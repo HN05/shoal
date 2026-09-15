@@ -202,9 +202,46 @@ An optional Shoal-specific repository configuration supports:
 - A workspace setup command for automatic dependency restoration when desired.
   The command uses the project's existing package manager and lockfiles.
 
-These capabilities are confirmed; the schema, filename, and serialization format
-are undecided. Filesystem precedence is defined below. Caller overrides and
+These capabilities and the configuration locations below are confirmed; the
+schema and serialization format are undecided. Filesystem precedence is defined
+below. Caller overrides and
 precedence for other configuration settings remain to be designed.
+
+### Configuration locations and format
+
+**Confirmed:** look for repository configuration in both locations, relative
+to the selected worktree root:
+
+- `.shoal.toml`
+- `.shoal/config.toml`
+
+The two layouts serve different repository needs:
+
+- Use `.shoal.toml` for standalone configuration when no supporting scripts
+  are needed.
+- Use `.shoal/config.toml` when keeping supporting scripts alongside the
+  configuration in `.shoal/`, for example `.shoal/setup.sh`.
+
+Scripts are repository-owned files referenced by configuration. Their presence
+alone does not cause Shoal to execute them; command syntax and script-path
+resolution remain to be specified with the configuration schema.
+
+Behavior when both files exist remains undecided: precedence, merging, or an
+explicit ambiguity error must be specified. Keep daemon state and allocations
+outside the repository.
+
+**Confirmed global location:** `~/.config/shoal/config.toml`. Respecting
+`XDG_CONFIG_HOME` as an override remains a proposal. Global filesystem policy
+retains its established precedence over repository grants.
+
+**The configuration file format and schema are not yet set.** The chosen path
+names do not finalize serialization, field names, setup-command syntax, or
+port/environment mapping syntax. The earlier TOML example was illustrative
+and is not an accepted schema.
+
+Read the configuration from the selected worktree so branches can carry their
+own settings. Proposed validation errors should identify the file and setting
+involved. Configuration update behavior remains open.
 
 ### Global machine configuration
 
@@ -231,8 +268,8 @@ a hidden grant to the whole home directory. Its exact paths are undecided. A
 conflict with a global deny should fail preparation with a clear explanation,
 rather than override the deny.
 
-Global config location, portable path syntax, and whether machine policy may
-disable unrestricted mode remain open. In unrestricted mode no filesystem
+Portable path syntax and whether machine policy may disable unrestricted mode
+remain open. In unrestricted mode no filesystem
 sandbox is applied; it must not be presented as enforcing these path rules.
 
 #### Allowed path configuration
