@@ -17,6 +17,11 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    /// Print the bundled agent skill, or install it at user scope.
+    Skill {
+        #[command(subcommand)]
+        command: Option<SkillCommand>,
+    },
     /// Print shell completions for commands, flags, and fixed argument values.
     Completions {
         #[arg(value_enum)]
@@ -49,6 +54,21 @@ pub enum Command {
     Diff { workspace: Option<String> },
     /// Fast-forward this workspace's repository main branch from its upstream.
     Pull { workspace: Option<String> },
+    /// Merge a local or remote branch into this workspace's own branch.
+    Merge {
+        branch: String,
+        workspace: Option<String>,
+        /// Fetch this branch from a specific configured remote, even if it exists locally.
+        #[arg(long)]
+        remote: Option<String>,
+    },
+    /// Internal worker launched through the tracked execution wrapper.
+    #[command(hide = true)]
+    MergeInternal {
+        branch: String,
+        #[arg(long)]
+        remote: Option<String>,
+    },
     /// Reserve, list, and release named TCP ports owned by a worktree.
     Port {
         #[command(subcommand)]
@@ -146,6 +166,23 @@ pub enum Command {
 pub enum CodexMode {
     Cli,
     App,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum SkillCommand {
+    /// Install or refresh the bundled skill for Codex and Claude Code (no daemon needed).
+    Install {
+        /// Install for one agent, or both by default.
+        #[arg(value_enum, default_value = "all")]
+        agent: SkillAgent,
+    },
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum SkillAgent {
+    All,
+    Codex,
+    Claude,
 }
 
 #[derive(Debug, Subcommand)]

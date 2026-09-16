@@ -154,6 +154,31 @@ checkout, or just its ref when not checked out. Git hooks and recursive submodul
 updates are disabled. Scoped agents may request this only through their own
 workspace; repository/service administration remains unavailable to them.
 
+### Merge into your workspace branch
+
+```sh
+shoal merge main
+shoal merge feature/api                    # Local, or discover a remote-only branch
+shoal merge feature/api --remote origin    # Fetch explicitly, even if local exists
+shoal merge origin/feature/api fix-login   # Qualified source and named destination
+shoal --json merge feature/api
+```
+
+The destination must be the workspace's recorded branch. Scoped agents can only
+target their own workspace. Local branches take precedence; otherwise Shoal
+queries configured remotes and fetches the branch even if it has never been
+fetched before. Multiple matches require `--remote`; an inaccessible remote
+prevents automatic discovery, so select a reachable remote explicitly. Qualified
+remote sources always fetch fresh data and reject deleted branches. Full
+`refs/heads/<branch>` and `refs/remotes/<remote>/<branch>` names are also accepted.
+
+Git can fast-forward or create a merge commit. Conflicts remain in your worktree
+for normal `git add`/`git commit` resolution or `git merge --abort`. There is no
+automatic stash, reset, push, or update of another branch. Hooks and recursive
+submodule updates are disabled. JSON includes `success`, `exit_code`, commit IDs,
+and Git's stdout/stderr; conflicts preserve Git's nonzero exit status. Fetch or
+validation errors use the usual CLI error output.
+
 ### Diff
 
 ```sh
@@ -368,8 +393,9 @@ worktree's configured and reserved ports, including the actual numbers.
 ### Scoped workspace commands
 
 Commands launched through `exec`, `claude`, and `codex cli` can inspect their own
-worktree, execute there, manage its resources, and pull its repository's main
-with `shoal pull`. They cannot access other worktrees, remove workspaces, perform
+worktree, execute there, merge any local or remote branch into their own branch
+with `shoal merge`, manage resources, and pull repository main with `shoal pull`.
+They cannot access other worktrees, remove workspaces, perform
 other repository administration, or administer the daemon. Nested
 commands keep that scope. Run a cross-workspace orchestrator outside `shoal exec`.
 Scope is cooperative; it does not restrict direct filesystem/Git operations.
@@ -557,3 +583,33 @@ its numeric `used`/`available` fields count pool/member slots, not reader limits
 Lease output always includes `mode`. Both modes survive daemon restarts, prevent
 automatic worktree cleanup, and are released on successful manual removal.
 Changing an active resource's kind requires draining its leases first.
+
+## Agent skill outside project repositories
+
+Install the skill bundled with the installed binary once at user scope. No
+running daemon or source checkout is needed:
+
+```sh
+shoal skill install          # Codex and Claude Code
+shoal skill install codex    # Only Codex
+shoal skill install claude   # Only Claude Code
+```
+
+Repeat after upgrading Shoal to refresh the instructions. Installation replaces
+the existing `SKILL.md` and preserves other files in the skill directory. Codex
+uses `~/.agents/skills/shoal/SKILL.md`; Claude uses
+`~/.claude/skills/shoal/SKILL.md`, honoring an absolute `CLAUDE_CONFIG_DIR` override.
+These are the documented user-level discovery locations for
+[Codex](https://learn.chatgpt.com/docs/build-skills) and
+[Claude Code](https://code.claude.com/docs/en/skills). The agent loads the skill when
+relevant; it need not be launched by Shoal. No project needs a copy of the skill.
+Run installation outside scoped workspace executions, since it updates user-level
+configuration. `shoal --json skill install` reports the installed agents and paths.
+
+An independently launched agent inside a managed worktree uses current-directory
+resolution for Shoal commands. Its enclosing session still lacks Shoal execution
+tracking and scope. In an ordinary checkout, use ordinary Git; Shoal resource
+leases still require a managed workspace. Installing the skill does not register
+or adopt a checkout. `shoal skill` still prints the bundled instructions;
+`shoal --json skill` returns the text in a `skill` field for
+integrations that manage their own instruction delivery.

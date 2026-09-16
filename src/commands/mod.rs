@@ -6,6 +6,7 @@ mod repositories;
 mod resources;
 mod service;
 mod simulators;
+mod skill;
 mod workspaces;
 
 use crate::{
@@ -18,6 +19,10 @@ use clap::CommandFactory;
 use serde_json::json;
 
 pub(crate) async fn run(cli: Cli) -> Result<i32> {
+    // Skill delivery is independent of daemon state and socket-path limits.
+    if let Some(Command::Skill { command }) = &cli.command {
+        return skill::run(command.as_ref(), cli.json);
+    }
     if cli.command.is_none() && !ui::is_interactive(cli.json) {
         Cli::command().print_help()?;
         return Ok(0);
@@ -43,12 +48,21 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         );
     }
     match command {
+        Command::Skill { command } => skill::run(command.as_ref(), cli.json),
         Command::Resource { command } => resources::run(&paths, command, cli.json).await,
         Command::Resources { workspace } => resources::overview(&paths, workspace, cli.json).await,
         Command::Sim { command } => simulators::run(&paths, command, cli.json).await,
         Command::Port { command } => ports::run(&paths, command, cli.json).await,
         Command::Ports { workspace } => ports::overview(&paths, workspace, cli.json).await,
         Command::Pull { workspace } => workspaces::pull(&paths, workspace, cli.json).await,
+        Command::Merge {
+            branch,
+            workspace,
+            remote,
+        } => crate::merge::run(&paths, workspace, branch, remote, cli.json).await,
+        Command::MergeInternal { branch, remote } => {
+            crate::merge::worker(&paths, branch, remote, cli.json).await
+        }
         Command::Diff { workspace } => workspaces::diff(&paths, workspace, cli.json).await,
         Command::Cd { workspace } => workspaces::cd(&paths, workspace, cli.json).await,
         Command::Repo { command } => repositories::run(&paths, command, cli.json).await,

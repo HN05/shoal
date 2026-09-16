@@ -2112,3 +2112,77 @@ Tests use fake Codex/T3 launchers for argument forwarding, current-directory
 selection, exit status, absence of managed executions, and scope denial. Completion
 tests exercise Bash callback results and registration in real Bash/Zsh shells
 using temporary home directories, without requiring a daemon or starting agents.
+
+### Workspace branch merges and portable agent instructions (implemented)
+
+Confirmed: agents may merge any local or remote branch into their own workspace
+branch, including a source that exists only on a remote. `shoal merge <branch>
+[workspace] [--remote <name>]` resolves the target by execution scope, current
+directory, or the existing human picker. The destination must be the workspace's
+recorded branch; detached HEAD and another checked-out branch are refused.
+
+A local source takes precedence. Otherwise Shoal queries configured remotes for
+an exact branch name and requires a single match; ambiguity or incomplete remote
+inspection requires explicit selection. `--remote <name>` chooses a configured
+remote and takes an unqualified source branch. `<remote>/<branch>` and full
+remote refs are accepted; explicit remote sources always fetch and never fall
+back to stale tracking refs. Full local refs require an existing local branch.
+Fetching uses a unique temporary ref with empty refmap, no tags/submodule
+recursion, and no FETCH_HEAD writes. It creates no local source branch and does
+not update other local or remote-tracking branches. The temporary ref is removed
+on normal success/failure; interruption may leave one for later inspection.
+
+The CLI launches a private merge worker through the existing execution wrapper.
+Daemon scope authorization and worktree identity validation therefore apply, and
+fetch/merge processes participate in normal stop and removal handling. Terminal
+I/O remains outside the daemon. The worker checks its authorized workspace and
+recorded branch, and rechecks branch/HEAD after fetching. Independent Git commands
+can still race with these checks under the cooperative model. No protocol or
+schema changes are needed.
+
+Normal Git fast-forwards and merge commits are supported. Hooks and recursive
+submodule updates are disabled, and edits are never automatically stashed or
+reset. Conflicts and MERGE_HEAD remain for ordinary Git resolution/abort; JSON
+reports success, exit code, source/previous/current commits, and Git output.
+Repository main and other worktrees are unchanged. `shoal pull` retains its
+separate semantics; `shoal pull` followed by `shoal merge main` imports refreshed
+main into the feature branch.
+
+Confirmed: skill availability must not require a copy in every project or require
+the agent to be launched by Shoal. `shoal skill` exports the instructions embedded
+in the binary (`--json` wraps them in a `skill` field), without a daemon. The
+README documents user-level installation for Codex and Claude and refreshing the
+file after a Shoal upgrade. Skill delivery keeps agent-specific discovery paths
+outside core lifecycle logic. The skill covers merges/resources and distinguishes scoped agents,
+independent agents in managed worktrees, and ordinary checkouts. Skill discovery
+itself grants neither workspace ownership nor lifecycle tracking.
+
+Validation uses temporary repositories and local bare remotes. It covers scoped
+destination denial, other workspace branches as sources, remote-only branches,
+fresh/deleted remote sources, multiple remotes, local precedence, explicit remote
+selection, conflicts, merge commits, uncommitted edits, changed/detached destination
+branches, and preservation of main, tracking refs, and FETCH_HEAD.
+
+### User-level skill installation (implemented)
+
+Confirmed: `shoal skill install` installs or refreshes the bundled skill for both
+Codex and Claude Code. An optional `codex`, `claude`, or `all` argument selects
+the destination; `all` is the default regardless of which agent binaries exist.
+Codex uses `$HOME/.agents/skills/shoal/SKILL.md`. Claude uses
+`$CLAUDE_CONFIG_DIR/skills/shoal/SKILL.md`, defaulting to `$HOME/.claude`; configured
+paths must be absolute. No project files, agent settings, daemon state, or OS
+services are created or changed. There is no automatic update on binary upgrade;
+rerun installation to refresh the instructions.
+
+Installation creates parent directories and atomically replaces only SKILL.md
+with the bundled content, preserving sibling files. An existing SKILL.md symlink
+is replaced rather than writing through it. Each file is installed independently;
+an error at a later destination does not undo an earlier successful installation.
+JSON reports an installed array of agent/path entries. Skill export remains
+available with `shoal skill` and `shoal --json skill`.
+
+Skill commands run without daemon socket-path validation. Scoped executions may
+export the skill but cannot install user-level configuration. Temporary-home
+tests cover export, default and selected installation, repeat updates, sibling
+preservation, symlink replacement, Claude configuration overrides, invalid paths,
+and scope rejection without a daemon or repository.

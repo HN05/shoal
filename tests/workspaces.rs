@@ -3067,3 +3067,271 @@ fn desktop_shortcuts_open_workspaces_without_cli_flags_or_execution_records() {
     }
     assert!(!fixture.run(&["codex", "desktop"]).status.success());
 }
+
+fn merge_commit(path: &Path, file: &str, contents: &str) {
+    fs::write(path.join(file), contents).unwrap();
+    git(path, &["add", file]);
+    git(
+        path,
+        &[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "-m",
+            file,
+        ],
+    );
+}
+
+#[test]
+fn merge_scoped_local_branch_only_changes_own_workspace() {
+    let fixture = Fixture::new();
+    let worker = fixture.add("worker");
+    let other = fixture.add("other");
+    let worker_path = Path::new(worker["path"].as_str().unwrap());
+    let other_path = Path::new(other["path"].as_str().unwrap());
+    merge_commit(other_path, "incoming", "from another workspace\n");
+    let expected = git(other_path, &["rev-parse", "HEAD"]);
+    let main = git(&fixture.repo, &["rev-parse", "main"]);
+    let binary = env!("CARGO_BIN_EXE_shoal");
+    let denied = fixture.run(&["exec", "worker", "--", binary, "merge", "other", "other"]);
+    assert!(!denied.status.success());
+    assert!(String::from_utf8_lossy(&denied.stderr).contains("cannot access another worktree"));
+    let output = fixture.run(&["exec", "worker", "--", binary, "--json", "merge", "other"]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let result: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(result["source_commit"], expected.trim());
+    assert_eq!(result["success"], true);
+    assert_eq!(git(worker_path, &["rev-parse", "HEAD"]), expected);
+    assert_eq!(git(other_path, &["rev-parse", "HEAD"]), expected);
+    assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), main);
+    assert_eq!(
+        git(worker_path, &["symbolic-ref", "--short", "HEAD"]),
+        "worker\n"
+    );
+    assert!(
+        fixture.ok(&["inspect", "worker"])["executions"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
+fn merge_fetches_remote_only_branch_and_refreshes_qualified_sources() {
+    let fixture = Fixture::new();
+    let worker = fixture.add("worker");
+    let path = Path::new(worker["path"].as_str().unwrap());
+    let author = pull_remote(&fixture);
+    git(&fixture.repo, &["remote", "rename", "origin", "source"]);
+    git(&author, &["switch", "-c", "feature/remote-only"]);
+    merge_commit(&author, "remote-only", "first\n");
+    git(&author, &["push", "origin", "feature/remote-only"]);
+    let before = git(&fixture.repo, &["rev-parse", "main"]);
+    // This branch has never been fetched into a local or remote-tracking ref.
+    assert_eq!(
+        git(
+            &fixture.repo,
+            &[
+                "for-each-ref",
+                "refs/remotes/source/feature/remote-only",
+                "refs/heads/feature/remote-only"
+            ]
+        ),
+        ""
+    );
+    let fetch_head = fixture.repo.join(".git/FETCH_HEAD");
+    fs::write(&fetch_head, "unrelated fetch sentinel\n").unwrap();
+    let binary = env!("CARGO_BIN_EXE_shoal");
+    let output = fixture.run(&[
+        "exec",
+        "worker",
+        "--",
+        binary,
+        "--json",
+        "merge",
+        "feature/remote-only",
+    ]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        git(path, &["rev-parse", "HEAD"]),
+        git(&author, &["rev-parse", "HEAD"])
+    );
+    merge_commit(&author, "remote-only", "latest\n");
+    git(&author, &["push", "origin", "feature/remote-only"]);
+    let result = fixture.ok(&["merge", "source/feature/remote-only", "worker"]);
+    assert_eq!(result["success"], true);
+    assert_eq!(
+        fs::read_to_string(path.join("remote-only")).unwrap(),
+        "latest\n"
+    );
+    assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), before);
+    assert_eq!(
+        fs::read_to_string(fetch_head).unwrap(),
+        "unrelated fetch sentinel\n"
+    );
+    assert_eq!(
+        git(
+            &fixture.repo,
+            &[
+                "for-each-ref",
+                "refs/shoal/merge/",
+                "refs/heads/feature/remote-only",
+                "refs/remotes/source/feature/remote-only"
+            ]
+        ),
+        ""
+    );
+    // A deleted remote branch must fail even if a stale tracking ref remains.
+    git(
+        &fixture.repo,
+        &[
+            "update-ref",
+            "refs/remotes/source/feature/remote-only",
+            "worker",
+        ],
+    );
+    git(
+        &author,
+        &["push", "origin", "--delete", "feature/remote-only"],
+    );
+    assert!(
+        !fixture
+            .run(&["merge", "source/feature/remote-only", "worker"])
+            .status
+            .success()
+    );
+}
+
+#[test]
+fn merge_remote_ambiguity_local_precedence_and_explicit_remote() {
+    let fixture = Fixture::new();
+    fixture.add("worker");
+    let author = pull_remote(&fixture);
+    git(&author, &["switch", "-c", "topic"]);
+    git(&author, &["push", "origin", "topic"]);
+    let remote = fixture.root.path().join("origin.git");
+    git(
+        &fixture.repo,
+        &["remote", "add", "second", remote.to_str().unwrap()],
+    );
+    let before = git(&fixture.repo, &["rev-parse", "worker"]);
+    let output = fixture.run(&["merge", "topic", "worker"]);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("multiple remotes"));
+    assert_eq!(git(&fixture.repo, &["rev-parse", "worker"]), before);
+    git(&fixture.repo, &["branch", "topic", "main"]);
+    assert_eq!(
+        fixture.ok(&["merge", "topic", "worker"])["commit"],
+        before.trim()
+    );
+    let result = fixture.ok(&["merge", "topic", "worker", "--remote", "second"]);
+    assert_eq!(
+        result["source_commit"],
+        git(&author, &["rev-parse", "HEAD"]).trim()
+    );
+    assert_eq!(git(&fixture.repo, &["rev-parse", "topic"]), before);
+    assert!(
+        !fixture
+            .run(&["merge", "topic", "worker", "--remote", "missing"])
+            .status
+            .success()
+    );
+    assert!(
+        !fixture
+            .run(&["merge", "missing-branch", "worker"])
+            .status
+            .success()
+    );
+    assert!(
+        !fixture
+            .run(&["merge", "topic:worker", "worker"])
+            .status
+            .success()
+    );
+    assert_eq!(
+        git(&fixture.repo, &["for-each-ref", "refs/shoal/merge/"]),
+        ""
+    );
+}
+
+#[test]
+fn merge_preserves_conflicts_and_refuses_changed_destination_branch() {
+    let fixture = Fixture::new();
+    let worker = fixture.add("worker");
+    let other = fixture.add("other");
+    let path = Path::new(worker["path"].as_str().unwrap());
+    let other_path = Path::new(other["path"].as_str().unwrap());
+    git(&fixture.repo, &["config", "user.name", "Test"]);
+    git(
+        &fixture.repo,
+        &["config", "user.email", "test@example.invalid"],
+    );
+    merge_commit(path, "tracked", "ours\n");
+    merge_commit(other_path, "tracked", "theirs\n");
+    let ours = git(path, &["rev-parse", "HEAD"]);
+    let theirs = git(other_path, &["rev-parse", "HEAD"]);
+    let output = fixture.run(&["--json", "merge", "other", "worker"]);
+    assert_eq!(output.status.code(), Some(1));
+    let result: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(result["success"], false);
+    assert!(result["stdout"].as_str().unwrap().contains("CONFLICT"));
+    assert_eq!(git(path, &["rev-parse", "HEAD"]), ours);
+    assert_eq!(git(path, &["rev-parse", "MERGE_HEAD"]), theirs);
+    assert!(
+        fs::read_to_string(path.join("tracked"))
+            .unwrap()
+            .contains("<<<<<<<")
+    );
+    git(path, &["merge", "--abort"]);
+    git(path, &["switch", "-c", "unowned"]);
+    let output = fixture.run(&["merge", "other", "worker"]);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("own recorded branch"));
+    assert_eq!(git(path, &["rev-parse", "HEAD"]), ours);
+    git(path, &["switch", "--detach"]);
+    assert!(!fixture.run(&["merge", "other", "worker"]).status.success());
+}
+
+#[test]
+fn merge_creates_merge_commit_and_preserves_uncommitted_edits() {
+    let fixture = Fixture::new();
+    let worker = fixture.add("worker");
+    let other = fixture.add("other");
+    let path = Path::new(worker["path"].as_str().unwrap());
+    let other_path = Path::new(other["path"].as_str().unwrap());
+    git(&fixture.repo, &["config", "user.name", "Test"]);
+    git(
+        &fixture.repo,
+        &["config", "user.email", "test@example.invalid"],
+    );
+    merge_commit(path, "ours", "ours\n");
+    merge_commit(other_path, "tracked", "theirs\n");
+    fs::write(path.join("tracked"), "uncommitted\n").unwrap();
+    let before = git(path, &["rev-parse", "HEAD"]);
+    assert!(!fixture.run(&["merge", "other", "worker"]).status.success());
+    assert_eq!(
+        fs::read_to_string(path.join("tracked")).unwrap(),
+        "uncommitted\n"
+    );
+    assert_eq!(git(path, &["rev-parse", "HEAD"]), before);
+    git(path, &["restore", "tracked"]);
+    let result = fixture.ok(&["merge", "other", "worker"]);
+    assert_eq!(result["success"], true);
+    assert_eq!(git(path, &["rev-parse", "HEAD^1"]), before);
+    assert_eq!(
+        git(path, &["rev-parse", "HEAD^2"]),
+        git(other_path, &["rev-parse", "HEAD"])
+    );
+    assert_eq!(fs::read_to_string(path.join("ours")).unwrap(), "ours\n");
+}

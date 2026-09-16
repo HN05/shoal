@@ -18,6 +18,9 @@ when behavior changes, distinguishing decisions from proposals.
   in the daemon and deny lifecycle/repository/service administration, except
   `shoal pull` may fast-forward the caller's own repo main from its upstream. This is
   cooperative scoping, not a boundary against a hostile same-user process.
+- Agents may merge any local or remote branch into their own recorded workspace
+  branch with `shoal merge`. Keep merges in the tracked execution wrapper; fetch
+  remote-only sources without updating other branches or relying on FETCH_HEAD.
 - Global TOML configuration supports `[auto_cleanup]` with `enabled` (default
   true) and `idle_minutes` (default 10). Automatic removal is only for idle,
   clean, fully pushed worktrees. Keep one removal path for manual and automatic
