@@ -2943,3 +2943,62 @@ fn reconcile_preserves_connected_commands_until_stop_is_explicit() {
     );
     assert_eq!(fixture.ok(&["port", "list", "connected"])[0], port);
 }
+
+#[test]
+fn stopping_disconnected_execution_does_not_hold_up_other_workspaces() {
+    let fixture = Fixture::new();
+    let orphan = fixture.add("orphan");
+    fixture.add("other");
+    let root = Path::new(orphan["path"].as_str().unwrap());
+    let script = r#"
+import pathlib, signal, sys, time
+root = pathlib.Path.cwd()
+def stopping(*_):
+    (root / 'stopping').touch()
+    while not (root / 'other-ran').exists():
+        time.sleep(0.01)
+    (root / 'saw-other').touch()
+    sys.exit(0)
+signal.signal(signal.SIGTERM, stopping)
+(root / 'ready').touch()
+time.sleep(30)
+"#;
+    let mut wrapper = fixture
+        .command()
+        .args(["exec", "orphan", "--", "python3", "-c", script])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    wait_registered_execution(&fixture, "orphan");
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while !root.join("ready").exists() {
+        assert!(Instant::now() < deadline);
+        thread::sleep(Duration::from_millis(10));
+    }
+    wrapper.kill().unwrap();
+    wrapper.wait().unwrap();
+    while fixture.ok(&["inspect", "orphan"])["executions"][0]["state"] != "unknown" {
+        assert!(Instant::now() < deadline);
+        thread::sleep(Duration::from_millis(10));
+    }
+    let mut stopping = fixture
+        .command()
+        .args(["stop", "orphan"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    while !root.join("stopping").exists() {
+        assert!(Instant::now() < deadline);
+        thread::sleep(Duration::from_millis(10));
+    }
+    let marker = root.join("other-ran");
+    let output = fixture.run(&["exec", "other", "--", "touch", marker.to_str().unwrap()]);
+    assert!(output.status.success());
+    stopping.wait().unwrap(); // Recovery may still require acknowledgement of unreadable environments.
+    assert!(
+        root.join("saw-other").exists(),
+        "other workspace was blocked until orphan was forcibly killed"
+    );
+}

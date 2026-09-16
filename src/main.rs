@@ -5,6 +5,7 @@ mod config;
 mod daemon;
 mod diff;
 mod execution;
+mod execution_processes;
 mod model;
 mod paths;
 mod ports;

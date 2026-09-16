@@ -1997,3 +1997,23 @@ children, PID identity mismatch, incomplete legacy records, interrupted removal,
 moved/replaced/missing worktrees, connected-command preservation, explicit stop,
 resource retention, missing-worktree cleanup, scope denial, and repeat repair.
 Native process recovery was exercised on macOS; Linux requires native validation.
+
+### Internal organization after recovery (implemented)
+
+The daemon's `workspace::Manager` now delegates repository registration, worktree
+ownership checks, removal/idle cleanup, and execution supervision to private
+workspace modules. The shared manager and its creation/lookup operations remain
+in `workspace.rs`; the public commands, protocol, and database format are unchanged.
+
+`execution_processes` combines native evidence (wrapper identity, child/group
+ancestry, execution markers, and unreadable environments) once for recovery and
+stopping. Those callers retain their different policies for uncertainty; collecting
+evidence does not itself authorize forgetting an execution or deleting a workspace.
+The native OS inspection and identity-checked signaling stay in `process_identity`.
+
+The active-execution map lock now covers registration/notification coordination
+only during stopping. Slow native scans and TERM/KILL waits occur after releasing
+it, so stopping disconnected commands does not delay another workspace's launches
+or completion acknowledgements. The stopping workspace's persisted lifecycle
+state still prevents new commands there. A regression test uses a terminating
+child that waits for another workspace to run before exiting.
