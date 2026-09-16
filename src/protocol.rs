@@ -2,6 +2,8 @@ use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 
+use crate::model::{ExecutionPlan, Inspection, Repository, Workspace};
+
 pub const VERSION: u32 = 1;
 pub const MAX_FRAME: usize = 64 * 1024;
 
@@ -17,6 +19,28 @@ pub struct Request {
 pub enum Method {
     Status,
     Shutdown,
+    Repositories,
+    Register {
+        source: String,
+    },
+    Add {
+        repository: String,
+        name: String,
+        base: Option<String>,
+    },
+    List,
+    Inspect {
+        workspace: String,
+    },
+    Remove {
+        workspace: String,
+    },
+    Stop {
+        workspace: String,
+    },
+    Execute {
+        workspace: String,
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -31,6 +55,12 @@ pub struct Response {
 #[serde(tag = "type", content = "data", rename_all = "snake_case")]
 pub enum Body {
     Status(Status),
+    Repositories(Vec<Repository>),
+    Repository(Repository),
+    Workspace(Workspace),
+    Workspaces(Vec<Workspace>),
+    Inspection(Inspection),
+    Execution(ExecutionPlan),
     Ok,
     Error { code: String, message: String },
 }
@@ -41,6 +71,18 @@ pub struct Status {
     pub version: String,
     pub uptime_secs: u64,
     pub managed: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ExecutionResult {
+    pub exit_code: i32,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum Control {
+    Stop,
+    Finished,
 }
 
 pub async fn read<T: DeserializeOwned>(stream: &mut (impl AsyncRead + Unpin)) -> Result<T> {

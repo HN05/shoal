@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{ffi::OsString, path::PathBuf};
 
 use clap::{Parser, Subcommand};
 
@@ -12,11 +12,56 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub json: bool,
     #[command(subcommand)]
-    pub command: Command,
+    pub command: Option<Command>,
 }
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    /// Print shell integration for Bash or Zsh.
+    Shell {
+        #[command(subcommand)]
+        command: ShellCommand,
+    },
+    /// Register repositories and list recently used repositories.
+    Repo {
+        #[command(subcommand)]
+        command: RepoCommand,
+    },
+    /// Create a named worktree from a registered repository.
+    Add {
+        repository: Option<String>,
+        #[arg(long)]
+        name: Option<String>,
+        /// Starting Git ref (defaults to the registered checkout's HEAD).
+        #[arg(long = "ref")]
+        base: Option<String>,
+    },
+    /// List managed workspaces.
+    List,
+    /// Inspect a workspace and its executions.
+    Inspect { workspace: Option<String> },
+    /// Stop connected commands, preserving the workspace.
+    Stop { workspace: Option<String> },
+    /// Stop commands and remove a clean worktree, preserving its branch.
+    Rm { workspace: Option<String> },
+    /// Execute a command in a named or current workspace.
+    Exec {
+        workspace: Option<String>,
+        #[arg(last = true, required = true)]
+        command: Vec<OsString>,
+    },
+    /// Shortcut for exec -- claude.
+    Claude {
+        workspace: Option<String>,
+        #[arg(last = true)]
+        args: Vec<OsString>,
+    },
+    /// Shortcut for exec -- codex.
+    Codex {
+        workspace: Option<String>,
+        #[arg(last = true)]
+        args: Vec<OsString>,
+    },
     /// Install and start the per-user daemon service.
     Setup {
         /// Preview the service definition without changing anything.
@@ -31,6 +76,17 @@ pub enum Command {
         #[command(subcommand)]
         command: DaemonCommand,
     },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum RepoCommand {
+    Add { source: String },
+    List,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ShellCommand {
+    Init,
 }
 
 #[derive(Debug, Subcommand)]

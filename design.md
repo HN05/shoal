@@ -892,7 +892,7 @@ implemented and tested.
 This command surface is a discussion draft, with `shoal setup`, the `add` and
 `rm` names, `claude` and `codex` shortcuts, workspace naming,
 current-directory resolution for execution commands, and
-interactive target pickers confirmed. Prefer fzf for selection.
+interactive target pickers confirmed. Use fzf for selection.
 Use short top-level commands for runs and grouped commands for daemon
 administration and resource allocation.
 Here a run is the managed workspace and its allocations; it can exist before
@@ -973,13 +973,13 @@ responsibilities; these shortcuts do not introduce separate agent integrations.
 
 ### Interactive selection
 
-**Confirmed:** support interactive selection with fzf preferred, and resolve
+**Confirmed:** use the external `fzf` executable for interactive selection, and resolve
 `exec` from the current directory before opening a picker. In particular:
 
 - `shoal add` offers recently used repositories, most recently used first.
   History includes repositories previously supplied by local path or URL and
-  persists across CLI invocations. An explicit path or URL adds a repository
-  without requiring it to appear in history first. After repository selection,
+  persists across CLI invocations. Register a path or URL first with
+  `shoal repo add`; `add` then accepts its path, source URL, or ID. After repository selection,
   prompt for a workspace name unless `--name` was supplied. Collect both before
   creating the workspace.
 - `shoal rm`, `shoal inspect`, and `shoal stop` offer existing runs. Rows should
@@ -1002,7 +1002,8 @@ Proposed interaction details:
   how to add the first repository using a path or URL.
 - Selection does not change the still-undecided dirty-worktree retention policy.
 
-Whether fzf is required or a built-in fallback is provided remains open.
+`fzf` is required for interactive pickers. There is no built-in fallback; explicit
+arguments remain usable without it.
 
 Proposed naming rules: names are unique within the daemon's workspace registry
 and must be valid single directory components. Reject invalid names and name
@@ -1096,9 +1097,8 @@ Worktrunk's `hash_port` maps strings into a fixed port range. This is not a
 reservation mechanism: collisions and occupied ports remain possible, so Shoal
 still needs its allocator. [Filter documentation](https://worktrunk.dev/hook/#worktrunk-filters).
 
-For the picker, Worktrunk embeds the Rust `skim` library. That is an alternative
-worth evaluating if Shoal wants an fzf-style picker without requiring an external
-executable; fzf remains the user's stated preference.
+Worktrunk embeds the Rust `skim` library for its picker. Shoal uses the external
+`fzf` executable, as explicitly selected by the user.
 [Picker dependencies](https://github.com/max-sixty/worktrunk/blob/main/Cargo.toml).
 
 ### Repository setup and Shoal-owned workspace commands
@@ -1357,8 +1357,8 @@ No formula or release automation has been implemented yet.
 Rust is the selected implementation language. The local CLI/daemon architecture
 is confirmed, with one OS-managed daemon per OS user per execution environment
 and a `shoal setup` command. The implementation order above is confirmed. The
-persistence mechanism, exact supervision and recovery protocol, remaining CLI
-syntax, and Linux sandbox mechanism remain undecided.
+exact recovery protocol, remaining resource CLI syntax, and Linux sandbox
+mechanism remain undecided. SQLite is used for workspace persistence.
 The simulator lifecycle tool choice is `simctl`, with `devicectl` to be evaluated
 for additional interactions.
 
@@ -1368,4 +1368,48 @@ foreground daemon mode, singleton locking, and stale-socket recovery. Runtime
 state defaults to `~/.local/state/shoal`, with an explicit override for isolated
 development instances. macOS uses launchd; Linux uses systemd user services.
 Service-manager tests use an isolated fixture; native Linux service operation
-has not yet been validated. Workspace implementation follows on a new branch.
+has not yet been validated. The foundation is committed before workspace work on
+`feat/workspaces`.
+
+### Initial workspace milestone
+
+Implemented:
+
+- Repository registration from local paths or Git clone URLs. URL clones are
+  retained for reuse; no automatic fetch. Repository pickers show recent use first.
+- SQLite repository, workspace, and execution records in `state.db`. The daemon
+  owns all writes. Name reservations are atomic across concurrent requests.
+- `add`, `list`, `inspect`, `exec`, `stop`, `rm`, and `claude`/`codex` shortcuts.
+  Worktrunk creates/removes worktrees with hooks disabled and its own isolated
+  configuration. Commands after `--` are passed as argument arrays.
+- Workspace paths `<state-dir>/workspaces/<name>`; unique names are 1–64 ASCII
+  letters/digits/hyphens/underscores and start with a letter or digit. A new
+  `shoal/<name>-<unique-suffix>` branch starts from committed `HEAD` or `--ref`.
+- Initial removal policy refuses tracked modifications/untracked files, removes
+  ignored worktree files, and preserves branches. Shared caches outside the
+  worktree and registered repository clones survive removal. More retention and
+  branch-pruning controls remain future work.
+- External `fzf` action/repository/workspace pickers, with no built-in fallback.
+  Explicit targets and noninteractive/JSON operation never open a picker.
+- Connected execution wrappers preserve terminal or piped I/O and exit codes,
+  receive stop requests from the daemon, and terminate the command's process
+  group. Removal first stops connected executions. The environment includes
+  `SHOAL_WORKSPACE_ID`, `SHOAL_RUN_ID`, `SHOAL_WORKSPACE`, and `SHOAL_STATE_DIR`.
+- `shoal shell init` prints Bash/Zsh integration; successful `setup` also prints
+  the function. It enters a newly created workspace and moves out of a removed
+  current workspace to the registered repository root, falling back to home.
+  Navigation uses a temporary file containing a literal directory path, without
+  evaluating that path as shell code. JSON calls never request navigation.
+  Shoal does not modify personal shell configuration.
+
+Repository configuration parsing and automatic setup/dependency restoration
+remain unimplemented while the public format/schema is undecided. Ports,
+simulators, and sandboxing remain later milestones. This slice handles normal
+connected execution, not comprehensive crash recovery: unknown executions block
+cleanup for manual reconciliation, and detached processes need later supervision
+work. No reconciliation command exists yet.
+
+Validation uses real Worktrunk with temporary repositories/state, including
+concurrent name claims, dirty-removal refusal, execution I/O and exit codes,
+stopping commands, persistence, and Bash/Zsh navigation. Real `fzf` and foreground
+terminal input are checked through a temporary pseudo-terminal.

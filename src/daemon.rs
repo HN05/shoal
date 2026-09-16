@@ -1,6 +1,7 @@
 use std::{
     fs::{self, File, OpenOptions},
     os::unix::fs::{FileTypeExt, OpenOptionsExt, PermissionsExt},
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -17,6 +18,7 @@ use tokio::{
 use crate::{
     paths::Paths,
     protocol::{self, Body, Method, Request, Response, Status},
+    workspace::Manager,
 };
 
 // Never unlink the lock file: waiters must all lock the same inode.
@@ -57,6 +59,7 @@ pub async fn run(paths: Paths, managed: bool) -> Result<()> {
         paths: paths.clone(),
         _lock: lock,
     };
+    let manager = Manager::open(paths.clone()).await?;
     let listener = UnixListener::bind(&paths.socket).context("bind daemon socket")?;
     fs::set_permissions(&paths.socket, fs::Permissions::from_mode(0o600))?;
     let mut terminate = signal(SignalKind::terminate())?;
@@ -74,8 +77,11 @@ pub async fn run(paths: Paths, managed: bool) -> Result<()> {
             accepted = listener.accept(), if clients.len() < 128 => {
                 let (stream, _) = accepted?;
                 let shutdown = shutdown.clone();
+                let manager = manager.clone();
                 clients.spawn(async move {
-                    let _ = timeout(Duration::from_secs(5), serve(stream, started, managed, shutdown)).await;
+                    if let Err(error) = serve(stream, started, managed, shutdown, manager).await {
+                        eprintln!("client connection: {error:#}");
+                    }
                 });
             }
         }
@@ -90,24 +96,31 @@ async fn serve(
     started: Instant,
     managed: bool,
     shutdown: watch::Sender<bool>,
+    manager: Arc<Manager>,
 ) -> Result<()> {
-    let request: Request = match protocol::read(&mut stream).await {
-        Ok(request) => request,
-        Err(error) => {
-            return protocol::write(
-                &mut stream,
-                &Response {
-                    protocol: protocol::VERSION,
-                    id: 0,
-                    body: Body::Error {
-                        code: "invalid_request".into(),
-                        message: error.to_string(),
+    let request: Request =
+        match timeout(Duration::from_secs(5), protocol::read(&mut stream)).await? {
+            Ok(request) => request,
+            Err(error) => {
+                return protocol::write(
+                    &mut stream,
+                    &Response {
+                        protocol: protocol::VERSION,
+                        id: 0,
+                        body: Body::Error {
+                            code: "invalid_request".into(),
+                            message: error.to_string(),
+                        },
                     },
-                },
-            )
-            .await;
+                )
+                .await;
+            }
+        };
+    if request.protocol == protocol::VERSION {
+        if let Method::Execute { workspace } = request.method {
+            return execute(stream, request.id, workspace, manager).await;
         }
-    };
+    }
     let mut stop = false;
     let body = if request.protocol != protocol::VERSION {
         Body::Error {
@@ -130,6 +143,13 @@ async fn serve(
                 stop = true;
                 Body::Ok
             }
+            method => match operation(&manager, method).await {
+                Ok(body) => body,
+                Err(error) => Body::Error {
+                    code: "operation_failed".into(),
+                    message: format!("{error:#}"),
+                },
+            },
         }
     };
     protocol::write(
@@ -145,4 +165,84 @@ async fn serve(
         let _ = shutdown.send(true);
     }
     Ok(())
+}
+
+async fn operation(manager: &Manager, method: Method) -> Result<Body> {
+    Ok(match method {
+        Method::Repositories => Body::Repositories(manager.repositories().await?),
+        Method::Register { source } => Body::Repository(manager.register(source).await?),
+        Method::Add {
+            repository,
+            name,
+            base,
+        } => Body::Workspace(manager.add(repository, name, base).await?),
+        Method::List => Body::Workspaces(manager.list().await?),
+        Method::Inspect { workspace } => Body::Inspection(manager.inspect(workspace).await?),
+        Method::Remove { workspace } => {
+            manager.remove(workspace).await?;
+            Body::Ok
+        }
+        Method::Stop { workspace } => {
+            manager.stop(workspace).await?;
+            Body::Ok
+        }
+        _ => anyhow::bail!("unsupported operation"),
+    })
+}
+
+async fn execute(
+    mut stream: UnixStream,
+    request_id: u64,
+    workspace: String,
+    manager: Arc<Manager>,
+) -> Result<()> {
+    let (plan, mut stop) = match manager.begin(workspace).await {
+        Ok(result) => result,
+        Err(error) => {
+            return protocol::write(
+                &mut stream,
+                &Response {
+                    protocol: protocol::VERSION,
+                    id: request_id,
+                    body: Body::Error {
+                        code: "execution_failed".into(),
+                        message: format!("{error:#}"),
+                    },
+                },
+            )
+            .await;
+        }
+    };
+    let execution_id = plan.id.clone();
+    let (mut reader, mut writer) = stream.into_split();
+    let result = async {
+        protocol::write(
+            &mut writer,
+            &Response {
+                protocol: protocol::VERSION,
+                id: request_id,
+                body: Body::Execution(plan),
+            },
+        )
+        .await?;
+        let finished = protocol::read::<protocol::ExecutionResult>(&mut reader);
+        tokio::pin!(finished);
+        let mut sent_stop = false;
+        loop {
+            tokio::select! {
+                result = &mut finished => break result,
+                changed = stop.changed(), if !sent_stop => {
+                    changed?;
+                    protocol::write(&mut writer, &protocol::Control::Stop).await?;
+                    sent_stop = true;
+                }
+            }
+        }
+    }
+    .await;
+    manager.finish(execution_id, result.is_ok()).await?;
+    if result.is_ok() {
+        protocol::write(&mut writer, &protocol::Control::Finished).await?;
+    }
+    result.map(|_| ())
 }

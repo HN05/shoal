@@ -1,16 +1,24 @@
 mod cli;
 mod client;
 mod daemon;
+mod execution;
+mod model;
 mod paths;
 mod protocol;
 mod service;
+mod shell;
+mod store;
+mod ui;
+mod workspace;
+mod worktrunk;
 
 use anyhow::{Result, ensure};
 use clap::Parser;
 use serde_json::json;
 
-use cli::{Cli, Command, DaemonCommand};
+use cli::{Cli, Command, DaemonCommand, RepoCommand, ShellCommand};
 use paths::Paths;
+use protocol::{Body, Method};
 
 #[tokio::main]
 async fn main() {
@@ -34,7 +42,224 @@ async fn main() {
 
 async fn run(cli: Cli) -> Result<i32> {
     let paths = Paths::new(cli.state_dir)?;
-    match cli.command {
+    let command = match cli.command {
+        Some(command) => command,
+        None => {
+            let action = ui::pick(
+                "Shoal> ",
+                [
+                    "add",
+                    "list",
+                    "inspect",
+                    "claude",
+                    "codex",
+                    "rm",
+                    "daemon status",
+                ]
+                .into_iter()
+                .map(|a| (a.into(), a.into()))
+                .collect(),
+                cli.json,
+            )?;
+            match action.as_str() {
+                "add" => Command::Add {
+                    repository: None,
+                    name: None,
+                    base: None,
+                },
+                "list" => Command::List,
+                "inspect" => Command::Inspect { workspace: None },
+                "claude" => Command::Claude {
+                    workspace: None,
+                    args: vec![],
+                },
+                "codex" => Command::Codex {
+                    workspace: None,
+                    args: vec![],
+                },
+                "rm" => Command::Rm { workspace: None },
+                _ => Command::Daemon {
+                    command: DaemonCommand::Status,
+                },
+            }
+        }
+    };
+    match command {
+        Command::Shell {
+            command: ShellCommand::Init,
+        } => {
+            if cli.json {
+                println!("{}", json!({"script": shell::INIT}));
+            } else {
+                print!("{}", shell::INIT);
+            }
+        }
+        Command::Repo {
+            command: RepoCommand::Add { source },
+        } => {
+            let source = ui::repository_selector(source)?;
+            match client::call(&paths, Method::Register { source }).await? {
+                Body::Repository(repo) => output(
+                    cli.json,
+                    &format!("Registered {} ({})", repo.path.display(), repo.id),
+                    serde_json::to_value(&repo)?,
+                ),
+                _ => anyhow::bail!("unexpected registration response"),
+            }
+        }
+        Command::Repo {
+            command: RepoCommand::List,
+        } => {
+            let repos = ui::repositories(&paths).await?;
+            if cli.json {
+                println!("{}", serde_json::to_string(&repos)?);
+            } else {
+                for repo in repos {
+                    println!("{}  {}", repo.id, repo.path.display());
+                }
+            }
+        }
+        Command::Add {
+            repository,
+            name,
+            base,
+        } => {
+            let repository = match repository {
+                Some(repo) => ui::repository_selector(repo)?,
+                None => ui::pick(
+                    "Repository> ",
+                    ui::repositories(&paths)
+                        .await?
+                        .into_iter()
+                        .map(|r| (r.id, r.path.display().to_string()))
+                        .collect(),
+                    cli.json,
+                )?,
+            };
+            let name = match name {
+                Some(name) => name,
+                None => ui::input("Workspace name", cli.json)?,
+            };
+            match client::call(
+                &paths,
+                Method::Add {
+                    repository,
+                    name,
+                    base,
+                },
+            )
+            .await?
+            {
+                Body::Workspace(workspace) => {
+                    output(
+                        cli.json,
+                        &format!("Created {} at {}", workspace.name, workspace.path.display()),
+                        serde_json::to_value(&workspace)?,
+                    );
+                    shell::navigate(&workspace.path, cli.json)?;
+                }
+                _ => anyhow::bail!("unexpected workspace response"),
+            }
+        }
+        Command::List => {
+            let workspaces = ui::workspaces(&paths).await?;
+            if cli.json {
+                println!("{}", serde_json::to_string(&workspaces)?);
+            } else {
+                for w in workspaces {
+                    println!(
+                        "{}  {}  {}  {}",
+                        w.name,
+                        w.state,
+                        w.branch,
+                        w.path.display()
+                    );
+                }
+            }
+        }
+        Command::Inspect { workspace } => {
+            let workspace = ui::workspace(&paths, workspace, false, cli.json).await?;
+            match client::call(&paths, Method::Inspect { workspace }).await? {
+                Body::Inspection(inspection) => {
+                    if cli.json {
+                        println!("{}", serde_json::to_string(&inspection)?);
+                    } else {
+                        println!("{}", serde_json::to_string_pretty(&inspection)?);
+                    }
+                }
+                _ => anyhow::bail!("unexpected inspection response"),
+            }
+        }
+        Command::Stop { workspace } => {
+            let workspace = ui::workspace(&paths, workspace, false, cli.json).await?;
+            client::call(&paths, Method::Stop { workspace }).await?;
+            output(
+                cli.json,
+                "Workspace processes stopped",
+                json!({"stopped": true}),
+            );
+        }
+        Command::Rm { workspace } => {
+            let workspace = ui::workspace(&paths, workspace, false, cli.json).await?;
+            let inspection = match client::call(
+                &paths,
+                Method::Inspect {
+                    workspace: workspace.clone(),
+                },
+            )
+            .await?
+            {
+                Body::Inspection(inspection) => inspection,
+                _ => anyhow::bail!("unexpected inspection response"),
+            };
+            let cwd = std::env::current_dir()?;
+            let inside = std::fs::canonicalize(&inspection.workspace.path)
+                .is_ok_and(|root| cwd.starts_with(root));
+            let destination = if inside {
+                ui::repositories(&paths)
+                    .await?
+                    .into_iter()
+                    .find(|r| r.id == inspection.workspace.repository_id)
+                    .map(|r| r.path)
+            } else {
+                None
+            };
+            let result = client::call(&paths, Method::Remove { workspace }).await;
+            if inside && (result.is_ok() || !cwd.exists()) {
+                let destination = destination
+                    .filter(|p| p.is_dir())
+                    .unwrap_or_else(|| paths.home.clone());
+                shell::navigate(&destination, cli.json)?;
+            }
+            result?;
+            output(
+                cli.json,
+                "Workspace removed; Git branch retained",
+                json!({"removed": true}),
+            );
+        }
+        Command::Exec { workspace, command } => {
+            let workspace = ui::workspace(&paths, workspace, true, cli.json).await?;
+            return execution::run(&paths, workspace, command).await;
+        }
+        Command::Claude { workspace, args } => {
+            let workspace = ui::workspace(&paths, workspace, true, cli.json).await?;
+            return execution::run(
+                &paths,
+                workspace,
+                std::iter::once("claude".into()).chain(args).collect(),
+            )
+            .await;
+        }
+        Command::Codex { workspace, args } => {
+            let workspace = ui::workspace(&paths, workspace, true, cli.json).await?;
+            return execution::run(
+                &paths,
+                workspace,
+                std::iter::once("codex".into()).chain(args).collect(),
+            )
+            .await;
+        }
         Command::Setup {
             dry_run,
             executable,
@@ -61,8 +286,14 @@ async fn run(cli: Cli) -> Result<i32> {
             output(
                 cli.json,
                 "Daemon service installed and running",
-                json!({"running": true, "service_file": service::file(&paths, service::Platform::current()?)}),
+                json!({"running": true, "service_file": service::file(&paths, service::Platform::current()?), "shell_init": shell::INIT}),
             );
+            if !cli.json {
+                println!(
+                    "\nAdd this function to ~/.zshrc or ~/.bashrc to navigate after add/rm:\n\n{}",
+                    shell::INIT
+                );
+            }
         }
         Command::Daemon {
             command: DaemonCommand::Run { managed },

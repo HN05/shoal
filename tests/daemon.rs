@@ -101,7 +101,12 @@ fn cli_connects_to_daemon_and_stops_it() {
             & 0o777,
         0o600
     );
-    assert!(daemon.run(&["daemon", "stop"]).status.success());
+    let stopped = daemon.run(&["daemon", "stop"]);
+    assert!(
+        stopped.status.success(),
+        "{}",
+        String::from_utf8_lossy(&stopped.stderr)
+    );
     assert!(daemon.child.wait().unwrap().success());
     assert!(!daemon.root.path().join("state/daemon.sock").exists());
     let output = daemon.run(&["--json", "daemon", "status"]);

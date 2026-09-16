@@ -12,7 +12,12 @@ use crate::{
 };
 
 pub async fn call(paths: &Paths, method: Method) -> Result<Body> {
-    timeout(Duration::from_secs(3), async {
+    let seconds = if matches!(method, Method::Status | Method::Shutdown) {
+        3
+    } else {
+        3600
+    };
+    timeout(Duration::from_secs(seconds), async {
         let mut stream = UnixStream::connect(&paths.socket).await.with_context(|| {
             format!(
                 "connect to {}; run `shoal setup` or `shoal daemon start`",
@@ -67,13 +72,16 @@ pub async fn status(paths: &Paths) -> Result<Option<Status>> {
 pub async fn wait(paths: &Paths, running: bool) -> Result<()> {
     let deadline = Instant::now() + Duration::from_secs(10);
     loop {
-        if status(paths).await?.is_some() == running {
-            return Ok(());
-        }
+        let last_error = match status(paths).await {
+            Ok(status) if status.is_some() == running => return Ok(()),
+            Ok(_) => None,
+            Err(error) => Some(error),
+        };
         ensure!(
             Instant::now() < deadline,
-            "daemon did not {} within 10 seconds",
-            if running { "start" } else { "stop" }
+            "daemon did not {} within 10 seconds{}",
+            if running { "start" } else { "stop" },
+            last_error.map(|e| format!(": {e:#}")).unwrap_or_default()
         );
         sleep(Duration::from_millis(100)).await;
     }
