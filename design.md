@@ -1380,9 +1380,15 @@ Implemented:
 
 - Repository registration from local paths or Git clone URLs. URL clones are
   retained for reuse; no automatic fetch. Repository pickers show recent use first.
-  Repository lists and pickers display the name and original path or URL, so
-  cloned repositories can be searched by their source rather than a UUID cache
-  path. Internal IDs still identify selections and remain in JSON output.
+  Repository lists display the name and original path or URL. Pickers show only
+  names, adding `(hostname)` when names collide, or `(local)` for local sources;
+  if that still collides, append the source. Internal IDs still identify selections
+  and remain in JSON output; UUID cache paths are never used as picker labels.
+  Registration is idempotent by remote URL (or canonical path when no origin
+  exists). Local checkouts use `origin`; common HTTPS/SSH forms and optional
+  `.git` suffixes match. Host, repository path case, and explicit port differences
+  remain distinct. Existing registrations are checked on each add, without network
+  access; old duplicate records are not automatically deleted or merged.
 - SQLite repository, workspace, and execution records in `state.db`. The daemon
   owns all writes. Name reservations are atomic across concurrent requests.
 - `add`, `list`, `inspect`, `exec`, `stop`, `rm`, and `claude`/`codex` shortcuts.

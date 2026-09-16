@@ -70,7 +70,9 @@ shoal rm fix-login          # Stop commands and remove a clean worktree
 
 Bare `shoal` displays help. `shoal add` offers registered repositories
 in most-recently-used order and prompts for a name. Repository lists and pickers
-show the repository name and original path or URL, including for managed clones.
+show readable repository names, including for managed clones. Pickers show just
+the name, adding `(hostname)` for duplicate names (and the source if still
+ambiguous). `repo list` includes each original path or URL.
 Commands with omitted workspace
 targets open an `fzf` picker; `rm`, `exec`, `claude`, and `codex` first look for a workspace
 containing the current directory. Explicit targets bypass selection. Noninteractive
@@ -83,6 +85,9 @@ the registered checkout's committed `HEAD`, or `--ref <git-ref>`, on a new branc
 named `shoal/<name>-<unique-suffix>`. Uncommitted source files are not copied.
 URL repositories are cloned once into `<state-dir>/repositories` and retained
 for reuse. Registration does not fetch updates automatically.
+Registration reuses an existing repository when its source URL or local checkout's
+`origin` identifies the same remote, including HTTPS/SSH forms and optional `.git`
+suffixes. Checkouts without `origin` are identified by their canonical local path.
 
 Removal refuses tracked changes and untracked files, removes ignored files
 inside the worktree, and retains Git branches. Shared caches outside the worktree

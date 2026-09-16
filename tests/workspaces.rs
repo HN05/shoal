@@ -169,6 +169,30 @@ fn url_registration_clones_once_and_supports_workspaces() {
 }
 
 #[test]
+fn registration_reuses_repositories_by_origin_across_paths_and_url_forms() {
+    let fixture = Fixture::new();
+    let original = fixture.ok(&["repo", "list"])[0].clone();
+    let url = "https://example.invalid/team/project.git";
+    let ssh_url = "git@example.invalid:team/project.git";
+    git(&fixture.repo, &["remote", "add", "origin", url]);
+    let other = fixture.root.path().join("other-checkout");
+    git(
+        &fixture.repo,
+        &["clone", "--local", ".", other.to_str().unwrap()],
+    );
+    git(&other, &["remote", "set-url", "origin", ssh_url]);
+    assert_eq!(
+        fixture.ok(&["repo", "add", other.to_str().unwrap()]),
+        original
+    );
+    assert_eq!(fixture.ok(&["repo", "add", ssh_url]), original);
+    assert_eq!(fixture.ok(&["repo", "add", url]), original);
+    assert_eq!(fixture.ok(&["repo", "list"]).as_array().unwrap().len(), 1);
+    fixture.ok(&["add", ssh_url, "--name", "alias"]);
+    fixture.ok(&["rm", "alias"]);
+}
+
+#[test]
 fn removal_accepts_switched_branch_but_refuses_replaced_repository() {
     let fixture = Fixture::new();
     let workspace = fixture.add("switched");

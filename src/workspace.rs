@@ -50,13 +50,16 @@ impl Manager {
 
     pub async fn register(&self, source: String) -> Result<Repository> {
         let _guard = self.repositories.lock().await;
-        if let Some(repo) = self
-            .repositories()
-            .await?
-            .into_iter()
-            .find(|r| r.source == source)
-        {
-            return Ok(repo);
+        let repositories = self.repositories().await?;
+        if let Some(repo) = repositories.iter().find(|r| r.source == source) {
+            return Ok(repo.clone());
+        }
+        if let Some(identity) = crate::repository::identity(&source).await? {
+            for repo in &repositories {
+                if crate::repository::identity(&repo.source).await?.as_ref() == Some(&identity) {
+                    return Ok(repo.clone());
+                }
+            }
         }
         let id = Uuid::new_v4().to_string();
         let path = if PathBuf::from(&source).exists() {
@@ -93,19 +96,22 @@ impl Manager {
     async fn repository(&self, selector: &str) -> Result<Repository> {
         let repositories = self.repositories().await?;
         let canonical = fs::canonicalize(selector).ok();
-        repositories
-            .into_iter()
-            .find(|repo| {
-                repo.id == selector
-                    || repo.source == selector
-                    || repo.path.to_str() == Some(selector)
-                    || canonical.as_ref() == Some(&repo.path)
-            })
-            .with_context(|| {
-                format!(
-                    "repository is not registered: {selector}; run `shoal repo add <path-or-url>`"
-                )
-            })
+        if let Some(repo) = repositories.iter().find(|repo| {
+            repo.id == selector
+                || repo.source == selector
+                || repo.path.to_str() == Some(selector)
+                || canonical.as_ref() == Some(&repo.path)
+        }) {
+            return Ok(repo.clone());
+        }
+        if let Some(identity) = crate::repository::identity(selector).await? {
+            for repo in repositories {
+                if crate::repository::identity(&repo.source).await?.as_ref() == Some(&identity) {
+                    return Ok(repo);
+                }
+            }
+        }
+        bail!("repository is not registered: {selector}; run `shoal repo add <path-or-url>`")
     }
 
     pub async fn list(&self) -> Result<Vec<Workspace>> {

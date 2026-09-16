@@ -83,10 +83,48 @@ pub async fn repositories(paths: &Paths) -> Result<Vec<Repository>> {
 }
 
 pub fn repository_label(repo: &Repository) -> String {
+    format!("{}  {}", repository_name(repo), repo.source)
+}
+
+fn repository_name(repo: &Repository) -> &str {
     let source = repo.source.trim_end_matches('/');
     let name = source.rsplit(['/', ':']).next().unwrap_or(source);
-    let name = name.strip_suffix(".git").unwrap_or(name);
-    format!("{name}  {}", repo.source)
+    name.strip_suffix(".git").unwrap_or(name)
+}
+
+pub fn repository_choices(repos: Vec<Repository>) -> Vec<(String, String)> {
+    let labels: Vec<_> = repos
+        .iter()
+        .map(|repo| {
+            let name = repository_name(repo);
+            if repos.iter().filter(|r| repository_name(r) == name).count() == 1 {
+                return name.to_owned();
+            }
+            let host = repo
+                .source
+                .split_once("://")
+                .map(|(_, rest)| rest.split('/').next().unwrap_or(rest))
+                .or_else(|| repo.source.split_once(':').map(|(host, _)| host))
+                .filter(|host| !host.is_empty());
+            match host {
+                Some(host) => format!("{name} ({})", host.rsplit('@').next().unwrap_or(host)),
+                None => format!("{name} (local)"),
+            }
+        })
+        .collect();
+    repos
+        .into_iter()
+        .zip(&labels)
+        .map(|(repo, label)| {
+            // Same host or multiple local checkouts can still share a name.
+            let label = if labels.iter().filter(|other| *other == label).count() > 1 {
+                format!("{label}  {}", repo.source)
+            } else {
+                label.clone()
+            };
+            (repo.id, label)
+        })
+        .collect()
 }
 
 pub async fn workspaces(paths: &Paths) -> Result<Vec<Workspace>> {

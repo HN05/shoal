@@ -5,6 +5,7 @@ mod execution;
 mod model;
 mod paths;
 mod protocol;
+mod repository;
 mod service;
 mod shell;
 mod store;
@@ -90,14 +91,7 @@ async fn run(cli: Cli) -> Result<i32> {
                 Some(repo) => ui::repository_selector(repo)?,
                 None => ui::pick(
                     "Repository> ",
-                    ui::repositories(&paths)
-                        .await?
-                        .into_iter()
-                        .map(|r| {
-                            let label = ui::repository_label(&r);
-                            (r.id, label)
-                        })
-                        .collect(),
+                    ui::repository_choices(ui::repositories(&paths).await?),
                     cli.json,
                 )?,
             };
