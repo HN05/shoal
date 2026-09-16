@@ -1584,3 +1584,112 @@ The human or orchestrator that manages multiple worktrees must call Shoal outsid
 a scoped execution. This is the agreed cooperative model: a same-user process
 could deliberately discard its environment or use Git/filesystem tools directly.
 Filesystem restrictions remain a later implementation milestone.
+
+### Implemented simulator sharing
+
+This section supersedes the open scheduling/configuration choices above.
+Simulator operations use `xcrun simctl`, verified against the installed CLI help
+and Apple's [Xcode command-line tool reference](https://developer.apple.com/documentation/xcode/xcode-command-line-tool-reference).
+`devicectl` and Device Hub integration are not required for this slice.
+
+Global `~/.config/shoal/config.toml` (restart the daemon to apply):
+
+```toml
+[simulators]
+max_booted = 2
+max_devices = 4
+idle_seconds = 120
+allow_any = false
+default = "phone"
+
+[simulators.profiles.phone]
+device = "iPhone 17"
+runtime = "iOS 26.5"
+```
+
+Profiles are the allowed device-type/runtime combinations, using exact names or
+identifiers from `shoal sim catalog`. Only installed, available runtimes qualify;
+when the inventory provides runtime compatibility data, incompatible device types
+are rejected before creation. Ambiguous names fail; identifiers are recommended.
+No default profile is assumed on a machine without configured profiles. Limits
+require 1–64 running slots and max_devices between max_booted and 256; the idle
+grace is 0–86400 seconds. These limits apply to this daemon; multiple isolated
+Shoal state directories do not share a scheduler.
+
+Repository TOML can select ordered preferences:
+
+```toml
+[simulators]
+preferred = ["phone", "tablet"]
+```
+
+Shoal picks the first installed compatible preferred profile; explicit CLI flags
+override preferences. Repo config cannot expand machine policy. `allow_any = true`
+permits other installed combinations through `--device` with `--runtime`; those
+requests require `--reason`. Shoal never downloads runtimes or installs Xcode.
+
+```sh
+shoal sim catalog
+shoal sim acquire [workspace] --profile phone --name tests
+shoal sim acquire [workspace] --profile phone --wait 60
+shoal sim list [workspace]
+shoal sim list --all
+shoal sim release tests [workspace]
+```
+
+The default lease name is `default`. Acquisition is explicit and exclusive, owned
+by worktree, with idempotency for the same worktree/name. Different names can
+request multiple instances. Output includes a concrete UDID, runtime, device
+type, instance ID, lease name, owner, reason, and state. Use the UDID with
+`xcodebuild -destination 'platform=iOS Simulator,id=<UDID>'` or `simctl <command>
+<UDID>`, never the ambiguous `booted` selector. `inspect` includes simulator records.
+Scoped processes can acquire/release/list only their own worktree's devices;
+`--all` is filtered. Catalog exposes installed types/runtimes and policy, not
+other worktrees' leases. Commands without a target stay in the execution's scope
+even if a child changes its current directory.
+
+Scheduling and storage:
+
+- A single simulator transition lock serializes allocation, boot, release,
+  shutdown, reset, and deletion. SQLite transactions do not span subprocesses;
+  unrelated CLI/port requests stay responsive. Boot readiness is checked with
+  `simctl bootstatus <UDID> -b` and a structured inventory check, with a 180-second
+  timeout per simctl invocation.
+- Prefer compatible idle instances; a different worktree receives a shutdown,
+  erase, and fresh boot before reuse. Reacquiring during the idle grace in the
+  same worktree preserves simulator contents.
+- At the running limit, shut down least recently used unallocated Shoal devices.
+  Active leases are never preempted. External devices in simctl's default device
+  set count against capacity but Shoal never mutates them. Other device sets and
+  indirect preview/test clones are outside this initial inventory boundary.
+- At the storage limit, delete least recently used unallocated devices before
+  creating another. Released devices expire after the grace period; a 15-second
+  sweep shuts them down and deletes their data. This bounds stored device count;
+  installed runtimes and OS caches remain machine-owned.
+- Capacity exhaustion returns a structured busy result and exit code 2. `--wait`
+  retries for up to the specified number of seconds (max 3600); it waits for
+  capacity, with boot time separately bounded. No FIFO/fairness guarantee or
+  atomic multi-resource acquisition is implemented yet.
+- Simulators use the default CoreSimulator device set for compatibility with
+  Xcode destinations. Only devices associated with persisted Shoal records are
+  mutated. Creation saves a unique `shoal-<instance-id>` name before calling
+  simctl; interrupted creation can recover the UDID by that exact name.
+- Ownership survives daemon restarts, command exit, and failed operations. A
+  failed/interrupted allocation is retained and requires `sim release` or worktree
+  removal before reuse. A restarted daemon never infers that a lease became idle
+  merely because its execution connection disappeared. Simulator list state is
+  Shoal's recorded lifecycle; external changes are checked on allocation/cleanup.
+- Active simulator leases prevent automatic worktree removal. Manual removal
+  stops connected commands, shuts down/deletes assigned and last-used idle
+  devices, then removes the worktree. Failed simulator deletion retains its
+  record and worktree so cleanup can be retried. Already successfully deleted
+  resources stay deleted if a later worktree-removal step fails.
+
+Validation: isolated fake-simctl integration tests cover exclusivity, concurrent
+claims, waiting, reset on handoff, external-device protection, machine limits,
+allowed/any policy, missing runtimes, crash persistence, interrupted creation,
+failed-removal retries, idle expiration, and worktree cleanup. A native disposable
+smoke test on this Mac also created/booted an iPhone 17 with installed iOS 26.5,
+verified repeated acquisition, released it, and confirmed deletion after removal.
+No persistent test service was installed. Simulator execution remains macOS-only;
+Linux retains CLI/workspace/port functionality.

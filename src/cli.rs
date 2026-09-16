@@ -47,6 +47,11 @@ pub enum Command {
         #[command(subcommand)]
         command: PortCommand,
     },
+    /// Share Shoal-managed Xcode simulators between worktrees.
+    Sim {
+        #[command(subcommand)]
+        command: SimCommand,
+    },
     /// Show configured and reserved ports for the current or named worktree.
     Ports { workspace: Option<String> },
     /// Inspect a workspace and its executions.
@@ -158,5 +163,40 @@ pub enum DaemonCommand {
     Run {
         #[arg(long, hide = true)]
         managed: bool,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum SimCommand {
+    /// Show available device types, installed runtimes, and machine profiles.
+    Catalog,
+    /// Show this worktree's simulators, or all managed instances.
+    List {
+        workspace: Option<String>,
+        #[arg(long, conflicts_with = "workspace")]
+        all: bool,
+    },
+    /// Acquire exclusive use; reuse the same named lease on repeated requests.
+    Acquire {
+        workspace: Option<String>,
+        #[arg(long, default_value = "default")]
+        name: String,
+        #[arg(long, conflicts_with_all = ["device", "runtime"])]
+        profile: Option<String>,
+        #[arg(long, requires = "runtime")]
+        device: Option<String>,
+        #[arg(long, requires = "device")]
+        runtime: Option<String>,
+        #[arg(long)]
+        reason: Option<String>,
+        /// Wait this many seconds for capacity (0 returns busy immediately).
+        #[arg(long, default_value_t = 0, value_parser = clap::value_parser!(u64).range(0..=3600))]
+        wait: u64,
+    },
+    /// End exclusive use; the idle policy controls shutdown and deletion.
+    Release {
+        #[arg(default_value = "default")]
+        name: String,
+        workspace: Option<String>,
     },
 }

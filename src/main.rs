@@ -16,6 +16,8 @@ mod repository;
 mod scope;
 mod service;
 mod shell;
+mod simctl;
+mod simulators;
 mod store;
 mod ui;
 mod workspace;
@@ -75,6 +77,7 @@ async fn run(cli: Cli) -> Result<i32> {
         );
     }
     match command {
+        Command::Sim { command } => return sim_command(&paths, command, cli.json).await,
         Command::Diff { workspace } => {
             let workspace = ui::workspace(&paths, workspace, true, cli.json).await?;
             let base = match client::call(&paths, Method::DiffBase { workspace }).await? {
@@ -596,4 +599,116 @@ fn output(json_output: bool, message: &str, value: serde_json::Value) {
     } else {
         println!("{message}");
     }
+}
+
+async fn sim_command(paths: &Paths, command: cli::SimCommand, json_output: bool) -> Result<i32> {
+    use cli::SimCommand;
+    match command {
+        SimCommand::Catalog => {
+            let Body::SimCatalog(catalog) = client::call(paths, Method::SimCatalog).await? else {
+                anyhow::bail!("unexpected simulator catalog response");
+            };
+            if json_output {
+                println!("{catalog}");
+            } else {
+                println!("{}", serde_json::to_string_pretty(&catalog)?);
+            }
+        }
+        SimCommand::List { workspace, all } => {
+            let workspace = if all {
+                None
+            } else {
+                Some(ui::workspace(paths, workspace, true, json_output).await?)
+            };
+            let Body::Simulators(sims) = client::call(paths, Method::SimList { workspace }).await?
+            else {
+                anyhow::bail!("unexpected simulator list response");
+            };
+            if json_output {
+                println!("{}", serde_json::to_string(&sims)?);
+            } else {
+                for sim in &sims {
+                    println!(
+                        "{}  {}  {}  {}  {}",
+                        sim.udid.as_deref().unwrap_or("pending"),
+                        sim.lease_name.as_deref().unwrap_or("idle"),
+                        sim.state,
+                        sim.device,
+                        sim.runtime
+                    );
+                }
+                if sims.is_empty() {
+                    println!("No managed simulators");
+                }
+            }
+        }
+        SimCommand::Acquire {
+            workspace,
+            name,
+            profile,
+            device,
+            runtime,
+            reason,
+            wait,
+        } => {
+            let workspace = ui::workspace(paths, workspace, true, json_output).await?;
+            let request = simulators::SimRequest {
+                name,
+                profile,
+                device,
+                runtime,
+                reason,
+            };
+            let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(wait);
+            loop {
+                match client::call(
+                    paths,
+                    Method::SimAcquire {
+                        workspace: workspace.clone(),
+                        request: request.clone(),
+                    },
+                )
+                .await?
+                {
+                    Body::Simulator(sim) => {
+                        output(
+                            json_output,
+                            &format!(
+                                "{}={} ({}, {})",
+                                sim.lease_name.as_deref().unwrap_or("default"),
+                                sim.udid.as_deref().unwrap_or("pending"),
+                                sim.device,
+                                sim.runtime
+                            ),
+                            serde_json::to_value(&sim)?,
+                        );
+                        break;
+                    }
+                    Body::SimBusy { message } if tokio::time::Instant::now() >= deadline => {
+                        output(
+                            json_output,
+                            &message,
+                            json!({"acquired":false,"code":"simulator_busy","message":message}),
+                        );
+                        return Ok(2);
+                    }
+                    Body::SimBusy { .. } => {
+                        tokio::time::sleep(
+                            std::time::Duration::from_secs(1).min(
+                                deadline.saturating_duration_since(tokio::time::Instant::now()),
+                            ),
+                        )
+                        .await
+                    }
+                    _ => anyhow::bail!("unexpected simulator acquisition response"),
+                }
+            }
+        }
+        SimCommand::Release { name, workspace } => {
+            let workspace = ui::workspace(paths, workspace, true, json_output).await?;
+            client::call(paths, Method::SimRelease { workspace, name }).await?;
+            output(json_output, "Simulator released", json!({"released":true}));
+        }
+    }
+    Ok(0)
 }

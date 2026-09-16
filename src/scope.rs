@@ -19,14 +19,18 @@ pub async fn authorize(
         .map(|(_, owner)| owner.clone())
         .ok_or_else(|| anyhow::anyhow!("expired or unknown workspace scope"))?;
     let target = match method {
-        Method::Status | Method::List | Method::Repositories => None,
-        Method::Inspect { workspace }
+        Method::Status | Method::List | Method::Repositories | Method::SimCatalog => None,
+        Method::SimAcquire { workspace, .. }
+        | Method::SimRelease { workspace, .. }
+        | Method::Inspect { workspace }
         | Method::DiffBase { workspace }
         | Method::Execute { workspace }
         | Method::ReservePort { workspace, .. }
         | Method::ReleasePort { workspace, .. }
         | Method::PortOverview { workspace } => Some(workspace),
-        Method::Ports { workspace } => Some(workspace.get_or_insert_with(|| owner.clone())),
+        Method::Ports { workspace } | Method::SimList { workspace } => {
+            Some(workspace.get_or_insert_with(|| owner.clone()))
+        }
         _ => bail!(
             "workspace processes can only inspect their worktree, execute there, and manage its resources"
         ),

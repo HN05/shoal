@@ -262,3 +262,52 @@ worktree, execute there, and manage its resources. They cannot access other
 worktrees, remove workspaces, alter repos, or administer the daemon. Nested
 commands keep that scope. Run a cross-workspace orchestrator outside `shoal exec`.
 Scope is cooperative; it does not restrict direct filesystem/Git operations.
+
+## Simulators (macOS)
+
+Shoal creates, boots, shares, and cleans up its own Xcode simulators. Configure
+allowed profiles in `~/.config/shoal/config.toml`, then restart the daemon:
+
+```toml
+[simulators]
+max_booted = 2
+max_devices = 4
+idle_seconds = 120
+allow_any = false
+default = "phone"
+
+[simulators.profiles.phone]
+device = "iPhone 17"
+runtime = "iOS 26.5"
+```
+
+Use `shoal sim catalog` to find names or identifiers installed on your machine.
+Repo config can set `[simulators] preferred = ["phone", "tablet"]`; explicit
+flags override it. No runtimes are downloaded. With global `allow_any = true`,
+other installed combinations can be requested with `--device`, `--runtime`, and
+`--reason`.
+
+```sh
+shoal sim acquire                   # Current worktree, configured preference
+shoal sim acquire --profile phone --name tests --wait 60
+shoal sim list                      # Current worktree's devices
+shoal sim list --all                 # All managed devices (human callers)
+shoal sim release tests
+shoal sim release                   # Release the default lease
+```
+
+Acquisition returns a ready device UDID; repeated requests for the same lease
+name return the same device. Use that UDID explicitly with `simctl` or
+`xcodebuild -destination 'platform=iOS Simulator,id=<UDID>'`. Leases belong to
+worktrees and survive command exit and daemon restart. Scope restrictions apply.
+
+At capacity, Shoal shuts down idle managed devices first; active leases and
+personal simulators are never interrupted. External running simulators count
+against the limit. Busy requests exit 2, or retry with `--wait <seconds>`.
+Released instances have a short reuse window, are erased before transfer to a
+different worktree, and are deleted when the idle timer expires (checked every
+15 seconds). Worktree removal deletes its devices; active leases block automatic
+removal. Failed operations retain records for `sim release` or removal to retry.
+
+The scheduler covers the default CoreSimulator device set and one Shoal daemon.
+Indirect Xcode test/preview clones and cross-daemon scheduling remain future work.

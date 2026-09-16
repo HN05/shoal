@@ -297,6 +297,14 @@ pub async fn workspace(
         return Ok(name);
     }
     let workspaces = workspaces(paths).await?;
+    if std::env::var_os("SHOAL_SCOPE_TOKEN").is_some() {
+        // List is filtered and authorized by the daemon, so this remains bound
+        // to the execution even when the process changes its working directory.
+        return workspaces
+            .first()
+            .map(|w| w.id.clone())
+            .context("scoped workspace is unavailable");
+    }
     if current {
         let cwd = std::fs::canonicalize(std::env::current_dir()?)?;
         if let Some(workspace) = workspaces

@@ -22,6 +22,10 @@ impl Fixture {
     }
 
     fn with_config(config: Option<&str>) -> Self {
+        Self::with_tools(config, false)
+    }
+
+    fn with_tools(config: Option<&str>, fake_sim: bool) -> Self {
         assert!(
             Command::new("wt").arg("--version").output().is_ok(),
             "workspace integration tests require Worktrunk (wt)"
@@ -30,6 +34,12 @@ impl Fixture {
         if let Some(config) = config {
             fs::create_dir_all(root.path().join(".config/shoal")).unwrap();
             fs::write(root.path().join(".config/shoal/config.toml"), config).unwrap();
+        }
+        if fake_sim {
+            fs::create_dir(root.path().join("bin")).unwrap();
+            let script = root.path().join("bin/xcrun");
+            fs::write(&script, include_str!("fixtures/simctl.py")).unwrap();
+            fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
         }
         let repo = root.path().join("repo with ' quotes & $literal");
         fs::create_dir(&repo).unwrap();
@@ -106,6 +116,14 @@ fn cli(root: &Path) -> Command {
         .arg("--state-dir")
         .arg(root.join("state"))
         .env("HOME", root)
+        .env(
+            "PATH",
+            format!(
+                "{}:{}",
+                root.join("bin").display(),
+                std::env::var("PATH").unwrap()
+            ),
+        )
         .env_remove("SHOAL_SHELL_DIRECTIVE")
         .env_remove("XDG_CONFIG_HOME")
         .env("GIT_CONFIG_GLOBAL", "/dev/null")
@@ -981,4 +999,289 @@ fn execution_scope_limits_management_and_expires() {
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("expired or unknown"));
     assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 2);
+}
+
+#[cfg(target_os = "macos")]
+const SIM_CONFIG: &str = r#"
+[simulators]
+max_booted = 1
+max_devices = 2
+idle_seconds = 120
+default = "phone"
+[simulators.profiles.phone]
+device = "Phone"
+runtime = "iOS Test"
+[simulators.profiles.tablet]
+device = "Tablet"
+runtime = "iOS Test"
+"#;
+
+#[test]
+#[cfg(target_os = "macos")]
+fn simulator_exclusivity_wait_reuse_scope_and_removal() {
+    let fixture = Fixture::with_tools(Some(SIM_CONFIG), true);
+    fixture.add("first");
+    fixture.add("second");
+    let first = fixture.ok(&["sim", "acquire", "first"]);
+    assert_eq!(first["state"], "leased");
+    assert_eq!(fixture.ok(&["sim", "acquire", "first"]), first);
+    let busy = fixture.run(&["--json", "sim", "acquire", "second"]);
+    assert_eq!(busy.status.code(), Some(2));
+    assert_eq!(
+        serde_json::from_slice::<Value>(&busy.stdout).unwrap()["acquired"],
+        false
+    );
+    let mut waiting = fixture
+        .command()
+        .args(["--json", "sim", "acquire", "second", "--wait", "10"])
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    thread::sleep(Duration::from_millis(150));
+    assert!(waiting.try_wait().unwrap().is_none());
+    fixture.ok(&["sim", "release", "default", "first"]);
+    let second = waiting.wait_with_output().unwrap();
+    assert!(second.status.success());
+    let second: Value = serde_json::from_slice(&second.stdout).unwrap();
+    assert_eq!(second["udid"], first["udid"]);
+    let events = fs::read_to_string(fixture.root.path().join("sim-events")).unwrap();
+    assert!(
+        events.contains("erase"),
+        "another owner must get a reset device"
+    );
+    let scoped = fixture.run(&[
+        "exec",
+        "first",
+        "--",
+        env!("CARGO_BIN_EXE_shoal"),
+        "sim",
+        "release",
+        "default",
+        "second",
+    ]);
+    assert!(!scoped.status.success());
+    let listed = fixture.run(&[
+        "exec",
+        "first",
+        "--",
+        env!("CARGO_BIN_EXE_shoal"),
+        "--json",
+        "sim",
+        "list",
+        "--all",
+    ]);
+    assert_eq!(
+        serde_json::from_slice::<Value>(&listed.stdout).unwrap(),
+        serde_json::json!([])
+    );
+    fixture.ok(&["rm", "first"]);
+    assert_eq!(
+        fixture
+            .ok(&["sim", "list", "--all"])
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    fixture.ok(&["rm", "second"]);
+    assert_eq!(fixture.ok(&["sim", "list", "--all"]), serde_json::json!([]));
+    assert_eq!(
+        fs::read_to_string(fixture.root.path().join("sim-devices.json")).unwrap(),
+        "[]"
+    );
+}
+
+#[test]
+#[cfg(target_os = "macos")]
+fn simulator_failures_retain_claims_and_restart_never_reassigns_them() {
+    let mut fixture = Fixture::with_tools(Some(SIM_CONFIG), true);
+    fixture.add("first");
+    fixture.add("second");
+    fs::write(fixture.root.path().join("sim-fail"), "bootstatus").unwrap();
+    assert!(!fixture.run(&["sim", "acquire", "first"]).status.success());
+    assert_eq!(fixture.ok(&["sim", "list", "first"])[0]["state"], "failed");
+    fs::remove_file(fixture.root.path().join("sim-fail")).unwrap();
+    fixture.ok(&["sim", "release", "default", "first"]);
+    let lease = fixture.ok(&["sim", "acquire", "first"]);
+    fixture.daemon.kill().unwrap();
+    fixture.daemon.wait().unwrap();
+    fixture.daemon = fixture
+        .command()
+        .args(["daemon", "run"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    fixture.wait_ready();
+    assert_eq!(fixture.ok(&["sim", "acquire", "first"]), lease);
+    assert_eq!(
+        fixture.run(&["sim", "acquire", "second"]).status.code(),
+        Some(2)
+    );
+    fs::write(fixture.root.path().join("sim-fail"), "delete").unwrap();
+    assert!(!fixture.run(&["rm", "first"]).status.success());
+    assert_eq!(
+        fixture.ok(&["sim", "list", "first"])[0]["udid"],
+        lease["udid"]
+    );
+    fs::remove_file(fixture.root.path().join("sim-fail")).unwrap();
+    fixture.ok(&["rm", "first"]);
+    assert_eq!(fixture.ok(&["sim", "list", "--all"]), serde_json::json!([]));
+}
+
+#[test]
+#[cfg(target_os = "macos")]
+fn simulator_policy_capacity_reclamation_and_external_devices() {
+    let fixture = Fixture::with_tools(Some(SIM_CONFIG), true);
+    let workspace = fixture.add("worker");
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    fs::write(
+        path.join(".shoal.toml"),
+        "[simulators]\npreferred = [\"tablet\"]\n",
+    )
+    .unwrap();
+    let tablet = fixture.ok(&["sim", "acquire", "worker"]);
+    assert_eq!(tablet["device"], "type.Tablet");
+    fixture.ok(&["sim", "release", "default", "worker"]);
+    let phone = fixture.ok(&["sim", "acquire", "worker", "--profile", "phone"]);
+    assert_ne!(phone["udid"], tablet["udid"]);
+    let devices: Value = serde_json::from_str(
+        &fs::read_to_string(fixture.root.path().join("sim-devices.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        devices
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|d| d["state"] == "Booted")
+            .count(),
+        1
+    );
+    fixture.ok(&["sim", "release", "default", "worker"]);
+    let unavailable = fixture.run(&[
+        "sim",
+        "acquire",
+        "worker",
+        "--device",
+        "Phone",
+        "--runtime",
+        "Missing",
+    ]);
+    assert!(!unavailable.status.success());
+    assert!(String::from_utf8_lossy(&unavailable.stderr).contains("does not download"));
+    let mut devices = devices.as_array().unwrap().clone();
+    for device in &mut devices {
+        device["state"] = serde_json::json!("Shutdown");
+    }
+    devices.push(serde_json::json!({"name":"Personal simulator","udid":"external","state":"Booted","isAvailable":true}));
+    fs::write(
+        fixture.root.path().join("sim-devices.json"),
+        serde_json::to_string(&devices).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        fixture.run(&["sim", "acquire", "worker"]).status.code(),
+        Some(2)
+    );
+    let events = fs::read_to_string(fixture.root.path().join("sim-events")).unwrap();
+    assert!(!events.contains("external"));
+    fixture.ok(&["rm", "worker", "--yes", "--delete-branch"]);
+}
+
+#[test]
+#[cfg(target_os = "macos")]
+fn simulator_any_policy_pool_limit_and_interrupted_creation_cleanup() {
+    let config = SIM_CONFIG.replace("max_devices = 2", "max_devices = 1\nallow_any = true");
+    let fixture = Fixture::with_tools(Some(&config), true);
+    fixture.add("worker");
+    let phone = fixture.ok(&["sim", "acquire", "worker"]);
+    fixture.ok(&["sim", "release", "default", "worker"]);
+    assert!(
+        !fixture
+            .run(&[
+                "sim",
+                "acquire",
+                "worker",
+                "--device",
+                "Watch",
+                "--runtime",
+                "iOS Test"
+            ])
+            .status
+            .success()
+    );
+    let watch = fixture.ok(&[
+        "sim",
+        "acquire",
+        "worker",
+        "--device",
+        "Watch",
+        "--runtime",
+        "iOS Test",
+        "--reason",
+        "Watch layout regression",
+    ]);
+    assert_ne!(watch["udid"], phone["udid"]);
+    assert_eq!(
+        fixture
+            .ok(&["sim", "list", "--all"])
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    fixture.ok(&["sim", "release", "default", "worker"]);
+    fs::write(fixture.root.path().join("sim-lost-create-response"), "1").unwrap();
+    assert!(!fixture.run(&["sim", "acquire", "worker"]).status.success());
+    let record = fixture.ok(&["sim", "list", "worker"]);
+    assert_eq!(record[0]["state"], "failed");
+    assert!(record[0]["udid"].is_null());
+    fixture.ok(&["sim", "release", "default", "worker"]);
+    assert_eq!(
+        fs::read_to_string(fixture.root.path().join("sim-devices.json")).unwrap(),
+        "[]"
+    );
+}
+
+#[test]
+#[cfg(target_os = "macos")]
+fn simulators_allocate_concurrently_and_idle_expiry_keeps_active_leases() {
+    let config = SIM_CONFIG
+        .replace("max_booted = 1", "max_booted = 2")
+        .replace("idle_seconds = 120", "idle_seconds = 0");
+    let fixture = Fixture::with_tools(Some(&config), true);
+    fixture.add("first");
+    fixture.add("second");
+    let first = fixture
+        .command()
+        .args(["--json", "sim", "acquire", "first"])
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let second = fixture
+        .command()
+        .args(["--json", "sim", "acquire", "second"])
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let first = first.wait_with_output().unwrap();
+    let second = second.wait_with_output().unwrap();
+    assert!(first.status.success() && second.status.success());
+    let first: Value = serde_json::from_slice(&first.stdout).unwrap();
+    let second: Value = serde_json::from_slice(&second.stdout).unwrap();
+    assert_ne!(first["udid"], second["udid"]);
+    fixture.ok(&["sim", "release", "default", "first"]);
+    let deadline = Instant::now() + Duration::from_secs(20);
+    loop {
+        let sims = fixture.ok(&["sim", "list", "--all"]);
+        if sims.as_array().unwrap().len() == 1 {
+            assert_eq!(sims[0]["udid"], second["udid"]);
+            break;
+        }
+        assert!(Instant::now() < deadline, "idle simulator was not deleted");
+        thread::sleep(Duration::from_millis(100));
+    }
+    fixture.ok(&["rm", "first"]);
+    fixture.ok(&["rm", "second"]);
 }

@@ -20,6 +20,7 @@ pub struct Manager {
     pub store: Store,
     pub config: crate::config::Config,
     paths: Paths,
+    pub sim_gate: Mutex<()>,
     repositories: Mutex<()>,
     pub scopes: Mutex<HashMap<String, (String, String)>>,
     active: Mutex<HashMap<String, watch::Sender<bool>>>,
@@ -36,6 +37,7 @@ impl Manager {
             config: crate::config::Config::load(&paths)?,
             store: Store::open(paths.state.join("state.db")).await?,
             paths,
+            sim_gate: Mutex::new(()),
             repositories: Mutex::new(()),
             scopes: Mutex::new(HashMap::new()),
             active: Mutex::new(HashMap::new()),
@@ -201,9 +203,11 @@ impl Manager {
 
     pub async fn inspect(&self, selector: String) -> Result<Inspection> {
         let workspace = self.get(selector).await?;
+        let simulators = self.simulators(Some(workspace.id.clone())).await?;
         self.store
             .run(move |db| {
                 Ok(Inspection {
+                    simulators,
                     executions: store::executions(db, &workspace.id)?,
                     ports: store::ports(db, Some(&workspace.id))?,
                     workspace,
@@ -359,6 +363,14 @@ impl Manager {
     }
 
     pub async fn cleanup_snapshot(&self, id: &str) -> Result<Option<u64>> {
+        if self
+            .simulators(Some(id.into()))
+            .await?
+            .iter()
+            .any(|s| s.workspace_id.is_some())
+        {
+            return Ok(None);
+        }
         let check = self.check_removal(id.to_owned(), 0).await?;
         if !check.safe() || !check.workspace.path.is_dir() {
             return Ok(None);
@@ -421,9 +433,9 @@ impl Manager {
                 };
                 ensure!(!matches!(choice, Choice::KeepBranch) || check.branch.is_some() || check.unpushed_commits == 0,
                     "detached HEAD has unpushed commits; create a branch before choosing to keep it");
-                // Future live resources (such as simulators) must be released/reset
-                // here. Port bookings remain reserved until directory removal succeeds,
-                // then cascade with the workspace record in the transaction below.
+                // Live resources are removed before the directory; failed cleanup
+                // retains their ownership records so removal can be retried.
+                self.remove_simulators(&workspace.id).await?;
                 worktrunk::remove(
                     &repo.path,
                     &self.paths.state.join("worktrunk.toml"),
@@ -439,6 +451,7 @@ impl Manager {
                 );
                 RemovalResult { removed: true, branch: None, branch_deleted: false, branch_outcome: "not_attempted".into() }
             };
+            self.remove_simulators(&workspace.id).await?;
             let id = workspace.id.clone();
             self.store
                 .run(move |db| {
@@ -616,7 +629,7 @@ impl Manager {
     }
 }
 
-pub fn validate_name(name: &str) -> Result<()> {
+pub(crate) fn validate_name(name: &str) -> Result<()> {
     ensure!(
         !name.is_empty()
             && name.len() <= 64

@@ -32,6 +32,7 @@ pub struct Execution {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Inspection {
+    pub simulators: Vec<crate::simulators::Simulator>,
     pub workspace: Workspace,
     pub executions: Vec<Execution>,
     pub ports: Vec<PortReservation>,

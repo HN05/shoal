@@ -25,6 +25,11 @@ when behavior changes, distinguishing decisions from proposals.
 - TCP port reservations are cooperative and owned by the worktree. Keep them
   across command exits and failed removal; successful removal releases them with
   the workspace record. Global `[ports]` config sets the automatic range.
+- Simulator leases are exclusive and worktree-owned. Persist claims before
+  simctl mutations; retain claims after failure/restart. Only mutate recorded
+  Shoal devices, reset before transferring owners, and delete on workspace
+  removal/idle expiry. Use installed runtimes only. Tests use an isolated xcrun
+  fixture; never touch personal simulator devices.
 - `shoal diff` uses Git fork-point/merge-base against the recorded base branch;
   do not compare directly to today's main tip or a frozen commit after a rebase.
   Preserve native Git pager/external-diff configuration.

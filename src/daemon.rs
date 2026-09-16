@@ -74,6 +74,17 @@ pub async fn run(paths: Paths, managed: bool) -> Result<()> {
             Duration::from_secs(manager.config.auto_cleanup.idle_minutes * 60),
         ))
     });
+    let sim_cleanup = {
+        let manager = manager.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(Duration::from_secs(15)).await;
+                if let Err(error) = manager.expire_simulators().await {
+                    eprintln!("simulator cleanup: {error:#}");
+                }
+            }
+        })
+    };
     loop {
         tokio::select! {
             _ = terminate.recv() => break,
@@ -92,6 +103,8 @@ pub async fn run(paths: Paths, managed: bool) -> Result<()> {
             }
         }
     }
+    sim_cleanup.abort();
+    let _ = sim_cleanup.await;
     clients.abort_all();
     if let Some(cleanup) = cleanup {
         cleanup.abort();
@@ -201,6 +214,29 @@ async fn serve(
 
 async fn operation(manager: &Manager, method: Method, scope: Option<&str>) -> Result<Body> {
     Ok(match method {
+        Method::SimCatalog => {
+            let inventory = crate::simctl::inventory().await?;
+            Body::SimCatalog(
+                serde_json::json!({"device_types":inventory.devicetypes, "runtimes":inventory.runtimes.into_iter().filter(|r| r.is_available).collect::<Vec<_>>(), "policy":manager.config.simulators}),
+            )
+        }
+        Method::SimList { workspace } => {
+            let owner = match workspace {
+                Some(selector) => Some(manager.get(selector).await?.id),
+                None => None,
+            };
+            Body::Simulators(manager.simulators(owner).await?)
+        }
+        Method::SimAcquire { workspace, request } => {
+            match manager.acquire_simulator(workspace, request).await? {
+                crate::simulators::Acquisition::Acquired(sim) => Body::Simulator(*sim),
+                crate::simulators::Acquisition::Busy(message) => Body::SimBusy { message },
+            }
+        }
+        Method::SimRelease { workspace, name } => {
+            manager.release_simulator(workspace, name).await?;
+            Body::Ok
+        }
         Method::Repositories => {
             let mut repos = manager.repositories().await?;
             if let Some(scope) = scope {

@@ -9,6 +9,7 @@ use crate::paths::Paths;
 pub struct Config {
     pub auto_cleanup: AutoCleanup,
     pub ports: Ports,
+    pub simulators: crate::simulators::SimConfig,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize)]
@@ -84,6 +85,7 @@ impl Config {
             config.ports.start > 0 && config.ports.start <= config.ports.end,
             "ports.start/end must specify a nonempty range between 1 and 65535"
         );
+        config.simulators.validate()?;
         Ok(config)
     }
 }

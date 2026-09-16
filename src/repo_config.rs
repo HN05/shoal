@@ -15,6 +15,7 @@ pub enum ConflictPolicy {
 #[serde(default, deny_unknown_fields)]
 pub struct RepoConfig {
     pub ports: PortDefaults,
+    pub simulators: SimulatorPreferences,
 }
 
 #[derive(Debug, Default, Deserialize, Serialize)]
@@ -67,4 +68,10 @@ pub fn load(workspace_dir: &Path) -> Result<RepoConfig> {
         );
     }
     Ok(config)
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct SimulatorPreferences {
+    pub preferred: Vec<String>,
 }
