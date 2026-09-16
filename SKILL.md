@@ -44,8 +44,9 @@ switch branches, stash edits, or reset your work. Conflicts return nonzero with
 `success: false` and Git output in JSON; resolve them in your own worktree and
 finish with `git add` and `git commit`, or cancel with `git merge --abort`.
 Other failures may return an error before a merge starts; inspect the error.
-`shoal pull` separately refreshes repository main from its upstream; follow it
-with `shoal merge main` when you also want those changes in your own branch.
+`shoal pull` separately refreshes the repository's default branch from its upstream;
+follow it with `shoal merge <default-branch>` when you also want those changes in
+your own branch (for example, `main` or `develop`).
 
 ## Ports
 

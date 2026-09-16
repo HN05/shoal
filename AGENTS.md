@@ -19,7 +19,7 @@ when behavior changes, distinguishing decisions from proposals.
   conflict policy.
 - Workspace commands inherit a scope token. Enforce own-worktree resource access
   in the daemon and deny lifecycle/repository/service administration, except
-  `shoal pull` may fast-forward the caller's own repo main from its upstream. This is
+  `shoal pull` may fast-forward the caller's own repo default branch from its upstream. This is
   cooperative scoping, not a boundary against a hostile same-user process.
 - Agents may merge any local or remote branch into their own recorded workspace
   branch with `shoal merge`. Keep merges in the tracked execution wrapper; fetch

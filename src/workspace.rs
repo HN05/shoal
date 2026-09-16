@@ -152,15 +152,30 @@ impl Manager {
             Ok(())
         }).await?;
         let result = async {
-            let base = match base.as_deref() {
-                None | Some("main") => "refs/heads/main",
-                Some(base) => base,
+            let default = crate::default_branch::resolve(&repo.path, base.is_none()).await;
+            // An explicit ref remains an escape hatch when remote default-branch
+            // discovery is unavailable. It does not implicitly refresh another ref.
+            let default = if base.is_none() {
+                Some(default?)
+            } else {
+                default.ok()
             };
-            if base == "refs/heads/main" {
-                self.refresh_main(&repo, true)
+            let default_ref = default.as_ref().map(|name| format!("refs/heads/{name}"));
+            let base = base
+                .as_deref()
+                .or(default_ref.as_deref())
+                .context("workspace base is unknown")?;
+            let refresh = default.as_deref() == Some(base) || default_ref.as_deref() == Some(base);
+            if refresh {
+                self.refresh_default_branch(&repo, default.as_deref().unwrap(), true)
                     .await
-                    .context("could not refresh main before creating workspace")?;
+                    .context("could not refresh the default branch before creating workspace")?;
             }
+            let base = if refresh {
+                default_ref.as_deref().unwrap()
+            } else {
+                base
+            };
             let commit = worktrunk::git(
                 &repo.path,
                 &["rev-parse", "--verify", &format!("{base}^{{commit}}")],
@@ -170,7 +185,7 @@ impl Manager {
             .to_owned();
             let reference =
                 worktrunk::git(&repo.path, &["rev-parse", "--symbolic-full-name", base]).await?;
-            let reference = reference.trim();
+            let reference = reference.trim_end_matches('\n');
             let reference = reference.starts_with("refs/").then(|| reference.to_owned());
             let (record_id, record_commit) = (workspace.id.clone(), commit.clone());
             self.store

@@ -95,7 +95,8 @@ pub struct PortOverview {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct PulledMain {
+pub struct PulledBranch {
+    pub branch: String,
     pub repository_id: String,
     pub previous_commit: String,
     pub commit: String,

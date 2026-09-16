@@ -72,14 +72,24 @@ existing destination or silently ignore a path that differs from an existing
 registration. Local checkout registration requires no remote and keeps the
 checkout in place; `--path` applies only to URL cloning.
 
-A workspace defaults to local `main`, fast-forwarded from its configured upstream
-before branching, even when the registered checkout is on another branch. An
-already-ahead main is preserved. Refresh failures (including missing upstream in
-a repository with remotes, divergence, or a dirty/managed main checkout) stop
-creation. Repositories with neither remotes nor a main upstream use local main.
-An explicit `--ref` selects another starting point without refreshing main;
-`--ref main` and `--ref refs/heads/main` still refresh it. Refresh and creation share
-the repository Git gate. Registration alone does not refresh main.
+A workspace defaults to the repository's default branch. Resolve `origin/HEAD`,
+or the sole remote's HEAD when there is no origin; multiple remotes without origin
+are ambiguous. Creation and pull discover a missing symbolic remote HEAD with
+`ls-remote --symref` and cache it. Existing cached HEAD is authoritative until the
+user updates it with `git remote set-head`. Without remotes, use the registered
+checkout's current branch; a detached checkout requires an explicit base. Never
+guess `main` or `master`. Registration does not contact remotes for discovery.
+
+Fast-forward the selected local default branch from its configured upstream before
+branching, even when the registered checkout is on another branch. Preserve an
+already-ahead default. Missing local branches, missing upstream in a repository
+with remotes, divergence, failed fetches, and dirty/managed default checkouts stop
+creation. Local repositories without remotes or upstreams need no refresh. An
+explicit `--ref` selects another starting point without refreshing the default;
+naming the detected default branch directly or with `refs/heads/` still refreshes
+it. Explicit refs use only local default metadata, remaining usable without remote
+default discovery. Refresh and creation
+share the repository Git gate. Registration alone does not refresh branches.
 
 A workspace starts from committed history and has a stable name and directory.
 Creation accepts literal Git branch names validated by Git, preserving slashes,
@@ -128,8 +138,8 @@ Git operations have separate meanings:
 - `diff` compares against the recorded base branch's fork point, falling back to
   merge-base. A fixed-commit base stays fixed. Preserve native Git diff settings;
   advancing main alone must not appear as work done on the feature branch.
-- `pull` fast-forwards repository main from its configured upstream. It preserves
-  an already-ahead main and refuses divergence, dirty main checkouts, and main
+- `pull` fast-forwards the repository default branch from its configured upstream.
+  It preserves an already-ahead default and refuses divergence, dirty checkouts, and that branch
   checked out in a managed workspace. It does not merge into the feature branch.
 - `merge` imports any local or remote branch into the workspace's recorded branch.
   Local sources take precedence; remote-only discovery requires an unambiguous
@@ -145,7 +155,7 @@ worktree checks are cooperative safeguards; independent Git commands can race.
 
 Commands launched through Shoal inherit a daemon-validated scope token. They may
 inspect and execute in their own workspace, merge into its branch, and manage its
-resources. `pull` for their repository's main is the narrow repository-management
+resources. `pull` for their repository's default branch is the narrow repository-management
 exception. Creation, removal, reconciliation, other-workspace access, and service
 administration belong to an unscoped caller. Nested executions retain scope;
 changing working directory does not expand it.
@@ -290,7 +300,9 @@ release bookkeeping leases with the ownership record. Failures retain the record
 needed to retry. Access to a shared cache never makes it disposable workspace data.
 
 Manual removal deletes a redundant branch when the worktree is clean and its
-contents match main or its upstream. Otherwise the caller explicitly chooses to
+contents match the local default branch or its upstream. Default-branch lookup
+uses local metadata only during cleanup; an unknown default is not a match.
+Otherwise the caller explicitly chooses to
 keep or delete the branch. Keeping a branch preserves committed work only;
 removing a worktree discards its uncommitted files.
 

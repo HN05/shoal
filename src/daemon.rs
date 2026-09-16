@@ -326,7 +326,9 @@ async fn operation(
             }
             Body::Workspaces(workspaces)
         }
-        Method::PullMain { workspace } => Body::PulledMain(manager.pull_main(workspace).await?),
+        Method::PullDefaultBranch { workspace } => {
+            Body::PulledBranch(manager.pull_default_branch(workspace).await?)
+        }
         Method::Reconcile { workspace, options } => {
             let workspaces = match workspace {
                 Some(workspace) => vec![manager.get(workspace).await?],

@@ -5,7 +5,7 @@ use tokio::process::Command;
 use uuid::Uuid;
 
 use crate::{
-    model::{PulledMain, Repository},
+    model::{PulledBranch, Repository},
     workspace::Manager,
     worktrunk,
 };
@@ -74,23 +74,26 @@ impl Manager {
         Ok(prefix)
     }
 
-    pub async fn pull_main(&self, selector: String) -> Result<PulledMain> {
+    pub async fn pull_default_branch(&self, selector: String) -> Result<PulledBranch> {
         let workspace = self.get(selector).await?;
         let repo = self.repository(&workspace.repository_id).await?;
         let gate = self.git_gate(&repo.id).await;
         let _guard = gate.lock().await;
-        self.refresh_main(&repo, false).await
+        let branch = crate::default_branch::resolve(&repo.path, true).await?;
+        self.refresh_default_branch(&repo, &branch, false).await
     }
 
     // The caller holds the repository's Git gate through any subsequent creation.
-    pub(crate) async fn refresh_main(
+    pub(crate) async fn refresh_default_branch(
         &self,
         repo: &Repository,
+        branch: &str,
         allow_local_only: bool,
-    ) -> Result<PulledMain> {
-        let previous_commit = git(&repo.path, &["rev-parse", "--verify", "refs/heads/main"])
+    ) -> Result<PulledBranch> {
+        let local_ref = format!("refs/heads/{branch}");
+        let previous_commit = git(&repo.path, &["rev-parse", "--verify", &local_ref])
             .await
-            .context("repository has no local main branch")?
+            .with_context(|| format!("repository has no local {branch} branch"))?
             .trim()
             .to_owned();
         let upstream = git(
@@ -98,12 +101,12 @@ impl Manager {
             &[
                 "for-each-ref",
                 "--format=%(upstream:remotename)%00%(upstream:remoteref)",
-                "refs/heads/main",
+                &local_ref,
             ],
         )
         .await?;
         let (remote, reference) = upstream
-            .trim()
+            .trim_end_matches('\n')
             .split_once('\0')
             .context("invalid Git upstream")?;
         if allow_local_only
@@ -111,7 +114,8 @@ impl Manager {
             && reference.is_empty()
             && git(&repo.path, &["remote"]).await?.trim().is_empty()
         {
-            return Ok(PulledMain {
+            return Ok(PulledBranch {
+                branch: branch.into(),
                 repository_id: repo.id.clone(),
                 updated: false,
                 commit: previous_commit.clone(),
@@ -120,13 +124,13 @@ impl Manager {
         }
         ensure!(
             !remote.is_empty() && reference.starts_with("refs/heads/"),
-            "main has no branch upstream; configure it with git branch --set-upstream-to=<remote>/main main"
+            "{branch} has no branch upstream; configure it with git branch --set-upstream-to=<remote>/{branch} {branch}"
         );
         let trees = git(&repo.path, &["worktree", "list", "--porcelain", "-z"]).await?;
         let checkout = trees.split("\0\0").find_map(|record| {
             record
                 .split('\0')
-                .any(|field| field == "branch refs/heads/main")
+                .any(|field| field == format!("branch {local_ref}"))
                 .then(|| {
                     record
                         .split('\0')
@@ -140,9 +144,9 @@ impl Manager {
                 !self.list().await?.iter().any(|w| {
                     std::fs::canonicalize(&w.path).is_ok_and(|managed| managed == path)
                 }),
-                "main is checked out in a managed workspace; switch that workspace back to its own branch first"
+                "{branch} is checked out in a managed workspace; switch that workspace back to its own branch first"
             );
-            clean_main(Path::new(checkout)).await?;
+            clean_branch(Path::new(checkout), branch).await?;
         }
 
         // A private fetch ref avoids races with unrelated fetches overwriting FETCH_HEAD.
@@ -164,13 +168,10 @@ impl Manager {
             let commit = git(&repo.path, &["rev-parse", "--verify", &fetched]).await?;
             let commit = commit.trim();
             ensure!(
-                git(&repo.path, &["rev-parse", "refs/heads/main"])
-                    .await?
-                    .trim()
-                    == previous_commit,
-                "main changed during fetch; retry shoal pull"
+                git(&repo.path, &["rev-parse", &local_ref]).await?.trim() == previous_commit,
+                "{branch} changed during fetch; retry shoal pull"
             );
-            // Like pull --ff-only, an already-ahead main stays untouched.
+            // Like pull --ff-only, an already-ahead default branch stays untouched.
             if git(
                 &repo.path,
                 &["merge-base", "--is-ancestor", commit, &previous_commit],
@@ -185,9 +186,13 @@ impl Manager {
                 &["merge-base", "--is-ancestor", &previous_commit, commit],
             )
             .await
-            .context("main and its upstream have diverged; resolve this manually before pulling")?;
+            .with_context(|| {
+                format!(
+                    "{branch} and its upstream have diverged; resolve this manually before pulling"
+                )
+            })?;
             if let Some(checkout) = checkout {
-                clean_main(Path::new(checkout)).await?;
+                clean_branch(Path::new(checkout), branch).await?;
                 git(
                     Path::new(checkout),
                     &[
@@ -204,7 +209,7 @@ impl Manager {
                 .await?;
             } else {
                 // Native fetch refuses a checked-out destination and a non-fast-forward.
-                // This also guards against main becoming checked out since discovery.
+                // This also guards against the default branch becoming checked out since discovery.
                 git(
                     &repo.path,
                     &[
@@ -213,7 +218,7 @@ impl Manager {
                         "--no-recurse-submodules",
                         "--no-write-fetch-head",
                         ".",
-                        &format!("{commit}:refs/heads/main"),
+                        &format!("{commit}:{local_ref}"),
                     ],
                 )
                 .await?;
@@ -224,7 +229,8 @@ impl Manager {
         let cleanup = git(&repo.path, &["update-ref", "-d", &fetched]).await;
         let commit = result?;
         cleanup.context("could not remove temporary pull ref")?;
-        Ok(PulledMain {
+        Ok(PulledBranch {
+            branch: branch.into(),
             repository_id: repo.id.clone(),
             updated: commit != previous_commit,
             previous_commit,
@@ -233,13 +239,10 @@ impl Manager {
     }
 }
 
-async fn clean_main(path: &Path) -> Result<()> {
+async fn clean_branch(path: &Path, branch: &str) -> Result<()> {
     ensure!(
-        git(path, &["symbolic-ref", "--quiet", "HEAD"])
-            .await?
-            .trim()
-            == "refs/heads/main",
-        "main checkout changed branches; retry shoal pull"
+        git(path, &["symbolic-ref", "--quiet", "HEAD"]).await? == format!("refs/heads/{branch}\n"),
+        "{branch} checkout changed branches; retry shoal pull"
     );
     ensure!(
         git(
@@ -253,7 +256,7 @@ async fn clean_main(path: &Path) -> Result<()> {
         )
         .await?
         .is_empty(),
-        "main checkout has uncommitted or untracked changes; clean it before pulling"
+        "{branch} checkout has uncommitted or untracked changes; clean it before pulling"
     );
     Ok(())
 }

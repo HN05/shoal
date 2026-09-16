@@ -11,7 +11,7 @@ pub struct RemovalCheck {
     pub dirty: bool,
     pub unpushed_commits: u64,
     pub branch: Option<String>,
-    pub matches_main: bool,
+    pub matches_default_branch: bool,
     pub matches_upstream: bool,
 }
 
@@ -37,9 +37,9 @@ impl RemovalCheck {
         if self.dirty {
             warnings.push("Uncommitted changes or untracked files will be deleted".into());
         }
-        if !self.matches_main && !self.matches_upstream {
+        if !self.matches_default_branch && !self.matches_upstream {
             warnings.push(
-                "Branch contents differ from main and upstream (or those refs are unavailable)"
+                "Branch contents differ from the default branch and upstream (or those refs are unavailable)"
                     .into(),
             );
         }
@@ -47,7 +47,7 @@ impl RemovalCheck {
     }
 
     pub fn can_delete_branch(&self) -> bool {
-        !self.dirty && (self.matches_main || self.matches_upstream)
+        !self.dirty && (self.matches_default_branch || self.matches_upstream)
     }
 
     pub fn needs_choice(&self) -> bool {
@@ -66,6 +66,7 @@ pub async fn check(
     workspace: Workspace,
     running_commands: usize,
     caller_pid: u32,
+    default_branch: Option<&str>,
 ) -> Result<RemovalCheck> {
     let mut check = RemovalCheck {
         workspace,
@@ -74,7 +75,7 @@ pub async fn check(
         dirty: false,
         unpushed_commits: 0,
         branch: None,
-        matches_main: false,
+        matches_default_branch: false,
         matches_upstream: false,
     };
     if check.workspace.path.exists() {
@@ -95,12 +96,18 @@ pub async fn check(
         let branch = branch.trim_end_matches('\n');
         check.branch = (!branch.is_empty()).then(|| branch.to_owned());
         let tree = worktrunk::git(&check.workspace.path, &["rev-parse", "HEAD^{tree}"]).await?;
-        check.matches_main = worktrunk::git(
-            &check.workspace.path,
-            &["rev-parse", "--verify", "refs/heads/main^{tree}"],
-        )
-        .await
-        .is_ok_and(|other| other == tree);
+        if let Some(default_branch) = default_branch {
+            check.matches_default_branch = worktrunk::git(
+                &check.workspace.path,
+                &[
+                    "rev-parse",
+                    "--verify",
+                    &format!("refs/heads/{default_branch}^{{tree}}"),
+                ],
+            )
+            .await
+            .is_ok_and(|other| other == tree);
+        }
         check.matches_upstream = worktrunk::git(
             &check.workspace.path,
             &["rev-parse", "--verify", "@{upstream}^{tree}"],

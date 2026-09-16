@@ -4,7 +4,7 @@ use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWrite
 
 use crate::model::{ExecutionPlan, Inspection, Repository, Workspace};
 
-pub const VERSION: u32 = 15;
+pub const VERSION: u32 = 16;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -79,7 +79,7 @@ pub enum Method {
         base: Option<String>,
     },
     List,
-    PullMain {
+    PullDefaultBranch {
         workspace: String,
     },
     DiffBase {
@@ -160,7 +160,7 @@ pub enum Body {
     RemovalCheck(crate::removal::RemovalCheck),
     RemovalResult(crate::removal::RemovalResult),
     DiffBase(crate::model::DiffBase),
-    PulledMain(crate::model::PulledMain),
+    PulledBranch(crate::model::PulledBranch),
     Port(crate::model::PortReservation),
     Ports(Vec<crate::model::PortReservation>),
     PortSuggestion(crate::model::PortSuggestion),

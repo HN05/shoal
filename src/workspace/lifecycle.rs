@@ -14,10 +14,13 @@ impl Manager {
         if inspection.workspace.path.exists() {
             self.verify_worktree(&inspection.workspace).await?;
         }
+        let repo = self.repository(&inspection.workspace.repository_id).await?;
+        let default_branch = crate::default_branch::resolve(&repo.path, false).await.ok();
         crate::removal::check(
             inspection.workspace,
             inspection.executions.len(),
             caller_pid,
+            default_branch.as_deref(),
         )
         .await
     }

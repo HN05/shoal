@@ -169,7 +169,7 @@ Workspace names are unique across repositories. Inputs that produce an occupied
 name fail without changing the existing workspace; choose a different name.
 Commands and completions use the resulting workspace name (or ID).
 
-Creation uses local `main`, or `--ref <git-ref>`, on a new branch. If its name is
+Creation uses the repository's default branch, or `--ref <git-ref>`, on a new branch. If its name is
 taken, append `-2`, `-3`, etc. Local branches, known remote branches, branch
 namespaces, and retained Shoal records count as conflicts. If an ancestor blocks
 the branch, suffix that component: an existing `feature` makes `feature/topic`
@@ -177,12 +177,23 @@ become `feature-2/topic`. Reserved names `HEAD` (Git), `@` (Worktrunk), and full
 40/64-character hex object-ID spellings also get a suffix. Branch conflict suffixes do not change the derived workspace name or
 directory. Existing branches and workspaces are not renamed.
 Uncommitted source files are not copied.
-Before branching from main, Shoal fetches its configured upstream and fast-forwards
-main, even if the registered checkout is on another branch. An already-ahead main
-is preserved. A failed fetch, missing upstream, divergence, or dirty/managed main
-checkout stops creation. Repositories with neither remotes nor a main upstream
-use local main. An explicit `--ref` other than `main` or `refs/heads/main` uses the
-selected history without refreshing main.
+Shoal reads `origin/HEAD` to find the default branch (for example, FotMob uses
+`develop`). Without `origin`, it uses the sole remote; multiple remotes without
+`origin` are ambiguous. If the remote HEAD is not cached, creation and `pull`
+query it and cache the symbolic ref. To pick up a remote's renamed default branch,
+run `git remote set-head origin --auto` in the registered checkout.
+
+Before branching, Shoal fetches the selected local branch's configured upstream
+and fast-forwards it, even if the registered checkout is on another branch. An
+already-ahead branch is preserved. Missing local branches or upstreams, a failed
+fetch, divergence, or a dirty/managed default-branch checkout stop creation. With
+no remotes, the registered checkout's current branch is the default and needs no
+upstream. Detached local checkouts need an explicit `--ref`.
+
+An explicit `--ref` selects another starting point without refreshing the default
+branch. Naming the detected default branch directly or as `refs/heads/<branch>`
+still refreshes it. Explicit refs use only locally known default-branch metadata;
+they remain usable without contacting a remote to discover its default.
 
 Register an existing local checkout directly; no remote is required:
 
@@ -191,8 +202,8 @@ shoal repo add ~/Projects/local-project --name local-project
 shoal add local-project --name feature
 ```
 
-The checkout stays in place. Creation uses its committed `main` when it has no
-remote; use `--ref <branch>` if the repository uses another branch name.
+The checkout stays in place. With no remote, creation uses its current committed
+branch; use `--ref <branch>` to select another starting point.
 
 The names shown by `shoal repo list` work as repository targets, including names
 inferred from URLs for older clones. Explicit `--name` values take precedence.
@@ -286,19 +297,20 @@ its state directory. If cleanup fails, completed steps stay completed and remain
 records are retained. Retry the same command to finish; new workspace creation is
 blocked while repository deletion is incomplete. Simulator audit history is kept.
 
-### Pull main
+### Pull the default branch
 
 ```sh
 shoal pull                 # Current workspace (or fzf); agents resolve to their own
 shoal pull fix-login
-shoal --json pull          # Previous/current commit IDs and whether main changed
+shoal --json pull          # Branch name, previous/current commits, and whether it changed
 ```
 
-Fast-forwards the workspace repository's local `main` from its configured upstream.
-Requires a local `main` with a tracking branch; it does not assume `origin`, merge
-or rebase the feature branch, stash edits, or force-update history. A checked-out
-`main` must be clean (including untracked files). Divergence is an error; a main
-that is already ahead stays unchanged. If `main` is checked out in another
+Fast-forwards the repository's default branch, selected as for `add`, from its
+configured upstream. Requires that local branch and its tracking configuration;
+the tracking remote may differ from the default remote. It does not merge or
+rebase the feature branch, stash edits, or force-update history. A checked-out
+default branch must be clean (including untracked files). Divergence is an error;
+an already-ahead branch stays unchanged. If the default branch is checked out in another
 Shoal-managed workspace, the request is refused. Otherwise Shoal updates its
 checkout, or just its ref when not checked out. Git hooks and recursive submodule
 updates are disabled. Scoped agents may request this only through their own
@@ -380,7 +392,7 @@ the probe socket so the application can bind. Reservations are cooperative:
 unrelated processes can still take a port later. UDP allocation is not implemented.
 
 Removal deletes the branch when the worktree is clean and its contents match
-local `main` or its configured upstream. The comparison is between Git trees;
+local default branch or its configured upstream. The comparison is between Git trees;
 commit history can differ. Missing refs do not count as a match.
 
 Otherwise, `fzf` offers these choices, with Cancel selected by default:
@@ -596,7 +608,7 @@ worktree's configured and reserved ports, including the actual numbers.
 
 Commands launched through `exec`, `claude`, and `codex cli` can inspect their own
 worktree, execute there, merge any local or remote branch into their own branch
-with `shoal merge`, manage resources, and pull repository main with `shoal pull`.
+with `shoal merge`, manage resources, and pull the repository default branch with `shoal pull`.
 They cannot access other worktrees, remove workspaces, perform
 other repository administration, or administer the daemon. Nested
 commands keep that scope. Run a cross-workspace orchestrator outside `shoal exec`.

@@ -676,6 +676,14 @@ fn registration_reuses_repositories_by_origin_across_paths_and_url_forms() {
     let url = "https://example.invalid/team/project.git";
     let ssh_url = "git@example.invalid:team/project.git";
     git(&fixture.repo, &["remote", "add", "origin", url]);
+    git(
+        &fixture.repo,
+        &[
+            "symbolic-ref",
+            "refs/remotes/origin/HEAD",
+            "refs/remotes/origin/main",
+        ],
+    );
     let other = fixture.root.path().join("other-checkout");
     git(
         &fixture.repo,
@@ -2937,6 +2945,8 @@ fn resource_scopes_separate_repos_share_global_capacity_and_limit_agents() {
 
 // Local bare origin plus a separate author checkout: no network or personal repos.
 fn pull_remote(fixture: &Fixture) -> PathBuf {
+    let branch = git(&fixture.repo, &["branch", "--show-current"]);
+    let branch = branch.trim_end_matches('\n');
     let remote = fixture.root.path().join("origin.git");
     git(
         &fixture.repo,
@@ -2954,7 +2964,11 @@ fn pull_remote(fixture: &Fixture) -> PathBuf {
     git(&fixture.repo, &["fetch", "origin"]);
     git(
         &fixture.repo,
-        &["branch", "--set-upstream-to=origin/main", "main"],
+        &[
+            "branch",
+            &format!("--set-upstream-to=origin/{branch}"),
+            branch,
+        ],
     );
     let author = fixture.root.path().join("author");
     git(
@@ -2975,8 +2989,37 @@ fn pull_remote(fixture: &Fixture) -> PathBuf {
             "upstream change",
         ],
     );
-    git(&author, &["push", "origin", "main"]);
+    git(&author, &["push", "origin", branch]);
     author
+}
+
+#[test]
+fn add_and_scoped_pull_use_develop_as_the_repository_default() {
+    let fixture = Fixture::new();
+    git(&fixture.repo, &["branch", "-m", "develop"]);
+    let author = pull_remote(&fixture);
+    let expected = git(&author, &["rev-parse", "HEAD"]);
+    let workspace = fixture.add("henrik/8374-set-league-season-player-profile");
+    assert_eq!(workspace["base_ref"], "refs/heads/develop");
+    assert_eq!(workspace["base_commit"], expected.trim());
+    let name = workspace["name"].as_str().unwrap();
+    let output = fixture.run(&[
+        "exec",
+        name,
+        "--",
+        env!("CARGO_BIN_EXE_shoal"),
+        "--json",
+        "pull",
+    ]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let result: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(result["branch"], "develop");
+    assert_eq!(result["updated"], false);
+    assert_eq!(fixture.ok(&["rm", name])["branch_deleted"], true);
 }
 
 #[test]

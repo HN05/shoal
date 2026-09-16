@@ -82,6 +82,8 @@ impl Fixture {
     }
 
     fn remote(&self) -> PathBuf {
+        let branch = git(&self.repo, &["branch", "--show-current"]);
+        let branch = branch.trim_end_matches('\n');
         let origin = self.root.path().join("origin.git");
         git(
             &self.repo,
@@ -99,7 +101,11 @@ impl Fixture {
         git(&self.repo, &["fetch", "origin"]);
         git(
             &self.repo,
-            &["branch", "--set-upstream-to=origin/main", "main"],
+            &[
+                "branch",
+                &format!("--set-upstream-to=origin/{branch}"),
+                branch,
+            ],
         );
         let author = self.root.path().join("author");
         git(
@@ -108,7 +114,7 @@ impl Fixture {
         );
         fs::write(author.join("upstream"), "remote\n").unwrap();
         commit(&author, "upstream");
-        git(&author, &["push", "origin", "main"]);
+        git(&author, &["push", "origin", branch]);
         author
     }
 }
@@ -137,6 +143,166 @@ async fn names_suffix_only_conflicts_and_serialize_concurrent_adds() {
     git(&f.repo, &["branch", "concurrent"]);
     let (first, second) = tokio::join!(f.add("concurrent"), f.add("concurrent-2"));
     assert_ne!(first.branch, second.branch);
+}
+
+#[tokio::test]
+async fn remote_default_controls_creation_pull_diff_and_removal() {
+    for branch in ["develop", "master", "release/current"] {
+        let f = Fixture::new().await;
+        git(&f.repo, &["branch", "-m", branch]);
+        let before = git(&f.repo, &["rev-parse", "HEAD"]);
+        let author = f.remote();
+        // A branch called main and an unrelated checkout must not override HEAD.
+        git(&f.repo, &["branch", "main"]);
+        git(&f.repo, &["switch", "-c", "unrelated"]);
+        let expected = git(&author, &["rev-parse", "HEAD"]);
+        let workspace = f.add("henrik/topic").await;
+        assert_eq!(workspace.base_ref, Some(format!("refs/heads/{branch}")));
+        assert_eq!(workspace.base_commit.as_deref(), Some(expected.trim()));
+        assert_eq!(git(&workspace.path, &["rev-parse", "HEAD"]), expected);
+        assert_eq!(git(&f.repo, &["rev-parse", "main"]), before);
+        assert_eq!(git(&f.repo, &["rev-parse", "HEAD"]), before);
+        assert_eq!(
+            git(&f.repo, &["symbolic-ref", "refs/remotes/origin/HEAD"]),
+            format!("refs/remotes/origin/{branch}\n")
+        );
+        assert!(
+            f.manager
+                .check_removal(workspace.id.clone(), 0)
+                .await
+                .unwrap()
+                .can_delete_branch()
+        );
+        assert_eq!(
+            f.manager
+                .diff_base(workspace.id.clone())
+                .await
+                .unwrap()
+                .commit,
+            expected.trim()
+        );
+        fs::write(author.join("upstream"), "newer\n").unwrap();
+        commit(&author, "upstream");
+        git(&author, &["push", "origin", branch]);
+        let result = f
+            .manager
+            .pull_default_branch(workspace.id.clone())
+            .await
+            .unwrap();
+        assert_eq!(result.branch, branch);
+        assert!(result.updated);
+        assert_eq!(result.commit, git(&author, &["rev-parse", "HEAD"]).trim());
+        assert_eq!(git(&workspace.path, &["rev-parse", "HEAD"]), expected);
+        assert_eq!(git(&f.repo, &["rev-parse", "main"]), before);
+        assert_eq!(
+            f.manager.diff_base(workspace.id).await.unwrap().commit,
+            expected.trim()
+        );
+    }
+}
+
+#[tokio::test]
+async fn non_main_default_refresh_preserves_safety_and_explicit_overrides() {
+    let f = Fixture::new().await;
+    git(&f.repo, &["branch", "-m", "develop"]);
+    git(&f.repo, &["branch", "main"]);
+    f.remote();
+    git(&f.repo, &["remote", "rename", "origin", "upstream"]);
+    let before = git(&f.repo, &["rev-parse", "HEAD"]);
+    fs::write(f.repo.join("tracked"), "dirty\n").unwrap();
+    for (index, base) in [None, Some("develop"), Some("refs/heads/develop")]
+        .into_iter()
+        .enumerate()
+    {
+        let error = f
+            .manager
+            .add(
+                f.repo_id.clone(),
+                format!("blocked-{index}"),
+                base.map(str::to_owned),
+            )
+            .await
+            .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("develop checkout has uncommitted"),
+            "{error:#}"
+        );
+    }
+    let explicit = f
+        .manager
+        .add(f.repo_id.clone(), "explicit".into(), Some("main".into()))
+        .await
+        .unwrap();
+    assert_eq!(git(&explicit.path, &["rev-parse", "HEAD"]), before);
+    assert_eq!(git(&f.repo, &["rev-parse", "develop"]), before);
+    assert_eq!(
+        fs::read_to_string(f.repo.join("tracked")).unwrap(),
+        "dirty\n"
+    );
+}
+
+#[tokio::test]
+async fn local_defaults_and_unavailable_or_ambiguous_remote_defaults() {
+    let f = Fixture::new().await;
+    git(&f.repo, &["branch", "-m", "trunk"]);
+    assert_eq!(
+        f.add("local").await.base_ref.as_deref(),
+        Some("refs/heads/trunk")
+    );
+    git(&f.repo, &["checkout", "--detach"]);
+    assert!(
+        f.manager
+            .add(f.repo_id.clone(), "detached".into(), None)
+            .await
+            .is_err()
+    );
+    f.manager
+        .add(
+            f.repo_id.clone(),
+            "explicit-detached".into(),
+            Some("trunk".into()),
+        )
+        .await
+        .unwrap();
+    git(&f.repo, &["switch", "trunk"]);
+    git(
+        &f.repo,
+        &[
+            "remote",
+            "add",
+            "upstream",
+            f.root.path().join("missing.git").to_str().unwrap(),
+        ],
+    );
+    assert!(
+        f.manager
+            .add(f.repo_id.clone(), "offline".into(), None)
+            .await
+            .is_err()
+    );
+    f.manager
+        .add(
+            f.repo_id.clone(),
+            "explicit-offline".into(),
+            Some("trunk".into()),
+        )
+        .await
+        .unwrap();
+    git(
+        &f.repo,
+        &["remote", "add", "backup", f.repo.to_str().unwrap()],
+    );
+    let error = f
+        .manager
+        .add(f.repo_id.clone(), "ambiguous".into(), None)
+        .await
+        .unwrap_err();
+    assert!(
+        error.to_string().contains("default remote is ambiguous"),
+        "{error:#}"
+    );
 }
 
 #[tokio::test]
@@ -174,7 +340,7 @@ async fn pull_updates_main_preserves_feature_and_enforces_scope() {
         .lock()
         .await
         .insert("token".into(), ("execution".into(), workspace.id.clone()));
-    let mut denied = Method::PullMain {
+    let mut denied = Method::PullDefaultBranch {
         workspace: "other".into(),
     };
     assert!(
@@ -182,23 +348,29 @@ async fn pull_updates_main_preserves_feature_and_enforces_scope() {
             .await
             .is_err()
     );
-    let mut allowed = Method::PullMain {
+    let mut allowed = Method::PullDefaultBranch {
         workspace: "worker".into(),
     };
     scope::authorize(&f.manager, Some("token"), &mut allowed)
         .await
         .unwrap();
-    let Method::PullMain { workspace: target } = allowed else {
+    let Method::PullDefaultBranch { workspace: target } = allowed else {
         panic!("wrong method")
     };
     assert_eq!(target, workspace.id);
-    let result = f.manager.pull_main(target).await.unwrap();
+    let result = f.manager.pull_default_branch(target).await.unwrap();
     assert!(result.updated);
     assert_eq!(result.previous_commit, before.trim());
     assert_eq!(result.commit, expected.trim());
     assert_eq!(git(&f.repo, &["rev-parse", "main"]), expected);
     assert_eq!(git(&workspace.path, &["rev-parse", "HEAD"]), before);
-    assert!(!f.manager.pull_main("worker".into()).await.unwrap().updated);
+    assert!(
+        !f.manager
+            .pull_default_branch("worker".into())
+            .await
+            .unwrap()
+            .updated
+    );
     assert_eq!(git(&f.repo, &["for-each-ref", "refs/shoal/pull/"]), "");
     assert_eq!(
         fs::read_to_string(f.repo.join("upstream")).unwrap(),
@@ -212,7 +384,7 @@ async fn pull_refuses_missing_upstream_dirty_and_diverged_main() {
     f.add("worker").await;
     assert!(
         f.manager
-            .pull_main("worker".into())
+            .pull_default_branch("worker".into())
             .await
             .unwrap_err()
             .to_string()
@@ -223,7 +395,7 @@ async fn pull_refuses_missing_upstream_dirty_and_diverged_main() {
     fs::write(f.repo.join("tracked"), "local edits\n").unwrap();
     assert!(
         f.manager
-            .pull_main("worker".into())
+            .pull_default_branch("worker".into())
             .await
             .unwrap_err()
             .to_string()
@@ -238,7 +410,7 @@ async fn pull_refuses_missing_upstream_dirty_and_diverged_main() {
     let diverged = git(&f.repo, &["rev-parse", "main"]);
     assert!(
         f.manager
-            .pull_main("worker".into())
+            .pull_default_branch("worker".into())
             .await
             .unwrap_err()
             .to_string()
@@ -256,12 +428,24 @@ async fn pull_handles_unchecked_ahead_and_separate_main_checkouts() {
     let author = f.remote();
     let expected = git(&author, &["rev-parse", "HEAD"]);
     git(&f.repo, &["switch", "-c", "source-branch"]);
-    assert!(f.manager.pull_main("worker".into()).await.unwrap().updated);
+    assert!(
+        f.manager
+            .pull_default_branch("worker".into())
+            .await
+            .unwrap()
+            .updated
+    );
     assert_eq!(git(&f.repo, &["rev-parse", "main"]), expected);
     assert_eq!(git(&f.repo, &["rev-parse", "HEAD"]), before);
     git(&author, &["reset", "--hard", "HEAD~1"]);
     git(&author, &["push", "--force", "origin", "main"]);
-    assert!(!f.manager.pull_main("worker".into()).await.unwrap().updated);
+    assert!(
+        !f.manager
+            .pull_default_branch("worker".into())
+            .await
+            .unwrap()
+            .updated
+    );
     assert_eq!(git(&f.repo, &["rev-parse", "main"]), expected);
     git(&f.repo, &["update-ref", "refs/heads/main", before.trim()]);
     git(&author, &["reset", "--hard", expected.trim()]);
@@ -271,7 +455,13 @@ async fn pull_handles_unchecked_ahead_and_separate_main_checkouts() {
         &f.repo,
         &["worktree", "add", main_path.to_str().unwrap(), "main"],
     );
-    assert!(f.manager.pull_main("worker".into()).await.unwrap().updated);
+    assert!(
+        f.manager
+            .pull_default_branch("worker".into())
+            .await
+            .unwrap()
+            .updated
+    );
     assert_eq!(
         fs::read_to_string(main_path.join("upstream")).unwrap(),
         "remote\n"
@@ -289,7 +479,7 @@ async fn pull_refuses_main_in_managed_workspace() {
     git(&workspace.path, &["switch", "main"]);
     assert!(
         f.manager
-            .pull_main("caller".into())
+            .pull_default_branch("caller".into())
             .await
             .unwrap_err()
             .to_string()

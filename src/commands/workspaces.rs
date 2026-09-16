@@ -18,16 +18,20 @@ pub(super) async fn pull(
     json_output: bool,
 ) -> Result<i32> {
     let workspace = ui::workspace(paths, workspace, true, json_output).await?;
-    let Body::PulledMain(result) = client::call(paths, Method::PullMain { workspace }).await?
+    let Body::PulledBranch(result) =
+        client::call(paths, Method::PullDefaultBranch { workspace }).await?
     else {
         anyhow::bail!("unexpected pull response");
     };
     if json_output {
         println!("{}", serde_json::to_string(&result)?);
     } else if result.updated {
-        println!("Updated main to {}", result.commit);
+        println!("Updated {} to {}", result.branch, result.commit);
     } else {
-        println!("Main is already up to date ({})", result.commit);
+        println!(
+            "{} is already up to date ({})",
+            result.branch, result.commit
+        );
     }
     Ok(0)
 }

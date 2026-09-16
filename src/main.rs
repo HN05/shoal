@@ -5,6 +5,7 @@ mod commands;
 mod completion;
 mod config;
 mod daemon;
+mod default_branch;
 mod diff;
 mod execution;
 mod execution_processes;

@@ -43,7 +43,7 @@ pub enum Command {
         /// Git branch name; a portable workspace name is derived from it.
         #[arg(long)]
         name: Option<String>,
-        /// Starting Git ref (defaults to main, refreshed from its upstream).
+        /// Starting Git ref (defaults to the repository's default branch, refreshed from its upstream).
         #[arg(long = "ref")]
         base: Option<String>,
         /// Start an agent after worktree creation succeeds.
@@ -61,7 +61,7 @@ pub enum Command {
     Cd { workspace: Option<String> },
     /// Show your changes since the fork point using native Git diff configuration.
     Diff { workspace: Option<String> },
-    /// Fast-forward this workspace's repository main branch from its upstream.
+    /// Fast-forward this workspace's repository default branch from its upstream.
     Pull { workspace: Option<String> },
     /// Merge a local or remote branch into this workspace's own branch.
     Merge {
