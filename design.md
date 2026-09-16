@@ -2023,3 +2023,59 @@ handlers for workspaces, repositories, ports, simulators, resource pools, recove
 and service administration. `main.rs` only declares modules, parses arguments, and
 handles top-level errors/exit codes. Existing command names, target selection,
 output, retries, shell directives, and scoped-command restrictions are preserved.
+
+### Codex desktop and T3 Code adapters (research/proposal)
+
+Reviewed 2026-09-16. No desktop adapter was installed or implemented. Keep app-
+specific integration outside Shoal's core, as with Superlogical.
+
+**Opening an existing workspace:** the installed `codex app --help` supports
+`codex app <path>`. T3 documents `t3 app <path>` with its desktop app already
+running on the same machine. Use the Shoal-created checkout directly rather than
+asking either app to create a second worktree. This is directory handoff, not
+execution registration, scope-token delivery, or proof of the GUI session's
+lifetime. T3 also supports threads in an existing worktree.
+[Launching T3](https://github.com/pingdotgg/t3code/blob/main/docs/user/install.md),
+[T3 threads](https://github.com/pingdotgg/t3code/blob/main/docs/user/thread-sidebar.md).
+
+**Resource access:** agents can use Shoal's existing CLI/skill from that directory.
+Codex also supports local MCP servers shared across its desktop, CLI, and IDE
+clients; a small workspace-bound resource MCP adapter is an optional future
+interface, not a requirement. Direct app launches currently lack the scope token
+that `shoal exec` supplies; opening the same folder alone does not enforce Shoal's
+own-workspace restrictions.
+[Codex MCP](https://learn.chatgpt.com/docs/extend/mcp).
+
+**Lifecycle gap:** GUI launchers can return while agent work continues, and shared
+app servers may work across several directories. Shoal's current execution/cwd
+checks cannot reliably establish that such a workspace is idle. A proposed
+external-session attachment/hold should keep it in use, issue workspace-scoped
+access, support several sessions per worktree, and reconcile lost connections
+conservatively. Define this generic contract before promising automatic GUI
+cleanup. A turn finishing or client disconnecting must not delete a workspace.
+For manual coexistence, disable automatic cleanup if activity cannot be tracked.
+
+Codex's documented SessionStart/SessionEnd command hooks could connect an adapter
+to that contract. SessionEnd can also occur during normal app shutdown or after
+an unobserved idle session, so it is not a reliable workspace-deletion callback;
+crashes need separate handling. Setup scripts run on Codex-created worktrees and
+are not documented as a replacement worktree allocator. Project actions can
+invoke Shoal commands from the integrated terminal.
+[Hooks](https://learn.chatgpt.com/docs/hooks),
+[Local environments](https://learn.chatgpt.com/docs/environments/local-environment).
+
+**Deeper integration:** Codex app-server exposes conversation/events/approval
+APIs for building a client; that does not establish a public API for replacing
+the official desktop app's workspace manager. T3 has server-side provider adapters
+and configurable provider binary paths, making a T3-side launcher adapter worth
+prototyping. Validate its working directory, environment, stdio protocol, and
+whether processes are shared before wrapping launches in `shoal exec`. No ready-
+made Shoal lifecycle extension was verified.
+[App Server](https://learn.chatgpt.com/docs/app-server),
+[T3 architecture](https://github.com/pingdotgg/t3code/blob/main/docs/internals/overview.md),
+[T3 provider settings](https://github.com/pingdotgg/t3code/blob/main/docs/user/install.md#providers).
+
+For Macraft guests, run Shoal and the agent/T3 server inside the execution guest;
+Macraft owns guest provisioning and connectivity. T3 already documents remote
+servers and desktop-managed SSH. Keep Shoal's local daemon behind that boundary.
+[T3 remote access](https://github.com/pingdotgg/t3code/blob/main/docs/user/remote-access.md).
