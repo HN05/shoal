@@ -1377,6 +1377,9 @@ Implemented:
 
 - Repository registration from local paths or Git clone URLs. URL clones are
   retained for reuse; no automatic fetch. Repository pickers show recent use first.
+  Repository lists and pickers display the name and original path or URL, so
+  cloned repositories can be searched by their source rather than a UUID cache
+  path. Internal IDs still identify selections and remain in JSON output.
 - SQLite repository, workspace, and execution records in `state.db`. The daemon
   owns all writes. Name reservations are atomic across concurrent requests.
 - `add`, `list`, `inspect`, `exec`, `stop`, `rm`, and `claude`/`codex` shortcuts.

@@ -63,7 +63,7 @@ async fn run(cli: Cli) -> Result<i32> {
             match client::call(&paths, Method::Register { source }).await? {
                 Body::Repository(repo) => output(
                     cli.json,
-                    &format!("Registered {} ({})", repo.path.display(), repo.id),
+                    &format!("Registered {}", ui::repository_label(&repo)),
                     serde_json::to_value(&repo)?,
                 ),
                 _ => anyhow::bail!("unexpected registration response"),
@@ -77,7 +77,7 @@ async fn run(cli: Cli) -> Result<i32> {
                 println!("{}", serde_json::to_string(&repos)?);
             } else {
                 for repo in repos {
-                    println!("{}  {}", repo.id, repo.path.display());
+                    println!("{}", ui::repository_label(&repo));
                 }
             }
         }
@@ -93,7 +93,10 @@ async fn run(cli: Cli) -> Result<i32> {
                     ui::repositories(&paths)
                         .await?
                         .into_iter()
-                        .map(|r| (r.id, r.path.display().to_string()))
+                        .map(|r| {
+                            let label = ui::repository_label(&r);
+                            (r.id, label)
+                        })
                         .collect(),
                     cli.json,
                 )?,

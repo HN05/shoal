@@ -82,6 +82,13 @@ pub async fn repositories(paths: &Paths) -> Result<Vec<Repository>> {
     }
 }
 
+pub fn repository_label(repo: &Repository) -> String {
+    let source = repo.source.trim_end_matches('/');
+    let name = source.rsplit(['/', ':']).next().unwrap_or(source);
+    let name = name.strip_suffix(".git").unwrap_or(name);
+    format!("{name}  {}", repo.source)
+}
+
 pub async fn workspaces(paths: &Paths) -> Result<Vec<Workspace>> {
     match client::call(paths, Method::List).await? {
         Body::Workspaces(workspaces) => Ok(workspaces),

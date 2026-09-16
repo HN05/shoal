@@ -69,7 +69,9 @@ shoal rm fix-login          # Stop commands and remove a clean worktree
 ```
 
 Bare `shoal` displays help. `shoal add` offers registered repositories
-in most-recently-used order and prompts for a name. Commands with omitted workspace
+in most-recently-used order and prompts for a name. Repository lists and pickers
+show the repository name and original path or URL, including for managed clones.
+Commands with omitted workspace
 targets open an `fzf` picker; `exec`, `claude`, and `codex` first look for a workspace
 containing the current directory. Explicit targets bypass selection. Noninteractive
 calls and `--json` never prompt; management commands support JSON output, while
