@@ -12,6 +12,7 @@ mod processes;
 mod protocol;
 mod removal;
 mod repo_config;
+mod repo_git;
 mod repository;
 mod resources;
 mod scope;
@@ -131,6 +132,21 @@ async fn run(cli: Cli) -> Result<i32> {
             }
         }
         Command::Sim { command } => return sim_command(&paths, command, cli.json).await,
+        Command::Pull { workspace } => {
+            let workspace = ui::workspace(&paths, workspace, true, cli.json).await?;
+            let Body::PulledMain(result) =
+                client::call(&paths, Method::PullMain { workspace }).await?
+            else {
+                anyhow::bail!("unexpected pull response");
+            };
+            if cli.json {
+                println!("{}", serde_json::to_string(&result)?);
+            } else if result.updated {
+                println!("Updated main to {}", result.commit);
+            } else {
+                println!("Main is already up to date ({})", result.commit);
+            }
+        }
         Command::Diff { workspace } => {
             let workspace = ui::workspace(&paths, workspace, true, cli.json).await?;
             let base = match client::call(&paths, Method::DiffBase { workspace }).await? {

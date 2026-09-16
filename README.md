@@ -108,7 +108,11 @@ executed commands retain their own stdin, stdout, stderr, and exit code.
 Workspaces live at `<state-dir>/workspaces/<name>`. Names are unique, 1–64 ASCII
 letters/digits/hyphens/underscores, starting with a letter or digit. Creation uses
 the registered checkout's committed `HEAD`, or `--ref <git-ref>`, on a new branch
-named `shoal/<name>-<unique-suffix>`. Uncommitted source files are not copied.
+named `<name>`. If taken, use `<name>-2`, `<name>-3`, etc. Local branches, known
+remote branches, branch namespaces, reserved Git names, and retained Shoal records
+count as conflicts.
+Workspace names/directories stay unchanged. Existing branches are not renamed.
+Uncommitted source files are not copied.
 URL repositories are cloned once into `<state-dir>/repositories` and retained
 for reuse. Registration does not fetch updates automatically.
 Registration reuses an existing repository when its source URL or local checkout's
@@ -117,6 +121,24 @@ suffixes. Checkouts without `origin` are identified by their canonical local pat
 Custom names can be set with `repo add --name` or `repo rename`, appear in pickers,
 and work as selectors (`shoal add my-project --name fix-login`). Explicit names
 are unique; naming an already registered URL updates its name without duplicating it.
+
+### Pull main
+
+```sh
+shoal pull                 # Current workspace (or fzf); agents resolve to their own
+shoal pull fix-login
+shoal --json pull          # Previous/current commit IDs and whether main changed
+```
+
+Fast-forwards the workspace repository's local `main` from its configured upstream.
+Requires a local `main` with a tracking branch; it does not assume `origin`, merge
+or rebase the feature branch, stash edits, or force-update history. A checked-out
+`main` must be clean (including untracked files). Divergence is an error; a main
+that is already ahead stays unchanged. If `main` is checked out in another
+Shoal-managed workspace, the request is refused. Otherwise Shoal updates its
+checkout, or just its ref when not checked out. Git hooks and recursive submodule
+updates are disabled. Scoped agents may request this only through their own
+workspace; repository/service administration remains unavailable to them.
 
 ### Diff
 
@@ -263,8 +285,9 @@ worktree's configured and reserved ports, including the actual numbers.
 ### Scoped workspace commands
 
 Commands launched through `exec`, `claude`, and `codex` can inspect their own
-worktree, execute there, and manage its resources. They cannot access other
-worktrees, remove workspaces, alter repos, or administer the daemon. Nested
+worktree, execute there, manage its resources, and pull its repository's main
+with `shoal pull`. They cannot access other worktrees, remove workspaces, perform
+other repository administration, or administer the daemon. Nested
 commands keep that scope. Run a cross-workspace orchestrator outside `shoal exec`.
 Scope is cooperative; it does not restrict direct filesystem/Git operations.
 

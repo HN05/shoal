@@ -42,6 +42,8 @@ pub enum Command {
     Cd { workspace: Option<String> },
     /// Show your changes since the fork point using native Git diff configuration.
     Diff { workspace: Option<String> },
+    /// Fast-forward this workspace's repository main branch from its upstream.
+    Pull { workspace: Option<String> },
     /// Reserve, list, and release named TCP ports owned by a worktree.
     Port {
         #[command(subcommand)]

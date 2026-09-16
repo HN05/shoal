@@ -1964,3 +1964,89 @@ fn resource_scopes_separate_repos_share_global_capacity_and_limit_agents() {
     assert!(String::from_utf8_lossy(&conflict.stderr).contains("conflicts with the global"));
     fixture.ok(&["resource", "release", "local", "second"]);
 }
+
+// Local bare origin plus a separate author checkout: no network or personal repos.
+fn pull_remote(fixture: &Fixture) -> PathBuf {
+    let remote = fixture.root.path().join("origin.git");
+    git(
+        &fixture.repo,
+        &[
+            "clone",
+            "--bare",
+            fixture.repo.to_str().unwrap(),
+            remote.to_str().unwrap(),
+        ],
+    );
+    git(
+        &fixture.repo,
+        &["remote", "add", "origin", remote.to_str().unwrap()],
+    );
+    git(&fixture.repo, &["fetch", "origin"]);
+    git(
+        &fixture.repo,
+        &["branch", "--set-upstream-to=origin/main", "main"],
+    );
+    let author = fixture.root.path().join("author");
+    git(
+        &fixture.repo,
+        &["clone", remote.to_str().unwrap(), author.to_str().unwrap()],
+    );
+    fs::write(author.join("upstream"), "from remote\n").unwrap();
+    git(&author, &["add", "upstream"]);
+    git(
+        &author,
+        &[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "-m",
+            "upstream change",
+        ],
+    );
+    git(&author, &["push", "origin", "main"]);
+    author
+}
+
+#[test]
+fn scoped_pull_updates_only_main_and_denies_other_workspace_targets() {
+    let fixture = Fixture::new();
+    let workspace = fixture.add("worker");
+    fixture.add("other");
+    let before = git(&fixture.repo, &["rev-parse", "main"]);
+    let author = pull_remote(&fixture);
+    let expected = git(&author, &["rev-parse", "HEAD"]);
+    let binary = env!("CARGO_BIN_EXE_shoal");
+    let output = fixture.run(&["exec", "worker", "--", binary, "--json", "pull", "other"]);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("cannot access another worktree"));
+    assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), before);
+    let output = fixture.run(&["exec", "worker", "--", binary, "--json", "pull"]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let result: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(result["updated"], true);
+    assert_eq!(result["previous_commit"], before.trim());
+    assert_eq!(result["commit"], expected.trim());
+    assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), expected);
+    assert_eq!(
+        git(
+            Path::new(workspace["path"].as_str().unwrap()),
+            &["rev-parse", "HEAD"]
+        ),
+        before
+    );
+    assert_eq!(fixture.ok(&["pull", "worker"])["updated"], false);
+    assert_eq!(
+        git(&fixture.repo, &["for-each-ref", "refs/shoal/pull/"]),
+        ""
+    );
+    assert_eq!(
+        fs::read_to_string(fixture.repo.join("upstream")).unwrap(),
+        "from remote\n"
+    );
+}

@@ -15,7 +15,8 @@ when behavior changes, distinguishing decisions from proposals.
 - Repository TOML lives at `.shoal.toml` or `.shoal/config.toml`; reject both
   together. Named ports are lazy, with CLI overrides and explicit conflict policy.
 - Workspace commands inherit a scope token. Enforce own-worktree resource access
-  in the daemon and deny lifecycle/repository/service administration. This is
+  in the daemon and deny lifecycle/repository/service administration, except
+  `shoal pull` may fast-forward the caller's own repo main from its upstream. This is
   cooperative scoping, not a boundary against a hostile same-user process.
 - Global TOML configuration supports `[auto_cleanup]` with `enabled` (default
   true) and `idle_minutes` (default 10). Automatic removal is only for idle,
@@ -39,6 +40,8 @@ when behavior changes, distinguishing decisions from proposals.
   enforce or manage the underlying resource's lifecycle.
 - Workspace and execution lifecycle states are typed enums; preserve their
   existing lowercase SQLite/JSON representation and reject unknown values.
+- New branches use the workspace name, with `-2`, `-3`, etc. only on conflict;
+  keep workspace names/directories unchanged and serialize allocation per repo.
 - `shoal diff` uses Git fork-point/merge-base against the recorded base branch;
   do not compare directly to today's main tip or a frozen commit after a rebase.
   Preserve native Git pager/external-diff configuration.

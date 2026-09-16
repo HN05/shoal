@@ -27,6 +27,7 @@ pub async fn authorize(
         | Method::SimRelease { workspace, .. }
         | Method::Inspect { workspace }
         | Method::DiffBase { workspace }
+        | Method::PullMain { workspace }
         | Method::Execute { workspace }
         | Method::ReservePort { workspace, .. }
         | Method::ReleasePort { workspace, .. }
@@ -38,7 +39,7 @@ pub async fn authorize(
             Some(workspace.get_or_insert_with(|| owner.clone()))
         }
         _ => bail!(
-            "workspace processes can only inspect their worktree, execute there, and manage its resources"
+            "workspace processes can only inspect their worktree, execute there, manage its resources, and pull its repository main"
         ),
     };
     if let Some(target) = target {

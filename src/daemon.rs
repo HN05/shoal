@@ -311,6 +311,7 @@ async fn operation(
             }
             Body::Workspaces(workspaces)
         }
+        Method::PullMain { workspace } => Body::PulledMain(manager.pull_main(workspace).await?),
         Method::DiffBase { workspace } => Body::DiffBase(manager.diff_base(workspace).await?),
         Method::ReservePort {
             workspace,

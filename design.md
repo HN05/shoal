@@ -1404,7 +1404,8 @@ Implemented:
   configuration. Commands after `--` are passed as argument arrays.
 - Workspace paths `<state-dir>/workspaces/<name>`; unique names are 1–64 ASCII
   letters/digits/hyphens/underscores and start with a letter or digit. A new
-  `shoal/<name>-<unique-suffix>` branch starts from committed `HEAD` or `--ref`.
+  branch named `<name>` starts from committed `HEAD` or `--ref`; collisions use
+  `<name>-2`, `<name>-3`, etc. (see the branch naming decision below).
 - Manual removal compares Git trees with local `main` and the branch's configured
   upstream. A clean worktree matching either is removed together with its branch,
   regardless of differing commit history. Missing refs do not match. Otherwise
@@ -1575,7 +1576,8 @@ defaulting to the current worktree. `port list` shows only actual reservations.
 Processes launched through `exec`, `claude`, or `codex` inherit a random
 `SHOAL_SCOPE_TOKEN`, checked by the daemon on every request. Their list/repository
 views are filtered; they can inspect/diff/execute in their own worktree and
-manage its resources. They cannot create/remove/stop worktrees, alter repositories,
+manage its resources and request `shoal pull` for their own repo main. They cannot
+create/remove/stop worktrees or perform other repository administration,
 control the daemon, or access other worktrees. Nested executions inherit the
 restriction. Tokens expire when an execution disconnects/finishes or the daemon
 restarts. Local CLI service administration is also denied when scoped.
@@ -1830,3 +1832,36 @@ transitions, SQLite bindings, and JSON use these types. Database and wire values
 remain the existing lowercase strings, preserving saved state and CLI consumers.
 Unknown/mismatched values fail decoding rather than silently creating a new state.
 Round-trip compatibility tests cover both JSON and SQLite representations.
+
+
+### Main updates and branch naming (implemented)
+
+`shoal pull [workspace]` requests a fast-forward of that workspace's repository
+local `main` from its configured upstream branch. It uses current-directory/fzf
+selection for humans and the execution's own workspace for scoped agents. The
+daemon derives the repository from the authorized workspace; agents cannot select
+another worktree, even in the same repository. This is a narrow exception to the
+restriction on repository administration. It does not rebase/merge the feature
+branch, install anything, create missing main/tracking configuration, or assume
+that the remote is named origin. JSON returns repository ID, previous/current
+commit IDs, and `updated`.
+
+Pulls and branch allocation are serialized per registered repository. Fetch uses
+a private temporary ref, removed on success or failure, so unrelated fetches
+cannot replace the fetched target. A clean non-Shoal checkout of main is updated
+with a fast-forward-only merge; tracked/untracked changes and divergence refuse
+the update. Already-ahead main is preserved. When main is not checked out, a
+local Git fetch fast-forwards its ref and refuses a destination that has since
+become checked out. Main checked out in any Shoal-managed workspace is refused,
+protecting other agents' worktrees. Hooks and recursive submodule updates are
+disabled. These checks coordinate cooperative users; independent Git commands
+can still race between checks. A daemon crash can leave a temporary pull ref.
+
+New workspaces create branch `<name>` without a Shoal prefix or random tag. Local
+branches, known remote-tracking branch names, conflicting branch namespaces,
+reserved Git names, and existing Shoal ownership records reserve names. Choose the
+first free `<name>-2`, `<name>-3`, etc. when needed. Allocation through Worktrunk
+creation holds a repo lock so simultaneous adds cannot select the same branch. External Git collisions
+fail safely through normal workspace failure handling. The workspace name and
+its directory remain the requested name; existing branches are not renamed.
+Protocol version is now 9; CLI and daemon must be upgraded together.

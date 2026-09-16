@@ -23,12 +23,22 @@ pub struct Manager {
     paths: Paths,
     pub sim_gate: Mutex<()>,
     repositories: Mutex<()>,
+    git_gates: Mutex<HashMap<String, Arc<Mutex<()>>>>,
     pub scopes: Mutex<HashMap<String, (String, String)>>,
     active: Mutex<HashMap<String, watch::Sender<bool>>>,
     activity: Mutex<HashMap<String, u64>>,
 }
 
 impl Manager {
+    pub(crate) async fn git_gate(&self, repository: &str) -> Arc<Mutex<()>> {
+        self.git_gates
+            .lock()
+            .await
+            .entry(repository.to_owned())
+            .or_default()
+            .clone()
+    }
+
     pub async fn open(paths: Paths) -> Result<Arc<Self>> {
         fs::create_dir_all(paths.state.join("workspaces"))?;
         fs::create_dir_all(paths.state.join("repositories"))?;
@@ -40,6 +50,7 @@ impl Manager {
             paths,
             sim_gate: Mutex::new(()),
             repositories: Mutex::new(()),
+            git_gates: Mutex::new(HashMap::new()),
             scopes: Mutex::new(HashMap::new()),
             active: Mutex::new(HashMap::new()),
             activity: Mutex::new(HashMap::new()),
@@ -150,7 +161,7 @@ impl Manager {
             .await
     }
 
-    async fn repository(&self, selector: &str) -> Result<Repository> {
+    pub(crate) async fn repository(&self, selector: &str) -> Result<Repository> {
         let repositories = self.repositories().await?;
         let canonical = fs::canonicalize(selector).ok();
         if let Some(repo) = repositories.iter().find(|repo| {
@@ -226,9 +237,12 @@ impl Manager {
     ) -> Result<Workspace> {
         validate_name(&name)?;
         let repo = self.repository(&repository).await?;
+        let gate = self.git_gate(&repo.id).await;
+        let _guard = gate.lock().await;
+        let branch = self.available_branch(&repo, &name).await?;
         let id = Uuid::new_v4().to_string();
         let workspace = Workspace {
-            branch: format!("shoal/{name}-{}", &id[..8]),
+            branch,
             id,
             repository_id: repo.id.clone(),
             path: self.paths.state.join("workspaces").join(&name),

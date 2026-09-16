@@ -79,3 +79,11 @@ pub struct PortOverview {
     pub configured: std::collections::BTreeMap<String, crate::repo_config::PortDefinition>,
     pub on_conflict: crate::repo_config::ConflictPolicy,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PulledMain {
+    pub repository_id: String,
+    pub previous_commit: String,
+    pub commit: String,
+    pub updated: bool,
+}
