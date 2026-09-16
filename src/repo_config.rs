@@ -20,6 +20,7 @@ pub enum ConflictPolicy {
 #[derive(Debug, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct RepoConfig {
+    pub setup_cmd: Option<String>,
     pub ports: PortDefaults,
     pub resources: BTreeMap<String, crate::resources::ResourceConfig>,
     pub resource_pools: BTreeMap<String, crate::resources::PoolConfig>,
@@ -62,6 +63,12 @@ pub fn load(workspace_dir: &Path) -> Result<RepoConfig> {
 
 pub fn parse(text: &str) -> Result<RepoConfig> {
     let config: RepoConfig = toml::from_str(text)?;
+    if let Some(command) = &config.setup_cmd {
+        ensure!(
+            !command.trim().is_empty() && !command.contains('\0'),
+            "setup_cmd must be a nonempty executable path"
+        );
+    }
     for (name, definition) in &config.ports.definitions {
         ensure!(
             !name.is_empty()
@@ -86,4 +93,29 @@ pub fn parse(text: &str) -> Result<RepoConfig> {
 #[serde(default, deny_unknown_fields)]
 pub struct SimulatorPreferences {
     pub preferred: Vec<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn setup_cmd_requires_a_nonempty_path() {
+        assert!(parse("").unwrap().setup_cmd.is_none());
+        assert_eq!(
+            parse("setup_cmd = 'scripts/setup.sh'")
+                .unwrap()
+                .setup_cmd
+                .as_deref(),
+            Some("scripts/setup.sh")
+        );
+        for text in [
+            "setup_cmd = ''",
+            "setup_cmd = '  '",
+            "setup_cmd = []",
+            r#"setup_cmd = "a\u0000b""#,
+        ] {
+            assert!(parse(text).is_err(), "{text}");
+        }
+    }
 }

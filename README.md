@@ -80,7 +80,7 @@ shoal rm fix-login --yes --delete-branch
 ```
 
 `add --agent codex|claude` starts the agent in the new workspace after worktree
-creation succeeds. Codex uses `codex.default_mode` below. Pass a prompt or other
+creation and configured setup succeed. Codex uses `codex.default_mode` below. Pass a prompt or other
 agent arguments after `--`, for example:
 
 ```sh
@@ -90,8 +90,9 @@ shoal add my-project --name fix-api --agent codex -- "Fix the API timeout"
 CLI agents run in the current terminal through Shoal's tracked execution wrapper.
 The command returns the agent's exit code and retains the workspace, including
 when launch fails. With shell integration, your shell enters the new workspace
-after the agent exits. Creation failures never launch an agent. No dependency
-setup runs yet. `--json` emits the workspace record first, followed by the agent's
+after the agent exits. Creation failures never launch an agent. Setup failures
+must be explicitly ignored before launching. `--json` emits the workspace record
+first, followed by the agent's
 unmodified output.
 
 `shoal claude` appends `--remote-control <workspace-name>`, using the resolved
@@ -384,9 +385,44 @@ External or unverified processes are left alone. Automatic cleanup
 still requires no active or unknown commands and no processes using the directory.
 Ignored worktree files are removed; shared caches remain untouched. Git protects
 branches checked out in another worktree; output reports the actual branch result.
-Worktrunk hooks are disabled. Repository configuration supports resource defaults;
-automatic setup scripts are not implemented yet. Restore dependencies with an
-explicit command such as `shoal exec fix-login -- npm ci`.
+Worktrunk hooks are disabled. Use `setup_cmd` for workspace setup (see below).
+
+### Workspace setup
+
+Set a top-level `setup_cmd` in `.shoal.toml`, `.shoal/config.toml`, or the local
+repository config imported with `shoal repo config --file`:
+
+```toml
+setup_cmd = "scripts/setup.sh"
+# Or use an absolute path on this machine:
+# setup_cmd = "/opt/dev-tools/setup-project"
+```
+
+Relative paths resolve from the new worktree's root, including local config paths;
+absolute paths are used as-is. The executable runs with the worktree as its working
+directory, using your CLI environment and Shoal workspace scope. Make scripts
+executable and include a shebang such as `#!/bin/sh`. The value is a single path;
+put arguments, multiple commands, and shell expressions inside the script.
+
+`shoal add` waits for setup before entering the worktree or launching `--agent`.
+If setup fails, interactive mode asks whether to delete the new workspace and its
+branch, ignore the failure and continue, or keep it for inspection (the default).
+Deleting requires confirmation and preserves the registered repository and other
+workspaces. Ignoring allows the requested agent to start once ownership and process
+checks pass.
+
+JSON/noninteractive mode returns nonzero and keeps the failed workspace. Setup
+output goes to stderr in JSON mode; no agent starts on failure. After inspecting
+partial changes, choose an explicit action:
+
+```sh
+shoal prepare fix-login                    # Retry setup, or rerun it later
+shoal reconcile fix-login --repair          # Ignore failure after ownership checks
+shoal rm fix-login --yes --delete-branch    # Delete only this workspace and branch
+```
+
+Setup is never inferred from package manifests. Without `setup_cmd`, creation
+behaves as before. Retry scripts should tolerate partial previous runs.
 
 ### Automatic cleanup
 
@@ -472,8 +508,8 @@ You can still omit targets to use Shoal's interactive fzf selection.
 ## Current scope
 
 The CLI/daemon, workspaces, named TCP ports, simulator sharing, cooperative
-resource pools, and explicit recovery are implemented. Filesystem restrictions,
-automatic repository setup scripts, and Homebrew packaging remain future work.
+resource pools, workspace setup, and explicit recovery are implemented. Filesystem
+restrictions and Homebrew packaging remain future work.
 No Shoal filesystem sandbox is applied yet. Repository resource configuration
 uses TOML; additional configuration sections will be defined as they are added.
 

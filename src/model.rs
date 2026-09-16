@@ -54,6 +54,7 @@ pub struct Inspection {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ExecutionPlan {
+    pub setup_cmd: Option<PathBuf>,
     pub scope_token: String,
     pub id: String,
     pub workspace: Workspace,

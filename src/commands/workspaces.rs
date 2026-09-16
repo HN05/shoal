@@ -114,7 +114,14 @@ pub(super) async fn add(
     )
     .await?
     {
-        Body::Workspace(workspace) => {
+        Body::Workspace(mut workspace) => {
+            if workspace.state == crate::state::WorkspaceState::Preparing {
+                let Some(prepared) = prepare_workspace(paths, &workspace, json_output).await?
+                else {
+                    return Ok(1);
+                };
+                workspace = prepared;
+            }
             output(
                 json_output,
                 &format!("Created {} at {}", workspace.name, workspace.path.display()),
@@ -133,6 +140,116 @@ pub(super) async fn add(
         }
         _ => anyhow::bail!("unexpected workspace response"),
     }
+}
+
+pub(super) async fn prepare(
+    paths: &Paths,
+    workspace: Option<String>,
+    json_output: bool,
+) -> Result<i32> {
+    let workspace = ui::workspace(paths, workspace, true, json_output).await?;
+    let Body::Inspection(inspection) = client::call(paths, Method::Inspect { workspace }).await?
+    else {
+        anyhow::bail!("unexpected inspection response");
+    };
+    let Some(workspace) = prepare_workspace(paths, &inspection.workspace, json_output).await?
+    else {
+        return Ok(1);
+    };
+    output(
+        json_output,
+        &format!("Prepared {}", workspace.name),
+        serde_json::to_value(workspace)?,
+    );
+    Ok(0)
+}
+
+async fn prepare_workspace(
+    paths: &Paths,
+    workspace: &crate::model::Workspace,
+    json_output: bool,
+) -> Result<Option<crate::model::Workspace>> {
+    let result = execution::prepare(paths, workspace.id.clone(), json_output).await;
+    let failure = match result {
+        Ok(0) => None,
+        Ok(code) => Some(format!("setup command exited with status {code}")),
+        Err(error) => Some(format!("{error:#}")),
+    };
+    if let Some(error) = failure {
+        ensure!(
+            ui::is_interactive(json_output),
+            "setup failed for {}: {error}; workspace retained. Retry with `shoal prepare {}`, ignore with `shoal reconcile {} --repair`, or delete with `shoal rm {} --yes --delete-branch`",
+            workspace.name,
+            workspace.name,
+            workspace.name,
+            workspace.name
+        );
+        eprintln!("Setup failed for {}: {error}", workspace.name);
+        match ui::setup_failure_choice()? {
+            ui::SetupFailureChoice::Delete => {
+                if ui::confirm(
+                    &format!(
+                        "Delete workspace {} at {} and its branch {} (including setup changes)?",
+                        workspace.name,
+                        workspace.path.display(),
+                        workspace.branch
+                    ),
+                    false,
+                    "--yes",
+                )? {
+                    client::call(
+                        paths,
+                        Method::Remove {
+                            workspace: workspace.id.clone(),
+                            choice: removal::Choice::DeleteBranch,
+                            caller_pid: std::process::id(),
+                        },
+                    )
+                    .await?;
+                    eprintln!("Deleted workspace {}", workspace.name);
+                }
+                return Ok(None);
+            }
+            ui::SetupFailureChoice::Ignore => {
+                let Body::Reconciliation(reports) = client::call(
+                    paths,
+                    Method::Reconcile {
+                        workspace: Some(workspace.id.clone()),
+                        options: crate::recovery::Options {
+                            repair: true,
+                            ..Default::default()
+                        },
+                    },
+                )
+                .await?
+                else {
+                    anyhow::bail!("unexpected reconciliation response");
+                };
+                ensure!(
+                    reports
+                        .iter()
+                        .all(|r| r.workspace.state == crate::state::WorkspaceState::Ready),
+                    "workspace still has unresolved ownership or processes; inspect with shoal reconcile"
+                );
+            }
+            ui::SetupFailureChoice::Cancel => return Ok(None),
+        }
+    }
+    let Body::Inspection(inspection) = client::call(
+        paths,
+        Method::Inspect {
+            workspace: workspace.id.clone(),
+        },
+    )
+    .await?
+    else {
+        anyhow::bail!("unexpected inspection response");
+    };
+    ensure!(
+        inspection.workspace.state == crate::state::WorkspaceState::Ready,
+        "workspace setup did not complete"
+    );
+    Ok(Some(inspection.workspace))
 }
 
 pub(super) async fn list(paths: &Paths, json_output: bool) -> Result<i32> {

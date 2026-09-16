@@ -52,6 +52,8 @@ pub enum Command {
         #[arg(last = true, requires = "agent")]
         args: Vec<OsString>,
     },
+    /// Run or retry the configured workspace setup command.
+    Prepare { workspace: Option<String> },
     /// List managed workspaces.
     List,
     /// Pick a workspace with fzf, enter a named workspace, or use - for the previous directory.

@@ -50,7 +50,7 @@ supports environments without a service manager.
 Register local repositories in place or retain URL clones for reuse. Registration
 is idempotent by normalized origin URL, falling back to canonical local path.
 Repository identity remains distinct from its optional display name. Registration
-does not implicitly fetch. Workspace creation does not restore dependencies.
+does not implicitly fetch. Workspace creation runs optional configured setup.
 Repository selectors accept the displayed source basename when unambiguous,
 including older clones stored under UUID directories. Explicit names take
 precedence over inferred names; use an ID, path, or source URL to disambiguate.
@@ -86,6 +86,29 @@ Its new branch uses that name, with numeric suffixes only on conflict. Serialize
 branch selection and creation per repository; existing refs and ownership records
 reserve branch names. Record the worktree's Git metadata identity so moved or
 replaced directories cannot be silently adopted.
+
+Repository config may set `setup_cmd` to an executable path. Relative paths resolve
+against the new worktree root, including when supplied through local repository
+config; absolute paths refer to the host filesystem. Execute the path directly,
+without shell parsing, PATH lookup, argument splitting, or inferred install commands.
+The executable must carry its own interpreter/shebang when needed. Its working
+directory is the worktree root. Setup uses the invoking CLI's tracked execution
+wrapper and environment, with workspace scope; the daemon owns readiness and
+execution records, never terminal I/O. Resources remain lazy.
+
+`add` keeps the workspace preparing until setup succeeds. Ordinary executions
+and agent launch require readiness. Setup failures preserve files, branches, and
+leases and mark the workspace failed. Interactive callers choose delete workspace,
+ignore and continue, or cancel (the default). Deletion confirms the exact worktree
+and branch and uses the shared removal path; it never deletes the registered
+repository. Ignoring explicitly repairs verified state before proceeding and
+cannot dismiss unresolved process ownership. JSON/noninteractive failures retain
+the workspace and return nonzero without prompting or starting the agent.
+`prepare [workspace]` explicitly reruns configured setup, including after failure;
+commands must tolerate partial previous runs. No automatic retry occurs. Unknown
+executions require reconciliation first; restart preserves interrupted setup as
+failed. JSON mode sends setup output to stderr and disconnects its stdin so stdout
+remains available for the workspace record and any subsequent agent output.
 
 Git operations have separate meanings:
 
@@ -146,16 +169,15 @@ Codex's mode is optional for current-workspace/picker launches. Global
 modes override it. Read the default at launch time without a daemon restart.
 Named workspace launches retain the explicit mode before the workspace selector.
 
-`add --agent codex|claude` launches after successful worktree creation, the current
-readiness requirement. Plain `add` creates without launching. Codex uses its
+`add --agent codex|claude` launches after successful worktree creation and configured
+setup, or after the user explicitly ignores a setup failure. Plain `add` creates without launching. Codex uses its
 configured default mode; arguments after `--` pass through to the agent.
 The CLI wrapper owns foreground execution and returns the agent's exit status;
 the daemon does not own terminal I/O. Retain the workspace on launch failure or
 agent exit so users can retry with existing shortcuts. Shell integration enters
 the workspace after the agent exits, including a nonzero exit. JSON mode emits
 the workspace record before unmodified agent output. App mode keeps its existing
-handoff-only lifecycle semantics. A future explicit setup phase can precede
-launch; dependency restoration is not part of readiness today.
+handoff-only lifecycle semantics.
 
 Desktop shortcuts hand an existing workspace directory to Codex or T3. A GUI
 launcher returning does not mean its agent session ended. Directory handoff alone
@@ -289,9 +311,6 @@ Preserve the implementation order: CLI/daemon, workspaces, ports, simulators,
 lifecycle polish, then filesystem restrictions. The core resource and recovery
 workflow exists; the following work remains distinct from current behavior:
 
-- **Workspace setup:** optional repository-owned dependency restoration is a
-  confirmed direction. Define command syntax, readiness, retries, and failure
-  cleanup before implementation. Do not infer install commands from manifests.
 - **External sessions:** define a generic attachment/hold and recovery contract
   before promising lifecycle tracking or automatic cleanup for GUI agents.
   App-specific hooks and launch adapters belong outside the core.

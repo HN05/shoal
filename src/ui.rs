@@ -55,6 +55,40 @@ fn confirm_with_io(
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum SetupFailureChoice {
+    Delete,
+    Ignore,
+    Cancel,
+}
+
+pub fn setup_failure_choice() -> Result<SetupFailureChoice> {
+    setup_failure_with_io(&mut io::stdin().lock(), &mut io::stderr().lock())
+}
+
+fn setup_failure_with_io(
+    input: &mut impl io::BufRead,
+    output: &mut impl Write,
+) -> Result<SetupFailureChoice> {
+    loop {
+        write!(
+            output,
+            "Setup failed: [d]elete workspace, [i]gnore and continue, or [c]ancel (keep for inspection) [c]: "
+        )?;
+        output.flush()?;
+        let mut answer = String::new();
+        if input.read_line(&mut answer)? == 0 {
+            return Ok(SetupFailureChoice::Cancel);
+        }
+        match answer.trim().to_ascii_lowercase().as_str() {
+            "d" | "delete" => return Ok(SetupFailureChoice::Delete),
+            "i" | "ignore" => return Ok(SetupFailureChoice::Ignore),
+            "" | "c" | "cancel" => return Ok(SetupFailureChoice::Cancel),
+            _ => writeln!(output, "Please enter d, i, or c.")?,
+        }
+    }
+}
+
 pub fn choose_removal(
     check: &crate::removal::RemovalCheck,
     json: bool,

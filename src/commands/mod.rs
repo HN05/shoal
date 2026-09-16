@@ -73,6 +73,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             agent,
             args,
         } => workspaces::add(&paths, repository, name, base, agent, args, cli.json).await,
+        Command::Prepare { workspace } => workspaces::prepare(&paths, workspace, cli.json).await,
         Command::List => workspaces::list(&paths, cli.json).await,
         Command::Inspect { workspace } => workspaces::inspect(&paths, workspace, cli.json).await,
         Command::Stop { workspace } => workspaces::stop(&paths, workspace, cli.json).await,

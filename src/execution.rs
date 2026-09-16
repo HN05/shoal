@@ -20,6 +20,27 @@ use crate::{
 
 pub async fn run(paths: &Paths, workspace: String, command: Vec<OsString>) -> Result<i32> {
     ensure!(!command.is_empty(), "a command is required after --");
+    run_command(paths, workspace, command, false, false).await
+}
+
+pub async fn prepare(paths: &Paths, workspace: String, json: bool) -> Result<i32> {
+    run_command(paths, workspace, vec![], true, json).await
+}
+
+async fn run_command(
+    paths: &Paths,
+    workspace: String,
+    command: Vec<OsString>,
+    setup: bool,
+    json: bool,
+) -> Result<i32> {
+    let wrapper = crate::process_identity::capture(std::process::id())?
+        .context("cannot identify execution wrapper")?;
+    let method = if setup {
+        Method::Prepare { workspace, wrapper }
+    } else {
+        Method::Execute { workspace, wrapper }
+    };
     let mut stream = UnixStream::connect(&paths.socket)
         .await
         .context("connect to daemon")?;
@@ -29,11 +50,7 @@ pub async fn run(paths: &Paths, workspace: String, command: Vec<OsString>) -> Re
             scope: std::env::var("SHOAL_SCOPE_TOKEN").ok(),
             protocol: protocol::VERSION,
             id: 1,
-            method: Method::Execute {
-                workspace,
-                wrapper: crate::process_identity::capture(std::process::id())?
-                    .context("cannot identify execution wrapper")?,
-            },
+            method,
         },
     )
     .await?;
@@ -46,6 +63,10 @@ pub async fn run(paths: &Paths, workspace: String, command: Vec<OsString>) -> Re
         Body::Execution(plan) => plan,
         Body::Error { message, .. } => bail!("{message}"),
         _ => bail!("unexpected execution response"),
+    };
+    let command = match &plan.setup_cmd {
+        Some(path) => vec![path.as_os_str().to_owned()],
+        None => command,
     };
     let result = async {
         let mut terminate = signal(SignalKind::terminate())?;
@@ -76,7 +97,7 @@ pub async fn run(paths: &Paths, workspace: String, command: Vec<OsString>) -> Re
             .envs(plan.ports.iter().map(|port| (&port.env_var, port.port.to_string())))
             .env("SHOAL_RESERVED_PORT_ENV", plan.ports.iter().map(|port| port.env_var.as_str()).collect::<Vec<_>>().join(":"))
             .env_remove("SHOAL_SHELL_DIRECTIVE")
-            .stdin(Stdio::inherit()).stdout(Stdio::inherit()).stderr(Stdio::inherit())
+            .stdin(if setup && json { Stdio::null() } else { Stdio::inherit() }).stdout(if setup && json { Stdio::from(std::io::stderr()) } else { Stdio::inherit() }).stderr(Stdio::inherit())
             .process_group(0).kill_on_drop(true).spawn().context("launch workspace command")?;
         let group = ProcessGroup(child.id().context("child PID unavailable")? as i32);
         protocol::write(&mut stream, &ExecutionEvent::Started {
@@ -110,7 +131,10 @@ pub async fn run(paths: &Paths, workspace: String, command: Vec<OsString>) -> Re
         protocol::write(&mut stream, &ExecutionEvent::Finished { exit_code: code }).await?;
         loop {
             if let Control::Finished { complete } = protocol::read::<Control>(&mut stream).await? {
-                if !complete { eprintln!("warning: execution has surviving or unverified processes; run shoal reconcile to inspect it"); }
+                if !complete {
+                    eprintln!("warning: execution has surviving or unverified processes; run shoal reconcile to inspect it");
+                    ensure!(!setup, "setup has surviving or unverified processes");
+                }
                 break;
             }
         }
@@ -119,7 +143,9 @@ pub async fn run(paths: &Paths, workspace: String, command: Vec<OsString>) -> Re
     .await
     .context("execution completion acknowledgement timed out")
     .and_then(|r| r);
-    if let Err(error) = report {
+    if setup {
+        report?;
+    } else if let Err(error) = report {
         eprintln!("warning: unable to report execution completion: {error:#}");
     }
     result

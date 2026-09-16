@@ -4,7 +4,7 @@ use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWrite
 
 use crate::model::{ExecutionPlan, Inspection, Repository, Workspace};
 
-pub const VERSION: u32 = 14;
+pub const VERSION: u32 = 15;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -121,6 +121,10 @@ pub enum Method {
     },
     Stop {
         workspace: String,
+    },
+    Prepare {
+        workspace: String,
+        wrapper: crate::process_identity::Identity,
     },
     Execute {
         workspace: String,

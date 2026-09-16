@@ -180,13 +180,22 @@ impl Manager {
                 &commit,
             )
             .await?;
-            self.record_worktree_identity(&workspace).await
+            self.record_worktree_identity(&workspace).await?;
+            Ok::<_, anyhow::Error>(self.workspace_config(&workspace).await?.setup_cmd.is_some())
         }
         .await;
         match result {
-            Ok(()) => {
-                self.set_state(&workspace.id, WorkspaceState::Ready, None)
-                    .await?
+            Ok(setup) => {
+                self.set_state(
+                    &workspace.id,
+                    if setup {
+                        WorkspaceState::Preparing
+                    } else {
+                        WorkspaceState::Ready
+                    },
+                    None,
+                )
+                .await?
             }
             Err(error) => {
                 self.set_state(

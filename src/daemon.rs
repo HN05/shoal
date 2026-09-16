@@ -173,7 +173,12 @@ async fn serve(
     };
     if request.protocol == protocol::VERSION {
         if let Method::Execute { workspace, wrapper } = request.method {
-            return execute(stream, request.id, workspace, wrapper, manager).await;
+            return execute(stream, request.id, workspace, wrapper, manager, false).await;
+        }
+    }
+    if request.protocol == protocol::VERSION {
+        if let Method::Prepare { workspace, wrapper } = request.method {
+            return execute(stream, request.id, workspace, wrapper, manager, true).await;
         }
     }
     let mut stop = false;
@@ -400,8 +405,14 @@ async fn execute(
     workspace: String,
     wrapper: crate::process_identity::Identity,
     manager: Arc<Manager>,
+    setup: bool,
 ) -> Result<()> {
-    let (plan, mut stop) = match manager.begin(workspace, Some(wrapper)).await {
+    let begin = if setup {
+        manager.begin_command(workspace, Some(wrapper), true).await
+    } else {
+        manager.begin(workspace, Some(wrapper)).await
+    };
+    let (plan, mut stop) = match begin {
         Ok(result) => result,
         Err(error) => {
             return protocol::write(
@@ -419,6 +430,7 @@ async fn execute(
         }
     };
     let execution_id = plan.id.clone();
+    let workspace_id = plan.workspace.id.clone();
     let (mut reader, mut writer) = stream.into_split();
     let result = async {
         protocol::write(
@@ -431,7 +443,7 @@ async fn execute(
         )
         .await?;
         match protocol::read::<protocol::ExecutionEvent>(&mut reader).await? {
-            protocol::ExecutionEvent::Finished { .. } => return Ok(()),
+            protocol::ExecutionEvent::Finished { exit_code } => return Ok(exit_code),
             protocol::ExecutionEvent::Started { child, group_id } => {
                 manager
                     .record_execution_child(execution_id.clone(), child, group_id)
@@ -445,7 +457,7 @@ async fn execute(
         loop {
             tokio::select! {
                 result = &mut finished => break match result? {
-                    protocol::ExecutionEvent::Finished { .. } => Ok(()),
+                    protocol::ExecutionEvent::Finished { exit_code } => Ok(exit_code),
                     _ => anyhow::bail!("unexpected execution event"),
                 },
                 changed = stop.changed(), if !sent_stop => {
@@ -457,7 +469,14 @@ async fn execute(
         }
     }
     .await;
-    let complete = manager.finish(execution_id, result.is_ok()).await?;
+    let setup_result = setup.then(|| (workspace_id, result.as_ref().copied().unwrap_or(1)));
+    let complete = if setup {
+        manager
+            .finish_command(execution_id, result.is_ok(), setup_result)
+            .await?
+    } else {
+        manager.finish(execution_id, result.is_ok()).await?
+    };
     if result.is_ok() {
         protocol::write(&mut writer, &protocol::Control::Finished { complete }).await?;
     }

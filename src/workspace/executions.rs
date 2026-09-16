@@ -23,6 +23,15 @@ impl Manager {
         selector: String,
         wrapper: Option<process::Identity>,
     ) -> Result<(ExecutionPlan, watch::Receiver<bool>)> {
+        self.begin_command(selector, wrapper, false).await
+    }
+
+    pub async fn begin_command(
+        &self,
+        selector: String,
+        wrapper: Option<process::Identity>,
+        setup: bool,
+    ) -> Result<(ExecutionPlan, watch::Receiver<bool>)> {
         if let Some(wrapper) = &wrapper {
             ensure!(
                 process::alive(wrapper)?,
@@ -31,8 +40,23 @@ impl Manager {
         }
         // Coordinate registration and stop notification without holding the map
         // during any external command or lifetime of the agent.
-        let mut active = self.active.lock().await;
         let workspace = self.get(selector).await?;
+        let gate = self.git_gate(&workspace.repository_id).await;
+        let _guard = if setup { Some(gate.lock().await) } else { None };
+        let mut active = self.active.lock().await;
+        let workspace = self.get(workspace.id).await?;
+        let setup_cmd = if setup {
+            Some(
+                workspace.path.join(
+                    self.workspace_config(&workspace)
+                        .await?
+                        .setup_cmd
+                        .context("no setup_cmd configured")?,
+                ),
+            )
+        } else {
+            None
+        };
         ensure!(workspace.path.is_dir(), "workspace directory is missing");
         self.verify_worktree(&workspace).await?;
         *self
@@ -47,12 +71,14 @@ impl Manager {
             .store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
-                let ready: bool = tx.query_row(
-                    "SELECT state='ready' FROM workspaces WHERE id=?1",
-                    [&workspace_id],
-                    |r| r.get(0),
-                )?;
-                ensure!(ready, "workspace is not ready");
+                if setup {
+                    let busy: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM executions WHERE workspace_id=?1)", [&workspace_id], |r| r.get(0))?;
+                    ensure!(!busy, "workspace has active or unknown executions");
+                    ensure!(tx.execute("UPDATE workspaces SET state='preparing',error=NULL WHERE id=?1 AND state IN ('ready','failed','preparing')", [&workspace_id])? == 1, "workspace is busy");
+                } else {
+                    let ready: bool = tx.query_row("SELECT state='ready' FROM workspaces WHERE id=?1", [&workspace_id], |r| r.get(0))?;
+                    ensure!(ready, "workspace is not ready");
+                }
                 tx.execute(
                     "INSERT INTO executions(id,workspace_id,state,wrapper) VALUES (?1,?2,?3,?4)",
                     params![
@@ -76,6 +102,7 @@ impl Manager {
             .insert(scope_token.clone(), (id.clone(), workspace.id.clone()));
         Ok((
             ExecutionPlan {
+                setup_cmd,
                 scope_token,
                 id,
                 workspace,
@@ -108,6 +135,15 @@ impl Manager {
     }
 
     pub async fn finish(&self, id: String, complete: bool) -> Result<bool> {
+        self.finish_command(id, complete, None).await
+    }
+
+    pub async fn finish_command(
+        &self,
+        id: String,
+        complete: bool,
+        setup: Option<(String, i32)>,
+    ) -> Result<bool> {
         let complete = if complete {
             match process::scan(HashSet::from([id.clone()])).await {
                 Ok(scan) => scan.processes.is_empty(),
@@ -120,14 +156,20 @@ impl Manager {
         let record_id = id.clone();
         self.store
             .run(move |db| {
+                let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
                 if complete {
-                    db.execute("DELETE FROM executions WHERE id=?1", [record_id])?;
+                    tx.execute("DELETE FROM executions WHERE id=?1", [record_id])?;
                 } else {
-                    db.execute(
+                    tx.execute(
                         "UPDATE executions SET state=?2 WHERE id=?1",
                         params![record_id, ExecutionState::Unknown],
                     )?;
                 }
+                if let Some((workspace, code)) = setup {
+                    let error = (!(complete && code == 0)).then(|| format!("setup failed (exit {code}, processes stopped: {complete}); retry with shoal prepare"));
+                    tx.execute("UPDATE workspaces SET state=?2,error=?3 WHERE id=?1 AND state='preparing'", params![workspace, if error.is_none() { WorkspaceState::Ready } else { WorkspaceState::Failed }, error])?;
+                }
+                tx.commit()?;
                 Ok(())
             })
             .await?;
