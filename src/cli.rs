@@ -226,12 +226,15 @@ pub enum SimCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum ResourceCommand {
-    /// Acquire one permit for any available member, or a specific resource.
+    /// Acquire a permit or reader/writer lock for an available or specific member.
     Acquire {
         pool: String,
         workspace: Option<String>,
         #[arg(long)]
         resource: Option<String>,
+        /// Lock mode (defaults to permit for semaphores, write for rwlocks).
+        #[arg(long, value_enum)]
+        mode: Option<crate::resources::LockMode>,
         /// Stable lease name; use different names to request multiple permits.
         #[arg(long, default_value = "default")]
         name: String,

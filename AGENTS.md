@@ -33,8 +33,10 @@ when behavior changes, distinguishing decisions from proposals.
   before mutations. Retain audit history after removal. Delete devices on
   workspace removal/idle expiry. Use installed runtimes only. Tests use an isolated xcrun
   fixture; never touch personal simulator devices.
-- Generic resource permits consume capacity in both the named pool and member.
-  Allocation must be atomic. Global pools span repositories; repo pools span
+- Generic semaphore permits consume capacity in both the named pool and member.
+  `kind = "rwlock"` allows unlimited readers or one exclusive writer. Readers of
+  one member share a pool slot; its final release frees the slot. New rwlock
+  leases default to write; mode changes require release. Allocation must be atomic. Global pools span repositories; repo pools span
   that repo's worktrees. Preserve leases on failed removal/restart; release them
   with successful removal. Active permits prevent automatic removal. Do not
   enforce or manage the underlying resource's lifecycle.

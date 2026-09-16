@@ -408,8 +408,8 @@ shoal resource release devices --name tests
 shoal resource release signing
 ```
 
-Acquisition is explicit and lazy. Each lease takes one slot from both the pool
-and selected member. An explicit member never silently changes to another.
+Acquisition is explicit and lazy. Each semaphore lease takes one slot from both
+the pool and selected member. An explicit member never silently changes to another.
 Repeating the same pool/lease name (default `default`) returns the existing
 permit; use distinct `--name` values for additional permits. Output always names
 the chosen resource. `--json` returns the lease, or `acquired: false` with exit 2
@@ -431,3 +431,46 @@ survive command exit and daemon restart, block automatic cleanup, and are freed
 by successful worktree removal. Failed removal retains them. Scoped agents can
 manage only their own leases; overview counts include other users without exposing
 their lease records. Human callers can use `resource list --all`.
+
+
+### Shared readers and exclusive writers
+
+Set `kind = "rwlock"` on a standalone resource or a pool member:
+
+```toml
+[resources.shared-cache]
+kind = "rwlock"
+
+# The same setting works under [resource_pools.<pool>.resources.<member>].
+```
+
+```sh
+shoal resource acquire shared-cache --mode read
+shoal resource release shared-cache
+shoal resource acquire shared-cache --mode write --wait 60
+shoal resource release shared-cache
+```
+
+Any number of read leases can coexist; a write lease excludes all other readers
+and writers of that resource. The lock is cooperative: a read lease is a promise
+to read, not filesystem enforcement. A new rwlock lease defaults to `write`;
+existing semaphore resources default to `permit`. Explicit read/write modes
+only select rwlock members, and `--mode permit` only selects semaphores.
+
+An rwlock's capacity must be 1 (the default). All readers on that member share
+one pool slot; a writer uses one slot. The slot is freed after its final lease is
+released. A pool may mix rwlocks and semaphores: its capacity counts occupied
+rwlock members plus semaphore permits. Further readers of an occupied member
+can join even when the pool has no free slots.
+
+Use different `--name` values for simultaneous leases within the same worktree.
+Repeating a lease name returns its existing mode; explicitly changing mode under
+that name is rejected. Release before acquiring another mode; upgrades and
+downgrades are not atomic. Writers may starve under a continuous stream of
+readers: waiting is bounded polling, with no queue or writer priority.
+
+`shoal resources` shows reader/writer counts and separate read/write availability;
+its numeric `used`/`available` fields count pool/member slots, not reader limits.
+Lease output always includes `mode`. Both modes survive daemon restarts, prevent
+automatic worktree cleanup, and are released on successful manual removal.
+Changing an active resource's kind requires draining its leases first.

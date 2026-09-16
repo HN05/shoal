@@ -107,18 +107,30 @@ async fn run(cli: Cli) -> Result<i32> {
                         }
                     );
                     for resource in &pool.resources {
-                        println!(
-                            "  {}: {}/{} in use, {} available",
-                            resource.name, resource.used, resource.capacity, resource.available
-                        );
+                        if resource.kind == resources::ResourceKind::Rwlock {
+                            println!(
+                                "  {}: {} readers, {} writers; read available: {}, write available: {}",
+                                resource.name,
+                                resource.readers,
+                                resource.writers,
+                                resource.read_available,
+                                resource.write_available
+                            );
+                        } else {
+                            println!(
+                                "  {}: {}/{} in use, {} available",
+                                resource.name, resource.used, resource.capacity, resource.available
+                            );
+                        }
                     }
                 }
                 for lease in &overview.leases {
                     println!(
-                        "  lease {}/{} -> {}{}",
+                        "  lease {}/{} -> {} [{}]{}",
                         lease.pool,
                         lease.name,
                         lease.resource,
+                        lease.mode,
                         lease
                             .reason
                             .as_ref()
@@ -862,6 +874,7 @@ async fn resource_command(
     use cli::ResourceCommand;
     match command {
         ResourceCommand::Acquire {
+            mode,
             pool,
             workspace,
             resource,
@@ -871,6 +884,7 @@ async fn resource_command(
         } => {
             let workspace = ui::workspace(paths, workspace, true, json_output).await?;
             let request = resources::AcquireRequest {
+                mode,
                 pool,
                 resource,
                 name,
@@ -891,8 +905,8 @@ async fn resource_command(
                         output(
                             json_output,
                             &format!(
-                                "{}/{} -> {} ({})",
-                                lease.pool, lease.name, lease.resource, lease.id
+                                "{}/{} -> {} [{}] ({})",
+                                lease.pool, lease.name, lease.resource, lease.mode, lease.id
                             ),
                             serde_json::to_value(&lease)?,
                         );
@@ -951,11 +965,12 @@ async fn resource_command(
             } else {
                 for lease in &leases {
                     println!(
-                        "{}  {}/{} -> {}{}",
+                        "{}  {}/{} -> {} [{}]{}",
                         lease.workspace_id,
                         lease.pool,
                         lease.name,
                         lease.resource,
+                        lease.mode,
                         lease
                             .reason
                             .as_ref()

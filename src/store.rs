@@ -14,7 +14,7 @@ impl Store {
         let store = Self { path };
         store.run(|db| {
             let version: i64 = db.query_row("PRAGMA user_version", [], |r| r.get(0))?;
-            ensure!(version <= 8, "state database was written by a newer Shoal version");
+            ensure!(version <= 9, "state database was written by a newer Shoal version");
             db.execute_batch("BEGIN;
                 CREATE TABLE IF NOT EXISTS repositories (
                     id TEXT PRIMARY KEY, path TEXT NOT NULL UNIQUE, source TEXT NOT NULL, last_used INTEGER NOT NULL
@@ -58,8 +58,11 @@ impl Store {
                     reason TEXT, created_at INTEGER NOT NULL, UNIQUE(workspace_id,pool,name),
                     FOREIGN KEY(scope,pool) REFERENCES resource_pools(scope,name)
                 );
-                CREATE INDEX IF NOT EXISTS resource_lease_pool ON resource_leases(scope,pool);
-                PRAGMA user_version=8; COMMIT;")?;
+                CREATE INDEX IF NOT EXISTS resource_lease_pool ON resource_leases(scope,pool);")?;
+            if version < 9 {
+                db.execute_batch("ALTER TABLE resource_leases ADD COLUMN mode TEXT NOT NULL DEFAULT 'permit' CHECK(mode IN ('permit','read','write'));")?;
+            }
+            db.execute_batch("PRAGMA user_version=9; COMMIT;")?;
             Ok(())
         }).await?;
         Ok(store)
@@ -161,6 +164,39 @@ mod tests {
             })
             .await
             .unwrap();
+        Store::open(path).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn migrates_semaphore_leases_and_definitions_from_version_eight() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("state.db");
+        let store = Store::open(path.clone()).await.unwrap();
+        store.run(|db| {
+            db.execute_batch("INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
+                INSERT INTO workspaces(id,repository_id,name,path,branch,state) VALUES ('workspace','repo','worker','/work','worker','ready');
+                ALTER TABLE resource_leases DROP COLUMN mode;
+                PRAGMA user_version=8;")?;
+            let definition = r#"{"capacity":2,"reason":null,"resources":{"worker":{"capacity":2,"reason":null}}}"#;
+            db.execute("INSERT INTO resource_pools(scope,name,definition) VALUES ('global','worker',?1)", [definition])?;
+            db.execute("INSERT INTO resource_leases VALUES ('lease','workspace','global','worker','default','worker',NULL,123)", [])?;
+            Ok(())
+        }).await.unwrap();
+        let migrated = Store::open(path.clone()).await.unwrap();
+        migrated.run(|db| {
+            let leases = crate::resources::leases(db, None)?;
+            assert_eq!(leases.len(), 1);
+            assert_eq!(leases[0].id, "lease");
+            assert_eq!(leases[0].mode, crate::resources::LockMode::Permit);
+            assert_eq!(leases[0].created_at, 123);
+            let json: String = db.query_row("SELECT definition FROM resource_pools", [], |row| row.get(0))?;
+            let stored: crate::resources::Definition = serde_json::from_str(&json)?;
+            let config: crate::repo_config::RepoConfig = toml::from_str("[resources.worker]\ncapacity=2")?;
+            assert_eq!(stored, crate::resources::definitions(&config.resources, &config.resource_pools)?["worker"]);
+            assert!(db.execute("UPDATE resource_leases SET mode='invalid'", []).is_err());
+            assert!(db.query_row("SELECT 'invalid'", [], |row| row.get::<_, crate::resources::LockMode>(0)).is_err());
+            Ok(())
+        }).await.unwrap();
         Store::open(path).await.unwrap();
     }
 }

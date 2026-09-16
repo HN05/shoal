@@ -186,6 +186,7 @@ mod tests {
             .acquire_resource(
                 workspace.id.clone(),
                 crate::resources::AcquireRequest {
+                    mode: None,
                     pool: "test-lock".into(),
                     name: "default".into(),
                     resource: None,
@@ -206,6 +207,48 @@ mod tests {
             .release_resource(workspace.id.clone(), "test-lock".into(), "default".into())
             .await
             .unwrap();
+        fs::write(
+            workspace.path.join(".shoal.toml"),
+            "[resources.cache]\nkind='rwlock'\n",
+        )
+        .unwrap();
+        for mode in [
+            crate::resources::LockMode::Read,
+            crate::resources::LockMode::Write,
+        ] {
+            manager
+                .acquire_resource(
+                    workspace.id.clone(),
+                    crate::resources::AcquireRequest {
+                        pool: "cache".into(),
+                        name: "default".into(),
+                        mode: Some(mode),
+                        resource: None,
+                        reason: None,
+                    },
+                )
+                .await
+                .unwrap();
+            // Remove config so only the lease can keep this clean/pushed worktree alive.
+            fs::remove_file(workspace.path.join(".shoal.toml")).unwrap();
+            assert!(
+                manager
+                    .cleanup_snapshot(&workspace.id)
+                    .await
+                    .unwrap()
+                    .is_none()
+            );
+            manager
+                .release_resource(workspace.id.clone(), "cache".into(), "default".into())
+                .await
+                .unwrap();
+            fs::write(
+                workspace.path.join(".shoal.toml"),
+                "[resources.cache]\nkind='rwlock'\n",
+            )
+            .unwrap();
+        }
+        fs::remove_file(workspace.path.join(".shoal.toml")).unwrap();
         let original = manager
             .cleanup_snapshot(&workspace.id)
             .await

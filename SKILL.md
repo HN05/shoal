@@ -33,9 +33,14 @@ shoal resource release devices
 ```
 
 Use the returned `resource`; `--resource <name>` requests a specific member.
-Standalone resources use the same commands. Each lease consumes one permit.
+Standalone resources use the same commands. Each semaphore lease consumes one permit.
 The same `--name` returns the same lease; use distinct names for additional
 permits and pass that name on release. Busy requests exit 2. Actual use is cooperative.
+
+For `kind: rwlock` resources, use `--mode read` for read-only access or `--mode write`
+for changes (new leases default to write). Readers share; writers exclude everyone
+on that resource. Check `read_available`/`write_available`, not just free slots.
+Release before changing mode; there are no atomic upgrades or writer priority.
 
 ## Simulators
 

@@ -1763,7 +1763,8 @@ resolution without starting actual agents or remote-control sessions.
 
 ### Implemented generic resource pools
 
-Generic resources use cooperative counting semaphores. They are declarative
+Generic resources default to cooperative counting semaphores (reader/writer locks
+are also implemented as described below). They are declarative
 names and capacities, with no lifecycle adapter, process enforcement, proxy, or
 sandboxing. A standalone resource is a one-member pool. Capacity 1 is a mutex.
 
@@ -1865,3 +1866,44 @@ creation holds a repo lock so simultaneous adds cannot select the same branch. E
 fail safely through normal workspace failure handling. The workspace name and
 its directory remain the requested name; existing branches are not renamed.
 Protocol version is now 9; CLI and daemon must be upgraded together.
+
+
+### Reader/writer resource locks (implemented)
+
+Standalone resources and individual pool members accept `kind = "rwlock"`;
+`kind = "semaphore"` is the backward-compatible default. Rwlock capacity must
+be 1. There is no configured limit on concurrent readers. One writer excludes
+all readers and other writers of the same member, including leases held by the
+same worktree under other names. This is cooperative bookkeeping, not access
+control for the underlying resource.
+
+`resource acquire --mode read|write|permit` chooses the requested mode. Omitted
+mode defaults to write for new rwlock leases and permit for semaphores. Mode
+filters compatible members when acquiring any member of a mixed pool; an
+incompatible pinned member is an error. Repeating a lease name without a mode
+returns the existing lease, including its mode. An explicit mode change under
+the same name is rejected: release first. There are no atomic upgrades or
+downgrades, writer preference, or fairness guarantees; readers can starve writers.
+Existing bounded `--wait` polling applies.
+
+All readers of a given rwlock member collectively occupy one pool slot, as does
+a writer. The member frees its slot when its final lease is released. Additional
+readers may join an occupied member even if the pool is full. Semaphore leases
+continue to consume one slot each. Thus a capacity-one standalone rwlock permits
+unlimited shared readers, and mixed pool capacity still limits occupied members
+and semaphore permits. Claim checks and insertion remain in the same immediate
+SQLite transaction, preventing concurrent writers or read/write overlap.
+
+Lease records and all lease output include typed mode: permit, read, or write.
+Resource overview reports kind, reader/writer counts, and separate read/write
+availability. Numeric used/available remain slot counts. Configuration drift
+sets availability false until definitions agree or leases are drained. Modes
+survive restart and retain existing ownership, scope, removal, and idle cleanup
+rules. SQLite schema 9 migrates old leases to permit; saved definitions without
+kind decode as semaphore. Unknown modes are rejected. Protocol version is 10;
+upgrade the daemon and CLI together.
+
+Validation covers many concurrent readers, competing read/write requests, final
+reader release, default/idempotent modes, mixed-pool capacity, incompatible modes,
+restart persistence, bounded waiting, scoped access, configuration changes,
+manual/automatic cleanup protection, and migration of preexisting permits.
