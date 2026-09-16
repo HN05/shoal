@@ -450,6 +450,9 @@ set -e
 . "$INTEGRATION"
 shoal add "$REPO" --name navigate
 test "${PWD##*/}" = navigate
+cd "$REPO"
+shoal cd navigate
+test "${PWD##*/}" = navigate
 if shoal exec navigate -- sh -c 'exit 7'; then
   exit 1
 else

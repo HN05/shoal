@@ -995,7 +995,13 @@ responsibilities; these shortcuts do not introduce separate agent integrations.
 
 Proposed interaction details:
 
-- Bare `shoal` displays help without requiring a daemon or opening a picker.
+- Bare `shoal` opens a workspace list with `fzf` in an interactive terminal.
+  Enter navigates, Ctrl-D removes, Ctrl-E offers Claude/Codex/custom shell
+  command execution, Ctrl-A adds, Ctrl-O inspects, and Ctrl-S stops commands.
+  An add-workspace row remains available when the list is empty. Each action
+  returns to the shell. `shoal --help` shows help; bare noninteractive calls also
+  show help. `shoal cd [workspace]` provides explicit navigation through the same
+  shell integration (or prints the path if the integration is not loaded).
 - Explicit targets bypass selection, so integrations can call the same commands.
 - Non-interactive invocations and `--json` never prompt. `add` requires a
   repository and name; `exec` can still resolve the current workspace without

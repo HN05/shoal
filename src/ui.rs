@@ -11,9 +11,13 @@ use crate::{
 };
 use anyhow::{Context, Result, bail, ensure};
 
+pub fn is_interactive(json: bool) -> bool {
+    !json && io::stdin().is_terminal() && io::stderr().is_terminal()
+}
+
 fn interactive(json: bool) -> Result<()> {
     ensure!(
-        !json && io::stdin().is_terminal() && io::stderr().is_terminal(),
+        is_interactive(json),
         "missing argument; pass an explicit target/name in non-interactive mode"
     );
     Ok(())
@@ -53,12 +57,22 @@ pub fn input(prompt: &str, json: bool) -> Result<String> {
 }
 
 pub fn pick(prompt: &str, entries: Vec<(String, String)>, json: bool) -> Result<String> {
+    Ok(pick_with_actions(prompt, entries, json, None)?.1)
+}
+
+fn pick_with_actions(
+    prompt: &str,
+    entries: Vec<(String, String)>,
+    json: bool,
+    actions: Option<(&str, &str)>,
+) -> Result<(String, String)> {
     interactive(json)?;
     ensure!(
         !entries.is_empty(),
         "nothing to select; register a repository with `shoal repo add <path-or-url>` or create a workspace with `shoal add`"
     );
-    let mut picker = Command::new("fzf")
+    let mut command = Command::new("fzf");
+    command
         .args([
             "--no-sort",
             "--delimiter=\t",
@@ -70,7 +84,13 @@ pub fn pick(prompt: &str, entries: Vec<(String, String)>, json: bool) -> Result<
         .env_remove("FZF_DEFAULT_OPTS_FILE")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::inherit())
+        .stderr(Stdio::inherit());
+    if let Some((keys, header)) = actions {
+        command
+            .arg(format!("--expect={keys}"))
+            .args(["--header", header]);
+    }
+    let mut picker = command
         .spawn()
         .context("open picker; install fzf or supply an explicit target")?;
     let mut input = picker.stdin.take().context("picker stdin is unavailable")?;
@@ -84,7 +104,13 @@ pub fn pick(prompt: &str, entries: Vec<(String, String)>, json: bool) -> Result<
     drop(input);
     let output = picker.wait_with_output()?;
     ensure!(output.status.success(), "selection canceled");
-    let id = String::from_utf8(output.stdout)?
+    let output = String::from_utf8(output.stdout)?;
+    let (action, selected) = if actions.is_some() {
+        output.split_once('\n').context("picker omitted action")?
+    } else {
+        ("", output.as_str())
+    };
+    let id = selected
         .split('\t')
         .next()
         .unwrap_or_default()
@@ -94,7 +120,83 @@ pub fn pick(prompt: &str, entries: Vec<(String, String)>, json: bool) -> Result<
         entries.iter().any(|entry| entry.0 == id),
         "picker returned an unknown item"
     );
-    Ok(id)
+    Ok((action.to_owned(), id))
+}
+
+pub async fn workspace_menu(paths: &Paths) -> Result<crate::cli::Command> {
+    use crate::cli::Command;
+    let repos = repository_choices(repositories(paths).await?).await?;
+    let mut entries: Vec<_> = workspaces(paths)
+        .await?
+        .into_iter()
+        .map(|w| {
+            let repo = repos
+                .iter()
+                .find(|(id, _)| id == &w.repository_id)
+                .map(|(_, name)| name.as_str())
+                .unwrap_or("unknown repository");
+            (
+                w.id,
+                format!("{}  {repo}  {}  {}", w.name, w.state, w.branch),
+            )
+        })
+        .collect();
+    entries.push(("add-workspace".into(), "+ Add workspace".into()));
+    let (action, id) = pick_with_actions(
+        "Shoal> ",
+        entries,
+        false,
+        Some((
+            "ctrl-d,ctrl-e,ctrl-a,ctrl-o,ctrl-s",
+            "enter: enter   ctrl-d: delete   ctrl-e: execute   ctrl-a: add   ctrl-o: inspect   ctrl-s: stop",
+        )),
+    )?;
+    if action == "ctrl-a" || (action.is_empty() && id == "add-workspace") {
+        return Ok(Command::Add {
+            repository: None,
+            name: None,
+            base: None,
+        });
+    }
+    ensure!(id != "add-workspace", "select a workspace for this action");
+    let workspace = Some(id);
+    Ok(match action.as_str() {
+        "" => Command::Cd { workspace },
+        "ctrl-d" => Command::Rm {
+            workspace,
+            yes: false,
+        },
+        "ctrl-o" => Command::Inspect { workspace },
+        "ctrl-s" => Command::Stop { workspace },
+        "ctrl-e" => match pick(
+            "Execute> ",
+            ["claude", "codex", "custom shell command"]
+                .into_iter()
+                .map(|s| (s.into(), s.into()))
+                .collect(),
+            false,
+        )?
+        .as_str()
+        {
+            "claude" => Command::Claude {
+                workspace,
+                args: vec![],
+            },
+            "codex" => Command::Codex {
+                workspace,
+                args: vec![],
+            },
+            _ => Command::Exec {
+                workspace,
+                command: vec![
+                    "sh".into(),
+                    "-c".into(),
+                    input("Shell command", false)?.into(),
+                ],
+            },
+        },
+        _ => bail!("unknown picker action"),
+    })
 }
 
 pub async fn repositories(paths: &Paths) -> Result<Vec<Repository>> {

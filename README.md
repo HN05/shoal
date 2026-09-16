@@ -60,6 +60,7 @@ Native Linux service integration has not yet been exercised on a Linux host.
 shoal repo add /path/to/repo # Or a Git clone URL; register once
 shoal repo list
 shoal add /path/to/repo --name fix-login
+shoal cd fix-login          # Enter through the shell function
 shoal exec fix-login -- cargo test
 shoal claude fix-login -- --help
 shoal codex fix-login -- --help
@@ -69,7 +70,22 @@ shoal rm fix-login          # Confirm if busy, dirty, or unpushed; retain branch
 shoal rm fix-login --yes    # Explicitly confirm those risks without prompting
 ```
 
-Bare `shoal` displays help. `shoal add` offers registered repositories
+Bare `shoal` opens an interactive workspace list. `shoal --help` shows help;
+without a terminal, bare `shoal` also shows help. The list offers:
+
+| Key | Action |
+| --- | --- |
+| Enter | Enter the selected workspace |
+| Ctrl-D | Delete, with confirmation when needed |
+| Ctrl-E | Run Claude, Codex, or a custom shell command |
+| Ctrl-A | Add a workspace |
+| Ctrl-O | Inspect |
+| Ctrl-S | Stop managed commands |
+
+Each selection performs its action and returns to your shell. Entering a workspace
+requires the shell integration below; without it, Shoal prints the path.
+
+`shoal add` offers registered repositories
 in most-recently-used order and prompts for a name. Repository lists and pickers
 show readable repository names, including for managed clones. Pickers show just
 the name, adding `(hostname)` for duplicate names (and the source if still

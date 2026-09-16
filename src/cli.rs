@@ -38,6 +38,8 @@ pub enum Command {
     },
     /// List managed workspaces.
     List,
+    /// Enter a workspace through the shell integration (otherwise print its path).
+    Cd { workspace: Option<String> },
     /// Inspect a workspace and its executions.
     Inspect { workspace: Option<String> },
     /// Stop connected commands, preserving the workspace.

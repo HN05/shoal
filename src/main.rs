@@ -46,12 +46,33 @@ async fn main() {
 }
 
 async fn run(cli: Cli) -> Result<i32> {
-    let Some(command) = cli.command else {
+    if cli.command.is_none() && !ui::is_interactive(cli.json) {
         Cli::command().print_help()?;
         return Ok(0);
-    };
+    }
     let paths = Paths::new(cli.state_dir)?;
+    let command = match cli.command {
+        Some(command) => command,
+        None => ui::workspace_menu(&paths).await?,
+    };
     match command {
+        Command::Cd { workspace } => {
+            let workspace = ui::workspace(&paths, workspace, true, cli.json).await?;
+            let inspection = match client::call(&paths, Method::Inspect { workspace }).await? {
+                Body::Inspection(inspection) => inspection,
+                _ => anyhow::bail!("unexpected inspection response"),
+            };
+            ensure!(
+                inspection.workspace.path.is_dir(),
+                "workspace directory is missing"
+            );
+            output(
+                cli.json,
+                &inspection.workspace.path.display().to_string(),
+                json!({"path": inspection.workspace.path}),
+            );
+            shell::navigate(&inspection.workspace.path, cli.json)?;
+        }
         Command::Shell {
             command: ShellCommand::Init,
         } => {
