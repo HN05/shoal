@@ -62,7 +62,9 @@ shoal repo add /path/to/repo --name my-project
 shoal repo rename my-project new-name
 shoal repo list
 shoal add /path/to/repo --name fix-login
+shoal cd                    # Fuzzy workspace picker, even inside a workspace
 shoal cd fix-login          # Enter through the shell function
+shoal cd -                  # Previous directory; refuses deleted destinations
 shoal exec fix-login -- cargo test
 shoal claude fix-login -- --help
 shoal codex fix-login -- --help
@@ -247,8 +249,21 @@ source <(shoal shell init)
 
 With the function loaded, successful `add` enters the workspace. Removing the
 workspace containing your current directory moves you to its registered repository
-root (or home if that root is gone). JSON calls do not change directories. Shoal
-does not edit your shell configuration automatically.
+root (or home if that root is gone). `shoal cd` always opens fzf, including from
+inside a workspace; `shoal cd <name>` goes directly to that workspace. The picker
+omits workspaces whose directories are missing. Canceling leaves you in place.
+
+`shoal cd -` uses your shell's previous directory, including ordinary directories
+outside Shoal. If that directory was deleted (for example by `shoal rm`), it
+reports an error and leaves you where you are. History is local to each shell,
+using `OLDPWD`, with no daemon-wide history. Scoped agents cannot navigate outside
+their own worktree. Without shell integration the command prints the destination;
+JSON calls return its path and never change directories. `shoal cd` without a target requires an
+interactive terminal; noninteractive callers must give a name or `-`.
+
+Reload `source <(shoal shell init)` in existing terminals after upgrading to pass
+previous-directory state reliably. Shoal does not edit your shell configuration
+automatically.
 
 ## Current scope
 

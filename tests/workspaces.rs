@@ -832,7 +832,12 @@ fn shell_function_navigates_after_add_and_away_after_rm() {
     let script = r#"
 set -e
 . "$INTEGRATION"
+cd "$REPO"
 shoal add "$REPO" --name navigate
+test "${PWD##*/}" = navigate
+shoal cd -
+test "$PWD" = "$REPO"
+shoal cd -
 test "${PWD##*/}" = navigate
 cd "$REPO"
 shoal cd navigate
@@ -852,6 +857,10 @@ rm untracked
 mkdir nested
 cd nested
 shoal rm
+test "$PWD" = "$REPO"
+if shoal cd -; then
+  exit 1
+fi
 test "$PWD" = "$REPO"
 printf 'navigation-ok\n'
 "#;
@@ -2378,4 +2387,159 @@ fn rwlock_scope_and_kind_drift_preserve_active_leases() {
         fixture.ok(&["resource", "acquire", "cache", "second"])["mode"],
         "permit"
     );
+}
+
+#[test]
+fn cd_previous_checks_existence_and_json_never_navigates() {
+    let fixture = Fixture::new();
+    let workspace = fixture.add("previous");
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    let directive = fixture.root.path().join("cd-directive");
+    fs::write(&directive, "").unwrap();
+    let output = fixture
+        .command()
+        .env("OLDPWD", path)
+        .env_remove("SHOAL_PREVIOUS_DIR")
+        .env("SHOAL_SHELL_DIRECTIVE", &directive)
+        .args(["--json", "cd", "-"])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        serde_json::from_slice::<Value>(&output.stdout).unwrap()["path"],
+        fs::canonicalize(path).unwrap().to_str().unwrap()
+    );
+    assert_eq!(fs::read_to_string(&directive).unwrap(), "");
+    fixture.ok(&["rm", "previous"]);
+    let deleted = fixture
+        .command()
+        .env("OLDPWD", path)
+        .env_remove("SHOAL_PREVIOUS_DIR")
+        .env("SHOAL_SHELL_DIRECTIVE", &directive)
+        .args(["cd", "-"])
+        .output()
+        .unwrap();
+    assert!(!deleted.status.success());
+    assert!(String::from_utf8_lossy(&deleted.stderr).contains("no longer exists"));
+    assert_eq!(fs::read_to_string(&directive).unwrap(), "");
+    for previous in [None, Some("relative/directory")] {
+        let mut command = fixture.command();
+        command
+            .env_remove("OLDPWD")
+            .env_remove("SHOAL_PREVIOUS_DIR");
+        if let Some(previous) = previous {
+            command.env("OLDPWD", previous);
+        }
+        assert!(!command.args(["cd", "-"]).output().unwrap().status.success());
+    }
+}
+
+#[test]
+fn cd_previous_cannot_escape_execution_scope() {
+    let fixture = Fixture::new();
+    let first = fixture.add("first");
+    let other = fixture.add("other");
+    let binary = env!("CARGO_BIN_EXE_shoal");
+    let scoped = |destination: &str| {
+        fixture
+            .command()
+            .env("SHOAL_PREVIOUS_DIR", destination)
+            .args(["exec", "first", "--", binary, "--json", "cd", "-"])
+            .output()
+            .unwrap()
+    };
+    assert!(scoped(first["path"].as_str().unwrap()).status.success());
+    for path in [
+        other["path"].as_str().unwrap(),
+        fixture.repo.to_str().unwrap(),
+    ] {
+        let output = scoped(path);
+        assert!(!output.status.success());
+        assert!(String::from_utf8_lossy(&output.stderr).contains("cannot navigate outside"));
+    }
+}
+
+#[test]
+fn cd_always_picks_even_inside_a_workspace_and_cancel_does_not_navigate() {
+    use std::os::fd::FromRawFd;
+    let fixture = Fixture::new();
+    let first = fixture.add("first");
+    let second = fixture.add("second");
+    let mut broken = fixture.command();
+    let failed = broken
+        .args([
+            "add",
+            fixture.repo.to_str().unwrap(),
+            "--name",
+            "missing",
+            "--ref",
+            "not-a-ref",
+        ])
+        .output()
+        .unwrap();
+    assert!(!failed.status.success());
+    let bin = fixture.root.path().join("bin");
+    fs::create_dir_all(&bin).unwrap();
+    let fzf = bin.join("fzf");
+    fs::write(&fzf, "#!/bin/sh\ncat > \"$SHOAL_TEST_PICK_INPUT\"\n[ \"$SHOAL_TEST_PICK_ID\" != cancel ] || exit 130\nawk -F '\\t' -v id=\"$SHOAL_TEST_PICK_ID\" '$1 == id { print }' \"$SHOAL_TEST_PICK_INPUT\"\n").unwrap();
+    fs::set_permissions(&fzf, fs::Permissions::from_mode(0o755)).unwrap();
+    let directive = fixture.root.path().join("cd-directive");
+    let input = fixture.root.path().join("picker-input");
+    for choice in [second["id"].as_str().unwrap(), "cancel"] {
+        fs::write(&directive, "").unwrap();
+        let (mut master, mut slave) = (-1, -1);
+        // Give the CLI real terminal handles so its normal interactive path runs.
+        assert_eq!(
+            unsafe {
+                libc::openpty(
+                    &mut master,
+                    &mut slave,
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                )
+            },
+            0
+        );
+        let _master = unsafe { fs::File::from_raw_fd(master) };
+        let slave = unsafe { fs::File::from_raw_fd(slave) };
+        let output = fixture
+            .command()
+            .current_dir(first["path"].as_str().unwrap())
+            .env("SHOAL_TEST_PICK_INPUT", &input)
+            .env("SHOAL_TEST_PICK_ID", choice)
+            .env("SHOAL_SHELL_DIRECTIVE", &directive)
+            .arg("cd")
+            .stdin(slave.try_clone().unwrap())
+            .stderr(slave)
+            .output()
+            .unwrap();
+        let choices = fs::read_to_string(&input).unwrap();
+        assert!(choices.contains(first["id"].as_str().unwrap()));
+        assert!(choices.contains(second["id"].as_str().unwrap()));
+        assert!(!choices.contains("missing"));
+        if choice == "cancel" {
+            assert!(!output.status.success());
+            assert_eq!(fs::read_to_string(&directive).unwrap(), "");
+        } else {
+            assert!(output.status.success());
+            assert_eq!(
+                fs::read_to_string(&directive).unwrap().trim(),
+                second["path"].as_str().unwrap()
+            );
+        }
+    }
+    // JSON/piped invocations must not silently choose the current workspace.
+    let output = fixture
+        .command()
+        .current_dir(first["path"].as_str().unwrap())
+        .args(["--json", "cd"])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("explicit target"));
 }

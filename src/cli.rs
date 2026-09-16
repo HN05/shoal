@@ -38,7 +38,7 @@ pub enum Command {
     },
     /// List managed workspaces.
     List,
-    /// Enter a workspace through the shell integration (otherwise print its path).
+    /// Pick a workspace with fzf, enter a named workspace, or use - for the previous directory.
     Cd { workspace: Option<String> },
     /// Show your changes since the fork point using native Git diff configuration.
     Diff { workspace: Option<String> },

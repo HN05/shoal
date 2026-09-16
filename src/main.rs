@@ -329,21 +329,29 @@ async fn run(cli: Cli) -> Result<i32> {
             }
         }
         Command::Cd { workspace } => {
-            let workspace = ui::workspace(&paths, workspace, true, cli.json).await?;
-            let inspection = match client::call(&paths, Method::Inspect { workspace }).await? {
-                Body::Inspection(inspection) => inspection,
-                _ => anyhow::bail!("unexpected inspection response"),
-            };
-            ensure!(
-                inspection.workspace.path.is_dir(),
-                "workspace directory is missing"
-            );
-            output(
-                cli.json,
-                &inspection.workspace.path.display().to_string(),
-                json!({"path": inspection.workspace.path}),
-            );
-            shell::navigate(&inspection.workspace.path, cli.json)?;
+            if workspace.as_deref() == Some("-") {
+                let destination = shell::previous_directory()?;
+                if std::env::var_os("SHOAL_SCOPE_TOKEN").is_some() {
+                    let workspaces = ui::workspaces(&paths).await?;
+                    ensure!(
+                        workspaces.iter().any(|w| std::fs::canonicalize(&w.path)
+                            .is_ok_and(|root| destination.starts_with(root))),
+                        "workspace processes cannot navigate outside their worktree"
+                    );
+                }
+                output(
+                    cli.json,
+                    &destination.display().to_string(),
+                    json!({"path": destination}),
+                );
+                shell::navigate(&destination, cli.json)?;
+            } else {
+                let workspace = match workspace {
+                    Some(workspace) => workspace,
+                    None => ui::workspace_picker(&paths, cli.json).await?,
+                };
+                enter_workspace(&paths, workspace, cli.json).await?;
+            }
         }
         Command::Shell {
             command: ShellCommand::Init,
@@ -666,6 +674,23 @@ async fn run(cli: Cli) -> Result<i32> {
         }
     }
     Ok(0)
+}
+
+async fn enter_workspace(paths: &Paths, workspace: String, json_output: bool) -> Result<()> {
+    let Body::Inspection(inspection) = client::call(paths, Method::Inspect { workspace }).await?
+    else {
+        anyhow::bail!("unexpected inspection response");
+    };
+    ensure!(
+        inspection.workspace.path.is_dir(),
+        "workspace directory is missing"
+    );
+    output(
+        json_output,
+        &inspection.workspace.path.display().to_string(),
+        json!({"path": inspection.workspace.path}),
+    );
+    shell::navigate(&inspection.workspace.path, json_output)
 }
 
 async fn stop(paths: &Paths) -> Result<()> {

@@ -1000,8 +1000,10 @@ Proposed interaction details:
   command execution, Ctrl-A adds, Ctrl-O inspects, and Ctrl-S stops commands.
   An add-workspace row remains available when the list is empty. Each action
   returns to the shell. `shoal --help` shows help; bare noninteractive calls also
-  show help. `shoal cd [workspace]` provides explicit navigation through the same
-  shell integration (or prints the path if the integration is not loaded).
+  show help. `shoal cd` always opens the workspace picker, even from inside a
+  worktree. `shoal cd <workspace>` navigates directly; `shoal cd -` uses the shell's
+  previous directory and refuses a deleted destination. All use the same shell
+  integration (or print the path if the integration is not loaded).
 - Explicit targets bypass selection, so integrations can call the same commands.
 - Non-interactive invocations and `--json` never prompt. `add` requires a
   repository and name; `exec` can still resolve the current workspace without
@@ -1907,3 +1909,26 @@ Validation covers many concurrent readers, competing read/write requests, final
 reader release, default/idempotent modes, mixed-pool capacity, incompatible modes,
 restart persistence, bounded waiting, scoped access, configuration changes,
 manual/automatic cleanup protection, and migration of preexisting permits.
+
+
+### Workspace navigation shortcuts (implemented)
+
+`shoal cd` always opens fzf, including when already inside a workspace. It lists
+only workspaces with existing directories, filtered to the caller's scope, and
+revalidates the selection before navigation. Explicit `shoal cd <name>` bypasses
+the picker. There is no separate `cdi` command. Canceling the picker performs no
+directory change; noninteractive/JSON callers must provide a name or `-`.
+
+`shoal cd -` follows ordinary shell previous-directory semantics, not global
+workspace history. The minimal Bash/Zsh wrapper passes `OLDPWD` as the one-call
+`SHOAL_PREVIOUS_DIR` environment variable; Rust falls back to exported `OLDPWD`
+for direct invocation. Rust requires an absolute, existing directory. A missing
+or deleted previous destination produces an error without a shell directive,
+leaving the caller in its current directory rather than returning to a removed
+worktree. Ordinary directories outside Shoal are valid for unscoped callers;
+scoped callers must stay within their own daemon-authorized worktree.
+
+Rust chooses and validates paths; the wrapper still only reads a data-file
+response, runs builtin cd, and preserves exit status. JSON never triggers shell
+navigation. Existing terminals should reload `source <(shoal shell init)` after
+upgrading. These changes need no database migration or daemon protocol change.

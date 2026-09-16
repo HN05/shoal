@@ -315,6 +315,20 @@ pub async fn workspace(
             return Ok(workspace.id.clone());
         }
     }
+    pick_workspace(workspaces, json)
+}
+
+pub async fn workspace_picker(paths: &Paths, json: bool) -> Result<String> {
+    // Always run the picker, including for scoped callers (whose list is filtered).
+    let workspaces = workspaces(paths)
+        .await?
+        .into_iter()
+        .filter(|w| w.path.is_dir())
+        .collect();
+    pick_workspace(workspaces, json)
+}
+
+fn pick_workspace(workspaces: Vec<Workspace>, json: bool) -> Result<String> {
     pick(
         "Workspace> ",
         workspaces
