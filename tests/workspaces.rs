@@ -218,6 +218,142 @@ fn url_registration_clones_once_and_supports_workspaces() {
 }
 
 #[test]
+fn displayed_repository_name_resolves_old_uuid_clones_and_rejects_ambiguity() {
+    let fixture = Fixture::new();
+    let mut clones = Vec::new();
+    for parent in ["one", "two"] {
+        let source = fixture.root.path().join(parent).join("saldoir-server.git");
+        fs::create_dir_all(source.parent().unwrap()).unwrap();
+        git(
+            &fixture.repo,
+            &["clone", "--bare", ".", source.to_str().unwrap()],
+        );
+        let url = format!("file://{}", source.display());
+        let destination = fixture.root.path().join(format!("old-uuid-{parent}"));
+        clones.push(fixture.ok(&["repo", "add", &url, "--path", destination.to_str().unwrap()]));
+        if parent == "one" {
+            let listing = fixture.run(&["repo", "list"]);
+            assert!(String::from_utf8_lossy(&listing.stdout).contains("saldoir-server  file://"));
+            fixture.ok(&["add", "saldoir-server", "--name", "feature"]);
+        }
+    }
+    let ambiguous = fixture.run(&["repo", "rm", "saldoir-server", "--yes"]);
+    assert!(!ambiguous.status.success());
+    assert!(String::from_utf8_lossy(&ambiguous.stderr).contains("repository name is ambiguous"));
+    for repo in &clones {
+        assert!(Path::new(repo["path"].as_str().unwrap()).exists());
+    }
+    // An explicit name wins over a colliding inferred name.
+    fixture.ok(&[
+        "repo",
+        "rename",
+        clones[1]["id"].as_str().unwrap(),
+        "saldoir-server",
+    ]);
+    fixture.ok(&["repo", "rm", "saldoir-server", "--yes"]);
+    assert!(!Path::new(clones[1]["path"].as_str().unwrap()).exists());
+    assert!(Path::new(clones[0]["path"].as_str().unwrap()).exists());
+    // The remaining inferred name now resolves, deleting its workspace too.
+    fixture.ok(&["repo", "rm", "saldoir-server", "--yes"]);
+    assert!(!Path::new(clones[0]["path"].as_str().unwrap()).exists());
+    assert_eq!(fixture.ok(&["list"]), serde_json::json!([]));
+    assert!(fixture.repo.exists());
+}
+
+#[test]
+fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
+    let fixture = Fixture::with_config(Some(RESOURCE_CONFIG));
+    fixture.ok(&["repo", "rename", fixture.repo.to_str().unwrap(), "project"]);
+    let first = fixture.add("first");
+    fixture.add("second");
+    fixture.ok(&["port", "reserve", "web", "first"]);
+    fixture.ok(&["resource", "acquire", "devices", "first", "--name", "tests"]);
+    let complete = |args: &[&str], cwd: &Path| {
+        let state = fixture.root.path().join("state");
+        let mut words = vec!["shoal", "--state-dir", state.to_str().unwrap()];
+        words.extend_from_slice(args);
+        let output = fixture
+            .command()
+            .arg("--")
+            .args(&words)
+            .env("SHOAL_COMPLETE", "bash")
+            .env("_CLAP_COMPLETE_INDEX", (words.len() - 1).to_string())
+            .env("SHOAL_STATE_DIR", fixture.root.path().join("wrong-state"))
+            .current_dir(cwd)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8(output.stdout)
+            .unwrap()
+            .lines()
+            .map(str::to_owned)
+            .collect::<Vec<_>>()
+    };
+    for args in [
+        vec!["repo", "rm", "pr"],
+        vec!["repo", "rename", "pr"],
+        vec!["add", "pr"],
+    ] {
+        assert!(
+            complete(&args, fixture.root.path()).contains(&"project".into()),
+            "{args:?}"
+        );
+    }
+    for command in ["rm", "cd", "exec", "diff", "inspect"] {
+        assert!(
+            complete(&[command, "fi"], fixture.root.path()).contains(&"first".into()),
+            "{command}"
+        );
+    }
+    let cwd = Path::new(first["path"].as_str().unwrap());
+    assert!(complete(&["port", "release", "w"], cwd).contains(&"web".into()));
+    assert!(complete(&["resource", "acquire", "d"], cwd).contains(&"devices".into()));
+    assert!(
+        complete(
+            &["resource", "acquire", "devices", "first", "--resource", "b"],
+            fixture.root.path()
+        )
+        .contains(&"beta".into())
+    );
+    assert!(
+        complete(
+            &["resource", "release", "devices", "first", "--name", "t"],
+            fixture.root.path()
+        )
+        .contains(&"tests".into())
+    );
+    fixture.ok(&["rm", "second"]);
+    assert!(!complete(&["rm", ""], cwd).contains(&"second".into()));
+    fixture.add("second");
+    let scoped = fixture.run(&[
+        "exec",
+        "first",
+        "--",
+        "env",
+        "SHOAL_COMPLETE=bash",
+        "_CLAP_COMPLETE_INDEX=2",
+        env!("CARGO_BIN_EXE_shoal"),
+        "--",
+        "shoal",
+        "rm",
+        "",
+    ]);
+    assert!(
+        scoped.status.success(),
+        "{}",
+        String::from_utf8_lossy(&scoped.stderr)
+    );
+    let text = String::from_utf8(scoped.stdout).unwrap();
+    assert!(text.lines().any(|line| line == "first"), "{text}");
+    assert!(!text.lines().any(|line| line == "second"), "{text}");
+    assert!(!fixture.root.path().join("wrong-state").exists());
+}
+
+#[test]
 fn local_repository_without_remotes_registers_in_place_and_creates_workspaces() {
     let fixture = Fixture::new();
     git(

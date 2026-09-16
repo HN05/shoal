@@ -8,7 +8,7 @@ description = "Local workspaces and resource allocation for coding agents"
 [dependencies]
 anyhow = "1"
 clap = { version = "4", features = ["derive", "env"] }
-clap_complete = "4"
+clap_complete = { version = "=4.6.11", features = ["unstable-dynamic"] }
 fs2 = "0.4"
 libc = "0.2"
 rusqlite = { version = "0.40.2", features = ["bundled"] }
@@ -22,4 +22,3 @@ uuid = { version = "1.26.1", features = ["v4", "serde"] }
 
 [dev-dependencies]
 plist = "1"
-

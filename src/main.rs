@@ -2,6 +2,7 @@ mod cleanup;
 mod cli;
 mod client;
 mod commands;
+mod completion;
 mod config;
 mod daemon;
 mod diff;
@@ -36,8 +37,15 @@ use clap::Parser;
 use cli::Cli;
 use serde_json::json;
 
+fn main() {
+    clap_complete::CompleteEnv::with_factory(completion::command)
+        .var(completion::ENV)
+        .complete();
+    run_cli();
+}
+
 #[tokio::main]
-async fn main() {
+async fn run_cli() {
     let cli = Cli::parse();
     let json_output = cli.json;
     match commands::run(cli).await {

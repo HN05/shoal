@@ -144,6 +144,11 @@ shoal add local-project --name feature
 The checkout stays in place. Creation uses its committed `main` when it has no
 remote; use `--ref <branch>` if the repository uses another branch name.
 
+The names shown by `shoal repo list` work as repository targets, including names
+inferred from URLs for older clones. Explicit `--name` values take precedence.
+If multiple repositories share an inferred name, use their ID, path, or source
+URL, or assign a unique name with `shoal repo rename`.
+
 URL repositories are cloned once into `~/.local/share/shoal/repositories/<name>`
 and retained for reuse, separately from daemon state. The directory uses `--name`
 when supplied, otherwise the URL's repository name without `.git`. If occupied,
@@ -369,23 +374,28 @@ automatically.
 
 ### Tab completion
 
-Reload the shell integration to enable command, flag, and fixed-value completion
-(including `codex cli`/`app`) in Bash or Zsh:
+Reload the shell integration in existing terminals to enable completion in Bash
+or Zsh:
 
 ```sh
 source <(shoal shell init)
 ```
 
-Zsh's completion system is initialized if needed. Completions are generated from
-the same command definitions as `--help` and do not need a running daemon.
+Zsh's completion system is initialized if needed. Each Tab uses the installed
+binary's current command definitions, covering subcommands, flags, fixed values
+(including `codex cli`/`app`), and filesystem paths without a running daemon.
+With the daemon running, completion also suggests registered repositories and
+workspaces across commands. It suggests resource pools, members, lease names,
+ports, and simulator lease names for the current or explicitly selected workspace.
+Live lookup respects `--state-dir`, `SHOAL_STATE_DIR`, and execution scope, times
+out after 500 ms, and never starts the daemon or opens a picker.
 For Bash versions that cannot source process substitutions, use
 `eval "$(shoal shell init)"` instead.
 
 To install completions separately, `shoal completions zsh` or
 `shoal completions bash` prints the script. Fish, PowerShell, and Elvish are also
 supported by `shoal completions <shell>`; `--json` returns a `script` field.
-These completions cover CLI syntax, not live workspace/repository/resource names;
-omit those targets to use Shoal's existing fzf selection.
+You can still omit targets to use Shoal's interactive fzf selection.
 
 ## Current scope
 

@@ -247,10 +247,7 @@ pub fn repository_label(repo: &Repository) -> String {
 }
 
 fn repository_name(repo: &Repository) -> &str {
-    if let Some(name) = &repo.name {
-        return name;
-    }
-    crate::repository::source_name(&repo.source)
+    crate::repository::name(repo)
 }
 
 pub async fn repository_choices(mut repos: Vec<Repository>) -> Result<Vec<(String, String)>> {

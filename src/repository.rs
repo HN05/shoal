@@ -3,6 +3,12 @@ use std::path::Path;
 
 use crate::worktrunk;
 
+pub fn name(repo: &crate::model::Repository) -> &str {
+    repo.name
+        .as_deref()
+        .unwrap_or_else(|| source_name(&repo.source))
+}
+
 pub fn source_name(source: &str) -> &str {
     let source = source.trim_end_matches('/');
     let name = source.rsplit(['/', ':']).next().unwrap_or(source);

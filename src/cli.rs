@@ -22,7 +22,7 @@ pub enum Command {
         #[command(subcommand)]
         command: Option<SkillCommand>,
     },
-    /// Print shell completions for commands, flags, and fixed argument values.
+    /// Print shell completions for commands, flags, and live targets.
     Completions {
         #[arg(value_enum)]
         shell: clap_complete::Shell,

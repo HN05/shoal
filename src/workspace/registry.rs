@@ -169,6 +169,17 @@ impl Manager {
         {
             return Ok(repo.clone());
         }
+        let inferred: Vec<_> = repositories
+            .iter()
+            .filter(|repo| crate::repository::name(repo) == selector)
+            .collect();
+        ensure!(
+            inferred.len() <= 1,
+            "repository name is ambiguous: {selector}; use its ID, path, or source URL"
+        );
+        if let Some(repo) = inferred.first() {
+            return Ok((*repo).clone());
+        }
         if let Some(identity) = crate::repository::identity(selector).await? {
             for repo in repositories {
                 if crate::repository::identity(&repo.source).await?.as_ref() == Some(&identity) {

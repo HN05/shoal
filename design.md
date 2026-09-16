@@ -51,6 +51,9 @@ Register local repositories in place or retain URL clones for reuse. Registratio
 is idempotent by normalized origin URL, falling back to canonical local path.
 Repository identity remains distinct from its optional display name. Registration
 does not implicitly fetch. Workspace creation does not restore dependencies.
+Repository selectors accept the displayed source basename when unambiguous,
+including older clones stored under UUID directories. Explicit names take
+precedence over inferred names; use an ID, path, or source URL to disambiguate.
 
 New URL clones live in `~/.local/share/shoal/repositories/<name>`, separately from
 daemon state. Use the explicit registration name or a sanitized URL basename
@@ -115,6 +118,13 @@ The CLI supports explicit targets and JSON for automation, with current-director
 resolution and fzf for interactive selection. Noninteractive calls never open a
 picker. Rust selects navigation paths; the Bash/Zsh wrapper only changes directory
 and preserves status, without evaluating repository-provided shell code.
+
+Shell completion asks the installed binary for current command syntax on each
+Tab. Live repository, workspace, and resource targets use read-only daemon calls,
+respect the caller's state directory and scope, and time out after 500 ms. Never
+start a daemon or open a picker for completion. Commands, flags, fixed values,
+and filesystem paths remain completable without a daemon. Resource suggestions
+use an explicit workspace or the current worktree.
 
 Agent shortcuts use the execution wrapper. Codex CLI launches with
 `--sandbox danger-full-access --ask-for-approval=never`; Claude receives the

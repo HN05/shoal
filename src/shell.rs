@@ -1,5 +1,4 @@
 use anyhow::{Context, Result, ensure};
-use clap::CommandFactory;
 use std::path::{Path, PathBuf};
 
 pub const INIT_COMMAND: &str = "source <(shoal shell init)";
@@ -31,7 +30,20 @@ fi
 
 pub fn completions(shell: clap_complete::Shell) -> Result<String> {
     let mut script = Vec::new();
-    clap_complete::generate(shell, &mut crate::cli::Cli::command(), "shoal", &mut script);
+    let shells = clap_complete::env::Shells::builtins();
+    let adapter = shells
+        .completer(&shell.to_string())
+        .context("unsupported completion shell")?;
+    let executable = crate::service::executable(None)?;
+    adapter.write_registration(
+        crate::completion::ENV,
+        "shoal",
+        "shoal",
+        executable
+            .to_str()
+            .context("executable path is not UTF-8")?,
+        &mut script,
+    )?;
     String::from_utf8(script).context("completion script is not UTF-8")
 }
 
