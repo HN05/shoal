@@ -1753,7 +1753,7 @@ real application-list parsing and audit retention after cleanup.
 `shoal claude [workspace] -- <args>` appends `--remote-control <workspace-name>`
 to the forwarded arguments. Resolve the workspace first so an ID, current-directory
 match, or fzf selection yields its human name for the remote-control session.
-`shoal codex [workspace] -- <args>` appends `--sandbox workspace-write
+`shoal codex [workspace] -- <args>` appends `--sandbox danger-full-access
 --ask-for-approval=never`. These defaults apply only to the shortcuts; generic
 `shoal exec` passes its command through unchanged. Shoal's worktree scope still
 applies to all executions. Stub-executable tests verify exact argv and name
@@ -2084,7 +2084,7 @@ servers and desktop-managed SSH. Keep Shoal's local daemon behind that boundary.
 ### Desktop launch shortcuts and shell completions (implemented)
 
 `shoal codex cli [workspace] [-- args...]` replaces the previous implicit CLI
-shortcut. Only CLI mode appends `--sandbox workspace-write --ask-for-approval=never`
+shortcut. Only CLI mode appends `--sandbox danger-full-access --ask-for-approval=never`
 and runs through Shoal's execution wrapper. `shoal codex app [workspace] [-- args...]`
 invokes `codex app <workspace-path>`; `shoal t3 [workspace] [-- args...]` invokes
 `t3 app <workspace-path>`. Launchers run in the resolved worktree, preserve their

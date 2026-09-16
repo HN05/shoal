@@ -755,7 +755,7 @@ fn agent_shortcuts_forward_arguments_without_starting_real_agents() {
                 if agent == "claude" {
                     "--remote-control\nshortcut\n"
                 } else {
-                    "--sandbox\nworkspace-write\n--ask-for-approval=never\n"
+                    "--sandbox\ndanger-full-access\n--ask-for-approval=never\n"
                 }
             )
         );

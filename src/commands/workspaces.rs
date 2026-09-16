@@ -303,7 +303,7 @@ pub(super) async fn codex(
         .chain(args)
         .chain([
             "--sandbox".into(),
-            "workspace-write".into(),
+            "danger-full-access".into(),
             "--ask-for-approval=never".into(),
         ])
         .collect();
