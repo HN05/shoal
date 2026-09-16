@@ -26,6 +26,7 @@ pub async fn run(paths: &Paths, workspace: String, command: Vec<OsString>) -> Re
     protocol::write(
         &mut stream,
         &Request {
+            scope: std::env::var("SHOAL_SCOPE_TOKEN").ok(),
             protocol: protocol::VERSION,
             id: 1,
             method: Method::Execute { workspace },
@@ -47,8 +48,7 @@ pub async fn run(paths: &Paths, workspace: String, command: Vec<OsString>) -> Re
         let mut interrupt = signal(SignalKind::interrupt())?;
         let mut quit = signal(SignalKind::quit())?;
         let mut process = Command::new(&command[0]);
-        // An orchestrator can launch another workspace from inside its own exec.
-        // Do not let its exported port numbers leak into the worker's environment.
+        // Refresh inherited port exports, including reservations released since launch.
         for (name, _) in std::env::vars_os() {
             if name.to_str().is_some_and(|name| name.starts_with("SHOAL_PORT_")) {
                 process.env_remove(name);
@@ -63,6 +63,7 @@ pub async fn run(paths: &Paths, workspace: String, command: Vec<OsString>) -> Re
         }
         let mut child = process.args(&command[1..])
             .current_dir(&plan.workspace.path)
+            .env("SHOAL_SCOPE_TOKEN", &plan.scope_token)
             .env("SHOAL_WORKSPACE_ID", &plan.workspace.id)
             .env("SHOAL_RUN_ID", &plan.workspace.id)
             .env("SHOAL_WORKSPACE", &plan.workspace.name)

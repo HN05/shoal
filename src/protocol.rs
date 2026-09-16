@@ -4,7 +4,7 @@ use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWrite
 
 use crate::model::{ExecutionPlan, Inspection, Repository, Workspace};
 
-pub const VERSION: u32 = 4;
+pub const VERSION: u32 = 5;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -12,6 +12,8 @@ pub struct Request {
     pub protocol: u32,
     pub id: u64,
     pub method: Method,
+    #[serde(default)]
+    pub scope: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -43,6 +45,7 @@ pub enum Method {
         port: Option<u16>,
         env_var: Option<String>,
         reason: Option<String>,
+        on_conflict: Option<crate::repo_config::ConflictPolicy>,
     },
     Ports {
         workspace: Option<String>,
@@ -50,6 +53,9 @@ pub enum Method {
     ReleasePort {
         workspace: String,
         name: String,
+    },
+    PortOverview {
+        workspace: String,
     },
     Inspect {
         workspace: String,
@@ -94,6 +100,8 @@ pub enum Body {
     DiffBase(crate::model::DiffBase),
     Port(crate::model::PortReservation),
     Ports(Vec<crate::model::PortReservation>),
+    PortSuggestion(crate::model::PortSuggestion),
+    PortOverview(crate::model::PortOverview),
     Ok,
     Error { code: String, message: String },
 }

@@ -234,3 +234,31 @@ Normal command shutdown includes its process group. Detached processes and recov
 after abrupt wrapper/daemon termination still need the later lifecycle work.
 Executions whose completion cannot be confirmed are recorded as unknown and block
 automatic cleanup. Manual removal can proceed, but cannot stop disconnected processes. Avoid daemon restarts during active commands at this stage.
+
+### Repo port defaults
+
+Use `.shoal.toml` or `.shoal/config.toml` (not both):
+
+```toml
+[ports]
+on_conflict = "suggest" # or "auto"
+
+[ports.web]
+port = 3000
+env = "PORT"
+reason = "Frontend dev server"
+```
+
+`shoal port reserve web` allocates on request. CLI flags override repo defaults.
+A conflict suggests an available number; fzf offers acceptance, while `--json`
+returns `reserved: false` and exits 2. Accept with `--port <suggested_port>`.
+`--on-conflict auto` accepts reassignment directly. `shoal ports` shows the current
+worktree's configured and reserved ports, including the actual numbers.
+
+### Scoped workspace commands
+
+Commands launched through `exec`, `claude`, and `codex` can inspect their own
+worktree, execute there, and manage its resources. They cannot access other
+worktrees, remove workspaces, alter repos, or administer the daemon. Nested
+commands keep that scope. Run a cross-workspace orchestrator outside `shoal exec`.
+Scope is cooperative; it does not restrict direct filesystem/Git operations.

@@ -455,8 +455,8 @@ fn ports_are_named_idempotent_exported_and_released_with_the_workspace() {
         "test -z \"${SHOAL_PORT_WEB:-}\" && test -z \"${API_PORT:-}\"",
     ]);
     assert!(
-        nested.status.success(),
-        "parent workspace ports leaked into nested execution: {}",
+        !nested.status.success(),
+        "cross-workspace execution should be denied: {}",
         String::from_utf8_lossy(&nested.stderr)
     );
     let path = Path::new(first["path"].as_str().unwrap());
@@ -842,4 +842,143 @@ printf 'navigation-ok\n'
         );
         assert!(String::from_utf8_lossy(&output.stdout).ends_with("navigation-ok\n"));
     }
+}
+
+#[test]
+fn configured_ports_are_lazy_and_conflicts_require_acceptance() {
+    let fixture = Fixture::new();
+    let occupied = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let preferred = occupied.local_addr().unwrap().port();
+    fs::write(
+        fixture.repo.join(".shoal.toml"),
+        format!("[ports.web]\nport = {preferred}\nenv = \"PORT\"\nreason = \"Web server\"\n")
+            .replace("\\\"", "\""),
+    )
+    .unwrap();
+    git(&fixture.repo, &["add", ".shoal.toml"]);
+    git(
+        &fixture.repo,
+        &[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "-m",
+            "config",
+        ],
+    );
+    let workspace = fixture.add("configured");
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    let overview = fixture
+        .command()
+        .current_dir(path)
+        .args(["--json", "ports"])
+        .output()
+        .unwrap();
+    assert!(overview.status.success());
+    let overview: Value = serde_json::from_slice(&overview.stdout).unwrap();
+    assert_eq!(overview["configured"]["web"]["port"], preferred);
+    assert_eq!(overview["reserved"], serde_json::json!([]));
+    let proposal = fixture.run(&["--json", "port", "reserve", "web", "configured"]);
+    assert_eq!(proposal.status.code(), Some(2));
+    let proposal: Value = serde_json::from_slice(&proposal.stdout).unwrap();
+    assert_eq!(proposal["reserved"], false);
+    assert_eq!(
+        fixture.ok(&["port", "list", "configured"]),
+        serde_json::json!([])
+    );
+    let accepted = fixture.ok(&[
+        "port",
+        "reserve",
+        "web",
+        "configured",
+        "--port",
+        &proposal["suggested_port"].to_string(),
+    ]);
+    assert_eq!(accepted["env_var"], "PORT");
+    assert_eq!(
+        fixture.ok(&["port", "reserve", "web", "configured"]),
+        accepted
+    );
+    fixture.ok(&["port", "release", "web", "configured"]);
+    let automatic = fixture.ok(&[
+        "port",
+        "reserve",
+        "web",
+        "configured",
+        "--on-conflict",
+        "auto",
+    ]);
+    assert_ne!(automatic["port"], preferred);
+    assert_eq!(
+        fixture.ok(&["port", "reserve", "web", "configured"]),
+        automatic
+    );
+    fs::create_dir(path.join(".shoal")).unwrap();
+    fs::rename(path.join(".shoal.toml"), path.join(".shoal/config.toml")).unwrap();
+    fixture.ok(&["ports", "configured"]);
+    fs::write(path.join(".shoal.toml"), "").unwrap();
+    assert!(!fixture.run(&["ports", "configured"]).status.success());
+}
+
+#[test]
+fn execution_scope_limits_management_and_expires() {
+    let fixture = Fixture::new();
+    fixture.add("worker");
+    fixture.add("other");
+    let binary = env!("CARGO_BIN_EXE_shoal");
+    let scoped = |args: &[&str]| {
+        fixture
+            .command()
+            .args(["exec", "worker", "--", binary])
+            .args(args)
+            .output()
+            .unwrap()
+    };
+    let output = scoped(&["--json", "list"]);
+    assert!(output.status.success());
+    let list: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(list.as_array().unwrap().len(), 1);
+    assert_eq!(list[0]["name"], "worker");
+    assert!(scoped(&["port", "reserve", "web"]).status.success());
+    assert!(
+        scoped(&["exec", "worker", "--", binary, "ports"])
+            .status
+            .success()
+    );
+    for args in [
+        vec!["rm", "worker", "--yes", "--delete-branch"],
+        vec!["stop", "worker"],
+        vec!["inspect", "other"],
+        vec!["port", "reserve", "web", "other"],
+        vec!["repo", "rename", fixture.repo.to_str().unwrap(), "changed"],
+        vec!["daemon", "stop"],
+        vec!["setup", "--dry-run"],
+    ] {
+        let output = scoped(&args);
+        assert!(
+            !output.status.success(),
+            "scoped {args:?} unexpectedly succeeded"
+        );
+    }
+    let token = fixture.run(&[
+        "exec",
+        "worker",
+        "--",
+        "sh",
+        "-c",
+        "printf '%s' \"$SHOAL_SCOPE_TOKEN\"",
+    ]);
+    let token = String::from_utf8(token.stdout).unwrap();
+    assert!(!token.is_empty());
+    let output = fixture
+        .command()
+        .env("SHOAL_SCOPE_TOKEN", token)
+        .args(["list"])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("expired or unknown"));
+    assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 2);
 }

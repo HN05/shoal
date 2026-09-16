@@ -21,6 +21,7 @@ pub struct Manager {
     pub config: crate::config::Config,
     paths: Paths,
     repositories: Mutex<()>,
+    pub scopes: Mutex<HashMap<String, (String, String)>>,
     active: Mutex<HashMap<String, watch::Sender<bool>>>,
     activity: Mutex<HashMap<String, u64>>,
 }
@@ -36,6 +37,7 @@ impl Manager {
             store: Store::open(paths.state.join("state.db")).await?,
             paths,
             repositories: Mutex::new(()),
+            scopes: Mutex::new(HashMap::new()),
             active: Mutex::new(HashMap::new()),
             activity: Mutex::new(HashMap::new()),
         }))
@@ -452,6 +454,10 @@ impl Manager {
         match result {
             Ok(outcome) => {
                 self.activity.lock().await.remove(&workspace.id);
+                self.scopes
+                    .lock()
+                    .await
+                    .retain(|_, (_, owner)| owner != &workspace.id);
                 Ok(outcome)
             }
             Err(error) => {
@@ -497,8 +503,14 @@ impl Manager {
             .await?;
         let (sender, receiver) = watch::channel(false);
         active.insert(id.clone(), sender);
+        let scope_token = Uuid::new_v4().to_string();
+        self.scopes
+            .lock()
+            .await
+            .insert(scope_token.clone(), (id.clone(), workspace.id.clone()));
         Ok((
             ExecutionPlan {
+                scope_token,
                 id,
                 workspace,
                 ports,
@@ -528,6 +540,10 @@ impl Manager {
             })
             .await?;
         active.remove(&id);
+        self.scopes
+            .lock()
+            .await
+            .retain(|_, (execution, _)| execution != &id);
         Ok(())
     }
 

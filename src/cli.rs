@@ -47,6 +47,8 @@ pub enum Command {
         #[command(subcommand)]
         command: PortCommand,
     },
+    /// Show configured and reserved ports for the current or named worktree.
+    Ports { workspace: Option<String> },
     /// Inspect a workspace and its executions.
     Inspect { workspace: Option<String> },
     /// Stop connected commands, preserving the workspace.
@@ -126,6 +128,9 @@ pub enum PortCommand {
         /// Explain what the reservation is used for.
         #[arg(long)]
         reason: Option<String>,
+        /// Override the repo's conflict behavior (default: suggest).
+        #[arg(long, value_enum)]
+        on_conflict: Option<crate::repo_config::ConflictPolicy>,
     },
     List {
         workspace: Option<String>,

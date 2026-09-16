@@ -39,6 +39,7 @@ pub struct Inspection {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ExecutionPlan {
+    pub scope_token: String,
     pub id: String,
     pub workspace: Workspace,
     pub ports: Vec<PortReservation>,
@@ -57,4 +58,22 @@ pub struct PortReservation {
 pub struct DiffBase {
     pub workspace_id: String,
     pub commit: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PortSuggestion {
+    pub workspace_id: String,
+    pub name: String,
+    pub requested_port: u16,
+    pub suggested_port: u16,
+    pub env_var: String,
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PortOverview {
+    pub workspace: Workspace,
+    pub reserved: Vec<PortReservation>,
+    pub configured: std::collections::BTreeMap<String, crate::repo_config::PortDefinition>,
+    pub on_conflict: crate::repo_config::ConflictPolicy,
 }

@@ -108,7 +108,7 @@ async fn serve(
     shutdown: watch::Sender<bool>,
     manager: Arc<Manager>,
 ) -> Result<()> {
-    let request: Request =
+    let mut request: Request =
         match timeout(Duration::from_secs(5), protocol::read(&mut stream)).await? {
             Ok(request) => request,
             Err(error) => {
@@ -126,6 +126,28 @@ async fn serve(
                 .await;
             }
         };
+    let scope = if request.protocol == protocol::VERSION {
+        match crate::scope::authorize(&manager, request.scope.as_deref(), &mut request.method).await
+        {
+            Ok(scope) => scope,
+            Err(error) => {
+                return protocol::write(
+                    &mut stream,
+                    &Response {
+                        protocol: protocol::VERSION,
+                        id: request.id,
+                        body: Body::Error {
+                            code: "scope_denied".into(),
+                            message: format!("{error:#}"),
+                        },
+                    },
+                )
+                .await;
+            }
+        }
+    } else {
+        None
+    };
     if request.protocol == protocol::VERSION {
         if let Method::Execute { workspace } = request.method {
             return execute(stream, request.id, workspace, manager).await;
@@ -153,7 +175,7 @@ async fn serve(
                 stop = true;
                 Body::Ok
             }
-            method => match operation(&manager, method).await {
+            method => match operation(&manager, method, scope.as_deref()).await {
                 Ok(body) => body,
                 Err(error) => Body::Error {
                     code: "operation_failed".into(),
@@ -177,9 +199,16 @@ async fn serve(
     Ok(())
 }
 
-async fn operation(manager: &Manager, method: Method) -> Result<Body> {
+async fn operation(manager: &Manager, method: Method, scope: Option<&str>) -> Result<Body> {
     Ok(match method {
-        Method::Repositories => Body::Repositories(manager.repositories().await?),
+        Method::Repositories => {
+            let mut repos = manager.repositories().await?;
+            if let Some(scope) = scope {
+                let owner = manager.get(scope.into()).await?;
+                repos.retain(|r| r.id == owner.repository_id);
+            }
+            Body::Repositories(repos)
+        }
         Method::Register { source, name } => {
             Body::Repository(manager.register(source, name).await?)
         }
@@ -191,7 +220,13 @@ async fn operation(manager: &Manager, method: Method) -> Result<Body> {
             name,
             base,
         } => Body::Workspace(manager.add(repository, name, base).await?),
-        Method::List => Body::Workspaces(manager.list().await?),
+        Method::List => {
+            let mut workspaces = manager.list().await?;
+            if let Some(scope) = scope {
+                workspaces.retain(|w| w.id == scope);
+            }
+            Body::Workspaces(workspaces)
+        }
         Method::DiffBase { workspace } => Body::DiffBase(manager.diff_base(workspace).await?),
         Method::ReservePort {
             workspace,
@@ -199,11 +234,26 @@ async fn operation(manager: &Manager, method: Method) -> Result<Body> {
             port,
             env_var,
             reason,
-        } => Body::Port(
-            manager
-                .reserve_port(workspace, name, port, env_var, reason)
-                .await?,
-        ),
+            on_conflict,
+        } => match manager
+            .reserve_port(
+                workspace,
+                name,
+                crate::ports::PortOptions {
+                    requested: port,
+                    env_var,
+                    reason,
+                    on_conflict,
+                },
+            )
+            .await?
+        {
+            crate::ports::ReserveOutcome::Reserved(port) => Body::Port(port),
+            crate::ports::ReserveOutcome::Suggested(proposal) => Body::PortSuggestion(proposal),
+        },
+        Method::PortOverview { workspace } => {
+            Body::PortOverview(manager.port_overview(workspace).await?)
+        }
         Method::Ports { workspace } => Body::Ports(manager.list_ports(workspace).await?),
         Method::ReleasePort { workspace, name } => {
             manager.release_port(workspace, name).await?;

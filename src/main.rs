@@ -11,7 +11,9 @@ mod ports;
 mod processes;
 mod protocol;
 mod removal;
+mod repo_config;
 mod repository;
+mod scope;
 mod service;
 mod shell;
 mod store;
@@ -57,6 +59,21 @@ async fn run(cli: Cli) -> Result<i32> {
         Some(command) => command,
         None => ui::workspace_menu(&paths).await?,
     };
+    if std::env::var_os("SHOAL_SCOPE_TOKEN").is_some() {
+        ensure!(
+            !matches!(
+                &command,
+                Command::Setup { .. }
+                    | Command::Daemon {
+                        command: DaemonCommand::Run { .. }
+                            | DaemonCommand::Start
+                            | DaemonCommand::Stop
+                            | DaemonCommand::Restart
+                    }
+            ),
+            "workspace processes cannot administer Shoal"
+        );
+    }
     match command {
         Command::Diff { workspace } => {
             let workspace = ui::workspace(&paths, workspace, true, cli.json).await?;
@@ -75,34 +92,76 @@ async fn run(cli: Cli) -> Result<i32> {
             PortCommand::Reserve {
                 name,
                 workspace,
-                port,
-                env,
-                reason,
+                mut port,
+                mut env,
+                mut reason,
+                on_conflict,
             } => {
                 let workspace = ui::workspace(&paths, workspace, true, cli.json).await?;
-                let reservation = match client::call(
-                    &paths,
-                    Method::ReservePort {
-                        workspace,
-                        name,
-                        port,
-                        env_var: env,
-                        reason,
-                    },
-                )
-                .await?
-                {
-                    Body::Port(reservation) => reservation,
-                    _ => anyhow::bail!("unexpected port response"),
-                };
-                output(
-                    cli.json,
-                    &format!(
-                        "{}={} ({})",
-                        reservation.name, reservation.port, reservation.env_var
-                    ),
-                    serde_json::to_value(&reservation)?,
-                );
+                loop {
+                    match client::call(
+                        &paths,
+                        Method::ReservePort {
+                            workspace: workspace.clone(),
+                            name: name.clone(),
+                            port,
+                            env_var: env.clone(),
+                            reason: reason.clone(),
+                            on_conflict,
+                        },
+                    )
+                    .await?
+                    {
+                        Body::Port(reservation) => {
+                            output(
+                                cli.json,
+                                &format!(
+                                    "{}={} ({})",
+                                    reservation.name, reservation.port, reservation.env_var
+                                ),
+                                serde_json::to_value(reservation)?,
+                            );
+                            break;
+                        }
+                        Body::PortSuggestion(proposal) => {
+                            if cli.json || !ui::is_interactive(cli.json) {
+                                let mut value = serde_json::to_value(&proposal)?;
+                                value["reserved"] = json!(false);
+                                output(
+                                    cli.json,
+                                    &format!(
+                                        "{}: port {} unavailable; suggested {}. Accept with --port {}",
+                                        proposal.name,
+                                        proposal.requested_port,
+                                        proposal.suggested_port,
+                                        proposal.suggested_port
+                                    ),
+                                    value,
+                                );
+                                return Ok(2);
+                            }
+                            println!(
+                                "{}: port {} unavailable; suggested {}",
+                                proposal.name, proposal.requested_port, proposal.suggested_port
+                            );
+                            let answer = ui::pick(
+                                "Reserve suggested port? ",
+                                vec![
+                                    ("no".into(), "Cancel".into()),
+                                    ("yes".into(), format!("Reserve {}", proposal.suggested_port)),
+                                ],
+                                false,
+                            )?;
+                            if answer != "yes" {
+                                return Ok(2);
+                            }
+                            port = Some(proposal.suggested_port);
+                            env = Some(proposal.env_var);
+                            reason = proposal.reason;
+                        }
+                        _ => anyhow::bail!("unexpected port response"),
+                    }
+                }
             }
             PortCommand::List { workspace, all } => {
                 let workspace = if all {
@@ -147,6 +206,44 @@ async fn run(cli: Cli) -> Result<i32> {
                 );
             }
         },
+        Command::Ports { workspace } => {
+            let workspace = ui::workspace(&paths, workspace, true, cli.json).await?;
+            let overview = match client::call(&paths, Method::PortOverview { workspace }).await? {
+                Body::PortOverview(overview) => overview,
+                _ => anyhow::bail!("unexpected port overview response"),
+            };
+            if cli.json {
+                println!("{}", serde_json::to_string(&overview)?);
+            } else {
+                for p in &overview.reserved {
+                    println!(
+                        "{}={} ({}){}",
+                        p.name,
+                        p.port,
+                        p.env_var,
+                        p.reason
+                            .as_ref()
+                            .map(|r| format!("  {r}"))
+                            .unwrap_or_default()
+                    );
+                }
+                for (name, definition) in &overview.configured {
+                    if !overview.reserved.iter().any(|p| &p.name == name) {
+                        println!(
+                            "{name}: not reserved (preferred: {}; conflicts: {:?})",
+                            definition
+                                .port
+                                .map(|p| p.to_string())
+                                .unwrap_or_else(|| "automatic".into()),
+                            definition.on_conflict.unwrap_or(overview.on_conflict)
+                        );
+                    }
+                }
+                if overview.reserved.is_empty() && overview.configured.is_empty() {
+                    println!("No configured or reserved ports");
+                }
+            }
+        }
         Command::Cd { workspace } => {
             let workspace = ui::workspace(&paths, workspace, true, cli.json).await?;
             let inspection = match client::call(&paths, Method::Inspect { workspace }).await? {

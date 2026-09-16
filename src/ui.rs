@@ -149,15 +149,25 @@ pub async fn workspace_menu(paths: &Paths) -> Result<crate::cli::Command> {
             )
         })
         .collect();
-    entries.push(("add-workspace".into(), "+ Add workspace".into()));
+    let scoped = std::env::var_os("SHOAL_SCOPE_TOKEN").is_some();
+    if !scoped {
+        entries.push(("add-workspace".into(), "+ Add workspace".into()));
+    }
     let (action, id) = pick_with_actions(
         "Shoal> ",
         entries,
         false,
-        Some((
-            "ctrl-d,ctrl-e,ctrl-a,ctrl-o,ctrl-s,ctrl-f",
-            "enter: enter   ctrl-d: delete   ctrl-e: execute   ctrl-a: add   ctrl-o: inspect   ctrl-s: stop   ctrl-f: diff",
-        )),
+        Some(if scoped {
+            (
+                "ctrl-e,ctrl-o,ctrl-f",
+                "enter: enter   ctrl-e: execute   ctrl-o: inspect   ctrl-f: diff",
+            )
+        } else {
+            (
+                "ctrl-d,ctrl-e,ctrl-a,ctrl-o,ctrl-s,ctrl-f",
+                "enter: enter   ctrl-d: delete   ctrl-e: execute   ctrl-a: add   ctrl-o: inspect   ctrl-s: stop   ctrl-f: diff",
+            )
+        }),
     )?;
     if action == "ctrl-a" || (action.is_empty() && id == "add-workspace") {
         return Ok(Command::Add {

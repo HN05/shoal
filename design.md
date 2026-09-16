@@ -1540,3 +1540,47 @@ The interactive workspace list also offers Ctrl-F for diff.
 Database migrations preserve existing ownership records while adding base
 metadata, repository names, and port reservations. Protocol version changes
 require restarting older daemons with the installed executable.
+
+### Repository port defaults and workspace command scope
+
+Repository configuration is now TOML, at `.shoal.toml` or `.shoal/config.toml`.
+Both together are an error. The latter allows scripts alongside the config.
+Only port settings are implemented in this slice; other proposed keys remain
+future work. Config is read from the current worktree at request time.
+
+```toml
+[ports]
+on_conflict = "suggest" # default; "auto" accepts another available port
+
+[ports.web]
+port = 3000
+env = "PORT"
+reason = "Frontend dev server"
+# on_conflict = "auto" # optional per-name override
+```
+
+Workspace creation never allocates ports. `shoal port reserve web` uses this
+configuration; `--port`, `--env`, `--reason`, and `--on-conflict` override it.
+Existing reservations remain stable, including when auto allocation selected a
+number different from the configured preference. Explicit changes to an existing
+number/environment mapping require release first.
+
+Suggestions make no reservation. Interactive callers accept through fzf;
+noninteractive/JSON callers receive the requested and suggested numbers and exit
+code 2 (`reserved: false`). Accept by requesting `--port <suggested_port>`;
+a race produces another suggestion. Successful output always includes the actual
+port. `shoal ports [workspace]` shows configured and reserved ports together,
+defaulting to the current worktree. `port list` shows only actual reservations.
+
+Processes launched through `exec`, `claude`, or `codex` inherit a random
+`SHOAL_SCOPE_TOKEN`, checked by the daemon on every request. Their list/repository
+views are filtered; they can inspect/diff/execute in their own worktree and
+manage its resources. They cannot create/remove/stop worktrees, alter repositories,
+control the daemon, or access other worktrees. Nested executions inherit the
+restriction. Tokens expire when an execution disconnects/finishes or the daemon
+restarts. Local CLI service administration is also denied when scoped.
+
+The human or orchestrator that manages multiple worktrees must call Shoal outside
+a scoped execution. This is the agreed cooperative model: a same-user process
+could deliberately discard its environment or use Git/filesystem tools directly.
+Filesystem restrictions remain a later implementation milestone.

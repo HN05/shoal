@@ -27,6 +27,7 @@ pub async fn call(paths: &Paths, method: Method) -> Result<Body> {
         protocol::write(
             &mut stream,
             &Request {
+                scope: std::env::var("SHOAL_SCOPE_TOKEN").ok(),
                 protocol: protocol::VERSION,
                 id: 1,
                 method,

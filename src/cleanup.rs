@@ -183,9 +183,10 @@ mod tests {
             .reserve_port(
                 workspace.id.clone(),
                 "web".into(),
-                None,
-                None,
-                Some("cleanup test".into()),
+                crate::ports::PortOptions {
+                    reason: Some("cleanup test".into()),
+                    ..Default::default()
+                },
             )
             .await
             .unwrap();
