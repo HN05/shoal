@@ -232,7 +232,8 @@ fn registration_reuses_repositories_by_origin_across_paths_and_url_forms() {
     assert_eq!(fixture.ok(&["repo", "add", ssh_url]), original);
     assert_eq!(fixture.ok(&["repo", "add", url]), original);
     assert_eq!(fixture.ok(&["repo", "list"]).as_array().unwrap().len(), 1);
-    fixture.ok(&["add", ssh_url, "--name", "alias"]);
+    // This remote tests identity matching only; explicitly use local history.
+    fixture.ok(&["add", ssh_url, "--name", "alias", "--ref", "HEAD"]);
     fixture.ok(&["rm", "alias"]);
 }
 
@@ -396,7 +397,15 @@ fn branch_removal_compares_contents_to_main_or_upstream_and_honors_explicit_choi
     git(path, &["branch", "--set-upstream-to=origin/pushed"]);
     assert_eq!(fixture.ok(&["rm", "pushed"])["branch_deleted"], true);
 
-    let divergent = fixture.add("divergent");
+    // The fake remote above models pushed history, not a fetchable upstream.
+    let divergent = fixture.ok(&[
+        "add",
+        fixture.repo.to_str().unwrap(),
+        "--name",
+        "divergent",
+        "--ref",
+        "HEAD",
+    ]);
     let path = Path::new(divergent["path"].as_str().unwrap());
     fs::write(path.join("tracked"), "unmerged work").unwrap();
     commit(path);
@@ -2033,6 +2042,27 @@ fn pull_remote(fixture: &Fixture) -> PathBuf {
     );
     git(&author, &["push", "origin", "main"]);
     author
+}
+
+#[test]
+fn add_refreshes_main_before_creating_the_worktree() {
+    let fixture = Fixture::new();
+    let author = pull_remote(&fixture);
+    let expected = git(&author, &["rev-parse", "HEAD"]);
+    let workspace = fixture.add("fresh");
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), expected);
+    assert_eq!(git(path, &["rev-parse", "HEAD"]), expected);
+    assert_eq!(workspace["base_ref"], "refs/heads/main");
+    assert_eq!(workspace["base_commit"], expected.trim());
+    assert_eq!(
+        fs::read_to_string(path.join("upstream")).unwrap(),
+        "from remote\n"
+    );
+    assert_eq!(
+        fs::read_to_string(fixture.repo.join("upstream")).unwrap(),
+        "from remote\n"
+    );
 }
 
 #[test]

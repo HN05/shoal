@@ -61,6 +61,15 @@ impl Manager {
         let repo = self.repository(&workspace.repository_id).await?;
         let gate = self.git_gate(&repo.id).await;
         let _guard = gate.lock().await;
+        self.refresh_main(&repo, false).await
+    }
+
+    // The caller holds the repository's Git gate through any subsequent creation.
+    pub(crate) async fn refresh_main(
+        &self,
+        repo: &Repository,
+        allow_local_only: bool,
+    ) -> Result<PulledMain> {
         let previous_commit = git(&repo.path, &["rev-parse", "--verify", "refs/heads/main"])
             .await
             .context("repository has no local main branch")?
@@ -79,6 +88,18 @@ impl Manager {
             .trim()
             .split_once('\0')
             .context("invalid Git upstream")?;
+        if allow_local_only
+            && remote.is_empty()
+            && reference.is_empty()
+            && git(&repo.path, &["remote"]).await?.trim().is_empty()
+        {
+            return Ok(PulledMain {
+                repository_id: repo.id.clone(),
+                updated: false,
+                commit: previous_commit.clone(),
+                previous_commit,
+            });
+        }
         ensure!(
             !remote.is_empty() && reference.starts_with("refs/heads/"),
             "main has no branch upstream; configure it with git branch --set-upstream-to=<remote>/main main"
@@ -186,7 +207,7 @@ impl Manager {
         let commit = result?;
         cleanup.context("could not remove temporary pull ref")?;
         Ok(PulledMain {
-            repository_id: repo.id,
+            repository_id: repo.id.clone(),
             updated: commit != previous_commit,
             previous_commit,
             commit,

@@ -42,7 +42,7 @@ pub enum Command {
         repository: Option<String>,
         #[arg(long)]
         name: Option<String>,
-        /// Starting Git ref (defaults to the registered checkout's HEAD).
+        /// Starting Git ref (defaults to main, refreshed from its upstream).
         #[arg(long = "ref")]
         base: Option<String>,
     },

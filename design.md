@@ -50,7 +50,16 @@ supports environments without a service manager.
 Register local repositories in place or retain URL clones for reuse. Registration
 is idempotent by normalized origin URL, falling back to canonical local path.
 Repository identity remains distinct from its optional display name. Registration
-and workspace creation do not implicitly fetch or restore dependencies.
+does not implicitly fetch. Workspace creation does not restore dependencies.
+
+A workspace defaults to local `main`, fast-forwarded from its configured upstream
+before branching, even when the registered checkout is on another branch. An
+already-ahead main is preserved. Refresh failures (including missing upstream in
+a repository with remotes, divergence, or a dirty/managed main checkout) stop
+creation. Repositories with neither remotes nor a main upstream use local main.
+An explicit `--ref` selects another starting point without refreshing main;
+`--ref main` and `--ref refs/heads/main` still refresh it. Refresh and creation share
+the repository Git gate. Registration alone does not refresh main.
 
 A workspace starts from committed history and has a stable name and directory.
 Its new branch uses that name, with numeric suffixes only on conflict. Serialize

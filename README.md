@@ -121,12 +121,18 @@ executed commands retain their own stdin, stdout, stderr, and exit code.
 
 Workspaces live at `<state-dir>/workspaces/<name>`. Names are unique, 1–64 ASCII
 letters/digits/hyphens/underscores, starting with a letter or digit. Creation uses
-the registered checkout's committed `HEAD`, or `--ref <git-ref>`, on a new branch
-named `<name>`. If taken, use `<name>-2`, `<name>-3`, etc. Local branches, known
+local `main`, or `--ref <git-ref>`, on a new branch named `<name>`. If taken, use
+`<name>-2`, `<name>-3`, etc. Local branches, known
 remote branches, branch namespaces, reserved Git names, and retained Shoal records
 count as conflicts.
 Workspace names/directories stay unchanged. Existing branches are not renamed.
 Uncommitted source files are not copied.
+Before branching from main, Shoal fetches its configured upstream and fast-forwards
+main, even if the registered checkout is on another branch. An already-ahead main
+is preserved. A failed fetch, missing upstream, divergence, or dirty/managed main
+checkout stops creation. Repositories with neither remotes nor a main upstream
+use local main. An explicit `--ref` other than `main` or `refs/heads/main` uses the
+selected history without refreshing main.
 URL repositories are cloned once into `<state-dir>/repositories` and retained
 for reuse. Registration does not fetch updates automatically.
 Registration reuses an existing repository when its source URL or local checkout's

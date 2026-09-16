@@ -138,7 +138,15 @@ impl Manager {
             Ok(())
         }).await?;
         let result = async {
-            let base = base.as_deref().unwrap_or("HEAD");
+            let base = match base.as_deref() {
+                None | Some("main") => "refs/heads/main",
+                Some(base) => base,
+            };
+            if base == "refs/heads/main" {
+                self.refresh_main(&repo, true)
+                    .await
+                    .context("could not refresh main before creating workspace")?;
+            }
             let commit = worktrunk::git(
                 &repo.path,
                 &["rev-parse", "--verify", &format!("{base}^{{commit}}")],

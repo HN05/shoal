@@ -276,3 +276,145 @@ async fn pull_refuses_main_in_managed_workspace() {
     );
     assert_eq!(git(&f.repo, &["rev-parse", "main"]), before);
 }
+
+#[tokio::test]
+async fn creation_refreshes_main_instead_of_using_checkout_head() {
+    let f = Fixture::new().await;
+    let original = git(&f.repo, &["rev-parse", "HEAD"]);
+    let author = f.remote();
+    git(&f.repo, &["remote", "rename", "origin", "source"]);
+    git(&f.repo, &["switch", "-c", "unrelated"]);
+    let fetch_head = f.repo.join(".git/FETCH_HEAD");
+    fs::write(&fetch_head, "unrelated fetch sentinel\n").unwrap();
+    for (index, base) in [None, Some("main"), Some("refs/heads/main")]
+        .into_iter()
+        .enumerate()
+    {
+        fs::write(author.join("upstream"), format!("revision {index}\n")).unwrap();
+        commit(&author, "upstream");
+        git(&author, &["push", "origin", "main"]);
+        let expected = git(&author, &["rev-parse", "HEAD"]);
+        let workspace = f
+            .manager
+            .add(
+                f.repo_id.clone(),
+                format!("worker-{index}"),
+                base.map(str::to_owned),
+            )
+            .await
+            .unwrap();
+        assert_eq!(git(&workspace.path, &["rev-parse", "HEAD"]), expected);
+        assert_eq!(git(&f.repo, &["rev-parse", "main"]), expected);
+        assert_eq!(git(&f.repo, &["rev-parse", "HEAD"]), original);
+        assert_eq!(workspace.base_commit.as_deref(), Some(expected.trim()));
+        assert_eq!(workspace.base_ref.as_deref(), Some("refs/heads/main"));
+        assert_eq!(
+            fs::read_to_string(&fetch_head).unwrap(),
+            "unrelated fetch sentinel\n"
+        );
+        assert_eq!(git(&f.repo, &["for-each-ref", "refs/shoal/pull/"]), "");
+    }
+}
+
+#[tokio::test]
+async fn creation_refuses_failed_refreshes_without_creating_a_branch() {
+    for failure in [
+        "dirty",
+        "diverged",
+        "missing-upstream",
+        "unavailable-remote",
+        "managed-main",
+    ] {
+        let f = Fixture::new().await;
+        let owned = f.add("existing").await;
+        f.remote();
+        let expected_error = match failure {
+            "dirty" => {
+                fs::write(f.repo.join("tracked"), "local edits\n").unwrap();
+                "uncommitted or untracked"
+            }
+            "diverged" => {
+                fs::write(f.repo.join("tracked"), "local commit\n").unwrap();
+                commit(&f.repo, "tracked");
+                "diverged"
+            }
+            "missing-upstream" => {
+                git(&f.repo, &["branch", "--unset-upstream", "main"]);
+                "no branch upstream"
+            }
+            "managed-main" => {
+                git(&f.repo, &["switch", "-c", "unrelated"]);
+                git(&owned.path, &["switch", "main"]);
+                "managed workspace"
+            }
+            _ => {
+                git(
+                    &f.repo,
+                    &[
+                        "remote",
+                        "set-url",
+                        "origin",
+                        f.root.path().join("missing.git").to_str().unwrap(),
+                    ],
+                );
+                "git failed"
+            }
+        };
+        let before = git(&f.repo, &["rev-parse", "main"]);
+        let error = f
+            .manager
+            .add(f.repo_id.clone(), "worker".into(), None)
+            .await
+            .unwrap_err();
+        assert!(
+            error.to_string().contains(expected_error),
+            "{failure}: {error:#}"
+        );
+        assert_eq!(git(&f.repo, &["rev-parse", "main"]), before);
+        assert_eq!(
+            git(
+                &f.repo,
+                &["for-each-ref", "refs/heads/worker", "refs/shoal/pull/"]
+            ),
+            ""
+        );
+        let failed = f.manager.get("worker".into()).await.unwrap();
+        assert_eq!(failed.state, crate::state::WorkspaceState::Failed);
+        assert!(!failed.path.exists());
+    }
+}
+
+#[tokio::test]
+async fn creation_honors_explicit_history_and_preserves_ahead_main() {
+    let f = Fixture::new().await;
+    let original = git(&f.repo, &["rev-parse", "HEAD"]);
+    let author = f.remote();
+    // Explicit history remains usable even when refreshing main would fail.
+    fs::write(f.repo.join("tracked"), "local edits\n").unwrap();
+    for (index, base) in ["HEAD", original.trim()].into_iter().enumerate() {
+        let workspace = f
+            .manager
+            .add(
+                f.repo_id.clone(),
+                format!("explicit-{index}"),
+                Some(base.into()),
+            )
+            .await
+            .unwrap();
+        assert_eq!(git(&workspace.path, &["rev-parse", "HEAD"]), original);
+        assert_eq!(git(&f.repo, &["rev-parse", "main"]), original);
+    }
+    fs::write(f.repo.join("tracked"), "initial\n").unwrap();
+    let workspace = f.add("updated").await;
+    assert_eq!(
+        git(&workspace.path, &["rev-parse", "HEAD"]),
+        git(&author, &["rev-parse", "HEAD"])
+    );
+    fs::write(f.repo.join("tracked"), "ahead\n").unwrap();
+    commit(&f.repo, "tracked");
+    let ahead = git(&f.repo, &["rev-parse", "main"]);
+    assert_eq!(
+        git(&f.add("ahead").await.path, &["rev-parse", "HEAD"]),
+        ahead
+    );
+}
