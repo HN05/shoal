@@ -144,8 +144,12 @@ shoal add local-project --name feature
 The checkout stays in place. Creation uses its committed `main` when it has no
 remote; use `--ref <branch>` if the repository uses another branch name.
 
-URL repositories are cloned once into `~/.local/share/shoal/repositories/<id>`
-and retained for reuse, separately from daemon state. Set the top-level
+URL repositories are cloned once into `~/.local/share/shoal/repositories/<name>`
+and retained for reuse, separately from daemon state. The directory uses `--name`
+when supplied, otherwise the URL's repository name without `.git`. If occupied,
+Shoal tries `<name>-2`, `<name>-3`, etc. Files, directories, symlinks, and recorded
+repository paths all reserve names. URL names are sanitized for directory use.
+Set the top-level
 `repositories_dir` in `~/.config/shoal/config.toml` (or
 `$XDG_CONFIG_HOME/shoal/config.toml`) to choose another location:
 

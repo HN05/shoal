@@ -267,6 +267,93 @@ fn local_repository_without_remotes_registers_in_place_and_creates_workspaces() 
 }
 
 #[test]
+fn clone_directories_use_repo_names_and_suffix_occupied_or_recorded_paths() {
+    let fixture = Fixture::with_config(Some("repositories_dir = \"~/clones\"\n"));
+    let directory = fixture.root.path().join("clones");
+    fs::create_dir(&directory).unwrap();
+    fs::write(directory.join("project"), "keep this file").unwrap();
+    std::os::unix::fs::symlink("missing-target", directory.join("project-2")).unwrap();
+    let mut repos = Vec::new();
+    for index in 0..3 {
+        let parent = fixture.root.path().join(format!("source-{index}"));
+        fs::create_dir(&parent).unwrap();
+        let source = parent.join("project.git");
+        git(
+            &fixture.repo,
+            &["clone", "--bare", ".", source.to_str().unwrap()],
+        );
+        let url = format!("file://{}", source.display());
+        let repo = fixture.ok(&["repo", "add", &url]);
+        assert_eq!(
+            Path::new(repo["path"].as_str().unwrap())
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap(),
+            format!("project-{}", index + 3)
+        );
+        assert_eq!(fixture.ok(&["repo", "add", &url]), repo);
+        repos.push(repo);
+        if index == 0 {
+            // A lost checkout must retain its path reservation in Shoal's registry.
+            fs::remove_dir_all(repos[0]["path"].as_str().unwrap()).unwrap();
+        }
+    }
+    assert_eq!(
+        fs::read_to_string(directory.join("project")).unwrap(),
+        "keep this file"
+    );
+    assert_eq!(
+        fs::read_link(directory.join("project-2")).unwrap(),
+        PathBuf::from("missing-target")
+    );
+    assert!(!directory.join("project-3").exists());
+    let url = format!("file://{}", fixture.repo.display());
+    let named = fixture.ok(&["repo", "add", &url, "--name", "chosen"]);
+    assert_eq!(
+        Path::new(named["path"].as_str().unwrap())
+            .file_name()
+            .unwrap(),
+        "chosen"
+    );
+    let renamed = fixture.ok(&["repo", "rename", "chosen", "new-label"]);
+    assert_eq!(renamed["path"], named["path"]);
+}
+
+#[test]
+fn clone_name_allocation_is_atomic_across_daemons_sharing_a_directory() {
+    let shared = tempfile::tempdir_in("/tmp").unwrap();
+    let config = format!("repositories_dir = {:?}", shared.path().to_str().unwrap());
+    let first = Fixture::with_config(Some(&config));
+    let second = Fixture::with_config(Some(&config));
+    let clone = |fixture: &Fixture| {
+        let source = fixture.root.path().join("project.git");
+        git(
+            &fixture.repo,
+            &["clone", "--bare", ".", source.to_str().unwrap()],
+        );
+        fixture.ok(&["repo", "add", &format!("file://{}", source.display())])
+    };
+    let (one, two) = thread::scope(|scope| {
+        let one = scope.spawn(|| clone(&first));
+        let two = scope.spawn(|| clone(&second));
+        (one.join().unwrap(), two.join().unwrap())
+    });
+    let mut names = [one, two].map(|repo| {
+        Path::new(repo["path"].as_str().unwrap())
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_owned()
+    });
+    names.sort();
+    assert_eq!(names, ["project", "project-2"]);
+    assert!(shared.path().join("project/.git").exists());
+    assert!(shared.path().join("project-2/.git").exists());
+}
+
+#[test]
 fn configured_repository_directory_affects_new_clones_and_preserves_existing_paths() {
     let mut fixture = Fixture::with_config(Some(
         "repositories_dir = \"~/clones with ' quotes & $literal\"\n",

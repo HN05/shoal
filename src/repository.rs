@@ -3,6 +3,32 @@ use std::path::Path;
 
 use crate::worktrunk;
 
+pub fn source_name(source: &str) -> &str {
+    let source = source.trim_end_matches('/');
+    let name = source.rsplit(['/', ':']).next().unwrap_or(source);
+    name.strip_suffix(".git").unwrap_or(name)
+}
+
+pub fn directory_name(source: &str) -> String {
+    let name: String = source_name(source)
+        .chars()
+        .take(64)
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.') {
+                c
+            } else {
+                '-'
+            }
+        })
+        .collect();
+    let name = name.trim_matches(['.', '-', '_']);
+    if name.is_empty() {
+        "repository".into()
+    } else {
+        name.into()
+    }
+}
+
 /// Local checkouts use origin; clones retain their original source URL even
 /// when their checkout is temporarily unavailable. No network access is needed.
 pub async fn identity(source: &str) -> Result<Option<String>> {
@@ -45,7 +71,31 @@ fn url_key(url: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::url_key;
+    use super::{directory_name, url_key};
+
+    #[test]
+    fn clone_directory_names_are_readable_single_components() {
+        for (source, expected) in [
+            (
+                "https://example.com/team/saldoir-server.git",
+                "saldoir-server",
+            ),
+            ("git@example.com:team/project.git", "project"),
+            (
+                "ssh://git@example.com:2222/team/My.Project.git/",
+                "My.Project",
+            ),
+            ("file:///tmp/local repo.git", "local-repo"),
+            ("file:///tmp/..", "repository"),
+            ("file:///tmp/.git", "repository"),
+        ] {
+            assert_eq!(directory_name(source), expected);
+        }
+        assert_eq!(
+            directory_name(&format!("https://example.com/{}", "a".repeat(300))).len(),
+            64
+        );
+    }
 
     #[test]
     fn equivalent_transports_match_without_conflating_hosts_paths_or_ports() {

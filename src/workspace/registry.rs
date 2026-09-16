@@ -77,22 +77,29 @@ impl Manager {
                 "repository path does not exist: {source}"
             );
             let path = match clone_path {
-                Some(path) => path,
-                None => self.config.repositories_dir(&self.paths)?.join(&id),
+                Some(path) => {
+                    let directory = path
+                        .parent()
+                        .context("clone path must name a new directory")?;
+                    fs::create_dir_all(directory).with_context(|| {
+                        format!("create repository parent directory {}", directory.display())
+                    })?;
+                    fs::create_dir(&path).with_context(|| {
+                        format!(
+                            "clone destination must not already exist: {}",
+                            path.display()
+                        )
+                    })?;
+                    path
+                }
+                None => {
+                    let directory = self.config.repositories_dir(&self.paths)?;
+                    let directory_name = name
+                        .clone()
+                        .unwrap_or_else(|| crate::repository::directory_name(&source));
+                    reserve_clone_directory(&directory, &directory_name, &repositories)?
+                }
             };
-            let directory = path
-                .parent()
-                .context("clone path must name a new directory")?;
-            fs::create_dir_all(directory).with_context(|| {
-                format!("create repository parent directory {}", directory.display())
-            })?;
-            // Only remove a directory on failure after this attempt created it.
-            fs::create_dir(&path).with_context(|| {
-                format!(
-                    "clone destination must not already exist: {}",
-                    path.display()
-                )
-            })?;
             let mut command = Command::new("git");
             command.args(["clone", "--"]).arg(&source).arg(&path);
             if let Err(error) = worktrunk::run(command).await {
@@ -171,6 +178,37 @@ impl Manager {
         }
         bail!("repository is not registered: {selector}; run `shoal repo add <path-or-url>`")
     }
+}
+
+fn reserve_clone_directory(
+    directory: &Path,
+    name: &str,
+    repositories: &[Repository],
+) -> Result<PathBuf> {
+    fs::create_dir_all(directory)
+        .with_context(|| format!("create repository directory {}", directory.display()))?;
+    let directory = fs::canonicalize(directory)?;
+    for suffix in 1_u64.. {
+        let path = directory.join(if suffix == 1 {
+            name.to_owned()
+        } else {
+            format!("{name}-{suffix}")
+        });
+        // A missing checkout still owns its recorded path.
+        if repositories.iter().any(|repo| repo.path == path) {
+            continue;
+        }
+        // Atomic reservation also prevents collisions between separate daemons.
+        match fs::create_dir(&path) {
+            Ok(()) => return Ok(path),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => {
+                return Err(error)
+                    .with_context(|| format!("reserve clone directory {}", path.display()));
+            }
+        }
+    }
+    bail!("repository directory suffixes exhausted")
 }
 
 fn check_clone_path(repo: &Repository, requested: Option<&Path>) -> Result<()> {

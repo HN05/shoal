@@ -52,8 +52,12 @@ is idempotent by normalized origin URL, falling back to canonical local path.
 Repository identity remains distinct from its optional display name. Registration
 does not implicitly fetch. Workspace creation does not restore dependencies.
 
-New URL clones live in `~/.local/share/shoal/repositories/<id>`, separately from
-daemon state. Global `repositories_dir` overrides their parent directory using an
+New URL clones live in `~/.local/share/shoal/repositories/<name>`, separately from
+daemon state. Use the explicit registration name or a sanitized URL basename
+without `.git`; append `-2`, `-3`, etc. only on conflict. Reserve the directory
+atomically, respecting existing filesystem entries and recorded repository paths
+even if their checkout is missing. Repository IDs remain stable internal UUIDs.
+Global `repositories_dir` overrides their parent directory using an
 absolute path or a home-relative `~/` path. Create the directory only when cloning.
 Changing the setting requires a daemon restart and affects new clones only;
 existing repository paths and local registrations remain unchanged. Do not move

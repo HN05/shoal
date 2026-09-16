@@ -250,9 +250,7 @@ fn repository_name(repo: &Repository) -> &str {
     if let Some(name) = &repo.name {
         return name;
     }
-    let source = repo.source.trim_end_matches('/');
-    let name = source.rsplit(['/', ':']).next().unwrap_or(source);
-    name.strip_suffix(".git").unwrap_or(name)
+    crate::repository::source_name(&repo.source)
 }
 
 pub async fn repository_choices(mut repos: Vec<Repository>) -> Result<Vec<(String, String)>> {
