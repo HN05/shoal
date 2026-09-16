@@ -1,0 +1,20 @@
+[package]
+name = "shoal"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "Local workspaces and resource allocation for coding agents"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive", "env"] }
+fs2 = "0.4"
+libc = "0.2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tempfile = "3"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "signal", "sync", "time", "process"] }
+
+[dev-dependencies]
+plist = "1"
+

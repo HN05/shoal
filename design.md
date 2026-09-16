@@ -1360,4 +1360,12 @@ and a `shoal setup` command. The implementation order above is confirmed. The
 persistence mechanism, exact supervision and recovery protocol, remaining CLI
 syntax, and Linux sandbox mechanism remain undecided.
 The simulator lifecycle tool choice is `simctl`, with `devicectl` to be evaluated
-for additional interactions. Implementation has not started.
+for additional interactions.
+
+The first implementation milestone is complete: a single Rust binary, service
+setup and controls, a versioned JSON protocol over a private Unix socket,
+foreground daemon mode, singleton locking, and stale-socket recovery. Runtime
+state defaults to `~/.local/state/shoal`, with an explicit override for isolated
+development instances. macOS uses launchd; Linux uses systemd user services.
+Service-manager tests use an isolated fixture; native Linux service operation
+has not yet been validated. Workspace implementation follows on a new branch.
