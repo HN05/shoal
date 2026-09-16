@@ -45,6 +45,12 @@ pub enum Command {
         /// Starting Git ref (defaults to main, refreshed from its upstream).
         #[arg(long = "ref")]
         base: Option<String>,
+        /// Start an agent after worktree creation succeeds.
+        #[arg(long, value_enum)]
+        agent: Option<Agent>,
+        /// Arguments forwarded to the agent.
+        #[arg(last = true, requires = "agent")]
+        args: Vec<OsString>,
     },
     /// List managed workspaces.
     List,
@@ -134,8 +140,9 @@ pub enum Command {
     },
     /// Run the Codex CLI or open a workspace in the Codex app.
     Codex {
+        /// Launch mode (defaults to codex.default_mode in global config, or cli).
         #[arg(value_enum)]
-        mode: CodexMode,
+        mode: Option<CodexMode>,
         workspace: Option<String>,
         #[arg(last = true)]
         args: Vec<OsString>,
@@ -162,10 +169,18 @@ pub enum Command {
     },
 }
 
-#[derive(Debug, Clone, Copy, ValueEnum)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, ValueEnum, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum CodexMode {
+    #[default]
     Cli,
     App,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum Agent {
+    Codex,
+    Claude,
 }
 
 #[derive(Debug, Subcommand)]

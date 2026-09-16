@@ -82,8 +82,16 @@ pub(super) async fn add(
     repository: Option<String>,
     name: Option<String>,
     base: Option<String>,
+    agent: Option<crate::cli::Agent>,
+    args: Vec<OsString>,
     json_output: bool,
 ) -> Result<i32> {
+    // Validate launch configuration before creating a workspace.
+    let codex_mode = if matches!(agent, Some(crate::cli::Agent::Codex)) {
+        Some(crate::config::Config::load(paths)?.codex.default_mode)
+    } else {
+        None
+    };
     let repository = match repository {
         Some(repo) => ui::repository_selector(repo)?,
         None => ui::pick(
@@ -113,10 +121,18 @@ pub(super) async fn add(
                 serde_json::to_value(&workspace)?,
             );
             shell::navigate(&workspace.path, json_output)?;
+            match agent {
+                Some(crate::cli::Agent::Codex) => {
+                    codex(paths, codex_mode, Some(workspace.id), args, json_output).await
+                }
+                Some(crate::cli::Agent::Claude) => {
+                    claude(paths, Some(workspace.id), args, json_output).await
+                }
+                None => Ok(0),
+            }
         }
         _ => anyhow::bail!("unexpected workspace response"),
     }
-    Ok(0)
 }
 
 pub(super) async fn list(paths: &Paths, json_output: bool) -> Result<i32> {
@@ -309,11 +325,15 @@ pub(super) async fn claude(
 
 pub(super) async fn codex(
     paths: &Paths,
-    mode: crate::cli::CodexMode,
+    mode: Option<crate::cli::CodexMode>,
     workspace: Option<String>,
     args: Vec<OsString>,
     json_output: bool,
 ) -> Result<i32> {
+    let mode = match mode {
+        Some(mode) => mode,
+        None => crate::config::Config::load(paths)?.codex.default_mode,
+    };
     if matches!(mode, crate::cli::CodexMode::App) {
         return open_app(paths, workspace, "codex", args, json_output).await;
     }

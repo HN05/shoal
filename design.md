@@ -141,6 +141,22 @@ Agent shortcuts use the execution wrapper. Codex CLI launches with
 workspace name for remote control. Generic `exec` forwards its command unchanged.
 Agent permission settings and Shoal's cooperative daemon scope are separate.
 
+Codex's mode is optional for current-workspace/picker launches. Global
+`[codex].default_mode` selects `cli` (the default) or `app`; explicit positional
+modes override it. Read the default at launch time without a daemon restart.
+Named workspace launches retain the explicit mode before the workspace selector.
+
+`add --agent codex|claude` launches after successful worktree creation, the current
+readiness requirement. Plain `add` creates without launching. Codex uses its
+configured default mode; arguments after `--` pass through to the agent.
+The CLI wrapper owns foreground execution and returns the agent's exit status;
+the daemon does not own terminal I/O. Retain the workspace on launch failure or
+agent exit so users can retry with existing shortcuts. Shell integration enters
+the workspace after the agent exits, including a nonzero exit. JSON mode emits
+the workspace record before unmodified agent output. App mode keeps its existing
+handoff-only lifecycle semantics. A future explicit setup phase can precede
+launch; dependency restoration is not part of readiness today.
+
 Desktop shortcuts hand an existing workspace directory to Codex or T3. A GUI
 launcher returning does not mean its agent session ended. Directory handoff alone
 provides neither execution tracking nor a scope token; disable automatic cleanup

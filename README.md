@@ -62,11 +62,13 @@ shoal repo add /path/to/repo --name my-project
 shoal repo rename my-project new-name
 shoal repo list
 shoal add /path/to/repo --name fix-login
+shoal add /path/to/repo --name fix-api --agent codex
 shoal cd                    # Fuzzy workspace picker, even inside a workspace
 shoal cd fix-login          # Enter through the shell function
 shoal cd -                  # Previous directory; refuses deleted destinations
 shoal exec fix-login -- cargo test
 shoal claude fix-login -- --help
+shoal codex                 # Current workspace or picker; defaults to cli
 shoal codex cli fix-login -- --help
 shoal codex app fix-login    # Open the Codex desktop app
 shoal t3 fix-login           # Open in the running T3 Code desktop app
@@ -77,12 +79,40 @@ shoal rm fix-login --yes --keep-branch
 shoal rm fix-login --yes --delete-branch
 ```
 
+`add --agent codex|claude` starts the agent in the new workspace after worktree
+creation succeeds. Codex uses `codex.default_mode` below. Pass a prompt or other
+agent arguments after `--`, for example:
+
+```sh
+shoal add my-project --name fix-api --agent codex -- "Fix the API timeout"
+```
+
+CLI agents run in the current terminal through Shoal's tracked execution wrapper.
+The command returns the agent's exit code and retains the workspace, including
+when launch fails. With shell integration, your shell enters the new workspace
+after the agent exits. Creation failures never launch an agent. No dependency
+setup runs yet. `--json` emits the workspace record first, followed by the agent's
+unmodified output.
+
 `shoal claude` appends `--remote-control <workspace-name>`, using the resolved
 workspace's name. `shoal codex cli` appends `--sandbox danger-full-access
 --ask-for-approval=never`. Arguments after `--` are forwarded before these flags.
 Use `shoal exec ... -- claude/codex ...` for a custom invocation.
 
-`codex` requires an explicit `cli` or `app` mode. App launches run
+`shoal codex` uses the default mode, initially `cli`. Set it in
+`~/.config/shoal/config.toml` (or `$XDG_CONFIG_HOME/shoal/config.toml`):
+
+```toml
+[codex]
+default_mode = "cli" # Or "app"
+```
+
+This setting takes effect on the next launch without restarting the daemon.
+Explicit `shoal codex cli` and `shoal codex app` override it. To name a workspace,
+include the mode: `shoal codex cli fix-login`. Arguments after `--` work with
+either the default or an explicit mode.
+
+App launches run
 `codex app <workspace-path>` or `t3 app <workspace-path>`, with optional arguments
 after `--` passed through unchanged. They add no agent flags and preserve the
 launcher's output and exit code. Install the corresponding CLI on your PATH;

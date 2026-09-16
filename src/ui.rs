@@ -213,6 +213,8 @@ pub async fn workspace_menu(paths: &Paths) -> Result<crate::cli::Command> {
             repository: None,
             name: None,
             base: None,
+            agent: None,
+            args: vec![],
         });
     }
     ensure!(id != "add-workspace", "select a workspace for this action");
@@ -249,11 +251,11 @@ pub async fn workspace_menu(paths: &Paths) -> Result<crate::cli::Command> {
                 args: vec![],
             },
             mode @ ("codex cli" | "codex app") => Command::Codex {
-                mode: if mode == "codex cli" {
+                mode: Some(if mode == "codex cli" {
                     crate::cli::CodexMode::Cli
                 } else {
                     crate::cli::CodexMode::App
-                },
+                }),
                 workspace,
                 args: vec![],
             },

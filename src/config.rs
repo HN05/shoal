@@ -8,11 +8,18 @@ use crate::paths::Paths;
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
     pub repositories_dir: Option<PathBuf>,
+    pub codex: Codex,
     pub auto_cleanup: AutoCleanup,
     pub ports: Ports,
     pub resources: std::collections::BTreeMap<String, crate::resources::ResourceConfig>,
     pub resource_pools: std::collections::BTreeMap<String, crate::resources::PoolConfig>,
     pub simulators: crate::simulators::SimConfig,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Codex {
+    pub default_mode: crate::cli::CodexMode,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize)]
@@ -34,6 +41,24 @@ impl Default for Ports {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn codex_mode_defaults_to_cli_and_rejects_invalid_settings() {
+        use crate::cli::CodexMode;
+
+        for text in ["", "[codex]", "[codex]\ndefault_mode = 'cli'"] {
+            let config: Config = toml::from_str(text).unwrap();
+            assert_eq!(config.codex.default_mode, CodexMode::Cli);
+        }
+        let config: Config = toml::from_str("[codex]\ndefault_mode = 'app'").unwrap();
+        assert_eq!(config.codex.default_mode, CodexMode::App);
+        for text in [
+            "[codex]\ndefault_mode = 'desktop'",
+            "[codex]\ndefaut_mode = 'app'",
+        ] {
+            assert!(toml::from_str::<Config>(text).is_err());
+        }
+    }
 
     #[test]
     fn cleanup_defaults_can_be_disabled_and_typos_are_rejected() {

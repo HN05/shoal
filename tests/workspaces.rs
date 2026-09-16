@@ -1186,6 +1186,196 @@ fn execution_preserves_pipes_exit_code_environment_and_current_workspace() {
 }
 
 #[test]
+fn add_starts_agents_only_after_creation_and_preserves_workspace_on_exit() {
+    let fixture = Fixture::new();
+    let bin = fixture.root.path().join("add-agent-bin");
+    fs::create_dir(&bin).unwrap();
+    let inspection = fixture.root.path().join("agent-inspection.json");
+    let directive = fixture.root.path().join("directive");
+    for agent in ["codex", "claude"] {
+        let stub = bin.join(agent);
+        fs::write(
+            &stub,
+            r#"#!/bin/sh
+"$SHOAL_TEST_BIN" --state-dir "$SHOAL_TEST_STATE" --json inspect "$SHOAL_TEST_NAME" > "$SHOAL_TEST_INSPECTION" || exit 99
+test -f tracked || exit 98
+test -z "$SHOAL_SHELL_DIRECTIVE" || exit 97
+printf '%s\n' "$PWD" "$SHOAL_WORKSPACE" "$@"
+exit 7
+"#,
+        )
+        .unwrap();
+        fs::set_permissions(&stub, fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    let config_dir = fixture.root.path().join(".config/shoal");
+    fs::create_dir_all(&config_dir).unwrap();
+    for (name, agent, mode) in [
+        ("add-codex", "codex", "cli"),
+        ("add-claude", "claude", "cli"),
+        ("add-app", "codex", "app"),
+    ] {
+        fs::write(
+            config_dir.join("config.toml"),
+            format!("[codex]\ndefault_mode = '{mode}'"),
+        )
+        .unwrap();
+        let output = fixture
+            .command()
+            .args([
+                "add",
+                fixture.repo.to_str().unwrap(),
+                "--name",
+                name,
+                "--agent",
+                agent,
+                "--",
+                "literal spaces; $(false)",
+            ])
+            .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+            .env("SHOAL_TEST_BIN", env!("CARGO_BIN_EXE_shoal"))
+            .env("SHOAL_TEST_STATE", fixture.root.path().join("state"))
+            .env("SHOAL_TEST_NAME", name)
+            .env("SHOAL_TEST_INSPECTION", &inspection)
+            .env("SHOAL_SHELL_DIRECTIVE", &directive)
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(7), "{output:?}");
+        let during: Value = serde_json::from_slice(&fs::read(&inspection).unwrap()).unwrap();
+        assert_eq!(during["workspace"]["name"], name);
+        assert_eq!(
+            during["executions"].as_array().unwrap().len(),
+            usize::from(mode == "cli")
+        );
+        let after = fixture.ok(&["inspect", name]);
+        assert_eq!(after["executions"], serde_json::json!([]));
+        let path = after["workspace"]["path"].as_str().unwrap();
+        assert!(Path::new(path).join("tracked").exists());
+        assert_eq!(fs::read_to_string(&directive).unwrap(), format!("{path}\n"));
+        let args = if mode == "app" {
+            format!("\napp\n{path}\nliteral spaces; $(false)\n")
+        } else if agent == "claude" {
+            format!("{name}\nliteral spaces; $(false)\n--remote-control\n{name}\n")
+        } else {
+            format!(
+                "{name}\nliteral spaces; $(false)\n--sandbox\ndanger-full-access\n--ask-for-approval=never\n"
+            )
+        };
+        assert!(
+            String::from_utf8(output.stdout)
+                .unwrap()
+                .ends_with(&format!(
+                    "{}\n{args}",
+                    fs::canonicalize(path).unwrap().display()
+                ))
+        );
+    }
+
+    fs::remove_file(&inspection).unwrap();
+    let output = fixture
+        .command()
+        .args([
+            "add",
+            fixture.repo.to_str().unwrap(),
+            "--name",
+            "bad-base",
+            "--ref",
+            "missing-ref",
+            "--agent",
+            "codex",
+        ])
+        .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+        .env("SHOAL_TEST_BIN", env!("CARGO_BIN_EXE_shoal"))
+        .env("SHOAL_TEST_INSPECTION", &inspection)
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(!inspection.exists());
+
+    // A missing executable leaves a completed worktree available for retry.
+    fs::remove_file(bin.join("codex")).unwrap();
+    fs::write(config_dir.join("config.toml"), "").unwrap();
+    let output = fixture
+        .command()
+        .args([
+            "add",
+            fixture.repo.to_str().unwrap(),
+            "--name",
+            "missing-agent",
+            "--agent",
+            "codex",
+        ])
+        .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let workspace = fixture.ok(&["inspect", "missing-agent"]);
+    assert!(
+        Path::new(workspace["workspace"]["path"].as_str().unwrap())
+            .join("tracked")
+            .exists()
+    );
+    assert_eq!(workspace["executions"], serde_json::json!([]));
+    assert!(
+        !fixture
+            .run(&["add", "--", "prompt without agent"])
+            .status
+            .success()
+    );
+}
+
+#[test]
+fn codex_default_mode_is_read_at_launch_and_explicit_modes_override_it() {
+    let fixture = Fixture::new();
+    let workspace = fixture.add("default-mode");
+    let path = workspace["path"].as_str().unwrap();
+    let bin = fixture.root.path().join("codex-bin");
+    fs::create_dir(&bin).unwrap();
+    let stub = bin.join("codex");
+    fs::write(
+        &stub,
+        "#!/bin/sh\nprintf '%s\\n' \"$SHOAL_WORKSPACE\" \"$@\"\nexit 7\n",
+    )
+    .unwrap();
+    fs::set_permissions(&stub, fs::Permissions::from_mode(0o700)).unwrap();
+
+    let config_dir = fixture.root.path().join(".config/shoal");
+    fs::create_dir_all(&config_dir).unwrap();
+    for config in ["", "[codex]\ndefault_mode = 'app'"] {
+        // Change the default while the daemon remains running.
+        fs::write(config_dir.join("config.toml"), config).unwrap();
+        for mode in [None, Some("cli"), Some("app")] {
+            let mut command = fixture.command();
+            command.current_dir(path).arg("codex");
+            if let Some(mode) = mode {
+                command.args([mode, "default-mode"]);
+            }
+            let output = command
+                .args(["--", "literal spaces; $(false)"])
+                .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+                .output()
+                .unwrap();
+            assert_eq!(
+                output.status.code(),
+                Some(7),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            let app = mode == Some("app") || (mode.is_none() && !config.is_empty());
+            let expected = if app {
+                format!("\napp\n{path}\nliteral spaces; $(false)\n")
+            } else {
+                "default-mode\nliteral spaces; $(false)\n--sandbox\ndanger-full-access\n--ask-for-approval=never\n".into()
+            };
+            assert_eq!(String::from_utf8(output.stdout).unwrap(), expected);
+            assert_eq!(
+                fixture.ok(&["inspect", "default-mode"])["executions"],
+                serde_json::json!([])
+            );
+        }
+    }
+}
+
+#[test]
 fn agent_shortcuts_forward_arguments_without_starting_real_agents() {
     let fixture = Fixture::new();
     let workspace = fixture.add("shortcut");
