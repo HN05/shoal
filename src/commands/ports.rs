@@ -67,15 +67,11 @@ pub(super) async fn run(paths: &Paths, command: PortCommand, json_output: bool) 
                             "{}: port {} unavailable; suggested {}",
                             proposal.name, proposal.requested_port, proposal.suggested_port
                         );
-                        let answer = ui::pick(
-                            "Reserve suggested port? ",
-                            vec![
-                                ("no".into(), "Cancel".into()),
-                                ("yes".into(), format!("Reserve {}", proposal.suggested_port)),
-                            ],
-                            false,
-                        )?;
-                        if answer != "yes" {
+                        if !ui::confirm(
+                            &format!("Reserve suggested port {}?", proposal.suggested_port),
+                            json_output,
+                            &format!("--port {}", proposal.suggested_port),
+                        )? {
                             return Ok(2);
                         }
                         port = Some(proposal.suggested_port);

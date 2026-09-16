@@ -57,10 +57,18 @@ pub(super) async fn run(paths: &Paths, command: RepoCommand, json_output: bool) 
             }
         }
         RepoCommand::Rm { repository, yes } => {
-            anyhow::ensure!(
-                yes,
-                "repository removal permanently deletes its checkout and all Shoal workspaces, including uncommitted and unpushed work; pass --yes"
-            );
+            if !yes {
+                anyhow::ensure!(
+                    ui::confirm(
+                        &format!(
+                            "Delete repository: {repository}\nDeletes: checkout, all Shoal workspaces and their resources\nWork:    uncommitted and unpushed changes are permanently lost"
+                        ),
+                        json_output,
+                        "--yes",
+                    )?,
+                    "repository removal canceled"
+                );
+            }
             let repository = ui::repository_selector(repository)?;
             match client::call(paths, Method::RemoveRepository { repository }).await? {
                 Body::RepositoryRemoved(result) => output(

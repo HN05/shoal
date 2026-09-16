@@ -114,10 +114,10 @@ pub enum Command {
         #[arg(short = 'y', long)]
         yes: bool,
         /// Remove the worktree but retain its branch, including when it contains work.
-        #[arg(long, requires = "yes", conflicts_with = "delete_branch")]
+        #[arg(long, conflicts_with = "delete_branch")]
         keep_branch: bool,
         /// Remove both worktree and branch, including uncommitted and differing work.
-        #[arg(long, requires = "yes", conflicts_with = "keep_branch")]
+        #[arg(long, conflicts_with = "keep_branch")]
         delete_branch: bool,
     },
     /// Execute a command in a named or current workspace.
@@ -204,7 +204,7 @@ pub enum RepoCommand {
     #[command(alias = "remove")]
     Rm {
         repository: String,
-        /// Confirm permanent deletion, including uncommitted and unpushed work.
+        /// Confirm permanent deletion without prompting, including unpushed work.
         #[arg(long)]
         yes: bool,
     },

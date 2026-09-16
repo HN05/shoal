@@ -119,12 +119,22 @@ resolution and fzf for interactive selection. Noninteractive calls never open a
 picker. Rust selects navigation paths; the Bash/Zsh wrapper only changes directory
 and preserves status, without evaluating repository-provided shell code.
 
+When approval is required, interactive commands show the action and ask `[y/N]`.
+Enter, `n`, and end-of-input cancel; invalid answers prompt again. Explicit flags
+such as `--yes` bypass confirmation; noninteractive/JSON callers must use those
+flags. Workspace branch choices remain separate: Cancel, Keep branch, or Delete
+branch, followed by a concise confirmation showing file and branch effects.
+Explicit branch flags skip the choice, not confirmation. Suggested port changes
+use the same yes/no prompt. Already safe workspace removal needs no new prompt.
+
 Shell completion asks the installed binary for current command syntax on each
 Tab. Live repository, workspace, and resource targets use read-only daemon calls,
 respect the caller's state directory and scope, and time out after 500 ms. Never
 start a daemon or open a picker for completion. Commands, flags, fixed values,
 and filesystem paths remain completable without a daemon. Resource suggestions
-use an explicit workspace or the current worktree.
+use an explicit workspace or the current worktree. Targets and subcommands come
+before flags; Zsh registration disables completion re-sorting for Shoal, including
+fzf-tab.
 
 Agent shortcuts use the execution wrapper. Codex CLI launches with
 `--sandbox danger-full-access --ask-for-approval=never`; Claude receives the
@@ -201,8 +211,11 @@ resource's lifecycle or enforcing its use.
 `repo rm <repository> --yes` permanently deletes the registered checkout (including
 local repositories), all its Shoal workspaces, branches, and owned resources. It
 stops managed executions through the shared workspace removal path and discards
-uncommitted and unpushed work. Refuse linked worktrees outside Shoal, redirected
+uncommitted and unpushed work. Refuse existing linked worktrees outside Shoal, redirected
 paths, and a checkout containing another registered repo or Shoal's state/home.
+Ignore missing linked directories only when Git reports their records prunable
+and unlocked. Existing paths (including dangling symlinks) and locked offline
+worktrees still block deletion. No separate global Git prune is necessary.
 Persist repository deletion progress before mutation; a failed cleanup retains
 remaining ownership and blocks new workspace creation until removal is retried.
 Deletion retries verify the recorded directory identity even after partial file

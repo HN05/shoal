@@ -134,6 +134,8 @@ fn zsh_completion_function_invokes_current_binary() {
             r#"
 autoload -Uz compinit; compinit -D
 source "$1"
+zstyle -s ':completion::complete:shoal::' sort sort_order
+[[ $sort_order == false ]] || exit 1
 _describe() { print -rl -- "${(@P)3}"; }
 words=(shoal repo r); CURRENT=3
 _clap_dynamic_completer_shoal

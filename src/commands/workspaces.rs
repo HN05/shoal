@@ -206,6 +206,25 @@ pub(super) async fn remove(
         );
         ui::choose_removal(&check, json_output)?
     };
+    if !yes && (check.needs_choice() || keep_branch || delete_branch) {
+        let branch_action = match choice {
+            removal::Choice::KeepBranch => "keep",
+            removal::Choice::DeleteBranch => "delete (including unpushed commits)",
+            removal::Choice::Auto => "delete (redundant)",
+        };
+        ensure!(
+            ui::confirm(
+                &format!(
+                    "Remove workspace: {}\nFiles:  delete, including uncommitted changes\nBranch: {} — {branch_action}",
+                    check.workspace.name,
+                    check.branch.as_deref().unwrap_or("none")
+                ),
+                json_output,
+                "--yes",
+            )?,
+            "workspace removal canceled"
+        );
+    }
     let inspection = match client::call(
         paths,
         Method::Inspect {

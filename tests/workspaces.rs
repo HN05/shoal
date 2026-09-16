@@ -114,6 +114,61 @@ impl Fixture {
     fn add(&self, name: &str) -> Value {
         self.ok(&["add", self.repo.to_str().unwrap(), "--name", name])
     }
+
+    fn interactive(&self, args: &[&str], answer: &str) -> (Output, String) {
+        use std::{io::Read, os::fd::FromRawFd};
+        let (mut master, mut slave) = (-1, -1);
+        assert_eq!(
+            unsafe {
+                libc::openpty(
+                    &mut master,
+                    &mut slave,
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                )
+            },
+            0
+        );
+        let mut master = unsafe { fs::File::from_raw_fd(master) };
+        let slave = unsafe { fs::File::from_raw_fd(slave) };
+        use std::os::fd::AsRawFd;
+        assert_ne!(
+            unsafe { libc::fcntl(master.as_raw_fd(), libc::F_SETFL, libc::O_NONBLOCK) },
+            -1
+        );
+        let mut child = self
+            .command()
+            .args(args)
+            .stdin(slave.try_clone().unwrap())
+            .stderr(slave)
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap();
+        master.write_all(answer.as_bytes()).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let mut transcript = Vec::new();
+        loop {
+            let _ = master.read_to_end(&mut transcript);
+            if child.try_wait().unwrap().is_some() {
+                break;
+            }
+            if Instant::now() >= deadline {
+                let _ = child.kill();
+                let _ = child.wait();
+                panic!(
+                    "interactive command timed out: {}",
+                    String::from_utf8_lossy(&transcript)
+                );
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+        let _ = master.read_to_end(&mut transcript);
+        (
+            child.wait_with_output().unwrap(),
+            String::from_utf8(transcript).unwrap(),
+        )
+    }
 }
 
 impl Drop for Fixture {
@@ -309,6 +364,15 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
             "{command}"
         );
     }
+    let choices = complete(&["repo", "rm", ""], fixture.root.path());
+    let target = choices.iter().position(|v| v == "project").unwrap();
+    assert!(
+        choices
+            .iter()
+            .enumerate()
+            .filter(|(_, v)| v.starts_with('-'))
+            .all(|(i, _)| i > target)
+    );
     let cwd = Path::new(first["path"].as_str().unwrap());
     assert!(complete(&["port", "release", "w"], cwd).contains(&"web".into()));
     assert!(complete(&["resource", "acquire", "d"], cwd).contains(&"devices".into()));
@@ -3879,6 +3943,87 @@ fn repository_removal_preserves_external_worktrees_and_deletes_clone_on_retry() 
     assert!(!path.exists());
     assert!(fixture.repo.exists());
     assert_eq!(fixture.ok(&["repo", "list"]).as_array().unwrap().len(), 1);
+}
+
+#[test]
+fn repository_removal_ignores_only_missing_prunable_unlocked_worktrees() {
+    let fixture = Fixture::new();
+    let external = fixture.root.path().join("external with spaces");
+    let target = fixture.repo.to_str().unwrap();
+    git(
+        &fixture.repo,
+        &[
+            "worktree",
+            "add",
+            "-b",
+            "external",
+            external.to_str().unwrap(),
+        ],
+    );
+    git(
+        &fixture.repo,
+        &["worktree", "lock", external.to_str().unwrap()],
+    );
+    fs::remove_dir_all(&external).unwrap();
+    let refused = fixture.run(&["repo", "rm", target, "--yes"]);
+    assert!(!refused.status.success());
+    assert!(String::from_utf8_lossy(&refused.stderr).contains("worktree outside Shoal"));
+    git(
+        &fixture.repo,
+        &["worktree", "unlock", external.to_str().unwrap()],
+    );
+    std::os::unix::fs::symlink(fixture.root.path().join("missing"), &external).unwrap();
+    assert!(
+        !fixture
+            .run(&["repo", "rm", target, "--yes"])
+            .status
+            .success()
+    );
+    fs::remove_file(&external).unwrap();
+    assert!(git(&fixture.repo, &["worktree", "list", "--porcelain"]).contains("prunable"));
+    fixture.ok(&["repo", "rm", target, "--yes"]);
+    assert!(!fixture.repo.exists());
+    assert!(fixture.ok(&["repo", "list"]).as_array().unwrap().is_empty());
+}
+
+#[test]
+fn interactive_removal_confirms_and_defaults_to_no_without_affecting_scripts() {
+    let fixture = Fixture::new();
+    fixture.ok(&["repo", "rename", fixture.repo.to_str().unwrap(), "project"]);
+    for flag in ["--keep-branch", "--delete-branch"] {
+        let workspace = fixture.add("worker");
+        let path = Path::new(workspace["path"].as_str().unwrap());
+        fs::write(path.join("uncommitted"), "keep until approved").unwrap();
+        let piped = fixture.run(&["rm", "worker", flag]);
+        assert!(!piped.status.success());
+        assert!(String::from_utf8_lossy(&piped.stderr).contains("pass --yes"));
+        let (no, prompt) = fixture.interactive(&["rm", "worker", flag], "n\n");
+        assert!(!no.status.success());
+        assert!(prompt.contains("Are you sure? [y/N]"), "{prompt}");
+        assert!(path.join("uncommitted").exists());
+        let (yes, prompt) = fixture.interactive(&["rm", "worker", flag], "maybe\ny\n");
+        assert!(yes.status.success(), "{prompt}");
+        assert!(prompt.contains("Please enter y or n."), "{prompt}");
+        assert!(!path.exists());
+        let branch_exists = git(
+            &fixture.repo,
+            &["branch", "--list", workspace["branch"].as_str().unwrap()],
+        );
+        assert_eq!(!branch_exists.trim().is_empty(), flag == "--keep-branch");
+    }
+    for answer in ["n\n", "\n", "\x04"] {
+        let (no, prompt) = fixture.interactive(&["repo", "rm", "project"], answer);
+        assert!(!no.status.success(), "{prompt}");
+        assert!(prompt.contains("Are you sure? [y/N]"), "{prompt}");
+        assert!(fixture.repo.exists());
+    }
+    let (json, prompt) = fixture.interactive(&["--json", "repo", "rm", "project"], "y\n");
+    assert!(!json.status.success());
+    assert!(!prompt.contains("Are you sure?"));
+    assert!(fixture.repo.exists());
+    let (yes, prompt) = fixture.interactive(&["repo", "rm", "project"], "Y\n");
+    assert!(yes.status.success(), "{prompt}");
+    assert!(!fixture.repo.exists());
 }
 
 #[test]

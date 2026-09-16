@@ -23,6 +23,38 @@ fn interactive(json: bool) -> Result<()> {
     Ok(())
 }
 
+/// Approval stays in the CLI. Piped/JSON callers must opt in explicitly.
+pub fn confirm(action: &str, json: bool, flag: &str) -> Result<bool> {
+    ensure!(
+        is_interactive(json),
+        "{action}; confirmation required in non-interactive mode; pass {flag}"
+    );
+    let mut input = io::stdin().lock();
+    let mut output = io::stderr().lock();
+    confirm_with_io(action, &mut input, &mut output)
+}
+
+fn confirm_with_io(
+    action: &str,
+    input: &mut impl io::BufRead,
+    output: &mut impl Write,
+) -> Result<bool> {
+    writeln!(output, "{action}")?;
+    loop {
+        write!(output, "Are you sure? [y/N] ")?;
+        output.flush()?;
+        let mut answer = String::new();
+        if input.read_line(&mut answer)? == 0 {
+            return Ok(false);
+        }
+        match answer.trim().to_ascii_lowercase().as_str() {
+            "y" | "yes" => return Ok(true),
+            "" | "n" | "no" => return Ok(false),
+            _ => writeln!(output, "Please enter y or n.")?,
+        }
+    }
+}
+
 pub fn choose_removal(
     check: &crate::removal::RemovalCheck,
     json: bool,
@@ -33,16 +65,23 @@ pub fn choose_removal(
         "removal requires a branch choice: {}. Pass --yes with --keep-branch or --delete-branch",
         warnings.join("; ")
     );
-    eprintln!("Remove workspace {}?", check.workspace.name);
+    eprintln!("Workspace: {}", check.workspace.name);
+    eprintln!("Branch:    {}", check.branch.as_deref().unwrap_or("none"));
     for warning in warnings {
         eprintln!("  - {warning}");
     }
     let choice = pick(
-        "Removal> ",
+        "Branch action> ",
         vec![
-            ("abort".into(), "Abort".into()),
-            ("keep".into(), "Delete worktree but keep branch".into()),
-            ("delete".into(), "Delete worktree and branch".into()),
+            ("abort".into(), "Cancel         Keep everything".into()),
+            (
+                "keep".into(),
+                "Keep branch    Delete workspace files only".into(),
+            ),
+            (
+                "delete".into(),
+                "Delete branch  Delete workspace files and branch".into(),
+            ),
         ],
         json,
     )?;

@@ -44,7 +44,13 @@ pub fn completions(shell: clap_complete::Shell) -> Result<String> {
             .context("executable path is not UTF-8")?,
         &mut script,
     )?;
-    String::from_utf8(script).context("completion script is not UTF-8")
+    let mut script = String::from_utf8(script).context("completion script is not UTF-8")?;
+    if shell == clap_complete::Shell::Zsh {
+        // clap emits targets before options. fzf-tab otherwise alphabetizes them
+        // again, putting every --flag ahead of the targets.
+        script.push_str("\nzstyle ':completion:*:shoal:*' sort false\n");
+    }
+    Ok(script)
 }
 
 pub fn navigate(path: &Path, json: bool) -> Result<()> {

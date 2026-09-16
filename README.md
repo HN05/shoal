@@ -196,10 +196,13 @@ shoal repo rm my-project --yes
 Permanently deletes the repository checkout, all its Shoal workspaces and branches,
 and their ports, simulators, and resource leases. Managed commands are stopped.
 This also deletes local repositories registered in place, including uncommitted
-and unpushed work. `--yes` is required; names, IDs, paths, and source URLs work as
-selectors. `repo remove` is an alias.
+and unpushed work. Interactive calls ask `Are you sure? [y/N]`; Enter or `n`
+cancels. Pass `--yes` to skip the prompt (required for scripts and `--json`).
+Names, IDs, paths, and source URLs work as selectors. `repo remove` is an alias.
 
-Linked worktrees outside Shoal must be removed separately first. Shoal refuses
+Existing linked worktrees outside Shoal must be removed separately first. Stale
+records for deleted directories do not block removal when Git marks them prunable.
+Locked worktrees remain protected, including on disconnected disks. Shoal refuses
 redirected paths and deletion that would include another registered repository or
 its state directory. If cleanup fails, completed steps stay completed and remaining
 records are retained. Retry the same command to finish; new workspace creation is
@@ -302,10 +305,19 @@ Removal deletes the branch when the worktree is clean and its contents match
 local `main` or its configured upstream. The comparison is between Git trees;
 commit history can differ. Missing refs do not count as a match.
 
-Otherwise, `fzf` offers **Abort**, **Delete worktree but keep branch**, and
-**Delete worktree and branch**, with Abort selected by default. Both deletion
-choices discard uncommitted/untracked files, so preserving the branch only saves
-committed work. Noninteractive callers choose `--yes --keep-branch` or
+Otherwise, `fzf` offers these choices, with Cancel selected by default:
+
+| Choice | Result |
+| --- | --- |
+| Cancel | Keep everything |
+| Keep branch | Delete workspace files only |
+| Delete branch | Delete workspace files and branch |
+
+The next prompt summarizes the workspace, files, and branch action and asks
+`Are you sure? [y/N]`. Both removal choices discard uncommitted/untracked files;
+keeping the branch saves committed work only. `--keep-branch` or `--delete-branch`
+skips the picker but still asks for confirmation. Noninteractive callers use
+`--yes --keep-branch` or
 `--yes --delete-branch`. `--yes` alone does not choose for differing/dirty work.
 
 Running processes do not block manual removal. Connected Shoal commands are
@@ -384,6 +396,8 @@ source <(shoal shell init)
 Zsh's completion system is initialized if needed. Each Tab uses the installed
 binary's current command definitions, covering subcommands, flags, fixed values
 (including `codex cli`/`app`), and filesystem paths without a running daemon.
+Targets and subcommands appear before flags. Zsh registration preserves this
+order in fzf-tab as well; reload the shell integration to apply it.
 With the daemon running, completion also suggests registered repositories and
 workspaces across commands. It suggests resource pools, members, lease names,
 ports, and simulator lease names for the current or explicitly selected workspace.

@@ -251,11 +251,32 @@ async fn check_checkout(repo: &Repository, workspaces: &[Workspace]) -> Result<(
         "repository uses external Git metadata; refusing deletion"
     );
     let trees = worktrunk::git(&repo.path, &["worktree", "list", "--porcelain", "-z"]).await?;
-    for path in trees
-        .split('\0')
-        .filter_map(|field| field.strip_prefix("worktree "))
-    {
+    for record in trees.split("\0\0") {
+        let fields: Vec<_> = record.split('\0').collect();
+        let Some(path) = fields
+            .iter()
+            .find_map(|field| field.strip_prefix("worktree "))
+        else {
+            continue;
+        };
         let path = Path::new(path);
+        // Removing a directory outside Git leaves its registration behind.
+        // Only ignore missing entries Git itself considers prunable; locked
+        // worktrees may merely be on an unmounted disk. No global prune is needed
+        // because successful repository deletion removes this metadata too.
+        let prunable = fields
+            .iter()
+            .any(|f| *f == "prunable" || f.starts_with("prunable "));
+        let locked = fields
+            .iter()
+            .any(|f| *f == "locked" || f.starts_with("locked "));
+        if prunable && !locked {
+            match fs::symlink_metadata(path) {
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(error) => return Err(error).context("inspect linked worktree"),
+                Ok(_) => {}
+            }
+        }
         ensure!(
             path == repo.path
                 || workspaces.iter().any(|w| {
