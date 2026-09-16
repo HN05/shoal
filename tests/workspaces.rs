@@ -206,10 +206,179 @@ fn url_registration_clones_once_and_supports_workspaces() {
         repo["path"].as_str().unwrap(),
         fixture.repo.to_str().unwrap()
     );
+    assert_eq!(
+        Path::new(repo["path"].as_str().unwrap()).parent().unwrap(),
+        fs::canonicalize(fixture.root.path().join(".local/share/shoal/repositories")).unwrap()
+    );
+    assert!(!fixture.root.path().join("state/repositories").exists());
     assert_eq!(fixture.ok(&["repo", "add", &url]), repo);
     fixture.ok(&["add", &url, "--name", "cloned"]);
     fixture.ok(&["rm", "cloned"]);
     assert!(Path::new(repo["path"].as_str().unwrap()).is_dir());
+}
+
+#[test]
+fn local_repository_without_remotes_registers_in_place_and_creates_workspaces() {
+    let fixture = Fixture::new();
+    git(
+        &fixture.repo,
+        &["update-ref", "-d", "refs/remotes/origin/main"],
+    );
+    assert!(git(&fixture.repo, &["remote"]).is_empty());
+    let repo = fixture.ok(&[
+        "repo",
+        "add",
+        fixture.repo.to_str().unwrap(),
+        "--name",
+        "local",
+    ]);
+    assert_eq!(repo["path"], fixture.repo.to_str().unwrap());
+    assert_eq!(fixture.ok(&["repo", "list"]).as_array().unwrap().len(), 1);
+    let workspace = fixture.ok(&["add", "local", "--name", "offline"]);
+    assert_eq!(
+        git(
+            Path::new(workspace["path"].as_str().unwrap()),
+            &["rev-parse", "HEAD"]
+        ),
+        git(&fixture.repo, &["rev-parse", "main"])
+    );
+    assert!(
+        !fixture
+            .root
+            .path()
+            .join(".local/share/shoal/repositories")
+            .exists()
+    );
+    assert!(!fixture.root.path().join("state/repositories").exists());
+    let unused = fixture.root.path().join("unused");
+    let output = fixture.run(&[
+        "repo",
+        "add",
+        fixture.repo.to_str().unwrap(),
+        "--path",
+        unused.to_str().unwrap(),
+    ]);
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("local repositories are registered in place")
+    );
+    assert!(!unused.exists());
+}
+
+#[test]
+fn configured_repository_directory_affects_new_clones_and_preserves_existing_paths() {
+    let mut fixture = Fixture::with_config(Some(
+        "repositories_dir = \"~/clones with ' quotes & $literal\"\n",
+    ));
+    let url = format!("file://{}", fixture.repo.display());
+    let repo = fixture.ok(&["repo", "add", &url]);
+    let path = Path::new(repo["path"].as_str().unwrap());
+    assert_eq!(
+        path.parent().unwrap(),
+        fs::canonicalize(fixture.root.path().join("clones with ' quotes & $literal")).unwrap()
+    );
+    assert!(!fixture.root.path().join("state/repositories").exists());
+    let new_root = fixture.root.path().join("new clones");
+    fs::write(
+        fixture.root.path().join(".config/shoal/config.toml"),
+        format!("repositories_dir = {:?}\n", new_root.to_str().unwrap()),
+    )
+    .unwrap();
+    fixture.restart();
+    assert_eq!(fixture.ok(&["repo", "add", &url]), repo);
+    fixture.ok(&["add", &url, "--name", "retained"]);
+    assert!(!new_root.exists());
+    let source = fixture.root.path().join("second.git");
+    git(
+        &fixture.repo,
+        &["clone", "--bare", ".", source.to_str().unwrap()],
+    );
+    let second = fixture.ok(&["repo", "add", &format!("file://{}", source.display())]);
+    assert_eq!(
+        Path::new(second["path"].as_str().unwrap())
+            .parent()
+            .unwrap(),
+        fs::canonicalize(new_root).unwrap()
+    );
+}
+
+#[test]
+fn repository_clone_path_overrides_default_and_resolves_in_callers_directory() {
+    let fixture = Fixture::with_config(Some("repositories_dir = \"~/default-clones\"\n"));
+    let url = format!("file://{}", fixture.repo.display());
+    let relative = "projects/a repo with ' quotes & $literal";
+    let output = fixture
+        .command()
+        .current_dir(fixture.root.path())
+        .args(["--json", "repo", "add", &url, "--path", relative])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let repo: Value = serde_json::from_slice(&output.stdout).unwrap();
+    let expected = fs::canonicalize(fixture.root.path().join(relative)).unwrap();
+    assert_eq!(repo["path"], expected.to_str().unwrap());
+    assert!(!fixture.root.path().join("default-clones").exists());
+    assert_eq!(fixture.ok(&["repo", "add", &url]), repo);
+    assert_eq!(
+        fixture.ok(&["repo", "add", &url, "--path", &format!("~/{relative}")]),
+        repo
+    );
+    let mismatch = fixture.root.path().join("other");
+    let output = fixture.run(&[
+        "repo",
+        "add",
+        &url,
+        "--path",
+        mismatch.to_str().unwrap(),
+        "--name",
+        "wrong",
+    ]);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("cannot relocate"));
+    assert!(!mismatch.exists());
+    assert_eq!(fixture.ok(&["repo", "add", &url]), repo);
+    fixture.ok(&["add", &url, "--name", "custom-clone"]);
+}
+
+#[test]
+fn clone_path_preserves_existing_destinations_and_cleans_only_failed_new_clones() {
+    let fixture = Fixture::new();
+    let url = format!("file://{}", fixture.repo.display());
+    let occupied = fixture.root.path().join("occupied");
+    fs::create_dir(&occupied).unwrap();
+    let file = occupied.join("keep");
+    fs::write(&file, "user data").unwrap();
+    let empty = fixture.root.path().join("empty");
+    fs::create_dir(&empty).unwrap();
+    let link = fixture.root.path().join("link");
+    std::os::unix::fs::symlink(&occupied, &link).unwrap();
+    for destination in [&occupied, &empty, &file, &link] {
+        let output = fixture.run(&["repo", "add", &url, "--path", destination.to_str().unwrap()]);
+        assert!(!output.status.success());
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains("destination must not already exist")
+        );
+        assert!(destination.exists());
+        assert_eq!(fs::read_to_string(&file).unwrap(), "user data");
+    }
+    let failed = fixture.root.path().join("failed clone");
+    let missing = format!(
+        "file://{}",
+        fixture.root.path().join("missing.git").display()
+    );
+    assert!(
+        !fixture
+            .run(&["repo", "add", &missing, "--path", failed.to_str().unwrap()])
+            .status
+            .success()
+    );
+    assert!(!failed.exists());
+    assert_eq!(fixture.ok(&["repo", "list"]).as_array().unwrap().len(), 1);
 }
 
 #[test]

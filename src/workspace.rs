@@ -41,7 +41,6 @@ impl Manager {
 
     pub async fn open(paths: Paths) -> Result<Arc<Self>> {
         fs::create_dir_all(paths.state.join("workspaces"))?;
-        fs::create_dir_all(paths.state.join("repositories"))?;
         // Avoid inheriting personal Worktrunk hooks and layout preferences.
         fs::write(paths.state.join("worktrunk.toml"), "# Managed by Shoal.\n")?;
         Ok(Arc::new(Self {

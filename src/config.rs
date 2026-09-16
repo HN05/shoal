@@ -7,6 +7,7 @@ use crate::paths::Paths;
 #[derive(Debug, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
+    pub repositories_dir: Option<PathBuf>,
     pub auto_cleanup: AutoCleanup,
     pub ports: Ports,
     pub resources: std::collections::BTreeMap<String, crate::resources::ResourceConfig>,
@@ -45,6 +46,33 @@ mod tests {
         assert_eq!(config.auto_cleanup.idle_minutes, 30);
         assert!(toml::from_str::<Config>("[auto_cleanpu]\nenabled = false").is_err());
     }
+
+    #[test]
+    fn repository_directory_defaults_and_validates_explicit_paths() {
+        let paths = Paths {
+            home: "/home/test".into(),
+            state: "/separate/state".into(),
+            socket: "/separate/state/daemon.sock".into(),
+        };
+        assert_eq!(
+            Config::default().repositories_dir(&paths).unwrap(),
+            PathBuf::from("/home/test/.local/share/shoal/repositories")
+        );
+        for (value, expected) in [
+            ("~/Projects/repos", "/home/test/Projects/repos"),
+            ("/external/repos", "/external/repos"),
+        ] {
+            let config: Config = toml::from_str(&format!("repositories_dir = {value:?}")).unwrap();
+            assert_eq!(
+                config.repositories_dir(&paths).unwrap(),
+                PathBuf::from(expected)
+            );
+        }
+        for value in ["", "relative/repos", "~someone/repos"] {
+            let config: Config = toml::from_str(&format!("repositories_dir = {value:?}")).unwrap();
+            assert!(config.repositories_dir(&paths).is_err());
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -64,6 +92,21 @@ impl Default for AutoCleanup {
 }
 
 impl Config {
+    pub fn repositories_dir(&self, paths: &Paths) -> Result<PathBuf> {
+        let Some(path) = &self.repositories_dir else {
+            return Ok(paths.home.join(".local/share/shoal/repositories"));
+        };
+        let path = match path.strip_prefix("~") {
+            Ok(relative) => paths.home.join(relative),
+            Err(_) => path.clone(),
+        };
+        ensure!(
+            path.is_absolute(),
+            "repositories_dir must be an absolute path or start with ~/"
+        );
+        Ok(path)
+    }
+
     pub fn load(paths: &Paths) -> Result<Self> {
         let base = std::env::var_os("XDG_CONFIG_HOME")
             .map(PathBuf::from)
@@ -79,6 +122,7 @@ impl Config {
         };
         let config: Self =
             toml::from_str(&text).with_context(|| format!("parse {}", path.display()))?;
+        config.repositories_dir(paths)?;
         ensure!(
             config.auto_cleanup.idle_minutes > 0 && config.auto_cleanup.idle_minutes <= 525600,
             "auto_cleanup.idle_minutes must be between 1 and 525600"

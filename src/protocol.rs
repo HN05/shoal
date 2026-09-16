@@ -4,7 +4,7 @@ use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWrite
 
 use crate::model::{ExecutionPlan, Inspection, Repository, Workspace};
 
-pub const VERSION: u32 = 11;
+pub const VERSION: u32 = 12;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -57,6 +57,7 @@ pub enum Method {
     Register {
         source: String,
         name: Option<String>,
+        path: Option<std::path::PathBuf>,
     },
     RenameRepository {
         repository: String,

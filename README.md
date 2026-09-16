@@ -133,8 +133,44 @@ is preserved. A failed fetch, missing upstream, divergence, or dirty/managed mai
 checkout stops creation. Repositories with neither remotes nor a main upstream
 use local main. An explicit `--ref` other than `main` or `refs/heads/main` uses the
 selected history without refreshing main.
-URL repositories are cloned once into `<state-dir>/repositories` and retained
-for reuse. Registration does not fetch updates automatically.
+
+Register an existing local checkout directly; no remote is required:
+
+```sh
+shoal repo add ~/Projects/local-project --name local-project
+shoal add local-project --name feature
+```
+
+The checkout stays in place. Creation uses its committed `main` when it has no
+remote; use `--ref <branch>` if the repository uses another branch name.
+
+URL repositories are cloned once into `~/.local/share/shoal/repositories/<id>`
+and retained for reuse, separately from daemon state. Set the top-level
+`repositories_dir` in `~/.config/shoal/config.toml` (or
+`$XDG_CONFIG_HOME/shoal/config.toml`) to choose another location:
+
+```toml
+repositories_dir = "~/Projects/shoal-repositories"
+```
+
+Choose an exact clone directory for just one repository with `--path`:
+
+```sh
+shoal repo add https://example.com/team/project.git --path ~/Projects/project
+```
+
+`--path` overrides the global directory. Relative paths resolve from your current
+directory; `~/` is also supported. The destination must not exist yet. Register
+an existing checkout by passing it as the source instead. Re-registering a URL
+with its existing path is allowed; a different path is rejected rather than
+moving or duplicating the repository.
+
+For `repositories_dir`, use an absolute path or `~/` for your home directory,
+and restart the daemon after changing it. This setting applies to new URL clones.
+Existing registrations keep their recorded paths, including older clones under
+`<state-dir>/repositories`; local repositories stay in place. Workspaces remain
+under `<state-dir>/workspaces`.
+Registration does not fetch updates automatically.
 Registration reuses an existing repository when its source URL or local checkout's
 `origin` identifies the same remote, including HTTPS/SSH forms and optional `.git`
 suffixes. Checkouts without `origin` are identified by their canonical local path.

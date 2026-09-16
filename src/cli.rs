@@ -187,10 +187,14 @@ pub enum SkillAgent {
 
 #[derive(Debug, Subcommand)]
 pub enum RepoCommand {
+    /// Register a local checkout (no remote required), or clone a repository URL.
     Add {
         source: String,
         #[arg(long)]
         name: Option<String>,
+        /// Clone this URL into this exact directory instead of repositories_dir/<id>.
+        #[arg(long)]
+        path: Option<PathBuf>,
     },
     Rename {
         repository: String,

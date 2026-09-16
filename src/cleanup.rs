@@ -169,7 +169,7 @@ mod tests {
                 crate::resources::ResourceConfig::default(),
             );
         let repo = manager
-            .register(repository_dir.to_str().unwrap().into(), None)
+            .register(repository_dir.to_str().unwrap().into(), None, None)
             .await
             .unwrap();
         let workspace = manager.add(repo.id, "idle".into(), None).await.unwrap();

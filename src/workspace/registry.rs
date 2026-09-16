@@ -3,7 +3,10 @@ use super::{Manager, validate_name};
 use crate::{model::Repository, store, worktrunk};
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::params;
-use std::{fs, path::PathBuf};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 use tokio::process::Command;
 use uuid::Uuid;
 
@@ -19,13 +22,26 @@ impl Manager {
             .await
     }
 
-    pub async fn register(&self, source: String, name: Option<String>) -> Result<Repository> {
+    pub async fn register(
+        &self,
+        source: String,
+        name: Option<String>,
+        clone_path: Option<PathBuf>,
+    ) -> Result<Repository> {
         if let Some(name) = &name {
             validate_name(name)?;
+        }
+        if let Some(path) = &clone_path {
+            ensure!(path.is_absolute(), "repository clone path must be absolute");
+            ensure!(
+                !Path::new(&source).exists(),
+                "--path is only for cloning URLs; local repositories are registered in place"
+            );
         }
         let _guard = self.repositories.lock().await;
         let repositories = self.repositories().await?;
         if let Some(repo) = repositories.iter().find(|r| r.source == source) {
+            check_clone_path(repo, clone_path.as_deref())?;
             return if let Some(name) = name {
                 self.rename_repository(repo.id.clone(), name).await
             } else {
@@ -35,6 +51,7 @@ impl Manager {
         if let Some(identity) = crate::repository::identity(&source).await? {
             for repo in &repositories {
                 if crate::repository::identity(&repo.source).await?.as_ref() == Some(&identity) {
+                    check_clone_path(repo, clone_path.as_deref())?;
                     return if let Some(name) = name {
                         self.rename_repository(repo.id.clone(), name).await
                     } else {
@@ -59,11 +76,27 @@ impl Manager {
                 source.contains("://") || source.contains('@'),
                 "repository path does not exist: {source}"
             );
-            let path = self.paths.state.join("repositories").join(&id);
+            let path = match clone_path {
+                Some(path) => path,
+                None => self.config.repositories_dir(&self.paths)?.join(&id),
+            };
+            let directory = path
+                .parent()
+                .context("clone path must name a new directory")?;
+            fs::create_dir_all(directory).with_context(|| {
+                format!("create repository parent directory {}", directory.display())
+            })?;
+            // Only remove a directory on failure after this attempt created it.
+            fs::create_dir(&path).with_context(|| {
+                format!(
+                    "clone destination must not already exist: {}",
+                    path.display()
+                )
+            })?;
             let mut command = Command::new("git");
             command.args(["clone", "--"]).arg(&source).arg(&path);
             if let Err(error) = worktrunk::run(command).await {
-                // This fresh UUID directory belongs exclusively to this attempt.
+                // This directory belongs exclusively to this attempt.
                 if path.exists() {
                     fs::remove_dir_all(&path).context("clean up failed repository clone")?;
                 }
@@ -138,4 +171,15 @@ impl Manager {
         }
         bail!("repository is not registered: {selector}; run `shoal repo add <path-or-url>`")
     }
+}
+
+fn check_clone_path(repo: &Repository, requested: Option<&Path>) -> Result<()> {
+    if let Some(path) = requested {
+        ensure!(
+            fs::canonicalize(path).is_ok_and(|path| path == repo.path),
+            "repository is already registered at {}; --path cannot relocate it",
+            repo.path.display()
+        );
+    }
+    Ok(())
 }

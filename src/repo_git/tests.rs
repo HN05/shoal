@@ -62,7 +62,7 @@ impl Fixture {
         .await
         .unwrap();
         let repo_id = manager
-            .register(repo.to_str().unwrap().into(), None)
+            .register(repo.to_str().unwrap().into(), None, None)
             .await
             .unwrap()
             .id;

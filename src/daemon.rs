@@ -294,8 +294,8 @@ async fn operation(
             }
             Body::Repositories(repos)
         }
-        Method::Register { source, name } => {
-            Body::Repository(manager.register(source, name).await?)
+        Method::Register { source, name, path } => {
+            Body::Repository(manager.register(source, name, path).await?)
         }
         Method::RenameRepository { repository, name } => {
             Body::Repository(manager.rename_repository(repository, name).await?)

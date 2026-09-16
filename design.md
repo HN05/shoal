@@ -52,6 +52,19 @@ is idempotent by normalized origin URL, falling back to canonical local path.
 Repository identity remains distinct from its optional display name. Registration
 does not implicitly fetch. Workspace creation does not restore dependencies.
 
+New URL clones live in `~/.local/share/shoal/repositories/<id>`, separately from
+daemon state. Global `repositories_dir` overrides their parent directory using an
+absolute path or a home-relative `~/` path. Create the directory only when cloning.
+Changing the setting requires a daemon restart and affects new clones only;
+existing repository paths and local registrations remain unchanged. Do not move
+existing clones automatically, because worktree identities depend on their Git
+metadata paths. Workspace directories remain under the state directory.
+`repo add <url> --path <directory>` overrides the clone destination for one repo.
+CLI relative paths resolve against the caller's directory. Never clone into an
+existing destination or silently ignore a path that differs from an existing
+registration. Local checkout registration requires no remote and keeps the
+checkout in place; `--path` applies only to URL cloning.
+
 A workspace defaults to local `main`, fast-forwarded from its configured upstream
 before branching, even when the registered checkout is on another branch. An
 already-ahead main is preserved. Refresh failures (including missing upstream in
