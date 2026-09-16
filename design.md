@@ -992,7 +992,7 @@ responsibilities; these shortcuts do not introduce separate agent integrations.
 
 Proposed interaction details:
 
-- Bare `shoal` opens an action picker, leading to the appropriate target picker.
+- Bare `shoal` displays help without requiring a daemon or opening a picker.
 - Explicit targets bypass selection, so integrations can call the same commands.
 - Non-interactive invocations and `--json` never prompt. `add` requires a
   repository and name; `exec` can still resolve the current workspace without
@@ -1389,7 +1389,7 @@ Implemented:
   ignored worktree files, and preserves branches. Shared caches outside the
   worktree and registered repository clones survive removal. More retention and
   branch-pruning controls remain future work.
-- External `fzf` action/repository/workspace pickers, with no built-in fallback.
+- External `fzf` repository/workspace pickers, with no built-in fallback.
   Explicit targets and noninteractive/JSON operation never open a picker.
 - Connected execution wrappers preserve terminal or piped I/O and exit codes,
   receive stop requests from the daemon, and terminate the command's process
@@ -1411,5 +1411,5 @@ work. No reconciliation command exists yet.
 
 Validation uses real Worktrunk with temporary repositories/state, including
 concurrent name claims, dirty-removal refusal, execution I/O and exit codes,
-stopping commands, persistence, and Bash/Zsh navigation. Real `fzf` and foreground
+stopping commands, persistence, and Bash/Zsh navigation. Real `fzf` repository/workspace selection and foreground
 terminal input are checked through a temporary pseudo-terminal.

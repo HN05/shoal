@@ -68,7 +68,7 @@ shoal stop fix-login        # Stop commands; keep the worktree
 shoal rm fix-login          # Stop commands and remove a clean worktree
 ```
 
-Bare `shoal` opens an `fzf` action menu. `shoal add` offers registered repositories
+Bare `shoal` displays help. `shoal add` offers registered repositories
 in most-recently-used order and prompts for a name. Commands with omitted workspace
 targets open an `fzf` picker; `exec`, `claude`, and `codex` first look for a workspace
 containing the current directory. Explicit targets bypass selection. Noninteractive

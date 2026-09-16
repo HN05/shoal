@@ -13,7 +13,7 @@ mod workspace;
 mod worktrunk;
 
 use anyhow::{Result, ensure};
-use clap::Parser;
+use clap::{CommandFactory, Parser};
 use serde_json::json;
 
 use cli::{Cli, Command, DaemonCommand, RepoCommand, ShellCommand};
@@ -41,49 +41,11 @@ async fn main() {
 }
 
 async fn run(cli: Cli) -> Result<i32> {
-    let paths = Paths::new(cli.state_dir)?;
-    let command = match cli.command {
-        Some(command) => command,
-        None => {
-            let action = ui::pick(
-                "Shoal> ",
-                [
-                    "add",
-                    "list",
-                    "inspect",
-                    "claude",
-                    "codex",
-                    "rm",
-                    "daemon status",
-                ]
-                .into_iter()
-                .map(|a| (a.into(), a.into()))
-                .collect(),
-                cli.json,
-            )?;
-            match action.as_str() {
-                "add" => Command::Add {
-                    repository: None,
-                    name: None,
-                    base: None,
-                },
-                "list" => Command::List,
-                "inspect" => Command::Inspect { workspace: None },
-                "claude" => Command::Claude {
-                    workspace: None,
-                    args: vec![],
-                },
-                "codex" => Command::Codex {
-                    workspace: None,
-                    args: vec![],
-                },
-                "rm" => Command::Rm { workspace: None },
-                _ => Command::Daemon {
-                    command: DaemonCommand::Status,
-                },
-            }
-        }
+    let Some(command) = cli.command else {
+        Cli::command().print_help()?;
+        return Ok(0);
     };
+    let paths = Paths::new(cli.state_dir)?;
     match command {
         Command::Shell {
             command: ShellCommand::Init,
