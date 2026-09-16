@@ -1138,18 +1138,150 @@ fn configured_port_range_exhaustion_and_release() {
 #[test]
 fn concurrent_adds_cannot_claim_the_same_name() {
     let fixture = Fixture::new();
-    let first = fixture
-        .command()
-        .args(["add", fixture.repo.to_str().unwrap(), "--name", "shared"])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    let second = fixture.run(&["add", fixture.repo.to_str().unwrap(), "--name", "shared"]);
-    let first = first.wait_with_output().unwrap();
-    assert_ne!(first.status.success(), second.status.success());
-    assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
-    fixture.ok(&["rm", "shared"]);
+    for (first_name, second_name, workspace_name) in [
+        ("shared", "shared", "shared"),
+        ("shared/topic", "shared-topic", "shared-topic"),
+    ] {
+        let first = fixture
+            .command()
+            .args(["add", fixture.repo.to_str().unwrap(), "--name", first_name])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let second = fixture.run(&["add", fixture.repo.to_str().unwrap(), "--name", second_name]);
+        let first = first.wait_with_output().unwrap();
+        assert_ne!(first.status.success(), second.status.success());
+        assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
+        fixture.ok(&["rm", workspace_name]);
+    }
+}
+
+#[test]
+fn branch_names_are_preserved_with_portable_workspace_names() {
+    let fixture = Fixture::new();
+    let long = format!("long/{}", "x".repeat(100));
+    let sha1 = "a".repeat(40);
+    let sha256 = "b".repeat(64);
+    for (branch, name) in [
+        (
+            "henrik/8374-set-league-season-player-profile",
+            "henrik-8374-set-league-season-player-profile",
+        ),
+        ("release/v1.2", "release-v1-2"),
+        ("feature/æøå-日本語", "feature--------"),
+        ("_private", "private"),
+        ("+special", "special"),
+        ("@", "workspace"),
+        (sha1.as_str(), sha1.as_str()),
+        (sha256.as_str(), sha256.as_str()),
+        ("refs/heads/topic", "refs-heads-topic"),
+        ("topic/-leaf", "topic--leaf"),
+        ("\u{2003}topic\u{2003}", "topic-"),
+        (
+            "topic/quote'\";$`(literal)&{ok}",
+            "topic-quote------literal---ok-",
+        ),
+        (long.as_str(), &format!("long-{}", "x".repeat(59))),
+    ] {
+        git(&fixture.repo, &["check-ref-format", "--branch", branch]);
+        let workspace = fixture.add(branch);
+        let actual_branch = if branch == "@" || branch == sha1 || branch == sha256 {
+            format!("{branch}-2")
+        } else {
+            branch.to_owned()
+        };
+        assert_eq!(workspace["branch"], actual_branch);
+        assert_eq!(workspace["name"], name, "{branch}");
+        let path = Path::new(workspace["path"].as_str().unwrap());
+        assert_eq!(path.file_name().unwrap(), name);
+        assert_eq!(
+            git(path, &["symbolic-ref", "HEAD"]),
+            format!("refs/heads/{actual_branch}\n")
+        );
+        assert_eq!(
+            fixture.ok(&["inspect", name])["workspace"]["id"],
+            workspace["id"]
+        );
+        let output = fixture.run(&["exec", name, "--", "git", "symbolic-ref", "HEAD"]);
+        assert!(output.status.success());
+        assert_eq!(
+            output.stdout,
+            format!("refs/heads/{actual_branch}\n").as_bytes()
+        );
+        assert_eq!(fixture.ok(&["merge", "main", name])["success"], true);
+        assert_eq!(fixture.ok(&["rm", name])["branch_deleted"], true);
+    }
+}
+
+#[test]
+fn invalid_branch_names_and_normalized_name_collisions_preserve_existing_work() {
+    let fixture = Fixture::new();
+    git(&fixture.repo, &["switch", "-c", "previous"]);
+    git(&fixture.repo, &["switch", "main"]);
+    for branch in [
+        "",
+        "../escape",
+        "/absolute",
+        "trailing/",
+        "double//slash",
+        "bad..name",
+        ".hidden",
+        "x/.hidden",
+        "bad.lock",
+        "x/bad.lock/y",
+        "bad.",
+        "bad name",
+        "bad\nname",
+        "bad\\name",
+        "bad~name",
+        "bad^name",
+        "bad:name",
+        "bad?name",
+        "bad*name",
+        "bad[name",
+        "-option",
+        "@{1}",
+        "@{-1}",
+    ] {
+        assert!(
+            !fixture
+                .run(&["add", fixture.repo.to_str().unwrap(), "--name", branch])
+                .status
+                .success(),
+            "{branch}"
+        );
+        assert_eq!(fixture.ok(&["list"]), serde_json::json!([]));
+    }
+    git(&fixture.repo, &["branch", "-d", "previous"]);
+    let existing = fixture.add("feature/topic");
+    for branch in ["feature-topic", "feature.topic"] {
+        let output = fixture.run(&["add", fixture.repo.to_str().unwrap(), "--name", branch]);
+        assert!(!output.status.success());
+        assert!(String::from_utf8_lossy(&output.stderr).contains("feature-topic"));
+    }
+    assert_eq!(fixture.ok(&["list"]), serde_json::json!([existing]));
+    assert_eq!(
+        git(
+            &fixture.repo,
+            &["for-each-ref", "--format=%(refname)", "refs/heads/"]
+        ),
+        "refs/heads/feature/topic\nrefs/heads/main\n"
+    );
+}
+
+#[test]
+fn interactive_add_preserves_literal_branch_spelling() {
+    let fixture = Fixture::new();
+    let (output, transcript) = fixture.interactive(
+        &["add", fixture.repo.to_str().unwrap()],
+        "\u{2003}henrik/topic\u{2003}\n",
+    );
+    assert!(output.status.success(), "{transcript}");
+    assert!(transcript.contains("Branch name:"));
+    let workspace = &fixture.ok(&["inspect", "henrik-topic-"])["workspace"];
+    assert_eq!(workspace["branch"], "\u{2003}henrik/topic\u{2003}");
+    fixture.ok(&["rm", "henrik-topic-"]);
 }
 
 #[test]

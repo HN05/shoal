@@ -140,6 +140,27 @@ async fn names_suffix_only_conflicts_and_serialize_concurrent_adds() {
 }
 
 #[tokio::test]
+async fn nested_branch_conflicts_suffix_the_blocked_component() {
+    let f = Fixture::new().await;
+    git(&f.repo, &["branch", "henrik"]);
+    git(&f.repo, &["branch", "henrik-2"]);
+    git(&f.repo, &["branch", "henrik-3/topic/nested"]);
+    git(
+        &f.repo,
+        &["update-ref", "refs/remotes/origin/henrik-3/topic-2", "HEAD"],
+    );
+    let workspace = f.add("henrik/topic").await;
+    assert_eq!(workspace.name, "henrik-topic");
+    assert_eq!(workspace.branch, "henrik-3/topic-3");
+    assert_eq!(
+        git(&workspace.path, &["symbolic-ref", "HEAD"]).trim(),
+        "refs/heads/henrik-3/topic-3"
+    );
+    // A sibling can share an existing namespace without renaming its prefix.
+    assert_eq!(f.add("henrik-3/other").await.branch, "henrik-3/other");
+}
+
+#[tokio::test]
 async fn pull_updates_main_preserves_feature_and_enforces_scope() {
     let f = Fixture::new().await;
     let workspace = f.add("worker").await;

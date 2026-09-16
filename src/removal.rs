@@ -92,7 +92,8 @@ pub async fn check(
         .trim()
         .parse()?;
         let branch = worktrunk::git(&check.workspace.path, &["branch", "--show-current"]).await?;
-        check.branch = (!branch.trim().is_empty()).then(|| branch.trim().to_owned());
+        let branch = branch.trim_end_matches('\n');
+        check.branch = (!branch.is_empty()).then(|| branch.to_owned());
         let tree = worktrunk::git(&check.workspace.path, &["rev-parse", "HEAD^{tree}"]).await?;
         check.matches_main = worktrunk::git(
             &check.workspace.path,

@@ -150,13 +150,32 @@ containing the current directory. Explicit targets bypass selection. Noninteract
 calls and `--json` never prompt; management commands support JSON output, while
 executed commands retain their own stdin, stdout, stderr, and exit code.
 
-Workspaces live at `<state-dir>/workspaces/<name>`. Names are unique, 1–64 ASCII
-letters/digits/hyphens/underscores, starting with a letter or digit. Creation uses
-local `main`, or `--ref <git-ref>`, on a new branch named `<name>`. If taken, use
-`<name>-2`, `<name>-3`, etc. Local branches, known
-remote branches, branch namespaces, reserved Git names, and retained Shoal records
-count as conflicts.
-Workspace names/directories stay unchanged. Existing branches are not renamed.
+`shoal add --name` and the interactive branch prompt accept literal Git branch
+names, validated by Git. The branch keeps the requested spelling, including
+slashes, punctuation, and Unicode. Workspaces live at
+`<state-dir>/workspaces/<name>` with a portable name derived from that input:
+replace characters other than ASCII letters/digits/hyphens/underscores with `-`,
+remove leading hyphens/underscores, and truncate to 64 characters. An empty result
+becomes `workspace`. For example:
+
+```sh
+shoal add FotMob-iOS --name henrik/8374-set-league-season-player-profile
+# Branch:    henrik/8374-set-league-season-player-profile
+# Workspace: henrik-8374-set-league-season-player-profile
+shoal cd henrik-8374-set-league-season-player-profile
+```
+
+Workspace names are unique across repositories. Inputs that produce an occupied
+name fail without changing the existing workspace; choose a different name.
+Commands and completions use the resulting workspace name (or ID).
+
+Creation uses local `main`, or `--ref <git-ref>`, on a new branch. If its name is
+taken, append `-2`, `-3`, etc. Local branches, known remote branches, branch
+namespaces, and retained Shoal records count as conflicts. If an ancestor blocks
+the branch, suffix that component: an existing `feature` makes `feature/topic`
+become `feature-2/topic`. Reserved names `HEAD` (Git), `@` (Worktrunk), and full
+40/64-character hex object-ID spellings also get a suffix. Branch conflict suffixes do not change the derived workspace name or
+directory. Existing branches and workspaces are not renamed.
 Uncommitted source files are not copied.
 Before branching from main, Shoal fetches its configured upstream and fast-forwards
 main, even if the registered checkout is on another branch. An already-ahead main

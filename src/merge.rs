@@ -117,10 +117,7 @@ pub async fn worker(
 
 async fn own_branch(path: &Path, branch: &str) -> Result<()> {
     ensure!(
-        git(path, &["symbolic-ref", "--quiet", "HEAD"])
-            .await?
-            .trim()
-            == format!("refs/heads/{branch}"),
+        git(path, &["symbolic-ref", "--quiet", "HEAD"]).await? == format!("refs/heads/{branch}\n"),
         "workspace must be on its own recorded branch ({branch}) before merging"
     );
     Ok(())

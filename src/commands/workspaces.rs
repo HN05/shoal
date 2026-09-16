@@ -102,7 +102,7 @@ pub(super) async fn add(
     };
     let name = match name {
         Some(name) => name,
-        None => ui::input("Workspace name", json_output)?,
+        None => ui::input("Branch name", json_output)?,
     };
     match client::call(
         paths,
@@ -124,7 +124,12 @@ pub(super) async fn add(
             }
             output(
                 json_output,
-                &format!("Created {} at {}", workspace.name, workspace.path.display()),
+                &format!(
+                    "Created {} on branch {} at {}",
+                    workspace.name,
+                    workspace.branch,
+                    workspace.path.display()
+                ),
                 serde_json::to_value(&workspace)?,
             );
             shell::navigate(&workspace.path, json_output)?;

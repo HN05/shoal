@@ -105,14 +105,24 @@ impl Manager {
         name: String,
         base: Option<String>,
     ) -> Result<Workspace> {
-        validate_name(&name)?;
         let repo = self.repository(&repository).await?;
+        // Ask Git about branch syntax, independently of the directory name.
+        // Preserve the historical HEAD -> HEAD-2 conflict behavior.
+        let checked = if name == "HEAD" { "HEAD-2" } else { &name };
+        let validated = worktrunk::git(&repo.path, &["check-ref-format", "--branch", checked])
+            .await
+            .context("invalid Git branch name")?;
+        ensure!(
+            validated == format!("{checked}\n"),
+            "use a literal Git branch name, not previous-checkout syntax"
+        );
         let gate = self.git_gate(&repo.id).await;
         let _guard = gate.lock().await;
         // Removal may have completed or failed while this request waited.
         self.repository(&repo.id).await?;
         self.ensure_repository_available(&repo.id).await?;
         let branch = self.available_branch(&repo, &name).await?;
+        let name = workspace_name(&name);
         let id = Uuid::new_v4().to_string();
         let workspace = Workspace {
             branch,
@@ -233,6 +243,26 @@ impl Manager {
 
     pub async fn touch(&self, id: &str) {
         *self.activity.lock().await.entry(id.to_owned()).or_default() += 1;
+    }
+}
+
+/// Keep directory/selector names portable without restricting Git branch syntax.
+fn workspace_name(branch: &str) -> String {
+    let name: String = branch
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '-' | '_') {
+                c
+            } else {
+                '-'
+            }
+        })
+        .collect();
+    let name = name.trim_start_matches(['-', '_']);
+    if name.is_empty() {
+        "workspace".into()
+    } else {
+        name.chars().take(64).collect()
     }
 }
 

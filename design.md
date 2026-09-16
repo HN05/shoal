@@ -82,10 +82,23 @@ An explicit `--ref` selects another starting point without refreshing main;
 the repository Git gate. Registration alone does not refresh main.
 
 A workspace starts from committed history and has a stable name and directory.
-Its new branch uses that name, with numeric suffixes only on conflict. Serialize
-branch selection and creation per repository; existing refs and ownership records
-reserve branch names. Record the worktree's Git metadata identity so moved or
-replaced directories cannot be silently adopted.
+Creation accepts literal Git branch names validated by Git, preserving slashes,
+punctuation, Unicode, and names longer than the workspace-name limit. Reject
+previous-checkout shorthand rather than expanding it. Derive the workspace name
+from the requested branch: replace non-ASCII-alphanumeric characters other than
+hyphen/underscore with hyphens, trim leading hyphens/underscores, truncate to 64
+characters, and use `workspace` if empty. Names remain globally unique; a
+normalization collision fails without modifying the existing workspace. Selectors
+and completions use the resulting workspace name or ID, not branch aliases.
+
+The branch receives numeric suffixes only on conflict. Suffix a blocking ancestor
+component when a branch occupies its namespace; otherwise suffix the leaf. `HEAD`
+and Worktrunk's `@` shortcut, along with full 40/64-character hex object-ID
+spellings, are reserved and receive suffixes. These suffixes do
+not change the derived workspace name or directory. Serialize branch selection
+and creation per repository; existing refs and ownership records reserve branch
+names. Record the worktree's Git metadata identity so moved or replaced directories
+cannot be silently adopted. Existing workspace names and records are unchanged.
 
 Repository config may set `setup_cmd` to an executable path. Relative paths resolve
 against the new worktree root, including when supplied through local repository

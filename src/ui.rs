@@ -132,7 +132,7 @@ pub fn input(prompt: &str, json: bool) -> Result<String> {
     io::stderr().flush()?;
     let mut value = String::new();
     io::stdin().read_line(&mut value)?;
-    let value = value.trim().to_owned();
+    let value = value.trim_end_matches(['\r', '\n']).to_owned();
     ensure!(!value.is_empty(), "canceled: no value supplied");
     Ok(value)
 }

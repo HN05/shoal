@@ -55,8 +55,10 @@ when behavior changes, distinguishing decisions from proposals.
   processes. Verify recorded Git metadata identity before exec/removal; moved or
   replaced worktrees are not adopted automatically. Use the shared removal path
   for missing-worktree resource cleanup and retain its branch.
-- New branches use the workspace name, with `-2`, `-3`, etc. only on conflict;
-  keep workspace names/directories unchanged and serialize allocation per repo.
+- Accept literal Git branch names and derive portable workspace names separately.
+  Suffix conflicting branch components with `-2`, `-3`, etc.; keep derived workspace
+  names/directories unchanged and serialize allocation per repo. Reject normalized
+  workspace-name collisions without changing existing workspaces.
 - `shoal diff` uses Git fork-point/merge-base against the recorded base branch;
   do not compare directly to today's main tip or a frozen commit after a rebase.
   Preserve native Git pager/external-diff configuration.

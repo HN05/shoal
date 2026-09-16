@@ -43,17 +43,35 @@ impl Manager {
                 .filter(|workspace| workspace.repository_id == repo.id)
                 .map(|workspace| workspace.branch),
         );
-        let mut candidate = name.to_owned();
-        let mut suffix = 2_u64;
-        while candidate == "HEAD"
-            || names.iter().any(|existing| {
-                existing == &candidate || existing.starts_with(&format!("{candidate}/"))
-            })
-        {
-            candidate = format!("{name}-{suffix}");
-            suffix += 1;
+        let mut prefix = String::new();
+        let mut components = name.split('/').peekable();
+        while let Some(component) = components.next() {
+            let base = format!("{prefix}{component}");
+            let mut candidate = base.clone();
+            let mut suffix = 2_u64;
+            let last = components.peek().is_none();
+            // A branch at an ancestor blocks all its descendants. Suffix that
+            // component rather than repeatedly suffixing an unreachable leaf.
+            // Worktrunk interprets @ as the current branch, even with --create;
+            // Git worktree add treats full hex object IDs as commits.
+            while (last
+                && (matches!(candidate.as_str(), "HEAD" | "@")
+                    || (matches!(candidate.len(), 40 | 64)
+                        && candidate.bytes().all(|c| c.is_ascii_hexdigit()))))
+                || names.iter().any(|existing| {
+                    existing == &candidate
+                        || (last && existing.starts_with(&format!("{candidate}/")))
+                })
+            {
+                candidate = format!("{base}-{suffix}");
+                suffix += 1;
+            }
+            prefix = candidate;
+            if !last {
+                prefix.push('/');
+            }
         }
-        Ok(candidate)
+        Ok(prefix)
     }
 
     pub async fn pull_main(&self, selector: String) -> Result<PulledMain> {

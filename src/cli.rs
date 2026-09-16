@@ -40,6 +40,7 @@ pub enum Command {
     /// Create a named worktree from a registered repository.
     Add {
         repository: Option<String>,
+        /// Git branch name; a portable workspace name is derived from it.
         #[arg(long)]
         name: Option<String>,
         /// Starting Git ref (defaults to main, refreshed from its upstream).
