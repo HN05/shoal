@@ -28,7 +28,7 @@ pub async fn authorize(
         | Method::Inspect { workspace }
         | Method::DiffBase { workspace }
         | Method::PullMain { workspace }
-        | Method::Execute { workspace }
+        | Method::Execute { workspace, .. }
         | Method::ReservePort { workspace, .. }
         | Method::ReleasePort { workspace, .. }
         | Method::PortOverview { workspace } => Some(workspace),

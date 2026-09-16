@@ -25,7 +25,7 @@ pub struct Manager {
     repositories: Mutex<()>,
     git_gates: Mutex<HashMap<String, Arc<Mutex<()>>>>,
     pub scopes: Mutex<HashMap<String, (String, String)>>,
-    active: Mutex<HashMap<String, watch::Sender<bool>>>,
+    pub(crate) active: Mutex<HashMap<String, watch::Sender<bool>>>,
     activity: Mutex<HashMap<String, u64>>,
 }
 
@@ -251,6 +251,8 @@ impl Manager {
             error: None,
             base_commit: None,
             base_ref: None,
+            git_dir: None,
+            git_dir_id: None,
         };
         ensure!(
             !workspace.path.exists(),
@@ -296,7 +298,8 @@ impl Manager {
                 &workspace.branch,
                 &commit,
             )
-            .await
+            .await?;
+            self.record_worktree_identity(&workspace).await
         }
         .await;
         match result {
@@ -320,7 +323,7 @@ impl Manager {
         self.get(workspace.id).await
     }
 
-    async fn set_state(
+    pub(crate) async fn set_state(
         &self,
         id: &str,
         state: WorkspaceState,
@@ -338,7 +341,7 @@ impl Manager {
             .await
     }
 
-    async fn verify_worktree(&self, workspace: &Workspace) -> Result<()> {
+    pub(crate) async fn verify_worktree(&self, workspace: &Workspace) -> Result<()> {
         let repo = self.repository(&workspace.repository_id).await?;
         // Verify this is still the checkout Shoal created before any deletion.
         let root = worktrunk::git(&workspace.path, &["rev-parse", "--show-toplevel"]).await?;
@@ -360,7 +363,49 @@ impl Manager {
             fs::canonicalize(expected.trim())? == fs::canonicalize(actual.trim())?,
             "workspace now belongs to a different repository"
         );
+        let actual_git_dir = worktrunk::git(
+            &workspace.path,
+            &["rev-parse", "--path-format=absolute", "--git-dir"],
+        )
+        .await?;
+        let actual_git_dir = fs::canonicalize(actual_git_dir.trim())?;
+        ensure!(
+            actual_git_dir != fs::canonicalize(actual.trim())?,
+            "workspace was replaced by a main repository checkout"
+        );
+        if let Some(identity) = &workspace.git_dir_id {
+            ensure!(
+                crate::recovery::directory_identity(&actual_git_dir)? == *identity,
+                "Git worktree metadata was replaced; ownership cannot be verified"
+            );
+        }
+        if let Some(expected) = &workspace.git_dir {
+            ensure!(
+                fs::canonicalize(expected)? == actual_git_dir,
+                "workspace path now refers to a different Git worktree"
+            );
+        }
         Ok(())
+    }
+
+    pub(crate) async fn record_worktree_identity(&self, workspace: &Workspace) -> Result<()> {
+        let git_dir = worktrunk::git(
+            &workspace.path,
+            &["rev-parse", "--path-format=absolute", "--git-dir"],
+        )
+        .await?;
+        let git_dir = fs::canonicalize(git_dir.trim())?;
+        let identity = crate::recovery::directory_identity(&git_dir)?;
+        let id = workspace.id.clone();
+        self.store
+            .run(move |db| {
+                db.execute(
+                    "UPDATE workspaces SET git_dir=?2,git_dir_id=?3 WHERE id=?1",
+                    params![id, git_dir.to_str(), identity],
+                )?;
+                Ok(())
+            })
+            .await
     }
 
     pub async fn check_removal(
@@ -490,7 +535,18 @@ impl Manager {
                     workspace.state == WorkspaceState::Failed,
                     "workspace directory disappeared; manual reconciliation required"
                 );
-                RemovalResult { removed: true, branch: None, branch_deleted: false, branch_outcome: "not_attempted".into() }
+                ensure!(self.missing_worktree(&workspace).await?.is_none(),
+                    "worktree was moved; restore its recorded path before removing it");
+                self.stop_executions(&workspace.id, !automatic).await?;
+                self.remove_simulators(&workspace.id).await?;
+                if self.missing_registration(&workspace).await? {
+                    // Prune only this owned registration, through Worktrunk, and
+                    // retain its branch because the contents cannot be inspected.
+                    worktrunk::remove(&repo.path, &self.paths.state.join("worktrunk.toml"),
+                        &workspace.path, true, false).await?
+                } else {
+                    RemovalResult { removed: true, branch: Some(workspace.branch.clone()), branch_deleted: false, branch_outcome: "retained".into() }
+                }
             };
             self.remove_simulators(&workspace.id).await?;
             let id = workspace.id.clone();
@@ -522,12 +578,23 @@ impl Manager {
         }
     }
 
-    pub async fn begin(&self, selector: String) -> Result<(ExecutionPlan, watch::Receiver<bool>)> {
+    pub async fn begin(
+        &self,
+        selector: String,
+        wrapper: Option<crate::process_identity::Identity>,
+    ) -> Result<(ExecutionPlan, watch::Receiver<bool>)> {
+        if let Some(wrapper) = &wrapper {
+            ensure!(
+                crate::process_identity::alive(wrapper)?,
+                "execution wrapper is no longer alive"
+            );
+        }
         // Coordinate registration and stop notification without holding the map
         // during any external command or lifetime of the agent.
         let mut active = self.active.lock().await;
         let workspace = self.get(selector).await?;
         ensure!(workspace.path.is_dir(), "workspace directory is missing");
+        self.verify_worktree(&workspace).await?;
         *self
             .activity
             .lock()
@@ -547,8 +614,13 @@ impl Manager {
                 )?;
                 ensure!(ready, "workspace is not ready");
                 tx.execute(
-                    "INSERT INTO executions VALUES (?1,?2,?3)",
-                    params![execution_id, workspace_id, ExecutionState::Running],
+                    "INSERT INTO executions(id,workspace_id,state,wrapper) VALUES (?1,?2,?3,?4)",
+                    params![
+                        execution_id,
+                        workspace_id,
+                        ExecutionState::Running,
+                        wrapper.map(|w| serde_json::to_string(&w)).transpose()?
+                    ],
                 )?;
                 let ports = store::ports(&tx, Some(&workspace_id))?;
                 tx.commit()?;
@@ -577,7 +649,38 @@ impl Manager {
         *self.activity.lock().await.entry(id.to_owned()).or_default() += 1;
     }
 
-    pub async fn finish(&self, id: String, complete: bool) -> Result<()> {
+    pub async fn record_execution_child(
+        &self,
+        id: String,
+        child: Option<crate::process_identity::Identity>,
+        group_id: u32,
+    ) -> Result<()> {
+        ensure!(
+            group_id > 1 && group_id <= i32::MAX as u32,
+            "invalid execution process group"
+        );
+        ensure!(
+            child.as_ref().is_none_or(|child| child.pid == group_id),
+            "child must lead its execution process group"
+        );
+        self.store.run(move |db| {
+            ensure!(db.execute("UPDATE executions SET child=?2,group_id=?3 WHERE id=?1 AND group_id IS NULL",
+                params![id, child.map(|c| serde_json::to_string(&c)).transpose()?, group_id])? == 1,
+                "execution already registered or no longer exists");
+            Ok(())
+        }).await
+    }
+
+    pub async fn finish(&self, id: String, complete: bool) -> Result<bool> {
+        let complete = if complete {
+            match crate::process_identity::scan(std::collections::HashSet::from([id.clone()])).await
+            {
+                Ok(scan) => scan.processes.is_empty(),
+                Err(_) => false,
+            }
+        } else {
+            false
+        };
         let mut active = self.active.lock().await;
         let record_id = id.clone();
         self.store
@@ -598,7 +701,7 @@ impl Manager {
             .lock()
             .await
             .retain(|_, (execution, _)| execution != &id);
-        Ok(())
+        Ok(complete)
     }
 
     pub async fn stop(&self, selector: String) -> Result<()> {
@@ -608,8 +711,13 @@ impl Manager {
             .run(move |db| {
                 ensure!(
                     db.execute(
-                        "UPDATE workspaces SET state=?2 WHERE id=?1 AND state=?3",
-                        params![id, WorkspaceState::Stopping, WorkspaceState::Ready]
+                        "UPDATE workspaces SET state=?2 WHERE id=?1 AND state IN (?3,?4)",
+                        params![
+                            id,
+                            WorkspaceState::Stopping,
+                            WorkspaceState::Ready,
+                            WorkspaceState::Failed
+                        ]
                     )? == 1,
                     "workspace is busy or not ready"
                 );
@@ -619,11 +727,68 @@ impl Manager {
         let result = self.stop_executions(&workspace.id, false).await;
         self.set_state(
             &workspace.id,
-            WorkspaceState::Ready,
-            result.as_ref().err().map(|e| format!("{e:#}")),
+            workspace.state,
+            result
+                .as_ref()
+                .err()
+                .map(|e| format!("{e:#}"))
+                .or(workspace.error),
         )
         .await?;
         result
+    }
+
+    async fn stop_disconnected(
+        &self,
+        execution: &crate::model::Execution,
+        manual_removal: bool,
+    ) -> Result<()> {
+        use crate::process_identity as process;
+        let scan = process::scan(std::collections::HashSet::from([execution.id.clone()])).await?;
+        let (related, unverified) =
+            process::related(execution.child.as_ref(), execution.group_id).await?;
+        let mut targets: Vec<_> = scan.processes.into_iter().map(|p| p.identity).collect();
+        targets.extend(related);
+        for identity in [&execution.wrapper, &execution.child].into_iter().flatten() {
+            if process::alive(identity)? {
+                targets.push(identity.clone());
+            }
+        }
+        process::stop_verified(&targets).await?;
+        let after = process::scan(std::collections::HashSet::from([execution.id.clone()])).await?;
+        ensure!(
+            after.processes.is_empty(),
+            "owned processes survived stopping; retry after shoal reconcile"
+        );
+        // Manual removal retains its policy: unrelated/unverifiable processes do
+        // not block deletion. A plain stop must not claim those processes stopped.
+        if !manual_removal {
+            ensure!(
+                execution.wrapper.is_some()
+                    && execution.group_id.is_some()
+                    && unverified.is_empty(),
+                "execution ownership is incomplete; use shoal reconcile to inspect it"
+            );
+            let (related, candidates) =
+                process::related(execution.child.as_ref(), execution.group_id).await?;
+            ensure!(
+                related.is_empty()
+                    && candidates.is_empty()
+                    && after
+                        .unreadable
+                        .iter()
+                        .all(|p| !p.not_older_than(execution.wrapper.as_ref().unwrap())),
+                "process state remains uncertain; use shoal reconcile to inspect it"
+            );
+            let id = execution.id.clone();
+            self.store
+                .run(move |db| {
+                    db.execute("DELETE FROM executions WHERE id=?1", [id])?;
+                    Ok(())
+                })
+                .await?;
+        }
+        Ok(())
     }
 
     async fn stop_executions(&self, id: &str, allow_disconnected: bool) -> Result<()> {
@@ -651,9 +816,9 @@ impl Manager {
                             .context("execution disconnected during stop")?;
                         connected += 1;
                     }
-                    None if allow_disconnected => {}
                     None => {
-                        bail!("execution is no longer connected; processes require reconciliation")
+                        self.stop_disconnected(&execution, allow_disconnected)
+                            .await?
                     }
                 }
             }

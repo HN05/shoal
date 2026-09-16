@@ -15,7 +15,7 @@ use tokio::{
 
 use crate::{
     paths::Paths,
-    protocol::{self, Body, Control, ExecutionResult, Method, Request, Response},
+    protocol::{self, Body, Control, ExecutionEvent, Method, Request, Response},
 };
 
 pub async fn run(paths: &Paths, workspace: String, command: Vec<OsString>) -> Result<i32> {
@@ -29,7 +29,11 @@ pub async fn run(paths: &Paths, workspace: String, command: Vec<OsString>) -> Re
             scope: std::env::var("SHOAL_SCOPE_TOKEN").ok(),
             protocol: protocol::VERSION,
             id: 1,
-            method: Method::Execute { workspace },
+            method: Method::Execute {
+                workspace,
+                wrapper: crate::process_identity::capture(std::process::id())?
+                    .context("cannot identify execution wrapper")?,
+            },
         },
     )
     .await?;
@@ -64,6 +68,7 @@ pub async fn run(paths: &Paths, workspace: String, command: Vec<OsString>) -> Re
         let mut child = process.args(&command[1..])
             .current_dir(&plan.workspace.path)
             .env("SHOAL_SCOPE_TOKEN", &plan.scope_token)
+            .env("SHOAL_EXECUTION_ID", &plan.id)
             .env("SHOAL_WORKSPACE_ID", &plan.workspace.id)
             .env("SHOAL_RUN_ID", &plan.workspace.id)
             .env("SHOAL_WORKSPACE", &plan.workspace.name)
@@ -74,6 +79,11 @@ pub async fn run(paths: &Paths, workspace: String, command: Vec<OsString>) -> Re
             .stdin(Stdio::inherit()).stdout(Stdio::inherit()).stderr(Stdio::inherit())
             .process_group(0).kill_on_drop(true).spawn().context("launch workspace command")?;
         let group = ProcessGroup(child.id().context("child PID unavailable")? as i32);
+        protocol::write(&mut stream, &ExecutionEvent::Started {
+            child: crate::process_identity::capture(group.0 as u32)?, group_id: group.0 as u32,
+        }).await?;
+        ensure!(matches!(timeout(Duration::from_secs(10), protocol::read::<Control>(&mut stream)).await??,
+            Control::Started), "daemon did not acknowledge process registration");
         let _terminal = Terminal::give_to(group.0)?;
         group.send(libc::SIGCONT);
         let control = protocol::read::<Control>(&mut stream);
@@ -96,13 +106,11 @@ pub async fn run(paths: &Paths, workspace: String, command: Vec<OsString>) -> Re
     let code = result.as_ref().copied().unwrap_or(1);
     // Report only after child/process-group cleanup. A lost connection never
     // grants the daemon permission to assume processes stopped.
-    let report = timeout(Duration::from_secs(5), async {
-        protocol::write(&mut stream, &ExecutionResult { exit_code: code }).await?;
+    let report = timeout(Duration::from_secs(20), async {
+        protocol::write(&mut stream, &ExecutionEvent::Finished { exit_code: code }).await?;
         loop {
-            if matches!(
-                protocol::read::<Control>(&mut stream).await?,
-                Control::Finished
-            ) {
+            if let Control::Finished { complete } = protocol::read::<Control>(&mut stream).await? {
+                if !complete { eprintln!("warning: execution has surviving or unverified processes; run shoal reconcile to inspect it"); }
                 break;
             }
         }

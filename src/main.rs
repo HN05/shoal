@@ -8,8 +8,10 @@ mod execution;
 mod model;
 mod paths;
 mod ports;
+mod process_identity;
 mod processes;
 mod protocol;
+mod recovery;
 mod removal;
 mod repo_config;
 mod repo_git;
@@ -327,6 +329,77 @@ async fn run(cli: Cli) -> Result<i32> {
                     println!("No configured or reserved ports");
                 }
             }
+        }
+        Command::Reconcile {
+            workspace,
+            all,
+            repair,
+            stop,
+            acknowledge_stopped,
+        } => {
+            let workspace = if all {
+                None
+            } else {
+                Some(ui::workspace(&paths, workspace, true, cli.json).await?)
+            };
+            let Body::Reconciliation(reports) = client::call(
+                &paths,
+                Method::Reconcile {
+                    workspace,
+                    options: recovery::Options {
+                        repair,
+                        stop,
+                        acknowledge_stopped,
+                    },
+                },
+            )
+            .await?
+            else {
+                anyhow::bail!("unexpected reconciliation response");
+            };
+            let unresolved = reports.iter().any(|r| !r.issues.is_empty());
+            if cli.json {
+                println!("{}", serde_json::to_string(&reports)?);
+            } else {
+                for report in &reports {
+                    println!(
+                        "{}: {} ({:?})",
+                        report.workspace.name, report.workspace.state, report.directory
+                    );
+                    for execution in &report.executions {
+                        println!(
+                            "  execution {}: {}{}{}",
+                            execution.id,
+                            execution.state,
+                            if execution.connected {
+                                " (connected)"
+                            } else {
+                                ""
+                            },
+                            if execution.cleared { " (cleared)" } else { "" }
+                        );
+                        for process in &execution.processes {
+                            println!("    owned PID {}", process.pid);
+                        }
+                        for process in &execution.unverified_processes {
+                            println!("    unverified group PID {} (not signaled)", process.pid);
+                        }
+                        for note in &execution.notes {
+                            println!("    {note}");
+                        }
+                    }
+                    for change in &report.changes {
+                        println!("  repaired: {change}");
+                    }
+                    for issue in &report.issues {
+                        println!("  unresolved: {issue}");
+                    }
+                }
+                if reports.is_empty() {
+                    println!("No workspaces to reconcile");
+                }
+            }
+            return Ok(if unresolved { 2 } else { 0 });
         }
         Command::Cd { workspace } => {
             if workspace.as_deref() == Some("-") {

@@ -65,7 +65,22 @@ pub enum Command {
     Ports { workspace: Option<String> },
     /// Inspect a workspace and its executions.
     Inspect { workspace: Option<String> },
-    /// Stop connected commands, preserving the workspace.
+    /// Inspect interrupted executions/worktrees; optionally repair verified state.
+    Reconcile {
+        workspace: Option<String>,
+        #[arg(long, conflicts_with = "workspace")]
+        all: bool,
+        /// Apply safe state repairs; preserve files, branches, and resource leases.
+        #[arg(long)]
+        repair: bool,
+        /// Stop connected commands and identity-verified surviving processes.
+        #[arg(long, requires = "repair")]
+        stop: bool,
+        /// Confirm untracked/legacy processes have stopped; visible survivors still block repair.
+        #[arg(long, requires = "repair")]
+        acknowledge_stopped: bool,
+    },
+    /// Stop managed commands and verified survivors, preserving the workspace.
     Stop { workspace: Option<String> },
     /// Remove a worktree and its redundant branch; choose what to keep if work differs.
     Rm {

@@ -21,6 +21,8 @@ pub struct Workspace {
     pub error: Option<String>,
     pub base_commit: Option<String>,
     pub base_ref: Option<String>,
+    pub git_dir: Option<PathBuf>,
+    pub git_dir_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -28,6 +30,9 @@ pub struct Execution {
     pub id: String,
     pub workspace_id: String,
     pub state: crate::state::ExecutionState,
+    pub wrapper: Option<crate::process_identity::Identity>,
+    pub child: Option<crate::process_identity::Identity>,
+    pub group_id: Option<u32>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

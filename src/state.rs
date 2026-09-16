@@ -35,6 +35,7 @@ states!(WorkspaceState {
     Ready => "ready",
     Stopping => "stopping",
     Removing => "removing",
+    Reconciling => "reconciling",
     Failed => "failed",
 });
 states!(ExecutionState {
@@ -54,6 +55,7 @@ mod tests {
             ("ready", WorkspaceState::Ready),
             ("stopping", WorkspaceState::Stopping),
             ("removing", WorkspaceState::Removing),
+            ("reconciling", WorkspaceState::Reconciling),
             ("failed", WorkspaceState::Failed),
         ] {
             assert_eq!(

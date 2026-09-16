@@ -42,6 +42,13 @@ when behavior changes, distinguishing decisions from proposals.
   enforce or manage the underlying resource's lifecycle.
 - Workspace and execution lifecycle states are typed enums; preserve their
   existing lowercase SQLite/JSON representation and reject unknown values.
+- Reconciliation reports by default; repair preserves work and resource leases.
+  Startup audits ownership but never clears unknown executions or deletes work.
+  Verify native PID birth identity before signaling survivors; unknown ownership
+  must not authorize a kill. Explicit acknowledgement cannot bypass visible live
+  processes. Verify recorded Git metadata identity before exec/removal; moved or
+  replaced worktrees are not adopted automatically. Use the shared removal path
+  for missing-worktree resource cleanup and retain its branch.
 - New branches use the workspace name, with `-2`, `-3`, etc. only on conflict;
   keep workspace names/directories unchanged and serialize allocation per repo.
 - `shoal diff` uses Git fork-point/merge-base against the recorded base branch;

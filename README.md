@@ -7,7 +7,7 @@ for the full design and implementation sequence.
 
 Requires Rust, Git, `lsof`, and Worktrunk (`wt`, tested with 0.77.0). Interactive menus
 require `fzf`. Install the runtime tools before running `shoal setup` so the
-daemon captures a PATH that includes them. Integration tests also use Bash and Zsh.
+daemon captures a PATH that includes them. Integration tests also use Bash, Zsh, and Python 3.
 
 ```sh
 cargo build
@@ -203,13 +203,14 @@ committed work. Noninteractive callers choose `--yes --keep-branch` or
 `--yes --delete-branch`. `--yes` alone does not choose for differing/dirty work.
 
 Running processes do not block manual removal. Connected Shoal commands are
-stopped; external or disconnected processes are left alone. Automatic cleanup
+stopped, along with identity-verified survivors of disconnected executions.
+External or unverified processes are left alone. Automatic cleanup
 still requires no active or unknown commands and no processes using the directory.
 Ignored worktree files are removed; shared caches remain untouched. Git protects
 branches checked out in another worktree; output reports the actual branch result.
-Worktrunk hooks are disabled; repository setup scripts and repository config
-parsing are not implemented yet. Restore dependencies with
-an explicit command such as `shoal exec fix-login -- npm ci`.
+Worktrunk hooks are disabled. Repository configuration supports resource defaults;
+automatic setup scripts are not implemented yet. Restore dependencies with an
+explicit command such as `shoal exec fix-login -- npm ci`.
 
 ### Automatic cleanup
 
@@ -223,9 +224,9 @@ fresh timers after daemon restarts.
 “Pushed” means commits are reachable from locally known remote branches; Shoal
 does not fetch automatically. Automatic removal rechecks conditions and uses the
 same cleanup path as manual removal. Matching branches are deleted; other branches
-and shared caches are retained. Future
-simulator leases will belong to the worktree and use this path too. Port
-reservations are already released here.
+and shared caches are retained. Active simulator leases and resource permits
+prevent automatic removal. Successful removal releases port reservations and
+resource permits and deletes the worktree's managed simulators.
 
 Configure `~/.config/shoal/config.toml` (or `$XDG_CONFIG_HOME/shoal/config.toml`):
 
@@ -267,15 +268,50 @@ automatically.
 
 ## Current scope
 
-The CLI/daemon foundation, workspace lifecycle, and named TCP port reservations
-are implemented, with SQLite persistence and connected command supervision. Simulators, lifecycle
-polish, and filesystem restrictions follow. No Shoal filesystem sandbox is applied
-yet. The public repository configuration format and schema remain undecided.
+The CLI/daemon, workspaces, named TCP ports, simulator sharing, cooperative
+resource pools, and explicit recovery are implemented. Filesystem restrictions,
+automatic repository setup scripts, and Homebrew packaging remain future work.
+No Shoal filesystem sandbox is applied yet. Repository resource configuration
+uses TOML; additional configuration sections will be defined as they are added.
 
-Normal command shutdown includes its process group. Detached processes and recovery
-after abrupt wrapper/daemon termination still need the later lifecycle work.
-Executions whose completion cannot be confirmed are recorded as unknown and block
-automatic cleanup. Manual removal can proceed, but cannot stop disconnected processes. Avoid daemon restarts during active commands at this stage.
+### Recovery
+
+```sh
+shoal reconcile fix-login                  # Inspect without changing state
+shoal --json reconcile --all               # Reports for every workspace
+shoal reconcile fix-login --repair         # Repair verified state, retain work/resources
+shoal reconcile fix-login --repair --stop  # Also stop verified surviving commands
+```
+
+Without a name, use the current workspace or `fzf`. Reports return exit code 2
+while issues remain, or 0 when resolved; JSON is always an array of reports.
+Reconciliation is an unscoped management operation, unavailable inside `shoal exec`.
+
+Startup marks interrupted lifecycle operations as failed and disconnected
+executions as unknown. It checks worktree ownership without deleting files or
+releasing resources. Repair can restore a verified worktree to ready and clear
+stopped execution records. Connected commands are left running unless `--stop`
+is supplied. Moved worktrees must be restored to their recorded path; Shoal
+refuses replaced worktree metadata. For a deleted directory, repair leaves the
+workspace failed, then explicit `shoal rm` finishes resource cleanup and prunes
+its stale Worktrunk registration while retaining the Git branch.
+
+Executions record wrapper/child PID and start time plus a process-group ID.
+Descendants inherit `SHOAL_EXECUTION_ID`; Shoal checks visible markers and live
+ancestry to find detached survivors. It rechecks process identities before
+signaling and does not kill unverified process-group candidates. Normal wrapper
+completion cleans up its original process group; a visible detached survivor
+keeps the execution unknown and prevents automatic cleanup.
+
+Process inspection is cooperative, not complete containment. Hidden environments
+(including some macOS system programs), cleared markers, and older records can
+leave recovery uncertain. After independently checking that those processes have
+stopped, use `--repair --acknowledge-stopped`. Known live wrappers, descendants,
+unverified group candidates, and visible directory users still block clearing.
+Detached children that hide their marker and outlive their original process group
+may escape detection after normal command completion. Unknown records are never
+silently discarded at startup. Native Linux process recovery still needs testing
+on a Linux host.
 
 ### Repo port defaults
 

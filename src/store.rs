@@ -14,7 +14,7 @@ impl Store {
         let store = Self { path };
         store.run(|db| {
             let version: i64 = db.query_row("PRAGMA user_version", [], |r| r.get(0))?;
-            ensure!(version <= 9, "state database was written by a newer Shoal version");
+            ensure!(version <= 10, "state database was written by a newer Shoal version");
             db.execute_batch("BEGIN;
                 CREATE TABLE IF NOT EXISTS repositories (
                     id TEXT PRIMARY KEY, path TEXT NOT NULL UNIQUE, source TEXT NOT NULL, last_used INTEGER NOT NULL
@@ -29,7 +29,7 @@ impl Store {
                 );
                 UPDATE executions SET state='unknown' WHERE state='running';
                 UPDATE workspaces SET state='failed', error='daemon stopped during workspace operation; inspect before cleanup'
-                    WHERE state IN ('preparing', 'removing', 'stopping');")?;
+                    WHERE state IN ('preparing', 'removing', 'stopping', 'reconciling');")?;
             if version < 2 {
                 db.execute_batch("ALTER TABLE workspaces ADD COLUMN base_commit TEXT;
                     ALTER TABLE workspaces ADD COLUMN base_ref TEXT;")?;
@@ -62,7 +62,14 @@ impl Store {
             if version < 9 {
                 db.execute_batch("ALTER TABLE resource_leases ADD COLUMN mode TEXT NOT NULL DEFAULT 'permit' CHECK(mode IN ('permit','read','write'));")?;
             }
-            db.execute_batch("PRAGMA user_version=9; COMMIT;")?;
+            if version < 10 {
+                db.execute_batch("ALTER TABLE workspaces ADD COLUMN git_dir TEXT;
+                    ALTER TABLE workspaces ADD COLUMN git_dir_id TEXT;
+                    ALTER TABLE executions ADD COLUMN wrapper TEXT;
+                    ALTER TABLE executions ADD COLUMN child TEXT;
+                    ALTER TABLE executions ADD COLUMN group_id INTEGER;")?;
+            }
+            db.execute_batch("PRAGMA user_version=10; COMMIT;")?;
             Ok(())
         }).await?;
         Ok(store)
@@ -105,6 +112,8 @@ pub fn workspace(row: &Row<'_>) -> rusqlite::Result<Workspace> {
         error: row.get(6)?,
         base_commit: row.get(7)?,
         base_ref: row.get(8)?,
+        git_dir: row.get::<_, Option<String>>(9)?.map(PathBuf::from),
+        git_dir_id: row.get(10)?,
     })
 }
 
@@ -118,12 +127,27 @@ pub fn ports(db: &Connection, workspace_id: Option<&str>) -> Result<Vec<PortRese
 
 pub fn executions(db: &Connection, workspace_id: &str) -> Result<Vec<Execution>> {
     Ok(db
-        .prepare("SELECT id, workspace_id, state FROM executions WHERE workspace_id=?1")?
+        .prepare("SELECT id, workspace_id, state, wrapper, child, group_id FROM executions WHERE workspace_id=?1")?
         .query_map([workspace_id], |r| {
             Ok(Execution {
                 id: r.get(0)?,
                 workspace_id: r.get(1)?,
                 state: r.get(2)?,
+                child: r.get::<_, Option<String>>(4)?.map(|json| serde_json::from_str(&json)
+                    .map_err(|error| rusqlite::Error::FromSqlConversionFailure(4, rusqlite::types::Type::Text, Box::new(error)))).transpose()?,
+                group_id: r.get(5)?,
+                wrapper: r
+                    .get::<_, Option<String>>(3)?
+                    .map(|json| {
+                        serde_json::from_str(&json).map_err(|error| {
+                            rusqlite::Error::FromSqlConversionFailure(
+                                3,
+                                rusqlite::types::Type::Text,
+                                Box::new(error),
+                            )
+                        })
+                    })
+                    .transpose()?,
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?)
@@ -176,6 +200,11 @@ mod tests {
             db.execute_batch("INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
                 INSERT INTO workspaces(id,repository_id,name,path,branch,state) VALUES ('workspace','repo','worker','/work','worker','ready');
                 ALTER TABLE resource_leases DROP COLUMN mode;
+                ALTER TABLE workspaces DROP COLUMN git_dir;
+                ALTER TABLE workspaces DROP COLUMN git_dir_id;
+                ALTER TABLE executions DROP COLUMN wrapper;
+                ALTER TABLE executions DROP COLUMN child;
+                ALTER TABLE executions DROP COLUMN group_id;
                 PRAGMA user_version=8;")?;
             let definition = r#"{"capacity":2,"reason":null,"resources":{"worker":{"capacity":2,"reason":null}}}"#;
             db.execute("INSERT INTO resource_pools(scope,name,definition) VALUES ('global','worker',?1)", [definition])?;

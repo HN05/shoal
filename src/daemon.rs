@@ -60,6 +60,7 @@ pub async fn run(paths: Paths, managed: bool) -> Result<()> {
         _lock: lock,
     };
     let manager = Manager::open(paths.clone()).await?;
+    manager.audit_worktrees().await?;
     let listener = UnixListener::bind(&paths.socket).context("bind daemon socket")?;
     fs::set_permissions(&paths.socket, fs::Permissions::from_mode(0o600))?;
     let mut terminate = signal(SignalKind::terminate())?;
@@ -171,8 +172,8 @@ async fn serve(
         None => None,
     };
     if request.protocol == protocol::VERSION {
-        if let Method::Execute { workspace } = request.method {
-            return execute(stream, request.id, workspace, manager).await;
+        if let Method::Execute { workspace, wrapper } = request.method {
+            return execute(stream, request.id, workspace, wrapper, manager).await;
         }
     }
     let mut stop = false;
@@ -312,6 +313,28 @@ async fn operation(
             Body::Workspaces(workspaces)
         }
         Method::PullMain { workspace } => Body::PulledMain(manager.pull_main(workspace).await?),
+        Method::Reconcile { workspace, options } => {
+            let workspaces = match workspace {
+                Some(workspace) => vec![manager.get(workspace).await?],
+                None => manager.list().await?,
+            };
+            let mut reports = Vec::new();
+            for workspace in workspaces {
+                let report = match manager.reconcile(workspace.id.clone(), options).await {
+                    Ok(report) => report,
+                    Err(error) => crate::recovery::Report {
+                        workspace,
+                        directory: crate::recovery::DirectoryState::Unverified,
+                        moved_to: None,
+                        executions: vec![],
+                        changes: vec![],
+                        issues: vec![format!("{error:#}")],
+                    },
+                };
+                reports.push(report);
+            }
+            Body::Reconciliation(reports)
+        }
         Method::DiffBase { workspace } => Body::DiffBase(manager.diff_base(workspace).await?),
         Method::ReservePort {
             workspace,
@@ -366,9 +389,10 @@ async fn execute(
     mut stream: UnixStream,
     request_id: u64,
     workspace: String,
+    wrapper: crate::process_identity::Identity,
     manager: Arc<Manager>,
 ) -> Result<()> {
-    let (plan, mut stop) = match manager.begin(workspace).await {
+    let (plan, mut stop) = match manager.begin(workspace, Some(wrapper)).await {
         Ok(result) => result,
         Err(error) => {
             return protocol::write(
@@ -397,12 +421,24 @@ async fn execute(
             },
         )
         .await?;
-        let finished = protocol::read::<protocol::ExecutionResult>(&mut reader);
+        match protocol::read::<protocol::ExecutionEvent>(&mut reader).await? {
+            protocol::ExecutionEvent::Finished { .. } => return Ok(()),
+            protocol::ExecutionEvent::Started { child, group_id } => {
+                manager
+                    .record_execution_child(execution_id.clone(), child, group_id)
+                    .await?;
+                protocol::write(&mut writer, &protocol::Control::Started).await?;
+            }
+        }
+        let finished = protocol::read::<protocol::ExecutionEvent>(&mut reader);
         tokio::pin!(finished);
         let mut sent_stop = false;
         loop {
             tokio::select! {
-                result = &mut finished => break result,
+                result = &mut finished => break match result? {
+                    protocol::ExecutionEvent::Finished { .. } => Ok(()),
+                    _ => anyhow::bail!("unexpected execution event"),
+                },
                 changed = stop.changed(), if !sent_stop => {
                     changed?;
                     protocol::write(&mut writer, &protocol::Control::Stop).await?;
@@ -412,9 +448,9 @@ async fn execute(
         }
     }
     .await;
-    manager.finish(execution_id, result.is_ok()).await?;
+    let complete = manager.finish(execution_id, result.is_ok()).await?;
     if result.is_ok() {
-        protocol::write(&mut writer, &protocol::Control::Finished).await?;
+        protocol::write(&mut writer, &protocol::Control::Finished { complete }).await?;
     }
     result.map(|_| ())
 }

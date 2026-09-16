@@ -285,7 +285,7 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
-        let (plan, _) = manager.begin(workspace.id.clone()).await.unwrap();
+        let (plan, _) = manager.begin(workspace.id.clone(), None).await.unwrap();
         assert!(
             manager
                 .cleanup_snapshot(&workspace.id)

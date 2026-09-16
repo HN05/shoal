@@ -4,7 +4,7 @@ use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWrite
 
 use crate::model::{ExecutionPlan, Inspection, Repository, Workspace};
 
-pub const VERSION: u32 = 10;
+pub const VERSION: u32 = 11;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -92,6 +92,10 @@ pub enum Method {
     PortOverview {
         workspace: String,
     },
+    Reconcile {
+        workspace: Option<String>,
+        options: crate::recovery::Options,
+    },
     Inspect {
         workspace: String,
     },
@@ -109,6 +113,7 @@ pub enum Method {
     },
     Execute {
         workspace: String,
+        wrapper: crate::process_identity::Identity,
     },
 }
 
@@ -133,6 +138,7 @@ pub enum Body {
     Workspace(Workspace),
     Workspaces(Vec<Workspace>),
     Inspection(Inspection),
+    Reconciliation(Vec<crate::recovery::Report>),
     Execution(ExecutionPlan),
     RemovalCheck(crate::removal::RemovalCheck),
     RemovalResult(crate::removal::RemovalResult),
@@ -160,15 +166,23 @@ pub struct Status {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct ExecutionResult {
-    pub exit_code: i32,
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ExecutionEvent {
+    Started {
+        child: Option<crate::process_identity::Identity>,
+        group_id: u32,
+    },
+    Finished {
+        exit_code: i32,
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Control {
+    Started,
     Stop,
-    Finished,
+    Finished { complete: bool },
 }
 
 pub async fn read<T: DeserializeOwned>(stream: &mut (impl AsyncRead + Unpin)) -> Result<T> {

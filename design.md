@@ -1370,8 +1370,8 @@ No formula or release automation has been implemented yet.
 Rust is the selected implementation language. The local CLI/daemon architecture
 is confirmed, with one OS-managed daemon per OS user per execution environment
 and a `shoal setup` command. The implementation order above is confirmed. The
-exact recovery protocol, remaining resource CLI syntax, and Linux sandbox
-mechanism remain undecided. SQLite is used for workspace persistence.
+resource CLI and explicit recovery protocol are implemented as described below;
+the Linux sandbox mechanism remains undecided. SQLite is used for workspace persistence.
 The simulator lifecycle tool choice is `simctl`, with `devicectl` to be evaluated
 for additional interactions.
 
@@ -1435,13 +1435,10 @@ Implemented:
   passes the result back to the shell, changes directory, and preserves status.
   Shoal does not modify personal shell configuration.
 
-Repository configuration parsing and automatic setup/dependency restoration
-remain unimplemented while the public format/schema is undecided. Ports,
-simulators, and sandboxing remain later milestones. This slice handles normal
-connected execution, not comprehensive crash recovery: unknown executions block
-automatic cleanup, and detached processes need later supervision work. Manual
-removal may proceed without stopping disconnected processes. No reconciliation
-command exists yet.
+At this initial milestone, repository configuration, resources, and recovery were
+pending. The later sections below supersede those limits with TOML resource
+configuration, ports, simulators, generic pools, and explicit reconciliation.
+Automatic setup/dependency restoration and filesystem restrictions remain pending.
 
 Validation uses real Worktrunk with temporary repositories/state, including
 concurrent name claims, dirty-removal refusal, execution I/O and exit codes,
@@ -1932,3 +1929,71 @@ Rust chooses and validates paths; the wrapper still only reads a data-file
 response, runs builtin cd, and preserves exit status. JSON never triggers shell
 navigation. Existing terminals should reload `source <(shoal shell init)` after
 upgrading. These changes need no database migration or daemon protocol change.
+
+
+### Recovery and reconciliation (implemented)
+
+This supersedes the initial disconnected-process and missing-reconciliation
+limitations above. Shoal remains a cooperative allocator, not a session manager
+or complete descendant containment system.
+
+- `shoal reconcile [workspace] [--all]` reports worktree ownership and execution
+  state without mutation. Omitted targets use the current workspace or fzf.
+  JSON returns an array, including for one workspace; unresolved issues exit 2.
+- `--repair` reserves a typed `reconciling` workspace state, restores verified
+  failed worktrees, and clears stopped execution records. Files, branches, ports,
+  simulator claims, and resource permits are retained. Independent workspaces
+  continue to report even when another cannot be inspected.
+- `--repair --stop` requests connected-wrapper shutdown and signals verified
+  survivors of disconnected commands. PID, same-user ownership, and native birth
+  identity are checked before each individual signal. A reused PID is not proof
+  of ownership. Unverified group candidates are reported, never signaled.
+- `--repair --acknowledge-stopped` is an explicit operator assertion for legacy
+  launch records or environments the OS cannot inspect. It cannot bypass a live
+  recorded wrapper/child, visible marked descendants, group candidates, or
+  visible processes using the workspace directory. Scope tokens deny reconcile.
+
+Executions persist wrapper identity before launch, then child identity and group
+ID through an acknowledged launch event. A crash before that event leaves an
+incomplete record requiring manual acknowledgement. Child processes inherit
+`SHOAL_EXECUTION_ID`; native environment inspection locates visible detached
+survivors without exposing command arguments or environment contents in reports.
+macOS uses process start seconds/microseconds; Linux uses boot ID and start ticks.
+A live recorded leader establishes ownership of its group and current descendants.
+Without that proof, group membership alone is insufficient to signal a process.
+Stop uses TERM then KILL with identity checks and rescans before clearing records.
+
+Normal wrapper completion still shuts down its process group. A visible detached
+survivor or failed process scan retains an unknown record. Recovery from a crash
+is more conservative: unreadable environments of processes born after the wrapper
+prevent automatic clearance. Protected macOS programs can hide their environment.
+A detached process that hides or clears its marker and outlives the original group
+can escape detection after normal completion; stronger supervision remains future
+work. This is not a hostile-process security boundary or agent session resumption.
+
+Each new worktree records its canonical Git admin directory and filesystem
+identity (device/inode). Startup validates ready worktrees, marks invalid ones
+failed, and records identities for verified legacy worktrees. Interrupted
+preparing/removing/stopping/reconciling states become failed; running executions
+become unknown. Startup never stops commands, deletes files, clears unknown
+executions, or releases leases. Exec and removal reject replaced Git metadata.
+
+If a worktree was moved, its recorded Git back-reference identifies the new path
+and cleanup is refused until the worktree returns to its recorded location. A
+confirmed missing directory remains failed after repair. Explicit `shoal rm`
+then cleans up owned simulators, prunes only that stale registration through
+Worktrunk, retains the Git branch, and releases other leases with the ownership
+record. Failures retain ownership for retry. Manual removal stops known surviving
+commands; unrelated/unverifiable processes still do not block manual deletion.
+Automatic cleanup remains blocked by running/unknown executions or failed state.
+
+SQLite schema 10 adds optional worktree identity, wrapper/child identity, and
+process-group fields without discarding existing ownership. Protocol 11 adds
+launch acknowledgement and reconciliation; upgrade CLI and daemon together.
+
+Validation uses isolated temporary repositories, daemons, and fake simulators.
+It covers wrapper death, daemon restart during execution, detached marked
+children, PID identity mismatch, incomplete legacy records, interrupted removal,
+moved/replaced/missing worktrees, connected-command preservation, explicit stop,
+resource retention, missing-worktree cleanup, scope denial, and repeat repair.
+Native process recovery was exercised on macOS; Linux requires native validation.

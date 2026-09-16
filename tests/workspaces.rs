@@ -83,6 +83,19 @@ impl Fixture {
         }
     }
 
+    fn restart(&mut self) {
+        self.daemon.kill().unwrap();
+        self.daemon.wait().unwrap();
+        self.daemon = self
+            .command()
+            .args(["daemon", "run"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        self.wait_ready();
+    }
+
     fn command(&self) -> Command {
         cli(self.root.path())
     }
@@ -2542,4 +2555,391 @@ fn cd_always_picks_even_inside_a_workspace_and_cancel_does_not_navigate() {
         .unwrap();
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("explicit target"));
+}
+
+fn recovery_report(fixture: &Fixture, args: &[&str]) -> Value {
+    let output = fixture.command().arg("--json").args(args).output().unwrap();
+    assert!(
+        matches!(output.status.code(), Some(0 | 2)),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    serde_json::from_slice(&output.stdout).unwrap()
+}
+
+#[test]
+fn reconcile_repairs_interrupted_state_and_preserves_work_and_leases() {
+    let mut fixture = Fixture::with_config(Some("[resources.lock]\n"));
+    let workspace = fixture.add("interrupted");
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    fs::write(path.join("uncommitted"), "preserve me").unwrap();
+    let port = fixture.ok(&["port", "reserve", "web", "interrupted"]);
+    let resource = fixture.ok(&["resource", "acquire", "lock", "interrupted"]);
+    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+    db.execute(
+        "UPDATE workspaces SET state='removing' WHERE name='interrupted'",
+        [],
+    )
+    .unwrap();
+    fixture.restart();
+    assert_eq!(
+        fixture.ok(&["inspect", "interrupted"])["workspace"]["state"],
+        "failed"
+    );
+    let preview = recovery_report(&fixture, &["reconcile", "interrupted"]);
+    assert_eq!(preview[0]["directory"], "valid");
+    assert!(!preview[0]["issues"].as_array().unwrap().is_empty());
+    assert_eq!(
+        fixture.ok(&["inspect", "interrupted"])["workspace"]["state"],
+        "failed"
+    );
+    let repaired = fixture.ok(&["reconcile", "interrupted", "--repair"]);
+    assert_eq!(repaired[0]["workspace"]["state"], "ready");
+    assert_eq!(
+        fs::read_to_string(path.join("uncommitted")).unwrap(),
+        "preserve me"
+    );
+    assert_eq!(fixture.ok(&["port", "list", "interrupted"])[0], port);
+    assert_eq!(
+        fixture.ok(&["resource", "list", "interrupted"])[0],
+        resource
+    );
+    assert!(
+        fixture.ok(&["reconcile", "interrupted", "--repair"])[0]["changes"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        !fixture
+            .run(&[
+                "exec",
+                "interrupted",
+                "--",
+                env!("CARGO_BIN_EXE_shoal"),
+                "reconcile",
+                "--all",
+                "--repair"
+            ])
+            .status
+            .success()
+    );
+}
+
+#[test]
+fn reconcile_detects_moved_and_replaced_worktrees_without_deleting_data() {
+    let fixture = Fixture::new();
+    let workspace = fixture.add("original");
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    fs::write(path.join("dirty"), "saved").unwrap();
+    let moved = fixture.root.path().join("moved workspace");
+    git(
+        &fixture.repo,
+        &[
+            "worktree",
+            "move",
+            path.to_str().unwrap(),
+            moved.to_str().unwrap(),
+        ],
+    );
+    let report = recovery_report(&fixture, &["reconcile", "original", "--repair"]);
+    assert_eq!(report[0]["directory"], "moved");
+    assert!(!fixture.run(&["rm", "original"]).status.success());
+    assert_eq!(fs::read_to_string(moved.join("dirty")).unwrap(), "saved");
+    git(
+        &fixture.repo,
+        &[
+            "worktree",
+            "move",
+            moved.to_str().unwrap(),
+            path.to_str().unwrap(),
+        ],
+    );
+    fixture.ok(&["reconcile", "original", "--repair"]);
+    // Replace the admin directory at its SAME path, proving pathname checks alone are insufficient.
+    let admin = Path::new(workspace["git_dir"].as_str().unwrap());
+    let old = fixture.root.path().join("old-admin");
+    fs::rename(admin, &old).unwrap();
+    fs::create_dir(admin).unwrap();
+    for entry in fs::read_dir(&old).unwrap() {
+        let entry = entry.unwrap();
+        if entry.file_type().unwrap().is_file() {
+            fs::copy(entry.path(), admin.join(entry.file_name())).unwrap();
+        }
+    }
+    let report = recovery_report(&fixture, &["reconcile", "original", "--repair"]);
+    assert_eq!(report[0]["directory"], "unverified");
+    assert!(
+        report[0]["issues"]
+            .to_string()
+            .contains("metadata was replaced")
+    );
+    assert!(
+        !fixture
+            .run(&["rm", "original", "--yes", "--delete-branch"])
+            .status
+            .success()
+    );
+    assert!(
+        !fixture
+            .run(&["exec", "original", "--", "true"])
+            .status
+            .success()
+    );
+    assert_eq!(fs::read_to_string(path.join("dirty")).unwrap(), "saved");
+}
+
+#[test]
+fn reconcile_missing_worktrees_allows_explicit_cleanup_and_retains_branches() {
+    let mut fixture = Fixture::with_config(Some("[resources.lock]\n"));
+    for (name, prune_git) in [("directory-only", false), ("git-removed", true)] {
+        let workspace = fixture.add(name);
+        fixture.ok(&["port", "reserve", "web", name]);
+        fixture.ok(&["resource", "acquire", "lock", name]);
+        let path = Path::new(workspace["path"].as_str().unwrap());
+        if prune_git {
+            git(
+                &fixture.repo,
+                &["worktree", "remove", path.to_str().unwrap()],
+            );
+        } else {
+            fs::remove_dir_all(path).unwrap();
+        }
+        fixture.restart();
+        assert_eq!(
+            fixture.ok(&["inspect", name])["workspace"]["state"],
+            "failed"
+        );
+        let report = recovery_report(&fixture, &["reconcile", name, "--repair"]);
+        assert_eq!(report[0]["directory"], "missing");
+        assert_eq!(
+            fixture
+                .ok(&["port", "list", name])
+                .as_array()
+                .unwrap()
+                .len(),
+            1
+        );
+        fixture.ok(&["rm", name]);
+        assert_eq!(
+            fixture.ok(&["port", "list", "--all"]),
+            serde_json::json!([])
+        );
+        assert_eq!(
+            fixture.ok(&["resource", "list", "--all"]),
+            serde_json::json!([])
+        );
+        assert!(!git(&fixture.repo, &["rev-parse", &format!("refs/heads/{name}")]).is_empty());
+        assert!(
+            !git(&fixture.repo, &["worktree", "list", "--porcelain"])
+                .contains(path.to_str().unwrap())
+        );
+    }
+}
+
+fn wait_registered_execution(fixture: &Fixture, workspace: &str) -> Value {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        let inspection = fixture.ok(&["inspect", workspace]);
+        if let Some(execution) = inspection["executions"].as_array().unwrap().first() {
+            if !execution["child"].is_null() {
+                return execution.clone();
+            }
+        }
+        assert!(Instant::now() < deadline, "execution not registered");
+        thread::sleep(Duration::from_millis(20));
+    }
+}
+
+#[test]
+fn reconcile_stops_identity_verified_orphans_after_wrapper_death() {
+    let fixture = Fixture::new();
+    fixture.add("orphan");
+    let mut wrapper = fixture
+        .command()
+        .args(["exec", "orphan", "--", "sleep", "30"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    let execution = wait_registered_execution(&fixture, "orphan");
+    wrapper.kill().unwrap();
+    wrapper.wait().unwrap();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while fixture.ok(&["inspect", "orphan"])["executions"][0]["state"] != "unknown" {
+        assert!(Instant::now() < deadline);
+        thread::sleep(Duration::from_millis(20));
+    }
+    let report = recovery_report(&fixture, &["reconcile", "orphan", "--repair"]);
+    assert!(
+        report[0]["executions"][0]["processes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|p| p["pid"] == execution["child"]["pid"])
+    );
+    assert_eq!(
+        fixture.ok(&["inspect", "orphan"])["executions"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    fixture.ok(&[
+        "reconcile",
+        "orphan",
+        "--repair",
+        "--stop",
+        "--acknowledge-stopped",
+    ]);
+    assert_eq!(
+        fixture.ok(&["inspect", "orphan"])["executions"],
+        serde_json::json!([])
+    );
+    assert_eq!(
+        fixture.ok(&["inspect", "orphan"])["workspace"]["state"],
+        "ready"
+    );
+}
+
+#[test]
+fn reconcile_recovers_daemon_crash_and_requires_acknowledgement_for_legacy_records() {
+    let mut fixture = Fixture::new();
+    let workspace = fixture.add("crash");
+    let port = fixture.ok(&["port", "reserve", "web", "crash"]);
+    let mut wrapper = fixture
+        .command()
+        .args(["exec", "crash", "--", "sleep", "30"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    wait_registered_execution(&fixture, "crash");
+    fixture.restart();
+    wrapper.wait().unwrap();
+    let report = recovery_report(&fixture, &["reconcile", "crash"]);
+    assert_eq!(report[0]["executions"][0]["state"], "unknown");
+    fixture.ok(&["reconcile", "crash", "--repair", "--acknowledge-stopped"]);
+    assert_eq!(fixture.ok(&["port", "list", "crash"])[0], port);
+    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+    db.execute(
+        "INSERT INTO executions(id,workspace_id,state) VALUES ('legacy',?1,'unknown')",
+        [workspace["id"].as_str().unwrap()],
+    )
+    .unwrap();
+    let report = recovery_report(&fixture, &["reconcile", "crash", "--repair"]);
+    assert!(!report[0]["executions"][0]["cleared"].as_bool().unwrap());
+    fixture.ok(&["reconcile", "crash", "--repair", "--acknowledge-stopped"]);
+    assert_eq!(
+        fixture.ok(&["inspect", "crash"])["executions"],
+        serde_json::json!([])
+    );
+}
+
+#[test]
+fn reconcile_finds_detached_tagged_children_even_after_the_command_exits() {
+    let fixture = Fixture::new();
+    fixture.add("detached");
+    let script = "import os, subprocess, sys; subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'], start_new_session=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)";
+    let output = fixture.run(&["exec", "detached", "--", "python3", "-c", script]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(String::from_utf8_lossy(&output.stderr).contains("surviving or unverified"));
+    let report = recovery_report(&fixture, &["reconcile", "detached"]);
+    assert!(
+        !report[0]["executions"][0]["processes"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    fixture.ok(&[
+        "reconcile",
+        "detached",
+        "--repair",
+        "--stop",
+        "--acknowledge-stopped",
+    ]);
+    assert_eq!(
+        fixture.ok(&["inspect", "detached"])["executions"],
+        serde_json::json!([])
+    );
+}
+
+#[test]
+fn manual_removal_stops_recorded_orphans_before_releasing_resources() {
+    let fixture = Fixture::with_config(Some("[resources.lock]\n"));
+    fixture.add("orphan");
+    fixture.ok(&["resource", "acquire", "lock", "orphan"]);
+    let mut wrapper = fixture
+        .command()
+        .args(["exec", "orphan", "--", "sleep", "30"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    let execution = wait_registered_execution(&fixture, "orphan");
+    wrapper.kill().unwrap();
+    wrapper.wait().unwrap();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while fixture.ok(&["inspect", "orphan"])["executions"][0]["state"] != "unknown" {
+        assert!(Instant::now() < deadline);
+        thread::sleep(Duration::from_millis(20));
+    }
+    fixture.ok(&["rm", "orphan"]);
+    assert_eq!(
+        fixture.ok(&["resource", "list", "--all"]),
+        serde_json::json!([])
+    );
+    let pid = execution["child"]["pid"].as_u64().unwrap().to_string();
+    let output = Command::new("ps")
+        .args(["-p", &pid, "-o", "stat="])
+        .output()
+        .unwrap();
+    let status = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        status.trim().is_empty() || status.trim().starts_with('Z'),
+        "owned child survived removal"
+    );
+}
+
+#[test]
+fn reconcile_all_reports_each_workspace_independently() {
+    let fixture = Fixture::new();
+    fixture.add("healthy");
+    let missing = fixture.add("missing");
+    fs::remove_dir_all(missing["path"].as_str().unwrap()).unwrap();
+    let reports = recovery_report(&fixture, &["reconcile", "--all", "--repair"]);
+    assert_eq!(reports.as_array().unwrap().len(), 2);
+    assert_eq!(reports[0]["workspace"]["name"], "healthy");
+    assert_eq!(reports[0]["workspace"]["state"], "ready");
+    assert_eq!(reports[1]["workspace"]["state"], "failed");
+}
+
+#[test]
+fn reconcile_preserves_connected_commands_until_stop_is_explicit() {
+    let fixture = Fixture::new();
+    fixture.add("connected");
+    let port = fixture.ok(&["port", "reserve", "web", "connected"]);
+    let mut wrapper = fixture
+        .command()
+        .args(["exec", "connected", "--", "sleep", "30"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    wait_registered_execution(&fixture, "connected");
+    let report = fixture.ok(&["reconcile", "connected", "--repair"]);
+    assert_eq!(report[0]["executions"][0]["connected"], true);
+    assert_eq!(report[0]["executions"][0]["cleared"], false);
+    assert!(wrapper.try_wait().unwrap().is_none());
+    fixture.ok(&["reconcile", "connected", "--repair", "--stop"]);
+    wrapper.wait().unwrap();
+    assert_eq!(
+        fixture.ok(&["inspect", "connected"])["executions"],
+        serde_json::json!([])
+    );
+    assert_eq!(fixture.ok(&["port", "list", "connected"])[0], port);
 }
