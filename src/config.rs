@@ -8,6 +8,23 @@ use crate::paths::Paths;
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
     pub auto_cleanup: AutoCleanup,
+    pub ports: Ports,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Ports {
+    pub start: u16,
+    pub end: u16,
+}
+
+impl Default for Ports {
+    fn default() -> Self {
+        Self {
+            start: 49152,
+            end: 65535,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -62,6 +79,10 @@ impl Config {
         ensure!(
             config.auto_cleanup.idle_minutes > 0 && config.auto_cleanup.idle_minutes <= 525600,
             "auto_cleanup.idle_minutes must be between 1 and 525600"
+        );
+        ensure!(
+            config.ports.start > 0 && config.ports.start <= config.ports.end,
+            "ports.start/end must specify a nonempty range between 1 and 65535"
         );
         Ok(config)
     }

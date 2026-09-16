@@ -40,6 +40,13 @@ pub enum Command {
     List,
     /// Enter a workspace through the shell integration (otherwise print its path).
     Cd { workspace: Option<String> },
+    /// Show your changes since the fork point using native Git diff configuration.
+    Diff { workspace: Option<String> },
+    /// Reserve, list, and release named TCP ports owned by a worktree.
+    Port {
+        #[command(subcommand)]
+        command: PortCommand,
+    },
     /// Inspect a workspace and its executions.
     Inspect { workspace: Option<String> },
     /// Stop connected commands, preserving the workspace.
@@ -93,8 +100,42 @@ pub enum Command {
 
 #[derive(Debug, Subcommand)]
 pub enum RepoCommand {
-    Add { source: String },
+    Add {
+        source: String,
+        #[arg(long)]
+        name: Option<String>,
+    },
+    Rename {
+        repository: String,
+        name: String,
+    },
     List,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum PortCommand {
+    /// Reserve a port, or return the existing reservation with this name.
+    Reserve {
+        name: String,
+        workspace: Option<String>,
+        #[arg(long)]
+        port: Option<u16>,
+        /// Environment variable exported to subsequent exec/claude/codex commands.
+        #[arg(long)]
+        env: Option<String>,
+        /// Explain what the reservation is used for.
+        #[arg(long)]
+        reason: Option<String>,
+    },
+    List {
+        workspace: Option<String>,
+        #[arg(long, conflicts_with = "workspace")]
+        all: bool,
+    },
+    Release {
+        name: String,
+        workspace: Option<String>,
+    },
 }
 
 #[derive(Debug, Subcommand)]

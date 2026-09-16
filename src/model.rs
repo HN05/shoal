@@ -7,6 +7,7 @@ pub struct Repository {
     pub path: PathBuf,
     pub source: String,
     pub last_used: i64,
+    pub name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -18,6 +19,8 @@ pub struct Workspace {
     pub branch: String,
     pub state: String,
     pub error: Option<String>,
+    pub base_commit: Option<String>,
+    pub base_ref: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -31,10 +34,27 @@ pub struct Execution {
 pub struct Inspection {
     pub workspace: Workspace,
     pub executions: Vec<Execution>,
+    pub ports: Vec<PortReservation>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ExecutionPlan {
     pub id: String,
     pub workspace: Workspace,
+    pub ports: Vec<PortReservation>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PortReservation {
+    pub workspace_id: String,
+    pub name: String,
+    pub port: u16,
+    pub env_var: String,
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DiffBase {
+    pub workspace_id: String,
+    pub commit: String,
 }

@@ -18,6 +18,7 @@ use crate::{
 
 pub struct Manager {
     pub store: Store,
+    pub config: crate::config::Config,
     paths: Paths,
     repositories: Mutex<()>,
     active: Mutex<HashMap<String, watch::Sender<bool>>>,
@@ -31,6 +32,7 @@ impl Manager {
         // Avoid inheriting personal Worktrunk hooks and layout preferences.
         fs::write(paths.state.join("worktrunk.toml"), "# Managed by Shoal.\n")?;
         Ok(Arc::new(Self {
+            config: crate::config::Config::load(&paths)?,
             store: Store::open(paths.state.join("state.db")).await?,
             paths,
             repositories: Mutex::new(()),
@@ -50,16 +52,27 @@ impl Manager {
             .await
     }
 
-    pub async fn register(&self, source: String) -> Result<Repository> {
+    pub async fn register(&self, source: String, name: Option<String>) -> Result<Repository> {
+        if let Some(name) = &name {
+            validate_name(name)?;
+        }
         let _guard = self.repositories.lock().await;
         let repositories = self.repositories().await?;
         if let Some(repo) = repositories.iter().find(|r| r.source == source) {
-            return Ok(repo.clone());
+            return if let Some(name) = name {
+                self.rename_repository(repo.id.clone(), name).await
+            } else {
+                Ok(repo.clone())
+            };
         }
         if let Some(identity) = crate::repository::identity(&source).await? {
             for repo in &repositories {
                 if crate::repository::identity(&repo.source).await?.as_ref() == Some(&identity) {
-                    return Ok(repo.clone());
+                    return if let Some(name) = name {
+                        self.rename_repository(repo.id.clone(), name).await
+                    } else {
+                        Ok(repo.clone())
+                    };
                 }
             }
         }
@@ -69,6 +82,12 @@ impl Manager {
                 worktrunk::git(&PathBuf::from(&source), &["rev-parse", "--show-toplevel"]).await?;
             fs::canonicalize(root.trim())?
         } else {
+            ensure!(
+                name.as_ref().is_none_or(|name| !repositories
+                    .iter()
+                    .any(|repo| repo.name.as_ref() == Some(name))),
+                "repository name is already in use"
+            );
             ensure!(
                 source.contains("://") || source.contains('@'),
                 "repository path does not exist: {source}"
@@ -89,10 +108,41 @@ impl Manager {
             .to_str()
             .context("repository path is not UTF-8")?
             .to_owned();
-        self.store.run(move |db| {
-            db.execute("INSERT INTO repositories VALUES (?1, ?2, ?3, (SELECT COALESCE(MAX(last_used), 0)+1 FROM repositories)) ON CONFLICT(path) DO NOTHING", params![id, path_string, source])?;
+        let repo = self.store.run(move |db| {
+            db.execute("INSERT INTO repositories (id,path,source,last_used) VALUES (?1, ?2, ?3, (SELECT COALESCE(MAX(last_used), 0)+1 FROM repositories)) ON CONFLICT(path) DO NOTHING", params![id, path_string, source])?;
             Ok(db.query_row("SELECT * FROM repositories WHERE path=?1", [path_string], store::repository)?)
-        }).await
+        }).await?;
+        if let Some(name) = name {
+            self.rename_repository(repo.id, name).await
+        } else {
+            Ok(repo)
+        }
+    }
+
+    pub async fn rename_repository(&self, selector: String, name: String) -> Result<Repository> {
+        validate_name(&name)?;
+        let repo = self.repository(&selector).await?;
+        self.store
+            .run(move |db| {
+                ensure!(
+                    !db.query_row(
+                        "SELECT EXISTS(SELECT 1 FROM repositories WHERE name=?1 AND id<>?2)",
+                        params![name, repo.id],
+                        |row| row.get::<_, bool>(0)
+                    )?,
+                    "repository name is already in use"
+                );
+                db.execute(
+                    "UPDATE repositories SET name=?2 WHERE id=?1",
+                    params![repo.id, name],
+                )?;
+                Ok(db.query_row(
+                    "SELECT * FROM repositories WHERE id=?1",
+                    [repo.id],
+                    store::repository,
+                )?)
+            })
+            .await
     }
 
     async fn repository(&self, selector: &str) -> Result<Repository> {
@@ -104,6 +154,12 @@ impl Manager {
                 || repo.path.to_str() == Some(selector)
                 || canonical.as_ref() == Some(&repo.path)
         }) {
+            return Ok(repo.clone());
+        }
+        if let Some(repo) = repositories
+            .iter()
+            .find(|repo| repo.name.as_deref() == Some(selector))
+        {
             return Ok(repo.clone());
         }
         if let Some(identity) = crate::repository::identity(selector).await? {
@@ -147,6 +203,7 @@ impl Manager {
             .run(move |db| {
                 Ok(Inspection {
                     executions: store::executions(db, &workspace.id)?,
+                    ports: store::ports(db, Some(&workspace.id))?,
                     workspace,
                 })
             })
@@ -170,6 +227,8 @@ impl Manager {
             name,
             state: "preparing".into(),
             error: None,
+            base_commit: None,
+            base_ref: None,
         };
         ensure!(
             !workspace.path.exists(),
@@ -180,18 +239,43 @@ impl Manager {
         self.store.run(move |db| {
             let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
             ensure!(!tx.query_row("SELECT EXISTS(SELECT 1 FROM workspaces WHERE name=?1)", [&record.name], |r| r.get::<_, bool>(0))?, "workspace name already exists: {}", record.name);
-            tx.execute("INSERT INTO workspaces VALUES (?1,?2,?3,?4,?5,?6,NULL)", params![record.id, record.repository_id, record.name, record.path.to_str(), record.branch, record.state])?;
+            tx.execute("INSERT INTO workspaces (id,repository_id,name,path,branch,state) VALUES (?1,?2,?3,?4,?5,?6)", params![record.id, record.repository_id, record.name, record.path.to_str(), record.branch, record.state])?;
             tx.execute("UPDATE repositories SET last_used=(SELECT COALESCE(MAX(last_used),0)+1 FROM repositories) WHERE id=?1", [record.repository_id])?;
             tx.commit()?;
             Ok(())
         }).await?;
-        let result = worktrunk::create(
-            &repo.path,
-            &self.paths.state.join("worktrunk.toml"),
-            &workspace.path,
-            &workspace.branch,
-            base.as_deref().unwrap_or("HEAD"),
-        )
+        let result = async {
+            let base = base.as_deref().unwrap_or("HEAD");
+            let commit = worktrunk::git(
+                &repo.path,
+                &["rev-parse", "--verify", &format!("{base}^{{commit}}")],
+            )
+            .await?
+            .trim()
+            .to_owned();
+            let reference =
+                worktrunk::git(&repo.path, &["rev-parse", "--symbolic-full-name", base]).await?;
+            let reference = reference.trim();
+            let reference = reference.starts_with("refs/").then(|| reference.to_owned());
+            let (record_id, record_commit) = (workspace.id.clone(), commit.clone());
+            self.store
+                .run(move |db| {
+                    db.execute(
+                        "UPDATE workspaces SET base_commit=?2,base_ref=?3 WHERE id=?1",
+                        params![record_id, record_commit, reference],
+                    )?;
+                    Ok(())
+                })
+                .await?;
+            worktrunk::create(
+                &repo.path,
+                &self.paths.state.join("worktrunk.toml"),
+                &workspace.path,
+                &workspace.branch,
+                &commit,
+            )
+            .await
+        }
         .await;
         match result {
             Ok(()) => self.set_state(&workspace.id, "ready", None).await?,
@@ -335,9 +419,9 @@ impl Manager {
                 };
                 ensure!(!matches!(choice, Choice::KeepBranch) || check.branch.is_some() || check.unpushed_commits == 0,
                     "detached HEAD has unpushed commits; create a branch before choosing to keep it");
-                // Future ports/simulator leases belong to the worktree. Release or
-                // reset them here, before deleting its directory and ownership record.
-                // Manual and automatic removal share this exact path.
+                // Future live resources (such as simulators) must be released/reset
+                // here. Port bookings remain reserved until directory removal succeeds,
+                // then cascade with the workspace record in the transaction below.
                 worktrunk::remove(
                     &repo.path,
                     &self.paths.state.join("worktrunk.toml"),
@@ -392,7 +476,8 @@ impl Manager {
             .or_default() += 1;
         let id = Uuid::new_v4().to_string();
         let (execution_id, workspace_id) = (id.clone(), workspace.id.clone());
-        self.store
+        let ports = self
+            .store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
                 let ready: bool = tx.query_row(
@@ -405,13 +490,25 @@ impl Manager {
                     "INSERT INTO executions VALUES (?1,?2,'running')",
                     params![execution_id, workspace_id],
                 )?;
+                let ports = store::ports(&tx, Some(&workspace_id))?;
                 tx.commit()?;
-                Ok(())
+                Ok(ports)
             })
             .await?;
         let (sender, receiver) = watch::channel(false);
         active.insert(id.clone(), sender);
-        Ok((ExecutionPlan { id, workspace }, receiver))
+        Ok((
+            ExecutionPlan {
+                id,
+                workspace,
+                ports,
+            },
+            receiver,
+        ))
+    }
+
+    pub async fn touch(&self, id: &str) {
+        *self.activity.lock().await.entry(id.to_owned()).or_default() += 1;
     }
 
     pub async fn finish(&self, id: String, complete: bool) -> Result<()> {

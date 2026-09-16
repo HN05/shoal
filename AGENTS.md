@@ -19,6 +19,12 @@ when behavior changes, distinguishing decisions from proposals.
   clean, fully pushed worktrees. Keep one removal path for manual and automatic
   cleanup; future resource leases belong to the worktree and must be released
   before its directory and ownership record are removed.
+- TCP port reservations are cooperative and owned by the worktree. Keep them
+  across command exits and failed removal; successful removal releases them with
+  the workspace record. Global `[ports]` config sets the automatic range.
+- `shoal diff` uses Git fork-point/merge-base against the recorded base branch;
+  do not compare directly to today's main tip or a frozen commit after a rebase.
+  Preserve native Git pager/external-diff configuration.
 
 ## Validation
 

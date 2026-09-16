@@ -18,11 +18,19 @@ struct Fixture {
 
 impl Fixture {
     fn new() -> Self {
+        Self::with_config(None)
+    }
+
+    fn with_config(config: Option<&str>) -> Self {
         assert!(
             Command::new("wt").arg("--version").output().is_ok(),
             "workspace integration tests require Worktrunk (wt)"
         );
         let root = tempfile::tempdir_in("/tmp").unwrap();
+        if let Some(config) = config {
+            fs::create_dir_all(root.path().join(".config/shoal")).unwrap();
+            fs::write(root.path().join(".config/shoal/config.toml"), config).unwrap();
+        }
         let repo = root.path().join("repo with ' quotes & $literal");
         fs::create_dir(&repo).unwrap();
         let repo = fs::canonicalize(repo).unwrap();
@@ -370,6 +378,267 @@ fn branch_removal_compares_contents_to_main_or_upstream_and_honors_explicit_choi
 }
 
 #[test]
+fn repositories_can_be_named_when_added_and_renamed_without_duplication() {
+    let fixture = Fixture::new();
+    let original = fixture.ok(&["repo", "list"])[0]["id"].clone();
+    let named = fixture.ok(&[
+        "repo",
+        "add",
+        fixture.repo.to_str().unwrap(),
+        "--name",
+        "project",
+    ]);
+    assert_eq!(named["id"], original);
+    assert_eq!(named["name"], "project");
+    fixture.ok(&["add", "project", "--name", "named"]);
+    let renamed = fixture.ok(&["repo", "rename", "project", "renamed"]);
+    assert_eq!(renamed["id"], original);
+    assert_eq!(renamed["name"], "renamed");
+    assert_eq!(fixture.ok(&["repo", "list"]).as_array().unwrap().len(), 1);
+    fixture.ok(&["rm", "named"]);
+}
+
+#[test]
+fn ports_are_named_idempotent_exported_and_released_with_the_workspace() {
+    let fixture = Fixture::new();
+    let first = fixture.add("first");
+    fixture.add("second");
+    let web = fixture.ok(&[
+        "port",
+        "reserve",
+        "web",
+        "first",
+        "--reason",
+        "Frontend dev server",
+    ]);
+    assert_eq!(web["env_var"], "SHOAL_PORT_WEB");
+    assert_eq!(web["reason"], "Frontend dev server");
+    assert_eq!(fixture.ok(&["port", "reserve", "web", "first"]), web);
+    let port = web["port"].to_string();
+    assert!(
+        !fixture
+            .run(&["port", "reserve", "web", "second", "--port", &port])
+            .status
+            .success()
+    );
+    let api = fixture.ok(&["port", "reserve", "api", "first", "--env", "API_PORT"]);
+    let output = fixture.run(&[
+        "exec",
+        "first",
+        "--",
+        "sh",
+        "-c",
+        "printf '%s:%s' \"$SHOAL_PORT_WEB\" \"$API_PORT\"",
+    ]);
+    assert!(output.status.success());
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        format!("{}:{}", web["port"], api["port"])
+    );
+    assert_eq!(
+        fixture.ok(&["inspect", "first"])["ports"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    let nested = fixture.run(&[
+        "exec",
+        "first",
+        "--",
+        env!("CARGO_BIN_EXE_shoal"),
+        "exec",
+        "second",
+        "--",
+        "sh",
+        "-c",
+        "test -z \"${SHOAL_PORT_WEB:-}\" && test -z \"${API_PORT:-}\"",
+    ]);
+    assert!(
+        nested.status.success(),
+        "parent workspace ports leaked into nested execution: {}",
+        String::from_utf8_lossy(&nested.stderr)
+    );
+    let path = Path::new(first["path"].as_str().unwrap());
+    fs::write(path.join("dirty"), "keep").unwrap();
+    assert!(!fixture.run(&["rm", "first"]).status.success());
+    assert_eq!(
+        fixture
+            .ok(&["port", "list", "first"])
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    fixture.ok(&["rm", "first", "--yes", "--keep-branch"]);
+    assert_eq!(
+        fixture.ok(&["port", "list", "--all"]),
+        serde_json::json!([])
+    );
+    fixture.ok(&["port", "reserve", "web", "second", "--port", &port]);
+    fixture.ok(&["port", "release", "web", "second"]);
+    assert_eq!(
+        fixture.ok(&["port", "list", "second"]),
+        serde_json::json!([])
+    );
+    fixture.ok(&["rm", "second"]);
+}
+
+#[test]
+fn ports_avoid_listeners_and_concurrent_allocations_are_unique_and_persistent() {
+    let mut fixture = Fixture::new();
+    fixture.add("ports");
+    let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let occupied = listener.local_addr().unwrap().port().to_string();
+    assert!(
+        !fixture
+            .run(&["port", "reserve", "occupied", "ports", "--port", &occupied])
+            .status
+            .success()
+    );
+    let mut children = Vec::new();
+    for i in 0..8 {
+        children.push(
+            fixture
+                .command()
+                .args(["--json", "port", "reserve", &format!("server{i}"), "ports"])
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()
+                .unwrap(),
+        );
+    }
+    let mut numbers = std::collections::HashSet::new();
+    for child in children {
+        let output = child.wait_with_output().unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let reservation: Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert!(numbers.insert(reservation["port"].as_u64().unwrap()));
+    }
+    let before = fixture.ok(&["port", "list", "ports"]);
+    assert!(fixture.run(&["daemon", "stop"]).status.success());
+    fixture.daemon.wait().unwrap();
+    fixture.daemon = fixture
+        .command()
+        .args(["daemon", "run"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    fixture.wait_ready();
+    assert_eq!(fixture.ok(&["port", "list", "ports"]), before);
+    fixture.ok(&["rm", "ports"]);
+}
+
+#[test]
+fn diff_excludes_new_main_commits_before_and_after_rebase_and_uses_git_configuration() {
+    let fixture = Fixture::new();
+    let workspace = fixture.add("changes");
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    let commit = |path: &Path| {
+        git(path, &["add", "."]);
+        git(
+            path,
+            &[
+                "-c",
+                "user.name=Shoal Test",
+                "-c",
+                "user.email=shoal@example.invalid",
+                "commit",
+                "-m",
+                "change",
+            ],
+        );
+    };
+    fs::write(path.join("tracked"), "workspace change\n").unwrap();
+    commit(path);
+    fs::write(fixture.repo.join("main-only"), "upstream-only content\n").unwrap();
+    commit(&fixture.repo);
+    for rebase in [false, true] {
+        if rebase {
+            git(
+                path,
+                &[
+                    "-c",
+                    "user.name=Shoal Test",
+                    "-c",
+                    "user.email=shoal@example.invalid",
+                    "rebase",
+                    "main",
+                ],
+            );
+            fs::write(path.join("staged"), "staged workspace content\n").unwrap();
+            git(path, &["add", "staged"]);
+            fs::write(path.join("tracked"), "unstaged workspace content\n").unwrap();
+        }
+        let output = fixture
+            .command()
+            .current_dir(path)
+            .args(["diff"])
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let diff = String::from_utf8(output.stdout).unwrap();
+        assert!(diff.contains("workspace"));
+        assert!(!diff.contains("main-only") && !diff.contains("upstream-only"));
+        if rebase {
+            assert!(
+                diff.contains("staged workspace content")
+                    && diff.contains("unstaged workspace content")
+            );
+        }
+    }
+    let external = fixture.root.path().join("external-diff");
+    fs::write(&external, "#!/bin/sh\nprintf 'configured-diff\\n'\n").unwrap();
+    fs::set_permissions(&external, fs::Permissions::from_mode(0o755)).unwrap();
+    git(
+        path,
+        &["config", "diff.external", external.to_str().unwrap()],
+    );
+    let output = fixture.run(&["diff", "changes"]);
+    assert!(output.status.success());
+    assert!(String::from_utf8_lossy(&output.stdout).contains("configured-diff"));
+    fixture.ok(&["rm", "changes", "--yes", "--delete-branch"]);
+}
+
+#[test]
+fn configured_port_range_exhaustion_and_release() {
+    let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let number = listener.local_addr().unwrap().port();
+    let fixture = Fixture::with_config(Some(&format!("[ports]\nstart={number}\nend={number}\n")));
+    fixture.add("limited");
+    assert!(
+        !fixture
+            .run(&["port", "reserve", "web", "limited"])
+            .status
+            .success()
+    );
+    drop(listener);
+    let lease = fixture.ok(&["port", "reserve", "web", "limited"]);
+    assert_eq!(lease["port"], number);
+    assert!(
+        !fixture
+            .run(&["port", "reserve", "api", "limited"])
+            .status
+            .success()
+    );
+    fixture.ok(&["port", "release", "web", "limited"]);
+    assert_eq!(
+        fixture.ok(&["port", "reserve", "api", "limited"])["port"],
+        number
+    );
+    fixture.ok(&["rm", "limited"]);
+}
+
+#[test]
 fn concurrent_adds_cannot_claim_the_same_name() {
     let fixture = Fixture::new();
     let first = fixture
@@ -452,30 +721,34 @@ fn agent_shortcuts_forward_arguments_without_starting_real_agents() {
 }
 
 #[test]
-fn stop_requests_terminate_the_connected_execution() {
+fn stop_and_manual_removal_terminate_connected_executions() {
     let fixture = Fixture::new();
-    fixture.add("running");
-    let child = fixture
-        .command()
-        .args(["exec", "running", "--", "sleep", "5"])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    let deadline = Instant::now() + Duration::from_secs(3);
-    while fixture.ok(&["inspect", "running"])["executions"]
-        .as_array()
-        .unwrap()
-        .is_empty()
-    {
+    for operation in ["stop", "rm"] {
+        fixture.add("running");
+        let child = fixture
+            .command()
+            .args(["exec", "running", "--", "sleep", "5"])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let deadline = Instant::now() + Duration::from_secs(3);
+        while fixture.ok(&["inspect", "running"])["executions"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+        {
+            assert!(Instant::now() < deadline);
+            thread::sleep(Duration::from_millis(10));
+        }
+        fixture.ok(&[operation, "running"]);
+        let output = child.wait_with_output().unwrap();
+        assert!(!output.status.success());
         assert!(Instant::now() < deadline);
-        thread::sleep(Duration::from_millis(10));
+        if operation == "stop" {
+            fixture.ok(&["rm", "running"]);
+        }
     }
-    fixture.ok(&["stop", "running"]);
-    let output = child.wait_with_output().unwrap();
-    assert!(!output.status.success());
-    assert!(Instant::now() < deadline);
-    fixture.ok(&["rm", "running"]);
 }
 
 #[test]

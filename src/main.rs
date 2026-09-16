@@ -3,9 +3,11 @@ mod cli;
 mod client;
 mod config;
 mod daemon;
+mod diff;
 mod execution;
 mod model;
 mod paths;
+mod ports;
 mod processes;
 mod protocol;
 mod removal;
@@ -21,7 +23,7 @@ use anyhow::{Result, ensure};
 use clap::{CommandFactory, Parser};
 use serde_json::json;
 
-use cli::{Cli, Command, DaemonCommand, RepoCommand, ShellCommand};
+use cli::{Cli, Command, DaemonCommand, PortCommand, RepoCommand, ShellCommand};
 use paths::Paths;
 use protocol::{Body, Method};
 
@@ -56,6 +58,95 @@ async fn run(cli: Cli) -> Result<i32> {
         None => ui::workspace_menu(&paths).await?,
     };
     match command {
+        Command::Diff { workspace } => {
+            let workspace = ui::workspace(&paths, workspace, true, cli.json).await?;
+            let base = match client::call(&paths, Method::DiffBase { workspace }).await? {
+                Body::DiffBase(base) => base,
+                _ => anyhow::bail!("unexpected diff base response"),
+            };
+            return execution::run(
+                &paths,
+                base.workspace_id,
+                vec!["git".into(), "diff".into(), base.commit.into(), "--".into()],
+            )
+            .await;
+        }
+        Command::Port { command } => match command {
+            PortCommand::Reserve {
+                name,
+                workspace,
+                port,
+                env,
+                reason,
+            } => {
+                let workspace = ui::workspace(&paths, workspace, true, cli.json).await?;
+                let reservation = match client::call(
+                    &paths,
+                    Method::ReservePort {
+                        workspace,
+                        name,
+                        port,
+                        env_var: env,
+                        reason,
+                    },
+                )
+                .await?
+                {
+                    Body::Port(reservation) => reservation,
+                    _ => anyhow::bail!("unexpected port response"),
+                };
+                output(
+                    cli.json,
+                    &format!(
+                        "{}={} ({})",
+                        reservation.name, reservation.port, reservation.env_var
+                    ),
+                    serde_json::to_value(&reservation)?,
+                );
+            }
+            PortCommand::List { workspace, all } => {
+                let workspace = if all {
+                    None
+                } else {
+                    Some(ui::workspace(&paths, workspace, true, cli.json).await?)
+                };
+                let ports = match client::call(&paths, Method::Ports { workspace }).await? {
+                    Body::Ports(ports) => ports,
+                    _ => anyhow::bail!("unexpected port list response"),
+                };
+                if cli.json {
+                    println!("{}", serde_json::to_string(&ports)?);
+                } else {
+                    let workspaces = ui::workspaces(&paths).await?;
+                    for port in ports {
+                        let owner = workspaces
+                            .iter()
+                            .find(|w| w.id == port.workspace_id)
+                            .map(|w| w.name.as_str())
+                            .unwrap_or(&port.workspace_id);
+                        println!(
+                            "{owner}/{}={} ({}){}",
+                            port.name,
+                            port.port,
+                            port.env_var,
+                            port.reason
+                                .as_ref()
+                                .map(|r| format!("  {r}"))
+                                .unwrap_or_default()
+                        );
+                    }
+                }
+            }
+            PortCommand::Release { name, workspace } => {
+                let workspace = ui::workspace(&paths, workspace, true, cli.json).await?;
+                client::call(&paths, Method::ReleasePort { workspace, name }).await?;
+                output(
+                    cli.json,
+                    "Port reservation released",
+                    json!({"released":true}),
+                );
+            }
+        },
         Command::Cd { workspace } => {
             let workspace = ui::workspace(&paths, workspace, true, cli.json).await?;
             let inspection = match client::call(&paths, Method::Inspect { workspace }).await? {
@@ -83,10 +174,10 @@ async fn run(cli: Cli) -> Result<i32> {
             }
         }
         Command::Repo {
-            command: RepoCommand::Add { source },
+            command: RepoCommand::Add { source, name },
         } => {
             let source = ui::repository_selector(source)?;
-            match client::call(&paths, Method::Register { source }).await? {
+            match client::call(&paths, Method::Register { source, name }).await? {
                 Body::Repository(repo) => output(
                     cli.json,
                     &format!("Registered {}", ui::repository_label(&repo)),
@@ -105,6 +196,19 @@ async fn run(cli: Cli) -> Result<i32> {
                 for repo in repos {
                     println!("{}", ui::repository_label(&repo));
                 }
+            }
+        }
+        Command::Repo {
+            command: RepoCommand::Rename { repository, name },
+        } => {
+            let repository = ui::repository_selector(repository)?;
+            match client::call(&paths, Method::RenameRepository { repository, name }).await? {
+                Body::Repository(repo) => output(
+                    cli.json,
+                    &format!("Renamed {}", ui::repository_label(&repo)),
+                    serde_json::to_value(&repo)?,
+                ),
+                _ => anyhow::bail!("unexpected repository response"),
             }
         }
         Command::Add {

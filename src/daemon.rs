@@ -60,7 +60,6 @@ pub async fn run(paths: Paths, managed: bool) -> Result<()> {
         _lock: lock,
     };
     let manager = Manager::open(paths.clone()).await?;
-    let config = crate::config::Config::load(&paths)?;
     let listener = UnixListener::bind(&paths.socket).context("bind daemon socket")?;
     fs::set_permissions(&paths.socket, fs::Permissions::from_mode(0o600))?;
     let mut terminate = signal(SignalKind::terminate())?;
@@ -69,10 +68,10 @@ pub async fn run(paths: Paths, managed: bool) -> Result<()> {
     let started = Instant::now();
     let mut clients = JoinSet::new();
     eprintln!("shoal daemon listening on {}", paths.socket.display());
-    let cleanup = config.auto_cleanup.enabled.then(|| {
+    let cleanup = manager.config.auto_cleanup.enabled.then(|| {
         tokio::spawn(crate::cleanup::run(
             manager.clone(),
-            Duration::from_secs(config.auto_cleanup.idle_minutes * 60),
+            Duration::from_secs(manager.config.auto_cleanup.idle_minutes * 60),
         ))
     });
     loop {
@@ -181,13 +180,35 @@ async fn serve(
 async fn operation(manager: &Manager, method: Method) -> Result<Body> {
     Ok(match method {
         Method::Repositories => Body::Repositories(manager.repositories().await?),
-        Method::Register { source } => Body::Repository(manager.register(source).await?),
+        Method::Register { source, name } => {
+            Body::Repository(manager.register(source, name).await?)
+        }
+        Method::RenameRepository { repository, name } => {
+            Body::Repository(manager.rename_repository(repository, name).await?)
+        }
         Method::Add {
             repository,
             name,
             base,
         } => Body::Workspace(manager.add(repository, name, base).await?),
         Method::List => Body::Workspaces(manager.list().await?),
+        Method::DiffBase { workspace } => Body::DiffBase(manager.diff_base(workspace).await?),
+        Method::ReservePort {
+            workspace,
+            name,
+            port,
+            env_var,
+            reason,
+        } => Body::Port(
+            manager
+                .reserve_port(workspace, name, port, env_var, reason)
+                .await?,
+        ),
+        Method::Ports { workspace } => Body::Ports(manager.list_ports(workspace).await?),
+        Method::ReleasePort { workspace, name } => {
+            manager.release_port(workspace, name).await?;
+            Body::Ok
+        }
         Method::Inspect { workspace } => Body::Inspection(manager.inspect(workspace).await?),
         Method::CheckRemoval {
             workspace,

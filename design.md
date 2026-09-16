@@ -1483,3 +1483,60 @@ resource leases, remove the worktree, then retire its ownership record. Future
 port/simulator backends must implement release in this shared path and retain
 ownership records on failure. Those backends are not implemented yet; no actual
 resource release is claimed by this milestone.
+
+### Named port reservations
+
+Implemented cooperative TCP reservations owned by worktree ID:
+
+- `shoal port reserve <name> [workspace] [--port N] [--env VARIABLE] [--reason TEXT]`
+- `shoal port list [workspace]` or `shoal port list --all`
+- `shoal port release <name> [workspace]`
+
+Missing workspace arguments resolve from the current directory, then fzf.
+Names are required and stable within a worktree; a repeated reservation returns
+its existing port and can update its reason. Names contain lowercase letters,
+digits, `_` or `-`, starting with a letter (max 64). Optional reasons are nonempty
+single lines (max 256 bytes). Changing a number or environment mapping requires
+release first. Explicit release is cooperative and does not stop processes.
+
+SQLite stores reservations with uniqueness for port numbers across the daemon,
+names within a worktree, and environment mappings within a worktree. Allocation
+uses a short write transaction and probes IPv4/IPv6 TCP sockets without address
+reuse. Probe sockets are closed immediately; unrelated processes can still bind
+later. UDP and socket activation/enforcement are outside this milestone.
+
+Default automatic range: 49152–65535. Global TOML `[ports]` supports `start` and
+`end`; explicit `--port` can select another nonzero port that can be bound.
+Subsequent executions receive `SHOAL_PORT_<NORMALIZED_NAME>` or an explicit
+`--env` variable. Existing process environments are not changed. Reservations
+survive command exit, stop, and daemon restart. `inspect` and JSON output expose
+the name, owner, port, environment variable, and reason.
+
+Successful manual and automatic removal release port records in the same
+transaction that retires the worktree. Failed directory removal retains leases.
+Live resources such as simulators will additionally need shutdown/reset before
+directory deletion. Resource activity resets the automatic cleanup timer.
+
+### Repository names and worktree diffs
+
+`shoal repo add <path-or-url> --name <name>` assigns a custom name; repeating an
+existing repository updates the name instead of adding it again. `shoal repo
+rename <repository> <name>` changes it later. Custom names are unique, use the
+same syntax as workspace names, appear in fzf, and serve as repository selectors.
+Default names still come from the repository source/origin, with hostname
+qualifiers when picker names collide.
+
+`shoal diff [workspace]` runs native `git diff` from the appropriate fork point.
+The recorded base branch, rather than its current tip or only a frozen original
+commit, is used with `git merge-base --fork-point` and a regular merge-base
+fallback. This excludes changes imported from main when main advances or the
+worktree rebases/merges it. The original base commit and full ref are recorded
+when creating worktrees. Explicit fixed-commit bases use their captured commit;
+older workspaces without metadata use main. Missing/unrelated base refs produce
+an error. Staged and unstaged tracked changes are included; untracked files are
+not part of Git diff. Configured Git pagers and external diff commands are honored.
+The interactive workspace list also offers Ctrl-F for diff.
+
+Database migrations preserve existing ownership records while adding base
+metadata, repository names, and port reservations. Protocol version changes
+require restarting older daemons with the installed executable.

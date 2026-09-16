@@ -161,7 +161,7 @@ mod tests {
         };
         let manager = Manager::open(paths).await.unwrap();
         let repo = manager
-            .register(repository_dir.to_str().unwrap().into())
+            .register(repository_dir.to_str().unwrap().into(), None)
             .await
             .unwrap();
         let workspace = manager.add(repo.id, "idle".into(), None).await.unwrap();
@@ -178,6 +178,16 @@ mod tests {
             .cleanup_snapshot(&workspace.id)
             .await
             .unwrap()
+            .unwrap();
+        manager
+            .reserve_port(
+                workspace.id.clone(),
+                "web".into(),
+                None,
+                None,
+                Some("cleanup test".into()),
+            )
+            .await
             .unwrap();
         fs::write(workspace.path.join("dirty"), "retain me").unwrap();
         assert!(
@@ -241,6 +251,7 @@ mod tests {
             .unwrap();
         assert!(!workspace.path.exists());
         assert!(manager.list().await.unwrap().is_empty());
+        assert!(manager.list_ports(None).await.unwrap().is_empty());
         assert_eq!(
             worktrunk::git(
                 &repository_dir,

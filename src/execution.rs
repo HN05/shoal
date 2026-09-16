@@ -46,12 +46,29 @@ pub async fn run(paths: &Paths, workspace: String, command: Vec<OsString>) -> Re
         let mut terminate = signal(SignalKind::terminate())?;
         let mut interrupt = signal(SignalKind::interrupt())?;
         let mut quit = signal(SignalKind::quit())?;
-        let mut child = Command::new(&command[0]).args(&command[1..])
+        let mut process = Command::new(&command[0]);
+        // An orchestrator can launch another workspace from inside its own exec.
+        // Do not let its exported port numbers leak into the worker's environment.
+        for (name, _) in std::env::vars_os() {
+            if name.to_str().is_some_and(|name| name.starts_with("SHOAL_PORT_")) {
+                process.env_remove(name);
+            }
+        }
+        if let Ok(names) = std::env::var("SHOAL_RESERVED_PORT_ENV") {
+            for name in names.split(':').filter(|name| !name.is_empty()
+                && !matches!(*name, "HOME" | "PATH" | "SHELL" | "TMPDIR")
+                && (!name.starts_with("SHOAL_") || name.starts_with("SHOAL_PORT_"))) {
+                process.env_remove(name);
+            }
+        }
+        let mut child = process.args(&command[1..])
             .current_dir(&plan.workspace.path)
             .env("SHOAL_WORKSPACE_ID", &plan.workspace.id)
             .env("SHOAL_RUN_ID", &plan.workspace.id)
             .env("SHOAL_WORKSPACE", &plan.workspace.name)
             .env("SHOAL_STATE_DIR", &paths.state)
+            .envs(plan.ports.iter().map(|port| (&port.env_var, port.port.to_string())))
+            .env("SHOAL_RESERVED_PORT_ENV", plan.ports.iter().map(|port| port.env_var.as_str()).collect::<Vec<_>>().join(":"))
             .env_remove("SHOAL_SHELL_DIRECTIVE")
             .stdin(Stdio::inherit()).stdout(Stdio::inherit()).stderr(Stdio::inherit())
             .process_group(0).kill_on_drop(true).spawn().context("launch workspace command")?;

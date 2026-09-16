@@ -58,6 +58,8 @@ Native Linux service integration has not yet been exercised on a Linux host.
 
 ```sh
 shoal repo add /path/to/repo # Or a Git clone URL; register once
+shoal repo add /path/to/repo --name my-project
+shoal repo rename my-project new-name
 shoal repo list
 shoal add /path/to/repo --name fix-login
 shoal cd fix-login          # Enter through the shell function
@@ -82,6 +84,7 @@ without a terminal, bare `shoal` also shows help. The list offers:
 | Ctrl-A | Add a workspace |
 | Ctrl-O | Inspect |
 | Ctrl-S | Stop managed commands |
+| Ctrl-F | Show workspace diff |
 
 Each selection performs its action and returns to your shell. Entering a workspace
 requires the shell integration below; without it, Shoal prints the path.
@@ -106,6 +109,59 @@ for reuse. Registration does not fetch updates automatically.
 Registration reuses an existing repository when its source URL or local checkout's
 `origin` identifies the same remote, including HTTPS/SSH forms and optional `.git`
 suffixes. Checkouts without `origin` are identified by their canonical local path.
+Custom names can be set with `repo add --name` or `repo rename`, appear in pickers,
+and work as selectors (`shoal add my-project --name fix-login`). Explicit names
+are unique; naming an already registered URL updates its name without duplicating it.
+
+### Diff
+
+```sh
+shoal diff fix-login
+shoal diff                 # Current workspace, otherwise fzf
+```
+
+Shows changes from the fork point against the base branch recorded at creation.
+Moving that base branch or rebasing onto it does not include its commits in your
+diff. Git's fork-point detection uses the base branch's reflog, with merge-base
+as a fallback. For workspaces created from a fixed commit, the captured commit
+is used; older workspaces without base metadata use `main`.
+
+Runs native `git diff`, preserving Git's configured pager and external diff
+command. Includes committed, staged, and unstaged tracked changes; untracked
+files follow normal Git behavior and do not appear. Missing/unrelated base refs
+produce an error rather than guessing another branch.
+
+### Port reservations
+
+```sh
+shoal port reserve web fix-login --reason "Frontend dev server"
+shoal port reserve api fix-login --port 3001 --env API_PORT --reason "HTTP API"
+shoal port list fix-login
+shoal port list --all
+shoal port release web fix-login
+shoal exec fix-login -- sh -c 'my-server --port "$API_PORT"'
+```
+
+Each named TCP reservation belongs to a worktree. Omitting the workspace uses
+the current workspace or opens `fzf`. Repeating a name returns the same port;
+`--reason` can update its description. Changing the number or environment mapping
+requires release first. Reservations persist across command exits, `stop`, and
+daemon restarts. Successful manual or automatic worktree removal releases them;
+failed removal keeps them reserved.
+
+Subsequent `exec`, `claude`, and `codex` commands receive `SHOAL_PORT_<NAME>` by
+default (`web` becomes `SHOAL_PORT_WEB`), or the variable supplied with `--env`.
+An already-running process keeps its original environment. All management
+commands support `--json`; `inspect` also includes reservations.
+Nested Shoal executions clear the parent workspace's exported port variables
+before applying the target workspace's reservations.
+
+Automatic allocation defaults to TCP ports 49152–65535. Override the range in
+global config with `[ports]`, `start = 49152`, and `end = 65535`. An explicit
+`--port` may select any nonzero port the user can bind. Shoal checks IPv4/IPv6
+availability and prevents duplicate allocations within the daemon, then releases
+the probe socket so the application can bind. Reservations are cooperative:
+unrelated processes can still take a port later. UDP allocation is not implemented.
 
 Removal deletes the branch when the worktree is clean and its contents match
 local `main` or its configured upstream. The comparison is between Git trees;
@@ -139,7 +195,8 @@ fresh timers after daemon restarts.
 does not fetch automatically. Automatic removal rechecks conditions and uses the
 same cleanup path as manual removal. Matching branches are deleted; other branches
 and shared caches are retained. Future
-resource leases belong to the worktree and must be released through this path.
+simulator leases will belong to the worktree and use this path too. Port
+reservations are already released here.
 
 Configure `~/.config/shoal/config.toml` (or `$XDG_CONFIG_HOME/shoal/config.toml`):
 
@@ -168,8 +225,8 @@ does not edit your shell configuration automatically.
 
 ## Current scope
 
-The CLI/daemon foundation and initial workspace lifecycle are implemented, with
-SQLite persistence and connected command supervision. Ports, simulators, lifecycle
+The CLI/daemon foundation, workspace lifecycle, and named TCP port reservations
+are implemented, with SQLite persistence and connected command supervision. Simulators, lifecycle
 polish, and filesystem restrictions follow. No Shoal filesystem sandbox is applied
 yet. The public repository configuration format and schema remain undecided.
 

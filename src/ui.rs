@@ -155,8 +155,8 @@ pub async fn workspace_menu(paths: &Paths) -> Result<crate::cli::Command> {
         entries,
         false,
         Some((
-            "ctrl-d,ctrl-e,ctrl-a,ctrl-o,ctrl-s",
-            "enter: enter   ctrl-d: delete   ctrl-e: execute   ctrl-a: add   ctrl-o: inspect   ctrl-s: stop",
+            "ctrl-d,ctrl-e,ctrl-a,ctrl-o,ctrl-s,ctrl-f",
+            "enter: enter   ctrl-d: delete   ctrl-e: execute   ctrl-a: add   ctrl-o: inspect   ctrl-s: stop   ctrl-f: diff",
         )),
     )?;
     if action == "ctrl-a" || (action.is_empty() && id == "add-workspace") {
@@ -178,6 +178,7 @@ pub async fn workspace_menu(paths: &Paths) -> Result<crate::cli::Command> {
         },
         "ctrl-o" => Command::Inspect { workspace },
         "ctrl-s" => Command::Stop { workspace },
+        "ctrl-f" => Command::Diff { workspace },
         "ctrl-e" => match pick(
             "Execute> ",
             ["claude", "codex", "custom shell command"]
@@ -221,6 +222,9 @@ pub fn repository_label(repo: &Repository) -> String {
 }
 
 fn repository_name(repo: &Repository) -> &str {
+    if let Some(name) = &repo.name {
+        return name;
+    }
     let source = repo.source.trim_end_matches('/');
     let name = source.rsplit(['/', ':']).next().unwrap_or(source);
     name.strip_suffix(".git").unwrap_or(name)
