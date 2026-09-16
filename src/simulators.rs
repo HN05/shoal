@@ -255,7 +255,10 @@ impl Manager {
             !request.clean || request.reason.is_some(),
             "--clean requires --reason explaining why a clean device is necessary"
         );
-        ensure!(workspace.state == "ready", "workspace is not ready");
+        ensure!(
+            workspace.state == crate::state::WorkspaceState::Ready,
+            "workspace is not ready"
+        );
         self.touch(&workspace.id).await;
         let mut records = self.simulators(None).await?;
         let mut inventory = simctl::inventory().await?;
@@ -472,7 +475,7 @@ impl Manager {
             // Removal may have started while simctl was running. Its cleanup waits
             // for our gate, so retain the claim and let that path remove it.
             ensure!(
-                self.get(workspace.id.clone()).await?.state == "ready",
+                self.get(workspace.id.clone()).await?.state == crate::state::WorkspaceState::Ready,
                 "workspace removal started during simulator boot"
             );
             Ok::<(), anyhow::Error>(())
@@ -608,7 +611,10 @@ impl Manager {
     pub async fn release_simulator(&self, selector: String, name: String) -> Result<()> {
         let _guard = self.sim_gate.lock().await;
         let workspace = self.get(selector).await?;
-        ensure!(workspace.state == "ready", "workspace is not ready");
+        ensure!(
+            workspace.state == crate::state::WorkspaceState::Ready,
+            "workspace is not ready"
+        );
         self.touch(&workspace.id).await;
         let mut sim = self
             .simulators(Some(workspace.id.clone()))

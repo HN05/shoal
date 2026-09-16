@@ -1,5 +1,6 @@
 use std::{collections::HashMap, fs, path::PathBuf, sync::Arc, time::Duration};
 
+use crate::state::{ExecutionState, WorkspaceState};
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{OptionalExtension, TransactionBehavior, params};
 use tokio::{
@@ -207,6 +208,7 @@ impl Manager {
         self.store
             .run(move |db| {
                 Ok(Inspection {
+                    resources: crate::resources::leases(db, Some(&workspace.id))?,
                     simulators,
                     executions: store::executions(db, &workspace.id)?,
                     ports: store::ports(db, Some(&workspace.id))?,
@@ -231,7 +233,7 @@ impl Manager {
             repository_id: repo.id.clone(),
             path: self.paths.state.join("workspaces").join(&name),
             name,
-            state: "preparing".into(),
+            state: WorkspaceState::Preparing,
             error: None,
             base_commit: None,
             base_ref: None,
@@ -284,10 +286,17 @@ impl Manager {
         }
         .await;
         match result {
-            Ok(()) => self.set_state(&workspace.id, "ready", None).await?,
+            Ok(()) => {
+                self.set_state(&workspace.id, WorkspaceState::Ready, None)
+                    .await?
+            }
             Err(error) => {
-                self.set_state(&workspace.id, "failed", Some(format!("{error:#}")))
-                    .await?;
+                self.set_state(
+                    &workspace.id,
+                    WorkspaceState::Failed,
+                    Some(format!("{error:#}")),
+                )
+                .await?;
                 bail!(
                     "workspace {} failed; inspect or remove it with Shoal: {error:#}",
                     workspace.name
@@ -297,8 +306,13 @@ impl Manager {
         self.get(workspace.id).await
     }
 
-    async fn set_state(&self, id: &str, state: &str, error: Option<String>) -> Result<()> {
-        let (id, state) = (id.to_owned(), state.to_owned());
+    async fn set_state(
+        &self,
+        id: &str,
+        state: WorkspaceState,
+        error: Option<String>,
+    ) -> Result<()> {
+        let id = id.to_owned();
         self.store
             .run(move |db| {
                 db.execute(
@@ -363,6 +377,9 @@ impl Manager {
     }
 
     pub async fn cleanup_snapshot(&self, id: &str) -> Result<Option<u64>> {
+        if !self.list_resources(Some(id.into())).await?.is_empty() {
+            return Ok(None);
+        }
         if self
             .simulators(Some(id.into()))
             .await?
@@ -403,11 +420,21 @@ impl Manager {
         let automatic = expected_snapshot.is_some();
         let workspace = self.get(selector).await?;
         let id = workspace.id.clone();
-        self.store.run(move |db| {
-            let changed = db.execute("UPDATE workspaces SET state='removing' WHERE id=?1 AND state IN ('ready','failed')", [id])?;
-            ensure!(changed == 1, "workspace is busy");
-            Ok(())
-        }).await?;
+        self.store
+            .run(move |db| {
+                let changed = db.execute(
+                    "UPDATE workspaces SET state=?2 WHERE id=?1 AND state IN (?3,?4)",
+                    params![
+                        id,
+                        WorkspaceState::Removing,
+                        WorkspaceState::Ready,
+                        WorkspaceState::Failed
+                    ],
+                )?;
+                ensure!(changed == 1, "workspace is busy");
+                Ok(())
+            })
+            .await?;
         let result = async {
             let repo = self.repository(&workspace.repository_id).await?;
             let outcome = if workspace.path.exists() {
@@ -446,7 +473,7 @@ impl Manager {
                 .await?
             } else {
                 ensure!(
-                    workspace.state == "failed",
+                    workspace.state == WorkspaceState::Failed,
                     "workspace directory disappeared; manual reconciliation required"
                 );
                 RemovalResult { removed: true, branch: None, branch_deleted: false, branch_outcome: "not_attempted".into() }
@@ -474,7 +501,7 @@ impl Manager {
                 Ok(outcome)
             }
             Err(error) => {
-                self.set_state(&workspace.id, &workspace.state, Some(format!("{error:#}")))
+                self.set_state(&workspace.id, workspace.state, Some(format!("{error:#}")))
                     .await?;
                 Err(error)
             }
@@ -506,8 +533,8 @@ impl Manager {
                 )?;
                 ensure!(ready, "workspace is not ready");
                 tx.execute(
-                    "INSERT INTO executions VALUES (?1,?2,'running')",
-                    params![execution_id, workspace_id],
+                    "INSERT INTO executions VALUES (?1,?2,?3)",
+                    params![execution_id, workspace_id, ExecutionState::Running],
                 )?;
                 let ports = store::ports(&tx, Some(&workspace_id))?;
                 tx.commit()?;
@@ -545,8 +572,8 @@ impl Manager {
                     db.execute("DELETE FROM executions WHERE id=?1", [record_id])?;
                 } else {
                     db.execute(
-                        "UPDATE executions SET state='unknown' WHERE id=?1",
-                        [record_id],
+                        "UPDATE executions SET state=?2 WHERE id=?1",
+                        params![record_id, ExecutionState::Unknown],
                     )?;
                 }
                 Ok(())
@@ -567,8 +594,8 @@ impl Manager {
             .run(move |db| {
                 ensure!(
                     db.execute(
-                        "UPDATE workspaces SET state='stopping' WHERE id=?1 AND state='ready'",
-                        [id]
+                        "UPDATE workspaces SET state=?2 WHERE id=?1 AND state=?3",
+                        params![id, WorkspaceState::Stopping, WorkspaceState::Ready]
                     )? == 1,
                     "workspace is busy or not ready"
                 );
@@ -578,7 +605,7 @@ impl Manager {
         let result = self.stop_executions(&workspace.id, false).await;
         self.set_state(
             &workspace.id,
-            "ready",
+            WorkspaceState::Ready,
             result.as_ref().err().map(|e| format!("{e:#}")),
         )
         .await?;

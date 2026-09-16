@@ -20,7 +20,10 @@ pub async fn authorize(
         .ok_or_else(|| anyhow::anyhow!("expired or unknown workspace scope"))?;
     let target = match method {
         Method::Status | Method::List | Method::Repositories | Method::SimCatalog => None,
-        Method::SimAcquire { workspace, .. }
+        Method::ResourceAcquire { workspace, .. }
+        | Method::ResourceRelease { workspace, .. }
+        | Method::ResourceOverview { workspace }
+        | Method::SimAcquire { workspace, .. }
         | Method::SimRelease { workspace, .. }
         | Method::Inspect { workspace }
         | Method::DiffBase { workspace }
@@ -28,7 +31,8 @@ pub async fn authorize(
         | Method::ReservePort { workspace, .. }
         | Method::ReleasePort { workspace, .. }
         | Method::PortOverview { workspace } => Some(workspace),
-        Method::Ports { workspace }
+        Method::ResourceList { workspace }
+        | Method::Ports { workspace }
         | Method::SimList { workspace }
         | Method::SimHistory { workspace, .. } => {
             Some(workspace.get_or_insert_with(|| owner.clone()))

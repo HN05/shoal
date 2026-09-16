@@ -1,12 +1,11 @@
 ---
 name: shoal
-description: Reserve TCP ports and acquire Xcode simulators through Shoal when development or testing needs these resources in a Shoal-managed session.
+description: Reserve ports, lease Xcode simulators, and acquire resource-pool permits through Shoal during development or testing.
 ---
 
 # Shoal resources
 
-Use `--json` and omit target arguments to use the current context. Request only
-resources needed for the task; use the returned port numbers and simulator UDIDs.
+Use `--json`, omit targets for the current context, and request only needed resources.
 
 ## Ports
 
@@ -24,6 +23,19 @@ If the suggested port suits the task, accept by repeating the request with
 `--port <suggested_port>`. Always use the returned `port`; don't assume the
 preferred number was allocated. New reservations do not update your current
 environment: pass the number to the server explicitly.
+
+## Resource pools
+
+```sh
+shoal --json resources
+shoal --json resource acquire devices --wait 60
+shoal resource release devices
+```
+
+Use the returned `resource`; `--resource <name>` requests a specific member.
+Standalone resources use the same commands. Each lease consumes one permit.
+The same `--name` returns the same lease; use distinct names for additional
+permits and pass that name on release. Busy requests exit 2. Actual use is cooperative.
 
 ## Simulators
 

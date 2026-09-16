@@ -14,7 +14,7 @@ impl Store {
         let store = Self { path };
         store.run(|db| {
             let version: i64 = db.query_row("PRAGMA user_version", [], |r| r.get(0))?;
-            ensure!(version <= 7, "state database was written by a newer Shoal version");
+            ensure!(version <= 8, "state database was written by a newer Shoal version");
             db.execute_batch("BEGIN;
                 CREATE TABLE IF NOT EXISTS repositories (
                     id TEXT PRIMARY KEY, path TEXT NOT NULL UNIQUE, source TEXT NOT NULL, last_used INTEGER NOT NULL
@@ -49,7 +49,17 @@ impl Store {
                 );
                 CREATE INDEX IF NOT EXISTS clean_requests_workspace ON simulator_clean_requests(workspace_id,id);
                 UPDATE simulator_clean_requests SET record=json_set(record, '$.status', 'interrupted') WHERE json_extract(record, '$.status')='requested';
-                PRAGMA user_version=7; COMMIT;")?;
+                CREATE TABLE IF NOT EXISTS resource_pools (
+                    scope TEXT NOT NULL, name TEXT NOT NULL, definition TEXT NOT NULL, PRIMARY KEY(scope,name)
+                );
+                CREATE TABLE IF NOT EXISTS resource_leases (
+                    id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+                    scope TEXT NOT NULL, pool TEXT NOT NULL, name TEXT NOT NULL, resource TEXT NOT NULL,
+                    reason TEXT, created_at INTEGER NOT NULL, UNIQUE(workspace_id,pool,name),
+                    FOREIGN KEY(scope,pool) REFERENCES resource_pools(scope,name)
+                );
+                CREATE INDEX IF NOT EXISTS resource_lease_pool ON resource_leases(scope,pool);
+                PRAGMA user_version=8; COMMIT;")?;
             Ok(())
         }).await?;
         Ok(store)
@@ -142,7 +152,10 @@ mod tests {
                 let workspace = db.query_row("SELECT * FROM workspaces", [], workspace)?;
                 assert_eq!(workspace.name, "feature");
                 assert!(workspace.base_commit.is_none() && workspace.base_ref.is_none());
-                assert_eq!(executions(db, "workspace")?[0].state, "unknown");
+                assert_eq!(
+                    executions(db, "workspace")?[0].state,
+                    crate::state::ExecutionState::Unknown
+                );
                 assert!(ports(db, None)?.is_empty());
                 Ok(())
             })

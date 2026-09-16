@@ -71,7 +71,7 @@ pub async fn sweep(manager: &Manager, timers: &mut Timers, delay: Duration) -> R
         .idle
         .retain(|id, _| workspaces.iter().any(|workspace| &workspace.id == id));
     for workspace in workspaces {
-        let snapshot = if workspace.state == "ready" {
+        let snapshot = if workspace.state == crate::state::WorkspaceState::Ready {
             match manager.cleanup_snapshot(&workspace.id).await {
                 Ok(snapshot) => snapshot,
                 Err(error) => {
@@ -159,7 +159,15 @@ mod tests {
             state: temp.path().join("state"),
             socket: temp.path().join("state/daemon.sock"),
         };
-        let manager = Manager::open(paths).await.unwrap();
+        let mut manager = Manager::open(paths).await.unwrap();
+        std::sync::Arc::get_mut(&mut manager)
+            .unwrap()
+            .config
+            .resources
+            .insert(
+                "test-lock".into(),
+                crate::resources::ResourceConfig::default(),
+            );
         let repo = manager
             .register(repository_dir.to_str().unwrap().into(), None)
             .await
@@ -174,6 +182,30 @@ mod tests {
             "unpushed work must be retained"
         );
         git(&["update-ref", "refs/remotes/origin/main", "HEAD"]);
+        manager
+            .acquire_resource(
+                workspace.id.clone(),
+                crate::resources::AcquireRequest {
+                    pool: "test-lock".into(),
+                    name: "default".into(),
+                    resource: None,
+                    reason: None,
+                },
+            )
+            .await
+            .unwrap();
+        assert!(
+            manager
+                .cleanup_snapshot(&workspace.id)
+                .await
+                .unwrap()
+                .is_none(),
+            "a resource lease must prevent automatic removal"
+        );
+        manager
+            .release_resource(workspace.id.clone(), "test-lock".into(), "default".into())
+            .await
+            .unwrap();
         let original = manager
             .cleanup_snapshot(&workspace.id)
             .await

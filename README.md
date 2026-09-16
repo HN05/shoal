@@ -345,3 +345,66 @@ paginated with `--limit`/`--before`. Scoped commands see only their own history.
 Reasons enable review; Shoal does not automatically judge whether they justify
 cleaning. A caller deliberately erasing a device outside Shoal bypasses this
 cooperative audit, as it bypasses resource reservations.
+
+
+## Cooperative resource pools
+
+Global config defines resources shared across repos; repo config (`.shoal.toml`
+or `.shoal/config.toml`) defines resources shared across that repo's branches.
+Both accept the same format:
+
+```toml
+# Standalone mutex. Raise capacity for a counting semaphore.
+[resources.signing]
+capacity = 1
+reason = "Signing service"
+
+[resource_pools.devices]
+capacity = 2                  # Total simultaneous permits across this pool
+
+[resource_pools.devices.resources.alpha]
+capacity = 1                  # Exclusive use of alpha
+
+[resource_pools.devices.resources.beta]
+capacity = 2                  # Up to two users of beta, within the pool limit
+```
+
+Member/standalone capacity defaults to 1. An omitted pool capacity defaults to
+its members' total capacity. Every pool must contain named members. Names use
+lowercase letters, digits, `_` or `-`, starting with a letter (max 64); capacities
+are 1–65535. Optional `reason` works on pools and resources.
+
+```sh
+shoal resources                              # Configured capacities and own leases
+shoal resource acquire devices               # Any available member
+shoal resource acquire devices --resource beta --name tests --reason "Integration tests"
+shoal resource acquire signing --wait 60      # Wait for the standalone resource
+shoal resource list                          # Current worktree's actual leases
+shoal resource release devices
+shoal resource release devices --name tests
+shoal resource release signing
+```
+
+Acquisition is explicit and lazy. Each lease takes one slot from both the pool
+and selected member. An explicit member never silently changes to another.
+Repeating the same pool/lease name (default `default`) returns the existing
+permit; use distinct `--name` values for additional permits. Output always names
+the chosen resource. `--json` returns the lease, or `acquired: false` with exit 2
+when busy. `--wait` retries for up to the given seconds (max 3600); no fairness
+or atomic multi-resource acquisition is promised.
+
+Global names cannot be overridden by a different repo definition. Repo pools
+are keyed by registered repo identity, so equal names in unrelated repos are
+independent. A member's identity is its pool plus its name; the same spelling in
+another pool does not automatically represent the same physical resource.
+Restart the daemon for global config changes; repo config is read on request.
+While leases are active, conflicting definitions block new acquisitions until
+the definitions agree or the leases drain. Release still works after config edits
+or removal. All sharing is within one Shoal daemon.
+
+Shoal accounts for permits; it does not start, stop, isolate, or prevent direct
+use of generic resources. Stop using a resource before releasing it. Leases
+survive command exit and daemon restart, block automatic cleanup, and are freed
+by successful worktree removal. Failed removal retains them. Scoped agents can
+manage only their own leases; overview counts include other users without exposing
+their lease records. Human callers can use `resource list --all`.

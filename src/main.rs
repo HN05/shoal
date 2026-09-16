@@ -13,12 +13,14 @@ mod protocol;
 mod removal;
 mod repo_config;
 mod repository;
+mod resources;
 mod scope;
 mod service;
 mod shell;
 mod sim_audit;
 mod simctl;
 mod simulators;
+mod state;
 mod store;
 mod ui;
 mod workspace;
@@ -78,6 +80,56 @@ async fn run(cli: Cli) -> Result<i32> {
         );
     }
     match command {
+        Command::Resource { command } => return resource_command(&paths, command, cli.json).await,
+        Command::Resources { workspace } => {
+            let workspace = ui::workspace(&paths, workspace, true, cli.json).await?;
+            let Body::ResourceOverview(overview) =
+                client::call(&paths, Method::ResourceOverview { workspace }).await?
+            else {
+                anyhow::bail!("unexpected resource overview response");
+            };
+            if cli.json {
+                println!("{}", serde_json::to_string(&overview)?);
+            } else {
+                for pool in &overview.pools {
+                    println!(
+                        "{} ({}) {}/{} in use, {} available{}",
+                        pool.name,
+                        pool.scope,
+                        pool.used,
+                        pool.capacity,
+                        pool.available,
+                        if pool.configuration_matches {
+                            ""
+                        } else {
+                            " [configuration changed; drain leases first]"
+                        }
+                    );
+                    for resource in &pool.resources {
+                        println!(
+                            "  {}: {}/{} in use, {} available",
+                            resource.name, resource.used, resource.capacity, resource.available
+                        );
+                    }
+                }
+                for lease in &overview.leases {
+                    println!(
+                        "  lease {}/{} -> {}{}",
+                        lease.pool,
+                        lease.name,
+                        lease.resource,
+                        lease
+                            .reason
+                            .as_ref()
+                            .map(|r| format!(" ({r})"))
+                            .unwrap_or_default()
+                    );
+                }
+                if overview.pools.is_empty() && overview.leases.is_empty() {
+                    println!("No configured resources or leases");
+                }
+            }
+        }
         Command::Sim { command } => return sim_command(&paths, command, cli.json).await,
         Command::Diff { workspace } => {
             let workspace = ui::workspace(&paths, workspace, true, cli.json).await?;
@@ -781,6 +833,124 @@ async fn sim_command(paths: &Paths, command: cli::SimCommand, json_output: bool)
             let workspace = ui::workspace(paths, workspace, true, json_output).await?;
             client::call(paths, Method::SimRelease { workspace, name }).await?;
             output(json_output, "Simulator released", json!({"released":true}));
+        }
+    }
+    Ok(0)
+}
+
+async fn resource_command(
+    paths: &Paths,
+    command: cli::ResourceCommand,
+    json_output: bool,
+) -> Result<i32> {
+    use cli::ResourceCommand;
+    match command {
+        ResourceCommand::Acquire {
+            pool,
+            workspace,
+            resource,
+            name,
+            reason,
+            wait,
+        } => {
+            let workspace = ui::workspace(paths, workspace, true, json_output).await?;
+            let request = resources::AcquireRequest {
+                pool,
+                resource,
+                name,
+                reason,
+            };
+            let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(wait);
+            loop {
+                match client::call(
+                    paths,
+                    Method::ResourceAcquire {
+                        workspace: workspace.clone(),
+                        request: request.clone(),
+                    },
+                )
+                .await?
+                {
+                    Body::ResourceLease(lease) => {
+                        output(
+                            json_output,
+                            &format!(
+                                "{}/{} -> {} ({})",
+                                lease.pool, lease.name, lease.resource, lease.id
+                            ),
+                            serde_json::to_value(&lease)?,
+                        );
+                        return Ok(0);
+                    }
+                    Body::ResourceBusy { message } if tokio::time::Instant::now() >= deadline => {
+                        output(
+                            json_output,
+                            &message,
+                            json!({"acquired":false,"code":"resource_busy","pool":request.pool,"resource":request.resource,"message":message}),
+                        );
+                        return Ok(2);
+                    }
+                    Body::ResourceBusy { .. } => {
+                        tokio::time::sleep(
+                            std::time::Duration::from_secs(1).min(
+                                deadline.saturating_duration_since(tokio::time::Instant::now()),
+                            ),
+                        )
+                        .await
+                    }
+                    _ => anyhow::bail!("unexpected resource acquisition response"),
+                }
+            }
+        }
+        ResourceCommand::Release {
+            pool,
+            workspace,
+            name,
+        } => {
+            let workspace = ui::workspace(paths, workspace, true, json_output).await?;
+            client::call(
+                paths,
+                Method::ResourceRelease {
+                    workspace,
+                    pool,
+                    name,
+                },
+            )
+            .await?;
+            output(json_output, "Resource released", json!({"released":true}));
+        }
+        ResourceCommand::List { workspace, all } => {
+            let workspace = if all {
+                None
+            } else {
+                Some(ui::workspace(paths, workspace, true, json_output).await?)
+            };
+            let Body::ResourceLeases(leases) =
+                client::call(paths, Method::ResourceList { workspace }).await?
+            else {
+                anyhow::bail!("unexpected resource list response");
+            };
+            if json_output {
+                println!("{}", serde_json::to_string(&leases)?);
+            } else {
+                for lease in &leases {
+                    println!(
+                        "{}  {}/{} -> {}{}",
+                        lease.workspace_id,
+                        lease.pool,
+                        lease.name,
+                        lease.resource,
+                        lease
+                            .reason
+                            .as_ref()
+                            .map(|r| format!(" ({r})"))
+                            .unwrap_or_default()
+                    );
+                }
+                if leases.is_empty() {
+                    println!("No resource leases");
+                }
+            }
         }
     }
     Ok(0)

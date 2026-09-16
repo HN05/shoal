@@ -47,6 +47,13 @@ pub enum Command {
         #[command(subcommand)]
         command: PortCommand,
     },
+    /// Acquire, list, and release cooperative resource permits.
+    Resource {
+        #[command(subcommand)]
+        command: ResourceCommand,
+    },
+    /// Show configured pools, resource capacities, and current leases.
+    Resources { workspace: Option<String> },
     /// Share Shoal-managed Xcode simulators between worktrees.
     Sim {
         #[command(subcommand)]
@@ -212,5 +219,34 @@ pub enum SimCommand {
         #[arg(default_value = "default")]
         name: String,
         workspace: Option<String>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ResourceCommand {
+    /// Acquire one permit for any available member, or a specific resource.
+    Acquire {
+        pool: String,
+        workspace: Option<String>,
+        #[arg(long)]
+        resource: Option<String>,
+        /// Stable lease name; use different names to request multiple permits.
+        #[arg(long, default_value = "default")]
+        name: String,
+        #[arg(long)]
+        reason: Option<String>,
+        #[arg(long, default_value_t = 0, value_parser = clap::value_parser!(u64).range(0..=3600))]
+        wait: u64,
+    },
+    Release {
+        pool: String,
+        workspace: Option<String>,
+        #[arg(long, default_value = "default")]
+        name: String,
+    },
+    List {
+        workspace: Option<String>,
+        #[arg(long, conflicts_with = "workspace")]
+        all: bool,
     },
 }

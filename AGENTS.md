@@ -32,6 +32,13 @@ when behavior changes, distinguishing decisions from proposals.
   before mutations. Retain audit history after removal. Delete devices on
   workspace removal/idle expiry. Use installed runtimes only. Tests use an isolated xcrun
   fixture; never touch personal simulator devices.
+- Generic resource permits consume capacity in both the named pool and member.
+  Allocation must be atomic. Global pools span repositories; repo pools span
+  that repo's worktrees. Preserve leases on failed removal/restart; release them
+  with successful removal. Active permits prevent automatic removal. Do not
+  enforce or manage the underlying resource's lifecycle.
+- Workspace and execution lifecycle states are typed enums; preserve their
+  existing lowercase SQLite/JSON representation and reject unknown values.
 - `shoal diff` uses Git fork-point/merge-base against the recorded base branch;
   do not compare directly to today's main tip or a frozen commit after a rebase.
   Preserve native Git pager/external-diff configuration.

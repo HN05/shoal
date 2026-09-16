@@ -15,6 +15,8 @@ pub enum ConflictPolicy {
 #[serde(default, deny_unknown_fields)]
 pub struct RepoConfig {
     pub ports: PortDefaults,
+    pub resources: BTreeMap<String, crate::resources::ResourceConfig>,
+    pub resource_pools: BTreeMap<String, crate::resources::PoolConfig>,
     pub simulators: SimulatorPreferences,
 }
 
@@ -67,6 +69,7 @@ pub fn load(workspace_dir: &Path) -> Result<RepoConfig> {
             "configured port {name} cannot use port zero"
         );
     }
+    crate::resources::definitions(&config.resources, &config.resource_pools)?;
     Ok(config)
 }
 

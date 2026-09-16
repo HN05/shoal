@@ -228,6 +228,26 @@ async fn operation(
     execution_id: Option<String>,
 ) -> Result<Body> {
     Ok(match method {
+        Method::ResourceAcquire { workspace, request } => {
+            match manager.acquire_resource(workspace, request).await? {
+                crate::resources::Acquisition::Acquired(lease) => Body::ResourceLease(lease),
+                crate::resources::Acquisition::Busy(message) => Body::ResourceBusy { message },
+            }
+        }
+        Method::ResourceRelease {
+            workspace,
+            pool,
+            name,
+        } => {
+            manager.release_resource(workspace, pool, name).await?;
+            Body::Ok
+        }
+        Method::ResourceList { workspace } => {
+            Body::ResourceLeases(manager.list_resources(workspace).await?)
+        }
+        Method::ResourceOverview { workspace } => {
+            Body::ResourceOverview(manager.resource_overview(workspace).await?)
+        }
         Method::SimHistory {
             workspace,
             limit,

@@ -4,7 +4,7 @@ use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWrite
 
 use crate::model::{ExecutionPlan, Inspection, Repository, Workspace};
 
-pub const VERSION: u32 = 7;
+pub const VERSION: u32 = 8;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -19,6 +19,21 @@ pub struct Request {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Method {
+    ResourceAcquire {
+        workspace: String,
+        request: crate::resources::AcquireRequest,
+    },
+    ResourceRelease {
+        workspace: String,
+        pool: String,
+        name: String,
+    },
+    ResourceList {
+        workspace: Option<String>,
+    },
+    ResourceOverview {
+        workspace: String,
+    },
     SimCatalog,
     SimHistory {
         workspace: Option<String>,
@@ -105,6 +120,10 @@ pub struct Response {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data", rename_all = "snake_case")]
 pub enum Body {
+    ResourceLease(crate::resources::ResourceLease),
+    ResourceLeases(Vec<crate::resources::ResourceLease>),
+    ResourceOverview(crate::resources::Overview),
+    ResourceBusy { message: String },
     Status(Status),
     Repositories(Vec<Repository>),
     Repository(Repository),

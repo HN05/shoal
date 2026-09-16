@@ -17,7 +17,7 @@ pub struct Workspace {
     pub name: String,
     pub path: PathBuf,
     pub branch: String,
-    pub state: String,
+    pub state: crate::state::WorkspaceState,
     pub error: Option<String>,
     pub base_commit: Option<String>,
     pub base_ref: Option<String>,
@@ -27,11 +27,12 @@ pub struct Workspace {
 pub struct Execution {
     pub id: String,
     pub workspace_id: String,
-    pub state: String,
+    pub state: crate::state::ExecutionState,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Inspection {
+    pub resources: Vec<crate::resources::ResourceLease>,
     pub simulators: Vec<crate::simulators::Simulator>,
     pub workspace: Workspace,
     pub executions: Vec<Execution>,

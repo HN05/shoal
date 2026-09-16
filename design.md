@@ -1757,3 +1757,76 @@ match, or fzf selection yields its human name for the remote-control session.
 `shoal exec` passes its command through unchanged. Shoal's worktree scope still
 applies to all executions. Stub-executable tests verify exact argv and name
 resolution without starting actual agents or remote-control sessions.
+
+
+### Implemented generic resource pools
+
+Generic resources use cooperative counting semaphores. They are declarative
+names and capacities, with no lifecycle adapter, process enforcement, proxy, or
+sandboxing. A standalone resource is a one-member pool. Capacity 1 is a mutex.
+
+Both global and repo TOML support `[resources.<name>]` with `capacity` (default
+1) and optional `reason`, and `[resource_pools.<name>]` with an optional total
+`capacity`, optional `reason`, and named `[resource_pools.<name>.resources.<member>]`
+entries with their own capacity/reason. Omitted pool capacity is the sum of member
+capacities; empty pools are invalid. Names use the same lowercase format as
+ports, and capacities must be 1–65535. Standalone and pool names cannot collide.
+
+Global definitions are shared across all registered repositories in one daemon.
+Repo definitions are shared by worktrees of the same registered repository and
+are independent of equally named pools in other repos. Different repo definitions
+cannot override a global name; an identical duplicate resolves to global scope.
+Members are identified within their pool, not by a cross-pool global name.
+Definitions are loaded like other settings: global at daemon startup, repo from
+the selected worktree at request time. No allocation occurs at creation.
+
+`shoal resource acquire <pool-or-resource> [workspace]` acquires one permit from
+both a pool and one named member. `--resource` pins a member; otherwise select
+an available member with the lowest fraction of capacity occupied, breaking ties
+by name. `--name` identifies the lease (default `default`) for idempotent repeated
+requests. Distinct names request additional permits. Explicitly changing the
+member of an existing lease requires release first. `--reason` overrides member
+or pool defaults and can update an existing lease's reason. Output identifies
+the actual member, pool, scope, owner, lease ID/name, reason, and acquisition time.
+
+`shoal resources [workspace]` shows configured pool/member capacity, aggregate
+occupancy, availability, config disagreements, and the caller's leases.
+`resource list [workspace]` lists actual leases; humans may pass `--all`.
+`resource release <pool-or-resource> [workspace] [--name <lease>]` returns a permit
+without requiring the config definition to still exist. Target selection follows
+ports/current directory/fzf, and scoped requests are authorized by the daemon.
+Scoped agents see aggregate shared occupancy but never other owners' lease
+records, and cannot release or inspect another owner's leases.
+
+Allocation uses an immediate SQLite transaction covering readiness checks,
+existing-name lookup, definition agreement, both capacity checks, and insertion.
+Concurrent acquisitions cannot overbook. Definitions are recorded with leases;
+while any are active, a conflicting branch/global definition rejects new claims.
+Existing matching leases remain usable and releasable. Once drained, a new
+request can replace the stored definition. This prevents branch config drift
+from creating extra capacity or revoking already-issued permits.
+
+Busy acquisition returns `acquired: false`, code `resource_busy`, and exit 2.
+`--wait <seconds>` retries up to 3600 seconds; no FIFO fairness, multi-permit
+atomicity, or deadlock avoidance is implied. A permit survives command exit and
+daemon restart until explicitly released or its worktree is removed. Active
+permits block automatic cleanup. Manual removal stops connected commands, removes
+the directory, then releases permits with the ownership record in one transaction;
+failed removal retains them. Agents must stop external resource use before
+release, since Shoal cannot verify use of generic resources.
+
+Validation covers independent pool/member limits, mutexes, multiple named permits,
+concurrent claims, bounded waiting, idempotency, persistence, scope filtering,
+repo/global identity, definition drift, release after config removal, successful
+and failed removal, and automatic-cleanup protection. The root agent skill adds
+only the resource commands and acquisition/release semantics.
+
+### Typed workspace and execution states
+
+`WorkspaceState` has Preparing, Ready, Stopping, Removing, and Failed variants.
+`ExecutionState` has Running and Unknown variants (Unknown is a recorded loss of
+execution connectivity, not an arbitrary unknown input). Models, comparisons,
+transitions, SQLite bindings, and JSON use these types. Database and wire values
+remain the existing lowercase strings, preserving saved state and CLI consumers.
+Unknown/mismatched values fail decoding rather than silently creating a new state.
+Round-trip compatibility tests cover both JSON and SQLite representations.

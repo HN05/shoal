@@ -9,6 +9,8 @@ use crate::paths::Paths;
 pub struct Config {
     pub auto_cleanup: AutoCleanup,
     pub ports: Ports,
+    pub resources: std::collections::BTreeMap<String, crate::resources::ResourceConfig>,
+    pub resource_pools: std::collections::BTreeMap<String, crate::resources::PoolConfig>,
     pub simulators: crate::simulators::SimConfig,
 }
 
@@ -86,6 +88,7 @@ impl Config {
             "ports.start/end must specify a nonempty range between 1 and 65535"
         );
         config.simulators.validate()?;
+        crate::resources::definitions(&config.resources, &config.resource_pools)?;
         Ok(config)
     }
 }
