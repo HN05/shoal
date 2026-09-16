@@ -982,7 +982,10 @@ responsibilities; these shortcuts do not introduce separate agent integrations.
   `shoal repo add`; `add` then accepts its path, source URL, or ID. After repository selection,
   prompt for a workspace name unless `--name` was supplied. Collect both before
   creating the workspace.
-- `shoal rm`, `shoal inspect`, and `shoal stop` offer existing runs. Rows should
+- `shoal rm` uses the workspace containing the current directory (including
+  subdirectories), falling back to the workspace picker when outside one.
+  An explicit workspace name always takes precedence.
+- `shoal inspect` and `shoal stop` offer existing runs. Rows should
   distinguish repository, run name/ID, branch, and state.
 - `shoal exec <workspace-name> -- <command>` selects the named workspace.
 - `shoal exec -- <command>` uses the workspace containing the current directory;

@@ -165,7 +165,7 @@ async fn run(cli: Cli) -> Result<i32> {
             );
         }
         Command::Rm { workspace } => {
-            let workspace = ui::workspace(&paths, workspace, false, cli.json).await?;
+            let workspace = ui::workspace(&paths, workspace, true, cli.json).await?;
             let inspection = match client::call(
                 &paths,
                 Method::Inspect {

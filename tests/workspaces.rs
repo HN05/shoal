@@ -381,7 +381,7 @@ else
   test "$?" -eq 7
 fi
 printf 'keep me' > untracked
-if shoal rm navigate; then
+if shoal rm; then
   exit 1
 fi
 test "${PWD##*/}" = navigate
@@ -389,7 +389,7 @@ test -f untracked
 rm untracked
 mkdir nested
 cd nested
-shoal rm navigate
+shoal rm
 test "$PWD" = "$REPO"
 printf 'navigation-ok\n'
 "#;
