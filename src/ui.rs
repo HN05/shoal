@@ -19,6 +19,28 @@ fn interactive(json: bool) -> Result<()> {
     Ok(())
 }
 
+pub fn confirm_removal(check: &crate::removal::RemovalCheck, json: bool) -> Result<()> {
+    let warnings = check.warnings();
+    ensure!(
+        !json && io::stdin().is_terminal() && io::stderr().is_terminal(),
+        "removal requires confirmation: {}. Pass --yes to confirm",
+        warnings.join("; ")
+    );
+    eprintln!("Remove workspace {}?", check.workspace.name);
+    for warning in warnings {
+        eprintln!("  - {warning}");
+    }
+    eprint!("Are you sure? [y/N] ");
+    io::stderr().flush()?;
+    let mut answer = String::new();
+    io::stdin().read_line(&mut answer)?;
+    ensure!(
+        matches!(answer.trim().to_ascii_lowercase().as_str(), "y" | "yes"),
+        "removal canceled"
+    );
+    Ok(())
+}
+
 pub fn input(prompt: &str, json: bool) -> Result<String> {
     interactive(json)?;
     eprint!("{prompt}: ");
@@ -92,7 +114,12 @@ fn repository_name(repo: &Repository) -> &str {
     name.strip_suffix(".git").unwrap_or(name)
 }
 
-pub fn repository_choices(repos: Vec<Repository>) -> Vec<(String, String)> {
+pub async fn repository_choices(mut repos: Vec<Repository>) -> Result<Vec<(String, String)>> {
+    for repo in &mut repos {
+        if let Some(url) = crate::repository::remote_url(&repo.source).await? {
+            repo.source = url;
+        }
+    }
     let labels: Vec<_> = repos
         .iter()
         .map(|repo| {
@@ -112,7 +139,7 @@ pub fn repository_choices(repos: Vec<Repository>) -> Vec<(String, String)> {
             }
         })
         .collect();
-    repos
+    Ok(repos
         .into_iter()
         .zip(&labels)
         .map(|(repo, label)| {
@@ -124,7 +151,7 @@ pub fn repository_choices(repos: Vec<Repository>) -> Vec<(String, String)> {
             };
             (repo.id, label)
         })
-        .collect()
+        .collect())
 }
 
 pub async fn workspaces(paths: &Paths) -> Result<Vec<Workspace>> {

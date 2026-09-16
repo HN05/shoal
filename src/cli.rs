@@ -42,8 +42,13 @@ pub enum Command {
     Inspect { workspace: Option<String> },
     /// Stop connected commands, preserving the workspace.
     Stop { workspace: Option<String> },
-    /// Stop commands and remove a clean worktree, preserving its branch.
-    Rm { workspace: Option<String> },
+    /// Remove a worktree, asking before stopping commands or discarding changes.
+    Rm {
+        workspace: Option<String>,
+        /// Confirm stopping commands and deleting uncommitted files without a prompt.
+        #[arg(short = 'y', long)]
+        yes: bool,
+    },
     /// Execute a command in a named or current workspace.
     Exec {
         workspace: Option<String>,

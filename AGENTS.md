@@ -14,6 +14,11 @@ when behavior changes, distinguishing decisions from proposals.
   operations and preserve Shoal's ownership records and cleanup policy.
 - Repository configuration locations are chosen; its schema and file format
   remain undecided. Do not silently invent a public configuration contract.
+- Global TOML configuration supports `[auto_cleanup]` with `enabled` (default
+  true) and `idle_minutes` (default 10). Automatic removal is only for idle,
+  clean, fully pushed worktrees. Keep one removal path for manual and automatic
+  cleanup; future resource leases belong to the worktree and must be released
+  before its directory and ownership record are removed.
 
 ## Validation
 

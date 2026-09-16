@@ -60,6 +60,7 @@ pub async fn run(paths: Paths, managed: bool) -> Result<()> {
         _lock: lock,
     };
     let manager = Manager::open(paths.clone()).await?;
+    let config = crate::config::Config::load(&paths)?;
     let listener = UnixListener::bind(&paths.socket).context("bind daemon socket")?;
     fs::set_permissions(&paths.socket, fs::Permissions::from_mode(0o600))?;
     let mut terminate = signal(SignalKind::terminate())?;
@@ -68,6 +69,12 @@ pub async fn run(paths: Paths, managed: bool) -> Result<()> {
     let started = Instant::now();
     let mut clients = JoinSet::new();
     eprintln!("shoal daemon listening on {}", paths.socket.display());
+    let cleanup = config.auto_cleanup.enabled.then(|| {
+        tokio::spawn(crate::cleanup::run(
+            manager.clone(),
+            Duration::from_secs(config.auto_cleanup.idle_minutes * 60),
+        ))
+    });
     loop {
         tokio::select! {
             _ = terminate.recv() => break,
@@ -87,6 +94,10 @@ pub async fn run(paths: Paths, managed: bool) -> Result<()> {
         }
     }
     clients.abort_all();
+    if let Some(cleanup) = cleanup {
+        cleanup.abort();
+        let _ = cleanup.await;
+    }
     while clients.join_next().await.is_some() {}
     Ok(())
 }
@@ -178,8 +189,16 @@ async fn operation(manager: &Manager, method: Method) -> Result<Body> {
         } => Body::Workspace(manager.add(repository, name, base).await?),
         Method::List => Body::Workspaces(manager.list().await?),
         Method::Inspect { workspace } => Body::Inspection(manager.inspect(workspace).await?),
-        Method::Remove { workspace } => {
-            manager.remove(workspace).await?;
+        Method::CheckRemoval {
+            workspace,
+            caller_pid,
+        } => Body::RemovalCheck(manager.check_removal(workspace, caller_pid).await?),
+        Method::Remove {
+            workspace,
+            confirmed,
+            caller_pid,
+        } => {
+            manager.remove(workspace, confirmed, caller_pid).await?;
             Body::Ok
         }
         Method::Stop { workspace } => {

@@ -5,7 +5,7 @@ for the full design and implementation sequence.
 
 ## Development
 
-Requires Rust, Git, and Worktrunk (`wt`, tested with 0.77.0). Interactive menus
+Requires Rust, Git, `lsof`, and Worktrunk (`wt`, tested with 0.77.0). Interactive menus
 require `fzf`. Install the runtime tools before running `shoal setup` so the
 daemon captures a PATH that includes them. Integration tests also use Bash and Zsh.
 
@@ -65,7 +65,8 @@ shoal claude fix-login -- --help
 shoal codex fix-login -- --help
 shoal inspect fix-login
 shoal stop fix-login        # Stop commands; keep the worktree
-shoal rm fix-login          # Stop commands and remove a clean worktree
+shoal rm fix-login          # Confirm if busy, dirty, or unpushed; retain branch
+shoal rm fix-login --yes    # Explicitly confirm those risks without prompting
 ```
 
 Bare `shoal` displays help. `shoal add` offers registered repositories
@@ -89,11 +90,41 @@ Registration reuses an existing repository when its source URL or local checkout
 `origin` identifies the same remote, including HTTPS/SSH forms and optional `.git`
 suffixes. Checkouts without `origin` are identified by their canonical local path.
 
-Removal refuses tracked changes and untracked files, removes ignored files
-inside the worktree, and retains Git branches. Shared caches outside the worktree
-remain untouched. Worktrunk hooks are disabled; repository setup scripts and
-Shoal configuration parsing are not implemented yet. Restore dependencies with
+Removal asks before stopping commands, discarding uncommitted/untracked files,
+or removing a worktree with unpushed commits. The default answer is no;
+noninteractive/JSON calls require `--yes` when any of these conditions apply.
+Only Shoal-managed commands are stopped; other processes using the directory
+are reported for confirmation. The invoking CLI and its ancestor shells are
+excluded from that check. Git branches are retained, and ignored files inside
+the worktree are removed. Shared caches outside the worktree remain untouched.
+Worktrunk hooks are disabled; repository setup scripts and repository config
+parsing are not implemented yet. Restore dependencies with
 an explicit command such as `shoal exec fix-login -- npm ci`.
+
+### Automatic cleanup
+
+Enabled by default: an idle, clean, fully pushed worktree is removed after
+10 minutes. File changes (including ignored files), Git HEAD changes, and Shoal
+command activity reset the timer. Running commands, processes with a working
+directory in the worktree (including open shells), dirty files, unpushed commits,
+and failed checks prevent cleanup. Shoal checks about every 30 seconds and starts
+fresh timers after daemon restarts.
+
+“Pushed” means commits are reachable from locally known remote branches; Shoal
+does not fetch automatically. Automatic removal rechecks conditions and uses the
+same cleanup path as manual removal, retaining branches and shared caches. Future
+resource leases belong to the worktree and must be released through this path.
+
+Configure `~/.config/shoal/config.toml` (or `$XDG_CONFIG_HOME/shoal/config.toml`):
+
+```toml
+[auto_cleanup]
+enabled = false # Default: true
+idle_minutes = 10
+```
+
+Restart the daemon after changing this configuration. `lsof` must be available
+for process checks; failed inspection retains the workspace.
 
 ### Shell navigation
 

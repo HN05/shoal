@@ -36,21 +36,25 @@ pub async fn git(repo: &Path, args: &[&str]) -> Result<String> {
 }
 
 pub async fn create(
-    repo: &Path,
-    config: &Path,
-    path: &Path,
+    repository_dir: &Path,
+    worktrunk_config: &Path,
+    workspace_dir: &Path,
     branch: &str,
     base: &str,
 ) -> Result<()> {
-    let literal = serde_json::to_string(path.to_str().context("workspace path is not UTF-8")?)?;
+    let literal = serde_json::to_string(
+        workspace_dir
+            .to_str()
+            .context("workspace path is not UTF-8")?,
+    )?;
     let mut command = Command::new("wt");
     command
         .arg("--config")
-        .arg(config)
+        .arg(worktrunk_config)
         .arg("--config-set")
         .arg(format!("worktree-path = {literal}"))
         .arg("-C")
-        .arg(repo)
+        .arg(repository_dir)
         .args([
             "switch",
             "--create",
@@ -71,32 +75,39 @@ pub async fn create(
         .as_str()
         .context("Worktrunk omitted workspace path")?;
     ensure!(
-        std::fs::canonicalize(reported)? == std::fs::canonicalize(path)?,
+        std::fs::canonicalize(reported)? == std::fs::canonicalize(workspace_dir)?,
         "Worktrunk created an unexpected workspace path"
     );
     Ok(())
 }
 
-pub async fn remove(repo: &Path, config: &Path, path: &Path) -> Result<()> {
+pub async fn remove(
+    repository_dir: &Path,
+    worktrunk_config: &Path,
+    workspace_dir: &Path,
+    confirmed: bool,
+) -> Result<()> {
     let mut command = Command::new("wt");
     command
         .arg("--config")
-        .arg(config)
+        .arg(worktrunk_config)
         .arg("-C")
-        .arg(repo)
+        .arg(repository_dir)
         .args([
             "remove",
             "--foreground",
             "--no-hooks",
             "--no-delete-branch",
             "--format=json",
-            "--",
-        ])
-        .arg(path);
+        ]);
+    if confirmed {
+        command.arg("--force");
+    }
+    command.arg("--").arg(workspace_dir);
     let _: Value =
         serde_json::from_str(&run(command).await?).context("invalid Worktrunk removal result")?;
     ensure!(
-        !path.exists(),
+        !workspace_dir.exists(),
         "Worktrunk returned before workspace removal completed"
     );
     Ok(())

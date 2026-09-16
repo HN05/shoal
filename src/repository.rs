@@ -6,6 +6,10 @@ use crate::worktrunk;
 /// Local checkouts use origin; clones retain their original source URL even
 /// when their checkout is temporarily unavailable. No network access is needed.
 pub async fn identity(source: &str) -> Result<Option<String>> {
+    Ok(remote_url(source).await?.map(|url| url_key(&url)))
+}
+
+pub async fn remote_url(source: &str) -> Result<Option<String>> {
     let url = if Path::new(source).exists() {
         let remotes = worktrunk::git(Path::new(source), &["remote"]).await?;
         if !remotes.lines().any(|remote| remote == "origin") {
@@ -18,7 +22,7 @@ pub async fn identity(source: &str) -> Result<Option<String>> {
     } else {
         source.to_owned()
     };
-    Ok(Some(url_key(&url)))
+    Ok(Some(url))
 }
 
 fn url_key(url: &str) -> String {

@@ -231,13 +231,13 @@ explicit ambiguity error must be specified. Keep daemon state and allocations
 outside the repository.
 
 **Confirmed global location:** `~/.config/shoal/config.toml`. Respecting
-`XDG_CONFIG_HOME` as an override remains a proposal. Global filesystem policy
+`XDG_CONFIG_HOME` as an absolute-path override is implemented. Global filesystem policy
 retains its established precedence over repository grants.
 
-**The configuration file format and schema are not yet set.** The chosen path
-names do not finalize serialization, field names, setup-command syntax, or
-port/environment mapping syntax. The earlier TOML example was illustrative
-and is not an accepted schema.
+**The repository configuration file format and schema are not yet set.** Global
+configuration now uses TOML for `[auto_cleanup]` (`enabled = true`,
+`idle_minutes = 10` by default). Repository setup-command syntax, resource
+requirements, and port/environment mapping syntax remain undecided.
 
 Read the configuration from the selected worktree so branches can carry their
 own settings. Proposed validation errors should identify the file and setting
@@ -1003,7 +1003,9 @@ Proposed interaction details:
   rather than waiting for terminal input.
 - Canceling a picker performs no action. An empty repository history explains
   how to add the first repository using a path or URL.
-- Selection does not change the still-undecided dirty-worktree retention policy.
+- Removal prompts default to no when commands/processes are running, files are
+  dirty/untracked, or commits are unpushed. `--yes` supplies explicit confirmation
+  for noninteractive calls. Branches remain preserved.
 
 `fzf` is required for interactive pickers. There is no built-in fallback; explicit
 arguments remain usable without it.
@@ -1397,10 +1399,12 @@ Implemented:
 - Workspace paths `<state-dir>/workspaces/<name>`; unique names are 1–64 ASCII
   letters/digits/hyphens/underscores and start with a letter or digit. A new
   `shoal/<name>-<unique-suffix>` branch starts from committed `HEAD` or `--ref`.
-- Initial removal policy refuses tracked modifications/untracked files, removes
-  ignored worktree files, and preserves branches. Shared caches outside the
-  worktree and registered repository clones survive removal. More retention and
-  branch-pruning controls remain future work.
+- Manual removal checks running commands/processes, tracked modifications,
+  untracked files, and unpushed commits. Risks require an interactive yes/no
+  confirmation (default no) or explicit `--yes`. Uncommitted files can be deleted
+  only after confirmation. Branches and shared caches outside the worktree are
+  retained; ignored worktree files are removed. Non-Shoal processes are reported,
+  not terminated. The invoking CLI and its ancestor shells are excluded.
 - External `fzf` repository/workspace pickers, with no built-in fallback.
   Explicit targets and noninteractive/JSON operation never open a picker.
 - Connected execution wrappers preserve terminal or piped I/O and exit codes,
@@ -1428,3 +1432,42 @@ Validation uses real Worktrunk with temporary repositories/state, including
 concurrent name claims, dirty-removal refusal, execution I/O and exit codes,
 stopping commands, persistence, and Bash/Zsh navigation. Real `fzf` repository/workspace selection and foreground
 terminal input are checked through a temporary pseudo-terminal.
+
+
+### Automatic worktree cleanup
+
+Confirmed and implemented: enabled by default, with a 10-minute idle timer.
+Only clean worktrees whose HEAD commits are reachable from locally known remote
+branches and which have no running commands/processes are eligible. No automatic
+fetch is performed. Unknown executions and failed inspections block cleanup.
+
+The daemon polls approximately every 30 seconds. Filesystem metadata changes
+(including ignored files), Git HEAD changes, and Shoal command activity reset the
+timer. Dirty/unpushed/busy states cancel it; becoming eligible starts a new timer.
+Timers reset after daemon restart. Metadata scans do not follow symlinks outside
+the worktree. Open shells count as active use for automatic cleanup. Process
+checks use `lsof` and fail closed when unavailable. Changes are rechecked in the
+shared removal path immediately before deleting the worktree; cooperative
+processes are assumed, so this is not transactional isolation against arbitrary
+external filesystem changes.
+
+Global `~/.config/shoal/config.toml` accepts:
+
+```toml
+[auto_cleanup]
+enabled = true
+idle_minutes = 10
+```
+
+`enabled = false` disables automatic cleanup. The delay must be 1–525600 minutes.
+An absolute `XDG_CONFIG_HOME` overrides the config directory. Restart the daemon
+to apply changes. Unknown configuration fields are rejected to catch typos.
+Repository configuration and the later machine/filesystem policy remain separate
+future work.
+
+**Resource ownership is per worktree.** Both manual and automatic removal use
+one lifecycle: check/confirm, stop managed commands, release/reset worktree-owned
+resource leases, remove the worktree, then retire its ownership record. Future
+port/simulator backends must implement release in this shared path and retain
+ownership records on failure. Those backends are not implemented yet; no actual
+resource release is claimed by this milestone.

@@ -1,10 +1,14 @@
+mod cleanup;
 mod cli;
 mod client;
+mod config;
 mod daemon;
 mod execution;
 mod model;
 mod paths;
+mod processes;
 mod protocol;
+mod removal;
 mod repository;
 mod service;
 mod shell;
@@ -91,7 +95,7 @@ async fn run(cli: Cli) -> Result<i32> {
                 Some(repo) => ui::repository_selector(repo)?,
                 None => ui::pick(
                     "Repository> ",
-                    ui::repository_choices(ui::repositories(&paths).await?),
+                    ui::repository_choices(ui::repositories(&paths).await?).await?,
                     cli.json,
                 )?,
             };
@@ -158,8 +162,29 @@ async fn run(cli: Cli) -> Result<i32> {
                 json!({"stopped": true}),
             );
         }
-        Command::Rm { workspace } => {
+        Command::Rm { workspace, yes } => {
             let workspace = ui::workspace(&paths, workspace, true, cli.json).await?;
+            let caller_pid = std::process::id();
+            let check = match client::call(
+                &paths,
+                Method::CheckRemoval {
+                    workspace: workspace.clone(),
+                    caller_pid,
+                },
+            )
+            .await?
+            {
+                Body::RemovalCheck(check) => check,
+                _ => anyhow::bail!("unexpected removal check response"),
+            };
+            let confirmed = if check.safe() {
+                false
+            } else {
+                if !yes {
+                    ui::confirm_removal(&check, cli.json)?;
+                }
+                true
+            };
             let inspection = match client::call(
                 &paths,
                 Method::Inspect {
@@ -183,7 +208,15 @@ async fn run(cli: Cli) -> Result<i32> {
             } else {
                 None
             };
-            let result = client::call(&paths, Method::Remove { workspace }).await;
+            let result = client::call(
+                &paths,
+                Method::Remove {
+                    workspace,
+                    confirmed: confirmed || yes,
+                    caller_pid,
+                },
+            )
+            .await;
             if inside && (result.is_ok() || !cwd.exists()) {
                 let destination = destination
                     .filter(|p| p.is_dir())

@@ -21,6 +21,7 @@ pub struct Manager {
     paths: Paths,
     repositories: Mutex<()>,
     active: Mutex<HashMap<String, watch::Sender<bool>>>,
+    activity: Mutex<HashMap<String, u64>>,
 }
 
 impl Manager {
@@ -34,6 +35,7 @@ impl Manager {
             paths,
             repositories: Mutex::new(()),
             active: Mutex::new(HashMap::new()),
+            activity: Mutex::new(HashMap::new()),
         }))
     }
 
@@ -218,7 +220,81 @@ impl Manager {
             .await
     }
 
-    pub async fn remove(&self, selector: String) -> Result<()> {
+    async fn verify_worktree(&self, workspace: &Workspace) -> Result<()> {
+        let repo = self.repository(&workspace.repository_id).await?;
+        // Verify this is still the checkout Shoal created before any deletion.
+        let root = worktrunk::git(&workspace.path, &["rev-parse", "--show-toplevel"]).await?;
+        ensure!(
+            fs::canonicalize(root.trim())? == fs::canonicalize(&workspace.path)?,
+            "workspace path no longer points to its worktree root"
+        );
+        let expected = worktrunk::git(
+            &repo.path,
+            &["rev-parse", "--path-format=absolute", "--git-common-dir"],
+        )
+        .await?;
+        let actual = worktrunk::git(
+            &workspace.path,
+            &["rev-parse", "--path-format=absolute", "--git-common-dir"],
+        )
+        .await?;
+        ensure!(
+            fs::canonicalize(expected.trim())? == fs::canonicalize(actual.trim())?,
+            "workspace now belongs to a different repository"
+        );
+        Ok(())
+    }
+
+    pub async fn check_removal(
+        &self,
+        selector: String,
+        caller_pid: u32,
+    ) -> Result<crate::removal::RemovalCheck> {
+        let inspection = self.inspect(selector).await?;
+        if inspection.workspace.path.exists() {
+            self.verify_worktree(&inspection.workspace).await?;
+        }
+        crate::removal::check(
+            inspection.workspace,
+            inspection.executions.len(),
+            caller_pid,
+        )
+        .await
+    }
+
+    pub async fn remove(&self, selector: String, confirmed: bool, caller_pid: u32) -> Result<()> {
+        self.remove_with_guard(selector, confirmed, caller_pid, None)
+            .await
+    }
+
+    pub async fn cleanup_snapshot(&self, id: &str) -> Result<Option<u64>> {
+        let check = self.check_removal(id.to_owned(), 0).await?;
+        if !check.safe() || !check.workspace.path.is_dir() {
+            return Ok(None);
+        }
+        let head = worktrunk::git(&check.workspace.path, &["rev-parse", "HEAD"]).await?;
+        let activity = self.activity.lock().await.get(id).copied().unwrap_or(0);
+        let path = check.workspace.path;
+        Ok(Some(
+            tokio::task::spawn_blocking(move || {
+                crate::cleanup::fingerprint(&path, &head, activity)
+            })
+            .await??,
+        ))
+    }
+
+    pub async fn remove_idle(&self, selector: String, snapshot: u64) -> Result<()> {
+        self.remove_with_guard(selector, false, 0, Some(snapshot))
+            .await
+    }
+
+    async fn remove_with_guard(
+        &self,
+        selector: String,
+        confirmed: bool,
+        caller_pid: u32,
+        expected_snapshot: Option<u64>,
+    ) -> Result<()> {
         let workspace = self.get(selector).await?;
         let id = workspace.id.clone();
         self.store.run(move |db| {
@@ -227,34 +303,29 @@ impl Manager {
             Ok(())
         }).await?;
         let result = async {
-            self.stop_executions(&workspace.id).await?;
             let repo = self.repository(&workspace.repository_id).await?;
             if workspace.path.exists() {
-                // Verify this is still the checkout Shoal created before any deletion.
-                let root =
-                    worktrunk::git(&workspace.path, &["rev-parse", "--show-toplevel"]).await?;
+                let check = self.check_removal(workspace.id.clone(), caller_pid).await?;
                 ensure!(
-                    fs::canonicalize(root.trim())? == fs::canonicalize(&workspace.path)?,
-                    "workspace path no longer points to its worktree root"
+                    confirmed || check.safe(),
+                    "removal requires confirmation: {}; retry with --yes to confirm",
+                    check.warnings().join("; ")
                 );
-                let expected = worktrunk::git(
-                    &repo.path,
-                    &["rev-parse", "--path-format=absolute", "--git-common-dir"],
-                )
-                .await?;
-                let actual = worktrunk::git(
-                    &workspace.path,
-                    &["rev-parse", "--path-format=absolute", "--git-common-dir"],
-                )
-                .await?;
-                ensure!(
-                    fs::canonicalize(expected.trim())? == fs::canonicalize(actual.trim())?,
-                    "workspace now belongs to a different repository"
-                );
+                self.stop_executions(&workspace.id).await?;
+                if let Some(expected) = expected_snapshot {
+                    ensure!(
+                        self.cleanup_snapshot(&workspace.id).await? == Some(expected),
+                        "workspace changed before automatic removal"
+                    );
+                }
+                // Future ports/simulator leases belong to the worktree. Release or
+                // reset them here, before deleting its directory and ownership record.
+                // Manual and automatic removal share this exact path.
                 worktrunk::remove(
                     &repo.path,
                     &self.paths.state.join("worktrunk.toml"),
                     &workspace.path,
+                    confirmed,
                 )
                 .await?;
             } else {
@@ -277,6 +348,7 @@ impl Manager {
                 .await?;
             return Err(error);
         }
+        self.activity.lock().await.remove(&workspace.id);
         Ok(())
     }
 
@@ -286,6 +358,12 @@ impl Manager {
         let mut active = self.active.lock().await;
         let workspace = self.get(selector).await?;
         ensure!(workspace.path.is_dir(), "workspace directory is missing");
+        *self
+            .activity
+            .lock()
+            .await
+            .entry(workspace.id.clone())
+            .or_default() += 1;
         let id = Uuid::new_v4().to_string();
         let (execution_id, workspace_id) = (id.clone(), workspace.id.clone());
         self.store

@@ -42,6 +42,8 @@ impl Fixture {
                 "initial",
             ],
         );
+        // Model a starting commit already present on a remote, without network I/O.
+        git(&repo, &["update-ref", "refs/remotes/origin/main", "HEAD"]);
         let daemon = cli(root.path())
             .args(["daemon", "run"])
             .stdout(Stdio::null())
@@ -229,6 +231,8 @@ fn dirty_workspace_is_retained_and_failed_creation_can_be_removed() {
         fixture.ok(&["inspect", "dirty"])["workspace"]["state"],
         "ready"
     );
+    fixture.ok(&["rm", "dirty", "--yes"]);
+    assert!(!Path::new(workspace["path"].as_str().unwrap()).exists());
     assert!(
         !fixture
             .run(&[
@@ -247,6 +251,53 @@ fn dirty_workspace_is_retained_and_failed_creation_can_be_removed() {
         "failed"
     );
     fixture.ok(&["rm", "broken"]);
+}
+
+#[test]
+fn removal_requires_confirmation_for_unpushed_commits_and_external_processes() {
+    let fixture = Fixture::new();
+    let workspace = fixture.add("unpushed");
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    git(
+        path,
+        &[
+            "-c",
+            "user.name=Shoal Test",
+            "-c",
+            "user.email=shoal@example.invalid",
+            "commit",
+            "--allow-empty",
+            "-m",
+            "unpushed",
+        ],
+    );
+    let output = fixture.run(&["rm", "unpushed"]);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("not on any known remote"));
+    fixture.ok(&["rm", "unpushed", "--yes"]);
+    git(
+        &fixture.repo,
+        &[
+            "rev-parse",
+            "--verify",
+            workspace["branch"].as_str().unwrap(),
+        ],
+    );
+
+    let workspace = fixture.add("external");
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    let mut process = Command::new("sleep")
+        .arg("10")
+        .current_dir(path)
+        .spawn()
+        .unwrap();
+    let output = fixture.run(&["rm", "external"]);
+    let _ = process.kill();
+    let _ = process.wait();
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("Processes are using this directory"));
+    assert!(path.exists());
+    fixture.ok(&["rm", "external"]);
 }
 
 #[test]
