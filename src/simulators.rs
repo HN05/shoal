@@ -68,8 +68,10 @@ impl SimConfig {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct SimRequest {
+    pub request_id: String,
+    pub clean: bool,
     pub name: String,
     pub profile: Option<String>,
     pub device: Option<String>,
@@ -79,6 +81,8 @@ pub struct SimRequest {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Simulator {
+    #[serde(default)]
+    pub installed_apps: Option<usize>,
     pub id: String,
     pub udid: Option<String>,
     pub device: String,
@@ -96,7 +100,7 @@ pub enum Acquisition {
     Acquired(Box<Simulator>),
     Busy(String),
 }
-fn now() -> u64 {
+pub(crate) fn now() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
@@ -195,6 +199,48 @@ impl Manager {
         &self,
         selector: String,
         request: SimRequest,
+        execution_id: Option<String>,
+    ) -> Result<Acquisition> {
+        let _guard = self.sim_gate.lock().await;
+        let workspace = self.get(selector).await?;
+        let mut audit = if request.clean {
+            Some(
+                self.start_clean_request(&workspace, &request, execution_id)
+                    .await?,
+            )
+        } else {
+            None
+        };
+        let result = self
+            .acquire_simulator_inner(workspace, request, &mut audit)
+            .await;
+        if let Some(mut audit) = audit {
+            audit.updated_at = now();
+            match &result {
+                Ok(Acquisition::Acquired(sim)) => {
+                    audit.status = "acquired".into();
+                    audit.simulator_id = Some(sim.id.clone());
+                    audit.udid = sim.udid.clone();
+                }
+                Ok(Acquisition::Busy(message)) => {
+                    audit.status = "busy".into();
+                    audit.error = Some(message.clone());
+                }
+                Err(error) => {
+                    audit.status = "failed".into();
+                    audit.error = Some(format!("{error:#}"));
+                }
+            }
+            self.save_clean_request(&audit).await?;
+        }
+        result
+    }
+
+    async fn acquire_simulator_inner(
+        &self,
+        workspace: crate::model::Workspace,
+        request: SimRequest,
+        audit: &mut Option<crate::sim_audit::CleanRequest>,
     ) -> Result<Acquisition> {
         crate::workspace::validate_name(&request.name)?;
         ensure!(
@@ -205,8 +251,10 @@ impl Manager {
         );
         // All simctl transitions are serialized. Never hold a SQLite transaction
         // across a boot; other resource/workspace requests remain responsive.
-        let _guard = self.sim_gate.lock().await;
-        let workspace = self.get(selector).await?;
+        ensure!(
+            !request.clean || request.reason.is_some(),
+            "--clean requires --reason explaining why a clean device is necessary"
+        );
         ensure!(workspace.state == "ready", "workspace is not ready");
         self.touch(&workspace.id).await;
         let mut records = self.simulators(None).await?;
@@ -223,6 +271,10 @@ impl Manager {
             Some(self.resolve_profile(&workspace.path, &request, &inventory)?)
         };
         if let Some(index) = existing {
+            ensure!(
+                !request.clean,
+                "this simulator name is already leased; release it before requesting a clean device, or use another --name"
+            );
             let sim = &mut records[index];
             if let Some(profile) = &profile {
                 ensure!(
@@ -246,9 +298,25 @@ impl Manager {
             return Ok(Acquisition::Acquired(Box::new(sim.clone())));
         }
         let profile = profile.unwrap();
-        // Prefer an idle compatible device, most recently used first (warm cache).
-        records.sort_by_key(|s| std::cmp::Reverse(s.last_used));
-        let reusable = records
+        // Cache live counts without booting stopped devices just to inspect them.
+        if request.clean && records.len() >= self.config.simulators.max_devices {
+            for sim in records.iter_mut().filter(|s| s.workspace_id.is_none()) {
+                if sim
+                    .udid
+                    .as_deref()
+                    .and_then(|u| inventory.device(u))
+                    .is_some_and(|d| d.state == "Booted")
+                {
+                    sim.installed_apps = simctl::user_app_count(sim.udid.as_deref().unwrap())
+                        .await
+                        .ok();
+                }
+            }
+            records.sort_by_key(|s| (s.installed_apps.unwrap_or(usize::MAX), s.last_used));
+        } else {
+            records.sort_by_key(|s| std::cmp::Reverse(s.last_used));
+        }
+        let mut reusable = records
             .iter()
             .find(|s| {
                 s.workspace_id.is_none()
@@ -261,6 +329,29 @@ impl Manager {
                         .is_some_and(|d| d.is_available)
             })
             .cloned();
+        if request.clean {
+            // Spare capacity costs zero reinstalls. At capacity, replacing an
+            // incompatible empty device can cost less than erasing a useful one.
+            let evictions_needed = records
+                .len()
+                .saturating_sub(self.config.simulators.max_devices)
+                + 1;
+            let eviction_candidates: Vec<_> = records
+                .iter()
+                .filter(|s| s.workspace_id.is_none())
+                .take(evictions_needed)
+                .collect();
+            let eviction_cost = eviction_candidates.iter().fold(0usize, |cost, s| {
+                cost.saturating_add(s.installed_apps.unwrap_or(usize::MAX))
+            });
+            let cheaper_eviction = eviction_candidates.len() == evictions_needed
+                && reusable
+                    .as_ref()
+                    .is_some_and(|r| eviction_cost < r.installed_apps.unwrap_or(usize::MAX));
+            if records.len() < self.config.simulators.max_devices || cheaper_eviction {
+                reusable = None;
+            }
+        }
         let reuse_running = reusable
             .as_ref()
             .and_then(|s| s.udid.as_deref())
@@ -271,7 +362,11 @@ impl Manager {
             .filter(|s| s.workspace_id.is_none() && reusable.as_ref().is_none_or(|r| r.id != s.id))
             .cloned()
             .collect();
-        idle.sort_by_key(|s| s.last_used);
+        if request.clean {
+            idle.sort_by_key(|s| (s.installed_apps.unwrap_or(usize::MAX), s.last_used));
+        } else {
+            idle.sort_by_key(|s| s.last_used);
+        }
         // External devices count toward the budget but are never shut down.
         for sim in &idle {
             if inventory.running_count() < self.config.simulators.max_booted
@@ -296,11 +391,21 @@ impl Manager {
                         "all managed simulator devices are allocated".into(),
                     ));
                 };
+                if let Some(audit) = audit.as_mut() {
+                    audit.evicted.push(crate::sim_audit::EvictedDevice {
+                        id: oldest.id.clone(),
+                        udid: oldest.udid.clone(),
+                        installed_apps: oldest.installed_apps,
+                    });
+                    audit.action = Some("create_after_eviction".into());
+                    self.save_clean_request(audit).await?;
+                }
                 self.delete_sim(&mut oldest).await?;
                 count -= 1;
             }
         }
         let mut sim = reusable.unwrap_or_else(|| Simulator {
+            installed_apps: Some(0),
             id: Uuid::new_v4().to_string(),
             udid: None,
             device: profile.device,
@@ -313,8 +418,16 @@ impl Manager {
             last_used: now(),
             error: None,
         });
-        let needs_reset =
-            sim.udid.is_some() && sim.last_workspace_id.as_ref() != Some(&workspace.id);
+        let needs_reset = request.clean && sim.udid.is_some();
+        if let Some(audit) = audit.as_mut() {
+            audit.simulator_id = Some(sim.id.clone());
+            audit.udid = sim.udid.clone();
+            audit.apps_removed = needs_reset.then_some(sim.installed_apps).flatten();
+            if audit.action.is_none() {
+                audit.action = Some(if needs_reset { "erase" } else { "create" }.into());
+            }
+            self.save_clean_request(audit).await?;
+        }
         sim.workspace_id = Some(workspace.id.clone());
         sim.lease_name = Some(request.name);
         sim.reason = request.reason;
@@ -333,11 +446,20 @@ impl Manager {
                 Uuid::parse_str(&udid)?;
                 sim.udid = Some(udid);
                 self.save_sim(&sim).await?;
+                if let Some(audit) = audit.as_mut() {
+                    audit.udid = sim.udid.clone();
+                    self.save_clean_request(audit).await?;
+                }
             }
             let udid = sim.udid.clone().unwrap();
             if needs_reset {
                 self.shutdown_sim(&sim).await?;
                 simctl::run(&["erase", &udid]).await?;
+                sim.installed_apps = Some(0);
+                if let Some(audit) = audit.as_mut() {
+                    audit.erase_completed = true;
+                    self.save_clean_request(audit).await?;
+                }
             }
             simctl::run(&["bootstatus", &udid, "-b"]).await?;
             ensure!(
@@ -500,6 +622,10 @@ impl Manager {
         if sim.state != "leased" {
             return self.delete_sim(&mut sim).await;
         }
+        sim.installed_apps = match sim.udid.as_deref() {
+            Some(udid) => simctl::user_app_count(udid).await.ok(),
+            None => None,
+        };
         sim.last_workspace_id = sim.workspace_id.take();
         sim.lease_name = None;
         sim.state = "idle".into();

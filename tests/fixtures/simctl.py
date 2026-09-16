@@ -2,6 +2,7 @@
 """Isolated simctl fixture; never invokes Xcode or touches real simulator storage."""
 import json
 import os
+import plistlib
 from pathlib import Path
 import sys
 import uuid
@@ -33,12 +34,20 @@ if command == 'create':
 else:
     device = next(d for d in devices if d['udid'] == args[0])
     assert device['name'].startswith('shoal-'), 'Shoal must never mutate external devices'
-    if command == 'bootstatus':
+    if command == 'listapps':
+        if device['state'] != 'Booted':
+            sys.exit(149)
+        apps = {'com.apple.SystemApp': {'ApplicationType': 'System'}}
+        apps.update({f'app.{i}': {'ApplicationType': 'User'} for i in range(device.get('user_apps', 0))})
+        print(plistlib.dumps(apps).decode())
+        sys.exit(0)
+    elif command == 'bootstatus':
         device['state'] = 'Booted'
     elif command == 'shutdown':
         device['state'] = 'Shutdown'
     elif command == 'erase':
         assert device['state'] == 'Shutdown'
+        device['user_apps'] = 0
     elif command == 'delete':
         assert device['state'] == 'Shutdown'
         devices.remove(device)

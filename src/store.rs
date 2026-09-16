@@ -14,7 +14,7 @@ impl Store {
         let store = Self { path };
         store.run(|db| {
             let version: i64 = db.query_row("PRAGMA user_version", [], |r| r.get(0))?;
-            ensure!(version <= 6, "state database was written by a newer Shoal version");
+            ensure!(version <= 7, "state database was written by a newer Shoal version");
             db.execute_batch("BEGIN;
                 CREATE TABLE IF NOT EXISTS repositories (
                     id TEXT PRIMARY KEY, path TEXT NOT NULL UNIQUE, source TEXT NOT NULL, last_used INTEGER NOT NULL
@@ -43,7 +43,13 @@ impl Store {
             if version < 5 { db.execute_batch("ALTER TABLE ports ADD COLUMN reason TEXT;")?; }
             db.execute_batch("CREATE UNIQUE INDEX IF NOT EXISTS repository_names ON repositories(name) WHERE name IS NOT NULL;
                 CREATE TABLE IF NOT EXISTS simulators(id TEXT PRIMARY KEY, record TEXT NOT NULL);
-                PRAGMA user_version=6; COMMIT;")?;
+                CREATE TABLE IF NOT EXISTS simulator_clean_requests (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT, request_id TEXT NOT NULL UNIQUE,
+                    workspace_id TEXT NOT NULL, record TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS clean_requests_workspace ON simulator_clean_requests(workspace_id,id);
+                UPDATE simulator_clean_requests SET record=json_set(record, '$.status', 'interrupted') WHERE json_extract(record, '$.status')='requested';
+                PRAGMA user_version=7; COMMIT;")?;
             Ok(())
         }).await?;
         Ok(store)

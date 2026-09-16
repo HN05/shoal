@@ -304,10 +304,39 @@ worktrees and survive command exit and daemon restart. Scope restrictions apply.
 At capacity, Shoal shuts down idle managed devices first; active leases and
 personal simulators are never interrupted. External running simulators count
 against the limit. Busy requests exit 2, or retry with `--wait <seconds>`.
-Released instances have a short reuse window, are erased before transfer to a
-different worktree, and are deleted when the idle timer expires (checked every
-15 seconds). Worktree removal deletes its devices; active leases block automatic
+Released instances keep apps and settings across worktrees during the reuse
+window, and are deleted when the idle timer expires (checked every 15 seconds). Worktree removal deletes its devices; active leases block automatic
 removal. Failed operations retain records for `sim release` or removal to retry.
 
 The scheduler covers the default CoreSimulator device set and one Shoal daemon.
 Indirect Xcode test/preview clones and cross-daemon scheduling remain future work.
+
+### Explicit clean devices and audit history
+
+```sh
+shoal sim acquire --clean --reason "Verify first-launch permission prompts"
+shoal sim history                  # Current worktree
+shoal sim history --all            # Review requests across worktrees
+shoal --json sim history --all --limit 50
+shoal sim history --all --before 123 # Older entries
+```
+
+Normal handoff does not erase or reboot the device. A clean request returns a
+fresh or fully erased device, requires a nonempty reason, and cannot erase an
+active lease: release it first or request another lease name.
+
+Shoal creates a fresh device when there is room, preserving installed apps on
+existing devices. At the pool limit it minimizes the estimated number of user
+apps lost, either erasing an idle compatible device or replacing an idle device
+with fewer apps. Counts are captured while booted and cached on release; unknown
+counts rank after known counts. Zero apps alone does not prove settings are clean.
+
+History records workspace name/ID, execution ID (or unscoped caller), timestamps,
+reason, outcome, selected device, planned resets/evictions, estimated app loss,
+and whether an erase completed. Busy/failed requests are included; retries from
+one `--wait` call share one entry with an attempt count. History lives in Shoal's
+SQLite database, survives workspace/device deletion and daemon restarts, and is
+paginated with `--limit`/`--before`. Scoped commands see only their own history.
+Reasons enable review; Shoal does not automatically judge whether they justify
+cleaning. A caller deliberately erasing a device outside Shoal bypasses this
+cooperative audit, as it bypasses resource reservations.

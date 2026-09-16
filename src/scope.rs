@@ -28,7 +28,9 @@ pub async fn authorize(
         | Method::ReservePort { workspace, .. }
         | Method::ReleasePort { workspace, .. }
         | Method::PortOverview { workspace } => Some(workspace),
-        Method::Ports { workspace } | Method::SimList { workspace } => {
+        Method::Ports { workspace }
+        | Method::SimList { workspace }
+        | Method::SimHistory { workspace, .. } => {
             Some(workspace.get_or_insert_with(|| owner.clone()))
         }
         _ => bail!(

@@ -1655,9 +1655,9 @@ Scheduling and storage:
   unrelated CLI/port requests stay responsive. Boot readiness is checked with
   `simctl bootstatus <UDID> -b` and a structured inventory check, with a 180-second
   timeout per simctl invocation.
-- Prefer compatible idle instances; a different worktree receives a shutdown,
-  erase, and fresh boot before reuse. Reacquiring during the idle grace in the
-  same worktree preserves simulator contents.
+- Prefer compatible idle instances and preserve apps/settings on normal handoff,
+  including across worktrees. Only an explicit `--clean` request authorizes an
+  erase; see the clean-device policy below.
 - At the running limit, shut down least recently used unallocated Shoal devices.
   Active leases are never preempted. External devices in simctl's default device
   set count against capacity but Shoal never mutates them. Other device sets and
@@ -1686,10 +1686,62 @@ Scheduling and storage:
   resources stay deleted if a later worktree-removal step fails.
 
 Validation: isolated fake-simctl integration tests cover exclusivity, concurrent
-claims, waiting, reset on handoff, external-device protection, machine limits,
+claims, waiting, state-preserving handoff, explicit resets, external-device protection, machine limits,
 allowed/any policy, missing runtimes, crash persistence, interrupted creation,
 failed-removal retries, idle expiration, and worktree cleanup. A native disposable
 smoke test on this Mac also created/booted an iPhone 17 with installed iOS 26.5,
 verified repeated acquisition, released it, and confirmed deletion after removal.
 No persistent test service was installed. Simulator execution remains macOS-only;
 Linux retains CLI/workspace/port functionality.
+
+
+### Explicit clean-device acquisition and accountability
+
+Normal acquisition preserves simulator apps, data, permissions, and settings.
+Ownership transfer alone never causes an erase. Cooperative agents must finish
+using the app/debugger before release. `sim acquire --clean --reason <text>`
+requests a newly created or fully erased device. The reason is required both by
+CLI argument validation and by the daemon, and must be a nonempty single line
+(max 256 bytes). This is a per-request choice, not an automatic machine policy.
+Existing active leases cannot be reset in place; release first or use another
+name. A repeated ordinary acquire remains idempotent; a new clean request for an
+already-active name fails without wiping it.
+
+Selection minimizes reinstalls: use spare pool capacity to create a fresh device
+without losing any installed apps. At capacity, compare estimated user-app counts
+on idle devices. Prefer erasing a compatible low-cost instance, or replace an
+incompatible idle instance when that loses fewer apps. Never preempt active
+leases. Cached counts come from `simctl listapps` (parsed via macOS `plutil`),
+which needs a booted device. Refresh counts on release and inspect booted idle
+candidates for clean selection; do not boot stopped candidates just to count.
+Unknown counts rank last, and ties use least recent use. System apps are excluded.
+These counts estimate reinstall cost, not elapsed time or app size. An empty app
+list is not proof of pristine device settings, so a reused clean allocation is
+always erased. Shoal does not automatically reinstall erased apps.
+
+Before acting, persist a clean-request audit record in the state SQLite database.
+Record workspace ID/name, repository ID, daemon-verified execution ID when scoped,
+request UUID, lease/profile/device/runtime selection, reason, timestamps, attempt
+count, status, action, device IDs, estimated app loss, planned evictions, erase
+completion, and failures. Missing/invalid reasons submitted directly to the daemon
+are recorded as failures; CLI parse errors never reach the daemon. Unscoped
+callers are labelled as such. Repeated capacity polls retain one request UUID
+and update its attempt count/status; terminal request IDs cannot reset devices
+again. Persist failures/busy results, and mark unfinished requests interrupted
+when the daemon restarts. If an audit write fails, do not start a destructive
+operation. An interrupted operation's log does not claim it completed.
+
+`shoal sim history [workspace]` resolves the current worktree; `--all` reviews all
+worktrees, including removed ones. `--limit` (default 20, maximum 50) and `--before
+<audit-id>` paginate newest-first, with JSON support. Scoped callers remain
+limited to their own worktree. Audit rows have no cascading workspace/device
+foreign key and are retained after removal; there is no automatic audit pruning
+in this slice. History supports reviewing unnecessary requests; reason quality
+is not inferred automatically. Direct same-user simctl/database operations remain
+outside the cooperative restriction model.
+
+Validation adds normal-handoff preservation, fresh-capacity preference, low-app
+reset/eviction selection, daemon-side reason enforcement, no reset of active
+leases, failed-erase logging, scoped visibility, retry grouping, and retained
+history after removal/restart. A disposable native iOS simulator also verified
+real application-list parsing and audit retention after cleanup.

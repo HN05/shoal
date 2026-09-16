@@ -16,6 +16,7 @@ mod repository;
 mod scope;
 mod service;
 mod shell;
+mod sim_audit;
 mod simctl;
 mod simulators;
 mod store;
@@ -649,10 +650,13 @@ async fn sim_command(paths: &Paths, command: cli::SimCommand, json_output: bool)
             device,
             runtime,
             reason,
+            clean,
             wait,
         } => {
             let workspace = ui::workspace(paths, workspace, true, json_output).await?;
             let request = simulators::SimRequest {
+                request_id: uuid::Uuid::new_v4().to_string(),
+                clean,
                 name,
                 profile,
                 device,
@@ -701,6 +705,68 @@ async fn sim_command(paths: &Paths, command: cli::SimCommand, json_output: bool)
                         .await
                     }
                     _ => anyhow::bail!("unexpected simulator acquisition response"),
+                }
+            }
+        }
+        SimCommand::History {
+            workspace,
+            all,
+            limit,
+            before,
+        } => {
+            let workspace = if all {
+                None
+            } else {
+                Some(ui::workspace(paths, workspace, true, json_output).await?)
+            };
+            let Body::SimHistory(entries) = client::call(
+                paths,
+                Method::SimHistory {
+                    workspace,
+                    limit,
+                    before,
+                },
+            )
+            .await?
+            else {
+                anyhow::bail!("unexpected simulator history response");
+            };
+            if json_output {
+                println!("{}", serde_json::to_string(&entries)?);
+            } else {
+                for entry in &entries {
+                    let r = &entry.request;
+                    println!(
+                        "#{} at {}  {}/{}  {}  action={}  erased-apps={}  actor={}\n  reason: {}{}",
+                        entry.id,
+                        r.requested_at,
+                        r.workspace_name,
+                        r.request.name,
+                        r.status,
+                        r.action.as_deref().unwrap_or("none"),
+                        r.apps_removed
+                            .map(|n| n.to_string())
+                            .unwrap_or_else(|| "unknown/not erased".into()),
+                        r.execution_id.as_deref().unwrap_or("unscoped caller"),
+                        r.request.reason.as_deref().unwrap_or("MISSING"),
+                        r.error
+                            .as_ref()
+                            .map(|e| format!("\n  {e}"))
+                            .unwrap_or_default()
+                    );
+                    for evicted in &r.evicted {
+                        println!(
+                            "  eviction planned: {} ({} apps)",
+                            evicted.udid.as_deref().unwrap_or(&evicted.id),
+                            evicted
+                                .installed_apps
+                                .map(|n| n.to_string())
+                                .unwrap_or_else(|| "unknown".into())
+                        );
+                    }
+                }
+                if entries.is_empty() {
+                    println!("No clean-device requests");
                 }
             }
         }

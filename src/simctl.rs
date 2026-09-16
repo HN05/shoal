@@ -75,3 +75,41 @@ pub async fn run(args: &[&str]) -> Result<String> {
 pub async fn inventory() -> Result<Inventory> {
     serde_json::from_str(&run(&["list", "--json"]).await?).context("parse simctl inventory")
 }
+
+/// listapps returns a plist, and requires a booted device. Cache counts at
+/// release so allocation need not boot an idle device just to estimate cost.
+pub async fn user_app_count(udid: &str) -> Result<usize> {
+    use std::process::Stdio;
+    use tokio::io::AsyncWriteExt;
+    let apps = run(&["listapps", udid]).await?;
+    let output = timeout(Duration::from_secs(10), async {
+        let mut convert = Command::new("/usr/bin/plutil")
+            .args(["-convert", "json", "-o", "-", "--", "-"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .kill_on_drop(true)
+            .spawn()?;
+        let mut stdin = convert.stdin.take().context("plutil stdin unavailable")?;
+        // Write concurrently with draining stdout to avoid pipe-buffer deadlocks.
+        let write = async move {
+            stdin.write_all(apps.as_bytes()).await?;
+            drop(stdin);
+            Ok::<_, std::io::Error>(())
+        };
+        let (output, ()) = tokio::try_join!(convert.wait_with_output(), write)?;
+        Ok::<_, anyhow::Error>(output)
+    })
+    .await
+    .context("plist conversion timed out")??;
+    ensure!(
+        output.status.success(),
+        "cannot parse simctl application list"
+    );
+    let apps: serde_json::Map<String, serde_json::Value> = serde_json::from_slice(&output.stdout)?;
+    // Count all non-system entries conservatively if metadata is incomplete.
+    Ok(apps
+        .values()
+        .filter(|app| app.get("ApplicationType").and_then(|t| t.as_str()) != Some("System"))
+        .count())
+}

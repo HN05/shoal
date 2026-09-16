@@ -161,6 +161,15 @@ async fn serve(
     } else {
         None
     };
+    let execution_id = match request.scope.as_deref() {
+        Some(token) => manager
+            .scopes
+            .lock()
+            .await
+            .get(token)
+            .map(|(execution, _)| execution.clone()),
+        None => None,
+    };
     if request.protocol == protocol::VERSION {
         if let Method::Execute { workspace } = request.method {
             return execute(stream, request.id, workspace, manager).await;
@@ -188,7 +197,7 @@ async fn serve(
                 stop = true;
                 Body::Ok
             }
-            method => match operation(&manager, method, scope.as_deref()).await {
+            method => match operation(&manager, method, scope.as_deref(), execution_id).await {
                 Ok(body) => body,
                 Err(error) => Body::Error {
                     code: "operation_failed".into(),
@@ -212,8 +221,24 @@ async fn serve(
     Ok(())
 }
 
-async fn operation(manager: &Manager, method: Method, scope: Option<&str>) -> Result<Body> {
+async fn operation(
+    manager: &Manager,
+    method: Method,
+    scope: Option<&str>,
+    execution_id: Option<String>,
+) -> Result<Body> {
     Ok(match method {
+        Method::SimHistory {
+            workspace,
+            limit,
+            before,
+        } => {
+            let owner = match workspace {
+                Some(selector) => Some(manager.get(selector).await?.id),
+                None => None,
+            };
+            Body::SimHistory(manager.clean_history(owner, limit, before).await?)
+        }
         Method::SimCatalog => {
             let inventory = crate::simctl::inventory().await?;
             Body::SimCatalog(
@@ -228,7 +253,10 @@ async fn operation(manager: &Manager, method: Method, scope: Option<&str>) -> Re
             Body::Simulators(manager.simulators(owner).await?)
         }
         Method::SimAcquire { workspace, request } => {
-            match manager.acquire_simulator(workspace, request).await? {
+            match manager
+                .acquire_simulator(workspace, request, execution_id)
+                .await?
+            {
                 crate::simulators::Acquisition::Acquired(sim) => Body::Simulator(*sim),
                 crate::simulators::Acquisition::Busy(message) => Body::SimBusy { message },
             }

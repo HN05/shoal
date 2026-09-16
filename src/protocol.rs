@@ -4,7 +4,7 @@ use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWrite
 
 use crate::model::{ExecutionPlan, Inspection, Repository, Workspace};
 
-pub const VERSION: u32 = 6;
+pub const VERSION: u32 = 7;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -20,6 +20,11 @@ pub struct Request {
 #[serde(rename_all = "snake_case")]
 pub enum Method {
     SimCatalog,
+    SimHistory {
+        workspace: Option<String>,
+        limit: u32,
+        before: Option<i64>,
+    },
     SimList {
         workspace: Option<String>,
     },
@@ -118,6 +123,7 @@ pub enum Body {
     Simulator(crate::simulators::Simulator),
     SimBusy { message: String },
     SimCatalog(serde_json::Value),
+    SimHistory(Vec<crate::sim_audit::AuditEntry>),
     Ok,
     Error { code: String, message: String },
 }

@@ -189,9 +189,23 @@ pub enum SimCommand {
         runtime: Option<String>,
         #[arg(long)]
         reason: Option<String>,
+        /// Require a fresh or erased device; a reason is mandatory and audited.
+        #[arg(long, requires = "reason")]
+        clean: bool,
         /// Wait this many seconds for capacity (0 returns busy immediately).
         #[arg(long, default_value_t = 0, value_parser = clap::value_parser!(u64).range(0..=3600))]
         wait: u64,
+    },
+    /// Review clean-device requests, including failed and busy requests.
+    History {
+        workspace: Option<String>,
+        #[arg(long, conflicts_with = "workspace")]
+        all: bool,
+        #[arg(long, default_value_t = 20, value_parser = clap::value_parser!(u32).range(1..=50))]
+        limit: u32,
+        /// Show entries older than this audit ID.
+        #[arg(long)]
+        before: Option<i64>,
     },
     /// End exclusive use; the idle policy controls shutdown and deletion.
     Release {

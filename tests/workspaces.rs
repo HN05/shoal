@@ -1046,8 +1046,8 @@ fn simulator_exclusivity_wait_reuse_scope_and_removal() {
     assert_eq!(second["udid"], first["udid"]);
     let events = fs::read_to_string(fixture.root.path().join("sim-events")).unwrap();
     assert!(
-        events.contains("erase"),
-        "another owner must get a reset device"
+        !events.contains("erase") && !events.contains("shutdown"),
+        "normal handoff must preserve simulator state without rebooting"
     );
     let scoped = fixture.run(&[
         "exec",
@@ -1284,4 +1284,301 @@ fn simulators_allocate_concurrently_and_idle_expiry_keeps_active_leases() {
     }
     fixture.ok(&["rm", "first"]);
     fixture.ok(&["rm", "second"]);
+}
+
+#[cfg(target_os = "macos")]
+fn set_sim_apps(fixture: &Fixture, udid: &Value, count: usize) {
+    let path = fixture.root.path().join("sim-devices.json");
+    let mut devices: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+    devices
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|d| d["udid"] == *udid)
+        .unwrap()["user_apps"] = serde_json::json!(count);
+    fs::write(path, serde_json::to_string(&devices).unwrap()).unwrap();
+}
+
+#[test]
+#[cfg(target_os = "macos")]
+fn clean_simulator_requires_reason_minimizes_erasure_and_keeps_audit_after_removal() {
+    let config = SIM_CONFIG.replace("max_booted = 1", "max_booted = 2");
+    let mut fixture = Fixture::with_tools(Some(&config), true);
+    fixture.add("first");
+    fixture.add("second");
+    fixture.add("third");
+    let first = fixture.ok(&["sim", "acquire", "first"]);
+    let second = fixture.ok(&["sim", "acquire", "second"]);
+    set_sim_apps(&fixture, &first["udid"], 5);
+    set_sim_apps(&fixture, &second["udid"], 1);
+    fixture.ok(&["sim", "release", "default", "first"]);
+    fixture.ok(&["sim", "release", "default", "second"]);
+    assert!(
+        !fixture
+            .run(&["sim", "acquire", "third", "--clean"])
+            .status
+            .success()
+    );
+    let clean = fixture.run(&[
+        "exec",
+        "third",
+        "--",
+        env!("CARGO_BIN_EXE_shoal"),
+        "--json",
+        "sim",
+        "acquire",
+        "--clean",
+        "--reason",
+        "Test first-launch permission prompts",
+    ]);
+    assert!(
+        clean.status.success(),
+        "{}",
+        String::from_utf8_lossy(&clean.stderr)
+    );
+    let clean: Value = serde_json::from_slice(&clean.stdout).unwrap();
+    assert_eq!(clean["udid"], second["udid"]);
+    let history = fixture.ok(&["sim", "history", "--all"]);
+    assert_eq!(history.as_array().unwrap().len(), 1);
+    assert_eq!(history[0]["apps_removed"], 1);
+    assert_eq!(history[0]["erase_completed"], true);
+    assert_eq!(history[0]["action"], "erase");
+    assert_eq!(history[0]["status"], "acquired");
+    assert_eq!(history[0]["workspace_name"], "third");
+    assert_eq!(
+        history[0]["request"]["reason"],
+        "Test first-launch permission prompts"
+    );
+    assert!(history[0]["execution_id"].is_string());
+    // A second clean request must not wipe a simulator still in use.
+    assert!(
+        !fixture
+            .run(&[
+                "sim",
+                "acquire",
+                "third",
+                "--clean",
+                "--reason",
+                "Accidental duplicate"
+            ])
+            .status
+            .success()
+    );
+    let history = fixture.ok(&["sim", "history", "--all"]);
+    assert_eq!(history[0]["status"], "failed");
+    assert!(history[0]["action"].is_null());
+    let page = fixture.ok(&[
+        "sim",
+        "history",
+        "--all",
+        "--before",
+        &history[0]["id"].to_string(),
+        "--limit",
+        "1",
+    ]);
+    assert_eq!(page[0]["status"], "acquired");
+    let visible = fixture.run(&[
+        "exec",
+        "first",
+        "--",
+        env!("CARGO_BIN_EXE_shoal"),
+        "--json",
+        "sim",
+        "history",
+        "--all",
+    ]);
+    assert_eq!(
+        serde_json::from_slice::<Value>(&visible.stdout).unwrap(),
+        serde_json::json!([])
+    );
+    fixture.ok(&["rm", "third"]);
+    assert_eq!(fixture.ok(&["sim", "history", "--all"]), history);
+    fixture.daemon.kill().unwrap();
+    fixture.daemon.wait().unwrap();
+    fixture.daemon = fixture
+        .command()
+        .args(["daemon", "run"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    fixture.wait_ready();
+    assert_eq!(fixture.ok(&["sim", "history", "--all"]), history);
+    let devices: Value = serde_json::from_str(
+        &fs::read_to_string(fixture.root.path().join("sim-devices.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(devices[0]["user_apps"], 5);
+}
+
+#[test]
+#[cfg(target_os = "macos")]
+fn clean_simulator_prefers_fresh_capacity_and_logs_invalid_reasons() {
+    let fixture = Fixture::with_tools(Some(SIM_CONFIG), true);
+    fixture.add("first");
+    fixture.add("second");
+    let first = fixture.ok(&["sim", "acquire", "first"]);
+    set_sim_apps(&fixture, &first["udid"], 3);
+    fixture.ok(&["sim", "release", "default", "first"]);
+    assert!(
+        !fixture
+            .run(&["sim", "acquire", "second", "--clean", "--reason", "   "])
+            .status
+            .success()
+    );
+    let second = fixture.ok(&[
+        "sim",
+        "acquire",
+        "second",
+        "--clean",
+        "--reason",
+        "Verify clean system settings",
+    ]);
+    assert_ne!(first["udid"], second["udid"]);
+    let history = fixture.ok(&["sim", "history", "--all"]);
+    assert_eq!(history[0]["action"], "create");
+    assert_eq!(history[1]["status"], "failed");
+    assert!(
+        !fs::read_to_string(fixture.root.path().join("sim-events"))
+            .unwrap()
+            .contains("erase")
+    );
+}
+
+#[test]
+#[cfg(target_os = "macos")]
+fn clean_simulator_wait_retries_share_one_audit_entry() {
+    let config = SIM_CONFIG.replace("max_devices = 2", "max_devices = 1");
+    let fixture = Fixture::with_tools(Some(&config), true);
+    fixture.add("first");
+    fixture.add("second");
+    fixture.ok(&["sim", "acquire", "first"]);
+    let waiting = fixture
+        .command()
+        .args([
+            "--json",
+            "sim",
+            "acquire",
+            "second",
+            "--clean",
+            "--reason",
+            "Verify no login session",
+            "--wait",
+            "10",
+        ])
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        let entries = fixture.ok(&["sim", "history", "--all"]);
+        if entries.as_array().unwrap().len() == 1 && entries[0]["status"] == "busy" {
+            break;
+        }
+        assert!(Instant::now() < deadline);
+        thread::sleep(Duration::from_millis(20));
+    }
+    fixture.ok(&["sim", "release", "default", "first"]);
+    let output = waiting.wait_with_output().unwrap();
+    assert!(output.status.success());
+    let entries = fixture.ok(&["sim", "history", "--all"]);
+    assert_eq!(entries.as_array().unwrap().len(), 1);
+    assert!(entries[0]["attempts"].as_u64().unwrap() >= 2);
+    assert_eq!(entries[0]["status"], "acquired");
+    assert_eq!(entries[0]["erase_completed"], true);
+}
+
+#[test]
+#[cfg(target_os = "macos")]
+fn clean_simulator_can_replace_an_empty_incompatible_device_to_preserve_apps() {
+    let config = SIM_CONFIG.replace("max_booted = 1", "max_booted = 2");
+    let fixture = Fixture::with_tools(Some(&config), true);
+    fixture.add("phone");
+    fixture.add("tablet");
+    fixture.add("requester");
+    let phone = fixture.ok(&["sim", "acquire", "phone"]);
+    let tablet = fixture.ok(&["sim", "acquire", "tablet", "--profile", "tablet"]);
+    set_sim_apps(&fixture, &phone["udid"], 5);
+    fixture.ok(&["sim", "release", "default", "phone"]);
+    fixture.ok(&["sim", "release", "default", "tablet"]);
+    let clean = fixture.ok(&[
+        "sim",
+        "acquire",
+        "requester",
+        "--clean",
+        "--reason",
+        "Check default OS settings",
+    ]);
+    assert_ne!(clean["udid"], phone["udid"]);
+    assert_ne!(clean["udid"], tablet["udid"]);
+    let history = fixture.ok(&["sim", "history", "--all"]);
+    assert_eq!(history[0]["action"], "create_after_eviction");
+    assert_eq!(history[0]["evicted"][0]["udid"], tablet["udid"]);
+    assert_eq!(history[0]["evicted"][0]["installed_apps"], 0);
+    assert!(
+        !fs::read_to_string(fixture.root.path().join("sim-events"))
+            .unwrap()
+            .contains("erase")
+    );
+}
+
+#[test]
+#[cfg(target_os = "macos")]
+fn clean_simulator_daemon_requires_reason_and_records_erase_failures() {
+    use std::{
+        io::{BufRead, BufReader},
+        os::unix::net::UnixStream,
+    };
+    let config = SIM_CONFIG.replace("max_devices = 2", "max_devices = 1");
+    let fixture = Fixture::with_tools(Some(&config), true);
+    let workspace = fixture.add("worker");
+    let call = |value: Value| {
+        let mut stream =
+            UnixStream::connect(fixture.root.path().join("state/daemon.sock")).unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .unwrap();
+        writeln!(stream, "{value}").unwrap();
+        let mut line = String::new();
+        BufReader::new(stream).read_line(&mut line).unwrap();
+        serde_json::from_str::<Value>(&line).unwrap()
+    };
+    let protocol =
+        call(serde_json::json!({"protocol":0,"id":1,"method":"status"}))["protocol"].clone();
+    let response = call(
+        serde_json::json!({"protocol":protocol,"id":2,"method":{"sim_acquire":{"workspace":workspace["id"],"request":{"request_id":uuid::Uuid::new_v4().to_string(),"clean":true,"name":"default","profile":null,"device":null,"runtime":null,"reason":null}}}}),
+    );
+    assert_eq!(response["type"], "error");
+    assert!(
+        response["data"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("--clean requires --reason")
+    );
+    assert_eq!(
+        fixture.ok(&["sim", "history", "--all"])[0]["status"],
+        "failed"
+    );
+    assert!(!fixture.root.path().join("sim-devices.json").exists());
+    fixture.ok(&["sim", "acquire", "worker"]);
+    fixture.ok(&["sim", "release", "default", "worker"]);
+    fs::write(fixture.root.path().join("sim-fail"), "erase").unwrap();
+    assert!(
+        !fixture
+            .run(&[
+                "sim",
+                "acquire",
+                "worker",
+                "--clean",
+                "--reason",
+                "Reset permission state"
+            ])
+            .status
+            .success()
+    );
+    let entry = &fixture.ok(&["sim", "history", "--all"])[0];
+    assert_eq!(entry["status"], "failed");
+    assert_eq!(entry["action"], "erase");
+    assert_eq!(entry["erase_completed"], false);
+    assert!(entry["error"].as_str().unwrap().contains("injected"));
 }
