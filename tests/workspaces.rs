@@ -375,6 +375,18 @@ set -e
 . "$INTEGRATION"
 shoal add "$REPO" --name navigate
 test "${PWD##*/}" = navigate
+if shoal exec navigate -- sh -c 'exit 7'; then
+  exit 1
+else
+  test "$?" -eq 7
+fi
+printf 'keep me' > untracked
+if shoal rm navigate; then
+  exit 1
+fi
+test "${PWD##*/}" = navigate
+test -f untracked
+rm untracked
 mkdir nested
 cd nested
 shoal rm navigate

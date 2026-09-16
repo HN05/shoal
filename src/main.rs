@@ -248,12 +248,12 @@ async fn run(cli: Cli) -> Result<i32> {
             output(
                 cli.json,
                 "Daemon service installed and running",
-                json!({"running": true, "service_file": service::file(&paths, service::Platform::current()?), "shell_init": shell::INIT}),
+                json!({"running": true, "service_file": service::file(&paths, service::Platform::current()?), "shell_init": shell::INIT_COMMAND}),
             );
             if !cli.json {
                 println!(
-                    "\nAdd this function to ~/.zshrc or ~/.bashrc to navigate after add/rm:\n\n{}",
-                    shell::INIT
+                    "\nAdd this line to ~/.zshrc or ~/.bashrc to navigate after add/rm:\n\n{}",
+                    shell::INIT_COMMAND
                 );
             }
         }

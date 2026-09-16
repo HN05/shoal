@@ -90,8 +90,8 @@ an explicit command such as `shoal exec fix-login -- npm ci`.
 
 ### Shell navigation
 
-`shoal setup` prints a Bash/Zsh function to add to your shell configuration. You
-can also load it in the current shell, or add this line to `.bashrc`/`.zshrc`:
+`shoal setup` prints this line to add to `.bashrc`/`.zshrc`. You can also run it
+in the current shell to load the Bash/Zsh function:
 
 ```sh
 source <(shoal shell init)

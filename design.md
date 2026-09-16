@@ -1395,11 +1395,14 @@ Implemented:
   receive stop requests from the daemon, and terminate the command's process
   group. Removal first stops connected executions. The environment includes
   `SHOAL_WORKSPACE_ID`, `SHOAL_RUN_ID`, `SHOAL_WORKSPACE`, and `SHOAL_STATE_DIR`.
-- `shoal shell init` prints Bash/Zsh integration; successful `setup` also prints
-  the function. It enters a newly created workspace and moves out of a removed
+- `shoal shell init` prints Bash/Zsh integration; successful `setup` prints
+  `source <(shoal shell init)` to add to shell configuration. The function enters
+  a newly created workspace and moves out of a removed
   current workspace to the registered repository root, falling back to home.
   Navigation uses a temporary file containing a literal directory path, without
   evaluating that path as shell code. JSON calls never request navigation.
+  Keep shell logic minimal: Rust chooses the destination; the function only
+  passes the result back to the shell, changes directory, and preserves status.
   Shoal does not modify personal shell configuration.
 
 Repository configuration parsing and automatic setup/dependency restoration
