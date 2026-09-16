@@ -479,21 +479,28 @@ async fn run(cli: Cli) -> Result<i32> {
         }
         Command::Claude { workspace, args } => {
             let workspace = ui::workspace(&paths, workspace, true, cli.json).await?;
-            return execution::run(
-                &paths,
-                workspace,
-                std::iter::once("claude".into()).chain(args).collect(),
-            )
-            .await;
+            let Body::Inspection(inspection) =
+                client::call(&paths, Method::Inspect { workspace }).await?
+            else {
+                anyhow::bail!("unexpected workspace response");
+            };
+            let command = std::iter::once("claude".into())
+                .chain(args)
+                .chain(["--remote-control".into(), inspection.workspace.name.into()])
+                .collect();
+            return execution::run(&paths, inspection.workspace.id, command).await;
         }
         Command::Codex { workspace, args } => {
             let workspace = ui::workspace(&paths, workspace, true, cli.json).await?;
-            return execution::run(
-                &paths,
-                workspace,
-                std::iter::once("codex".into()).chain(args).collect(),
-            )
-            .await;
+            let command = std::iter::once("codex".into())
+                .chain(args)
+                .chain([
+                    "--sandbox".into(),
+                    "workspace-write".into(),
+                    "--ask-for-approval=never".into(),
+                ])
+                .collect();
+            return execution::run(&paths, workspace, command).await;
         }
         Command::Setup {
             dry_run,

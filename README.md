@@ -73,6 +73,11 @@ shoal rm fix-login --yes --keep-branch
 shoal rm fix-login --yes --delete-branch
 ```
 
+`shoal claude` appends `--remote-control <workspace-name>`, using the resolved
+workspace's name. `shoal codex` appends `--sandbox workspace-write
+--ask-for-approval=never`. Arguments after `--` are forwarded before these flags.
+Use `shoal exec ... -- claude/codex ...` for a custom invocation.
+
 Bare `shoal` opens an interactive workspace list. `shoal --help` shows help;
 without a terminal, bare `shoal` also shows help. The list offers:
 

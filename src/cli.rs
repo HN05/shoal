@@ -77,13 +77,13 @@ pub enum Command {
         #[arg(last = true, required = true)]
         command: Vec<OsString>,
     },
-    /// Shortcut for exec -- claude.
+    /// Run Claude with remote control named after the workspace.
     Claude {
         workspace: Option<String>,
         #[arg(last = true)]
         args: Vec<OsString>,
     },
-    /// Shortcut for exec -- codex.
+    /// Run Codex with workspace-write sandboxing and no approval prompts.
     Codex {
         workspace: Option<String>,
         #[arg(last = true)]

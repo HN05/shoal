@@ -709,7 +709,7 @@ fn execution_preserves_pipes_exit_code_environment_and_current_workspace() {
 #[test]
 fn agent_shortcuts_forward_arguments_without_starting_real_agents() {
     let fixture = Fixture::new();
-    fixture.add("shortcut");
+    let workspace = fixture.add("shortcut");
     let bin = fixture.root.path().join("stub-bin");
     fs::create_dir(&bin).unwrap();
     for agent in ["claude", "codex"] {
@@ -733,8 +733,32 @@ fn agent_shortcuts_forward_arguments_without_starting_real_agents() {
         );
         assert_eq!(
             String::from_utf8(output.stdout).unwrap(),
-            "shortcut\n--version\nhello with spaces\n"
+            format!(
+                "shortcut\n--version\nhello with spaces\n{}",
+                if agent == "claude" {
+                    "--remote-control\nshortcut\n"
+                } else {
+                    "--sandbox\nworkspace-write\n--ask-for-approval=never\n"
+                }
+            )
         );
+    }
+    // Current-directory resolution supplies an ID internally; Claude still gets
+    // the human workspace name, as it must after an fzf selection as well.
+    for target in [Some(workspace["id"].as_str().unwrap()), None] {
+        let mut command = fixture.command();
+        command
+            .current_dir(workspace["path"].as_str().unwrap())
+            .arg("claude");
+        if let Some(target) = target {
+            command.arg(target);
+        }
+        let output = command
+            .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        assert_eq!(output.stdout, b"shortcut\n--remote-control\nshortcut\n");
     }
 }
 

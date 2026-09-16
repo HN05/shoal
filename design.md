@@ -1745,3 +1745,15 @@ reset/eviction selection, daemon-side reason enforcement, no reset of active
 leases, failed-erase logging, scoped visibility, retry grouping, and retained
 history after removal/restart. A disposable native iOS simulator also verified
 real application-list parsing and audit retention after cleanup.
+
+
+### Agent shortcut launch arguments
+
+`shoal claude [workspace] -- <args>` appends `--remote-control <workspace-name>`
+to the forwarded arguments. Resolve the workspace first so an ID, current-directory
+match, or fzf selection yields its human name for the remote-control session.
+`shoal codex [workspace] -- <args>` appends `--sandbox workspace-write
+--ask-for-approval=never`. These defaults apply only to the shortcuts; generic
+`shoal exec` passes its command through unchanged. Shoal's worktree scope still
+applies to all executions. Stub-executable tests verify exact argv and name
+resolution without starting actual agents or remote-control sessions.
