@@ -85,30 +85,49 @@ pub async fn remove(
     repository_dir: &Path,
     worktrunk_config: &Path,
     workspace_dir: &Path,
-    confirmed: bool,
-) -> Result<()> {
+    force_files: bool,
+    delete_branch: bool,
+) -> Result<crate::removal::RemovalResult> {
     let mut command = Command::new("wt");
     command
         .arg("--config")
         .arg(worktrunk_config)
         .arg("-C")
         .arg(repository_dir)
-        .args([
-            "remove",
-            "--foreground",
-            "--no-hooks",
-            "--no-delete-branch",
-            "--format=json",
-        ]);
-    if confirmed {
+        .args(["remove", "--foreground", "--no-hooks", "--format=json"]);
+    command.arg(if delete_branch {
+        "--force-delete"
+    } else {
+        "--no-delete-branch"
+    });
+    if force_files {
         command.arg("--force");
     }
     command.arg("--").arg(workspace_dir);
-    let _: Value =
+    let result: Value =
         serde_json::from_str(&run(command).await?).context("invalid Worktrunk removal result")?;
+    let result = match result.as_array() {
+        Some(entries) => {
+            ensure!(
+                entries.len() == 1,
+                "unexpected number of Worktrunk removal results"
+            );
+            &entries[0]
+        }
+        None => &result,
+    };
     ensure!(
         !workspace_dir.exists(),
         "Worktrunk returned before workspace removal completed"
     );
-    Ok(())
+    let branch_outcome = result["branch_outcome"]
+        .as_str()
+        .context("Worktrunk omitted branch outcome")?
+        .to_owned();
+    Ok(crate::removal::RemovalResult {
+        removed: true,
+        branch: result["branch"].as_str().map(str::to_owned),
+        branch_deleted: branch_outcome == "deleted",
+        branch_outcome,
+    })
 }

@@ -44,12 +44,18 @@ pub enum Command {
     Inspect { workspace: Option<String> },
     /// Stop connected commands, preserving the workspace.
     Stop { workspace: Option<String> },
-    /// Remove a worktree, asking before stopping commands or discarding changes.
+    /// Remove a worktree and its redundant branch; choose what to keep if work differs.
     Rm {
         workspace: Option<String>,
-        /// Confirm stopping commands and deleting uncommitted files without a prompt.
+        /// Confirm removal without a prompt; differing/dirty work needs a branch choice.
         #[arg(short = 'y', long)]
         yes: bool,
+        /// Remove the worktree but retain its branch, including when it contains work.
+        #[arg(long, requires = "yes", conflicts_with = "delete_branch")]
+        keep_branch: bool,
+        /// Remove both worktree and branch, including uncommitted and differing work.
+        #[arg(long, requires = "yes", conflicts_with = "keep_branch")]
+        delete_branch: bool,
     },
     /// Execute a command in a named or current workspace.
     Exec {

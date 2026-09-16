@@ -123,7 +123,7 @@ fn git(repo: &Path, args: &[&str]) -> String {
 }
 
 #[test]
-fn named_workspace_uses_committed_history_and_preserves_branch_on_removal() {
+fn named_workspace_uses_committed_history_and_deletes_redundant_branch() {
     let fixture = Fixture::new();
     let first = fixture.ok(&["repo", "list"]);
     fixture.ok(&["repo", "add", fixture.repo.to_str().unwrap()]);
@@ -140,13 +140,16 @@ fn named_workspace_uses_committed_history_and_preserves_branch_on_removal() {
     fs::write(path.join("ignored/cache"), "disposable").unwrap();
     fixture.ok(&["rm", "fix-login"]);
     assert!(!path.exists());
-    git(
-        &fixture.repo,
-        &[
-            "rev-parse",
-            "--verify",
-            workspace["branch"].as_str().unwrap(),
-        ],
+    assert_eq!(
+        git(
+            &fixture.repo,
+            &[
+                "for-each-ref",
+                "--format=%(refname)",
+                &format!("refs/heads/{}", workspace["branch"].as_str().unwrap())
+            ]
+        ),
+        ""
     );
     assert_eq!(fixture.ok(&["list"]), serde_json::json!([]));
     assert_eq!(
@@ -201,7 +204,17 @@ fn removal_accepts_switched_branch_but_refuses_replaced_repository() {
     let path = Path::new(workspace["path"].as_str().unwrap());
     git(path, &["switch", "-c", "my-branch"]);
     fixture.ok(&["rm", "switched"]);
-    git(&fixture.repo, &["rev-parse", "--verify", "my-branch"]);
+    assert_eq!(
+        git(
+            &fixture.repo,
+            &[
+                "for-each-ref",
+                "--format=%(refname)",
+                "refs/heads/my-branch"
+            ]
+        ),
+        ""
+    );
 
     let workspace = fixture.add("replaced");
     let path = Path::new(workspace["path"].as_str().unwrap());
@@ -231,7 +244,7 @@ fn dirty_workspace_is_retained_and_failed_creation_can_be_removed() {
         fixture.ok(&["inspect", "dirty"])["workspace"]["state"],
         "ready"
     );
-    fixture.ok(&["rm", "dirty", "--yes"]);
+    fixture.ok(&["rm", "dirty", "--yes", "--keep-branch"]);
     assert!(!Path::new(workspace["path"].as_str().unwrap()).exists());
     assert!(
         !fixture
@@ -254,10 +267,12 @@ fn dirty_workspace_is_retained_and_failed_creation_can_be_removed() {
 }
 
 #[test]
-fn removal_requires_confirmation_for_unpushed_commits_and_external_processes() {
+fn removal_requires_branch_choice_for_differences_but_not_external_processes() {
     let fixture = Fixture::new();
     let workspace = fixture.add("unpushed");
     let path = Path::new(workspace["path"].as_str().unwrap());
+    fs::write(path.join("tracked"), "different contents").unwrap();
+    git(path, &["add", "tracked"]);
     git(
         path,
         &[
@@ -273,8 +288,8 @@ fn removal_requires_confirmation_for_unpushed_commits_and_external_processes() {
     );
     let output = fixture.run(&["rm", "unpushed"]);
     assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("not on any known remote"));
-    fixture.ok(&["rm", "unpushed", "--yes"]);
+    assert!(String::from_utf8_lossy(&output.stderr).contains("branch choice"));
+    fixture.ok(&["rm", "unpushed", "--yes", "--keep-branch"]);
     git(
         &fixture.repo,
         &[
@@ -294,10 +309,64 @@ fn removal_requires_confirmation_for_unpushed_commits_and_external_processes() {
     let output = fixture.run(&["rm", "external"]);
     let _ = process.kill();
     let _ = process.wait();
-    assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("Processes are using this directory"));
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(!path.exists());
+}
+
+#[test]
+fn branch_removal_compares_contents_to_main_or_upstream_and_honors_explicit_choice() {
+    let fixture = Fixture::new();
+    let commit = |path: &Path| {
+        git(path, &["add", "."]);
+        git(
+            path,
+            &[
+                "-c",
+                "user.name=Shoal Test",
+                "-c",
+                "user.email=shoal@example.invalid",
+                "commit",
+                "--allow-empty",
+                "-m",
+                "work",
+            ],
+        );
+    };
+    let same = fixture.add("same-tree");
+    commit(Path::new(same["path"].as_str().unwrap()));
+    assert_eq!(fixture.ok(&["rm", "same-tree"])["branch_deleted"], true);
+
+    let pushed = fixture.add("pushed");
+    let path = Path::new(pushed["path"].as_str().unwrap());
+    fs::write(path.join("tracked"), "different from main").unwrap();
+    commit(path);
+    git(
+        &fixture.repo,
+        &[
+            "remote",
+            "add",
+            "origin",
+            "https://example.invalid/project.git",
+        ],
+    );
+    git(path, &["update-ref", "refs/remotes/origin/pushed", "HEAD"]);
+    git(path, &["branch", "--set-upstream-to=origin/pushed"]);
+    assert_eq!(fixture.ok(&["rm", "pushed"])["branch_deleted"], true);
+
+    let divergent = fixture.add("divergent");
+    let path = Path::new(divergent["path"].as_str().unwrap());
+    fs::write(path.join("tracked"), "unmerged work").unwrap();
+    commit(path);
+    assert!(!fixture.run(&["rm", "divergent"]).status.success());
     assert!(path.exists());
-    fixture.ok(&["rm", "external"]);
+    assert_eq!(
+        fixture.ok(&["rm", "divergent", "--yes", "--delete-branch"])["branch_deleted"],
+        true
+    );
 }
 
 #[test]

@@ -1009,9 +1009,9 @@ Proposed interaction details:
   rather than waiting for terminal input.
 - Canceling a picker performs no action. An empty repository history explains
   how to add the first repository using a path or URL.
-- Removal prompts default to no when commands/processes are running, files are
-  dirty/untracked, or commits are unpushed. `--yes` supplies explicit confirmation
-  for noninteractive calls. Branches remain preserved.
+- Removal deletes clean branches with the same contents as main or upstream.
+  Dirty/differing work opens an Abort / keep branch / delete branch picker.
+  Running processes do not block manual removal; they still block automatic cleanup.
 
 `fzf` is required for interactive pickers. There is no built-in fallback; explicit
 arguments remain usable without it.
@@ -1405,12 +1405,17 @@ Implemented:
 - Workspace paths `<state-dir>/workspaces/<name>`; unique names are 1–64 ASCII
   letters/digits/hyphens/underscores and start with a letter or digit. A new
   `shoal/<name>-<unique-suffix>` branch starts from committed `HEAD` or `--ref`.
-- Manual removal checks running commands/processes, tracked modifications,
-  untracked files, and unpushed commits. Risks require an interactive yes/no
-  confirmation (default no) or explicit `--yes`. Uncommitted files can be deleted
-  only after confirmation. Branches and shared caches outside the worktree are
-  retained; ignored worktree files are removed. Non-Shoal processes are reported,
-  not terminated. The invoking CLI and its ancestor shells are excluded.
+- Manual removal compares Git trees with local `main` and the branch's configured
+  upstream. A clean worktree matching either is removed together with its branch,
+  regardless of differing commit history. Missing refs do not match. Otherwise
+  show three fzf choices: Abort (default), delete worktree but keep branch, or
+  delete worktree and branch. Both deletion choices discard uncommitted files;
+  a retained branch preserves committed work only. Noninteractive callers use
+  `--yes --keep-branch` or `--yes --delete-branch` for these cases.
+  Manual deletion stops connected Shoal commands, but external/disconnected
+  processes do not prevent removal and are not killed. Automatic cleanup still
+  blocks on any running/unknown execution or process using the directory.
+  Worktrunk reports the actual branch result (including another-worktree guards).
 - External `fzf` repository/workspace pickers, with no built-in fallback.
   Explicit targets and noninteractive/JSON operation never open a picker.
 - Connected execution wrappers preserve terminal or piped I/O and exit codes,
@@ -1431,8 +1436,9 @@ Repository configuration parsing and automatic setup/dependency restoration
 remain unimplemented while the public format/schema is undecided. Ports,
 simulators, and sandboxing remain later milestones. This slice handles normal
 connected execution, not comprehensive crash recovery: unknown executions block
-cleanup for manual reconciliation, and detached processes need later supervision
-work. No reconciliation command exists yet.
+automatic cleanup, and detached processes need later supervision work. Manual
+removal may proceed without stopping disconnected processes. No reconciliation
+command exists yet.
 
 Validation uses real Worktrunk with temporary repositories/state, including
 concurrent name claims, dirty-removal refusal, execution I/O and exit codes,

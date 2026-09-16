@@ -4,7 +4,7 @@ use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWrite
 
 use crate::model::{ExecutionPlan, Inspection, Repository, Workspace};
 
-pub const VERSION: u32 = 2;
+pub const VERSION: u32 = 3;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -34,7 +34,7 @@ pub enum Method {
     },
     Remove {
         workspace: String,
-        confirmed: bool,
+        choice: crate::removal::Choice,
         caller_pid: u32,
     },
     CheckRemoval {
@@ -68,6 +68,7 @@ pub enum Body {
     Inspection(Inspection),
     Execution(ExecutionPlan),
     RemovalCheck(crate::removal::RemovalCheck),
+    RemovalResult(crate::removal::RemovalResult),
     Ok,
     Error { code: String, message: String },
 }

@@ -23,26 +23,34 @@ fn interactive(json: bool) -> Result<()> {
     Ok(())
 }
 
-pub fn confirm_removal(check: &crate::removal::RemovalCheck, json: bool) -> Result<()> {
+pub fn choose_removal(
+    check: &crate::removal::RemovalCheck,
+    json: bool,
+) -> Result<crate::removal::Choice> {
     let warnings = check.warnings();
     ensure!(
         !json && io::stdin().is_terminal() && io::stderr().is_terminal(),
-        "removal requires confirmation: {}. Pass --yes to confirm",
+        "removal requires a branch choice: {}. Pass --yes with --keep-branch or --delete-branch",
         warnings.join("; ")
     );
     eprintln!("Remove workspace {}?", check.workspace.name);
     for warning in warnings {
         eprintln!("  - {warning}");
     }
-    eprint!("Are you sure? [y/N] ");
-    io::stderr().flush()?;
-    let mut answer = String::new();
-    io::stdin().read_line(&mut answer)?;
-    ensure!(
-        matches!(answer.trim().to_ascii_lowercase().as_str(), "y" | "yes"),
-        "removal canceled"
-    );
-    Ok(())
+    let choice = pick(
+        "Removal> ",
+        vec![
+            ("abort".into(), "Abort".into()),
+            ("keep".into(), "Delete worktree but keep branch".into()),
+            ("delete".into(), "Delete worktree and branch".into()),
+        ],
+        json,
+    )?;
+    match choice.as_str() {
+        "keep" => Ok(crate::removal::Choice::KeepBranch),
+        "delete" => Ok(crate::removal::Choice::DeleteBranch),
+        _ => bail!("removal canceled"),
+    }
 }
 
 pub fn input(prompt: &str, json: bool) -> Result<String> {
@@ -165,6 +173,8 @@ pub async fn workspace_menu(paths: &Paths) -> Result<crate::cli::Command> {
         "ctrl-d" => Command::Rm {
             workspace,
             yes: false,
+            keep_branch: false,
+            delete_branch: false,
         },
         "ctrl-o" => Command::Inspect { workspace },
         "ctrl-s" => Command::Stop { workspace },

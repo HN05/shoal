@@ -1,30 +1,10 @@
 use anyhow::{Context, Result};
-use std::{collections::HashMap, path::Path, process::Stdio, time::Duration};
+use std::{path::Path, process::Stdio, time::Duration};
 use tokio::{process::Command, time::timeout};
 
-use crate::worktrunk;
-
-/// Exclude the requesting CLI and its ancestor shells for explicit removal.
-/// Automatic cleanup passes zero and treats open shells as workspace users.
-pub async fn in_directory(root: &Path, caller_pid: u32) -> Result<Vec<String>> {
-    let mut excluded = vec![std::process::id()];
-    if caller_pid != 0 {
-        let mut command = Command::new("ps");
-        command.args(["-axo", "pid=,ppid="]).current_dir("/");
-        let output = worktrunk::run(command).await?;
-        let parents: HashMap<u32, u32> = output
-            .lines()
-            .filter_map(|line| {
-                let mut fields = line.split_whitespace();
-                Some((fields.next()?.parse().ok()?, fields.next()?.parse().ok()?))
-            })
-            .collect();
-        let mut pid = caller_pid;
-        while pid != 0 && !excluded.contains(&pid) {
-            excluded.push(pid);
-            pid = parents.get(&pid).copied().unwrap_or(0);
-        }
-    }
+/// Automatic cleanup treats every process using the directory as activity.
+pub async fn in_directory(root: &Path) -> Result<Vec<String>> {
+    let excluded = [std::process::id()];
     let output = timeout(
         Duration::from_secs(10),
         Command::new("lsof")

@@ -183,7 +183,12 @@ async fn run(cli: Cli) -> Result<i32> {
                 json!({"stopped": true}),
             );
         }
-        Command::Rm { workspace, yes } => {
+        Command::Rm {
+            workspace,
+            yes,
+            keep_branch,
+            delete_branch,
+        } => {
             let workspace = ui::workspace(&paths, workspace, true, cli.json).await?;
             let caller_pid = std::process::id();
             let check = match client::call(
@@ -198,13 +203,18 @@ async fn run(cli: Cli) -> Result<i32> {
                 Body::RemovalCheck(check) => check,
                 _ => anyhow::bail!("unexpected removal check response"),
             };
-            let confirmed = if check.safe() {
-                false
+            let choice = if keep_branch {
+                removal::Choice::KeepBranch
+            } else if delete_branch {
+                removal::Choice::DeleteBranch
+            } else if !check.needs_choice() {
+                removal::Choice::Auto
             } else {
-                if !yes {
-                    ui::confirm_removal(&check, cli.json)?;
-                }
-                true
+                ensure!(
+                    !yes,
+                    "choose --keep-branch or --delete-branch with --yes for a dirty or differing workspace"
+                );
+                ui::choose_removal(&check, cli.json)?
             };
             let inspection = match client::call(
                 &paths,
@@ -233,7 +243,7 @@ async fn run(cli: Cli) -> Result<i32> {
                 &paths,
                 Method::Remove {
                     workspace,
-                    confirmed: confirmed || yes,
+                    choice,
                     caller_pid,
                 },
             )
@@ -244,12 +254,19 @@ async fn run(cli: Cli) -> Result<i32> {
                     .unwrap_or_else(|| paths.home.clone());
                 shell::navigate(&destination, cli.json)?;
             }
-            result?;
-            output(
-                cli.json,
-                "Workspace removed; Git branch retained",
-                json!({"removed": true}),
-            );
+            let result = match result? {
+                Body::RemovalResult(result) => result,
+                _ => anyhow::bail!("unexpected removal response"),
+            };
+            let message = match (&result.branch, result.branch_deleted) {
+                (Some(branch), true) => format!("Workspace and Git branch {branch} removed"),
+                (Some(branch), false) => format!(
+                    "Workspace removed; Git branch {branch} retained ({})",
+                    result.branch_outcome
+                ),
+                (None, _) => "Workspace removed".into(),
+            };
+            output(cli.json, &message, serde_json::to_value(&result)?);
         }
         Command::Exec { workspace, command } => {
             let workspace = ui::workspace(&paths, workspace, true, cli.json).await?;

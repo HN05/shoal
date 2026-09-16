@@ -195,12 +195,9 @@ async fn operation(manager: &Manager, method: Method) -> Result<Body> {
         } => Body::RemovalCheck(manager.check_removal(workspace, caller_pid).await?),
         Method::Remove {
             workspace,
-            confirmed,
+            choice,
             caller_pid,
-        } => {
-            manager.remove(workspace, confirmed, caller_pid).await?;
-            Body::Ok
-        }
+        } => Body::RemovalResult(manager.remove(workspace, choice, caller_pid).await?),
         Method::Stop { workspace } => {
             manager.stop(workspace).await?;
             Body::Ok

@@ -241,11 +241,18 @@ mod tests {
             .unwrap();
         assert!(!workspace.path.exists());
         assert!(manager.list().await.unwrap().is_empty());
-        worktrunk::git(
-            &repository_dir,
-            &["rev-parse", "--verify", &workspace.branch],
-        )
-        .await
-        .unwrap();
+        assert_eq!(
+            worktrunk::git(
+                &repository_dir,
+                &[
+                    "for-each-ref",
+                    "--format=%(refname)",
+                    &format!("refs/heads/{}", workspace.branch)
+                ],
+            )
+            .await
+            .unwrap(),
+            ""
+        );
     }
 }

@@ -262,8 +262,13 @@ impl Manager {
         .await
     }
 
-    pub async fn remove(&self, selector: String, confirmed: bool, caller_pid: u32) -> Result<()> {
-        self.remove_with_guard(selector, confirmed, caller_pid, None)
+    pub async fn remove(
+        &self,
+        selector: String,
+        choice: crate::removal::Choice,
+        caller_pid: u32,
+    ) -> Result<crate::removal::RemovalResult> {
+        self.remove_with_guard(selector, choice, caller_pid, None)
             .await
     }
 
@@ -284,17 +289,20 @@ impl Manager {
     }
 
     pub async fn remove_idle(&self, selector: String, snapshot: u64) -> Result<()> {
-        self.remove_with_guard(selector, false, 0, Some(snapshot))
+        self.remove_with_guard(selector, crate::removal::Choice::Auto, 0, Some(snapshot))
             .await
+            .map(|_| ())
     }
 
     async fn remove_with_guard(
         &self,
         selector: String,
-        confirmed: bool,
+        choice: crate::removal::Choice,
         caller_pid: u32,
         expected_snapshot: Option<u64>,
-    ) -> Result<()> {
+    ) -> Result<crate::removal::RemovalResult> {
+        use crate::removal::{Choice, RemovalResult};
+        let automatic = expected_snapshot.is_some();
         let workspace = self.get(selector).await?;
         let id = workspace.id.clone();
         self.store.run(move |db| {
@@ -304,20 +312,29 @@ impl Manager {
         }).await?;
         let result = async {
             let repo = self.repository(&workspace.repository_id).await?;
-            if workspace.path.exists() {
+            let outcome = if workspace.path.exists() {
                 let check = self.check_removal(workspace.id.clone(), caller_pid).await?;
-                ensure!(
-                    confirmed || check.safe(),
-                    "removal requires confirmation: {}; retry with --yes to confirm",
-                    check.warnings().join("; ")
-                );
-                self.stop_executions(&workspace.id).await?;
+                ensure!(!automatic || check.safe(), "workspace is no longer idle, clean and fully pushed");
+                ensure!(automatic || !matches!(choice, Choice::Auto) || !check.needs_choice(),
+                    "removal requires a branch choice: {}; use --yes with --keep-branch or --delete-branch", check.warnings().join("; "));
+                self.stop_executions(&workspace.id, !automatic).await?;
                 if let Some(expected) = expected_snapshot {
                     ensure!(
                         self.cleanup_snapshot(&workspace.id).await? == Some(expected),
                         "workspace changed before automatic removal"
                     );
                 }
+                let check = self.check_removal(workspace.id.clone(), caller_pid).await?;
+                ensure!(!automatic || check.safe(), "workspace changed while stopping commands");
+                ensure!(automatic || !matches!(choice, Choice::Auto) || !check.needs_choice(),
+                    "workspace changed while stopping commands; choose whether to keep or delete the branch");
+                let delete_branch = match choice {
+                    Choice::Auto => check.can_delete_branch(),
+                    Choice::KeepBranch => false,
+                    Choice::DeleteBranch => true,
+                };
+                ensure!(!matches!(choice, Choice::KeepBranch) || check.branch.is_some() || check.unpushed_commits == 0,
+                    "detached HEAD has unpushed commits; create a branch before choosing to keep it");
                 // Future ports/simulator leases belong to the worktree. Release or
                 // reset them here, before deleting its directory and ownership record.
                 // Manual and automatic removal share this exact path.
@@ -325,31 +342,40 @@ impl Manager {
                     &repo.path,
                     &self.paths.state.join("worktrunk.toml"),
                     &workspace.path,
-                    confirmed,
+                    !matches!(choice, Choice::Auto),
+                    delete_branch,
                 )
-                .await?;
+                .await?
             } else {
                 ensure!(
                     workspace.state == "failed",
                     "workspace directory disappeared; manual reconciliation required"
                 );
-            }
+                RemovalResult { removed: true, branch: None, branch_deleted: false, branch_outcome: "not_attempted".into() }
+            };
             let id = workspace.id.clone();
             self.store
                 .run(move |db| {
-                    db.execute("DELETE FROM workspaces WHERE id=?1", [id])?;
-                    Ok(())
+                    let tx = db.transaction()?;
+                    tx.execute("DELETE FROM executions WHERE workspace_id=?1", [&id])?;
+                    tx.execute("DELETE FROM workspaces WHERE id=?1", [id])?;
+                    tx.commit()?;
+                    Ok(outcome)
                 })
                 .await
         }
         .await;
-        if let Err(error) = result {
-            self.set_state(&workspace.id, &workspace.state, Some(format!("{error:#}")))
-                .await?;
-            return Err(error);
+        match result {
+            Ok(outcome) => {
+                self.activity.lock().await.remove(&workspace.id);
+                Ok(outcome)
+            }
+            Err(error) => {
+                self.set_state(&workspace.id, &workspace.state, Some(format!("{error:#}")))
+                    .await?;
+                Err(error)
+            }
         }
-        self.activity.lock().await.remove(&workspace.id);
-        Ok(())
     }
 
     pub async fn begin(&self, selector: String) -> Result<(ExecutionPlan, watch::Receiver<bool>)> {
@@ -423,7 +449,7 @@ impl Manager {
                 Ok(())
             })
             .await?;
-        let result = self.stop_executions(&workspace.id).await;
+        let result = self.stop_executions(&workspace.id, false).await;
         self.set_state(
             &workspace.id,
             "ready",
@@ -433,7 +459,7 @@ impl Manager {
         result
     }
 
-    async fn stop_executions(&self, id: &str) -> Result<()> {
+    async fn stop_executions(&self, id: &str, allow_disconnected: bool) -> Result<()> {
         let id = id.to_owned();
         let deadline = Instant::now() + Duration::from_secs(10);
         loop {
@@ -446,11 +472,26 @@ impl Manager {
             if executions.is_empty() {
                 return Ok(());
             }
+            let mut connected = 0;
             for execution in executions {
-                let sender = active.get(&execution.id).context("execution is no longer connected; cleanup is blocked until its processes are reconciled")?;
-                sender
-                    .send(true)
-                    .context("execution disconnected during stop")?;
+                match active
+                    .get(&execution.id)
+                    .filter(|sender| !sender.is_closed())
+                {
+                    Some(sender) => {
+                        sender
+                            .send(true)
+                            .context("execution disconnected during stop")?;
+                        connected += 1;
+                    }
+                    None if allow_disconnected => {}
+                    None => {
+                        bail!("execution is no longer connected; processes require reconciliation")
+                    }
+                }
+            }
+            if connected == 0 {
+                return Ok(());
             }
             drop(active);
             ensure!(
