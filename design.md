@@ -2017,3 +2017,9 @@ it, so stopping disconnected commands does not delay another workspace's launche
 or completion acknowledgements. The stopping workspace's persisted lifecycle
 state still prevents new commands there. A regression test uses a terminating
 child that waits for another workspace to run before exiting.
+
+CLI dispatch now lives in `commands/mod.rs`, with separate request/prompt/rendering
+handlers for workspaces, repositories, ports, simulators, resource pools, recovery,
+and service administration. `main.rs` only declares modules, parses arguments, and
+handles top-level errors/exit codes. Existing command names, target selection,
+output, retries, shell directives, and scoped-command restrictions are preserved.
