@@ -188,6 +188,17 @@ resource's lifecycle or enforcing its use.
 
 ## Removal and recovery
 
+`repo rm <repository> --yes` permanently deletes the registered checkout (including
+local repositories), all its Shoal workspaces, branches, and owned resources. It
+stops managed executions through the shared workspace removal path and discards
+uncommitted and unpushed work. Refuse linked worktrees outside Shoal, redirected
+paths, and a checkout containing another registered repo or Shoal's state/home.
+Persist repository deletion progress before mutation; a failed cleanup retains
+remaining ownership and blocks new workspace creation until removal is retried.
+Deletion retries verify the recorded directory identity even after partial file
+deletion or daemon restart. Completed cleanup is not rolled back. Retain simulator
+audit history after repository deletion.
+
 Manual and automatic cleanup share one removal path: establish ownership, stop
 owned executions, clean up owned simulator devices, remove the worktree, and
 release bookkeeping leases with the ownership record. Failures retain the records

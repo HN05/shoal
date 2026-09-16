@@ -182,6 +182,24 @@ Custom names can be set with `repo add --name` or `repo rename`, appear in picke
 and work as selectors (`shoal add my-project --name fix-login`). Explicit names
 are unique; naming an already registered URL updates its name without duplicating it.
 
+### Delete a repository
+
+```sh
+shoal repo rm my-project --yes
+```
+
+Permanently deletes the repository checkout, all its Shoal workspaces and branches,
+and their ports, simulators, and resource leases. Managed commands are stopped.
+This also deletes local repositories registered in place, including uncommitted
+and unpushed work. `--yes` is required; names, IDs, paths, and source URLs work as
+selectors. `repo remove` is an alias.
+
+Linked worktrees outside Shoal must be removed separately first. Shoal refuses
+redirected paths and deletion that would include another registered repository or
+its state directory. If cleanup fails, completed steps stay completed and remaining
+records are retained. Retry the same command to finish; new workspace creation is
+blocked while repository deletion is incomplete. Simulator audit history is kept.
+
 ### Pull main
 
 ```sh

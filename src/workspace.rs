@@ -3,6 +3,7 @@ mod executions;
 mod lifecycle;
 mod ownership;
 mod registry;
+mod repo_removal;
 
 use crate::{
     model::{Inspection, Workspace},
@@ -107,6 +108,9 @@ impl Manager {
         let repo = self.repository(&repository).await?;
         let gate = self.git_gate(&repo.id).await;
         let _guard = gate.lock().await;
+        // Removal may have completed or failed while this request waited.
+        self.repository(&repo.id).await?;
+        self.ensure_repository_available(&repo.id).await?;
         let branch = self.available_branch(&repo, &name).await?;
         let id = Uuid::new_v4().to_string();
         let workspace = Workspace {

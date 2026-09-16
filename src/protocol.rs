@@ -4,7 +4,7 @@ use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWrite
 
 use crate::model::{ExecutionPlan, Inspection, Repository, Workspace};
 
-pub const VERSION: u32 = 12;
+pub const VERSION: u32 = 13;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -62,6 +62,9 @@ pub enum Method {
     RenameRepository {
         repository: String,
         name: String,
+    },
+    RemoveRepository {
+        repository: String,
     },
     Add {
         repository: String,
@@ -136,6 +139,7 @@ pub enum Body {
     Status(Status),
     Repositories(Vec<Repository>),
     Repository(Repository),
+    RepositoryRemoved(crate::model::RepositoryRemoval),
     Workspace(Workspace),
     Workspaces(Vec<Workspace>),
     Inspection(Inspection),

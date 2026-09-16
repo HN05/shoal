@@ -14,7 +14,7 @@ impl Store {
         let store = Self { path };
         store.run(|db| {
             let version: i64 = db.query_row("PRAGMA user_version", [], |r| r.get(0))?;
-            ensure!(version <= 10, "state database was written by a newer Shoal version");
+            ensure!(version <= 11, "state database was written by a newer Shoal version");
             db.execute_batch("BEGIN;
                 CREATE TABLE IF NOT EXISTS repositories (
                     id TEXT PRIMARY KEY, path TEXT NOT NULL UNIQUE, source TEXT NOT NULL, last_used INTEGER NOT NULL
@@ -69,7 +69,11 @@ impl Store {
                     ALTER TABLE executions ADD COLUMN child TEXT;
                     ALTER TABLE executions ADD COLUMN group_id INTEGER;")?;
             }
-            db.execute_batch("PRAGMA user_version=10; COMMIT;")?;
+            db.execute_batch("CREATE TABLE IF NOT EXISTS repository_removals (
+                repository_id TEXT PRIMARY KEY REFERENCES repositories(id) ON DELETE CASCADE,
+                directory_id TEXT,
+                deleting_files INTEGER NOT NULL DEFAULT 0 CHECK(deleting_files IN (0,1))
+            ); PRAGMA user_version=11; COMMIT;")?;
             Ok(())
         }).await?;
         Ok(store)

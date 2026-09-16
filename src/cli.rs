@@ -200,6 +200,14 @@ pub enum RepoCommand {
         repository: String,
         name: String,
     },
+    /// Delete a repository checkout and all its Shoal workspaces and resources.
+    #[command(alias = "remove")]
+    Rm {
+        repository: String,
+        /// Confirm permanent deletion, including uncommitted and unpushed work.
+        #[arg(long)]
+        yes: bool,
+    },
     List,
 }
 

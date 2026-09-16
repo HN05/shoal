@@ -3621,3 +3621,263 @@ fn merge_creates_merge_commit_and_preserves_uncommitted_edits() {
     );
     assert_eq!(fs::read_to_string(path.join("ours")).unwrap(), "ours\n");
 }
+
+#[test]
+fn repository_removal_deletes_local_checkout_workspaces_and_leases_and_stops_commands() {
+    let fixture = Fixture::with_config(Some("[resources.global-lock]\n"));
+    let repo = fixture.ok(&[
+        "repo",
+        "add",
+        fixture.repo.to_str().unwrap(),
+        "--name",
+        "doomed",
+    ]);
+    let first = fixture.add("first");
+    let second = fixture.add("second");
+    let first_path = Path::new(first["path"].as_str().unwrap());
+    fs::write(first_path.join("dirty"), "uncommitted work").unwrap();
+    fs::write(first_path.join(".shoal.toml"), "[resources.local-lock]\n").unwrap();
+    fs::write(fixture.repo.join("untracked"), "repo changes").unwrap();
+    fixture.ok(&["port", "reserve", "web", "first"]);
+    fixture.ok(&["resource", "acquire", "local-lock", "first"]);
+    fixture.ok(&["resource", "acquire", "global-lock", "second"]);
+    let declined = fixture.run(&["repo", "rm", "doomed"]);
+    assert!(!declined.status.success());
+    assert!(String::from_utf8_lossy(&declined.stderr).contains("pass --yes"));
+    let scoped = fixture.run(&[
+        "exec",
+        "second",
+        "--",
+        env!("CARGO_BIN_EXE_shoal"),
+        "repo",
+        "rm",
+        "doomed",
+        "--yes",
+    ]);
+    assert!(!scoped.status.success());
+    assert!(String::from_utf8_lossy(&scoped.stderr).contains("workspace processes can only"));
+    let mut command = fixture
+        .command()
+        .args(["exec", "first", "--", "sleep", "30"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while fixture.ok(&["inspect", "first"])["executions"]
+        .as_array()
+        .unwrap()
+        .is_empty()
+    {
+        assert!(Instant::now() < deadline);
+        thread::sleep(Duration::from_millis(20));
+    }
+    let result = fixture.ok(&["repo", "rm", "doomed", "--yes"]);
+    assert_eq!(result["removed"], true);
+    assert_eq!(result["repository_id"], repo["id"]);
+    assert_eq!(result["workspaces_removed"], 2);
+    assert!(!command.wait().unwrap().success());
+    assert!(!fixture.repo.exists());
+    assert!(!first_path.exists());
+    assert!(!Path::new(second["path"].as_str().unwrap()).exists());
+    assert!(fixture.ok(&["repo", "list"]).as_array().unwrap().is_empty());
+    assert!(fixture.ok(&["list"]).as_array().unwrap().is_empty());
+    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+    for table in [
+        "ports",
+        "resource_leases",
+        "executions",
+        "repository_removals",
+    ] {
+        assert_eq!(
+            db.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r
+                .get::<_, i64>(0))
+                .unwrap(),
+            0
+        );
+    }
+    assert_eq!(
+        db.query_row(
+            "SELECT COUNT(*) FROM resource_pools WHERE scope<>'global'",
+            [],
+            |r| r.get::<_, i64>(0)
+        )
+        .unwrap(),
+        0
+    );
+    assert_eq!(
+        db.query_row(
+            "SELECT COUNT(*) FROM resource_pools WHERE scope='global'",
+            [],
+            |r| r.get::<_, i64>(0)
+        )
+        .unwrap(),
+        1
+    );
+}
+
+#[test]
+fn repository_removal_preserves_external_worktrees_and_deletes_clone_on_retry() {
+    let fixture = Fixture::new();
+    let url = format!("file://{}", fixture.repo.display());
+    let repo = fixture.ok(&["repo", "add", &url, "--name", "cloned"]);
+    let path = Path::new(repo["path"].as_str().unwrap());
+    let external = fixture.root.path().join("external");
+    git(
+        path,
+        &[
+            "worktree",
+            "add",
+            "-b",
+            "external",
+            external.to_str().unwrap(),
+        ],
+    );
+    let refused = fixture.run(&["repo", "rm", "cloned", "--yes"]);
+    assert!(!refused.status.success());
+    assert!(String::from_utf8_lossy(&refused.stderr).contains("worktree outside Shoal"));
+    assert!(external.exists() && path.exists());
+    git(path, &["worktree", "remove", external.to_str().unwrap()]);
+    fs::write(path.join("local-work"), "discarded explicitly").unwrap();
+    fixture.ok(&["repo", "remove", &url, "--yes"]);
+    assert!(!path.exists());
+    assert!(fixture.repo.exists());
+    assert_eq!(fixture.ok(&["repo", "list"]).as_array().unwrap().len(), 1);
+}
+
+#[test]
+fn repository_removal_retries_partial_file_deletion_after_restart_but_rejects_replacement() {
+    use std::os::unix::fs::MetadataExt;
+    let mut fixture = Fixture::new();
+    let repo = fixture.ok(&["repo", "list"])[0].clone();
+    let id = repo["id"].as_str().unwrap();
+    let metadata = fs::metadata(&fixture.repo).unwrap();
+    let identity = format!("{}:{}", metadata.dev(), metadata.ino());
+    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+    db.execute("INSERT INTO repository_removals(repository_id,directory_id,deleting_files) VALUES (?1,?2,1)", rusqlite::params![id, identity]).unwrap();
+    let refused = fixture.run(&["add", id, "--name", "too-late"]);
+    assert!(!refused.status.success());
+    assert!(String::from_utf8_lossy(&refused.stderr).contains("removal is incomplete"));
+    fs::remove_dir_all(fixture.repo.join(".git")).unwrap();
+    fixture.restart();
+    let saved = fixture.root.path().join("original-directory");
+    fs::rename(&fixture.repo, &saved).unwrap();
+    fs::create_dir(&fixture.repo).unwrap();
+    fs::write(fixture.repo.join("keep"), "replacement").unwrap();
+    let refused = fixture.run(&["repo", "rm", id, "--yes"]);
+    assert!(!refused.status.success());
+    assert!(String::from_utf8_lossy(&refused.stderr).contains("was replaced"));
+    assert_eq!(
+        fs::read_to_string(fixture.repo.join("keep")).unwrap(),
+        "replacement"
+    );
+    fs::remove_dir_all(&fixture.repo).unwrap();
+    fs::rename(saved, &fixture.repo).unwrap();
+    fixture.ok(&["repo", "rm", id, "--yes"]);
+    assert!(!fixture.repo.exists());
+    assert!(fixture.ok(&["repo", "list"]).as_array().unwrap().is_empty());
+}
+
+#[test]
+fn repository_removal_rejects_symlinks_and_nested_registered_repositories() {
+    let fixture = Fixture::new();
+    let id = fixture.ok(&["repo", "list"])[0]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let saved = fixture.root.path().join("original");
+    fs::rename(&fixture.repo, &saved).unwrap();
+    std::os::unix::fs::symlink(&saved, &fixture.repo).unwrap();
+    let refused = fixture.run(&["repo", "rm", &id, "--yes"]);
+    assert!(!refused.status.success());
+    assert!(String::from_utf8_lossy(&refused.stderr).contains("symlink"));
+    assert!(saved.join("tracked").exists());
+    fs::remove_file(&fixture.repo).unwrap();
+    fs::rename(saved, &fixture.repo).unwrap();
+    let nested = fixture.repo.join("nested");
+    fs::create_dir(&nested).unwrap();
+    git(&nested, &["init", "-b", "main"]);
+    fixture.ok(&["repo", "add", nested.to_str().unwrap()]);
+    let refused = fixture.run(&["repo", "rm", &id, "--yes"]);
+    assert!(!refused.status.success());
+    assert!(String::from_utf8_lossy(&refused.stderr).contains("another registered repository"));
+    assert!(fixture.repo.exists() && nested.exists());
+}
+
+#[test]
+fn repository_removal_serializes_with_workspace_creation() {
+    let fixture = Fixture::new();
+    let id = fixture.ok(&["repo", "list"])[0]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let add = fixture
+        .command()
+        .args(["add", &id, "--name", "racing"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    fixture.ok(&["repo", "rm", &id, "--yes"]);
+    let _ = add.wait_with_output().unwrap();
+    assert!(fixture.ok(&["repo", "list"]).as_array().unwrap().is_empty());
+    assert!(fixture.ok(&["list"]).as_array().unwrap().is_empty());
+    assert!(!fixture.root.path().join("state/workspaces/racing").exists());
+    assert!(!fixture.repo.exists());
+}
+
+#[test]
+#[cfg(target_os = "macos")]
+fn repository_removal_preserves_resources_on_failure_and_retries_after_restart() {
+    let config = format!("{SIM_CONFIG}\n[resources.lock]\n");
+    let mut fixture = Fixture::with_tools(Some(&config), true);
+    let repo = fixture.ok(&["repo", "list"])[0].clone();
+    let id = repo["id"].as_str().unwrap();
+    let workspace = fixture.add("worker");
+    let port = fixture.ok(&["port", "reserve", "web", "worker"]);
+    let resource = fixture.ok(&["resource", "acquire", "lock", "worker"]);
+    fixture.ok(&[
+        "sim",
+        "acquire",
+        "worker",
+        "--clean",
+        "--reason",
+        "repository removal test",
+    ]);
+    fs::write(fixture.root.path().join("sim-fail"), "delete").unwrap();
+    assert!(!fixture.run(&["repo", "rm", id, "--yes"]).status.success());
+    assert!(fixture.repo.exists());
+    assert!(Path::new(workspace["path"].as_str().unwrap()).exists());
+    assert_eq!(fixture.ok(&["port", "list", "worker"])[0], port);
+    assert_eq!(fixture.ok(&["resource", "list", "worker"])[0], resource);
+    fixture.restart();
+    assert!(
+        !fixture
+            .run(&["add", id, "--name", "blocked"])
+            .status
+            .success()
+    );
+    fs::remove_file(fixture.root.path().join("sim-fail")).unwrap();
+    fixture.ok(&["repo", "rm", id, "--yes"]);
+    assert!(!fixture.repo.exists());
+    assert!(
+        fixture
+            .ok(&["sim", "list", "--all"])
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(
+        fs::read_to_string(fixture.root.path().join("sim-devices.json")).unwrap(),
+        "[]"
+    );
+    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+    assert!(
+        db.query_row("SELECT COUNT(*) FROM simulator_clean_requests", [], |r| r
+            .get::<_, i64>(
+            0
+        ))
+        .unwrap()
+            > 0
+    );
+}

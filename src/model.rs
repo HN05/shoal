@@ -10,6 +10,14 @@ pub struct Repository {
     pub name: Option<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RepositoryRemoval {
+    pub removed: bool,
+    pub repository_id: String,
+    pub path: PathBuf,
+    pub workspaces_removed: usize,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Workspace {
     pub id: String,

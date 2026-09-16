@@ -56,6 +56,25 @@ pub(super) async fn run(paths: &Paths, command: RepoCommand, json_output: bool) 
                 _ => anyhow::bail!("unexpected repository response"),
             }
         }
+        RepoCommand::Rm { repository, yes } => {
+            anyhow::ensure!(
+                yes,
+                "repository removal permanently deletes its checkout and all Shoal workspaces, including uncommitted and unpushed work; pass --yes"
+            );
+            let repository = ui::repository_selector(repository)?;
+            match client::call(paths, Method::RemoveRepository { repository }).await? {
+                Body::RepositoryRemoved(result) => output(
+                    json_output,
+                    &format!(
+                        "Deleted {} and {} Shoal workspaces",
+                        result.path.display(),
+                        result.workspaces_removed
+                    ),
+                    serde_json::to_value(&result)?,
+                ),
+                _ => anyhow::bail!("unexpected repository removal response"),
+            }
+        }
     }
     Ok(0)
 }
