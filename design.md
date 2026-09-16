@@ -2079,3 +2079,36 @@ For Macraft guests, run Shoal and the agent/T3 server inside the execution guest
 Macraft owns guest provisioning and connectivity. T3 already documents remote
 servers and desktop-managed SSH. Keep Shoal's local daemon behind that boundary.
 [T3 remote access](https://github.com/pingdotgg/t3code/blob/main/docs/user/remote-access.md).
+
+
+### Desktop launch shortcuts and shell completions (implemented)
+
+`shoal codex cli [workspace] [-- args...]` replaces the previous implicit CLI
+shortcut. Only CLI mode appends `--sandbox workspace-write --ask-for-approval=never`
+and runs through Shoal's execution wrapper. `shoal codex app [workspace] [-- args...]`
+invokes `codex app <workspace-path>`; `shoal t3 [workspace] [-- args...]` invokes
+`t3 app <workspace-path>`. Launchers run in the resolved worktree, preserve their
+exit codes/stdin/stdout/stderr, and forward optional arguments as literal values.
+App modes add no CLI agent flags, do not create execution records, and do not kill
+GUI process groups when the launcher returns. T3 requires its desktop app running.
+Targets resolve by name, then current directory/fzf when omitted, with daemon
+scope checks for workspace inspection. Ctrl-E lists both Codex modes and T3.
+
+This implements directory handoff only. The external-session attachment and GUI
+lifecycle/scoping proposals above remain unimplemented. Disable automatic cleanup
+for manual GUI use if the existing activity checks cannot track it reliably.
+
+`shoal completions <shell>` emits scripts generated from Clap's command tree using
+clap_complete; Bash, Zsh, Fish, PowerShell, and Elvish are available. JSON wraps the
+script in a `script` field. No daemon is required. Command/flag/fixed-value
+completion is provided; dynamic workspace/resource names still use fzf.
+`shoal shell init` now loads Bash/Zsh completions alongside its existing small
+navigation function, initializing Zsh compinit if needed. Bash loads trusted,
+Shoal-generated completion code using command substitution for compatibility with
+older Bash process-substitution behavior. No repository output is evaluated.
+Users reload their existing init line; Shoal does not edit personal shell files.
+
+Tests use fake Codex/T3 launchers for argument forwarding, current-directory
+selection, exit status, absence of managed executions, and scope denial. Completion
+tests exercise Bash callback results and registration in real Bash/Zsh shells
+using temporary home directories, without requiring a daemon or starting agents.

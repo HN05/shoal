@@ -72,8 +72,22 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         Command::Claude { workspace, args } => {
             workspaces::claude(&paths, workspace, args, cli.json).await
         }
-        Command::Codex { workspace, args } => {
-            workspaces::codex(&paths, workspace, args, cli.json).await
+        Command::Codex {
+            mode,
+            workspace,
+            args,
+        } => workspaces::codex(&paths, mode, workspace, args, cli.json).await,
+        Command::T3 { workspace, args } => {
+            workspaces::open_app(&paths, workspace, "t3", args, cli.json).await
+        }
+        Command::Completions { shell } => {
+            let script = crate::shell::completions(shell)?;
+            if cli.json {
+                println!("{}", json!({"script": script}));
+            } else {
+                print!("{script}");
+            }
+            Ok(0)
         }
         Command::Setup {
             dry_run,

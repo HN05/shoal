@@ -733,9 +733,13 @@ fn agent_shortcuts_forward_arguments_without_starting_real_agents() {
         )
         .unwrap();
         fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
-        let output = fixture
-            .command()
-            .args([agent, "shortcut", "--", "--version", "hello with spaces"])
+        let mut command = fixture.command();
+        command.arg(agent);
+        if agent == "codex" {
+            command.arg("cli");
+        }
+        let output = command
+            .args(["shortcut", "--", "--version", "hello with spaces"])
             .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
             .output()
             .unwrap();
@@ -3001,4 +3005,65 @@ time.sleep(30)
         root.join("saw-other").exists(),
         "other workspace was blocked until orphan was forcibly killed"
     );
+}
+
+#[test]
+fn desktop_shortcuts_open_workspaces_without_cli_flags_or_execution_records() {
+    let fixture = Fixture::new();
+    let workspace = fixture.add("desktop");
+    let path = workspace["path"].as_str().unwrap();
+    let bin = fixture.root.path().join("desktop-bin");
+    fs::create_dir(&bin).unwrap();
+    for program in ["codex", "t3"] {
+        let stub = bin.join(program);
+        fs::write(&stub, "#!/bin/sh\nprintf '%s\\n' \"$PWD\" \"$@\"\nexit 7\n").unwrap();
+        fs::set_permissions(&stub, fs::Permissions::from_mode(0o700)).unwrap();
+        for explicit in [true, false] {
+            let mut command = fixture.command();
+            command.arg(program);
+            if program == "codex" {
+                command.arg("app");
+            }
+            if explicit {
+                command.arg("desktop");
+            } else {
+                command.current_dir(path);
+            }
+            let output = command
+                .args(["--", "--example", "literal spaces; $(false)"])
+                .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+                .output()
+                .unwrap();
+            assert_eq!(
+                output.status.code(),
+                Some(7),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            assert_eq!(
+                String::from_utf8(output.stdout).unwrap(),
+                format!(
+                    "{}\napp\n{path}\n--example\nliteral spaces; $(false)\n",
+                    fs::canonicalize(path).unwrap().display()
+                )
+            );
+            assert_eq!(
+                fixture.ok(&["inspect", "desktop"])["executions"],
+                serde_json::json!([])
+            );
+        }
+    }
+    fixture.add("other");
+    for args in [vec!["codex", "app", "other"], vec!["t3", "other"]] {
+        let output = fixture
+            .command()
+            .args(["exec", "desktop", "--", env!("CARGO_BIN_EXE_shoal")])
+            .args(args)
+            .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+            .output()
+            .unwrap();
+        assert!(!output.status.success());
+        assert!(String::from_utf8_lossy(&output.stderr).contains("another worktree"));
+    }
+    assert!(!fixture.run(&["codex", "desktop"]).status.success());
 }

@@ -1,6 +1,6 @@
 use std::{ffi::OsString, path::PathBuf};
 
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 
 #[derive(Debug, Parser)]
 #[command(version, about)]
@@ -17,6 +17,11 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    /// Print shell completions for commands, flags, and fixed argument values.
+    Completions {
+        #[arg(value_enum)]
+        shell: clap_complete::Shell,
+    },
     /// Print shell integration for Bash or Zsh.
     Shell {
         #[command(subcommand)]
@@ -107,8 +112,16 @@ pub enum Command {
         #[arg(last = true)]
         args: Vec<OsString>,
     },
-    /// Run Codex with workspace-write sandboxing and no approval prompts.
+    /// Run the Codex CLI or open a workspace in the Codex app.
     Codex {
+        #[arg(value_enum)]
+        mode: CodexMode,
+        workspace: Option<String>,
+        #[arg(last = true)]
+        args: Vec<OsString>,
+    },
+    /// Open a workspace in the running T3 Code desktop app.
+    T3 {
         workspace: Option<String>,
         #[arg(last = true)]
         args: Vec<OsString>,
@@ -127,6 +140,12 @@ pub enum Command {
         #[command(subcommand)]
         command: DaemonCommand,
     },
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum CodexMode {
+    Cli,
+    App,
 }
 
 #[derive(Debug, Subcommand)]

@@ -1,4 +1,5 @@
 use anyhow::{Context, Result, ensure};
+use clap::CommandFactory;
 use std::path::{Path, PathBuf};
 
 pub const INIT_COMMAND: &str = "source <(shoal shell init)";
@@ -16,7 +17,23 @@ pub const INIT: &str = r#"shoal() {
   fi
   return "$shoal_exit"
 }
+
+if [ -n "${ZSH_VERSION-}" ]; then
+  if ! typeset -f compdef >/dev/null; then
+    autoload -Uz compinit
+    compinit
+  fi
+  source <(command shoal completions zsh)
+elif [ -n "${BASH_VERSION-}" ]; then
+  eval "$(command shoal completions bash)"
+fi
 "#;
+
+pub fn completions(shell: clap_complete::Shell) -> Result<String> {
+    let mut script = Vec::new();
+    clap_complete::generate(shell, &mut crate::cli::Cli::command(), "shoal", &mut script);
+    String::from_utf8(script).context("completion script is not UTF-8")
+}
 
 pub fn navigate(path: &Path, json: bool) -> Result<()> {
     if json {

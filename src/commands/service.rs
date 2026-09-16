@@ -38,7 +38,7 @@ pub(super) async fn setup(
     );
     if !json_output {
         println!(
-            "\nAdd this line to ~/.zshrc or ~/.bashrc to navigate after add/rm:\n\n{}",
+            "\nAdd this line to ~/.zshrc or ~/.bashrc for directory navigation and tab completion:\n\n{}",
             shell::INIT_COMMAND
         );
     }

@@ -191,10 +191,16 @@ pub async fn workspace_menu(paths: &Paths) -> Result<crate::cli::Command> {
         "ctrl-f" => Command::Diff { workspace },
         "ctrl-e" => match pick(
             "Execute> ",
-            ["claude", "codex", "custom shell command"]
-                .into_iter()
-                .map(|s| (s.into(), s.into()))
-                .collect(),
+            [
+                "claude",
+                "codex cli",
+                "codex app",
+                "t3",
+                "custom shell command",
+            ]
+            .into_iter()
+            .map(|s| (s.into(), s.into()))
+            .collect(),
             false,
         )?
         .as_str()
@@ -203,7 +209,16 @@ pub async fn workspace_menu(paths: &Paths) -> Result<crate::cli::Command> {
                 workspace,
                 args: vec![],
             },
-            "codex" => Command::Codex {
+            mode @ ("codex cli" | "codex app") => Command::Codex {
+                mode: if mode == "codex cli" {
+                    crate::cli::CodexMode::Cli
+                } else {
+                    crate::cli::CodexMode::App
+                },
+                workspace,
+                args: vec![],
+            },
+            "t3" => Command::T3 {
                 workspace,
                 args: vec![],
             },

@@ -7,8 +7,8 @@ use crate::{
     ui,
 };
 use crate::{execution, removal, shell};
-use anyhow::Result;
 use anyhow::ensure;
+use anyhow::{Context, Result};
 use serde_json::json;
 use std::ffi::OsString;
 
@@ -290,10 +290,14 @@ pub(super) async fn claude(
 
 pub(super) async fn codex(
     paths: &Paths,
+    mode: crate::cli::CodexMode,
     workspace: Option<String>,
     args: Vec<OsString>,
     json_output: bool,
 ) -> Result<i32> {
+    if matches!(mode, crate::cli::CodexMode::App) {
+        return open_app(paths, workspace, "codex", args, json_output).await;
+    }
     let workspace = ui::workspace(paths, workspace, true, json_output).await?;
     let command = std::iter::once("codex".into())
         .chain(args)
@@ -304,6 +308,41 @@ pub(super) async fn codex(
         ])
         .collect();
     execution::run(paths, workspace, command).await
+}
+
+/// Desktop launchers hand the directory to another process. Their short-lived
+/// command is not the agent session and must not own/kill the app's process group.
+pub(super) async fn open_app(
+    paths: &Paths,
+    workspace: Option<String>,
+    program: &str,
+    args: Vec<OsString>,
+    json_output: bool,
+) -> Result<i32> {
+    use std::os::unix::process::ExitStatusExt;
+    let workspace = ui::workspace(paths, workspace, true, json_output).await?;
+    let Body::Inspection(inspection) = client::call(paths, Method::Inspect { workspace }).await?
+    else {
+        anyhow::bail!("unexpected workspace response");
+    };
+    ensure!(
+        inspection.workspace.path.is_dir(),
+        "workspace directory is missing"
+    );
+    let status = tokio::process::Command::new(program)
+        .arg("app")
+        .arg(&inspection.workspace.path)
+        .args(args)
+        .current_dir(&inspection.workspace.path)
+        .env_remove("SHOAL_SHELL_DIRECTIVE")
+        .status()
+        .await
+        .with_context(|| {
+            format!("launch {program} app; install {program} and make it available on PATH")
+        })?;
+    Ok(status
+        .code()
+        .unwrap_or_else(|| 128 + status.signal().unwrap_or(1)))
 }
 
 async fn enter_workspace(paths: &Paths, workspace: String, json_output: bool) -> Result<()> {

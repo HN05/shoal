@@ -67,7 +67,9 @@ shoal cd fix-login          # Enter through the shell function
 shoal cd -                  # Previous directory; refuses deleted destinations
 shoal exec fix-login -- cargo test
 shoal claude fix-login -- --help
-shoal codex fix-login -- --help
+shoal codex cli fix-login -- --help
+shoal codex app fix-login    # Open the Codex desktop app
+shoal t3 fix-login           # Open in the running T3 Code desktop app
 shoal inspect fix-login
 shoal stop fix-login        # Stop commands; keep the worktree
 shoal rm fix-login          # Delete redundant branch, otherwise choose what to keep
@@ -76,9 +78,19 @@ shoal rm fix-login --yes --delete-branch
 ```
 
 `shoal claude` appends `--remote-control <workspace-name>`, using the resolved
-workspace's name. `shoal codex` appends `--sandbox workspace-write
+workspace's name. `shoal codex cli` appends `--sandbox workspace-write
 --ask-for-approval=never`. Arguments after `--` are forwarded before these flags.
 Use `shoal exec ... -- claude/codex ...` for a custom invocation.
+
+`codex` requires an explicit `cli` or `app` mode. App launches run
+`codex app <workspace-path>` or `t3 app <workspace-path>`, with optional arguments
+after `--` passed through unchanged. They add no agent flags and preserve the
+launcher's output and exit code. Install the corresponding CLI on your PATH;
+T3's desktop app must already be running. An omitted workspace uses the current
+workspace, otherwise fzf. App handoff does not track GUI sessions or supply their
+agents with Shoal execution scope or port variables. Disable automatic cleanup
+when using an app whose workspace activity Shoal cannot track reliably.
+
 
 Bare `shoal` opens an interactive workspace list. `shoal --help` shows help;
 without a terminal, bare `shoal` also shows help. The list offers:
@@ -87,7 +99,7 @@ without a terminal, bare `shoal` also shows help. The list offers:
 | --- | --- |
 | Enter | Enter the selected workspace |
 | Ctrl-D | Delete, with confirmation when needed |
-| Ctrl-E | Run Claude, Codex, or a custom shell command |
+| Ctrl-E | Run Claude/Codex CLI, open Codex/T3 apps, or run a shell command |
 | Ctrl-A | Add a workspace |
 | Ctrl-O | Inspect |
 | Ctrl-S | Stop managed commands |
@@ -102,7 +114,7 @@ show readable repository names, including for managed clones. Pickers show just
 the name, adding `(hostname)` for duplicate names (and the source if still
 ambiguous). `repo list` includes each original path or URL.
 Commands with omitted workspace
-targets open an `fzf` picker; `rm`, `exec`, `claude`, and `codex` first look for a workspace
+targets open an `fzf` picker; `rm`, `exec`, `claude`, `codex`, and `t3` first look for a workspace
 containing the current directory. Explicit targets bypass selection. Noninteractive
 calls and `--json` never prompt; management commands support JSON output, while
 executed commands retain their own stdin, stdout, stderr, and exit code.
@@ -178,7 +190,7 @@ requires release first. Reservations persist across command exits, `stop`, and
 daemon restarts. Successful manual or automatic worktree removal releases them;
 failed removal keeps them reserved.
 
-Subsequent `exec`, `claude`, and `codex` commands receive `SHOAL_PORT_<NAME>` by
+Subsequent `exec`, `claude`, and `codex cli` commands receive `SHOAL_PORT_<NAME>` by
 default (`web` becomes `SHOAL_PORT_WEB`), or the variable supplied with `--env`.
 An already-running process keeps its original environment. All management
 commands support `--json`; `inspect` also includes reservations.
@@ -266,6 +278,26 @@ Reload `source <(shoal shell init)` in existing terminals after upgrading to pas
 previous-directory state reliably. Shoal does not edit your shell configuration
 automatically.
 
+### Tab completion
+
+Reload the shell integration to enable command, flag, and fixed-value completion
+(including `codex cli`/`app`) in Bash or Zsh:
+
+```sh
+source <(shoal shell init)
+```
+
+Zsh's completion system is initialized if needed. Completions are generated from
+the same command definitions as `--help` and do not need a running daemon.
+For Bash versions that cannot source process substitutions, use
+`eval "$(shoal shell init)"` instead.
+
+To install completions separately, `shoal completions zsh` or
+`shoal completions bash` prints the script. Fish, PowerShell, and Elvish are also
+supported by `shoal completions <shell>`; `--json` returns a `script` field.
+These completions cover CLI syntax, not live workspace/repository/resource names;
+omit those targets to use Shoal's existing fzf selection.
+
 ## Current scope
 
 The CLI/daemon, workspaces, named TCP ports, simulator sharing, cooperative
@@ -335,7 +367,7 @@ worktree's configured and reserved ports, including the actual numbers.
 
 ### Scoped workspace commands
 
-Commands launched through `exec`, `claude`, and `codex` can inspect their own
+Commands launched through `exec`, `claude`, and `codex cli` can inspect their own
 worktree, execute there, manage its resources, and pull its repository's main
 with `shoal pull`. They cannot access other worktrees, remove workspaces, perform
 other repository administration, or administer the daemon. Nested
