@@ -300,6 +300,12 @@ async fn operation(
         Method::RenameRepository { repository, name } => {
             Body::Repository(manager.rename_repository(repository, name).await?)
         }
+        Method::RepositoryConfig { repository } => {
+            Body::RepositoryConfig(manager.repository_config(repository).await?)
+        }
+        Method::SetRepositoryConfig { repository, toml } => {
+            Body::RepositoryConfig(manager.set_repository_config(repository, toml).await?)
+        }
         Method::RemoveRepository { repository } => {
             Body::RepositoryRemoved(manager.remove_repository(repository).await?)
         }

@@ -7,7 +7,7 @@ use std::{
 
 use crate::{
     model::{PortOverview, PortReservation, PortSuggestion},
-    repo_config::{self, ConflictPolicy},
+    repo_config::ConflictPolicy,
     store,
     workspace::Manager,
 };
@@ -83,7 +83,7 @@ impl Manager {
             on_conflict,
         } = options;
         let workspace = self.get(selector).await?;
-        let config = repo_config::load(&workspace.path)?;
+        let config = self.workspace_config(&workspace).await?;
         let definition = config
             .ports
             .definitions
@@ -200,7 +200,7 @@ impl Manager {
 
     pub async fn port_overview(&self, selector: String) -> Result<PortOverview> {
         let workspace = self.get(selector).await?;
-        let config = repo_config::load(&workspace.path)?;
+        let config = self.workspace_config(&workspace).await?;
         let reserved = self.list_ports(Some(workspace.id.clone())).await?;
         Ok(PortOverview {
             workspace,

@@ -3,6 +3,12 @@ use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, fs, path::Path};
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct LocalConfig {
+    pub repository_id: String,
+    pub toml: Option<String>,
+}
+
 #[derive(Debug, Default, Clone, Copy, Deserialize, Serialize, ValueEnum)]
 #[serde(rename_all = "snake_case")]
 pub enum ConflictPolicy {
@@ -51,8 +57,11 @@ pub fn load(workspace_dir: &Path) -> Result<RepoConfig> {
         return Ok(RepoConfig::default());
     };
     let text = fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
-    let config: RepoConfig =
-        toml::from_str(&text).with_context(|| format!("parse {}", path.display()))?;
+    parse(&text).with_context(|| format!("parse {}", path.display()))
+}
+
+pub fn parse(text: &str) -> Result<RepoConfig> {
+    let config: RepoConfig = toml::from_str(text)?;
     for (name, definition) in &config.ports.definitions {
         ensure!(
             !name.is_empty()

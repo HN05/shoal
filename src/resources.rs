@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use uuid::Uuid;
 
-use crate::{repo_config, workspace::Manager};
+use crate::workspace::Manager;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -293,11 +293,11 @@ impl ResourceConfig {
 }
 
 impl Manager {
-    fn resource_definitions(
+    async fn resource_definitions(
         &self,
         workspace: &crate::model::Workspace,
     ) -> Result<BTreeMap<String, (String, Definition)>> {
-        let repo = repo_config::load(&workspace.path)?;
+        let repo = self.workspace_config(workspace).await?;
         let global = definitions(&self.config.resources, &self.config.resource_pools)?;
         let local = definitions(&repo.resources, &repo.resource_pools)?;
         let mut result: BTreeMap<_, _> = global
@@ -333,7 +333,7 @@ impl Manager {
         validate_reason(request.reason.as_deref())?;
         let workspace = self.get(selector).await?;
         self.touch(&workspace.id).await;
-        let mut definitions = self.resource_definitions(&workspace)?;
+        let mut definitions = self.resource_definitions(&workspace).await?;
         let (scope, definition) = definitions
             .remove(&request.pool)
             .ok_or_else(|| anyhow::anyhow!("unknown resource or pool: {}", request.pool))?;
@@ -423,7 +423,7 @@ impl Manager {
 
     pub async fn resource_overview(&self, selector: String) -> Result<Overview> {
         let workspace = self.get(selector).await?;
-        let definitions = self.resource_definitions(&workspace)?;
+        let definitions = self.resource_definitions(&workspace).await?;
         self.store
             .run(move |db| {
                 let tx = db.transaction()?;

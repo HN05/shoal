@@ -88,6 +88,8 @@ fn dynamic_completion_covers_nested_commands_flags_and_paths_without_daemon() {
     let home = tempfile::tempdir().unwrap();
     for (words, expected) in [
         (vec!["shoal", "repo", "r"], "rm"),
+        (vec!["shoal", "repo", "c"], "config"),
+        (vec!["shoal", "repo", "config", "--f"], "--file"),
         (vec!["shoal", "repo", "rm", "--y"], "--yes"),
         (vec!["shoal", "port", "r"], "reserve"),
         (vec!["shoal", "resource", "a"], "acquire"),

@@ -187,6 +187,33 @@ Custom names can be set with `repo add --name` or `repo rename`, appear in picke
 and work as selectors (`shoal add my-project --name fix-login`). Explicit names
 are unique; naming an already registered URL updates its name without duplicating it.
 
+### Store repository config outside Git
+
+```sh
+shoal repo config my-project --file ~/project-shoal.toml
+shoal repo config my-project          # Print the saved TOML
+shoal repo config my-project --clear  # Return to worktree config
+```
+
+Use the same TOML format as `.shoal.toml`, including ports, resources, resource
+pools, and simulator preferences. Shoal validates and copies the file into its
+state database; it does not modify the repository or keep a reference to the
+input file. Reimport the file to apply later edits. `--json` returns
+`repository_id` and `toml` (`null` when no local config is saved).
+
+The saved config replaces the entire worktree config for every existing and new
+workspace of this repository. Omitted settings use their normal defaults; the
+files are not merged. An empty file explicitly selects all defaults. Without a
+saved config, Shoal reads `.shoal.toml` or `.shoal/config.toml` from each worktree
+and rejects both together. Changes apply on the next resource request without a
+daemon restart; existing reservations and leases remain in place. Global machine
+policy and CLI overrides still apply.
+
+Local config survives daemon restarts, repo renames, and individual workspace
+removal. Successful `repo rm` deletes it with the repository registration; failed
+removal retains it for retry. Scoped workspace commands cannot administer this
+config.
+
 ### Delete a repository
 
 ```sh
@@ -194,7 +221,8 @@ shoal repo rm my-project --yes
 ```
 
 Permanently deletes the repository checkout, all its Shoal workspaces and branches,
-and their ports, simulators, and resource leases. Managed commands are stopped.
+and their ports, simulators, and resource leases, plus the locally saved repo
+config. Managed commands are stopped.
 This also deletes local repositories registered in place, including uncommitted
 and unpushed work. Interactive calls ask `Are you sure? [y/N]`; Enter or `n`
 cancels. Pass `--yes` to skip the prompt (required for scripts and `--json`).
@@ -460,7 +488,8 @@ on a Linux host.
 
 ### Repo port defaults
 
-Use `.shoal.toml` or `.shoal/config.toml` (not both):
+Use `.shoal.toml` or `.shoal/config.toml` (not both), or import an external file
+with `shoal repo config <repository> --file <file>`:
 
 ```toml
 [ports]

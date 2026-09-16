@@ -3,6 +3,7 @@ mod executions;
 mod lifecycle;
 mod ownership;
 mod registry;
+mod repo_configuration;
 mod repo_removal;
 
 use crate::{

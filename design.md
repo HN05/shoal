@@ -161,6 +161,17 @@ workspace removal. Agents stop using a resource before releasing it.
 
 Global TOML supplies machine policy. Repository TOML is read from the selected
 worktree at `.shoal.toml` or `.shoal/config.toml`; both together are an error.
+An optional local config is stored as TOML in the daemon database, keyed by stable
+repository ID and owned by its registration. `repo config --file` validates and
+copies it; `repo config` shows it and `--clear` removes it. It replaces the entire
+worktree config for all of that repository's workspaces, without reading or
+merging checkout files. Empty TOML explicitly chooses defaults; absent local
+config preserves worktree-file discovery and its dual-file error. Read config on
+each resource request, so changes need no restart and leave existing leases
+unchanged. Updates are unscoped repository administration and serialize with
+registration/removal; incomplete removal blocks updates. Rename, daemon restart,
+and workspace removal preserve local config. Successful repository deletion
+cascades its deletion in the same database transaction; failed removal retains it.
 Repository preferences cannot expand machine policy. Global resource pools span
 repositories within one daemon; repo pools span that repository's worktrees.
 Resources are acquired lazily, not during workspace creation.

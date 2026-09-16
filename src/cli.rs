@@ -187,6 +187,16 @@ pub enum SkillAgent {
 
 #[derive(Debug, Subcommand)]
 pub enum RepoCommand {
+    /// Show or replace repository configuration stored locally by Shoal.
+    Config {
+        repository: String,
+        /// Import TOML as the complete config for all this repository's workspaces.
+        #[arg(long, conflicts_with = "clear", value_hint = clap::ValueHint::FilePath)]
+        file: Option<PathBuf>,
+        /// Remove the local config and use each worktree's repository config again.
+        #[arg(long)]
+        clear: bool,
+    },
     /// Register a local checkout (no remote required), or clone a repository URL.
     Add {
         source: String,

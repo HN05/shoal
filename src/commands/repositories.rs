@@ -7,10 +7,52 @@ use crate::{
     protocol::{Body, Method},
     ui,
 };
-use anyhow::Result;
+use anyhow::{Context, Result};
 
 pub(super) async fn run(paths: &Paths, command: RepoCommand, json_output: bool) -> Result<i32> {
     match command {
+        RepoCommand::Config {
+            repository,
+            file,
+            clear,
+        } => {
+            let repository = ui::repository_selector(repository)?;
+            let updating = file.is_some() || clear;
+            let method = if updating {
+                let toml = file
+                    .map(|path| {
+                        std::fs::read_to_string(&path)
+                            .with_context(|| format!("read {}", path.display()))
+                    })
+                    .transpose()?;
+                Method::SetRepositoryConfig { repository, toml }
+            } else {
+                Method::RepositoryConfig { repository }
+            };
+            match client::call(paths, method).await? {
+                Body::RepositoryConfig(config) => {
+                    if json_output {
+                        println!("{}", serde_json::to_string(&config)?);
+                    } else if updating {
+                        println!(
+                            "{}",
+                            if clear {
+                                "Cleared local repository config"
+                            } else {
+                                "Saved local repository config"
+                            }
+                        );
+                    } else if let Some(text) = config.toml {
+                        print!("{text}");
+                    } else {
+                        eprintln!(
+                            "No local repository config; using each worktree's repository config"
+                        );
+                    }
+                }
+                _ => anyhow::bail!("unexpected repository config response"),
+            }
+        }
         RepoCommand::Add { source, name, path } => {
             let source = ui::repository_selector(source)?;
             let path = path

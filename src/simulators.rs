@@ -7,7 +7,7 @@ use std::{
 };
 use uuid::Uuid;
 
-use crate::{repo_config, simctl, workspace::Manager};
+use crate::{simctl, workspace::Manager};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -271,7 +271,10 @@ impl Manager {
         let profile = if existing.is_some() && !explicit {
             None
         } else {
-            Some(self.resolve_profile(&workspace.path, &request, &inventory)?)
+            Some(
+                self.resolve_profile(&workspace, &request, &inventory)
+                    .await?,
+            )
         };
         if let Some(index) = existing {
             ensure!(
@@ -494,9 +497,9 @@ impl Manager {
         Ok(Acquisition::Acquired(Box::new(sim)))
     }
 
-    fn resolve_profile(
+    async fn resolve_profile(
         &self,
-        path: &std::path::Path,
+        workspace: &crate::model::Workspace,
         request: &SimRequest,
         inventory: &simctl::Inventory,
     ) -> Result<Profile> {
@@ -553,7 +556,7 @@ impl Manager {
                 runtime: runtime.clone(),
             }
         } else {
-            let repo = repo_config::load(path)?;
+            let repo = self.workspace_config(workspace).await?;
             let names = if let Some(name) = &request.profile {
                 vec![name.clone()]
             } else if !repo.simulators.preferred.is_empty() {

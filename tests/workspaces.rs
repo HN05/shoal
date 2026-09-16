@@ -350,6 +350,7 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
     };
     for args in [
         vec!["repo", "rm", "pr"],
+        vec!["repo", "config", "pr"],
         vec!["repo", "rename", "pr"],
         vec!["add", "pr"],
     ] {
@@ -1486,6 +1487,8 @@ fn execution_scope_limits_management_and_expires() {
         vec!["inspect", "other"],
         vec!["port", "reserve", "web", "other"],
         vec!["repo", "rename", fixture.repo.to_str().unwrap(), "changed"],
+        vec!["repo", "config", fixture.repo.to_str().unwrap()],
+        vec!["repo", "config", fixture.repo.to_str().unwrap(), "--clear"],
         vec!["daemon", "stop"],
         vec!["setup", "--dry-run"],
     ] {
@@ -2322,6 +2325,160 @@ fn resource_claims_are_atomic_persistent_and_wait_for_release() {
         fixture.ok(&["resource", "list", "--all"]),
         serde_json::json!([])
     );
+}
+
+#[test]
+fn local_repository_config_is_copied_shared_persistent_and_reversible() {
+    let mut fixture = Fixture::new();
+    let first = fixture.add("first");
+    let repo = fixture.ok(&["repo", "list"])[0].clone();
+    let id = repo["id"].as_str().unwrap();
+    assert!(fixture.ok(&["repo", "config", id])["toml"].is_null());
+    let input = fixture.root.path().join("local.toml");
+    let text = "# Local preferences\n[ports.web]\nenv='LOCAL_PORT'\n[resources.lock]\ncapacity=1\n";
+    fs::write(&input, text).unwrap();
+    let saved = fixture.ok(&["repo", "config", id, "--file", input.to_str().unwrap()]);
+    assert_eq!(saved["repository_id"], id);
+    assert_eq!(saved["toml"], text);
+    assert_eq!(fixture.run(&["repo", "config", id]).stdout, text.as_bytes());
+    fs::remove_file(&input).unwrap();
+    fixture.ok(&["repo", "rename", id, "renamed"]);
+    fixture.restart();
+    assert_eq!(fixture.ok(&["repo", "config", "renamed"]), saved);
+    fixture.add("second");
+    for path in [&fixture.repo, Path::new(first["path"].as_str().unwrap())] {
+        assert!(git(path, &["status", "--porcelain"]).is_empty());
+        assert!(!path.join(".shoal.toml").exists());
+        assert!(!path.join(".shoal").exists());
+    }
+    for name in ["first", "second"] {
+        assert_eq!(
+            fixture.ok(&["ports", name])["configured"]["web"]["env"],
+            "LOCAL_PORT"
+        );
+    }
+    let port = fixture.ok(&["port", "reserve", "web", "first"]);
+    assert_eq!(port["env_var"], "LOCAL_PORT");
+    fixture.ok(&["resource", "acquire", "lock", "first"]);
+    assert_eq!(
+        fixture
+            .run(&["resource", "acquire", "lock", "second"])
+            .status
+            .code(),
+        Some(2)
+    );
+    fixture.ok(&["resource", "release", "lock", "first"]);
+    fixture.ok(&["rm", "second", "--yes", "--delete-branch"]);
+    assert_eq!(fixture.ok(&["repo", "config", id]), saved);
+
+    let path = Path::new(first["path"].as_str().unwrap());
+    fs::write(
+        path.join(".shoal.toml"),
+        "[ports.checked_in]\nenv='CHECKED_IN'\n",
+    )
+    .unwrap();
+    fs::create_dir(path.join(".shoal")).unwrap();
+    fs::write(path.join(".shoal/config.toml"), "invalid TOML").unwrap();
+    assert_eq!(
+        fixture.ok(&["ports", "first"])["configured"]
+            .as_object()
+            .unwrap()
+            .len(),
+        1
+    );
+    // Invalid replacements must leave the saved config intact.
+    for invalid in [
+        "invalid TOML",
+        "unknown=true",
+        "[ports.web]\nport=0",
+        "[resources.lock]\ncapacity=0",
+    ] {
+        fs::write(&input, invalid).unwrap();
+        assert!(
+            !fixture
+                .run(&["repo", "config", id, "--file", input.to_str().unwrap()])
+                .status
+                .success()
+        );
+        assert_eq!(fixture.ok(&["repo", "config", id]), saved);
+    }
+    fs::write(&input, "").unwrap();
+    fixture.ok(&["repo", "config", id, "--file", input.to_str().unwrap()]);
+    assert!(
+        fixture.ok(&["ports", "first"])["configured"]
+            .as_object()
+            .unwrap()
+            .is_empty()
+    );
+    assert!(fixture.ok(&["repo", "config", id, "--clear"])["toml"].is_null());
+    assert!(!fixture.run(&["ports", "first"]).status.success());
+    fs::remove_file(path.join(".shoal/config.toml")).unwrap();
+    assert_eq!(
+        fixture.ok(&["ports", "first"])["configured"]["checked_in"]["env"],
+        "CHECKED_IN"
+    );
+    assert_eq!(fixture.ok(&["port", "list", "first"])[0], port);
+    fixture.ok(&["repo", "config", id, "--clear"]);
+}
+
+#[test]
+fn local_repository_config_is_isolated_and_deleted_only_with_its_repository() {
+    let fixture = Fixture::new();
+    let repo = fixture.ok(&["repo", "list"])[0].clone();
+    let id = repo["id"].as_str().unwrap();
+    let input = fixture.root.path().join("local.toml");
+    fs::write(&input, "[ports.web]\n").unwrap();
+    let saved = fixture.ok(&["repo", "config", id, "--file", input.to_str().unwrap()]);
+    let other_path = fixture.root.path().join("other-repo");
+    fs::create_dir(&other_path).unwrap();
+    git(&other_path, &["init", "-b", "main"]);
+    let other = fixture.ok(&["repo", "add", other_path.to_str().unwrap()]);
+    assert!(fixture.ok(&["repo", "config", other["id"].as_str().unwrap()])["toml"].is_null());
+    let outside = fixture.root.path().join("outside");
+    git(
+        &fixture.repo,
+        &[
+            "worktree",
+            "add",
+            "-b",
+            "outside",
+            outside.to_str().unwrap(),
+        ],
+    );
+    assert!(!fixture.run(&["repo", "rm", id, "--yes"]).status.success());
+    assert_eq!(fixture.ok(&["repo", "config", id]), saved);
+    git(
+        &fixture.repo,
+        &["worktree", "remove", outside.to_str().unwrap()],
+    );
+    fixture.ok(&["repo", "rm", id, "--yes"]);
+    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+    assert_eq!(
+        db.query_row("SELECT COUNT(*) FROM repository_configs", [], |row| row
+            .get::<_, i64>(0))
+            .unwrap(),
+        0
+    );
+    assert!(input.exists());
+    assert_eq!(fixture.ok(&["repo", "list"]).as_array().unwrap().len(), 1);
+}
+
+#[test]
+#[cfg(target_os = "macos")]
+fn local_repository_config_selects_simulator_preferences() {
+    let fixture = Fixture::with_tools(Some(SIM_CONFIG), true);
+    fixture.add("worker");
+    let input = fixture.root.path().join("local.toml");
+    fs::write(&input, "[simulators]\npreferred=['tablet']\n").unwrap();
+    fixture.ok(&[
+        "repo",
+        "config",
+        fixture.repo.to_str().unwrap(),
+        "--file",
+        input.to_str().unwrap(),
+    ]);
+    let sim = fixture.ok(&["sim", "acquire", "worker"]);
+    assert_eq!(sim["device"], "type.Tablet");
 }
 
 fn commit_resource_config(repo: &Path, config: &str) {
@@ -4114,6 +4271,9 @@ fn repository_removal_preserves_resources_on_failure_and_retries_after_restart()
     let mut fixture = Fixture::with_tools(Some(&config), true);
     let repo = fixture.ok(&["repo", "list"])[0].clone();
     let id = repo["id"].as_str().unwrap();
+    let input = fixture.root.path().join("local.toml");
+    fs::write(&input, "[ports.web]\n").unwrap();
+    let saved = fixture.ok(&["repo", "config", id, "--file", input.to_str().unwrap()]);
     let workspace = fixture.add("worker");
     let port = fixture.ok(&["port", "reserve", "web", "worker"]);
     let resource = fixture.ok(&["resource", "acquire", "lock", "worker"]);
@@ -4132,6 +4292,10 @@ fn repository_removal_preserves_resources_on_failure_and_retries_after_restart()
     assert_eq!(fixture.ok(&["port", "list", "worker"])[0], port);
     assert_eq!(fixture.ok(&["resource", "list", "worker"])[0], resource);
     fixture.restart();
+    assert_eq!(fixture.ok(&["repo", "config", id]), saved);
+    let blocked = fixture.run(&["repo", "config", id, "--clear"]);
+    assert!(!blocked.status.success());
+    assert!(String::from_utf8_lossy(&blocked.stderr).contains("removal is incomplete"));
     assert!(
         !fixture
             .run(&["add", id, "--name", "blocked"])
@@ -4141,6 +4305,13 @@ fn repository_removal_preserves_resources_on_failure_and_retries_after_restart()
     fs::remove_file(fixture.root.path().join("sim-fail")).unwrap();
     fixture.ok(&["repo", "rm", id, "--yes"]);
     assert!(!fixture.repo.exists());
+    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+    assert_eq!(
+        db.query_row("SELECT COUNT(*) FROM repository_configs", [], |row| row
+            .get::<_, i64>(0))
+            .unwrap(),
+        0
+    );
     assert!(
         fixture
             .ok(&["sim", "list", "--all"])

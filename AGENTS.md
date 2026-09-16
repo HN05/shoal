@@ -13,7 +13,10 @@ when behavior changes, distinguishing decisions from proposals.
 - Invoke external tools with argument arrays. Use Worktrunk for worktree
   operations and preserve Shoal's ownership records and cleanup policy.
 - Repository TOML lives at `.shoal.toml` or `.shoal/config.toml`; reject both
-  together. Named ports are lazy, with CLI overrides and explicit conflict policy.
+  together when no local override exists. Optional local repository config lives
+  in daemon state, replaces the entire worktree config, and is deleted with its
+  repository registration. Named ports are lazy, with CLI overrides and explicit
+  conflict policy.
 - Workspace commands inherit a scope token. Enforce own-worktree resource access
   in the daemon and deny lifecycle/repository/service administration, except
   `shoal pull` may fast-forward the caller's own repo main from its upstream. This is
