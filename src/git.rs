@@ -1,7 +1,7 @@
 //! Git invocations shared by workspace creation, removal, pulls, and merges.
 use std::path::{Path, PathBuf};
 
-use anyhow::Result;
+use anyhow::{Context, Result, ensure};
 use tokio::process::Command;
 
 use crate::subprocess;
@@ -33,6 +33,28 @@ pub async fn run_isolated(repo: &Path, args: &[&str]) -> Result<String> {
     let mut command = isolated_command(repo);
     command.args(args);
     subprocess::output(command).await
+}
+
+/// Ask Git whether `name` is acceptable branch syntax, independently of the
+/// derived directory name. `repo` is the directory to ask from; `None` uses
+/// the current one. Previous-checkout syntax such as `@{-1}` is rejected
+/// because `--branch` would silently expand it; the historical `HEAD` name is
+/// checked as its `HEAD-2` conflict spelling.
+pub async fn check_branch_name(repo: Option<&Path>, name: &str) -> Result<()> {
+    let checked = if name == "HEAD" { "HEAD-2" } else { name };
+    let mut command = match repo {
+        Some(repo) => self::command(repo),
+        None => Command::new("git"),
+    };
+    command.args(["check-ref-format", "--branch", checked]);
+    let validated = subprocess::output(command)
+        .await
+        .context("invalid Git branch name")?;
+    ensure!(
+        validated == format!("{checked}\n"),
+        "use a literal Git branch name, not previous-checkout syntax"
+    );
+    Ok(())
 }
 
 /// One entry of `git worktree list --porcelain`.
@@ -96,5 +118,27 @@ mod tests {
         assert!(trees[1].locked && trees[1].prunable);
         assert_eq!(trees[2].branch, None);
         assert!(parse_worktrees("").is_empty());
+    }
+
+    #[tokio::test]
+    async fn branch_names_follow_git_syntax() {
+        for name in ["feature/login", "fix-2", "HEAD", "release/v1.0.0"] {
+            check_branch_name(None, name).await.unwrap();
+        }
+        for name in [
+            "",
+            "bad name",
+            "-dash",
+            "a..b",
+            "trailing/",
+            "@{-1}",
+            "refs/heads/x\n",
+        ] {
+            let error = check_branch_name(None, name).await.unwrap_err();
+            assert!(
+                format!("{error:#}").contains("branch name"),
+                "{name:?}: {error:#}"
+            );
+        }
     }
 }

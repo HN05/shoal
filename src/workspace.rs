@@ -136,16 +136,7 @@ impl Manager {
         base: Option<String>,
     ) -> Result<Workspace> {
         let repo = self.repository(repository).await?;
-        // Ask Git about branch syntax, independently of the directory name.
-        // Preserve the historical HEAD -> HEAD-2 conflict behavior.
-        let checked = if name == "HEAD" { "HEAD-2" } else { &name };
-        let validated = git::run(&repo.path, &["check-ref-format", "--branch", checked])
-            .await
-            .context("invalid Git branch name")?;
-        ensure!(
-            validated == format!("{checked}\n"),
-            "use a literal Git branch name, not previous-checkout syntax"
-        );
+        git::check_branch_name(Some(&repo.path), &name).await?;
         let gate = self.git_gate(&repo.id).await;
         let _guard = gate.lock().await;
         // Removal may have completed or failed while this request waited.
@@ -371,11 +362,25 @@ impl Manager {
                     "UPDATE workspaces SET state=?2 WHERE id=?1 AND state IN (?3,?4)",
                     params![id, state, WorkspaceState::Ready, WorkspaceState::Failed],
                 )?;
-                ensure!(
-                    changed == 1,
-                    "workspace is busy with another lifecycle operation"
-                );
-                Ok(())
+                if changed == 1 {
+                    return Ok(());
+                }
+                // Name the operation that holds the workspace; automatic
+                // cleanup may be removing it at the same moment as a user.
+                let current: Option<WorkspaceState> = db
+                    .query_row("SELECT state FROM workspaces WHERE id=?1", [&id], |row| {
+                        row.get(0)
+                    })
+                    .optional()?;
+                match current {
+                    None => bail!("workspace no longer exists"),
+                    Some(WorkspaceState::Removing) => {
+                        bail!("workspace is already being removed; it will disappear shortly")
+                    }
+                    Some(current) => bail!(
+                        "workspace is {current}; wait for that operation to finish before another lifecycle operation"
+                    ),
+                }
             })
             .await
     }

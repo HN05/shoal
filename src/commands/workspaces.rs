@@ -9,7 +9,7 @@ use crate::{
     client::{self, request},
     config::Config,
     context::Context,
-    env, execution,
+    env, execution, git,
     hooks::{self, Hook},
     model::Workspace,
     protocol::{Body, Method},
@@ -169,7 +169,15 @@ pub(super) async fn add(
     } else {
         let name = match name.take() {
             Some(name) => name,
-            None => ui::input(ctx, "Branch name")?,
+            // The daemon rejects bad syntax too; checking here lets a typo be
+            // corrected instead of ending the command.
+            None => loop {
+                let name = ui::input(ctx, "Branch name")?;
+                match git::check_branch_name(None, &name).await {
+                    Ok(()) => break name,
+                    Err(error) => eprintln!("{error:#}"),
+                }
+            },
         };
         (
             request!(
