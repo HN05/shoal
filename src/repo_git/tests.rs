@@ -52,6 +52,8 @@ impl Fixture {
         let repo = root.path().join("repo with ' quotes & $literal");
         fs::create_dir(&repo).unwrap();
         git(&repo, &["init", "-b", "main"]);
+        git(&repo, &["config", "user.name", "Test"]);
+        git(&repo, &["config", "user.email", "test@example.invalid"]);
         fs::write(repo.join("tracked"), "initial\n").unwrap();
         commit(&repo, "tracked");
         let manager = Manager::open(Paths {

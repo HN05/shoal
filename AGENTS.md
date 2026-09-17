@@ -20,7 +20,7 @@ when behavior changes, distinguishing decisions from proposals.
   in daemon state, replaces the entire worktree config, and is deleted with its
   registration. Named ports are lazy, with CLI overrides and explicit conflicts.
 - Workspace commands inherit a scope token. Enforce own-worktree resource access
-  in the daemon and deny `shoal pull` and lifecycle/repository/service
+  in the daemon and deny `shoal pull`, `shoal land` and lifecycle/repository/service
   administration; own-workspace PR watches/merge acknowledgements are allowed.
   Scope is cooperative, not a boundary against hostile same-user processes.
 - Agents may merge any local or remote branch into their own recorded workspace
@@ -31,7 +31,7 @@ when behavior changes, distinguishing decisions from proposals.
   without updating other branches or relying on FETCH_HEAD.
 - Global TOML configuration supports `[auto_cleanup]` with `enabled` (default
   true) and `idle_minutes` (default 10). Automatic removal is only for idle,
-  clean, fully pushed worktrees, or worktrees deleted outside Shoal. Keep one removal path for manual and automatic
+  clean worktrees with all commits pushed or on the local default branch, or deleted worktrees. Keep one removal path for manual and automatic
   cleanup, retaining the default branch unless explicitly deleted. PR cleanup is
   on by default: stop tracked agents, verify clean merged HEAD, use that path.
 - TCP port reservations are cooperative and owned by the worktree. Keep them
@@ -83,10 +83,9 @@ milestone reports, test inventories, or investigation notes.
 
 ## Validation
 
-Run `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, and `cargo
-test` for Rust changes. Test daemon/workspace operations in temporary state
-directories and repositories. Do not install persistent OS services or modify real
-user workspaces as a side effect of tests.
+Run `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, and `cargo test`
+for Rust changes. Test in temporary state directories and repositories; never install
+persistent OS services or modify real user workspaces as a side effect of tests.
 
 ## CI
 

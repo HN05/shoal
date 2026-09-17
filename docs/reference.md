@@ -322,12 +322,10 @@ stderr as its error. It is skipped when the worktree directory is already gone.
 ### Remove a workspace
 
 Removal retains the default branch unless `--delete-branch`; other clean branches
-matching the default or upstream, or merged into the default, are deleted.
-Otherwise fzf offers Cancel (default), Keep branch (files only), or Delete branch,
-followed by a summary and `Are you sure? [y/N]`. Both choices discard uncommitted
-and untracked files. `--keep-branch` or `--delete-branch` skips the picker but not
-the confirmation; scripts use `--yes` with one of them, since `--yes` alone does
-not choose for dirty or differing work. Ctrl-C cancels any Shoal prompt.
+matching default/upstream or merged into the default are deleted. Otherwise fzf
+offers Cancel (default), Keep branch, or Delete branch, then `Are you sure? [y/N]`.
+Both choices discard uncommitted and untracked files. `--keep-branch`/`--delete-branch`
+skips the picker; add `--yes` to skip confirmation. `--yes` alone cannot choose for dirty/differing work.
 
 Manual removal stops tracked commands and verified survivors, leaving unrelated
 processes alone. Ignored files go; shared caches stay; Worktrunk hooks are disabled.
@@ -353,8 +351,8 @@ retaining branches; moved worktrees or recorded commands need manual recovery.
 File changes (including ignored files), HEAD and commands reset the timer.
 Running/unknown commands, directory users (including shells), dirty/unpushed work,
 simulator leases, permits and failed checks block cleanup. Pushed means reachable
-from locally known remote branches or the local default branch; no fetch. Sweeps run about every 30 seconds;
-timers reset on restart. The daemon needs `lsof` on PATH.
+from locally known remote branches or the local default branch; no fetch.
+Sweeps run about every 30 seconds; timers reset on restart. The daemon needs `lsof` on PATH.
 
 ```toml
 [auto_cleanup]
@@ -363,7 +361,6 @@ idle_minutes = 10
 ```
 
 Restart the daemon after changing this.
-
 ### Port reservations
 
 ```sh

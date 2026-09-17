@@ -4512,7 +4512,8 @@ fn merge_preserves_conflicts_and_refuses_changed_destination_branch() {
     assert!(
         fs::read_to_string(path.join("tracked"))
             .unwrap()
-            .contains("    );
+            .contains("<<<<<<<")
+    );
     git(path, &["merge", "--abort"]);
     git(path, &["switch", "-c", "unowned"]);
     let output = fixture.run(&["merge", "other", "worker"]);
@@ -5688,7 +5689,6 @@ fn interactive_add_picks_existing_branch_and_reopens_workspace() {
     assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
 }
 
-<<<<<<< HEAD
 fn wait_removed(fixture: &Fixture, name: &str) {
     let deadline = Instant::now() + Duration::from_secs(15);
     while fixture

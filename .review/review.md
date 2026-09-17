@@ -14,7 +14,7 @@ removal, check it against the rule those files state before judging it.
   path that deletes a directory, kills a process or mutates a simulator
   without those checks is a blocker.
 - Scope: workspace commands carry a scope token and get own-worktree access
-  only; lifecycle, repository and service administration stay denied, except
+  only; `pull`, `land`, lifecycle, repository and service administration stay denied, except
   own-workspace PR registration/merge acknowledgements. PR cleanup defaults on,
   stops tracked agents, and requires clean files and unchanged merged HEAD. This is
   cooperative, not a security boundary, so judge it as such.
@@ -23,7 +23,8 @@ removal, check it against the rule those files state before judging it.
   with successful removal. Active permits block automatic cleanup.
 - Existing branches use unsuffixed worktrees; reopen verified owned workspaces,
   reject other checkouts, never adopt the main checkout, and keep the default
-  branch on removal unless deletion was explicit.
+  branch on removal unless deletion was explicit. Idle cleanup accepts commits
+  retained on the local default branch as well as remote-tracking branches.
 - External tools are invoked with argument arrays, never shell strings.
   Terminal I/O stays in the execution wrapper; the daemon owns state.
 - Persistence: lifecycle enums keep their lowercase SQLite/JSON spelling and
@@ -34,7 +35,8 @@ removal, check it against the rule those files state before judging it.
   xcrun fixture, and never install services or touch personal simulators.
 - Documentation: `tests/docs.rs` budgets every Markdown file. Usage lives in
   README.md, behavior in docs/reference.md, decisions in design.md,
-  contributor rules in AGENTS.md. Flag behavior changes without the matching
+  contributor rules in AGENTS.md. Budget increases need a reason in the commit.
+  Flag behavior changes without the matching
   sentence edit, and text that restates code or history. Never ask for a
   comment on clear code or a reworded correct one.
 
