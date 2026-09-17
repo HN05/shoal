@@ -64,6 +64,18 @@ class ReleaseTests(unittest.TestCase):
                 release.release_all("0.2.0")
             publish.assert_not_called()
 
+    def test_ci_publishes_with_repository_api_without_cli_login(self):
+        with patch.dict(release.os.environ, {"RELEASE_AUTOMATION_TOKEN": "test-token",
+                                             "RELEASE_REPOSITORY": "HN05/shoal"}), \
+                patch.object(release, "api") as api, patch.object(release, "run") as run:
+            release.create_release("0.2.0")
+            run.assert_not_called()
+            endpoint, payload = api.call_args.args
+            self.assertEqual(endpoint, "/repos/HN05/shoal/releases")
+            self.assertEqual(payload["tag_name"], "v0.2.0")
+            self.assertFalse(payload["draft"])
+            self.assertFalse(payload["prerelease"])
+
 
 class ReleaseIntegrationTests(unittest.TestCase):
     def test_prepare_and_publish_use_separate_reviewed_commits(self):
@@ -94,6 +106,7 @@ class ReleaseIntegrationTests(unittest.TestCase):
                 return actual_run(*args, **kwargs)
 
             with patch.object(release, "ROOT", checkout), patch.object(release, "run", run), \
+                    patch.dict(release.os.environ, {"RELEASE_AUTOMATION_TOKEN": ""}), \
                     patch.object(release, "validate") as validate:
                 release.prepare(None, False)
                 self.assertEqual(command("git", "branch", "--show-current", cwd=checkout), "release/v0.1.1")

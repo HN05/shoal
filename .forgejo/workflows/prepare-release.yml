@@ -34,7 +34,6 @@ jobs:
           apt-get install -y --no-install-recommends git lsof zsh python3 ca-certificates
           rustup component add rustfmt clippy
           cargo install --locked worktrunk --version 0.78.0
-          cargo install --locked forgejo-cli --version 0.6.0
       - name: Check out main
         env:
           SERVER: ${{ github.server_url }}
@@ -57,9 +56,6 @@ jobs:
           export GIT_CONFIG_COUNT=1
           export GIT_CONFIG_KEY_0="http.${SERVER%/}/.extraheader"
           export GIT_CONFIG_VALUE_0="Authorization: basic $(printf 'x-access-token:%s' "$TOKEN" | base64 | tr -d '\n')"
-          export XDG_CONFIG_HOME
-          XDG_CONFIG_HOME=$(mktemp -d)
-          printf '%s\n' "$TOKEN" | fj auth add-token -H "$SERVER"
           unset TOKEN
           cd source
           if [ -n "$REQUESTED_VERSION" ]; then

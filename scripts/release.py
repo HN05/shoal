@@ -94,7 +94,6 @@ def prepare(requested, dry_run, automated=False):
     if dry_run:
         print(f"Would prepare release/v{version} from origin/main")
         return
-    run("fj", "whoami")
     branch = f"release/v{version}"
     run("git", "switch", "-c", branch)
     (ROOT / "Cargo.toml").write_text(manifest)
@@ -139,15 +138,27 @@ def publish(version, dry_run, merged_commit=None):
     if dry_run:
         print(f"Would publish {tag} at {sha}; Homebrew updates through Actions")
         return
-    run("fj", "whoami")
     validate()
     if not existing:
         run("git", "tag", "-a", tag, sha, "-m", f"Shoal {version}")
     run("git", "push", "origin", f"refs/tags/{tag}")
-    # fj returns an error if the release already exists: never overwrite it.
-    run("fj", "release", "create", f"Shoal {version}", "--tag", tag,
-        "--body", f"Shoal {version}.\n\nInstall or upgrade through the "
-        "[HN05 Homebrew tap](https://github.com/HN05/homebrew-tap).")
+    create_release(version)
+
+
+def create_release(version):
+    body = (f"Shoal {version}.\n\nInstall or upgrade through the "
+            "[HN05 Homebrew tap](https://github.com/HN05/homebrew-tap).")
+    # CI calls repository endpoints directly; no user-profile/login API is needed.
+    # Both paths reject an existing release instead of overwriting it.
+    if os.environ.get("RELEASE_AUTOMATION_TOKEN"):
+        repository = os.environ["RELEASE_REPOSITORY"]
+        api(f"/repos/{repository}/releases", {
+            "name": f"Shoal {version}", "tag_name": f"v{version}",
+            "body": body, "draft": False, "prerelease": False,
+        })
+    else:
+        run("fj", "release", "create", f"Shoal {version}", "--tag", f"v{version}",
+            "--body", body)
 
 
 def merged_release(pr, repository, number):
