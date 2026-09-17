@@ -71,6 +71,20 @@ impl Manager {
         }
         verify_directory(&repo.path, identity, true)?;
         delete_checkout(repo.path.clone()).await?;
+        // Only an empty repository directory goes; anything else in it is the user's.
+        if let Some(directory) = &repo.workspaces_dir {
+            match fs::remove_dir(directory) {
+                Ok(()) => {}
+                Err(error)
+                    if matches!(
+                        error.kind(),
+                        std::io::ErrorKind::NotFound | std::io::ErrorKind::DirectoryNotEmpty
+                    ) => {}
+                Err(error) => {
+                    return Err(error).with_context(|| format!("delete {}", directory.display()));
+                }
+            }
+        }
         let id = repo.id.clone();
         self.store
             .run(move |db| {

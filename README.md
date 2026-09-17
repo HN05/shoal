@@ -25,7 +25,8 @@ source <(shoal shell init)
 
 ## Create a workspace
 
-Register a local repository or Git clone URL once, then create a task:
+Register a local repository or Git clone URL once, then create a task. Each
+repository's workspaces (and its clone, for URLs) live under `~/shoal/<name>/`:
 
 ```sh
 shoal repo add /path/to/project --name my-project
@@ -114,7 +115,8 @@ pools, setup and hooks, and configuration outside Git.
 `shoal rm` removes a workspace and its resources, prompting when needed about
 its branch and uncommitted work. `shoal stop` keeps the workspace.
 
-Automatic cleanup removes idle, clean, fully pushed workspaces after 10 minutes.
+Automatic cleanup removes idle, clean, fully pushed workspaces after 10 minutes,
+and forgets workspaces whose directory you deleted yourself, keeping the branch.
 Disable it when using desktop agents whose activity Shoal cannot track. Set this
 in `~/.config/shoal/config.toml`, then restart the daemon:
 

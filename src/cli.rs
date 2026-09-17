@@ -245,7 +245,7 @@ pub enum RepoCommand {
         source: String,
         #[arg(long)]
         name: Option<String>,
-        /// Clone this URL into this exact directory instead of repositories_dir/<name>.
+        /// Clone this URL into this exact directory instead of root_dir/<name>/main.
         #[arg(long)]
         path: Option<PathBuf>,
     },

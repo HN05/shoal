@@ -7,7 +7,7 @@ use crate::paths::Paths;
 #[derive(Debug, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
-    pub repositories_dir: Option<PathBuf>,
+    pub root_dir: Option<PathBuf>,
     pub codex: Codex,
     pub auto_cleanup: AutoCleanup,
     pub ports: Ports,
@@ -73,29 +73,26 @@ mod tests {
     }
 
     #[test]
-    fn repository_directory_defaults_and_validates_explicit_paths() {
+    fn root_directory_defaults_and_validates_explicit_paths() {
         let paths = Paths {
             home: "/home/test".into(),
             state: "/separate/state".into(),
             socket: "/separate/state/daemon.sock".into(),
         };
         assert_eq!(
-            Config::default().repositories_dir(&paths).unwrap(),
-            PathBuf::from("/home/test/.local/share/shoal/repositories")
+            Config::default().root_dir(&paths).unwrap(),
+            PathBuf::from("/home/test/shoal")
         );
         for (value, expected) in [
             ("~/Projects/repos", "/home/test/Projects/repos"),
             ("/external/repos", "/external/repos"),
         ] {
-            let config: Config = toml::from_str(&format!("repositories_dir = {value:?}")).unwrap();
-            assert_eq!(
-                config.repositories_dir(&paths).unwrap(),
-                PathBuf::from(expected)
-            );
+            let config: Config = toml::from_str(&format!("root_dir = {value:?}")).unwrap();
+            assert_eq!(config.root_dir(&paths).unwrap(), PathBuf::from(expected));
         }
         for value in ["", "relative/repos", "~someone/repos"] {
-            let config: Config = toml::from_str(&format!("repositories_dir = {value:?}")).unwrap();
-            assert!(config.repositories_dir(&paths).is_err());
+            let config: Config = toml::from_str(&format!("root_dir = {value:?}")).unwrap();
+            assert!(config.root_dir(&paths).is_err());
         }
     }
 }
@@ -117,9 +114,11 @@ impl Default for AutoCleanup {
 }
 
 impl Config {
-    pub fn repositories_dir(&self, paths: &Paths) -> Result<PathBuf> {
-        let Some(path) = &self.repositories_dir else {
-            return Ok(paths.home.join(".local/share/shoal/repositories"));
+    /// Parent of every repository directory: `<root>/<repo>/` holds the
+    /// repository's URL clone as `main` and its workspaces as siblings.
+    pub fn root_dir(&self, paths: &Paths) -> Result<PathBuf> {
+        let Some(path) = &self.root_dir else {
+            return Ok(paths.home.join("shoal"));
         };
         let path = match path.strip_prefix("~") {
             Ok(relative) => paths.home.join(relative),
@@ -127,7 +126,7 @@ impl Config {
         };
         ensure!(
             path.is_absolute(),
-            "repositories_dir must be an absolute path or start with ~/"
+            "root_dir must be an absolute path or start with ~/"
         );
         Ok(path)
     }
@@ -147,7 +146,7 @@ impl Config {
         };
         let config: Self =
             toml::from_str(&text).with_context(|| format!("parse {}", path.display()))?;
-        config.repositories_dir(paths)?;
+        config.root_dir(paths)?;
         ensure!(
             config.auto_cleanup.idle_minutes > 0 && config.auto_cleanup.idle_minutes <= 525600,
             "auto_cleanup.idle_minutes must be between 1 and 525600"

@@ -115,6 +115,11 @@ impl Fixture {
         self.ok(&["add", self.repo.to_str().unwrap(), "--name", name])
     }
 
+    /// `~/shoal`, the default parent of every repository directory.
+    fn shoal_dir(&self) -> PathBuf {
+        fs::canonicalize(self.root.path().join("shoal")).unwrap()
+    }
+
     fn interactive(&self, args: &[&str], answer: &str) -> (Output, String) {
         use std::{io::Read, os::fd::FromRawFd};
         let (mut master, mut slave) = (-1, -1);
@@ -264,15 +269,23 @@ fn url_registration_clones_once_and_supports_workspaces() {
         repo["path"].as_str().unwrap(),
         fixture.repo.to_str().unwrap()
     );
-    assert_eq!(
-        Path::new(repo["path"].as_str().unwrap()).parent().unwrap(),
-        fs::canonicalize(fixture.root.path().join(".local/share/shoal/repositories")).unwrap()
-    );
+    // Clones live at `~/shoal/<repo>/main` beside that repository's workspaces.
+    let clone = Path::new(repo["path"].as_str().unwrap());
+    let directory = clone.parent().unwrap();
+    assert_eq!(clone.file_name().unwrap(), "main");
+    assert_eq!(repo["workspaces_dir"], directory.to_str().unwrap());
+    assert_eq!(directory.parent().unwrap(), fixture.shoal_dir());
     assert!(!fixture.root.path().join("state/repositories").exists());
     assert_eq!(fixture.ok(&["repo", "add", &url]), repo);
-    fixture.ok(&["add", &url, "--name", "cloned"]);
+    let workspace = fixture.ok(&["add", &url, "--name", "cloned"]);
+    assert_eq!(
+        Path::new(workspace["path"].as_str().unwrap())
+            .parent()
+            .unwrap(),
+        directory
+    );
     fixture.ok(&["rm", "cloned"]);
-    assert!(Path::new(repo["path"].as_str().unwrap()).is_dir());
+    assert!(clone.is_dir());
 }
 
 #[test]
@@ -457,12 +470,12 @@ fn local_repository_without_remotes_registers_in_place_and_creates_workspaces() 
         ),
         git(&fixture.repo, &["rev-parse", "main"])
     );
-    assert!(
-        !fixture
-            .root
-            .path()
-            .join(".local/share/shoal/repositories")
-            .exists()
+    // In-place checkouts stay put; only their workspaces gather under `~/shoal/<repo>`.
+    assert_eq!(
+        Path::new(workspace["path"].as_str().unwrap())
+            .parent()
+            .unwrap(),
+        fixture.shoal_dir().join("repo-with---quotes----literal")
     );
     assert!(!fixture.root.path().join("state/repositories").exists());
     let unused = fixture.root.path().join("unused");
@@ -483,9 +496,8 @@ fn local_repository_without_remotes_registers_in_place_and_creates_workspaces() 
 
 #[test]
 fn clone_directories_use_repo_names_and_suffix_occupied_or_recorded_paths() {
-    let fixture = Fixture::with_config(Some("repositories_dir = \"~/clones\"\n"));
+    let fixture = Fixture::with_config(Some("root_dir = \"~/clones\"\n"));
     let directory = fixture.root.path().join("clones");
-    fs::create_dir(&directory).unwrap();
     fs::write(directory.join("project"), "keep this file").unwrap();
     std::os::unix::fs::symlink("missing-target", directory.join("project-2")).unwrap();
     let mut repos = Vec::new();
@@ -499,8 +511,12 @@ fn clone_directories_use_repo_names_and_suffix_occupied_or_recorded_paths() {
         );
         let url = format!("file://{}", source.display());
         let repo = fixture.ok(&["repo", "add", &url]);
+        let clone = Path::new(repo["path"].as_str().unwrap());
+        assert_eq!(clone.file_name().unwrap(), "main");
         assert_eq!(
-            Path::new(repo["path"].as_str().unwrap())
+            clone
+                .parent()
+                .unwrap()
                 .file_name()
                 .unwrap()
                 .to_str()
@@ -510,8 +526,8 @@ fn clone_directories_use_repo_names_and_suffix_occupied_or_recorded_paths() {
         assert_eq!(fixture.ok(&["repo", "add", &url]), repo);
         repos.push(repo);
         if index == 0 {
-            // A lost checkout must retain its path reservation in Shoal's registry.
-            fs::remove_dir_all(repos[0]["path"].as_str().unwrap()).unwrap();
+            // A lost directory must retain its path reservation in Shoal's registry.
+            fs::remove_dir_all(repos[0]["workspaces_dir"].as_str().unwrap()).unwrap();
         }
     }
     assert_eq!(
@@ -527,18 +543,21 @@ fn clone_directories_use_repo_names_and_suffix_occupied_or_recorded_paths() {
     let named = fixture.ok(&["repo", "add", &url, "--name", "chosen"]);
     assert_eq!(
         Path::new(named["path"].as_str().unwrap())
+            .parent()
+            .unwrap()
             .file_name()
             .unwrap(),
         "chosen"
     );
     let renamed = fixture.ok(&["repo", "rename", "chosen", "new-label"]);
     assert_eq!(renamed["path"], named["path"]);
+    assert_eq!(renamed["workspaces_dir"], named["workspaces_dir"]);
 }
 
 #[test]
 fn clone_name_allocation_is_atomic_across_daemons_sharing_a_directory() {
     let shared = tempfile::tempdir_in("/tmp").unwrap();
-    let config = format!("repositories_dir = {:?}", shared.path().to_str().unwrap());
+    let config = format!("root_dir = {:?}", shared.path().to_str().unwrap());
     let first = Fixture::with_config(Some(&config));
     let second = Fixture::with_config(Some(&config));
     let clone = |fixture: &Fixture| {
@@ -555,7 +574,7 @@ fn clone_name_allocation_is_atomic_across_daemons_sharing_a_directory() {
         (one.join().unwrap(), two.join().unwrap())
     });
     let mut names = [one, two].map(|repo| {
-        Path::new(repo["path"].as_str().unwrap())
+        Path::new(repo["workspaces_dir"].as_str().unwrap())
             .file_name()
             .unwrap()
             .to_str()
@@ -564,32 +583,37 @@ fn clone_name_allocation_is_atomic_across_daemons_sharing_a_directory() {
     });
     names.sort();
     assert_eq!(names, ["project", "project-2"]);
-    assert!(shared.path().join("project/.git").exists());
-    assert!(shared.path().join("project-2/.git").exists());
+    assert!(shared.path().join("project/main/.git").exists());
+    assert!(shared.path().join("project-2/main/.git").exists());
 }
 
 #[test]
-fn configured_repository_directory_affects_new_clones_and_preserves_existing_paths() {
-    let mut fixture = Fixture::with_config(Some(
-        "repositories_dir = \"~/clones with ' quotes & $literal\"\n",
-    ));
+fn configured_root_directory_affects_new_repositories_and_preserves_existing_paths() {
+    let mut fixture =
+        Fixture::with_config(Some("root_dir = \"~/clones with ' quotes & $literal\"\n"));
     let url = format!("file://{}", fixture.repo.display());
     let repo = fixture.ok(&["repo", "add", &url]);
     let path = Path::new(repo["path"].as_str().unwrap());
     assert_eq!(
-        path.parent().unwrap(),
+        path.parent().unwrap().parent().unwrap(),
         fs::canonicalize(fixture.root.path().join("clones with ' quotes & $literal")).unwrap()
     );
     assert!(!fixture.root.path().join("state/repositories").exists());
     let new_root = fixture.root.path().join("new clones");
     fs::write(
         fixture.root.path().join(".config/shoal/config.toml"),
-        format!("repositories_dir = {:?}\n", new_root.to_str().unwrap()),
+        format!("root_dir = {:?}\n", new_root.to_str().unwrap()),
     )
     .unwrap();
     fixture.restart();
     assert_eq!(fixture.ok(&["repo", "add", &url]), repo);
-    fixture.ok(&["add", &url, "--name", "retained"]);
+    let retained = fixture.ok(&["add", &url, "--name", "retained"]);
+    assert_eq!(
+        Path::new(retained["path"].as_str().unwrap())
+            .parent()
+            .unwrap(),
+        path.parent().unwrap()
+    );
     assert!(!new_root.exists());
     let source = fixture.root.path().join("second.git");
     git(
@@ -600,6 +624,8 @@ fn configured_repository_directory_affects_new_clones_and_preserves_existing_pat
     assert_eq!(
         Path::new(second["path"].as_str().unwrap())
             .parent()
+            .unwrap()
+            .parent()
             .unwrap(),
         fs::canonicalize(new_root).unwrap()
     );
@@ -607,7 +633,7 @@ fn configured_repository_directory_affects_new_clones_and_preserves_existing_pat
 
 #[test]
 fn repository_clone_path_overrides_default_and_resolves_in_callers_directory() {
-    let fixture = Fixture::with_config(Some("repositories_dir = \"~/default-clones\"\n"));
+    let fixture = Fixture::with_config(Some("root_dir = \"~/default-clones\"\n"));
     let url = format!("file://{}", fixture.repo.display());
     let relative = "projects/a repo with ' quotes & $literal";
     let output = fixture
@@ -624,7 +650,13 @@ fn repository_clone_path_overrides_default_and_resolves_in_callers_directory() {
     let repo: Value = serde_json::from_slice(&output.stdout).unwrap();
     let expected = fs::canonicalize(fixture.root.path().join(relative)).unwrap();
     assert_eq!(repo["path"], expected.to_str().unwrap());
-    assert!(!fixture.root.path().join("default-clones").exists());
+    // The repository directory is still reserved for its workspaces.
+    let directory = Path::new(repo["workspaces_dir"].as_str().unwrap());
+    assert_eq!(
+        directory.parent().unwrap(),
+        fs::canonicalize(fixture.root.path().join("default-clones")).unwrap()
+    );
+    assert!(fs::read_dir(directory).unwrap().next().is_none());
     assert_eq!(fixture.ok(&["repo", "add", &url]), repo);
     assert_eq!(
         fixture.ok(&["repo", "add", &url, "--path", &format!("~/{relative}")]),
@@ -3702,51 +3734,82 @@ fn reconcile_detects_moved_and_replaced_worktrees_without_deleting_data() {
 }
 
 #[test]
-fn reconcile_missing_worktrees_allows_explicit_cleanup_and_retains_branches() {
-    let mut fixture = Fixture::with_config(Some("[resources.lock]\n"));
-    for (name, prune_git) in [("directory-only", false), ("git-removed", true)] {
+fn deleted_worktrees_are_forgotten_with_their_resources_but_moved_ones_are_kept() {
+    let mut fixture = Fixture::with_config(Some("[resources.lock]\ncapacity = 3\n"));
+    let mut paths = Vec::new();
+    for name in ["directory-only", "git-removed", "moved"] {
         let workspace = fixture.add(name);
         fixture.ok(&["port", "reserve", "web", name]);
         fixture.ok(&["resource", "acquire", "lock", name]);
-        let path = Path::new(workspace["path"].as_str().unwrap());
-        if prune_git {
-            git(
-                &fixture.repo,
-                &["worktree", "remove", path.to_str().unwrap()],
-            );
-        } else {
-            fs::remove_dir_all(path).unwrap();
-        }
-        fixture.restart();
-        assert_eq!(
-            fixture.ok(&["inspect", name])["workspace"]["state"],
-            "failed"
-        );
-        let report = recovery_report(&fixture, &["reconcile", name, "--repair"]);
-        assert_eq!(report[0]["directory"], "missing");
-        assert_eq!(
-            fixture
-                .ok(&["port", "list", name])
-                .as_array()
-                .unwrap()
-                .len(),
-            1
-        );
-        fixture.ok(&["rm", name]);
-        assert_eq!(
-            fixture.ok(&["port", "list", "--all"]),
-            serde_json::json!([])
-        );
-        assert_eq!(
-            fixture.ok(&["resource", "list", "--all"]),
-            serde_json::json!([])
-        );
-        assert!(!git(&fixture.repo, &["rev-parse", &format!("refs/heads/{name}")]).is_empty());
-        assert!(
-            !git(&fixture.repo, &["worktree", "list", "--porcelain"])
-                .contains(path.to_str().unwrap())
-        );
+        paths.push(PathBuf::from(workspace["path"].as_str().unwrap()));
     }
+    fs::remove_dir_all(&paths[0]).unwrap();
+    git(
+        &fixture.repo,
+        &["worktree", "remove", paths[1].to_str().unwrap()],
+    );
+    let elsewhere = fixture.root.path().join("elsewhere");
+    git(
+        &fixture.repo,
+        &[
+            "worktree",
+            "move",
+            paths[2].to_str().unwrap(),
+            elsewhere.to_str().unwrap(),
+        ],
+    );
+    // The startup sweep forgets deleted worktrees without touching moved ones.
+    fixture.restart();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        let names: Vec<String> = fixture
+            .ok(&["list"])
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|w| w["name"].as_str().unwrap().to_owned())
+            .collect();
+        if names == ["moved"] {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "deleted worktrees remain: {names:?}"
+        );
+        thread::sleep(Duration::from_millis(20));
+    }
+    assert_eq!(
+        fixture.ok(&["inspect", "moved"])["workspace"]["state"],
+        "failed"
+    );
+    assert!(!fixture.run(&["rm", "moved"]).status.success());
+    assert_eq!(
+        fixture
+            .ok(&["port", "list", "--all"])
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(
+        fixture
+            .ok(&["resource", "list", "--all"])
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    let worktrees = git(&fixture.repo, &["worktree", "list", "--porcelain"]);
+    for (name, path) in ["directory-only", "git-removed"].iter().zip(&paths) {
+        assert!(!git(&fixture.repo, &["rev-parse", &format!("refs/heads/{name}")]).is_empty());
+        assert!(!worktrees.contains(path.to_str().unwrap()));
+    }
+    // Explicit removal of a deleted worktree needs no reconciliation first.
+    let workspace = fixture.add("explicit");
+    fs::remove_dir_all(workspace["path"].as_str().unwrap()).unwrap();
+    let result = fixture.ok(&["rm", "explicit"]);
+    assert_eq!(result["branch_deleted"], false);
+    assert!(!git(&fixture.repo, &["rev-parse", "refs/heads/explicit"]).is_empty());
 }
 
 fn wait_registered_execution(fixture: &Fixture, workspace: &str) -> Value {
@@ -4674,10 +4737,8 @@ fn repository_removal_rejects_symlinks_and_nested_registered_repositories() {
 #[test]
 fn repository_removal_serializes_with_workspace_creation() {
     let fixture = Fixture::new();
-    let id = fixture.ok(&["repo", "list"])[0]["id"]
-        .as_str()
-        .unwrap()
-        .to_owned();
+    let repo = fixture.ok(&["repo", "list"])[0].clone();
+    let id = repo["id"].as_str().unwrap().to_owned();
     let add = fixture
         .command()
         .args(["add", &id, "--name", "racing"])
@@ -4689,7 +4750,8 @@ fn repository_removal_serializes_with_workspace_creation() {
     let _ = add.wait_with_output().unwrap();
     assert!(fixture.ok(&["repo", "list"]).as_array().unwrap().is_empty());
     assert!(fixture.ok(&["list"]).as_array().unwrap().is_empty());
-    assert!(!fixture.root.path().join("state/workspaces/racing").exists());
+    // The emptied repository directory goes with the registration.
+    assert!(!Path::new(repo["workspaces_dir"].as_str().unwrap()).exists());
     assert!(!fixture.repo.exists());
 }
 
@@ -4988,7 +5050,9 @@ fn setup_interruption_preserves_work_and_blocks_concurrent_execution() {
         .stderr(Stdio::null())
         .spawn()
         .unwrap();
-    let path = fixture.root.path().join("state/workspaces/interrupted");
+    let path = fixture
+        .shoal_dir()
+        .join("repo-with---quotes----literal/interrupted");
     let deadline = Instant::now() + Duration::from_secs(10);
     while !path.join("setup-started").exists() {
         assert!(Instant::now() < deadline, "setup did not start");

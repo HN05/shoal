@@ -172,15 +172,17 @@ branch itself. Uncommitted files are not copied.
 
 ### Repositories
 
-Register a local checkout in place (no remote required) or a clone URL. URL
-clones go to `~/.local/share/shoal/repositories/<name>`, named by `--name` or
-the URL basename without `.git`, suffixed `-2`, `-3` on conflict with files or
-recorded paths. Set `repositories_dir = "~/Projects/shoal-repositories"` in the
-global config (absolute or `~/` path, daemon restart required) to change the
-parent for new clones; existing registrations keep their paths. `repo add <url>
---path <dir>` clones one repository to an exact new directory (relative to the
-current directory; `~/` allowed). Re-registering a URL with its existing path is
-fine; a different path is rejected.
+Register a local checkout in place (no remote required) or a clone URL. Each
+repository gets `~/shoal/<name>/`, named by `--name` or the source basename
+without `.git`, suffixed `-2`, `-3` on conflict with files or recorded paths;
+its workspaces are created inside it and a URL clone lives there as `main`. A
+local checkout already at `~/shoal/<name>/<anything>` keeps that directory.
+Set `root_dir = "~/Projects"` in the global config (absolute or `~/` path,
+daemon restart required) to change the parent for new registrations; existing
+ones keep their paths, as do workspaces created before this layout. `repo add
+<url> --path <dir>` clones one repository to an exact new directory (relative
+to the current directory; `~/` allowed). Re-registering a URL with its existing
+path is fine; a different path is rejected.
 
 Registration is idempotent by normalized `origin` URL (HTTPS/SSH forms and
 `.git` suffixes match) or canonical local path, and never fetches. Clone URLs
@@ -332,7 +334,11 @@ containing your shell moves you to its repository root (or home).
 ### Automatic cleanup
 
 Enabled by default: an idle, clean, fully pushed worktree is removed after 10
-minutes through the same path as manual removal. File changes (including
+minutes through the same path as manual removal. Whether or not it is enabled,
+a worktree directory deleted outside Shoal is forgotten on the next sweep, its
+ports, leases and simulators released and its branch retained; a moved worktree
+or one with recorded commands is left for `shoal stop`, `shoal rm` or
+`shoal reconcile`. File changes (including
 ignored files), HEAD changes, and Shoal commands reset the timer; running or
 unknown commands, processes with a working directory in the worktree (open
 shells included), dirty files, unpushed commits, simulator leases, resource
@@ -424,9 +430,8 @@ interrupted lifecycle operations failed and disconnected executions unknown,
 and audits worktrees without deleting files or releasing leases. Repair
 restores verified worktrees to ready and clears executions proven stopped;
 connected commands keep running unless `--stop`. Moved worktrees must return to
-their recorded path, replaced metadata is refused, and a deleted directory
-leaves the workspace failed until `shoal rm` cleans up its resources and stale
-Worktrunk registration while retaining the branch.
+their recorded path, replaced metadata is refused, and a deleted directory is
+forgotten by the next cleanup sweep or `shoal rm`, retaining the branch.
 
 Executions record wrapper and child identities plus a process group.
 Descendants inherit `SHOAL_EXECUTION_ID`, which recovery uses with live

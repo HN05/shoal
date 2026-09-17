@@ -11,7 +11,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 12;
+const SCHEMA_VERSION: i64 = 13;
 
 #[derive(Clone)]
 pub struct Store {
@@ -119,6 +119,9 @@ fn migrate(db: &mut Connection) -> Result<()> {
             ALTER TABLE executions ADD COLUMN group_id INTEGER;",
         )?;
     }
+    if version < 13 {
+        db.execute_batch("ALTER TABLE repositories ADD COLUMN workspaces_dir TEXT;")?;
+    }
     db.execute_batch(&format!(
         "CREATE TABLE IF NOT EXISTS repository_removals (
             repository_id TEXT PRIMARY KEY REFERENCES repositories(id) ON DELETE CASCADE,
@@ -176,6 +179,7 @@ pub fn repository(row: &Row<'_>) -> rusqlite::Result<Repository> {
         source: row.get(2)?,
         last_used: row.get(3)?,
         name: row.get(4)?,
+        workspaces_dir: row.get::<_, Option<String>>(5)?.map(PathBuf::from),
     })
 }
 
@@ -252,7 +256,7 @@ mod tests {
             .run(|db| {
                 let repo = db.query_row("SELECT * FROM repositories", [], repository)?;
                 assert_eq!(repo.id, "repo");
-                assert!(repo.name.is_none());
+                assert!(repo.name.is_none() && repo.workspaces_dir.is_none());
                 let workspace = db.query_row("SELECT * FROM workspaces", [], workspace)?;
                 assert_eq!(workspace.name, "feature");
                 assert!(workspace.base_commit.is_none() && workspace.base_ref.is_none());
@@ -282,6 +286,7 @@ mod tests {
                 ALTER TABLE executions DROP COLUMN wrapper;
                 ALTER TABLE executions DROP COLUMN child;
                 ALTER TABLE executions DROP COLUMN group_id;
+                ALTER TABLE repositories DROP COLUMN workspaces_dir;
                 PRAGMA user_version=8;")?;
             let definition = r#"{"capacity":2,"reason":null,"resources":{"worker":{"capacity":2,"reason":null}}}"#;
             db.execute("INSERT INTO resource_pools(scope,name,definition) VALUES ('global','worker',?1)", [definition])?;

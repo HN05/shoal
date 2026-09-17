@@ -44,7 +44,7 @@ pub struct Manager {
 
 impl Manager {
     pub async fn open(paths: Paths) -> Result<Arc<Self>> {
-        fs::create_dir_all(paths.workspaces_dir())?;
+        paths.prepare()?;
         // Avoid inheriting personal Worktrunk hooks and layout preferences.
         fs::write(paths.worktrunk_config(), "# Managed by Shoal.\n")?;
         Ok(Arc::new(Self {
@@ -156,7 +156,7 @@ impl Manager {
         let workspace = Workspace {
             id: Uuid::new_v4().to_string(),
             repository_id: repo.id.clone(),
-            path: self.paths.workspaces_dir().join(&name),
+            path: self.workspaces_dir(&repo).await?.join(&name),
             name,
             branch,
             state: WorkspaceState::Preparing,

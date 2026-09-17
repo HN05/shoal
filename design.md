@@ -60,12 +60,14 @@ merges; tap updates retry against the tap's latest main without force pushes.
 
 ## Workspaces and Git
 
-Register local repositories in place or retain URL clones for reuse under
-`~/.local/share/shoal/repositories/<name>` (global `repositories_dir` or a
-one-off `--path` override; directories are reserved atomically and never
-reused or moved). Registration is idempotent by normalized origin URL, then
-canonical path, never fetches, and keeps a stable UUID separate from the
-display name. Workspaces stay under the state directory.
+Every repository owns `~/shoal/<name>/` (global `root_dir`): its workspaces
+are created inside it and a URL clone lives there as `main`, so worktrees are
+grouped per repository, never nested in a checkout, and outside the state
+directory. Directories are reserved atomically and never reused or moved; an
+in-place checkout placed as `~/shoal/<name>/<x>` adopts that directory, and
+`--path` clones elsewhere. Registration is idempotent by normalized origin URL,
+then canonical path, never fetches, and keeps a stable UUID separate from the
+display name. `repo rm` deletes the directory only once it is empty.
 
 A workspace branches from the repository default branch: `origin/HEAD`, the
 sole remote's HEAD, or the checkout's current branch without remotes, never a
@@ -195,8 +197,10 @@ clears executions proven stopped while preserving work and leases. Startup
 audits but never deletes, kills, clears unknown executions, or releases leases.
 Survivors are signaled only after verifying PID birth identity and same-user
 ownership; acknowledgement cannot override visible live processes. Moved or
-replaced worktrees stay unresolved until restored; a missing directory is
-cleaned up only by explicit removal, retaining the branch.
+replaced worktrees stay unresolved until restored. A deleted directory means
+the user removed the worktree: the cleanup sweep forgets it through the shared
+removal path, releasing its leases and retaining its branch, unless it has
+commands Shoal cannot verify stopped.
 
 ## Remaining work
 

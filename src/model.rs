@@ -18,6 +18,9 @@ pub struct Repository {
     /// Monotonic usage counter; higher means more recently used.
     pub last_used: i64,
     pub name: Option<String>,
+    /// `<root_dir>/<name>`: parent of this repository's workspaces and of its
+    /// URL clone. Reserved once, never moved; `None` until first needed.
+    pub workspaces_dir: Option<PathBuf>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

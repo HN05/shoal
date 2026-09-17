@@ -18,25 +18,29 @@ enum Removal {
     },
     /// Idle cleanup; only safe, unchanged workspaces may go.
     Automatic { snapshot: u64 },
+    /// The directory was deleted outside Shoal; forget the workspace and
+    /// release what it owned, retaining its branch.
+    Deleted,
 }
 
 impl Removal {
     fn choice(self) -> BranchChoice {
         match self {
             Removal::Manual { choice, .. } => choice,
-            Removal::Automatic { .. } => BranchChoice::Auto,
+            Removal::Automatic { .. } | Removal::Deleted => BranchChoice::Auto,
         }
     }
 
     fn caller_pid(self) -> u32 {
         match self {
             Removal::Manual { caller_pid, .. } => caller_pid,
-            Removal::Automatic { .. } => 0,
+            Removal::Automatic { .. } | Removal::Deleted => 0,
         }
     }
 
+    /// Unattended removals never signal processes Shoal cannot verify.
     fn is_automatic(self) -> bool {
-        matches!(self, Removal::Automatic { .. })
+        !matches!(self, Removal::Manual { .. })
     }
 
     /// Automatic removal needs a safe workspace; manual removal with `Auto`
@@ -71,7 +75,7 @@ impl Removal {
                 !check.needs_choice(),
                 "workspace changed while stopping commands; choose whether to keep or delete the branch"
             ),
-            (Removal::Manual { .. }, _) => {}
+            (Removal::Manual { .. } | Removal::Deleted, _) => {}
         }
         Ok(())
     }
@@ -146,6 +150,13 @@ impl Manager {
             .map(|_| ())
     }
 
+    /// Forget a workspace whose directory was deleted outside Shoal.
+    pub async fn remove_deleted(&self, selector: &str) -> Result<RemovalResult> {
+        let workspace = self.workspace(selector).await?;
+        ensure!(!workspace.path.try_exists()?, "workspace directory exists");
+        self.remove(selector, Removal::Deleted).await
+    }
+
     async fn remove(&self, selector: &str, removal: Removal) -> Result<RemovalResult> {
         let workspace = self.workspace(selector).await?;
         self.reserve_lifecycle(&workspace.id, WorkspaceState::Removing)
@@ -175,7 +186,12 @@ impl Manager {
                 Ok(outcome)
             }
             Err(error) => {
-                self.set_state(&workspace.id, workspace.state, Some(format!("{error:#}")))
+                // A deleted directory can no longer be ready.
+                let state = match removal {
+                    Removal::Deleted => WorkspaceState::Failed,
+                    _ => workspace.state,
+                };
+                self.set_state(&workspace.id, state, Some(format!("{error:#}")))
                     .await?;
                 Err(error)
             }
@@ -238,8 +254,8 @@ impl Manager {
         .await
     }
 
-    /// The directory is gone: only a failed workspace whose worktree was not
-    /// merely moved may be forgotten, and its branch is always retained.
+    /// The directory is gone: a worktree that was deleted rather than moved is
+    /// forgotten, and its branch is always retained.
     async fn remove_missing_worktree(
         &self,
         workspace: &crate::model::Workspace,
@@ -247,13 +263,22 @@ impl Manager {
     ) -> Result<RemovalResult> {
         let repo = self.repository(&workspace.repository_id).await?;
         ensure!(
-            workspace.state == WorkspaceState::Failed,
-            "workspace directory disappeared; manual reconciliation required"
+            !matches!(removal, Removal::Automatic { .. }),
+            "workspace directory disappeared during idle cleanup"
         );
         ensure!(
             self.missing_worktree(workspace).await?.is_none(),
             "worktree was moved; restore its recorded path before removing it"
         );
+        if matches!(removal, Removal::Deleted) {
+            ensure!(
+                self.inspect_workspace(&workspace.id)
+                    .await?
+                    .executions
+                    .is_empty(),
+                "commands are recorded; stop them with shoal stop or shoal rm"
+            );
+        }
         self.stop_executions(&workspace.id, !removal.is_automatic())
             .await?;
         self.remove_simulators(&workspace.id).await?;

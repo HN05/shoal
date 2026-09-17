@@ -18,8 +18,7 @@ when behavior changes, distinguishing decisions from proposals.
   inside the shared removal path) are untracked user processes with the
   workspace identity and no scope token. Optional local repository config lives
   in daemon state, replaces the entire worktree config, and is deleted with its
-  repository registration. Named ports are lazy, with CLI overrides and explicit
-  conflict policy.
+  registration. Named ports are lazy, with CLI overrides and explicit conflicts.
 - Workspace commands inherit a scope token. Enforce own-worktree resource access
   in the daemon and deny `shoal pull` and lifecycle/repository/service
   administration. This is cooperative scoping, not a boundary against a hostile
@@ -32,7 +31,7 @@ when behavior changes, distinguishing decisions from proposals.
   without updating other branches or relying on FETCH_HEAD.
 - Global TOML configuration supports `[auto_cleanup]` with `enabled` (default
   true) and `idle_minutes` (default 10). Automatic removal is only for idle,
-  clean, fully pushed worktrees. Keep one removal path for manual and automatic
+  clean, fully pushed worktrees, or worktrees deleted outside Shoal. Keep one removal path for manual and automatic
   cleanup; future resource leases belong to the worktree and must be released
   before its directory and ownership record are removed.
 - TCP port reservations are cooperative and owned by the worktree. Keep them
@@ -43,8 +42,8 @@ when behavior changes, distinguishing decisions from proposals.
   Shoal devices and preserve state on normal handoff. Clean devices require an
   explicit `--clean --reason`; minimize erased apps and persist an audit trail
   before mutations. Retain audit history after removal. Delete devices on
-  workspace removal/idle expiry. Use installed runtimes only. Tests use an isolated xcrun
-  fixture; never touch personal simulator devices.
+  workspace removal/idle expiry. Use installed runtimes only. Tests use an
+  isolated xcrun fixture; never touch personal simulator devices.
 - Generic semaphore permits consume capacity in both the named pool and member.
   `kind = "rwlock"` allows unlimited readers or one exclusive writer. Readers of
   one member share a pool slot; its final release frees the slot. New rwlock
@@ -60,7 +59,9 @@ when behavior changes, distinguishing decisions from proposals.
   must not authorize a kill. Explicit acknowledgement cannot bypass visible live
   processes. Verify recorded Git metadata identity before exec/removal; moved or
   replaced worktrees are not adopted automatically. Use the shared removal path
-  for missing-worktree resource cleanup and retain its branch.
+  for deleted-worktree cleanup and retain its branch; never forget a moved one.
+- Repositories own `<root_dir>/<name>/` (default `~/shoal`): workspaces
+  inside, URL clones as `main`, reserved atomically and never moved.
 - Accept literal Git branch names and derive portable workspace names separately.
   Suffix conflicting branch components with `-2`, `-3`, etc.; keep derived workspace
   names/directories unchanged and serialize allocation per repo. Reject normalized

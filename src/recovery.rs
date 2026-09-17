@@ -238,7 +238,7 @@ impl Manager {
                 ));
             }
             Ok(None) => report.issues.push(
-                "Workspace directory is missing; after repair, use shoal rm to finish owned-resource cleanup (branch retained)".into(),
+                "Workspace directory was deleted; the next cleanup sweep or shoal rm forgets the workspace and retains its branch".into(),
             ),
             Err(error) => report
                 .issues

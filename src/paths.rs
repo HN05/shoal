@@ -56,11 +56,6 @@ impl Paths {
         self.state.join("state.db")
     }
 
-    /// Parent directory of every managed worktree.
-    pub fn workspaces_dir(&self) -> PathBuf {
-        self.state.join("workspaces")
-    }
-
     /// Managed Worktrunk configuration, isolating Shoal from personal hooks.
     pub fn worktrunk_config(&self) -> PathBuf {
         self.state.join("worktrunk.toml")

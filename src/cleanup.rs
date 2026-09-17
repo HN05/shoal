@@ -1,4 +1,5 @@
-//! Automatic removal of idle, clean, fully pushed worktrees.
+//! Automatic removal of idle, clean, fully pushed worktrees, and of workspaces
+//! whose directory was deleted outside Shoal.
 use anyhow::Result;
 use std::{
     collections::{HashMap, hash_map::DefaultHasher},
@@ -10,7 +11,7 @@ use std::{
 };
 use tokio::time::{Instant, sleep};
 
-use crate::workspace::Manager;
+use crate::{model::Workspace, state::WorkspaceState, workspace::Manager};
 
 const SWEEP_INTERVAL: Duration = Duration::from_secs(30);
 
@@ -82,13 +83,28 @@ pub fn fingerprint(root: &Path, head: &str, activity: u64) -> Result<u64> {
     Ok(hash.finish())
 }
 
-pub async fn sweep(manager: &Manager, timers: &mut Timers, delay: Duration) -> Result<()> {
+/// `idle` is the delay before idle removal; `None` disables it, leaving only
+/// deleted-directory cleanup.
+pub async fn sweep(manager: &Manager, timers: &mut Timers, idle: Option<Duration>) -> Result<()> {
     let workspaces = manager.list_workspaces().await?;
     timers
         .idle
         .retain(|id, _| workspaces.iter().any(|workspace| &workspace.id == id));
     for workspace in workspaces {
-        let snapshot = if workspace.state == crate::state::WorkspaceState::Ready {
+        // Only a worktree that existed (identity recorded) can have been deleted;
+        // a failed creation keeps its error until removed explicitly.
+        if matches!(
+            workspace.state,
+            WorkspaceState::Ready | WorkspaceState::Failed
+        ) && workspace.git_dir.is_some()
+            && !workspace.path.try_exists()?
+        {
+            timers.idle.remove(&workspace.id);
+            remove_deleted(manager, &workspace).await;
+            continue;
+        }
+        let Some(delay) = idle else { continue };
+        let snapshot = if workspace.state == WorkspaceState::Ready {
             match manager.cleanup_snapshot(&workspace.id).await {
                 Ok(snapshot) => snapshot,
                 Err(error) => {
@@ -112,10 +128,27 @@ pub async fn sweep(manager: &Manager, timers: &mut Timers, delay: Duration) -> R
     Ok(())
 }
 
-pub async fn run(manager: Arc<Manager>, delay: Duration) {
+/// A deleted worktree is forgotten unless it was moved or still has commands
+/// Shoal cannot verify; the branch is retained either way.
+async fn remove_deleted(manager: &Manager, workspace: &Workspace) {
+    match manager.missing_worktree(workspace).await {
+        Ok(Some(_)) => return,
+        Ok(None) => {}
+        Err(error) => {
+            eprintln!("deleted worktree {} retained: {error:#}", workspace.name);
+            return;
+        }
+    }
+    match manager.remove_deleted(&workspace.id).await {
+        Ok(_) => eprintln!("forgot deleted worktree {}", workspace.name),
+        Err(error) => eprintln!("deleted worktree {} retained: {error:#}", workspace.name),
+    }
+}
+
+pub async fn run(manager: Arc<Manager>, idle: Option<Duration>) {
     let mut timers = Timers::default();
     loop {
-        if let Err(error) = sweep(&manager, &mut timers, delay).await {
+        if let Err(error) = sweep(&manager, &mut timers, idle).await {
             eprintln!("auto cleanup: {error:#}");
         }
         sleep(SWEEP_INTERVAL).await;
@@ -295,7 +328,7 @@ mod tests {
                 since: Instant::now() - Duration::from_secs(600),
             },
         );
-        sweep(&manager, &mut timers, Duration::from_secs(600))
+        sweep(&manager, &mut timers, Some(Duration::from_secs(600)))
             .await
             .unwrap();
         assert!(!workspace.path.exists());
