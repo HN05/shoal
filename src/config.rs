@@ -128,7 +128,7 @@ impl Default for AutoCleanup {
 
 impl Config {
     /// Parent of every repository directory: `<root>/<repo>/` holds the
-    /// repository's URL clone as `main` and its workspaces as siblings.
+    /// repository's URL clone as `.checkout` and its workspaces as siblings.
     pub fn root_dir(&self, paths: &Paths) -> Result<PathBuf> {
         let Some(path) = self.root_dir.as_ref().or(self.repositories_dir.as_ref()) else {
             return Ok(paths.home.join("shoal"));
