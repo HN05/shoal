@@ -30,7 +30,8 @@ if required approvals or checks prevent merging. It never force-merges.
 Failed runs retain their release branch or PR for inspection. Existing tags are
 never moved. If publication succeeded but a later job failed, rerun the failed
 jobs in the same workflow run; they reuse the published tag rather than creating
-another release, and skip assets that are already attached.
+another release, and a release whose `SHA256SUMS` is attached keeps its assets,
+while a partial upload is replaced whole.
 
 Builds run in the CI image described in AGENTS.md, which carries the pinned
 Rust toolchain, Worktrunk, Zig and cargo-zigbuild; rebuild it after changing

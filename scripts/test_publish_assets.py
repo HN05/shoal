@@ -8,7 +8,9 @@ from urllib.error import HTTPError
 
 publish = importlib.import_module("publish-assets")
 
-RELEASE = {"id": 9, "tag_name": "v0.2.0", "draft": False, "assets": [{"name": "old.tar.gz"}]}
+RELEASE = {"id": 9, "tag_name": "v0.2.0", "draft": False,
+           "assets": [{"id": 41, "name": "old.tar.gz"}, {"id": 42, "name": "other.txt"}]}
+COMPLETE = dict(RELEASE, assets=RELEASE["assets"] + [{"id": 43, "name": "SHA256SUMS"}])
 SHA = "a" * 40
 
 
@@ -21,20 +23,33 @@ class PublishAssetsTests(unittest.TestCase):
             paths.append(path)
         return paths
 
-    def test_forgejo_uploads_only_missing_files_as_multipart(self):
+    def test_partial_forgejo_upload_is_replaced_whole_with_manifest_last(self):
         env = {"RELEASE_API_URL": "https://forge/api/v1/", "RELEASE_REPOSITORY": "HN05/shoal",
                "RELEASE_AUTOMATION_TOKEN": "forge-token"}
         with tempfile.TemporaryDirectory() as root, patch.dict(publish.os.environ, env), \
-                patch.object(publish, "request", side_effect=[RELEASE, None]) as request:
-            publish.forgejo("v0.2.0", self.files(root, "old.tar.gz", "new.tar.gz"))
-            self.assertEqual(request.call_count, 2)
-            self.assertEqual(request.call_args_list[0].args,
+                patch.object(publish, "request", side_effect=[RELEASE, None, None, None, None]) as request:
+            publish.forgejo("v0.2.0", self.files(root, "SHA256SUMS", "old.tar.gz", "new.tar.gz"))
+            calls = request.call_args_list
+            self.assertEqual(calls[0].args,
                              ("https://forge/api/v1/repos/HN05/shoal/releases/tags/v0.2.0", "forge-token", "token"))
-            url, token, scheme, body, content_type = request.call_args_list[1].args
-            self.assertEqual(url, "https://forge/api/v1/repos/HN05/shoal/releases/9/assets?name=new.tar.gz")
+            self.assertEqual(calls[1].args[0], "https://forge/api/v1/repos/HN05/shoal/releases/9/assets/41")
+            self.assertEqual(calls[1].kwargs, {"method": "DELETE"})
+            self.assertEqual([c.args[0].rsplit("=", 1)[1] for c in calls[2:]],
+                             ["new.tar.gz", "old.tar.gz", "SHA256SUMS"])
+            url, token, scheme, body, content_type = calls[2].args
             self.assertTrue(content_type.startswith("multipart/form-data; boundary="))
             self.assertIn(b'name="attachment"; filename="new.tar.gz"', body)
             self.assertIn(b"binary new.tar.gz", body)
+
+    def test_complete_asset_set_is_left_alone_and_manifest_is_required(self):
+        env = {"RELEASE_API_URL": "https://forge/api/v1/", "RELEASE_REPOSITORY": "HN05/shoal",
+               "RELEASE_AUTOMATION_TOKEN": "forge-token"}
+        with tempfile.TemporaryDirectory() as root, patch.dict(publish.os.environ, env), \
+                patch.object(publish, "request", side_effect=[COMPLETE]) as request:
+            publish.forgejo("v0.2.0", self.files(root, "SHA256SUMS", "old.tar.gz", "new.tar.gz"))
+            self.assertEqual(request.call_count, 1)
+        with self.assertRaises(ValueError):
+            publish.plan([Path("shoal.tar.gz")], [])
 
     def test_github_creates_release_after_mirror_and_uploads(self):
         env = {"RELEASE_REPOSITORY": "HN05/shoal", "GITHUB_RELEASE_TOKEN": "gh-token"}
@@ -43,8 +58,8 @@ class PublishAssetsTests(unittest.TestCase):
         self.addCleanup(missing.close)
         with tempfile.TemporaryDirectory() as root, patch.dict(publish.os.environ, env), \
                 patch.object(publish, "mirrored") as mirrored, \
-                patch.object(publish, "request", side_effect=[missing, created, None]) as request:
-            publish.github("v0.2.0", self.files(root, "shoal.tar.gz"), SHA)
+                patch.object(publish, "request", side_effect=[missing, created, None, None]) as request:
+            publish.github("v0.2.0", self.files(root, "shoal.tar.gz", "SHA256SUMS"), SHA)
             mirrored.assert_called_once_with("HN05/shoal", "v0.2.0", SHA)
             create = request.call_args_list[1]
             self.assertEqual(create.args[0], "https://api.github.com/repos/HN05/shoal/releases")
@@ -55,17 +70,24 @@ class PublishAssetsTests(unittest.TestCase):
             self.assertEqual(upload.args[0],
                              "https://uploads.github.com/repos/HN05/shoal/releases/9/assets?name=shoal.tar.gz")
             self.assertEqual(upload.args[3], b"binary shoal.tar.gz")
+            self.assertTrue(request.call_args_list[3].args[0].endswith("name=SHA256SUMS"))
 
-    def test_github_reuses_existing_release_and_rejects_drafts(self):
+    def test_github_replaces_partial_uploads_reuses_complete_releases_and_rejects_drafts(self):
         env = {"RELEASE_REPOSITORY": "HN05/shoal", "GITHUB_RELEASE_TOKEN": "gh-token"}
         with tempfile.TemporaryDirectory() as root, patch.dict(publish.os.environ, env), \
                 patch.object(publish, "mirrored"), \
-                patch.object(publish, "request", side_effect=[RELEASE]) as request:
-            publish.github("v0.2.0", self.files(root, "old.tar.gz"), SHA)
-            self.assertEqual(request.call_count, 1)
+                patch.object(publish, "request", side_effect=[RELEASE, None, None, None]) as request:
+            publish.github("v0.2.0", self.files(root, "old.tar.gz", "SHA256SUMS"), SHA)
+            delete = request.call_args_list[1]
+            self.assertEqual(delete.args[0], "https://api.github.com/repos/HN05/shoal/releases/assets/41")
+            self.assertEqual(delete.kwargs, {"method": "DELETE"})
+            self.assertEqual(request.call_count, 4)
+            request.side_effect = [COMPLETE]
+            publish.github("v0.2.0", self.files(root, "old.tar.gz", "SHA256SUMS"), SHA)
+            self.assertEqual(request.call_count, 5)
             request.side_effect = [dict(RELEASE, draft=True)]
             with self.assertRaises(ValueError):
-                publish.github("v0.2.0", self.files(root, "old.tar.gz"), SHA)
+                publish.github("v0.2.0", self.files(root, "old.tar.gz", "SHA256SUMS"), SHA)
 
     def test_mirror_wait_accepts_only_the_released_commit(self):
         refs = f"{SHA}\trefs/tags/v0.2.0\n"

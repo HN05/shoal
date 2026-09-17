@@ -3,8 +3,10 @@
 
 `forgejo <tag> <files...>` uploads to the existing Forgejo release for the tag.
 `github <tag> <files...>` waits for the push mirror to carry the tag, creates the
-GitHub release when missing, and uploads the files. Both skip files whose name
-is already attached, so a rerun after a partial failure completes the release.
+GitHub release when missing, and uploads the files. SHA256SUMS goes last and
+marks a complete set: a release that has it is left alone, and one without it
+has any partial upload from an earlier build replaced whole, so a rerun never
+mixes files from two builds.
 """
 import argparse
 import json
@@ -20,6 +22,7 @@ from urllib.request import Request, urlopen
 
 GITHUB_API = "https://api.github.com"
 GITHUB_UPLOADS = "https://uploads.github.com"
+MANIFEST = "SHA256SUMS"
 
 
 def version(tag):
@@ -28,12 +31,12 @@ def version(tag):
     return tag[1:]
 
 
-def request(url, token, scheme, data=None, content_type="application/json"):
+def request(url, token, scheme, data=None, content_type="application/json", method=None):
     body = json.dumps(data).encode() if isinstance(data, dict) else data
     headers = {"Authorization": f"{scheme} {token}", "Accept": "application/json"}
     if body is not None:
         headers["Content-Type"] = content_type
-    with urlopen(Request(url, data=body, headers=headers), timeout=300) as response:
+    with urlopen(Request(url, data=body, headers=headers, method=method), timeout=300) as response:
         payload = response.read()
         return json.loads(payload) if payload else None
 
@@ -47,20 +50,32 @@ def multipart(path):
         f"multipart/form-data; boundary={boundary}"
 
 
-def missing(files, existing):
-    names = {asset["name"] for asset in existing}
-    for path in files:
-        if path.name in names:
-            print(f"{path.name}: already attached")
-        else:
-            yield path
+def plan(files, existing):
+    """Files to upload, manifest last, and ids of stale assets to delete first.
+
+    Every run builds the archives afresh, so files attached by an earlier run
+    cannot be mixed with new ones. The manifest is attached last: when it is
+    there the set is complete and nothing is touched; otherwise whatever was
+    attached is a partial upload and is replaced."""
+    if MANIFEST not in {path.name for path in files}:
+        raise ValueError(f"{MANIFEST} must be among the files")
+    attached = {asset["name"]: asset["id"] for asset in existing}
+    if MANIFEST in attached:
+        print(f"{MANIFEST} already attached; leaving the complete asset set unchanged")
+        return [], []
+    uploads = sorted(files, key=lambda path: (path.name == MANIFEST, path.name))
+    return uploads, [attached[path.name] for path in uploads if path.name in attached]
 
 
 def forgejo(tag, files):
     base = os.environ["RELEASE_API_URL"].rstrip("/") + "/repos/" + os.environ["RELEASE_REPOSITORY"]
     token = os.environ["RELEASE_AUTOMATION_TOKEN"]
     release = request(f"{base}/releases/tags/{tag}", token, "token")
-    for path in missing(files, release["assets"]):
+    uploads, stale = plan(files, release["assets"])
+    for asset_id in stale:
+        request(f"{base}/releases/{release['id']}/assets/{asset_id}", token, "token", method="DELETE")
+        print(f"asset {asset_id}: removed partial upload from an earlier build")
+    for path in uploads:
         body, content_type = multipart(path)
         request(f"{base}/releases/{release['id']}/assets?name={path.name}", token, "token",
                 body, content_type)
@@ -105,7 +120,12 @@ def github(tag, files, revision):
         print(f"created GitHub release {tag}")
     if release.get("draft") or release["tag_name"] != tag:
         raise ValueError(f"unexpected GitHub release for {tag}")
-    for path in missing(files, release["assets"]):
+    uploads, stale = plan(files, release["assets"])
+    for asset_id in stale:
+        request(f"{GITHUB_API}/repos/{repository}/releases/assets/{asset_id}", token, "Bearer",
+                method="DELETE")
+        print(f"asset {asset_id}: removed partial upload from an earlier build")
+    for path in uploads:
         content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
         request(f"{GITHUB_UPLOADS}/repos/{repository}/releases/{release['id']}/assets?name={path.name}",
                 token, "Bearer", path.read_bytes(), content_type)
