@@ -102,7 +102,7 @@ def mirrored(repository, tag, revision, attempts=30, delay=20):
 
 def github(tag, files, revision):
     repository = os.environ["RELEASE_REPOSITORY"]
-    token = os.environ["GITHUB_RELEASE_TOKEN"]
+    token = os.environ["RELEASE_TOKEN_GITHUB"]
     mirrored(repository, tag, revision)
     base = f"{GITHUB_API}/repos/{repository}/releases"
     try:

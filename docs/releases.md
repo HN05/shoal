@@ -21,7 +21,7 @@ token. There is no separate Homebrew or GitHub workflow to run.
   and restrict repository access to `HN05/shoal`. No `read:user` scope is needed;
   the workflow uses Git and repository API endpoints only.
 - `HOMEBREW_TAP_TOKEN`: Actions secret with write access to both Forgejo taps.
-- `GITHUB_RELEASE_TOKEN`: fine-grained GitHub token for `HN05/shoal` with
+- `RELEASE_TOKEN_GITHUB`: fine-grained GitHub token for `HN05/shoal` with
   read and write access to Contents; it creates the GitHub release and assets.
 - A `docker` Actions runner with HTTPS access to the forge, registries, and GitHub.
 

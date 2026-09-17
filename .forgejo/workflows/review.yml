@@ -55,7 +55,7 @@ jobs:
       - uses: https://git.henriknordvik.com/HN05/review-bot@main
         if: steps.labels.outputs.skip != 'true'
         with:
-          agent: ${{ vars.REVIEW_AGENT || 'codex' }}
+          agent: ${{ vars.REVIEW_AGENT || 'claude' }}
           rerun-label: review/default
           instructions-file: .review/review.md
           claude-auth-dir: /var/lib/review-bot/claude

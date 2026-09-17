@@ -52,7 +52,7 @@ class PublishAssetsTests(unittest.TestCase):
             publish.plan([Path("shoal.tar.gz")], [])
 
     def test_github_creates_release_after_mirror_and_uploads(self):
-        env = {"RELEASE_REPOSITORY": "HN05/shoal", "GITHUB_RELEASE_TOKEN": "gh-token"}
+        env = {"RELEASE_REPOSITORY": "HN05/shoal", "RELEASE_TOKEN_GITHUB": "gh-token"}
         created = dict(RELEASE, assets=[])
         missing = HTTPError("url", 404, "missing", {}, io.BytesIO())
         self.addCleanup(missing.close)
@@ -73,7 +73,7 @@ class PublishAssetsTests(unittest.TestCase):
             self.assertTrue(request.call_args_list[3].args[0].endswith("name=SHA256SUMS"))
 
     def test_github_replaces_partial_uploads_reuses_complete_releases_and_rejects_drafts(self):
-        env = {"RELEASE_REPOSITORY": "HN05/shoal", "GITHUB_RELEASE_TOKEN": "gh-token"}
+        env = {"RELEASE_REPOSITORY": "HN05/shoal", "RELEASE_TOKEN_GITHUB": "gh-token"}
         with tempfile.TemporaryDirectory() as root, patch.dict(publish.os.environ, env), \
                 patch.object(publish, "mirrored"), \
                 patch.object(publish, "request", side_effect=[RELEASE, None, None, None]) as request:

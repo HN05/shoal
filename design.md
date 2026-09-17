@@ -51,14 +51,13 @@ a service manager. The service captures the installing shell's `PATH`.
 Distribution is a source-built Homebrew formula in the shared HN05 tap with a
 release channel (immutable tags, selected explicitly) and a `main` channel.
 Build and packaging logic lives in Shoal's `scripts/install-homebrew.sh`; the
-tap declares sources and dependencies. Releases are made by one Forgejo Actions
-workflow that bumps versions, validates, creates and merges a version PR under
-normal branch protection, tags the exact merged commit, publishes the release,
-and then, from that tag, updates both taps (Forgejo-sourced, and GitHub-sourced
-with a push mirror), attaches cross-built Linux and macOS binaries, and
-recreates the release with the same files on GitHub, since push mirrors carry
-refs but not releases. It never tags a later commit, downgrades, or force
-merges; tap updates retry against the tap's latest main without force pushes.
+tap declares sources and dependencies. One Forgejo Actions workflow releases: it
+bumps versions, validates, creates and merges a version PR under normal branch
+protection, tags the exact merged commit, publishes the release, and from that
+tag updates both taps (Forgejo- and GitHub-sourced via a push mirror), attaches
+cross-built Linux and macOS binaries, and recreates the release on GitHub, which
+mirrors do not carry. It never tags a later commit, downgrades, or force merges;
+tap updates retry against the tap's latest main without force pushes.
 
 ## Workspaces and Git
 

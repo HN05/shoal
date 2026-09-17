@@ -13,7 +13,9 @@ shoal skill install
 ```
 
 Use `brew install --HEAD hn05/tap/shoal` to track `main` instead of releases, or
-download a prebuilt macOS or Linux binary from a [release](https://github.com/HN05/shoal/releases).
+download a prebuilt macOS or Linux binary from a [release](https://github.com/HN05/shoal/releases);
+the macOS binaries are unsigned, so clear the download quarantine first with
+`xattr -d com.apple.quarantine shoal`.
 Homebrew installs the runtime dependencies. `shoal setup` starts the per-user
 daemon; `shoal skill install` installs instructions for Codex and Claude Code.
 
@@ -138,15 +140,13 @@ brew upgrade hn05/tap/shoal
 shoal daemon restart
 ```
 
-For a main-channel install, use `brew upgrade --fetch-HEAD hn05/tap/shoal`.
-Homebrew skill links update automatically. Reload `source <(shoal shell init)`
-in existing terminals after upgrading.
+For a main-channel install, use `brew upgrade --fetch-HEAD hn05/tap/shoal`. Skill
+links update automatically; reload `source <(shoal shell init)` in open terminals.
 
 ## Development
 
 See [design.md](design.md) for decisions and the [command reference](docs/reference.md) for behavior.
-Create releases through **Actions → release**; see [release setup](docs/releases.md).
-Documentation is budgeted by `tests/docs.rs`; trim before extending.
+Create releases through **Actions → release** ([setup](docs/releases.md)). `tests/docs.rs` budgets the docs; trim before extending.
 
 Requires Rust, Git, `lsof`, and Worktrunk (`wt`, tested with 0.77.0). Interactive menus
 require `fzf`. Install the runtime tools before running `shoal setup` so the

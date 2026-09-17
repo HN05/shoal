@@ -33,12 +33,13 @@ jobs:
           REF: ${{ github.ref }}
           TOKEN: ${{ secrets.RELEASE_AUTOMATION_TOKEN }}
           TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_RELEASE_TOKEN }}
+          # Not GITHUB_*: Forgejo reserves that prefix for secret names.
+          RELEASE_TOKEN_GITHUB: ${{ secrets.RELEASE_TOKEN_GITHUB }}
         run: |
           test "$REF" = refs/heads/main || { echo 'Select main to release'; exit 1; }
           test -n "$TOKEN" || { echo 'Configure RELEASE_AUTOMATION_TOKEN'; exit 1; }
           test -n "$TAP_TOKEN" || { echo 'Configure HOMEBREW_TAP_TOKEN'; exit 1; }
-          test -n "$GITHUB_TOKEN" || { echo 'Configure GITHUB_RELEASE_TOKEN'; exit 1; }
+          test -n "$RELEASE_TOKEN_GITHUB" || { echo 'Configure RELEASE_TOKEN_GITHUB'; exit 1; }
       - name: Check out main
         env:
           SERVER: ${{ github.server_url }}
@@ -234,7 +235,7 @@ jobs:
           sha256sum -c SHA256SUMS
       - name: Create the GitHub release
         env:
-          GITHUB_RELEASE_TOKEN: ${{ secrets.GITHUB_RELEASE_TOKEN }}
+          RELEASE_TOKEN_GITHUB: ${{ secrets.RELEASE_TOKEN_GITHUB }}
           RELEASE_REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
