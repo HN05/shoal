@@ -1,9 +1,16 @@
 use std::{
     fs,
     io::{BufRead, BufReader, Write},
-    os::unix::{fs::PermissionsExt, net::UnixStream},
+    os::unix::{
+        fs::PermissionsExt,
+        net::{UnixListener, UnixStream},
+    },
     path::Path,
     process::{Child, Command, Output, Stdio},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
     thread,
     time::{Duration, Instant},
 };
@@ -209,6 +216,87 @@ fn setup_preview_does_not_install_a_service() {
     assert!(!root.path().join("state").exists());
 }
 
+struct IncompatibleDaemon {
+    stop: Arc<AtomicBool>,
+    thread: Option<thread::JoinHandle<()>>,
+}
+
+impl IncompatibleDaemon {
+    fn listen(root: &Path, malformed: bool) -> Self {
+        fs::create_dir_all(root.join("state")).unwrap();
+        let listener = UnixListener::bind(root.join("state/daemon.sock")).unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let stop = Arc::new(AtomicBool::new(false));
+        let done = stop.clone();
+        let thread = thread::spawn(move || {
+            while !done.load(Ordering::Relaxed) {
+                let (mut stream, _) = match listener.accept() {
+                    Ok(connection) => connection,
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        thread::sleep(Duration::from_millis(10));
+                        continue;
+                    }
+                    Err(error) => panic!("{error}"),
+                };
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(3)))
+                    .unwrap();
+                let mut line = String::new();
+                BufReader::new(&stream).read_line(&mut line).unwrap();
+                let request: Value = serde_json::from_str(&line).unwrap();
+                if malformed {
+                    writeln!(stream, "not json").unwrap();
+                } else {
+                    let response = json!({
+                        "protocol": request["protocol"].as_u64().unwrap() + 1,
+                        "id": request["id"],
+                        "type": "error",
+                        "data": {"code": "protocol_mismatch", "message": "old daemon"}
+                    });
+                    writeln!(stream, "{response}").unwrap();
+                }
+            }
+        });
+        Self {
+            stop,
+            thread: Some(thread),
+        }
+    }
+}
+
+impl Drop for IncompatibleDaemon {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Relaxed);
+        self.thread.take().unwrap().join().unwrap();
+    }
+}
+
+#[test]
+fn setup_refuses_an_incompatible_daemon_without_an_installed_service() {
+    let root = tempfile::tempdir_in("/tmp").unwrap();
+    let _daemon = IncompatibleDaemon::listen(root.path(), false);
+    let output = command(root.path()).arg("setup").output().unwrap();
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("stop the foreground daemon"));
+    assert!(
+        command(root.path())
+            .args(["setup", "--dry-run"])
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
+}
+
+#[test]
+fn setup_preserves_a_compatible_foreground_daemon() {
+    let daemon = Daemon::start();
+    let output = daemon.run(&["setup"]);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("foreground daemon"));
+    assert!(daemon.run(&["daemon", "status"]).status.success());
+}
+
 #[test]
 fn setup_is_repeatable_and_service_controls_work_with_an_isolated_manager() {
     let root = tempfile::tempdir_in("/tmp").unwrap();
@@ -279,6 +367,32 @@ esac
     let original = fs::read_to_string(&pid_path).unwrap();
     run(&["setup"]);
     assert_eq!(fs::read_to_string(&pid_path).unwrap(), original);
+
+    // Replace only the wire response. Stopping the real managed daemon removes
+    // its socket, allowing setup to install and start the current binary.
+    let socket = root.path().join("state/daemon.sock");
+    let hidden_socket = root.path().join("state/managed.sock");
+    fs::rename(&socket, &hidden_socket).unwrap();
+    {
+        let _daemon = IncompatibleDaemon::listen(root.path(), true);
+        let output = command(root.path())
+            .arg("setup")
+            .env("PATH", &bin)
+            .output()
+            .unwrap();
+        assert!(!output.status.success());
+        assert!(!String::from_utf8_lossy(&output.stderr).contains("Updating daemon"));
+        assert_eq!(fs::read_to_string(&pid_path).unwrap(), original);
+    }
+    fs::remove_file(&socket).unwrap();
+    {
+        let _daemon = IncompatibleDaemon::listen(root.path(), false);
+        run(&["--json", "setup"]);
+    }
+    assert_ne!(fs::read_to_string(&pid_path).unwrap(), original);
+    let upgraded = fs::read_to_string(&pid_path).unwrap();
+    run(&["setup"]);
+    assert_eq!(fs::read_to_string(&pid_path).unwrap(), upgraded);
     run(&["daemon", "restart"]);
     assert_ne!(fs::read_to_string(&pid_path).unwrap(), original);
     run(&["daemon", "stop"]);

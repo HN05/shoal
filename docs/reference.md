@@ -55,7 +55,8 @@ directory must match. `daemon status` exits 1 when offline.
 
 `shoal setup` preserves the invoked executable's symlink path and captures the
 current `PATH` for the service, so install `wt`, `git`, `lsof`, and any hook
-tools first. Restart the daemon after upgrading its binary. macOS diagnostics go
+tools first. Setup restarts an incompatible installed daemon automatically;
+foreground daemons must be stopped manually. macOS diagnostics go
 to `daemon.log` in the state directory; Linux uses `journalctl --user -u
 shoal.service`. Tests use an isolated service-manager fixture and never install
 a real service; native Linux service integration is untested on a Linux host.

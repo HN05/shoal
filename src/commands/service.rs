@@ -1,7 +1,7 @@
 //! CLI OS-service administration, including offline/protocol-upgrade handling.
 use std::path::PathBuf;
 
-use anyhow::{Result, ensure};
+use anyhow::{Context as _, Result, ensure};
 use serde_json::json;
 
 use crate::{
@@ -29,11 +29,28 @@ pub(super) async fn setup(
         })?;
         return Ok(0);
     }
-    if let Some(status) = client::status(&ctx.paths).await? {
-        ensure!(
+    match client::status(&ctx.paths).await {
+        Ok(Some(status)) => ensure!(
             status.managed,
             "a foreground daemon is running; stop it before setting up the service"
-        );
+        ),
+        Ok(None) => {}
+        Err(error) if error.is::<client::ProtocolMismatch>() => {
+            // Use the service manager without speaking the incompatible protocol.
+            // stop checks the installed state directory and waits for the socket
+            // to become unreachable before setup can replace the definition.
+            ensure!(
+                service::file(&ctx.paths, platform).is_file(),
+                "daemon protocol mismatch and no installed service; stop the foreground daemon, then rerun `shoal setup`"
+            );
+            if !ctx.json {
+                eprintln!("Updating daemon service after a protocol change...");
+            }
+            stop(&ctx.paths).await.context(
+                "could not stop the incompatible daemon service; stop any foreground daemon before rerunning `shoal setup`",
+            )?;
+        }
+        Err(error) => return Err(error),
     }
     service::setup(&ctx.paths, &executable).await?;
     client::wait(&ctx.paths, true).await?;

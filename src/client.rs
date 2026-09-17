@@ -14,6 +14,17 @@ use crate::{
     protocol::{self, Body, Method, Request, Response, Status},
 };
 
+#[derive(Debug)]
+pub struct ProtocolMismatch;
+
+impl std::fmt::Display for ProtocolMismatch {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("daemon protocol mismatch; run `shoal setup` to update the managed daemon, or restart a foreground daemon with the installed version")
+    }
+}
+
+impl std::error::Error for ProtocolMismatch {}
+
 /// Send `method` and return the open stream with the daemon's first reply,
 /// including [`Body::Error`]. Executions keep using the stream; [`call`] drops it.
 pub async fn open(paths: &Paths, method: Method) -> Result<(UnixStream, Body)> {
@@ -26,10 +37,9 @@ pub async fn open(paths: &Paths, method: Method) -> Result<(UnixStream, Body)> {
     let request = Request::new(method);
     protocol::write(&mut stream, &request).await?;
     let reply: Response = protocol::read(&mut stream).await?;
-    ensure!(
-        reply.protocol == protocol::VERSION,
-        "daemon protocol mismatch; restart the daemon with the installed version"
-    );
+    if reply.protocol != protocol::VERSION {
+        return Err(ProtocolMismatch.into());
+    }
     ensure!(reply.id == request.id, "unexpected daemon response ID");
     Ok((stream, reply.body))
 }

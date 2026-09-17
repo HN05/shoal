@@ -39,8 +39,8 @@ execution stopped or that its resources are free.
 Use short transactions for atomic claims and typed lifecycle states with
 lowercase persisted and wire spellings; unknown values are errors. Keep slow
 external operations outside transactions while retaining ownership through
-failure. Migrations preserve ownership records; protocol mismatches require a
-matching CLI and daemon.
+failure. Migrations preserve ownership records; setup automatically restarts an
+incompatible installed daemon, verifying it stopped before replacing its service.
 
 Worktrunk creates and removes worktrees through Shoal's adapter with isolated
 configuration and hooks disabled. Invoke external tools with argument arrays.
