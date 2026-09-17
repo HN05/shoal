@@ -252,7 +252,7 @@ impl Manager {
             .context("workspace base is unknown")?;
         let refresh = default.as_deref() == Some(base) || default_ref.as_deref() == Some(base);
         if refresh {
-            self.refresh_default_branch(repo, default.as_deref().unwrap(), true)
+            self.refresh_branch(repo, default.as_deref().unwrap(), true)
                 .await
                 .context("could not refresh the default branch before creating workspace")?;
         }

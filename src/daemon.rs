@@ -267,6 +267,9 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::PullDefaultBranch { workspace } => {
             Body::PulledBranch(manager.pull_default_branch(&workspace).await?)
         }
+        Method::RefreshMergeSource { workspace, branch } => {
+            Body::PulledBranch(manager.refresh_merge_source(&workspace, &branch).await?)
+        }
         Method::DiffBase { workspace } => Body::DiffBase(manager.diff_base(&workspace).await?),
         Method::WorkspaceHooks { workspace } => {
             Body::Hooks(manager.workspace_hooks(&workspace).await?)

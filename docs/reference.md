@@ -234,20 +234,24 @@ Fast-forwards the repository's default branch from its configured upstream
 (which may differ from the default remote). It does not touch the feature
 branch. A checked-out default branch must be clean; divergence or a default
 branch checked out in a managed workspace is an error. Hooks and recursive
-submodule updates are disabled. Scoped agents may pull only through their own
-workspace.
+submodule updates are disabled. Scoped agents cannot pull; `shoal merge`
+refreshes its source for them.
 
 ### Merge into your workspace branch
 
 ```sh
-shoal merge main
+shoal merge main                           # Any local branch: fast-forwarded from upstream first
 shoal merge feature/api                    # Local, or discover a remote-only branch
+shoal merge feature/api --local            # Merge the local branch as it is, no refresh
 shoal merge feature/api --remote origin    # Fetch explicitly, even if local exists
 shoal merge origin/feature/api fix-login   # Qualified source, named destination
 ```
 
 The destination must be the workspace's recorded branch. Local branches take
-precedence; otherwise Shoal queries configured remotes and fetches the branch.
+precedence and are first fast-forwarded from their upstream under the `pull`
+rules above (a dirty checkout or divergence is an error; `--local` skips this).
+A local branch without an upstream, or checked out in a managed workspace, is
+merged as it is. Otherwise Shoal queries configured remotes and fetches the branch.
 Several matches or an unreachable remote require `--remote`. Qualified remote
 sources and full `refs/…` names always fetch fresh data. Git fast-forwards or
 creates a merge commit; conflicts stay in the worktree for `git commit` or `git
@@ -437,9 +441,8 @@ untested on a Linux host.
 
 Commands launched through `exec`, `claude`, and `codex cli` carry a scope token
 that confines them to their own worktree: inspect, execute, `merge`, `diff`,
-resources, and `pull` of their repository's default branch. They cannot reach
-other worktrees, remove workspaces, administer repositories, or control the
-daemon; nested commands keep the scope. Scope is cooperative and does not
+and resources. They cannot `pull`, reach other worktrees, remove workspaces,
+administer repositories, or control the daemon; nested commands keep the scope. Scope is cooperative and does not
 restrict direct filesystem or Git operations.
 
 ## Simulators (macOS)

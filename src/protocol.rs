@@ -99,6 +99,11 @@ pub enum Method {
     PullDefaultBranch {
         workspace: String,
     },
+    /// Fast-forward a local merge source from its upstream before merging.
+    RefreshMergeSource {
+        workspace: String,
+        branch: String,
+    },
     DiffBase {
         workspace: String,
     },

@@ -73,6 +73,9 @@ pub enum Command {
         /// Fetch this branch from a specific configured remote, even if it exists locally.
         #[arg(long)]
         remote: Option<String>,
+        /// Merge the local branch as it is instead of fast-forwarding it from its upstream first.
+        #[arg(long, conflicts_with = "remote")]
+        local: bool,
     },
     /// Internal worker launched through the tracked execution wrapper.
     #[command(hide = true)]
@@ -80,6 +83,8 @@ pub enum Command {
         branch: String,
         #[arg(long)]
         remote: Option<String>,
+        #[arg(long)]
+        local: bool,
     },
     /// Reserve, list, and release named TCP ports owned by a worktree.
     Port {

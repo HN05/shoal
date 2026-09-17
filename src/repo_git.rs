@@ -1,4 +1,4 @@
-//! Branch allocation and default-branch refreshes for a registered repository.
+//! Branch allocation and upstream refreshes for a registered repository.
 use std::path::Path;
 
 use anyhow::{Context, Result, ensure};
@@ -53,12 +53,69 @@ impl Manager {
         let gate = self.git_gate(&repo.id).await;
         let _guard = gate.lock().await;
         let branch = crate::default_branch::resolve(&repo.path, true).await?;
-        self.refresh_default_branch(&repo, &branch, false).await
+        self.refresh_branch(&repo, &branch, false).await
     }
 
-    /// Fast-forward the local default branch from its upstream. The caller
-    /// holds the repository's Git gate through any subsequent creation.
-    pub(crate) async fn refresh_default_branch(
+    /// Fast-forward a local merge source from its upstream so `shoal merge`
+    /// imports current work. A source without an upstream, or checked out in
+    /// a managed workspace whose branch must stay untouched, is left as it is.
+    pub async fn refresh_merge_source(&self, selector: &str, branch: &str) -> Result<PulledBranch> {
+        let workspace = self.workspace(selector).await?;
+        let repo = self.repository(&workspace.repository_id).await?;
+        let gate = self.git_gate(&repo.id).await;
+        let _guard = gate.lock().await;
+        let local_ref = format!("refs/heads/{branch}");
+        git_run(&repo.path, &["check-ref-format", &local_ref])
+            .await
+            .context("invalid source branch name")?;
+        let commit = git_run(&repo.path, &["rev-parse", "--verify", &local_ref])
+            .await
+            .with_context(|| format!("local source branch does not exist: {branch}"))?
+            .trim()
+            .to_owned();
+        let skipped = if upstream(&repo, &local_ref).await?.is_none() {
+            Some(format!("{branch} has no upstream; merging its local state"))
+        } else {
+            self.managed_checkout(&repo, branch).await?.map(|checkout| {
+                format!("{branch} is checked out in workspace {checkout}; merging its local state")
+            })
+        };
+        match skipped {
+            Some(skipped) => Ok(PulledBranch {
+                branch: branch.into(),
+                repository_id: repo.id.clone(),
+                updated: false,
+                previous_commit: commit.clone(),
+                commit,
+                skipped: Some(skipped),
+            }),
+            None => self.refresh_branch(&repo, branch, false).await,
+        }
+    }
+
+    /// The managed workspace that has `branch` checked out, if any.
+    async fn managed_checkout(&self, repo: &Repository, branch: &str) -> Result<Option<String>> {
+        let Some(checkout) = git::worktrees(&repo.path)
+            .await?
+            .into_iter()
+            .find(|tree| tree.is_branch(branch))
+        else {
+            return Ok(None);
+        };
+        let Ok(path) = std::fs::canonicalize(&checkout.path) else {
+            return Ok(None);
+        };
+        Ok(self
+            .list_workspaces()
+            .await?
+            .into_iter()
+            .find(|w| std::fs::canonicalize(&w.path).is_ok_and(|managed| managed == path))
+            .map(|w| w.name))
+    }
+
+    /// Fast-forward a local branch from its upstream. The caller holds the
+    /// repository's Git gate through any subsequent creation.
+    pub(crate) async fn refresh_branch(
         &self,
         repo: &Repository,
         branch: &str,
@@ -70,22 +127,9 @@ impl Manager {
             .with_context(|| format!("repository has no local {branch} branch"))?
             .trim()
             .to_owned();
-        let upstream = git_run(
-            &repo.path,
-            &[
-                "for-each-ref",
-                "--format=%(upstream:remotename)%00%(upstream:remoteref)",
-                &local_ref,
-            ],
-        )
-        .await?;
-        let (remote, reference) = upstream
-            .trim_end_matches('\n')
-            .split_once('\0')
-            .context("invalid Git upstream")?;
+        let upstream = upstream(repo, &local_ref).await?;
         if allow_local_only
-            && remote.is_empty()
-            && reference.is_empty()
+            && upstream.is_none()
             && git_run(&repo.path, &["remote"]).await?.trim().is_empty()
         {
             return Ok(PulledBranch {
@@ -94,12 +138,15 @@ impl Manager {
                 updated: false,
                 commit: previous_commit.clone(),
                 previous_commit,
+                skipped: None,
             });
         }
-        ensure!(
-            !remote.is_empty() && reference.starts_with("refs/heads/"),
-            "{branch} has no branch upstream; configure it with git branch --set-upstream-to=<remote>/{branch} {branch}"
-        );
+        let (remote, reference) = upstream.with_context(|| {
+            format!(
+                "{branch} has no branch upstream; configure it with git branch --set-upstream-to=<remote>/{branch} {branch}"
+            )
+        })?;
+        let (remote, reference) = (remote.as_str(), reference.as_str());
         let checkout = git::worktrees(&repo.path)
             .await?
             .into_iter()
@@ -139,7 +186,7 @@ impl Manager {
                     .await?
                     .trim()
                     == previous_commit,
-                "{branch} changed during fetch; retry shoal pull"
+                "{branch} changed during fetch; retry"
             );
             // Like pull --ff-only, an already-ahead default branch stays untouched.
             if git_run(
@@ -205,8 +252,28 @@ impl Manager {
             updated: commit != previous_commit,
             previous_commit,
             commit,
+            skipped: None,
         })
     }
+}
+
+/// The `(remote, refs/heads/...)` upstream of a local branch, if configured.
+async fn upstream(repo: &Repository, local_ref: &str) -> Result<Option<(String, String)>> {
+    let upstream = git_run(
+        &repo.path,
+        &[
+            "for-each-ref",
+            "--format=%(upstream:remotename)%00%(upstream:remoteref)",
+            local_ref,
+        ],
+    )
+    .await?;
+    let (remote, reference) = upstream
+        .trim_end_matches('\n')
+        .split_once('\0')
+        .context("invalid Git upstream")?;
+    Ok((!remote.is_empty() && reference.starts_with("refs/heads/"))
+        .then(|| (remote.to_owned(), reference.to_owned())))
 }
 
 /// Suffix conflicting components with `-2`, `-3`, ... A branch at an ancestor
@@ -248,7 +315,7 @@ async fn clean_branch(path: &Path, branch: &str) -> Result<()> {
     ensure!(
         git_run(path, &["symbolic-ref", "--quiet", "HEAD"]).await?
             == format!("refs/heads/{branch}\n"),
-        "{branch} checkout changed branches; retry shoal pull"
+        "{branch} checkout changed branches; retry"
     );
     ensure!(
         git_run(
@@ -262,7 +329,7 @@ async fn clean_branch(path: &Path, branch: &str) -> Result<()> {
         )
         .await?
         .is_empty(),
-        "{branch} checkout has uncommitted or untracked changes; clean it before pulling"
+        "{branch} checkout has uncommitted or untracked changes; clean it before refreshing it from upstream"
     );
     Ok(())
 }

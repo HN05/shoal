@@ -130,4 +130,7 @@ pub struct PulledBranch {
     pub previous_commit: String,
     pub commit: String,
     pub updated: bool,
+    /// Why a merge source was left as it is instead of refreshed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skipped: Option<String>,
 }

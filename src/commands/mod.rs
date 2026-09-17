@@ -75,10 +75,13 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             branch,
             workspace,
             remote,
-        } => crate::merge::run(&ctx, workspace, branch, remote).await,
-        Command::MergeInternal { branch, remote } => {
-            crate::merge::worker(&ctx, branch, remote).await
-        }
+            local,
+        } => crate::merge::run(&ctx, workspace, branch, remote, local).await,
+        Command::MergeInternal {
+            branch,
+            remote,
+            local,
+        } => crate::merge::worker(&ctx, branch, remote, local).await,
         Command::Inspect { workspace } => workspaces::inspect(&ctx, workspace).await,
         Command::Stop { workspace } => workspaces::stop(&ctx, workspace).await,
         Command::Rm {

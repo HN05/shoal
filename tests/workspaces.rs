@@ -3008,7 +3008,7 @@ fn pull_remote(fixture: &Fixture) -> PathBuf {
 }
 
 #[test]
-fn add_and_scoped_pull_use_develop_as_the_repository_default() {
+fn add_and_pull_use_develop_as_the_repository_default() {
     let fixture = Fixture::new();
     git(&fixture.repo, &["branch", "-m", "develop"]);
     let author = pull_remote(&fixture);
@@ -3017,20 +3017,7 @@ fn add_and_scoped_pull_use_develop_as_the_repository_default() {
     assert_eq!(workspace["base_ref"], "refs/heads/develop");
     assert_eq!(workspace["base_commit"], expected.trim());
     let name = workspace["name"].as_str().unwrap();
-    let output = fixture.run(&[
-        "exec",
-        name,
-        "--",
-        env!("CARGO_BIN_EXE_shoal"),
-        "--json",
-        "pull",
-    ]);
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    let result: Value = serde_json::from_slice(&output.stdout).unwrap();
+    let result = fixture.ok(&["pull", name]);
     assert_eq!(result["branch"], "develop");
     assert_eq!(result["updated"], false);
     assert_eq!(fixture.ok(&["rm", name])["branch_deleted"], true);
@@ -3058,19 +3045,18 @@ fn add_refreshes_main_before_creating_the_worktree() {
 }
 
 #[test]
-fn scoped_pull_updates_only_main_and_denies_other_workspace_targets() {
+fn pull_updates_only_main_and_is_denied_to_scoped_processes() {
     let fixture = Fixture::new();
     let workspace = fixture.add("worker");
-    fixture.add("other");
     let before = git(&fixture.repo, &["rev-parse", "main"]);
     let author = pull_remote(&fixture);
     let expected = git(&author, &["rev-parse", "HEAD"]);
     let binary = env!("CARGO_BIN_EXE_shoal");
-    let output = fixture.run(&["exec", "worker", "--", binary, "--json", "pull", "other"]);
-    assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("cannot access another worktree"));
-    assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), before);
     let output = fixture.run(&["exec", "worker", "--", binary, "--json", "pull"]);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("shoal merge refreshes"));
+    assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), before);
+    let output = fixture.run(&["--json", "pull", "worker"]);
     assert!(
         output.status.success(),
         "{}",
@@ -4143,6 +4129,70 @@ fn merge_scoped_local_branch_only_changes_own_workspace() {
             .unwrap()
             .is_empty()
     );
+}
+
+#[test]
+fn merge_refreshes_local_source_from_upstream_unless_local_or_owned_by_a_workspace() {
+    let fixture = Fixture::new();
+    let worker = fixture.add("worker");
+    let path = Path::new(worker["path"].as_str().unwrap());
+    let stale = git(&fixture.repo, &["rev-parse", "main"]);
+    let author = pull_remote(&fixture);
+    let upstream = git(&author, &["rev-parse", "HEAD"]);
+    let binary = env!("CARGO_BIN_EXE_shoal");
+    // A scoped agent merging main gets the upstream state without shoal pull.
+    let output = fixture.run(&["exec", "worker", "--", binary, "--json", "merge", "main"]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let result: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(result["success"], true);
+    assert_eq!(result["source_refresh"]["updated"], true);
+    assert_eq!(result["source_refresh"]["previous_commit"], stale.trim());
+    assert_eq!(result["source_commit"], upstream.trim());
+    assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), upstream);
+    assert_eq!(git(path, &["rev-parse", "HEAD"]), upstream);
+    assert_eq!(
+        fs::read_to_string(fixture.repo.join("upstream")).unwrap(),
+        "from remote\n"
+    );
+    // --local merges the local branch as it is and leaves upstream alone.
+    merge_commit(&author, "upstream", "second\n");
+    git(&author, &["push", "origin", "main"]);
+    let result = fixture.ok(&["merge", "main", "worker", "--local"]);
+    assert!(result["source_refresh"].is_null());
+    assert_eq!(result["source_commit"], upstream.trim());
+    assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), upstream);
+    // A dirty main checkout blocks the refresh instead of merging stale work.
+    fs::write(fixture.repo.join("scratch"), "dirty\n").unwrap();
+    let output = fixture.run(&["merge", "main", "worker"]);
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("--local"), "{stderr}");
+    assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), upstream);
+    assert_eq!(git(path, &["rev-parse", "HEAD"]), upstream);
+    fs::remove_file(fixture.repo.join("scratch")).unwrap();
+    // Another workspace's branch is merged as it is, even with an upstream.
+    let other = fixture.add("other");
+    let other_path = Path::new(other["path"].as_str().unwrap());
+    git(
+        &fixture.repo,
+        &["branch", "--set-upstream-to=origin/main", "other"],
+    );
+    merge_commit(other_path, "theirs", "other work\n");
+    let theirs = git(other_path, &["rev-parse", "HEAD"]);
+    let result = fixture.ok(&["merge", "other", "worker"]);
+    assert_eq!(result["source_commit"], theirs.trim());
+    assert!(
+        result["source_refresh"]["skipped"]
+            .as_str()
+            .unwrap()
+            .contains("workspace other")
+    );
+    assert_eq!(git(other_path, &["rev-parse", "HEAD"]), theirs);
+    assert_eq!(git(&fixture.repo, &["for-each-ref", "refs/shoal/"]), "");
 }
 
 #[test]

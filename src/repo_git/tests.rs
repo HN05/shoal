@@ -328,21 +328,40 @@ async fn pull_updates_main_preserves_feature_and_enforces_scope() {
             },
         )
         .await;
-    let mut denied = Method::PullDefaultBranch {
+    // Scoped processes never pull, not even their own repository; they refresh
+    // merge sources of their own workspace instead.
+    for target in ["other", "worker"] {
+        let mut denied = Method::PullDefaultBranch {
+            workspace: target.into(),
+        };
+        assert!(
+            scope::authorize(&f.manager, Some("token"), &mut denied)
+                .await
+                .unwrap_err()
+                .to_string()
+                .contains("shoal merge refreshes")
+        );
+    }
+    let mut denied = Method::RefreshMergeSource {
         workspace: "other".into(),
+        branch: "main".into(),
     };
     assert!(
         scope::authorize(&f.manager, Some("token"), &mut denied)
             .await
             .is_err()
     );
-    let mut allowed = Method::PullDefaultBranch {
+    let mut allowed = Method::RefreshMergeSource {
         workspace: "worker".into(),
+        branch: "main".into(),
     };
     scope::authorize(&f.manager, Some("token"), &mut allowed)
         .await
         .unwrap();
-    let Method::PullDefaultBranch { workspace: target } = allowed else {
+    let Method::RefreshMergeSource {
+        workspace: target, ..
+    } = allowed
+    else {
         panic!("wrong method")
     };
     assert_eq!(target, workspace.id);

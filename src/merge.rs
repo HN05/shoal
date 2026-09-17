@@ -2,7 +2,7 @@
 //! processes in the CLI wrapper. The daemon authorizes the destination workspace.
 use std::path::Path;
 
-use anyhow::{Context as _, Result, ensure};
+use anyhow::{Context as _, Result, bail, ensure};
 use serde_json::json;
 use tokio::process::Command;
 use uuid::Uuid;
@@ -11,6 +11,8 @@ use crate::{
     client,
     context::Context,
     env, execution, git,
+    model::PulledBranch,
+    protocol::{Body, Method},
     ui::{self, Fallback},
 };
 
@@ -20,6 +22,7 @@ pub async fn run(
     workspace: Option<String>,
     branch: String,
     remote: Option<String>,
+    local: bool,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let mut command = vec![std::env::current_exe()?.into_os_string()];
@@ -30,10 +33,18 @@ pub async fn run(
     if let Some(remote) = remote {
         command.extend(["--remote".into(), remote.into()]);
     }
+    if local {
+        command.push("--local".into());
+    }
     execution::run(&ctx.paths, workspace, command).await
 }
 
-pub async fn worker(ctx: &Context, branch: String, remote: Option<String>) -> Result<i32> {
+pub async fn worker(
+    ctx: &Context,
+    branch: String,
+    remote: Option<String>,
+    local: bool,
+) -> Result<i32> {
     ensure!(env::is_scoped(), "merge worker requires a scoped execution");
     let workspace =
         std::env::var(env::WORKSPACE_ID).context("merge worker requires a workspace")?;
@@ -47,6 +58,16 @@ pub async fn worker(ctx: &Context, branch: String, remote: Option<String>) -> Re
     let previous = git_run(path, &["rev-parse", "HEAD"]).await?;
     let fetched = format!("refs/shoal/merge/{}", Uuid::new_v4());
     let result = async {
+        let refresh = if local || remote.is_some() {
+            None
+        } else {
+            refresh_source(ctx, path, &workspace.id, &branch).await?
+        };
+        if let Some(refresh) = &refresh
+            && !ctx.json
+        {
+            eprintln!("{}", refresh_summary(refresh));
+        }
         let commit = source(path, &branch, remote.as_deref(), &fetched).await?;
         own_branch(path, &workspace.branch).await?;
         ensure!(
@@ -76,6 +97,7 @@ pub async fn worker(ctx: &Context, branch: String, remote: Option<String>) -> Re
                 "{}",
                 json!({
                     "workspace_id": workspace.id,
+                    "source_refresh": refresh,
                     "source_commit": commit,
                     "previous_commit": previous.trim(),
                     "commit": git_run(path, &["rev-parse", "HEAD"]).await?.trim(),
@@ -98,6 +120,59 @@ pub async fn worker(ctx: &Context, branch: String, remote: Option<String>) -> Re
     let code = result?;
     cleanup.context("could not remove temporary merge ref")?;
     Ok(code)
+}
+
+/// Ask the daemon to fast-forward an existing local source branch from its
+/// upstream, so the merge imports current work. Remote-qualified sources
+/// fetch fresh data on their own, and missing local branches are discovered
+/// on remotes by `source`.
+async fn refresh_source(
+    ctx: &Context,
+    path: &Path,
+    workspace: &str,
+    branch: &str,
+) -> Result<Option<PulledBranch>> {
+    if branch.starts_with("refs/remotes/") {
+        return Ok(None);
+    }
+    let name = branch.strip_prefix("refs/heads/").unwrap_or(branch);
+    if git_run(
+        path,
+        &["rev-parse", "--verify", &format!("refs/heads/{name}")],
+    )
+    .await
+    .is_err()
+    {
+        return Ok(None);
+    }
+    let body = client::call(
+        &ctx.paths,
+        Method::RefreshMergeSource {
+            workspace: workspace.to_owned(),
+            branch: name.to_owned(),
+        },
+    )
+    .await
+    .with_context(|| {
+        format!(
+            "could not refresh {name} from its upstream; pass --local to merge the local branch as it is"
+        )
+    })?;
+    match body {
+        Body::PulledBranch(refresh) => Ok(Some(refresh)),
+        _ => bail!("unexpected daemon response; expected PulledBranch"),
+    }
+}
+
+fn refresh_summary(refresh: &PulledBranch) -> String {
+    match (&refresh.skipped, refresh.updated) {
+        (Some(skipped), _) => skipped.clone(),
+        (None, true) => format!(
+            "Updated {} from its upstream ({}..{})",
+            refresh.branch, refresh.previous_commit, refresh.commit
+        ),
+        (None, false) => format!("{} is up to date with its upstream", refresh.branch),
+    }
 }
 
 async fn own_branch(path: &Path, branch: &str) -> Result<()> {

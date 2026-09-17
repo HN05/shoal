@@ -21,12 +21,15 @@ when behavior changes, distinguishing decisions from proposals.
   repository registration. Named ports are lazy, with CLI overrides and explicit
   conflict policy.
 - Workspace commands inherit a scope token. Enforce own-worktree resource access
-  in the daemon and deny lifecycle/repository/service administration, except
-  `shoal pull` may fast-forward the caller's own repo default branch from its upstream. This is
-  cooperative scoping, not a boundary against a hostile same-user process.
+  in the daemon and deny `shoal pull` and lifecycle/repository/service
+  administration. This is cooperative scoping, not a boundary against a hostile
+  same-user process.
 - Agents may merge any local or remote branch into their own recorded workspace
-  branch with `shoal merge`. Keep merges in the tracked execution wrapper; fetch
-  remote-only sources without updating other branches or relying on FETCH_HEAD.
+  branch with `shoal merge`. A local source is first fast-forwarded from its
+  upstream by the daemon under the `pull` rules, except sources without an
+  upstream or checked out in a managed workspace; `--local` skips the refresh.
+  Keep merges in the tracked execution wrapper; fetch remote-only sources
+  without updating other branches or relying on FETCH_HEAD.
 - Global TOML configuration supports `[auto_cleanup]` with `enabled` (default
   true) and `idle_minutes` (default 10). Automatic removal is only for idle,
   clean, fully pushed worktrees. Keep one removal path for manual and automatic

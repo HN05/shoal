@@ -37,7 +37,7 @@ pub async fn authorize(
         | Method::SimRelease { workspace, .. }
         | Method::InspectWorkspace { workspace }
         | Method::DiffBase { workspace }
-        | Method::PullDefaultBranch { workspace }
+        | Method::RefreshMergeSource { workspace, .. }
         | Method::Execute { workspace, .. }
         | Method::ReservePort { workspace, .. }
         | Method::ReleasePort { workspace, .. }
@@ -48,8 +48,11 @@ pub async fn authorize(
         | Method::SimHistory { workspace, .. } => {
             Some(workspace.get_or_insert_with(|| owner.clone()))
         }
+        Method::PullDefaultBranch { .. } => bail!(
+            "workspace processes cannot pull; shoal merge refreshes its source branch from upstream first"
+        ),
         _ => bail!(
-            "workspace processes can only inspect their worktree, execute there, manage its resources, and pull its repository default branch"
+            "workspace processes can only inspect their worktree, execute there, manage its resources, and merge into their own branch"
         ),
     };
     if let Some(target) = target {

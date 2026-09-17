@@ -105,17 +105,18 @@ failure retains the workspace. Both hook keys share the setup path rules.
 fixed commits stay fixed) with native Git settings, so advancing the base is
 never shown as work. `pull` fast-forwards the repository default branch only.
 `merge` imports any local or remote branch into the workspace's own branch,
-preferring local sources and requiring unambiguous remote discovery, and
-leaves conflicts for ordinary Git. Fetches use private temporary refs, merges
+preferring local sources, which it first fast-forwards from their upstream
+unless `--local`, they lack an upstream, or a managed workspace has them
+checked out; remote discovery must be unambiguous, and conflicts are left for
+ordinary Git. Fetches use private temporary refs, merges
 run through the tracked wrapper, and own-branch checks are cooperative.
 
 ## Scope and user interfaces
 
 Commands launched through Shoal inherit a daemon-validated scope token that
-confines them to their own workspace: inspect, execute, merge, resources, and
-`pull` of their repository default branch. Creation, removal, reconciliation,
-other workspaces, repository administration, and service control need an
-unscoped caller. Nested executions keep their scope.
+confines them to their own workspace: inspect, execute, merge, and resources.
+`pull`, creation, removal, reconciliation, other workspaces, repository
+administration, and service control need an unscoped caller. Nested executions keep their scope.
 
 The CLI takes explicit targets and `--json` for automation, and uses
 current-directory resolution and fzf interactively; noninteractive calls never
