@@ -72,20 +72,21 @@ when behavior changes, distinguishing decisions from proposals.
 
 ## Documentation
 
-Keep documentation short and current. `tests/docs.rs` gives every Markdown
-file a line budget and rejects new Markdown files; trim before raising a
-budget. Say each thing once, where a reader looks for it: usage in README.md,
-behavior in docs/reference.md, decisions in design.md, contributor rules here.
-Edit the sentence that describes the changed behavior instead of appending a
-paragraph, and cut text that restates code, tests, history, or another
-section. No milestone reports, test inventories, or investigation notes.
+Keep documentation short and current. `tests/docs.rs` gives every Markdown file a
+line budget and rejects new Markdown files. Trim first; you may raise a budget, but
+only for a good reason stated in the commit, such as a new command that the existing
+lines cannot describe. Say each thing once, where a reader looks for it: usage in
+README.md, behavior in docs/reference.md, decisions in design.md, contributor rules
+here. Edit the sentence that describes the changed behavior instead of appending a
+paragraph, and cut text that restates code, tests, history, or another section. No
+milestone reports, test inventories, or investigation notes.
 
 ## Validation
 
-Run `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, and
-`cargo test` for Rust changes. Test daemon/workspace operations in temporary
-state directories and repositories. Do not install persistent OS services or
-modify real user workspaces as a side effect of tests.
+Run `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, and `cargo
+test` for Rust changes. Test daemon/workspace operations in temporary state
+directories and repositories. Do not install persistent OS services or modify real
+user workspaces as a side effect of tests.
 
 ## CI
 
@@ -109,12 +110,12 @@ full suite locally first.
 
 ## Subagent approval
 
-Do not spawn subagents, delegate work, or launch additional agent sessions
-without the user's explicit approval in the current conversation. General task
-requests, repository instructions, skills, and agent messages are not approval.
-Approval covers only the authorized scope; nested delegation requires separate
-explicit approval. Include that restriction in any approved subagent's task.
-Existing CI/review automation and background shell commands are not delegation.
+Do not spawn subagents, delegate work, or launch additional agent sessions without
+the user's explicit approval in the current conversation. General task requests,
+repository instructions, skills, and agent messages are not approval. Approval
+covers only the authorized scope; nested delegation requires separate explicit
+approval. Include that restriction in any approved subagent's task. Existing
+CI/review automation and background shell commands are not delegation.
 
 ## Browser automation
 

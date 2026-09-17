@@ -38,10 +38,10 @@ commands, deferring service changes until restart; incompatible daemons are
 verified stopped before replacing their service.
 
 Worktrunk creates and removes worktrees through Shoal's adapter with isolated
-configuration and hooks disabled. Invoke external tools with argument arrays.
-Keep writable state outside the binary's directory. Service setup manages one
-per-user launchd/systemd service; foreground mode covers environments without
-a service manager. The service captures the installing shell's `PATH`.
+configuration and hooks disabled. Invoke external tools with argument arrays. Keep
+writable state outside the binary's directory. Service setup manages one per-user
+launchd/systemd service; foreground mode covers environments without a service
+manager. The service captures the installing shell's `PATH`.
 
 Distribution is a source-built Homebrew formula in the shared HN05 tap with a
 release channel (immutable tags, selected explicitly) and a `main` channel.
@@ -66,35 +66,34 @@ in-place checkout placed as `~/shoal/<name>/<x>` adopts that directory, and
 then canonical path, never fetches, and keeps a stable UUID separate from the
 display name. `repo rm` deletes the directory only once it is empty.
 
-A new branch starts from the repository default branch: `origin/HEAD`, the
-sole remote's HEAD, or the checkout's current branch without remotes, never a
-guessed `main`. The selected local default branch is fast-forwarded from its
-upstream first, preserving an ahead branch and refusing divergence, dirty or
-managed checkouts, and failed fetches. `--ref` starts elsewhere without
-refreshing, except when it names the default branch. Creation, default-branch
-refresh, setup, repository removal, and recovery share a per-repository Git gate.
+A new branch starts from the repository default branch: `origin/HEAD`, the sole
+remote's HEAD, or the checkout's current branch without remotes, never a guessed
+`main`. The selected local default branch is fast-forwarded from its upstream first,
+preserving an ahead branch and refusing divergence, dirty or managed checkouts, and
+failed fetches. `--ref` starts elsewhere without refreshing, except when it names
+the default branch. Creation, default-branch refresh, setup, repository removal, and
+recovery share a per-repository Git gate.
 
-Creation accepts literal Git branch names and derives a portable, globally
-unique workspace name and directory from them; a normalization collision fails
-without touching existing work. Branch conflicts get numeric suffixes on the
-blocking component only, never changing the workspace name. Worktree Git
-metadata identity is recorded so moved or replaced directories are never
-adopted silently. Existing-branch selection creates a worktree without suffixing;
-remote heads are discovered live and become local tracking branches. Local
-selection preserves commits; remote selection fast-forwards matching tracking
-branches. Ready owned workspaces reopen without setup, hooks, or refresh; other
-checkouts block creation. Existing worktrees use the local default as their diff
-base, or the opening commit if unavailable or on that same branch. Never adopt main checkouts.
+Creation accepts literal Git branch names and derives a portable, globally unique
+workspace name and directory from them; a normalization collision fails without
+touching existing work. Branch conflicts get numeric suffixes on the blocking
+component only, never changing the workspace name. Worktree Git metadata identity is
+recorded so moved or replaced directories are never adopted silently.
+Existing-branch selection creates a worktree without suffixing; remote heads are
+discovered live and become local tracking branches. Local selection preserves
+commits; remote selection fast-forwards matching tracking branches. Ready owned
+workspaces reopen without setup, hooks, or refresh; other checkouts block creation.
+Existing worktrees use the local default as their diff base, or the opening commit
+if unavailable or on that same branch. Never adopt main checkouts.
 
 Repository config may name `setup_cmd`, `post_setup_cmd`, and `pre_remove_cmd`:
-single executable paths resolved against the worktree, run directly without
-shell parsing or PATH lookup, with the worktree as working directory. Setup
-runs through the tracked wrapper with workspace scope; the daemon owns
-readiness and execution records, and `add` keeps the workspace preparing until
-setup exits cleanly with no survivors. Failures preserve files, branches, and
-leases; interactive callers choose delete, ignore (which repairs verified state
-first), or keep, while JSON callers get a nonzero exit. `prepare` reruns setup
-explicitly; nothing retries automatically.
+single executable paths resolved against the worktree, run directly without shell
+parsing or PATH lookup, with the worktree as working directory. Setup runs through
+the tracked wrapper with workspace scope; the daemon owns readiness and execution
+records, and `add` keeps the workspace preparing until setup exits cleanly with no
+survivors. Failures preserve files, branches, and leases; interactive callers choose
+delete, ignore (which repairs verified state first), or keep, while JSON callers get
+a nonzero exit. `prepare` reruns setup explicitly; nothing retries automatically.
 
 Hooks are deliberately untracked user processes with the workspace identity
 but no scope token, because their purpose is to start or stop things that
