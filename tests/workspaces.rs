@@ -276,6 +276,17 @@ fn url_registration_clones_once_and_supports_workspaces() {
 }
 
 #[test]
+fn url_registration_drops_trailing_slashes_from_the_clone_origin() {
+    let fixture = Fixture::new();
+    let url = format!("file://{}", fixture.repo.display());
+    let repo = fixture.ok(&["repo", "add", &format!("{url}//")]);
+    assert_eq!(repo["source"], url);
+    let clone = Path::new(repo["path"].as_str().unwrap());
+    assert_eq!(git(clone, &["remote", "get-url", "origin"]).trim(), url);
+    assert_eq!(fixture.ok(&["repo", "add", &url]), repo);
+}
+
+#[test]
 fn displayed_repository_name_resolves_old_uuid_clones_and_rejects_ambiguity() {
     let fixture = Fixture::new();
     let mut clones = Vec::new();

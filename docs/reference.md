@@ -183,7 +183,8 @@ current directory; `~/` allowed). Re-registering a URL with its existing path is
 fine; a different path is rejected.
 
 Registration is idempotent by normalized `origin` URL (HTTPS/SSH forms and
-`.git` suffixes match) or canonical local path, and never fetches. Names from
+`.git` suffixes match) or canonical local path, and never fetches. Clone URLs
+lose trailing slashes so worktrees get a remote forge CLIs recognize. Names from
 `--name` or `repo rename` are unique and work as selectors alongside IDs, paths,
 and source URLs; inferred names work when unambiguous.
 

@@ -40,6 +40,13 @@ impl Manager {
                 "--path is only for cloning URLs; local repositories are registered in place"
             );
         }
+        // A trailing slash on a clone URL would become every worktree's origin
+        // and break forge CLIs' repository detection; local paths canonicalize.
+        let source = if Path::new(&source).exists() {
+            source
+        } else {
+            source.trim_end_matches('/').to_owned()
+        };
         let _guard = self.registry_gate.lock().await;
         let repositories = self.repositories().await?;
         if let Some(existing) = find_existing(&repositories, &source).await? {
