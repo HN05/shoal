@@ -25,15 +25,6 @@ Or track `main`:
 brew install --HEAD hn05/tap/shoal
 ```
 
-The fully qualified install commands also tap the GitHub repository automatically.
-If you previously tapped `hn05/tap` with the Forgejo URL, switch it using
-`brew tap --custom-remote hn05/tap https://github.com/HN05/homebrew-tap.git`.
-The original Forgejo-source tap remains available via its explicit repository URL.
-
-The release formula targets `v0.1.0`; that first tag has not been published yet.
-Release installation becomes available when it is published with the packaging
-and skill-link changes included.
-
 After installing either channel:
 
 ```sh
@@ -73,48 +64,6 @@ Project-specific build and packaging logic lives in `scripts/install-homebrew.sh
 in this repository. The shared tap only declares source versions, dependencies,
 and the invocation of that script. The selected release or main commit supplies
 its own build script and skill.
-
-### Releasing
-
-Requires Python 3.11+, Rust, and an authenticated `fj` CLI. Start from a clean
-checkout at the current `origin/main` commit:
-
-```sh
-python3 scripts/release.py prepare        # Next unused patch version
-python3 scripts/release.py prepare 0.2.0  # Or select a version
-```
-
-Preparation updates both Cargo versions, runs formatting/Clippy/tests and a
-release build, pushes a `release/vX.Y.Z` branch, and opens a PR. Merge that PR,
-update your checkout to current main, then publish:
-
-```sh
-python3 scripts/release.py publish 0.2.0
-```
-
-Publishing verifies main's versions, reruns validation, pushes an immutable tag,
-and creates the Forgejo release. Both commands support `--dry-run` to check
-version/ref selection without edits or publication (they still fetch refs).
-For the first release, `publish 0.1.0` can publish the existing version once the
-packaging changes are merged; no version bump is required. Validation failures
-leave the release branch available for inspection; no changes are discarded.
-
-The `Update Homebrew release` Actions workflow automatically updates both Forgejo
-tap repositories when a stable release is published: `HN05/homebrew-tap` retains
-Forgejo source URLs, and `HN05/homebrew-tap-github` uses GitHub source URLs and is
-push-mirrored to GitHub's `HN05/homebrew-tap`. It updates each formula's version,
-tag, and commit pin independently. It skips
-drafts/prereleases, rejects downgrades and moved tags, and retries concurrent tap
-pushes without overwriting other projects. To retry, manually dispatch the
-workflow with the existing tag. The GitHub formula is updated only once the
-GitHub Shoal mirror has the identical release tag/commit; rerun after mirroring
-if it has not caught up. No manual formula edits are needed.
-
-One-time setup: add `HOMEBREW_TAP_TOKEN` to Shoal's Actions secrets with HTTPS
-write access to both Forgejo tap repositories (restrict the token to those repositories where
-supported). The workflow runs on the `docker` runner and needs only HTTPS access.
-It does not use the SSH deploy key. Updated releases become available through
-`brew update` and `brew upgrade`; the HEAD channel tracks `main` independently.
 
 ## Development
 

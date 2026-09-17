@@ -7,11 +7,8 @@ on:
     inputs:
       tag:
         description: Existing stable release tag to publish to Homebrew (vX.Y.Z)
-        required: false
-      verify_connection:
-        description: Check HTTPS tap access without publishing or changing a formula
-        type: boolean
-        default: false
+        type: string
+        required: true
 
 concurrency:
   group: homebrew-release
@@ -37,7 +34,6 @@ jobs:
           apt-get update
           apt-get install -y --no-install-recommends git python3 ca-certificates
       - name: Check out release
-        if: inputs.verify_connection != true && inputs.verify_connection != 'true'
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
           FORGEJO_SERVER: ${{ github.server_url }}
@@ -53,7 +49,6 @@ jobs:
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
           TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          VERIFY_CONNECTION: ${{ inputs.verify_connection }}
           TAP_REPOSITORY: ${{ matrix.tap }}
           SOURCE_KIND: ${{ matrix.source }}
           FORGEJO_SERVER: ${{ github.server_url }}
@@ -68,11 +63,6 @@ jobs:
           export GIT_TERMINAL_PROMPT=0
           unset TAP_TOKEN
           git clone --branch main "${FORGEJO_SERVER%/}/${REPOSITORY%/*}/$TAP_REPOSITORY.git" tap
-          if [ "$VERIFY_CONNECTION" = true ]; then
-            git -C tap push --dry-run origin HEAD:main
-            echo 'HTTPS tap authentication and push dry-run succeeded; no changes published.'
-            exit 0
-          fi
           git -C tap config user.name 'Shoal release bot'
           git -C tap config user.email 'shoal-release@users.noreply.github.com'
           source_url="${FORGEJO_SERVER%/}/$REPOSITORY.git"
