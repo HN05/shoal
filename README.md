@@ -3,6 +3,109 @@
 Local workspaces and resource allocation for coding agents. See [design.md](design.md)
 for the full design and implementation sequence.
 
+## Homebrew
+
+The shared [HN05 tap](https://git.henriknordvik.com/HN05/homebrew-tap) offers two channels: tagged releases
+(the default) and the current `main` branch (`--HEAD`). Both build from source.
+Tap the repository once:
+
+```sh
+brew tap hn05/tap https://git.henriknordvik.com/HN05/homebrew-tap.git
+```
+
+Install a release:
+
+```sh
+brew install hn05/tap/shoal
+```
+
+Or track `main`:
+
+```sh
+brew install --HEAD hn05/tap/shoal
+```
+
+The release formula targets `v0.1.0`; that first tag has not been published yet.
+Release installation becomes available when it is published with the packaging
+and skill-link changes included.
+
+After installing either channel:
+
+```sh
+shoal skill install
+shoal setup --executable "$(brew --prefix shoal)/bin/shoal"
+```
+
+The formula installs Worktrunk, Git, fzf, and lsof as runtime dependencies, and
+uses Rust to build. Shoal manages its own per-user service through `shoal setup`.
+To update releases:
+
+```sh
+brew update
+brew upgrade hn05/tap/shoal
+shoal daemon restart
+```
+
+To update `main`:
+
+```sh
+brew update
+brew upgrade --fetch-HEAD hn05/tap/shoal
+shoal daemon restart
+```
+
+The channels share one installation, daemon, and skill path. To switch, stop the
+daemon with `shoal daemon stop`, run `brew uninstall hn05/tap/shoal`, then use
+the desired install command above and run `shoal daemon start`. Shoal's state and
+user skill links remain outside the Homebrew package and are preserved.
+
+Installed skill links follow Homebrew's stable `opt` path automatically. Existing
+copied skills need one `shoal skill install` using the Homebrew binary to migrate.
+If another Shoal installation is earlier on PATH, use
+`"$(brew --prefix shoal)/bin/shoal"` explicitly or adjust PATH.
+
+Project-specific build and packaging logic lives in `scripts/install-homebrew.sh`
+in this repository. The shared tap only declares source versions, dependencies,
+and the invocation of that script. The selected release or main commit supplies
+its own build script and skill.
+
+### Releasing
+
+Requires Python 3.11+, Rust, and an authenticated `fj` CLI. Start from a clean
+checkout at the current `origin/main` commit:
+
+```sh
+python3 scripts/release.py prepare        # Next unused patch version
+python3 scripts/release.py prepare 0.2.0  # Or select a version
+```
+
+Preparation updates both Cargo versions, runs formatting/Clippy/tests and a
+release build, pushes a `release/vX.Y.Z` branch, and opens a PR. Merge that PR,
+update your checkout to current main, then publish:
+
+```sh
+python3 scripts/release.py publish 0.2.0
+```
+
+Publishing verifies main's versions, reruns validation, pushes an immutable tag,
+and creates the Forgejo release. Both commands support `--dry-run` to check
+version/ref selection without edits or publication (they still fetch refs).
+For the first release, `publish 0.1.0` can publish the existing version once the
+packaging changes are merged; no version bump is required. Validation failures
+leave the release branch available for inspection; no changes are discarded.
+
+The `Update Homebrew release` Actions workflow automatically updates the shared
+tap's version, tag, and commit pin when a stable release is published. It skips
+drafts/prereleases, rejects downgrades and moved tags, and retries concurrent tap
+pushes without overwriting other projects. To retry, manually dispatch the
+workflow with the existing tag. No manual formula edits are needed.
+
+One-time setup: add `HOMEBREW_TAP_TOKEN` to Shoal's Actions secrets with HTTPS
+write access to `HN05/homebrew-tap` (restrict the token to that repository where
+supported). The workflow runs on the `docker` runner and needs only HTTPS access.
+It does not use the SSH deploy key. Updated releases become available through
+`brew update` and `brew upgrade`; the HEAD channel tracks `main` independently.
+
 ## Development
 
 Requires Rust, Git, `lsof`, and Worktrunk (`wt`, tested with 0.77.0). Interactive menus
@@ -809,7 +912,9 @@ shoal skill install codex    # Only Codex
 shoal skill install claude   # Only Claude Code
 ```
 
-Repeat after upgrading Shoal to refresh the instructions. Installation replaces
+Homebrew installations symlink `SKILL.md` to the packaged skill through the stable
+Homebrew `opt` path, so upgrades refresh it automatically. Cargo installations
+copy the bundled instructions; repeat after upgrading to refresh them. Installation replaces
 the existing `SKILL.md` and preserves other files in the skill directory. Codex
 uses `~/.agents/skills/shoal/SKILL.md`; Claude uses
 `~/.claude/skills/shoal/SKILL.md`, honoring an absolute `CLAUDE_CONFIG_DIR` override.

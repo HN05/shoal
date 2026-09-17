@@ -45,6 +45,26 @@ Keep writable state outside the installed binary's directory so upgrades preserv
 it. Service setup manages one per-user launchd/systemd service; foreground mode
 supports environments without a service manager.
 
+The shared HN05/homebrew-tap repository provides two source-built channels in one
+formula: tagged releases by default and `--HEAD` for `main`. Project-specific
+build and packaging logic stays in Shoal's `scripts/install-homebrew.sh`; the tap
+selects sources, declares dependencies, and invokes that script. Release versions and
+immutable tags are explicitly selected by the formula; advancing `main` alone
+does not upgrade release installations. The initial release target is `v0.1.0`,
+pending publication. Channels share the binary, daemon, and skill paths; switching
+channels replaces the installation. Homebrew installs runtime dependencies and
+the bundled skill, but service registration and restarts remain explicit Shoal
+commands. Use the stable Homebrew opt executable path for service registration.
+
+Release preparation and publication live in Shoal. The release script updates
+Cargo versions on a PR branch and validates before pushing. After that PR is
+merged, publication validates current main, creates an immutable tag, and
+publishes the Forgejo release. Stable release publication triggers a Docker
+Actions workflow that updates only Shoal's formula in the shared tap over HTTPS,
+using the HOMEBREW_TAP_TOKEN secret. Refuse release downgrades or changed commit
+pins for an existing version. Concurrent tap pushes are retried against its
+latest main without force-pushing. Main-channel builds need no tap version bump.
+
 ## Workspaces and Git
 
 Register local repositories in place or retain URL clones for reuse. Registration
@@ -212,6 +232,11 @@ project or a Shoal-launched agent. `skill` exports the bundled instructions;
 `skill install` installs or refreshes them for Codex and/or Claude. Installation
 is independent of the daemon and cannot run from a scoped execution. Skill
 availability does not register a checkout or establish execution ownership.
+Homebrew builds embed the stable opt path of their packaged skill. Installation
+atomically replaces each agent's SKILL.md with a symlink to that path, preserving
+sibling files and following future upgrades. Other builds install a bundled copy
+which must be refreshed after upgrading. Never follow an old SKILL.md symlink
+when replacing it; missing packaged instructions fail installation explicitly.
 
 ## Resource ownership
 
@@ -342,8 +367,8 @@ workflow exists; the following work remains distinct from current behavior:
 - **Storage policy:** define ownership and retention for run data outside the
   worktree, shared caches, logs, and retained artifacts. Numeric pruning limits
   and retained audit-history policy remain open.
-- **Distribution and portability:** Homebrew installation is a confirmed future
-  requirement. Preserve stable service identity across upgrades. Native Linux
+- **Distribution and portability:** Publishing the first tagged release and
+  Homebrew bottles remain future work. Preserve stable service identity across upgrades. Native Linux
   service and recovery validation remains outstanding.
 - **Execution environments:** host/guest and cross-user resource coordination are
   unresolved. Independent state directories currently have independent capacity.

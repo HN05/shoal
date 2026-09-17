@@ -8,7 +8,10 @@ description: Use Shoal to merge local or remote branches into your managed workt
 Use `--json`, omit targets for the current context, and request only needed resources.
 
 For user-level availability outside project repositories, `shoal skill install`
-installs or refreshes this skill for Codex and Claude Code. An optional `codex` or
+installs or refreshes this skill for Codex and Claude Code. Homebrew installs link
+to the packaged skill and follow upgrades on either the release or `main` channel
+automatically; after a Cargo upgrade,
+rerun installation to refresh the copy. An optional `codex` or
 `claude` argument selects one. Run installation outside a scoped execution.
 
 ## Workspace context

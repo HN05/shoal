@@ -1,0 +1,82 @@
+name: Update Homebrew release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing stable release tag to publish to Homebrew (vX.Y.Z)
+        required: false
+      verify_connection:
+        description: Check HTTPS tap access without publishing or changing a formula
+        type: boolean
+        default: false
+
+concurrency:
+  group: homebrew-release
+  cancel-in-progress: false
+
+jobs:
+  update-tap:
+    if: github.event_name == 'workflow_dispatch' || (!github.event.release.prerelease && !github.event.release.draft)
+    runs-on: docker
+    container:
+      image: debian:bookworm-slim
+    steps:
+      - name: Install tools
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends git python3 ca-certificates
+      - name: Check out release
+        if: inputs.verify_connection != true && inputs.verify_connection != 'true'
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          set -eu
+          python3 -c 'import os,re; assert re.fullmatch(r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", os.environ["RELEASE_TAG"]), "expected stable vX.Y.Z tag"'
+          git init source
+          git -C source remote add origin https://git.henriknordvik.com/HN05/shoal.git
+          git -C source fetch --depth 1 origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+          git -C source checkout --detach "refs/tags/$RELEASE_TAG"
+      - name: Update shared tap
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          VERIFY_CONNECTION: ${{ inputs.verify_connection }}
+        run: |
+          set -eu
+          test -n "$TAP_TOKEN" || { echo 'Configure HOMEBREW_TAP_TOKEN in Shoal Actions secrets'; exit 1; }
+          # Keep credentials out of remote URLs, Git config files, and arguments.
+          export GIT_CONFIG_COUNT=1
+          export GIT_CONFIG_KEY_0=http.https://git.henriknordvik.com/.extraheader
+          export GIT_CONFIG_VALUE_0="Authorization: basic $(printf 'x-access-token:%s' "$TAP_TOKEN" | base64 | tr -d '\n')"
+          export GIT_TERMINAL_PROMPT=0
+          unset TAP_TOKEN
+          git clone --branch main https://git.henriknordvik.com/HN05/homebrew-tap.git tap
+          if [ "$VERIFY_CONNECTION" = true ]; then
+            git -C tap push --dry-run origin HEAD:main
+            echo 'HTTPS tap authentication and push dry-run succeeded; no changes published.'
+            exit 0
+          fi
+          git -C tap config user.name 'Shoal release bot'
+          git -C tap config user.email 'shoal-release@noreply.git.henriknordvik.com'
+          # Recompute after a rejected push so simultaneous project releases
+          # preserve one another's changes. Never force-push the shared tap.
+          for attempt in 1 2 3; do
+            python3 source/scripts/update-homebrew.py "$RELEASE_TAG" tap
+            if git -C tap diff --quiet -- Formula/shoal.rb; then
+              exit 0
+            fi
+            git -C tap add Formula/shoal.rb
+            git -C tap commit -m "Update Shoal to $RELEASE_TAG"
+            if git -C tap push origin HEAD:main; then
+              exit 0
+            fi
+            if [ "$attempt" = 3 ]; then
+              exit 1
+            fi
+            git -C tap fetch origin main
+            # This is the disposable CI clone, containing only our failed commit.
+            git -C tap reset --hard origin/main
+          done

@@ -1,5 +1,10 @@
 //! User-level skill delivery; no daemon, repository, or agent process is needed.
-use std::{fs, io::Write, os::unix::fs::PermissionsExt, path::PathBuf};
+use std::{
+    fs,
+    io::Write,
+    os::unix::fs::{PermissionsExt, symlink},
+    path::{Path, PathBuf},
+};
 
 use anyhow::{Context, Result, ensure};
 use serde_json::json;
@@ -38,20 +43,20 @@ pub(super) fn run(command: Option<&SkillCommand>, json_output: bool) -> Result<i
         destinations.push(("claude", config.join("skills/shoal/SKILL.md")));
     }
     let mut installed = Vec::new();
+    let source = option_env!("SHOAL_SKILL_PATH").map(Path::new);
+    if let Some(source) = source {
+        ensure!(source.is_absolute(), "packaged skill path must be absolute");
+        ensure!(
+            source.is_file(),
+            "packaged skill is missing: {}",
+            source.display()
+        );
+    }
     for (agent, path) in destinations {
         let directory = path.parent().context("missing skill directory")?;
         fs::create_dir_all(directory)
             .with_context(|| format!("create skill directory {}", directory.display()))?;
-        // Replace only this file, atomically. Do not truncate an existing file
-        // or follow a SKILL.md symlink into a user's source checkout.
-        let mut temporary = tempfile::NamedTempFile::new_in(directory)?;
-        temporary.write_all(SKILL.as_bytes())?;
-        temporary
-            .as_file()
-            .set_permissions(fs::Permissions::from_mode(0o644))?;
-        temporary
-            .persist(&path)
-            .with_context(|| format!("install skill at {}", path.display()))?;
+        install(&path, source)?;
         if !json_output {
             println!("Installed {agent} skill at {}", path.display());
         }
@@ -61,4 +66,56 @@ pub(super) fn run(command: Option<&SkillCommand>, json_output: bool) -> Result<i
         println!("{}", json!({"installed": installed}));
     }
     Ok(0)
+}
+
+fn install(path: &Path, source: Option<&Path>) -> Result<()> {
+    let directory = path.parent().context("missing skill directory")?;
+    // Replace only SKILL.md atomically, never following its previous symlink.
+    if let Some(source) = source {
+        let temporary = tempfile::tempdir_in(directory)?;
+        let link = temporary.path().join("SKILL.md");
+        symlink(source, &link)?;
+        fs::rename(link, path).with_context(|| format!("link skill at {}", path.display()))?;
+    } else {
+        let mut temporary = tempfile::NamedTempFile::new_in(directory)?;
+        temporary.write_all(SKILL.as_bytes())?;
+        temporary
+            .as_file()
+            .set_permissions(fs::Permissions::from_mode(0o644))?;
+        temporary
+            .persist(path)
+            .with_context(|| format!("install skill at {}", path.display()))?;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn packaged_skill_tracks_upgrades_and_preserves_previous_source() {
+        let root = tempfile::tempdir().unwrap();
+        let old = root.path().join("personal.md");
+        let source = root.path().join("packaged.md");
+        let destination = root.path().join("SKILL.md");
+        fs::write(&old, "personal").unwrap();
+        fs::write(&source, "version one").unwrap();
+        symlink(&old, &destination).unwrap();
+        for _ in 0..2 {
+            install(&destination, Some(&source)).unwrap();
+            assert_eq!(fs::read_link(&destination).unwrap(), source);
+            assert_eq!(fs::read_to_string(&old).unwrap(), "personal");
+        }
+        fs::write(&source, "version two").unwrap();
+        assert_eq!(fs::read_to_string(&destination).unwrap(), "version two");
+        fs::remove_file(&destination).unwrap();
+        fs::create_dir(&destination).unwrap();
+        fs::write(destination.join("keep"), "keep").unwrap();
+        assert!(install(&destination, Some(&source)).is_err());
+        assert_eq!(
+            fs::read_to_string(destination.join("keep")).unwrap(),
+            "keep"
+        );
+    }
 }
