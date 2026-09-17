@@ -14,7 +14,9 @@ removal, check it against the rule those files state before judging it.
   path that deletes a directory, kills a process or mutates a simulator
   without those checks is a blocker.
 - Scope: workspace commands carry a scope token and get own-worktree access
-  only; lifecycle, repository and service administration stay denied. This is
+  only; lifecycle, repository and service administration stay denied, except
+  own-workspace PR registration/merge acknowledgements. PR cleanup defaults on,
+  stops tracked agents, and requires clean files and unchanged merged HEAD. This is
   cooperative, not a security boundary, so judge it as such.
 - Allocation is atomic and persisted before the external mutation (simctl,
   Worktrunk). Leases survive restart and failed removal and are released only

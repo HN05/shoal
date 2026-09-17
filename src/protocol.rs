@@ -19,7 +19,7 @@ use crate::{
     simulators::{SimRequest, Simulator, SimulatorCatalog},
 };
 
-pub const VERSION: u32 = 19;
+pub const VERSION: u32 = 20;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -84,6 +84,11 @@ pub enum Method {
         base: Option<String>,
     },
     ListWorkspaces,
+    SetPr {
+        workspace: String,
+        url: Option<String>,
+        clear: bool,
+    },
     InspectWorkspace {
         workspace: String,
     },

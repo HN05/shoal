@@ -3,7 +3,6 @@
 Shoal gives each coding task its own Git worktree and coordinates shared ports,
 Xcode simulators, and other resources. Run agents or commands in a workspace,
 switch between tasks, and clean up when finished.
-
 ## Install
 
 ```sh
@@ -60,10 +59,11 @@ shoal diff fix-login           # Changes since the branch's fork point
 shoal inspect fix-login       # Workspace details
 shoal stop fix-login          # Stop managed commands; keep the workspace
 shoal rm fix-login            # Remove the workspace
+shoal pr https://github.com/owner/repo/pull/42  # Remove when merged
+shoal merged                  # Manually confirm merge and remove
 ```
 
-Inside a workspace, most commands can omit its name. Use `--json` for structured
-output and `shoal <command> --help` for options.
+Inside a workspace, omit its name. Use `--json` or `shoal <command> --help`.
 
 To bring changes into your current workspace:
 

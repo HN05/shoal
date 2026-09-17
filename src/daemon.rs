@@ -246,6 +246,14 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::InspectWorkspace { workspace } => {
             Body::Inspection(manager.inspect_workspace(&workspace).await?)
         }
+        Method::SetPr {
+            workspace,
+            url,
+            clear,
+        } => {
+            manager.set_pr(&workspace, url, clear).await?;
+            Body::Ok
+        }
         Method::StopWorkspace { workspace } => {
             manager.stop_workspace(&workspace).await?;
             Body::Ok

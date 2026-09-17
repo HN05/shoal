@@ -5,7 +5,7 @@ use anyhow::{Context, Result, ensure};
 use serde::Deserialize;
 use tokio::{process::Command, time::timeout};
 
-use crate::{model::Repository, repository, validate::MAX_NAME_LEN};
+use crate::{forge::ForgeRepo, model::Repository, repository, validate::MAX_NAME_LEN};
 
 pub(super) struct Issue {
     number: u64,
@@ -37,89 +37,6 @@ impl Issue {
             "Work on issue #{}: {}\n{}\n\nIssue details:\n{}",
             self.number, self.title, self.url, self.details
         )
-    }
-}
-
-#[derive(Debug, PartialEq)]
-struct ForgeRepo {
-    host: String,
-    path: String,
-}
-
-impl ForgeRepo {
-    fn parse(remote: &str) -> Result<Self> {
-        let (authority, path, ssh) = if let Some((scheme, rest)) = remote.split_once("://") {
-            ensure!(
-                matches!(scheme, "https" | "http" | "ssh"),
-                "issue lookup needs a GitHub or Forgejo remote"
-            );
-            let (authority, path) = rest
-                .split_once('/')
-                .context("remote is missing owner/repository")?;
-            (authority, path, scheme == "ssh")
-        } else {
-            let (authority, path) = remote
-                .split_once(':')
-                .context("issue lookup needs a GitHub or Forgejo remote")?;
-            (authority, path, true)
-        };
-        let host = authority.rsplit('@').next().unwrap_or(authority);
-        let host = if ssh {
-            host.split(':').next().unwrap_or(host)
-        } else {
-            host
-        };
-        let path = path.trim_end_matches('/');
-        let path = path.strip_suffix(".git").unwrap_or(path);
-        ensure!(
-            !host.is_empty()
-                && !host.starts_with('-')
-                && host
-                    .chars()
-                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | ':'))
-                && path.split('/').count() == 2
-                && path.split('/').all(|part| !part.is_empty()
-                    && part != "."
-                    && part != ".."
-                    && part
-                        .chars()
-                        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_'))),
-            "issue lookup needs a remote with host/owner/repository"
-        );
-        Ok(Self {
-            host: host.to_ascii_lowercase(),
-            path: path.into(),
-        })
-    }
-
-    fn issue(&self, input: &str) -> Result<(u64, String)> {
-        let (number, url) = if input.starts_with("https://") || input.starts_with("http://") {
-            let input = input
-                .split(['?', '#'])
-                .next()
-                .unwrap()
-                .trim_end_matches('/');
-            let (repo, number) = input
-                .rsplit_once("/issues/")
-                .context("expected an issue URL ending in /issues/<number>")?;
-            ensure!(
-                Self::parse(repo)? == *self,
-                "issue URL belongs to a different repository"
-            );
-            (number, input.to_owned())
-        } else {
-            (
-                input,
-                format!("https://{}/{}/issues/{input}", self.host, self.path),
-            )
-        };
-        ensure!(
-            !number.is_empty() && number.bytes().all(|c| c.is_ascii_digit()),
-            "issue must be a positive number or an issue URL"
-        );
-        let number = number.parse::<u64>().context("issue number is too large")?;
-        ensure!(number > 0, "issue number must be positive");
-        Ok((number, url))
     }
 }
 

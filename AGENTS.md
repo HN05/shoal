@@ -21,8 +21,8 @@ when behavior changes, distinguishing decisions from proposals.
   registration. Named ports are lazy, with CLI overrides and explicit conflicts.
 - Workspace commands inherit a scope token. Enforce own-worktree resource access
   in the daemon and deny `shoal pull` and lifecycle/repository/service
-  administration. This is cooperative scoping, not a boundary against a hostile
-  same-user process.
+  administration; own-workspace PR watches/merge acknowledgements are allowed.
+  Scope is cooperative, not a boundary against hostile same-user processes.
 - Agents may merge any local or remote branch into their own recorded workspace
   branch with `shoal merge`. A local source is first fast-forwarded from its
   upstream by the daemon under the `pull` rules, except sources without an
@@ -32,8 +32,8 @@ when behavior changes, distinguishing decisions from proposals.
 - Global TOML configuration supports `[auto_cleanup]` with `enabled` (default
   true) and `idle_minutes` (default 10). Automatic removal is only for idle,
   clean, fully pushed worktrees, or worktrees deleted outside Shoal. Keep one removal path for manual and automatic
-  cleanup, retaining the default branch unless explicitly deleted. Leases are released
-  before its directory and ownership record are removed.
+  cleanup, retaining the default branch unless explicitly deleted. PR cleanup is
+  on by default: stop tracked agents, verify clean merged HEAD, use that path.
 - TCP port reservations are cooperative and owned by the worktree. Keep them
   across command exits and failed removal; successful removal releases them with
   the workspace record. Global `[ports]` config sets the automatic range.

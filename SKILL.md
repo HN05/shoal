@@ -7,12 +7,9 @@ description: Use Shoal to merge local or remote branches into your managed workt
 
 Use `--json`, omit targets for the current context, and request only needed resources.
 
-For user-level availability outside project repositories, `shoal skill install`
-installs or refreshes this skill for Codex and Claude Code. Homebrew installs link
-to the packaged skill and follow upgrades on either the release or `main` channel
-automatically; after a Cargo upgrade,
-rerun installation to refresh the copy. An optional `codex` or
-`claude` argument selects one. Run installation outside a scoped execution.
+`shoal skill install` refreshes user-level instructions for Codex and Claude.
+Homebrew links follow upgrades; Cargo installs need refreshing. Run installation
+outside a scoped execution; an optional `codex` or `claude` selects one.
 
 ## Workspace context
 
@@ -25,6 +22,14 @@ When unsure whether your checkout is managed, use `shoal --json list` and match
 your working directory to a returned workspace `path`. In an ordinary checkout,
 use ordinary Git for merges. Shoal's resources require a managed workspace;
 do not select another agent's workspace or create one just to obtain a lease.
+
+## PR completion
+
+After opening a PR, run `shoal pr <url>`. Shoal checks with `gh`/`fj` and, when
+merged, stops tracked agents and removes the clean workspace. Without those
+tools/login, confirm the merge yourself and call `shoal merged` as your last
+command. Never acknowledge unmerged work. `[pr_cleanup] enabled = false` disables
+this; `shoal pr --clear` cancels a watch. Dirty or newer work is retained.
 
 ## Merge branches into your own branch
 

@@ -1,6 +1,6 @@
 # Shoal command reference
 
-Detailed command behavior and configuration. Start with the [usage guide](../README.md).
+Start with the [usage guide](../README.md).
 
 - [Installation and upgrades](#homebrew)
 - [Daemon](#daemon)
@@ -16,9 +16,8 @@ Detailed command behavior and configuration. Start with the [usage guide](../REA
 
 ## Homebrew
 
-The [HN05 tap](https://github.com/HN05/homebrew-tap) offers tagged releases (the
-default) and the current `main` branch (`--HEAD`). Both build from source and
-install Worktrunk, Git, fzf, and lsof as runtime dependencies.
+The [HN05 tap](https://github.com/HN05/homebrew-tap) builds releases or `--HEAD`
+from source with Worktrunk, Git, fzf and lsof dependencies.
 
 ```sh
 brew tap hn05/tap
@@ -33,8 +32,6 @@ daemon, and skill path; to switch, run `shoal daemon stop`, uninstall, install
 the other channel, and `shoal daemon start`. State and skill links live outside
 the package and survive. Skill links follow Homebrew's stable `opt` path; a
 skill copied by an older install needs one `shoal skill install` to migrate.
-Build and packaging logic lives in `scripts/install-homebrew.sh`; the tap only
-declares versions and dependencies and invokes that script.
 
 ## Daemon
 
@@ -58,8 +55,7 @@ current `PATH` for the service, so install `wt`, `git`, `lsof`, and any hook
 tools first. Setup preserves compatible daemons and commands until restart;
 incompatible daemons restart automatically. Stop foreground daemons manually. macOS diagnostics go
 to `daemon.log` in the state directory; Linux uses `journalctl --user -u
-shoal.service`. Tests use an isolated service-manager fixture and never install
-a real service; native Linux service integration is untested on a Linux host.
+shoal.service`. Native Linux service integration remains untested.
 
 ## Workspaces
 
@@ -317,35 +313,38 @@ is skipped when the worktree directory is already gone.
 
 ### Remove a workspace
 
-Removal retains the default branch unless `--delete-branch`; other clean branches
-matching the default or upstream are deleted. Otherwise fzf offers Cancel (default),
-Keep branch (files only), or Delete branch, followed by a summary and `Are you
-sure? [y/N]`. Both choices discard uncommitted and untracked files.
-`--keep-branch` or `--delete-branch` skips the picker but not the confirmation;
-scripts use `--yes` with one of them, since `--yes` alone does not choose for
-dirty or differing work. Ctrl-C cancels any Shoal prompt.
+Removal retains the default branch unless `--delete-branch`; clean branches
+matching default/upstream are deleted. Otherwise fzf offers Cancel (default),
+Keep branch, or Delete branch, then `Are you sure? [y/N]`. Both choices discard
+uncommitted files. `--keep-branch`/`--delete-branch` skips the picker; add `--yes`
+to skip confirmation. `--yes` alone cannot choose for dirty/differing work.
 
-Running processes do not block manual removal: connected Shoal commands and
-identity-verified survivors are stopped, unrelated processes are left alone.
-Ignored files are removed, shared caches are not, and Git protects branches
-checked out elsewhere; output reports the actual branch result. Worktrunk hooks
-are disabled; use Shoal's setup and hooks instead. Removing the workspace
-containing your shell moves you to `<root_dir>/<repo>` (or home if unavailable).
+Manual removal stops tracked commands and verified survivors, leaving unrelated
+processes alone. Ignored files go; shared caches stay; Worktrunk hooks are disabled.
+Git protects other checkouts. Shell integration returns to `<root_dir>/<repo>`.
+
+### PR cleanup
+
+`shoal pr <url> [--workspace <name>]` watches a GitHub/Forgejo PR using the
+daemon's `gh`/`fj` and existing login. Shoal stores no forge credentials.
+Persistent watches poll every ~30 seconds and suppress idle cleanup. Merged PRs
+must name the recorded branch and contain HEAD.
+`shoal merged [workspace]` manually acknowledges HEAD without forge tools. Both
+stop tracked agents and remove immediately, retaining dirty/newer work and using
+normal resource cleanup/branch retention. `inspect` shows errors in `pr_cleanup`.
+`shoal pr --clear` cancels. Global `[pr_cleanup] enabled = false` disables this
+(default true), independently of idle cleanup; restart after changing it.
 
 ### Automatic cleanup
 
-Enabled by default: an idle, clean, fully pushed worktree is removed after 10
-minutes through the same path as manual removal. Whether or not it is enabled,
-a worktree directory deleted outside Shoal is forgotten on the next sweep, its
-ports, leases and simulators released and its branch retained; a moved worktree
-or one with recorded commands is left for `shoal stop`, `shoal rm` or
-`shoal reconcile`. File changes (including
-ignored files), HEAD changes, and Shoal commands reset the timer; running or
-unknown commands, processes with a working directory in the worktree (open
-shells included), dirty files, unpushed commits, simulator leases, resource
-permits, and failed checks prevent it. "Pushed" means reachable from locally
-known remote branches; Shoal does not fetch. Sweeps run about every 30 seconds
-and timers restart with the daemon. `lsof` must be on the daemon's `PATH`.
+Idle, clean, fully pushed worktrees are removed after 10 minutes by default.
+Deleted directories are forgotten even when disabled, releasing resources and
+retaining branches; moved worktrees or recorded commands need manual recovery.
+File changes (including ignored files), HEAD and commands reset the timer.
+Running/unknown commands, directory users (including shells), dirty/unpushed work,
+simulator leases, permits and failed checks block cleanup. Pushed means reachable
+from locally known remote branches; no fetch. Sweeps run about every 30 seconds;
+timers reset on restart. The daemon needs `lsof` on PATH.
 
 ```toml
 [auto_cleanup]
@@ -445,6 +444,7 @@ untested on a Linux host.
 
 ### Scoped workspace commands
 
+PR watches and merge acknowledgements are own-workspace scope exceptions.
 Commands launched through `exec`, `claude`, and `codex cli` carry a scope token
 that confines them to their own worktree: inspect, execute, `merge`, `diff`,
 and resources. They cannot `pull`, reach other worktrees, remove workspaces,

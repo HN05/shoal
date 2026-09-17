@@ -587,6 +587,37 @@ fn trust_claude_workspace(config: &std::path::Path, workspace: &std::path::Path)
     Ok(true)
 }
 
+pub(super) async fn pr(
+    ctx: &Context,
+    workspace: Option<String>,
+    url: Option<String>,
+    clear: bool,
+) -> Result<i32> {
+    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    let body = client::call(
+        &ctx.paths,
+        Method::SetPr {
+            workspace,
+            url,
+            clear,
+        },
+    )
+    .await?;
+    ensure!(
+        matches!(body, Body::Ok),
+        "unexpected PR cleanup response: {body:?}"
+    );
+    ctx.emit(
+        if clear {
+            "PR cleanup cancelled"
+        } else {
+            "PR cleanup registered; tracked commands will stop when the merge is confirmed"
+        },
+        serde_json::json!({"registered": !clear}),
+    )?;
+    Ok(0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

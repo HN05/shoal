@@ -10,7 +10,9 @@ use anyhow::{Result, bail, ensure};
 
 /// Who is removing the workspace, which decides how strict the checks are.
 #[derive(Clone, Copy)]
-enum Removal {
+enum Removal<'a> {
+    /// Explicit merge completion stops tracked agents without waiting for idle.
+    Merged { head: &'a str },
     /// A user request; dirty or differing work needs an explicit branch choice.
     Manual {
         choice: BranchChoice,
@@ -23,30 +25,36 @@ enum Removal {
     Deleted,
 }
 
-impl Removal {
+impl Removal<'_> {
     fn choice(self) -> BranchChoice {
         match self {
             Removal::Manual { choice, .. } => choice,
-            Removal::Automatic { .. } | Removal::Deleted => BranchChoice::Auto,
+            Removal::Automatic { .. } | Removal::Deleted | Removal::Merged { .. } => {
+                BranchChoice::Auto
+            }
         }
     }
 
     fn caller_pid(self) -> u32 {
         match self {
             Removal::Manual { caller_pid, .. } => caller_pid,
-            Removal::Automatic { .. } | Removal::Deleted => 0,
+            Removal::Automatic { .. } | Removal::Deleted | Removal::Merged { .. } => 0,
         }
     }
 
     /// Unattended removals never signal processes Shoal cannot verify.
     fn is_automatic(self) -> bool {
-        !matches!(self, Removal::Manual { .. })
+        !matches!(self, Removal::Manual { .. } | Removal::Merged { .. })
     }
 
     /// Automatic removal needs a safe workspace; manual removal with `Auto`
     /// needs a workspace that does not require a branch choice.
     fn verify(self, check: &RemovalCheck, stage: Stage) -> Result<()> {
         match (self, stage) {
+            (Removal::Merged { .. }, _) => ensure!(
+                !check.dirty,
+                "workspace has uncommitted or untracked work; retaining it"
+            ),
             (Removal::Automatic { .. }, Stage::Initial) => ensure!(
                 check.safe(),
                 "workspace is no longer idle, clean and fully pushed"
@@ -118,6 +126,9 @@ impl Manager {
     /// A fingerprint of everything automatic cleanup must see unchanged before
     /// removing the workspace, or `None` when it is not a cleanup candidate.
     pub async fn cleanup_snapshot(&self, id: &str) -> Result<Option<u64>> {
+        if self.pr_registration(id).await?.is_some() {
+            return Ok(None);
+        }
         if !self.list_resources(Some(id)).await?.is_empty() {
             return Ok(None);
         }
@@ -150,12 +161,18 @@ impl Manager {
             .map(|_| ())
     }
 
+    pub async fn remove_merged(&self, selector: &str, head: &str) -> Result<()> {
+        self.remove(selector, Removal::Merged { head })
+            .await
+            .map(|_| ())
+    }
+
     /// Forget a workspace whose directory was deleted outside Shoal.
     pub async fn remove_deleted(&self, selector: &str) -> Result<RemovalResult> {
         self.remove(selector, Removal::Deleted).await
     }
 
-    async fn remove(&self, selector: &str, removal: Removal) -> Result<RemovalResult> {
+    async fn remove(&self, selector: &str, removal: Removal<'_>) -> Result<RemovalResult> {
         let workspace = self.workspace(selector).await?;
         self.reserve_lifecycle(&workspace.id, WorkspaceState::Removing)
             .await?;
@@ -202,13 +219,19 @@ impl Manager {
     async fn remove_present_worktree(
         &self,
         workspace: &crate::model::Workspace,
-        removal: Removal,
+        removal: Removal<'_>,
     ) -> Result<RemovalResult> {
         let repo = self.repository(&workspace.repository_id).await?;
         let check = self
             .check_removal(&workspace.id, removal.caller_pid())
             .await?;
         removal.verify(&check, Stage::Initial)?;
+        if let Removal::Merged { head } = removal {
+            ensure!(
+                crate::pr::current_head(workspace).await? == head,
+                "HEAD changed before PR cleanup"
+            );
+        }
         self.stop_executions(&workspace.id, !removal.is_automatic())
             .await?;
         if let Removal::Automatic { snapshot } = removal {
@@ -221,6 +244,12 @@ impl Manager {
             .check_removal(&workspace.id, removal.caller_pid())
             .await?;
         removal.verify(&check, Stage::AfterStop)?;
+        if let Removal::Merged { head } = removal {
+            ensure!(
+                crate::pr::current_head(workspace).await? == head,
+                "HEAD changed while stopping commands"
+            );
+        }
         let choice = removal.choice();
         let default_branch = crate::default_branch::resolve(&repo.path, false).await.ok();
         let delete_branch = match choice {
@@ -245,6 +274,16 @@ impl Manager {
         {
             hooks::run_detached(Hook::PreRemove, workspace, &command, &self.paths).await?;
         }
+        if let Removal::Merged { head } = removal {
+            ensure!(
+                crate::pr::current_head(workspace).await? == head,
+                "HEAD changed during pre-remove hook"
+            );
+            removal.verify(
+                &self.check_removal(&workspace.id, 0).await?,
+                Stage::AfterStop,
+            )?;
+        }
         // Live resources are removed before the directory; failed cleanup
         // retains their ownership records so removal can be retried.
         self.remove_simulators(&workspace.id).await?;
@@ -263,7 +302,7 @@ impl Manager {
     async fn remove_missing_worktree(
         &self,
         workspace: &crate::model::Workspace,
-        removal: Removal,
+        removal: Removal<'_>,
     ) -> Result<RemovalResult> {
         let repo = self.repository(&workspace.repository_id).await?;
         ensure!(

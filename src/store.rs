@@ -11,7 +11,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 13;
+const SCHEMA_VERSION: i64 = 14;
 
 #[derive(Clone)]
 pub struct Store {
@@ -131,6 +131,10 @@ fn migrate(db: &mut Connection) -> Result<()> {
         CREATE TABLE IF NOT EXISTS repository_configs (
             repository_id TEXT PRIMARY KEY REFERENCES repositories(id) ON DELETE CASCADE,
             toml TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS pr_cleanup (
+            workspace_id TEXT PRIMARY KEY REFERENCES workspaces(id) ON DELETE CASCADE,
+            record TEXT NOT NULL
         );
         PRAGMA user_version={SCHEMA_VERSION};
         COMMIT;"

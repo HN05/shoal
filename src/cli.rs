@@ -89,6 +89,18 @@ pub enum Command {
         #[arg(long)]
         local: bool,
     },
+    /// Watch a PR URL; stop tracked commands and remove this workspace when merged.
+    Pr {
+        #[arg(required_unless_present = "clear", conflicts_with = "clear")]
+        url: Option<String>,
+        #[arg(long)]
+        workspace: Option<String>,
+        /// Cancel PR cleanup for this workspace.
+        #[arg(long)]
+        clear: bool,
+    },
+    /// Confirm this commit was merged; stop tracked commands and remove the workspace.
+    Merged { workspace: Option<String> },
     /// Reserve, list, and release named TCP ports owned by a worktree.
     Port {
         #[command(subcommand)]

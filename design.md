@@ -1,9 +1,7 @@
 # Shoal design
 
-Product decisions and open work. Usage belongs in [README.md](README.md),
-behavior in [docs/reference.md](docs/reference.md), contributor rules in
-[AGENTS.md](AGENTS.md). Change decisions in place; never append milestone
-reports, test inventories, or investigation notes.
+Decisions and proposals; usage: [README.md](README.md), behavior:
+[docs/reference.md](docs/reference.md), contributor rules: [AGENTS.md](AGENTS.md).
 
 ## Purpose and boundaries
 
@@ -15,31 +13,27 @@ Agents cooperate with Shoal's scope and allocations. Shoal does not stop a
 hostile same-user process from bypassing them through Git, the filesystem, or
 direct resource access; filesystem restrictions are future work.
 
-Caller-specific integration stays outside the core. Superlogical owns its
-terminal sessions and requests preparation, execution, and removal; Macraft
-owns VM and container provisioning. Shoal does not provision build tools,
-manage browsers, schedule agent tasks, or store conversations. Agent shortcuts
+Caller-specific integration stays outside the core: Superlogical owns terminals;
+Macraft owns VM/container provisioning. Shoal does not provision tools, manage
+browsers, schedule agent tasks, or store conversations. Agent shortcuts
 (`claude`, `codex`, `t3`) are thin launchers around the generic `exec` path;
-their agent-specific flags and setup are meant to become configurable defaults
-rather than deeper integration.
+Agent-specific flags and setup are to become configurable defaults.
 
 ## Architecture
 
 One Rust binary provides the CLI, execution wrapper, and daemon. Each state
 directory has one daemon shared across repositories, with a private Unix
 socket and a versioned JSON protocol; the ordinary installation is per user.
-The daemon owns persistent state in SQLite and coordinates allocation,
-lifecycle transitions, and recovery.
+The daemon owns SQLite state, allocation, lifecycle transitions, and recovery.
 
 The execution wrapper owns terminal I/O, environment delivery, exit codes, and
 command process groups, registers with the daemon, and handles stop requests.
 The daemon never proxies terminals, and a lost connection is not proof that an
 execution stopped or that its resources are free.
 
-Use short transactions for atomic claims and typed lifecycle states with
-lowercase persisted and wire spellings; unknown values are errors. Keep slow
-external operations outside transactions while retaining ownership through
-failure. Migrations preserve ownership. Setup preserves compatible daemons and
+Use short transactions for atomic claims; typed lifecycle states retain lowercase
+persisted/wire spellings and reject unknown values. Slow operations stay outside
+transactions; failures and migrations preserve ownership. Setup preserves compatible daemons and
 commands, deferring service changes until restart; incompatible daemons are
 verified stopped before replacing their service.
 
@@ -126,7 +120,8 @@ run through the tracked wrapper, and own-branch checks are cooperative.
 Commands launched through Shoal inherit a daemon-validated scope token that
 confines them to their own workspace: inspect, execute, merge, and resources.
 `pull`, creation, removal, reconciliation, other workspaces, repository
-administration, and service control need an unscoped caller. Nested executions keep their scope.
+administration, and service control need an unscoped caller. PR registration and
+manual merge acknowledgement are own-workspace exceptions; nested executions keep scope.
 
 The CLI takes explicit targets and `--json` for automation, and uses
 current-directory resolution and fzf interactively; noninteractive calls never
@@ -199,7 +194,11 @@ no executions, directory users, leases, or permits, rechecked immediately
 before deletion, without fetching. `repo rm` deletes the checkout and every
 workspace through that path, refuses external worktrees and dangerous paths,
 persists progress, and blocks new workspaces until an interrupted removal is
-retried.
+retried. PR cleanup is separately enabled by default: persisted watches use the
+user's gh/fj login and require a merged PR containing HEAD; manual acknowledgement
+binds to HEAD. Both stop tracked agents immediately through shared removal,
+rechecking clean files and HEAD after stopping. Failures retain work and leases;
+registered workspaces are excluded from idle cleanup until cleared or removed.
 
 Reconciliation reports by default; repair restores verified worktrees and
 clears executions proven stopped while preserving work and leases. Startup

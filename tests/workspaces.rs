@@ -1945,6 +1945,8 @@ fn execution_scope_limits_management_and_expires() {
         vec!["rm", "worker", "--yes", "--delete-branch"],
         vec!["stop", "worker"],
         vec!["inspect", "other"],
+        vec!["merged", "other"],
+        vec!["pr", "--clear", "--workspace", "other"],
         vec!["port", "reserve", "web", "other"],
         vec!["repo", "rename", fixture.repo.to_str().unwrap(), "changed"],
         vec!["repo", "config", fixture.repo.to_str().unwrap()],
@@ -5685,4 +5687,260 @@ fn interactive_add_picks_existing_branch_and_reopens_workspace() {
         );
     }
     assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
+}
+
+fn wait_removed(fixture: &Fixture, name: &str) {
+    let deadline = Instant::now() + Duration::from_secs(15);
+    while fixture
+        .ok(&["list"])
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|w| w["name"] == name)
+    {
+        assert!(
+            Instant::now() < deadline,
+            "PR cleanup did not remove workspace: {}",
+            fixture.ok(&["inspect", name])
+        );
+        thread::sleep(Duration::from_millis(30));
+    }
+}
+
+fn wait_pr_error(fixture: &Fixture, name: &str, message: &str) {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        let inspection = fixture.ok(&["inspect", name]);
+        if inspection["pr_cleanup"]["error"]
+            .as_str()
+            .is_some_and(|s| s.contains(message))
+        {
+            return;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "expected {message}: {inspection}"
+        );
+        thread::sleep(Duration::from_millis(30));
+    }
+}
+
+#[test]
+fn merged_stops_agent_and_releases_resources_without_idle_delay() {
+    let fixture = Fixture::with_config(Some("[auto_cleanup]\nenabled=false\n[resources.device]\n"));
+    let workspace = fixture.add("merged");
+    fixture.ok(&["port", "reserve", "web", "merged"]);
+    fixture.ok(&["resource", "acquire", "device", "merged"]);
+    let mut wrapper = fixture
+        .command()
+        .args(["exec", "merged", "--", "sleep", "60"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    wait_registered_execution(&fixture, "merged");
+    fixture.ok(&["merged", "merged"]);
+    wait_removed(&fixture, "merged");
+    assert!(!wrapper.wait().unwrap().success());
+    assert!(!Path::new(workspace["path"].as_str().unwrap()).exists());
+    assert!(
+        fixture
+            .ok(&["resource", "list", "--all"])
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        fixture
+            .ok(&["port", "list", "--all"])
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
+fn merged_retains_dirty_work_and_changed_head_across_restart_and_can_be_cancelled() {
+    let mut fixture = Fixture::new();
+    let workspace = fixture.add("retain");
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    fs::write(path.join("dirty"), "keep").unwrap();
+    fixture.ok(&[
+        "exec",
+        "retain",
+        "--",
+        env!("CARGO_BIN_EXE_shoal"),
+        "--json",
+        "merged",
+    ]);
+    wait_pr_error(&fixture, "retain", "uncommitted");
+    git(path, &["add", "dirty"]);
+    git(
+        path,
+        &[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "-m",
+            "new work",
+        ],
+    );
+    fixture.restart();
+    wait_pr_error(&fixture, "retain", "HEAD changed");
+    assert!(path.join("dirty").exists());
+    fixture.ok(&["pr", "--clear", "--workspace", "retain"]);
+    assert!(fixture.ok(&["inspect", "retain"])["pr_cleanup"].is_null());
+}
+
+#[test]
+fn pr_cleanup_can_be_disabled_independently() {
+    let fixture = Fixture::with_config(Some("[pr_cleanup]\nenabled=false\n"));
+    fixture.add("keep");
+    let output = fixture.run(&["merged", "keep"]);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("PR cleanup is disabled"));
+    assert!(fixture.ok(&["inspect", "keep"])["pr_cleanup"].is_null());
+}
+
+#[test]
+fn pr_watch_checks_github_state_and_commit_and_survives_restart() {
+    let mut fixture = Fixture::with_config(Some("[auto_cleanup]\nenabled=false\n"));
+    let workspace = fixture.add("watch");
+    git(
+        &fixture.repo,
+        &[
+            "remote",
+            "add",
+            "origin",
+            "https://github.com/team/repo.git",
+        ],
+    );
+    let bin = fixture.root.path().join("bin");
+    fs::create_dir(&bin).unwrap();
+    fs::write(bin.join("gh"), "#!/bin/sh\ncat \"$HOME/pr.json\"\n").unwrap();
+    fs::set_permissions(bin.join("gh"), fs::Permissions::from_mode(0o755)).unwrap();
+    let failed = fixture.run(&[
+        "pr",
+        "https://github.com/team/repo/pull/56",
+        "--workspace",
+        "watch",
+    ]);
+    assert!(!failed.status.success());
+    assert!(String::from_utf8_lossy(&failed.stderr).contains("shoal merged"));
+    assert!(fixture.ok(&["inspect", "watch"])["pr_cleanup"].is_null());
+    assert!(
+        !fixture
+            .run(&[
+                "pr",
+                "https://github.com/other/repo/pull/56",
+                "--workspace",
+                "watch"
+            ])
+            .status
+            .success()
+    );
+    let response = fixture.root.path().join("pr.json");
+    let write_response = |state: &str, head: &str| {
+        fs::write(&response, serde_json::json!({"number":56,"state":state,"headRefName":"watch","commits":[{"oid":head}]}).to_string()).unwrap()
+    };
+    let head = git(
+        Path::new(workspace["path"].as_str().unwrap()),
+        &["rev-parse", "HEAD"],
+    )
+    .trim()
+    .to_owned();
+    write_response("OPEN", &head);
+    fixture.ok(&[
+        "pr",
+        "https://github.com/team/repo/pull/56",
+        "--workspace",
+        "watch",
+    ]);
+    fixture.restart();
+    assert_eq!(
+        fixture.ok(&["inspect", "watch"])["pr_cleanup"]["url"],
+        "https://github.com/team/repo/pull/56"
+    );
+    write_response("MERGED", &"a".repeat(40));
+    fixture.restart();
+    wait_pr_error(&fixture, "watch", "does not contain");
+    fs::write(&response, "malformed output").unwrap();
+    fixture.restart();
+    wait_pr_error(&fixture, "watch", "expected");
+    write_response("CLOSED", &head);
+    fixture.restart();
+    assert!(Path::new(workspace["path"].as_str().unwrap()).exists());
+    write_response("MERGED", &head);
+    fixture.restart();
+    wait_removed(&fixture, "watch");
+}
+
+#[test]
+fn pr_watch_checks_forgejo_merge_and_commits_with_fixture_cli() {
+    let fixture = Fixture::new();
+    let workspace = fixture.add("fj-watch");
+    git(
+        &fixture.repo,
+        &[
+            "remote",
+            "add",
+            "origin",
+            "https://forge.example/team/repo.git",
+        ],
+    );
+    let bin = fixture.root.path().join("bin");
+    fs::create_dir(&bin).unwrap();
+    fs::write(bin.join("fj"), "#!/bin/sh\nfor arg; do last=$arg; done\nif [ \"$last\" = commits ]; then cat \"$HOME/commits\"; else printf 'Title #56\\nBy user — Merged — +1 -0\\nFrom `fj-watch` into `main`\\n'; fi\n").unwrap();
+    fs::set_permissions(bin.join("fj"), fs::Permissions::from_mode(0o755)).unwrap();
+    let head = git(
+        Path::new(workspace["path"].as_str().unwrap()),
+        &["rev-parse", "HEAD"],
+    );
+    fs::write(
+        fixture.root.path().join("commits"),
+        format!("commit {} (+1, -0)\nAuthor: Test\n", head.trim()),
+    )
+    .unwrap();
+    fixture.ok(&[
+        "pr",
+        "https://forge.example/team/repo/pulls/56",
+        "--workspace",
+        "fj-watch",
+    ]);
+    wait_removed(&fixture, "fj-watch");
+}
+
+#[test]
+fn merged_rechecks_head_after_pre_remove_hook() {
+    let fixture = Fixture::new();
+    fs::write(
+        fixture.repo.join(".shoal.toml"),
+        "pre_remove_cmd = 'hook.sh'\n",
+    )
+    .unwrap();
+    fs::write(fixture.repo.join("hook.sh"), "#!/bin/sh\ngit -c user.name=Test -c user.email=test@example.invalid commit --allow-empty -m 'hook work'\n").unwrap();
+    fs::set_permissions(
+        fixture.repo.join("hook.sh"),
+        fs::Permissions::from_mode(0o755),
+    )
+    .unwrap();
+    git(&fixture.repo, &["add", "."]);
+    git(
+        &fixture.repo,
+        &[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "-m",
+            "hook",
+        ],
+    );
+    let workspace = fixture.add("hook");
+    fixture.ok(&["merged", "hook"]);
+    wait_pr_error(&fixture, "hook", "HEAD changed during pre-remove hook");
+    assert!(Path::new(workspace["path"].as_str().unwrap()).exists());
 }

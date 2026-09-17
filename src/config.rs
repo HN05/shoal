@@ -12,6 +12,7 @@ pub struct Config {
     pub repositories_dir: Option<PathBuf>,
     pub codex: Codex,
     pub auto_cleanup: AutoCleanup,
+    pub pr_cleanup: PrCleanup,
     pub ports: Ports,
     pub resources: std::collections::BTreeMap<String, crate::resources::ResourceConfig>,
     pub resource_pools: std::collections::BTreeMap<String, crate::resources::PoolConfig>,
@@ -66,6 +67,14 @@ mod tests {
     fn cleanup_defaults_can_be_disabled_and_typos_are_rejected() {
         let config: Config = toml::from_str("").unwrap();
         assert!(config.auto_cleanup.enabled);
+        assert!(config.pr_cleanup.enabled);
+        assert!(
+            !toml::from_str::<Config>("[pr_cleanup]\nenabled=false")
+                .unwrap()
+                .pr_cleanup
+                .enabled
+        );
+        assert!(toml::from_str::<Config>("[pr_cleanup]\nenabld=false").is_err());
         assert_eq!(config.auto_cleanup.idle_minutes, 10);
         let config: Config =
             toml::from_str("[auto_cleanup]\nenabled = false\nidle_minutes = 30\n").unwrap();
@@ -171,5 +180,16 @@ impl Config {
         config.simulators.validate()?;
         crate::resources::definitions(&config.resources, &config.resource_pools)?;
         Ok(config)
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct PrCleanup {
+    pub enabled: bool,
+}
+impl Default for PrCleanup {
+    fn default() -> Self {
+        Self { enabled: true }
     }
 }

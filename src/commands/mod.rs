@@ -83,6 +83,12 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             remote,
             local,
         } => crate::merge::worker(&ctx, branch, remote, local).await,
+        Command::Pr {
+            workspace,
+            url,
+            clear,
+        } => workspaces::pr(&ctx, workspace, url, clear).await,
+        Command::Merged { workspace } => workspaces::pr(&ctx, workspace, None, false).await,
         Command::Inspect { workspace } => workspaces::inspect(&ctx, workspace).await,
         Command::Stop { workspace } => workspaces::stop(&ctx, workspace).await,
         Command::Rm {

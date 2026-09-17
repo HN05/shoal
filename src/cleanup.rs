@@ -86,6 +86,7 @@ pub fn fingerprint(root: &Path, head: &str, activity: u64) -> Result<u64> {
 /// `idle` is the delay before idle removal; `None` disables it, leaving only
 /// deleted-directory cleanup.
 pub async fn sweep(manager: &Manager, timers: &mut Timers, idle: Option<Duration>) -> Result<()> {
+    manager.sweep_prs().await?;
     let workspaces = manager.list_workspaces().await?;
     timers
         .idle
@@ -151,7 +152,10 @@ pub async fn run(manager: Arc<Manager>, idle: Option<Duration>) {
         if let Err(error) = sweep(&manager, &mut timers, idle).await {
             eprintln!("auto cleanup: {error:#}");
         }
-        sleep(SWEEP_INTERVAL).await;
+        tokio::select! {
+            _ = sleep(SWEEP_INTERVAL) => {},
+            _ = manager.cleanup_notify.notified() => {},
+        }
     }
 }
 

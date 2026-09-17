@@ -75,6 +75,7 @@ pub struct Execution {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Inspection {
+    pub pr_cleanup: Option<crate::pr::Registration>,
     pub workspace: Workspace,
     pub executions: Vec<Execution>,
     pub ports: Vec<PortReservation>,
