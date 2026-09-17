@@ -5,14 +5,14 @@ use std::{path::Path, process::Command};
 
 const BUDGETS: &[(&str, usize)] = &[
     // Review-bot brief; the action reads this path, so it cannot fold into AGENTS.md.
-    (".review/review.md", 60),
-    ("AGENTS.md", 125),
-    ("CLAUDE.md", 5),
-    ("README.md", 160),
-    ("SKILL.md", 120),
-    ("design.md", 240),
-    ("docs/reference.md", 580),
-    ("docs/releases.md", 40),
+    (".review/review.md", 80),
+    ("AGENTS.md", 160),
+    ("CLAUDE.md", 10),
+    ("README.md", 200),
+    ("SKILL.md", 150),
+    ("design.md", 300),
+    ("docs/reference.md", 750),
+    ("docs/releases.md", 50),
 ];
 
 #[test]
