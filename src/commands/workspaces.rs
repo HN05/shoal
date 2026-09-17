@@ -399,7 +399,7 @@ pub(super) async fn remove(
     )
     .await;
     if let Some(destination) = escape {
-        if result.is_ok() || !std::env::current_dir()?.exists() {
+        if result.is_ok() || !std::env::current_dir().is_ok_and(|cwd| cwd.exists()) {
             shell::navigate(&destination, ctx.json)?;
         }
     }
@@ -432,7 +432,7 @@ fn confirm_removal(ctx: &Context, check: &RemovalCheck, choice: BranchChoice) ->
 }
 
 /// Where the shell should go if the current directory is inside `workspace`:
-/// its repository checkout, or home when that is unavailable.
+/// its repository's Shoal directory, or home when that is unavailable.
 async fn escape_destination(ctx: &Context, workspace: &Workspace) -> Result<Option<PathBuf>> {
     let cwd = std::env::current_dir()?;
     if !workspace.contains(&cwd) {
@@ -442,7 +442,7 @@ async fn escape_destination(ctx: &Context, workspace: &Workspace) -> Result<Opti
         .await?
         .into_iter()
         .find(|r| r.id == workspace.repository_id)
-        .map(|r| r.path)
+        .and_then(|r| r.workspaces_dir)
         .filter(|p| p.is_dir());
     Ok(Some(repository.unwrap_or_else(|| ctx.paths.home.clone())))
 }

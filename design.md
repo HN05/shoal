@@ -39,8 +39,9 @@ execution stopped or that its resources are free.
 Use short transactions for atomic claims and typed lifecycle states with
 lowercase persisted and wire spellings; unknown values are errors. Keep slow
 external operations outside transactions while retaining ownership through
-failure. Migrations preserve ownership records; setup automatically restarts an
-incompatible installed daemon, verifying it stopped before replacing its service.
+failure. Migrations preserve ownership. Setup preserves compatible daemons and
+commands, deferring service changes until restart; incompatible daemons are
+verified stopped before replacing their service.
 
 Worktrunk creates and removes worktrees through Shoal's adapter with isolated
 configuration and hooks disabled. Invoke external tools with argument arrays.
@@ -129,10 +130,10 @@ administration, and service control need an unscoped caller. Nested executions k
 
 The CLI takes explicit targets and `--json` for automation, and uses
 current-directory resolution and fzf interactively; noninteractive calls never
-open a picker. Rust chooses navigation paths; the Bash/Zsh wrapper only changes
-directory and never evaluates repository-provided code. Confirmations show the
-action and ask `[y/N]`, cancel on Enter, `n`, end of input, or Ctrl-C (also
-after a tracked execution in the same process), and are bypassed only by
+open a picker. Rust chooses paths, including `<root_dir>/<repo>` after removal;
+the Bash/Zsh wrapper changes directory without evaluating repository code.
+Confirmations show the action and ask `[y/N]`, cancel on Enter, `n`, EOF or
+Ctrl-C (also after a tracked execution), and are bypassed only by
 explicit flags such as `--yes`. Removal's branch choice stays separate from
 its confirmation; explicit branch flags skip the choice only.
 

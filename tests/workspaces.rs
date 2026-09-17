@@ -1777,6 +1777,7 @@ set -e
 cd "$REPO"
 shoal add "$REPO" --name navigate
 test "${PWD##*/}" = navigate
+shoal_repo_dir="$(dirname "$PWD")"
 shoal cd -
 test "$PWD" = "$REPO"
 shoal cd -
@@ -1799,11 +1800,11 @@ rm untracked
 mkdir nested
 cd nested
 shoal rm
-test "$PWD" = "$REPO"
+test "$PWD" = "$shoal_repo_dir"
 if shoal cd -; then
   exit 1
 fi
-test "$PWD" = "$REPO"
+test "$PWD" = "$shoal_repo_dir"
 printf 'navigation-ok\n'
 "#;
     for shell in ["bash", "zsh"] {

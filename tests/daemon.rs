@@ -349,7 +349,10 @@ esac
     let run = |args: &[&str]| {
         let output = command(root.path())
             .args(args)
-            .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+            .env(
+                "PATH",
+                format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()),
+            )
             .env("SHOAL_BINARY", env!("CARGO_BIN_EXE_shoal"))
             .env("SHOAL_TEST_STATE", root.path().join("state"))
             .env("FAKE_PID", &pid_path)
@@ -367,6 +370,88 @@ esac
     let original = fs::read_to_string(&pid_path).unwrap();
     run(&["setup"]);
     assert_eq!(fs::read_to_string(&pid_path).unwrap(), original);
+
+    // A changed executable path must update the definition without breaking an
+    // existing execution's daemon connection.
+    let repo = root.path().join("repo");
+    fs::create_dir(&repo).unwrap();
+    for args in [
+        vec!["init", "-b", "main"],
+        vec![
+            "-c",
+            "user.name=Shoal Test",
+            "-c",
+            "user.email=shoal@example.invalid",
+            "commit",
+            "--allow-empty",
+            "-m",
+            "initial",
+        ],
+    ] {
+        assert!(
+            Command::new("git")
+                .current_dir(&repo)
+                .args(args)
+                .output()
+                .unwrap()
+                .status
+                .success()
+        );
+    }
+    run(&["repo", "add", repo.to_str().unwrap()]);
+    run(&["add", repo.to_str().unwrap(), "--name", "keep-running"]);
+    let marker = root.path().join("started");
+    let finish = root.path().join("finish");
+    let mut execution = command(root.path())
+        .args([
+            "exec",
+            "keep-running",
+            "--",
+            "sh",
+            "-c",
+            "touch \"$1\"; while [ ! -f \"$2\" ]; do sleep 0.05; done",
+            "sh",
+        ])
+        .arg(&marker)
+        .arg(&finish)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !marker.exists() {
+        assert!(
+            execution.try_wait().unwrap().is_none(),
+            "execution exited before setup"
+        );
+        assert!(Instant::now() < deadline, "execution did not start");
+        thread::sleep(Duration::from_millis(20));
+    }
+    let replacement = bin.join("updated-shoal");
+    std::os::unix::fs::symlink(env!("CARGO_BIN_EXE_shoal"), &replacement).unwrap();
+    run(&["setup", "--executable", replacement.to_str().unwrap()]);
+    assert_eq!(fs::read_to_string(&pid_path).unwrap(), original);
+    let preview: Value =
+        serde_json::from_slice(&run(&["--json", "setup", "--dry-run"]).stdout).unwrap();
+    assert!(
+        fs::read_to_string(preview["path"].as_str().unwrap())
+            .unwrap()
+            .contains(replacement.to_str().unwrap())
+    );
+    let inspection: Value =
+        serde_json::from_slice(&run(&["--json", "inspect", "keep-running"]).stdout).unwrap();
+    assert_eq!(inspection["executions"][0]["state"], "running");
+    assert!(execution.try_wait().unwrap().is_none());
+    fs::write(&finish, "").unwrap();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        if let Some(status) = execution.try_wait().unwrap() {
+            assert!(status.success());
+            break;
+        }
+        assert!(Instant::now() < deadline, "execution did not finish");
+        thread::sleep(Duration::from_millis(20));
+    }
 
     // Replace only the wire response. Stopping the real managed daemon removes
     // its socket, allowing setup to install and start the current binary.

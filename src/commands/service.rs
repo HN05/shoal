@@ -29,12 +29,15 @@ pub(super) async fn setup(
         })?;
         return Ok(0);
     }
-    match client::status(&ctx.paths).await {
-        Ok(Some(status)) => ensure!(
-            status.managed,
-            "a foreground daemon is running; stop it before setting up the service"
-        ),
-        Ok(None) => {}
+    let preserve_running = match client::status(&ctx.paths).await {
+        Ok(Some(status)) => {
+            ensure!(
+                status.managed,
+                "a foreground daemon is running; stop it before setting up the service"
+            );
+            true
+        }
+        Ok(None) => false,
         Err(error) if error.is::<client::ProtocolMismatch>() => {
             // Use the service manager without speaking the incompatible protocol.
             // stop checks the installed state directory and waits for the socket
@@ -49,10 +52,11 @@ pub(super) async fn setup(
             stop(&ctx.paths).await.context(
                 "could not stop the incompatible daemon service; stop any foreground daemon before rerunning `shoal setup`",
             )?;
+            false
         }
         Err(error) => return Err(error),
-    }
-    service::setup(&ctx.paths, &executable).await?;
+    };
+    service::setup(&ctx.paths, &executable, preserve_running).await?;
     client::wait(&ctx.paths, true).await?;
     ctx.emit(
         "Daemon service installed and running",

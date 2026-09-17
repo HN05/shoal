@@ -26,7 +26,8 @@ removal, check it against the rule those files state before judging it.
   Terminal I/O stays in the execution wrapper; the daemon owns state.
 - Persistence: lifecycle enums keep their lowercase SQLite/JSON spelling and
   reject unknown values. Schema and state-file changes need a compatibility
-  story for existing daemons.
+  story for existing daemons. Setup preserves compatible daemons and commands,
+  deferring service changes until restart; incompatible daemons restart.
 - Tests run in temporary state directories and repositories, use the isolated
   xcrun fixture, and never install services or touch personal simulators.
 - Documentation: `tests/docs.rs` budgets every Markdown file. Usage lives in

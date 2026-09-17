@@ -55,8 +55,8 @@ directory must match. `daemon status` exits 1 when offline.
 
 `shoal setup` preserves the invoked executable's symlink path and captures the
 current `PATH` for the service, so install `wt`, `git`, `lsof`, and any hook
-tools first. Setup restarts an incompatible installed daemon automatically;
-foreground daemons must be stopped manually. macOS diagnostics go
+tools first. Setup preserves compatible daemons and commands until restart;
+incompatible daemons restart automatically. Stop foreground daemons manually. macOS diagnostics go
 to `daemon.log` in the state directory; Linux uses `journalctl --user -u
 shoal.service`. Tests use an isolated service-manager fixture and never install
 a real service; native Linux service integration is untested on a Linux host.
@@ -330,7 +330,7 @@ identity-verified survivors are stopped, unrelated processes are left alone.
 Ignored files are removed, shared caches are not, and Git protects branches
 checked out elsewhere; output reports the actual branch result. Worktrunk hooks
 are disabled; use Shoal's setup and hooks instead. Removing the workspace
-containing your shell moves you to its repository root (or home).
+containing your shell moves you to `<root_dir>/<repo>` (or home if unavailable).
 
 ### Automatic cleanup
 

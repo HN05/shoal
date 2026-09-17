@@ -183,7 +183,7 @@ fn domain() -> String {
     format!("gui/{}", unsafe { libc::geteuid() })
 }
 
-pub async fn setup(paths: &Paths, executable: &Path) -> Result<()> {
+pub async fn setup(paths: &Paths, executable: &Path, preserve_running: bool) -> Result<()> {
     let platform = Platform::current()?;
     let definition = definition(paths, executable, platform)?;
     paths.prepare()?;
@@ -205,14 +205,17 @@ pub async fn setup(paths: &Paths, executable: &Path) -> Result<()> {
     match platform {
         Platform::Mac => {
             let target = format!("{}/{LABEL}", domain());
-            if changed && command("launchctl", &["print", &target], false).await? {
+            if changed
+                && !preserve_running
+                && command("launchctl", &["print", &target], false).await?
+            {
                 command("launchctl", &["bootout", &target], true).await?;
             }
         }
         Platform::Linux => {
             command("systemctl", &["--user", "daemon-reload"], true).await?;
             command("systemctl", &["--user", "enable", UNIT], true).await?;
-            if changed {
+            if changed && !preserve_running {
                 command("systemctl", &["--user", "restart", UNIT], true).await?;
             }
         }
