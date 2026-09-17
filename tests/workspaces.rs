@@ -269,10 +269,10 @@ fn url_registration_clones_once_and_supports_workspaces() {
         repo["path"].as_str().unwrap(),
         fixture.repo.to_str().unwrap()
     );
-    // Clones live at `~/shoal/<repo>/main` beside that repository's workspaces.
+    // Clones live at `~/shoal/<repo>/.checkout` beside that repository's workspaces.
     let clone = Path::new(repo["path"].as_str().unwrap());
     let directory = clone.parent().unwrap();
-    assert_eq!(clone.file_name().unwrap(), "main");
+    assert_eq!(clone.file_name().unwrap(), ".checkout");
     assert_eq!(repo["workspaces_dir"], directory.to_str().unwrap());
     assert_eq!(directory.parent().unwrap(), fixture.shoal_dir());
     assert!(!fixture.root.path().join("state/repositories").exists());
@@ -286,6 +286,10 @@ fn url_registration_clones_once_and_supports_workspaces() {
     );
     fixture.ok(&["rm", "cloned"]);
     assert!(clone.is_dir());
+    // No workspace name can collide with the clone's directory.
+    let main = fixture.ok(&["add", &url, "--name", "main"]);
+    assert_eq!(main["path"], directory.join("main").to_str().unwrap());
+    assert_eq!(main["branch"], "main-2");
 }
 
 #[test]
@@ -538,6 +542,42 @@ fn placed_checkouts_adopt_their_directory_but_never_another_checkout() {
 }
 
 #[test]
+fn root_directory_inside_state_or_a_checkout_is_refused() {
+    let mut fixture = Fixture::new();
+    let url = format!("file://{}", fixture.repo.display());
+    let config = fixture.root.path().join(".config/shoal/config.toml");
+    fs::create_dir_all(config.parent().unwrap()).unwrap();
+    let outer = fixture.root.path().join("outer");
+    fs::create_dir(&outer).unwrap();
+    git(&outer, &["init", "-b", "main"]);
+    let outer = outer.display().to_string();
+    // A root inside the state directory or a registered checkout refuses every
+    // registration; one inside the checkout being registered refuses that one.
+    for (root, message, sources) in [
+        ("~/state/worktrees", "state directory", vec![&url, &outer]),
+        (
+            "~/repo with ' quotes & $literal/worktrees",
+            "repository checkout",
+            vec![&url, &outer],
+        ),
+        ("~/outer/worktrees", "repository checkout", vec![&outer]),
+    ] {
+        fs::write(&config, format!("root_dir = {root:?}\n")).unwrap();
+        fixture.restart();
+        for source in sources {
+            let output = fixture.run(&["repo", "add", source]);
+            assert!(!output.status.success(), "{root}: {source} was registered");
+            assert!(String::from_utf8_lossy(&output.stderr).contains(message));
+        }
+        assert!(!fixture.root.path().join(&root[2..]).exists());
+        assert_eq!(fixture.ok(&["repo", "list"]).as_array().unwrap().len(), 1);
+    }
+    // The already placed repository still creates workspaces in its own directory.
+    let workspace = fixture.add("still-works");
+    assert!(Path::new(workspace["path"].as_str().unwrap()).starts_with(fixture.shoal_dir()));
+}
+
+#[test]
 fn clone_directories_use_repo_names_and_suffix_occupied_or_recorded_paths() {
     let fixture = Fixture::with_config(Some("root_dir = \"~/clones\"\n"));
     let directory = fixture.root.path().join("clones");
@@ -555,7 +595,7 @@ fn clone_directories_use_repo_names_and_suffix_occupied_or_recorded_paths() {
         let url = format!("file://{}", source.display());
         let repo = fixture.ok(&["repo", "add", &url]);
         let clone = Path::new(repo["path"].as_str().unwrap());
-        assert_eq!(clone.file_name().unwrap(), "main");
+        assert_eq!(clone.file_name().unwrap(), ".checkout");
         assert_eq!(
             clone
                 .parent()
@@ -626,8 +666,8 @@ fn clone_name_allocation_is_atomic_across_daemons_sharing_a_directory() {
     });
     names.sort();
     assert_eq!(names, ["project", "project-2"]);
-    assert!(shared.path().join("project/main/.git").exists());
-    assert!(shared.path().join("project-2/main/.git").exists());
+    assert!(shared.path().join("project/.checkout/.git").exists());
+    assert!(shared.path().join("project-2/.checkout/.git").exists());
 }
 
 #[test]

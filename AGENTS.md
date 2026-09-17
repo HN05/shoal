@@ -60,8 +60,8 @@ when behavior changes, distinguishing decisions from proposals.
   processes. Verify recorded Git metadata identity before exec/removal; moved or
   replaced worktrees are not adopted automatically. Use the shared removal path
   for deleted-worktree cleanup and retain its branch; never forget a moved one.
-- Repositories own `<root_dir>/<name>/` (default `~/shoal`): workspaces
-  inside, URL clones as `main`, reserved atomically and never moved.
+- Repositories own `<root_dir>/<name>/` (default `~/shoal`): workspaces inside,
+  URL clones as `.checkout`, never moved; refuse roots inside state or checkouts.
 - Accept literal Git branch names and derive portable workspace names separately.
   Suffix conflicting branch components with `-2`, `-3`, etc.; keep derived workspace
   names/directories unchanged and serialize allocation per repo. Reject normalized

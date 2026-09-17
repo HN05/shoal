@@ -10,8 +10,9 @@ use std::{
 use tokio::process::Command;
 use uuid::Uuid;
 
-/// Directory name of a URL clone inside its repository directory.
-pub const CHECKOUT_DIR: &str = "main";
+/// Directory name of a URL clone inside its repository directory. Derived
+/// workspace names never contain `.`, so no workspace can collide with it.
+pub const CHECKOUT_DIR: &str = ".checkout";
 
 impl Manager {
     pub async fn repositories(&self) -> Result<Vec<Repository>> {
@@ -60,17 +61,20 @@ impl Manager {
             };
         }
         let root = self.config.root_dir(&self.paths)?;
+        let state = fs::canonicalize(&self.paths.state)?;
+        let checkouts = repositories.iter().map(|repo| repo.path.as_path());
         let directory_name = name
             .clone()
             .unwrap_or_else(|| repository::directory_name(&source));
         let (path, workspaces_dir) = if PathBuf::from(&source).exists() {
-            let root_dir = git::run(Path::new(&source), &["rev-parse", "--show-toplevel"]).await?;
-            let path = fs::canonicalize(root_dir.trim())?;
+            let toplevel = git::run(Path::new(&source), &["rev-parse", "--show-toplevel"]).await?;
+            let path = fs::canonicalize(toplevel.trim())?;
+            let root = prepare_root(&root, &state, checkouts.chain([path.as_path()]))?;
             // A checkout already placed as `<root>/<x>/<checkout>` keeps that
             // directory, unless `<x>` is itself a checkout or another repository's.
             let placed = path
                 .parent()
-                .filter(|parent| parent.parent() == fs::canonicalize(&root).ok().as_deref())
+                .filter(|parent| parent.parent() == Some(root.as_path()))
                 .filter(|parent| !parent.join(".git").exists())
                 .filter(|parent| {
                     !repositories.iter().any(|repo| {
@@ -94,6 +98,7 @@ impl Manager {
                 source.contains("://") || source.contains('@'),
                 "repository path does not exist: {source}"
             );
+            let root = prepare_root(&root, &state, checkouts)?;
             let workspaces_dir = reserve_directory(&root, &directory_name, &repositories)?;
             let destination = match clone_path {
                 Some(path) => create_clone_directory(path),
@@ -171,7 +176,11 @@ impl Manager {
         if let Some(directory) = &current.workspaces_dir {
             return Ok(directory.clone());
         }
-        let root = self.config.root_dir(&self.paths)?;
+        let root = prepare_root(
+            &self.config.root_dir(&self.paths)?,
+            &fs::canonicalize(&self.paths.state)?,
+            repositories.iter().map(|repo| repo.path.as_path()),
+        )?;
         let directory = reserve_directory(
             &root,
             &repository::directory_name(repository::name(repo)),
@@ -268,12 +277,49 @@ fn create_clone_directory(path: PathBuf) -> Result<PathBuf> {
     Ok(path)
 }
 
+/// The canonical, existing `root_dir`. Worktrees must stay out of Shoal's
+/// state and of every checkout, so a root inside either is refused before
+/// anything is created.
+fn prepare_root<'a>(
+    root: &Path,
+    state: &Path,
+    checkouts: impl IntoIterator<Item = &'a Path>,
+) -> Result<PathBuf> {
+    let intended = canonicalize_missing(root)?;
+    ensure!(
+        !intended.starts_with(state),
+        "root_dir {} is inside Shoal's state directory",
+        intended.display()
+    );
+    for checkout in checkouts {
+        ensure!(
+            !intended.starts_with(checkout),
+            "root_dir {} is inside the repository checkout {}",
+            intended.display(),
+            checkout.display()
+        );
+    }
+    fs::create_dir_all(root)
+        .with_context(|| format!("create repository root directory {}", root.display()))?;
+    Ok(fs::canonicalize(root)?)
+}
+
+/// Canonicalize the deepest existing ancestor and append the rest.
+fn canonicalize_missing(path: &Path) -> Result<PathBuf> {
+    let mut existing = path;
+    let mut missing = Vec::new();
+    while !existing.exists() {
+        missing.push(existing.file_name().context("root_dir has no name")?);
+        existing = existing.parent().context("root_dir has no parent")?;
+    }
+    let mut canonical = fs::canonicalize(existing)?;
+    canonical.extend(missing.iter().rev());
+    Ok(canonical)
+}
+
 /// Reserve `<root>/<name>` (suffixed `-2`, `-3`, ... when occupied or recorded)
 /// by creating it, so concurrent daemons cannot share one directory.
 fn reserve_directory(root: &Path, name: &str, repositories: &[Repository]) -> Result<PathBuf> {
-    fs::create_dir_all(root)
-        .with_context(|| format!("create repository root directory {}", root.display()))?;
-    let root = fs::canonicalize(root)?;
     for suffix in 1_u64.. {
         let path = root.join(if suffix == 1 {
             name.to_owned()

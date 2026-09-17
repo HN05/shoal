@@ -175,15 +175,15 @@ branch itself. Uncommitted files are not copied.
 Register a local checkout in place (no remote required) or a clone URL. Each
 repository gets `~/shoal/<name>/`, named by `--name` or the source basename
 without `.git`, suffixed `-2`, `-3` on conflict with files or recorded paths;
-its workspaces are created inside it and a URL clone lives there as `main`. A
-local checkout already at `~/shoal/<name>/<anything>` keeps that directory.
-Set `root_dir = "~/Projects"` (formerly `repositories_dir`) in the global
-config (absolute or `~/` path, daemon restart required) to change the parent
-for new registrations; existing
-ones keep their paths, as do workspaces created before this layout. `repo add
-<url> --path <dir>` clones one repository to an exact new directory (relative
-to the current directory; `~/` allowed). Re-registering a URL with its existing
-path is fine; a different path is rejected.
+its workspaces are created inside it and a URL clone lives there as
+`.checkout`. A local checkout already at `~/shoal/<name>/<anything>` keeps
+that directory. `root_dir = "~/Projects"` (formerly `repositories_dir`) in the
+global config (absolute or `~/` path outside Shoal's state directory and every
+checkout; daemon restart required) changes the parent for new registrations;
+existing ones keep their paths, as do workspaces created before this layout.
+`repo add <url> --path <dir>` clones one repository to an exact new directory
+(relative to the current directory; `~/` allowed). Re-registering a URL with
+its existing path is fine; a different path is rejected.
 
 Registration is idempotent by normalized `origin` URL (HTTPS/SSH forms and
 `.git` suffixes match) or canonical local path, and never fetches. Clone URLs

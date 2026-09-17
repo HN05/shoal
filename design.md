@@ -61,9 +61,10 @@ merges; tap updates retry against the tap's latest main without force pushes.
 ## Workspaces and Git
 
 Every repository owns `~/shoal/<name>/` (global `root_dir`): its workspaces
-are created inside it and a URL clone lives there as `main`, so worktrees are
-grouped per repository, never nested in a checkout, and outside the state
-directory. Directories are reserved atomically and never reused or moved; an
+are created inside it and a URL clone lives there as `.checkout`, a name no
+workspace can take, so worktrees are grouped per repository, never nested in a
+checkout, and outside the state directory; a root inside either is refused.
+Directories are reserved atomically and never reused or moved; an
 in-place checkout placed as `~/shoal/<name>/<x>` adopts that directory, and
 `--path` clones elsewhere. Registration is idempotent by normalized origin URL,
 then canonical path, never fetches, and keeps a stable UUID separate from the
