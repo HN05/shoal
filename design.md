@@ -1,7 +1,7 @@
 # Shoal design
 
 Current product decisions and unresolved work. Command usage and configuration
-examples belong in [README.md](README.md); contributor rules belong in
+examples belong in the [usage guide](README.md) and [command reference](docs/reference.md); contributor rules belong in
 [AGENTS.md](AGENTS.md). Update decisions in place rather than appending milestone
 reports, test inventories, or investigation transcripts.
 
