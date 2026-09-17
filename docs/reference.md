@@ -40,7 +40,7 @@ After installing either channel:
 
 ```sh
 shoal skill install
-shoal setup --executable "$(brew --prefix shoal)/bin/shoal"
+shoal setup
 ```
 
 The formula installs Worktrunk, Git, fzf, and lsof as runtime dependencies, and
@@ -104,9 +104,8 @@ an isolated instance for development. Service commands target the one registered
 per-user service; its configured state directory must match. Runtime state and
 the Unix socket are private to the user. Status returns exit code 1 when offline.
 
-`setup` preserves the invoked executable's symlink path where possible. Use
-`--executable /absolute/path/to/shoal` to explicitly select a stable installation
-path. A running daemon must be restarted after upgrading its binary. macOS
+`shoal setup` preserves the invoked executable's symlink path where possible.
+A running daemon must be restarted after upgrading its binary. macOS
 daemon diagnostics go to `daemon.log` in the state directory; Linux uses the
 user journal (`journalctl --user -u shoal.service`).
 

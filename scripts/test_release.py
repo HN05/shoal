@@ -1,4 +1,5 @@
 import unittest
+import copy
 from pathlib import Path
 import subprocess
 import tempfile
@@ -23,6 +24,45 @@ class ReleaseTests(unittest.TestCase):
                 release.bump(self.manifest, self.lock, version, {"v0.1.1"})
         with self.assertRaises(ValueError):
             release.bump(self.manifest, self.lock.replace('"0.1.0"', '"0.2.0"'), None, set())
+
+    def test_merged_identity_including_deleted_branch(self):
+        pr = {"merged": True, "number": 7, "merge_commit_sha": "a" * 40,
+              "base": {"ref": "main", "repo": {"full_name": "HN05/shoal"}},
+              "head": {"ref": "release/v0.1.1", "repo": {"full_name": "HN05/shoal"}}}
+        self.assertEqual(release.merged_release(pr, "HN05/shoal", 7), ("0.1.1", "a" * 40))
+        pr["head"].update(ref="refs/pull/7/head", label="release/v0.1.1")
+        self.assertEqual(release.merged_release(pr, "HN05/shoal", 7), ("0.1.1", "a" * 40))
+        mutations = [
+            lambda p: p.update(merged=False),
+            lambda p: p.update(number=8),
+            lambda p: p.update(merge_commit_sha="not-a-commit"),
+            lambda p: p["base"].update(ref="other"),
+            lambda p: p["head"]["repo"].update(full_name="fork/shoal"),
+            lambda p: p["head"].update(ref="feature", label="release/v0.1.1"),
+        ]
+        for mutate in mutations:
+            invalid = copy.deepcopy(pr)
+            mutate(invalid)
+            with self.assertRaises(ValueError):
+                release.merged_release(invalid, "HN05/shoal", 7)
+
+    def test_one_click_release_pins_merge_and_only_publishes_after_success(self):
+        with patch.dict(release.os.environ, {"RELEASE_REPOSITORY": "HN05/shoal"}), \
+                patch.object(release, "prepare", return_value={"number": 7}) as prepare, \
+                patch.object(release, "git", return_value="a" * 40), \
+                patch.object(release, "api", side_effect=[None, {"merged": True}]) as api, \
+                patch.object(release, "publish_merged") as publish:
+            release.release_all(None)
+            prepare.assert_called_once_with(None, False, automated=True)
+            self.assertEqual(api.call_args_list[0].args[1], {
+                "Do": "rebase", "head_commit_id": "a" * 40, "delete_branch_after_merge": True,
+            })
+            publish.assert_called_once_with({"merged": True}, "HN05/shoal", 7)
+            api.side_effect = ValueError("merge blocked")
+            publish.reset_mock()
+            with self.assertRaises(ValueError):
+                release.release_all("0.2.0")
+            publish.assert_not_called()
 
 
 class ReleaseIntegrationTests(unittest.TestCase):

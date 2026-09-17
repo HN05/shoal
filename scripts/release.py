@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
 """Prepare a release PR, then publish its merged version using the fj login."""
 import argparse
+import json
+import os
 from pathlib import Path
 import re
 import subprocess
 import tempfile
+import time
 import tomllib
+from urllib.error import HTTPError
+from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -64,7 +69,17 @@ def validate():
     run("cargo", "build", "--locked", "--release")
 
 
-def prepare(requested, dry_run):
+def api(path, data=None):
+    base = os.environ["RELEASE_API_URL"].rstrip("/")
+    token = os.environ["RELEASE_AUTOMATION_TOKEN"]
+    request = Request(base + path, data=json.dumps(data).encode() if data is not None else None,
+                      headers={"Authorization": f"token {token}", "Content-Type": "application/json"})
+    with urlopen(request, timeout=60) as response:
+        body = response.read()
+        return json.loads(body) if body else None
+
+
+def prepare(requested, dry_run, automated=False):
     if git("status", "--porcelain"):
         raise ValueError("commit or stash changes before preparing a release")
     run("git", "fetch", "origin", "+refs/heads/*:refs/remotes/origin/*", "--tags")
@@ -88,25 +103,33 @@ def prepare(requested, dry_run):
     run("git", "add", "Cargo.toml", "Cargo.lock")
     run("git", "commit", "-m", f"chore: prepare release v{version}")
     run("git", "push", "-u", "origin", branch)
+    if automated:
+        repository = os.environ["RELEASE_REPOSITORY"]
+        return api(f"/repos/{repository}/pulls", {
+            "title": f"Release v{version}", "base": "main", "head": branch,
+            "body": f"Prepare Shoal {version}. Validated formatting, Clippy, tests, and release build. "
+                    "The Release workflow will merge this version change and publish it automatically.",
+        })
     with tempfile.NamedTemporaryFile(mode="w", suffix=".md") as body:
         body.write(f"Prepare Shoal {version}. Both Cargo versions are updated.\n\n"
                    "Validated formatting, Clippy, tests, and the release build.\n\n"
                    f"After merging, run `python3 scripts/release.py publish {version}`. "
-                   "Publishing the release automatically updates the shared Homebrew tap.\n")
+                   "Alternatively use Actions → Release for the fully automated process.\n")
         body.flush()
         run("fj", "pr", "create", f"Release v{version}", "--base", "main",
             "--head", branch, "--body-file", body.name)
 
 
-def publish(version, dry_run):
+def publish(version, dry_run, merged_commit=None):
     parts(version)
     if git("status", "--porcelain"):
         raise ValueError("commit or stash changes before publishing a release")
     run("git", "fetch", "origin", "+refs/heads/main:refs/remotes/origin/main", "--tags")
-    sha = git("rev-parse", "origin/main")
+    sha = merged_commit or git("rev-parse", "origin/main")
+    git("merge-base", "--is-ancestor", sha, "origin/main")
     # Validate what will actually be tagged, not the caller's old checkout.
     if git("rev-parse", "HEAD") != sha:
-        raise ValueError("check out the current origin/main commit before publishing")
+        raise ValueError("check out the release commit before publishing")
     if versions(git("show", f"{sha}:Cargo.toml"), git("show", f"{sha}:Cargo.lock")) != version:
         raise ValueError("requested version is not merged into main")
     tag = f"v{version}"
@@ -127,6 +150,61 @@ def publish(version, dry_run):
         "[HN05 Homebrew tap](https://github.com/HN05/homebrew-tap).")
 
 
+def merged_release(pr, repository, number):
+    """Accept only the server-confirmed merge of this repository's release PR."""
+    if (pr.get("merged") is not True or pr.get("number") != number or number < 1
+            or pr.get("base", {}).get("ref") != "main"
+            or pr.get("base", {}).get("repo", {}).get("full_name") != repository
+            or pr.get("head", {}).get("repo", {}).get("full_name") != repository):
+        raise ValueError("expected a merged release PR from this repository into main")
+    head = pr["head"]
+    branch = head.get("ref", "")
+    if branch == f"refs/pull/{number}/head":
+        branch = head.get("label", "")
+    if not branch.startswith("release/v"):
+        raise ValueError("expected a release/vMAJOR.MINOR.PATCH branch")
+    version = branch.removeprefix("release/v")
+    parts(version)
+    sha = pr.get("merge_commit_sha", "")
+    if not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", sha):
+        raise ValueError("missing merged commit ID")
+    return version, sha
+
+
+def publish_merged(pr, repository, number):
+    version, sha = merged_release(pr, repository, number)
+    if git("status", "--porcelain"):
+        raise ValueError("publish-pr requires a clean checkout")
+    run("git", "fetch", "origin", "+refs/heads/main:refs/remotes/origin/main", "--tags")
+    git("merge-base", "--is-ancestor", sha, "origin/main")
+    if versions(git("show", f"{sha}:Cargo.toml"), git("show", f"{sha}:Cargo.lock")) != version:
+        raise ValueError("merged PR version does not match its release branch")
+    run("git", "checkout", "--detach", sha)
+    publish(version, False, merged_commit=sha)
+
+
+def release_all(requested):
+    repository = os.environ["RELEASE_REPOSITORY"]
+    pr = prepare(requested, False, automated=True)
+    number = pr["number"]
+    # Pin the merge to the exact validated release commit and respect branch
+    # protection. Never use force_merge or merge an unexpected branch update.
+    merge = {"Do": "rebase", "head_commit_id": git("rev-parse", "HEAD"),
+             "delete_branch_after_merge": True}
+    # Forgejo may still be computing mergeability just after PR creation.
+    # Retry only its temporary/not-allowed response; protection remains intact.
+    for attempt in range(30):
+        try:
+            api(f"/repos/{repository}/pulls/{number}/merge", merge)
+            break
+        except HTTPError as error:
+            if error.code != 405 or attempt == 29:
+                raise
+            time.sleep(2)
+    merged = api(f"/repos/{repository}/pulls/{number}")
+    publish_merged(merged, repository, number)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -136,10 +214,15 @@ def main():
     pub.add_argument("version")
     for command in (prep, pub):
         command.add_argument("--dry-run", action="store_true")
+    automated = commands.add_parser("run", help="CI: prepare, merge, validate, and publish a release")
+    automated.add_argument("version", nargs="?")
     args = parser.parse_args()
     try:
-        (prepare if args.command == "prepare" else publish)(args.version, args.dry_run)
-    except (ValueError, subprocess.CalledProcessError) as error:
+        if args.command == "run":
+            release_all(args.version)
+        else:
+            (prepare if args.command == "prepare" else publish)(args.version, args.dry_run)
+    except (ValueError, subprocess.CalledProcessError, HTTPError) as error:
         parser.exit(1, f"Release failed: {error}\n")
 
 

@@ -1,0 +1,69 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version (blank chooses the next unused patch)
+        type: string
+        required: false
+
+concurrency:
+  group: shoal-release
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: docker
+    container:
+      image: rust:1.98-bookworm
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check configuration
+        env:
+          REF: ${{ github.ref }}
+          TOKEN: ${{ secrets.RELEASE_AUTOMATION_TOKEN }}
+        run: |
+          test "$REF" = refs/heads/main || { echo 'Select main to prepare a release'; exit 1; }
+          test -n "$TOKEN" || { echo 'Configure RELEASE_AUTOMATION_TOKEN'; exit 1; }
+      - name: Install build tools
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends git lsof zsh python3 ca-certificates
+          rustup component add rustfmt clippy
+          cargo install --locked worktrunk --version 0.78.0
+          cargo install --locked forgejo-cli --version 0.6.0
+      - name: Check out main
+        env:
+          SERVER: ${{ github.server_url }}
+          REPO: ${{ github.repository }}
+        run: |
+          git clone "$SERVER/$REPO.git" source
+          git -C source checkout --detach origin/main
+          git -C source config user.name 'Shoal release bot'
+          git -C source config user.email 'shoal-release@users.noreply.github.com'
+      - name: Create release
+        env:
+          TOKEN: ${{ secrets.RELEASE_AUTOMATION_TOKEN }}
+          SERVER: ${{ github.server_url }}
+          REQUESTED_VERSION: ${{ inputs.version }}
+          RELEASE_AUTOMATION_TOKEN: ${{ secrets.RELEASE_AUTOMATION_TOKEN }}
+          RELEASE_API_URL: ${{ github.api_url }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          export GIT_CONFIG_COUNT=1
+          export GIT_CONFIG_KEY_0="http.${SERVER%/}/.extraheader"
+          export GIT_CONFIG_VALUE_0="Authorization: basic $(printf 'x-access-token:%s' "$TOKEN" | base64 | tr -d '\n')"
+          export XDG_CONFIG_HOME
+          XDG_CONFIG_HOME=$(mktemp -d)
+          printf '%s\n' "$TOKEN" | fj auth add-token -H "$SERVER"
+          unset TOKEN
+          cd source
+          if [ -n "$REQUESTED_VERSION" ]; then
+            python3 scripts/release.py run "$REQUESTED_VERSION"
+          else
+            python3 scripts/release.py run
+          fi

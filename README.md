@@ -8,7 +8,7 @@ switch between tasks, and clean up when finished.
 
 ```sh
 brew install hn05/tap/shoal
-shoal setup --executable "$(brew --prefix shoal)/bin/shoal"
+shoal setup
 shoal skill install
 ```
 
@@ -139,6 +139,7 @@ in existing terminals after upgrading.
 
 See [design.md](design.md) for product decisions and the
 [command reference](docs/reference.md) for detailed behavior.
+Create releases through **Actions → Release**; see [release setup](docs/releases.md).
 
 Requires Rust, Git, `lsof`, and Worktrunk (`wt`, tested with 0.77.0). Interactive menus
 require `fzf`. Install the runtime tools before running `shoal setup` so the

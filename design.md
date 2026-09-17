@@ -56,10 +56,13 @@ channels replaces the installation. Homebrew installs runtime dependencies and
 the bundled skill, but service registration and restarts remain explicit Shoal
 commands. Use the stable Homebrew opt executable path for service registration.
 
-Release preparation and publication live in Shoal. The release script updates
-Cargo versions on a PR branch and validates before pushing. After that PR is
-merged, publication validates current main, creates an immutable tag, and
-publishes the Forgejo release. Stable release publication triggers a Docker
+Release preparation and publication live in Shoal. Actions → Release accepts an
+explicit version or selects the next unused patch. One run updates Cargo versions,
+validates and builds, creates and merges a version PR under normal branch
+protection, then validates its exact merged commit, creates an immutable tag,
+and publishes the Forgejo release. It never tags a later main commit by accident.
+The automation token must have merge permission; no force-merge bypass is used.
+Stable release publication triggers a Docker
 Actions workflow that updates only Shoal's formula in two Forgejo taps over HTTPS,
 using the HOMEBREW_TAP_TOKEN secret. HN05/homebrew-tap keeps Forgejo source URLs;
 HN05/homebrew-tap-github uses GitHub source URLs and push-mirrors to GitHub's
