@@ -5,6 +5,7 @@ from pathlib import Path
 import re
 import subprocess
 import tomllib
+from urllib.parse import urlparse
 
 
 def release_version(value):
@@ -13,7 +14,11 @@ def release_version(value):
     return tuple(map(int, value.split(".")))
 
 
-def update_formula(text, version, revision):
+def update_formula(text, version, revision, source_url="https://github.com/HN05/shoal.git"):
+    parsed = urlparse(source_url)
+    if (parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password
+            or parsed.path != "/HN05/shoal.git" or parsed.query or parsed.fragment):
+        raise ValueError("expected an HTTPS Shoal repository URL")
     new_version = release_version(version)
     if not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", revision):
         raise ValueError("expected a full Git commit ID")
@@ -22,7 +27,7 @@ def update_formula(text, version, revision):
         raise ValueError("expected exactly one formula version")
     if new_version < release_version(versions[0]):
         raise ValueError("refusing to downgrade the release channel")
-    pattern = (r'^  url "https://git\.henriknordvik\.com/HN05/shoal\.git", '
+    pattern = (rf'^  url "{re.escape(source_url)}", '
                r'tag: "v[^"\n]+"(?:, revision: "([0-9a-f]+)")?$')
     sources = list(re.finditer(pattern, text, re.M))
     if len(sources) != 1:
@@ -31,7 +36,7 @@ def update_formula(text, version, revision):
     if version == versions[0] and old_revision and old_revision != revision:
         raise ValueError("refusing to move an already pinned release tag")
     text = re.sub(pattern,
-                  f'  url "https://git.henriknordvik.com/HN05/shoal.git", '
+                  f'  url "{source_url}", '
                   f'tag: "v{version}", revision: "{revision}"', text, flags=re.M)
     return re.sub(r'^  version "[^"]+"$', f'  version "{version}"', text, flags=re.M)
 
@@ -40,6 +45,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("tag")
     parser.add_argument("tap", type=Path)
+    parser.add_argument("--source-url", required=True,
+                        help="Expected HTTPS source repository URL for this tap")
     args = parser.parse_args()
     if not args.tag.startswith("v"):
         parser.error("release tags must start with v")
@@ -55,9 +62,17 @@ def main():
     if package["name"] != "shoal" or package["version"] != version:
         raise ValueError("release tag must match Shoal's Cargo package version")
     git("cat-file", "-e", f"{revision}:scripts/install-homebrew.sh")
+    if args.source_url == "https://github.com/HN05/shoal.git":
+        # Do not publish a formula before the source mirror has the exact tag.
+        refs = git("ls-remote", "https://github.com/HN05/shoal.git",
+                   f"refs/tags/{args.tag}", f"refs/tags/{args.tag}^{{}}")
+        targets = dict(line.split()[::-1] for line in refs.splitlines())
+        mirrored = targets.get(f"refs/tags/{args.tag}^{{}}", targets.get(f"refs/tags/{args.tag}"))
+        if mirrored != revision:
+            raise ValueError("GitHub source tag is missing or differs; wait for the Shoal mirror and retry")
     formula = args.tap / "Formula/shoal.rb"
     original = formula.read_text()
-    updated = update_formula(original, version, revision)
+    updated = update_formula(original, version, revision, args.source_url)
     if updated != original:
         formula.write_text(updated)
     print(f"Shoal {args.tag}: {revision}")

@@ -5,12 +5,12 @@ for the full design and implementation sequence.
 
 ## Homebrew
 
-The shared [HN05 tap](https://git.henriknordvik.com/HN05/homebrew-tap) offers two channels: tagged releases
+The shared [HN05 tap](https://github.com/HN05/homebrew-tap) offers two channels: tagged releases
 (the default) and the current `main` branch (`--HEAD`). Both build from source.
 Tap the repository once:
 
 ```sh
-brew tap hn05/tap https://git.henriknordvik.com/HN05/homebrew-tap.git
+brew tap hn05/tap
 ```
 
 Install a release:
@@ -24,6 +24,11 @@ Or track `main`:
 ```sh
 brew install --HEAD hn05/tap/shoal
 ```
+
+The fully qualified install commands also tap the GitHub repository automatically.
+If you previously tapped `hn05/tap` with the Forgejo URL, switch it using
+`brew tap --custom-remote hn05/tap https://github.com/HN05/homebrew-tap.git`.
+The original Forgejo-source tap remains available via its explicit repository URL.
 
 The release formula targets `v0.1.0`; that first tag has not been published yet.
 Release installation becomes available when it is published with the packaging
@@ -94,14 +99,19 @@ For the first release, `publish 0.1.0` can publish the existing version once the
 packaging changes are merged; no version bump is required. Validation failures
 leave the release branch available for inspection; no changes are discarded.
 
-The `Update Homebrew release` Actions workflow automatically updates the shared
-tap's version, tag, and commit pin when a stable release is published. It skips
+The `Update Homebrew release` Actions workflow automatically updates both Forgejo
+tap repositories when a stable release is published: `HN05/homebrew-tap` retains
+Forgejo source URLs, and `HN05/homebrew-tap-github` uses GitHub source URLs and is
+push-mirrored to GitHub's `HN05/homebrew-tap`. It updates each formula's version,
+tag, and commit pin independently. It skips
 drafts/prereleases, rejects downgrades and moved tags, and retries concurrent tap
 pushes without overwriting other projects. To retry, manually dispatch the
-workflow with the existing tag. No manual formula edits are needed.
+workflow with the existing tag. The GitHub formula is updated only once the
+GitHub Shoal mirror has the identical release tag/commit; rerun after mirroring
+if it has not caught up. No manual formula edits are needed.
 
 One-time setup: add `HOMEBREW_TAP_TOKEN` to Shoal's Actions secrets with HTTPS
-write access to `HN05/homebrew-tap` (restrict the token to that repository where
+write access to both Forgejo tap repositories (restrict the token to those repositories where
 supported). The workflow runs on the `docker` runner and needs only HTTPS access.
 It does not use the SSH deploy key. Updated releases become available through
 `brew update` and `brew upgrade`; the HEAD channel tracks `main` independently.
@@ -262,10 +272,10 @@ remove leading hyphens/underscores, and truncate to 64 characters. An empty resu
 becomes `workspace`. For example:
 
 ```sh
-shoal add FotMob-iOS --name henrik/8374-set-league-season-player-profile
-# Branch:    henrik/8374-set-league-season-player-profile
-# Workspace: henrik-8374-set-league-season-player-profile
-shoal cd henrik-8374-set-league-season-player-profile
+shoal add example-ios --name feature/123-update-profile
+# Branch:    feature/123-update-profile
+# Workspace: feature-123-update-profile
+shoal cd feature-123-update-profile
 ```
 
 Workspace names are unique across repositories. Inputs that produce an occupied
@@ -280,7 +290,7 @@ become `feature-2/topic`. Reserved names `HEAD` (Git), `@` (Worktrunk), and full
 40/64-character hex object-ID spellings also get a suffix. Branch conflict suffixes do not change the derived workspace name or
 directory. Existing branches and workspaces are not renamed.
 Uncommitted source files are not copied.
-Shoal reads `origin/HEAD` to find the default branch (for example, FotMob uses
+Shoal reads `origin/HEAD` to find the default branch (for example, a repository may use
 `develop`). Without `origin`, it uses the sole remote; multiple remotes without
 `origin` are ambiguous. If the remote HEAD is not cached, creation and `pull`
 query it and cache the symbolic ref. To pick up a remote's renamed default branch,
@@ -643,7 +653,7 @@ You can still omit targets to use Shoal's interactive fzf selection.
 
 The CLI/daemon, workspaces, named TCP ports, simulator sharing, cooperative
 resource pools, workspace setup, and explicit recovery are implemented. Filesystem
-restrictions and Homebrew packaging remain future work.
+restrictions and prebuilt Homebrew bottles remain future work.
 No Shoal filesystem sandbox is applied yet. Repository resource configuration
 uses TOML; additional configuration sections will be defined as they are added.
 

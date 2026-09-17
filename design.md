@@ -45,7 +45,7 @@ Keep writable state outside the installed binary's directory so upgrades preserv
 it. Service setup manages one per-user launchd/systemd service; foreground mode
 supports environments without a service manager.
 
-The shared HN05/homebrew-tap repository provides two source-built channels in one
+The shared HN05/homebrew-tap repository on GitHub provides two source-built channels in one
 formula: tagged releases by default and `--HEAD` for `main`. Project-specific
 build and packaging logic stays in Shoal's `scripts/install-homebrew.sh`; the tap
 selects sources, declares dependencies, and invokes that script. Release versions and
@@ -60,8 +60,14 @@ Release preparation and publication live in Shoal. The release script updates
 Cargo versions on a PR branch and validates before pushing. After that PR is
 merged, publication validates current main, creates an immutable tag, and
 publishes the Forgejo release. Stable release publication triggers a Docker
-Actions workflow that updates only Shoal's formula in the shared tap over HTTPS,
-using the HOMEBREW_TAP_TOKEN secret. Refuse release downgrades or changed commit
+Actions workflow that updates only Shoal's formula in two Forgejo taps over HTTPS,
+using the HOMEBREW_TAP_TOKEN secret. HN05/homebrew-tap keeps Forgejo source URLs;
+HN05/homebrew-tap-github uses GitHub source URLs and push-mirrors to GitHub's
+HN05/homebrew-tap. The workflow writes only to Forgejo; it needs no GitHub write
+credential. Verify the GitHub source tag resolves to the same release commit
+before updating the GitHub-facing formula. A delayed source mirror fails that
+update for explicit retry without blocking the original tap's update.
+Refuse release downgrades or changed commit
 pins for an existing version. Concurrent tap pushes are retried against its
 latest main without force-pushing. Main-channel builds need no tap version bump.
 

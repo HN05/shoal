@@ -21,6 +21,14 @@ jobs:
   update-tap:
     if: github.event_name == 'workflow_dispatch' || (!github.event.release.prerelease && !github.event.release.draft)
     runs-on: docker
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - tap: homebrew-tap
+            source: forgejo
+          - tap: homebrew-tap-github
+            source: github
     container:
       image: debian:bookworm-slim
     steps:
@@ -32,11 +40,13 @@ jobs:
         if: inputs.verify_connection != true && inputs.verify_connection != 'true'
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+          FORGEJO_SERVER: ${{ github.server_url }}
+          REPOSITORY: ${{ github.repository }}
         run: |
           set -eu
           python3 -c 'import os,re; assert re.fullmatch(r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", os.environ["RELEASE_TAG"]), "expected stable vX.Y.Z tag"'
           git init source
-          git -C source remote add origin https://git.henriknordvik.com/HN05/shoal.git
+          git -C source remote add origin "${FORGEJO_SERVER%/}/$REPOSITORY.git"
           git -C source fetch --depth 1 origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
           git -C source checkout --detach "refs/tags/$RELEASE_TAG"
       - name: Update shared tap
@@ -44,27 +54,35 @@ jobs:
           RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
           TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           VERIFY_CONNECTION: ${{ inputs.verify_connection }}
+          TAP_REPOSITORY: ${{ matrix.tap }}
+          SOURCE_KIND: ${{ matrix.source }}
+          FORGEJO_SERVER: ${{ github.server_url }}
+          REPOSITORY: ${{ github.repository }}
         run: |
           set -eu
           test -n "$TAP_TOKEN" || { echo 'Configure HOMEBREW_TAP_TOKEN in Shoal Actions secrets'; exit 1; }
           # Keep credentials out of remote URLs, Git config files, and arguments.
           export GIT_CONFIG_COUNT=1
-          export GIT_CONFIG_KEY_0=http.https://git.henriknordvik.com/.extraheader
+          export GIT_CONFIG_KEY_0="http.${FORGEJO_SERVER%/}/.extraheader"
           export GIT_CONFIG_VALUE_0="Authorization: basic $(printf 'x-access-token:%s' "$TAP_TOKEN" | base64 | tr -d '\n')"
           export GIT_TERMINAL_PROMPT=0
           unset TAP_TOKEN
-          git clone --branch main https://git.henriknordvik.com/HN05/homebrew-tap.git tap
+          git clone --branch main "${FORGEJO_SERVER%/}/${REPOSITORY%/*}/$TAP_REPOSITORY.git" tap
           if [ "$VERIFY_CONNECTION" = true ]; then
             git -C tap push --dry-run origin HEAD:main
             echo 'HTTPS tap authentication and push dry-run succeeded; no changes published.'
             exit 0
           fi
           git -C tap config user.name 'Shoal release bot'
-          git -C tap config user.email 'shoal-release@noreply.git.henriknordvik.com'
+          git -C tap config user.email 'shoal-release@users.noreply.github.com'
+          source_url="${FORGEJO_SERVER%/}/$REPOSITORY.git"
+          if [ "$SOURCE_KIND" = github ]; then
+            source_url="https://github.com/$REPOSITORY.git"
+          fi
           # Recompute after a rejected push so simultaneous project releases
           # preserve one another's changes. Never force-push the shared tap.
           for attempt in 1 2 3; do
-            python3 source/scripts/update-homebrew.py "$RELEASE_TAG" tap
+            python3 source/scripts/update-homebrew.py "$RELEASE_TAG" tap --source-url "$source_url"
             if git -C tap diff --quiet -- Formula/shoal.rb; then
               exit 0
             fi

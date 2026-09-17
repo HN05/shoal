@@ -9,9 +9,9 @@ spec.loader.exec_module(updater)
 
 class FormulaUpdateTests(unittest.TestCase):
     formula = '''class Shoal < Formula
-  url "https://git.henriknordvik.com/HN05/shoal.git", tag: "v0.1.0"
+  url "https://github.com/HN05/shoal.git", tag: "v0.1.0"
   version "0.1.0"
-  head "https://git.henriknordvik.com/HN05/shoal.git", branch: "main"
+  head "https://github.com/HN05/shoal.git", branch: "main"
 end
 '''
 
@@ -36,6 +36,19 @@ end
             with self.subTest(version=version, revision=revision):
                 with self.assertRaises(ValueError):
                     updater.update_formula(text, version, revision)
+
+    def test_forgejo_formula_preserves_its_source_and_rejects_wrong_host(self):
+        formula = self.formula.replace("github.com", "forgejo.example")
+        source_url = "https://forgejo.example/HN05/shoal.git"
+        result = updater.update_formula(formula, "0.2.0", "b" * 40, source_url)
+        self.assertIn('url "https://forgejo.example/HN05/shoal.git", tag: "v0.2.0"', result)
+        self.assertEqual(result.splitlines()[3], formula.splitlines()[3])
+        self.assertNotIn("github.com", result)
+        self.assertEqual(updater.update_formula(result, "0.2.0", "b" * 40, source_url), result)
+        with self.assertRaises(ValueError):
+            updater.update_formula(formula, "0.2.0", "b" * 40)
+        with self.assertRaises(ValueError):
+            updater.update_formula(self.formula, "0.2.0", "b" * 40, source_url)
 
 
 if __name__ == "__main__":

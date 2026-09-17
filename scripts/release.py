@@ -124,7 +124,7 @@ def publish(version, dry_run):
     # fj returns an error if the release already exists: never overwrite it.
     run("fj", "release", "create", f"Shoal {version}", "--tag", tag,
         "--body", f"Shoal {version}.\n\nInstall or upgrade through the "
-        "[HN05 Homebrew tap](https://git.henriknordvik.com/HN05/homebrew-tap).")
+        "[HN05 Homebrew tap](https://github.com/HN05/homebrew-tap).")
 
 
 def main():
