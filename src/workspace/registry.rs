@@ -132,37 +132,9 @@ impl Manager {
     /// Resolve an ID, path, source URL, explicit name, derived name, or
     /// equivalent remote to a registered repository.
     pub(crate) async fn repository(&self, selector: &str) -> Result<Repository> {
-        let repositories = self.repositories().await?;
-        let canonical = fs::canonicalize(selector).ok();
-        if let Some(repo) = repositories.iter().find(|repo| {
-            repo.id == selector
-                || repo.source == selector
-                || repo.path.to_str() == Some(selector)
-                || canonical.as_ref() == Some(&repo.path)
-        }) {
-            return Ok(repo.clone());
-        }
-        if let Some(repo) = repositories
-            .iter()
-            .find(|repo| repo.name.as_deref() == Some(selector))
-        {
-            return Ok(repo.clone());
-        }
-        let inferred: Vec<_> = repositories
-            .iter()
-            .filter(|repo| repository::name(repo) == selector)
-            .collect();
-        ensure!(
-            inferred.len() <= 1,
-            "repository name is ambiguous: {selector}; use its ID, path, or source URL"
-        );
-        if let Some(repo) = inferred.first() {
-            return Ok((*repo).clone());
-        }
-        if let Some(repo) = find_by_identity(&repositories, selector).await? {
-            return Ok(repo.clone());
-        }
-        bail!("repository is not registered: {selector}; run `shoal repo add <path-or-url>`")
+        Ok(repository::select(&self.repositories().await?, selector)
+            .await?
+            .clone())
     }
 }
 
@@ -174,22 +146,7 @@ async fn find_existing<'a>(
     if let Some(repo) = repositories.iter().find(|r| r.source == source) {
         return Ok(Some(repo));
     }
-    find_by_identity(repositories, source).await
-}
-
-async fn find_by_identity<'a>(
-    repositories: &'a [Repository],
-    source: &str,
-) -> Result<Option<&'a Repository>> {
-    let Some(identity) = repository::identity(source).await? else {
-        return Ok(None);
-    };
-    for repo in repositories {
-        if repository::identity(&repo.source).await?.as_ref() == Some(&identity) {
-            return Ok(Some(repo));
-        }
-    }
-    Ok(None)
+    repository::find_by_identity(repositories, source).await
 }
 
 async fn clone(source: &str, destination: &Path) -> Result<PathBuf> {

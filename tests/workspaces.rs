@@ -5154,3 +5154,200 @@ fn claude_launch_marks_the_workspace_trusted_in_claude_config() {
     assert!(output.status.success(), "{output:?}");
     assert!(String::from_utf8_lossy(&output.stderr).contains("must be an absolute path"));
 }
+
+#[test]
+fn add_from_issue_uses_existing_forge_cli_and_passes_context_to_agents() {
+    let fixture = Fixture::with_config(Some("[codex]\ndefault_mode = 'app'\n"));
+    let bin = fixture.root.path().join("issue-bin");
+    fs::create_dir(&bin).unwrap();
+    for tool in ["gh", "fj"] {
+        let script = bin.join(tool);
+        fs::write(&script, "#!/bin/sh\nprintf '%s\\0' \"$@\" > \"$ISSUE_ARGS\"\npwd > \"$ISSUE_CWD\"\ncat \"$ISSUE_RESPONSE\"\n").unwrap();
+        fs::set_permissions(&script, fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    for tool in ["codex", "claude"] {
+        let script = bin.join(tool);
+        fs::write(
+            &script,
+            "#!/bin/sh\nprintf '%s\\0' \"$@\" > \"$AGENT_ARGS\"\n",
+        )
+        .unwrap();
+        fs::set_permissions(&script, fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    let response = fixture.root.path().join("issue-response");
+    let issue_args = fixture.root.path().join("issue-args");
+    let issue_cwd = fixture.root.path().join("issue-cwd");
+    let agent_args = fixture.root.path().join("agent-args");
+    let title = "Fix API timeout; $(false)";
+    let body = "Reproduce with two clients.\nKeep the connection alive.";
+    for (index, (host, agent, as_url)) in [
+        ("github.com", "codex", false),
+        ("github.com", "claude", true),
+        ("forge.example", "codex", true),
+        ("forge.example", "claude", false),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let number = index + 34;
+        let url = format!("https://{host}/team/project/issues/{number}");
+        let remote = format!("git@{host}:team/project.git");
+        if index == 0 {
+            git(&fixture.repo, &["remote", "add", "origin", &remote]);
+        } else {
+            git(&fixture.repo, &["remote", "set-url", "origin", &remote]);
+        }
+        let text = if host == "github.com" {
+            serde_json::json!({"number": number, "title": title, "body": body}).to_string()
+        } else {
+            format!(
+                "\u{2068}{title}\u{2069} #\u{2068}{number}\u{2069}\"\nBy user — Open\n\n> {body}\n\n0 comments\n"
+            )
+        };
+        fs::write(&response, text).unwrap();
+        let input = if as_url {
+            url.clone()
+        } else {
+            number.to_string()
+        };
+        let output = fixture
+            .command()
+            .args([
+                "--json",
+                "add",
+                fixture.repo.to_str().unwrap(),
+                "--ref",
+                "HEAD",
+                "--issue",
+                &input,
+                "--agent",
+                agent,
+                "--",
+                "--model",
+                "test-model",
+            ])
+            .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+            .env("ISSUE_RESPONSE", &response)
+            .env("ISSUE_ARGS", &issue_args)
+            .env("ISSUE_CWD", &issue_cwd)
+            .env("AGENT_ARGS", &agent_args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let workspace: Value = serde_json::from_slice(&output.stdout).unwrap();
+        let name = format!("issue-{number}-fix-api-timeout-false");
+        assert_eq!(workspace["name"], name);
+        assert_eq!(workspace["branch"], name);
+        assert_eq!(
+            fs::read_to_string(&issue_cwd).unwrap().trim(),
+            fixture.repo.to_str().unwrap()
+        );
+        let invocation = fs::read_to_string(&issue_args).unwrap();
+        assert!(invocation.contains(&format!("issue\0view\0{number}\0")));
+        if host == "github.com" {
+            assert!(invocation.contains("--repo\0github.com/team/project\0"));
+        } else {
+            assert!(invocation.contains("--host\0forge.example\0--remote\0origin\0"));
+        }
+        let invocation = fs::read_to_string(&agent_args).unwrap();
+        let prompt = invocation.split('\0').next().unwrap();
+        assert!(prompt.contains(title));
+        assert!(prompt.contains(&url));
+        assert!(prompt.contains(body));
+        assert!(invocation.contains("\0--model\0test-model\0"));
+        assert_eq!(
+            fixture.ok(&["inspect", &name])["executions"],
+            serde_json::json!([])
+        );
+    }
+    // An explicit name still loads the issue, with no agent required.
+    let output = fixture
+        .command()
+        .args([
+            "--json",
+            "add",
+            fixture.repo.to_str().unwrap(),
+            "--ref",
+            "HEAD",
+            "--issue",
+            "37",
+            "--name",
+            "custom-issue-name",
+        ])
+        .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+        .env("ISSUE_RESPONSE", &response)
+        .env("ISSUE_ARGS", &issue_args)
+        .env("ISSUE_CWD", &issue_cwd)
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(
+        serde_json::from_slice::<Value>(&output.stdout).unwrap()["name"],
+        "custom-issue-name"
+    );
+}
+
+#[test]
+fn issue_lookup_errors_never_create_a_workspace() {
+    let fixture = Fixture::new();
+    git(
+        &fixture.repo,
+        &[
+            "remote",
+            "add",
+            "origin",
+            "https://github.com/team/project.git",
+        ],
+    );
+    let bin = fixture.root.path().join("issue-bin");
+    fs::create_dir(&bin).unwrap();
+    let tool = bin.join("gh");
+    for (input, script, diagnostic) in [
+        ("4", None, "install it"),
+        (
+            "4",
+            Some("#!/bin/sh\necho login-required >&2\nexit 1\n"),
+            "login-required",
+        ),
+        (
+            "4",
+            Some("#!/bin/sh\necho bad-json\n"),
+            "invalid gh issue response",
+        ),
+        (
+            "https://github.com/other/project/issues/4",
+            None,
+            "different repository",
+        ),
+    ] {
+        if let Some(script) = script {
+            fs::write(&tool, script).unwrap();
+            fs::set_permissions(&tool, fs::Permissions::from_mode(0o700)).unwrap();
+        } else if tool.exists() {
+            fs::remove_file(&tool).unwrap();
+        }
+        let output = fixture
+            .command()
+            .args([
+                "add",
+                fixture.repo.to_str().unwrap(),
+                "--ref",
+                "HEAD",
+                "--issue",
+                input,
+            ])
+            .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+            .output()
+            .unwrap();
+        assert!(!output.status.success());
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains(diagnostic),
+            "{output:?}"
+        );
+        assert_eq!(fixture.ok(&["list"]), serde_json::json!([]));
+    }
+}

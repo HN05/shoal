@@ -88,11 +88,13 @@ pub(super) async fn add(
     repository: Option<String>,
     name: Option<String>,
     base: Option<String>,
+    issue: Option<String>,
     agent: Option<Agent>,
-    args: Vec<OsString>,
+    mut args: Vec<OsString>,
 ) -> Result<i32> {
     // Validate launch configuration before creating a workspace.
     let codex_mode = match agent {
+        Some(Agent::Codex) if issue.is_some() => Some(CodexMode::Cli),
         Some(Agent::Codex) => Some(Config::load(&ctx.paths)?.codex.default_mode),
         _ => None,
     };
@@ -104,10 +106,21 @@ pub(super) async fn add(
             ui::repository_choices(client::repositories(&ctx.paths).await?).await?,
         )?,
     };
-    let name = match name {
+    let issue = match issue {
+        Some(input) => {
+            let repos = client::repositories(&ctx.paths).await?;
+            let repo = crate::repository::select(&repos, &repository).await?;
+            Some(super::issues::load(repo, &input).await?)
+        }
+        None => None,
+    };
+    let name = match name.or_else(|| issue.as_ref().map(|issue| issue.branch_name())) {
         Some(name) => name,
         None => ui::input(ctx, "Branch name")?,
     };
+    if let Some(issue) = issue.filter(|_| agent.is_some()) {
+        args.insert(0, issue.prompt().into());
+    }
     let mut workspace = request!(
         &ctx.paths,
         Method::CreateWorkspace {

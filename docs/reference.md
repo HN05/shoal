@@ -63,6 +63,15 @@ a real service; native Linux service integration is untested on a Linux host.
 
 ## Workspaces
 
+`add --issue <number-or-url>` reads the registered repository's issue using `gh`
+for github.com or `fj` for Forgejo remotes. Install the appropriate CLI and use
+its existing login (`gh auth login` or `fj auth login`); no Shoal forge config or
+tokens are needed. URLs must match the repository. Lookup failures create nothing.
+Names default to `issue-<number>-<title-slug>`; `--name` overrides this. With
+`--agent`, the issue title, URL and details supply the initial prompt (forward
+agent options after `--`, not a second prompt). Codex uses CLI mode for issue
+prompts even when its default is `app`. Ordinary setup, hooks and collision rules apply.
+
 ```sh
 shoal repo add /path/to/repo             # Or a Git clone URL; register once
 shoal repo add /path/to/repo --name my-project

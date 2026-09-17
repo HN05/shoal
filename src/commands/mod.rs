@@ -1,5 +1,6 @@
 //! CLI dispatch. Domain handlers own requests, prompts, and rendering;
 //! daemon modules own lifecycle and allocation policy.
+mod issues;
 mod menu;
 mod ports;
 mod recovery;
@@ -60,10 +61,11 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         Command::Add {
             repository,
             name,
+            issue,
             base,
             agent,
             args,
-        } => workspaces::add(&ctx, repository, name, base, agent, args).await,
+        } => workspaces::add(&ctx, repository, name, base, issue, agent, args).await,
         Command::Prepare { workspace } => workspaces::prepare(&ctx, workspace).await,
         Command::List => workspaces::list(&ctx).await,
         Command::Cd { workspace } => workspaces::cd(&ctx, workspace).await,

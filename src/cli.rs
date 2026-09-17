@@ -43,6 +43,9 @@ pub enum Command {
         /// Git branch name; a portable workspace name is derived from it.
         #[arg(long)]
         name: Option<String>,
+        /// Derive a name and agent prompt from a forge issue number or URL.
+        #[arg(long)]
+        issue: Option<String>,
         /// Starting Git ref (defaults to the repository's default branch, refreshed from its upstream).
         #[arg(long = "ref")]
         base: Option<String>,

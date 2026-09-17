@@ -135,6 +135,9 @@ Agent shortcuts use the execution wrapper: Codex CLI gets full access without
 approvals, Claude gets remote control named after the workspace and a persisted
 trust entry in its config (Claude offers no flag for this; its own error text
 names that entry). Codex's default mode is a global config value read at launch.
+`add --issue` resolves issue numbers/URLs using the remote and existing gh/fj
+login, derives a portable name, and supplies issue context to CLI agents; forge
+lookup stays in the CLI with no Shoal credentials or forge configuration.
 `add --agent` launches only after creation, setup, and the post-setup hook
 succeed, or after an explicitly ignored setup failure, and retains the
 workspace whatever the agent does. Desktop handoffs (Codex app, T3) provide no

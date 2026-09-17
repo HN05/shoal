@@ -37,6 +37,7 @@ Or create the workspace and start an agent in one command:
 
 ```sh
 shoal add my-project --name fix-api --agent codex -- "Fix the API timeout"
+shoal add my-project --issue 34 --agent codex  # Issue number or URL; uses gh/fj
 ```
 
 Use `--agent claude` for Claude Code. New workspaces branch from the repository's

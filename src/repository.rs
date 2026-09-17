@@ -1,8 +1,8 @@
 //! Repository naming and identity derived from a source path or URL.
-use anyhow::Result;
+use anyhow::{Result, bail, ensure};
 use std::path::Path;
 
-use crate::git;
+use crate::{git, model::Repository};
 
 /// The explicit name, or the last path component of the source.
 pub fn name(repo: &crate::model::Repository) -> &str {
@@ -88,6 +88,55 @@ fn url_key(url: &str) -> String {
     let path = path.trim_end_matches('/');
     let path = path.strip_suffix(".git").unwrap_or(path);
     format!("remote:{}/{path}", host.to_ascii_lowercase())
+}
+
+/// Resolve the same repository selectors in the CLI and daemon.
+pub async fn select<'a>(repositories: &'a [Repository], selector: &str) -> Result<&'a Repository> {
+    let canonical = std::fs::canonicalize(selector).ok();
+    if let Some(repo) = repositories.iter().find(|repo| {
+        repo.id == selector
+            || repo.source == selector
+            || repo.path.to_str() == Some(selector)
+            || canonical.as_ref() == Some(&repo.path)
+    }) {
+        return Ok(repo);
+    }
+    if let Some(repo) = repositories
+        .iter()
+        .find(|repo| repo.name.as_deref() == Some(selector))
+    {
+        return Ok(repo);
+    }
+    let inferred: Vec<_> = repositories
+        .iter()
+        .filter(|repo| name(repo) == selector)
+        .collect();
+    ensure!(
+        inferred.len() <= 1,
+        "repository name is ambiguous: {selector}; use its ID, path, or source URL"
+    );
+    if let Some(repo) = inferred.first() {
+        return Ok(*repo);
+    }
+    if let Some(repo) = find_by_identity(repositories, selector).await? {
+        return Ok(repo);
+    }
+    bail!("repository is not registered: {selector}; run `shoal repo add <path-or-url>`")
+}
+
+pub async fn find_by_identity<'a>(
+    repositories: &'a [Repository],
+    source: &str,
+) -> Result<Option<&'a Repository>> {
+    let Some(source_identity) = identity(source).await? else {
+        return Ok(None);
+    };
+    for repo in repositories {
+        if identity(&repo.source).await?.as_ref() == Some(&source_identity) {
+            return Ok(Some(repo));
+        }
+    }
+    Ok(None)
 }
 
 #[cfg(test)]
