@@ -66,7 +66,11 @@ pub async fn scan(ids: HashSet<String>) -> Result<Scan> {
             let fields: Vec<_> = line.split_whitespace().collect();
             ensure!(fields.len() == 2, "invalid process inventory");
             let pid: u32 = fields[0].parse()?;
-            let uid: u32 = fields[1].parse()?;
+            // System daemons may run as negative UIDs such as nobody (-2);
+            // they are never ours.
+            let Ok(uid) = fields[1].parse::<u32>() else {
+                continue;
+            };
             if uid != unsafe { libc::geteuid() } || pid <= 1 || pid == std::process::id() {
                 continue;
             }

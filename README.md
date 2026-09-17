@@ -102,8 +102,11 @@ env = "PORT"
 capacity = 1
 ```
 
-See the [command reference](docs/reference.md) for simulator profiles, shared
-resource pools, workspace setup scripts, and configuration outside Git.
+The same file can name a `setup_cmd` that prepares each new worktree, a
+`post_setup_cmd` that runs once it is ready (open a tmux session, say), and a
+`pre_remove_cmd` that runs before it is removed. See the
+[command reference](docs/reference.md) for simulator profiles, shared resource
+pools, setup and hooks, and configuration outside Git.
 
 ## Cleanup
 
@@ -140,6 +143,7 @@ in existing terminals after upgrading.
 See [design.md](design.md) for product decisions and the
 [command reference](docs/reference.md) for detailed behavior.
 Create releases through **Actions → release**; see [release setup](docs/releases.md).
+Documentation is budgeted by `tests/docs.rs`; trim before extending.
 
 Requires Rust, Git, `lsof`, and Worktrunk (`wt`, tested with 0.77.0). Interactive menus
 require `fzf`. Install the runtime tools before running `shoal setup` so the

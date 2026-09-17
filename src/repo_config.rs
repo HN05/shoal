@@ -1,7 +1,11 @@
 use anyhow::{Context, Result, ensure};
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, fs, path::Path};
+use std::{
+    collections::BTreeMap,
+    fs,
+    path::{Path, PathBuf},
+};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LocalConfig {
@@ -21,6 +25,10 @@ pub enum ConflictPolicy {
 #[serde(default, deny_unknown_fields)]
 pub struct RepoConfig {
     pub setup_cmd: Option<String>,
+    /// Runs untracked after the workspace is ready, e.g. to open a tmux session.
+    pub post_setup_cmd: Option<String>,
+    /// Runs untracked before the worktree is removed, e.g. to close that session.
+    pub pre_remove_cmd: Option<String>,
     pub ports: PortDefaults,
     pub resources: BTreeMap<String, crate::resources::ResourceConfig>,
     pub resource_pools: BTreeMap<String, crate::resources::PoolConfig>,
@@ -63,11 +71,17 @@ pub fn load(workspace_dir: &Path) -> Result<RepoConfig> {
 
 pub fn parse(text: &str) -> Result<RepoConfig> {
     let config: RepoConfig = toml::from_str(text)?;
-    if let Some(command) = &config.setup_cmd {
-        ensure!(
-            !command.trim().is_empty() && !command.contains('\0'),
-            "setup_cmd must be a nonempty executable path"
-        );
+    for (key, command) in [
+        ("setup_cmd", &config.setup_cmd),
+        ("post_setup_cmd", &config.post_setup_cmd),
+        ("pre_remove_cmd", &config.pre_remove_cmd),
+    ] {
+        if let Some(command) = command {
+            ensure!(
+                !command.trim().is_empty() && !command.contains('\0'),
+                "{key} must be a nonempty executable path"
+            );
+        }
     }
     for (name, definition) in &config.ports.definitions {
         crate::validate::lowercase_name("port", name)
@@ -79,6 +93,24 @@ pub fn parse(text: &str) -> Result<RepoConfig> {
     }
     crate::resources::definitions(&config.resources, &config.resource_pools)?;
     Ok(config)
+}
+
+impl RepoConfig {
+    /// Hook executables resolved against the worktree, like `setup_cmd`.
+    pub fn hooks(&self, worktree: &Path) -> Hooks {
+        let resolve = |command: &Option<String>| command.as_ref().map(|c| worktree.join(c));
+        Hooks {
+            post_setup_cmd: resolve(&self.post_setup_cmd),
+            pre_remove_cmd: resolve(&self.pre_remove_cmd),
+        }
+    }
+}
+
+/// The effective, resolved lifecycle hooks of one workspace.
+#[derive(Debug, Default, Serialize, Deserialize)]
+pub struct Hooks {
+    pub post_setup_cmd: Option<PathBuf>,
+    pub pre_remove_cmd: Option<PathBuf>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -106,8 +138,33 @@ mod tests {
             "setup_cmd = '  '",
             "setup_cmd = []",
             r#"setup_cmd = "a\u0000b""#,
+            "post_setup_cmd = ''",
+            "pre_remove_cmd = ' '",
         ] {
             assert!(parse(text).is_err(), "{text}");
         }
+    }
+
+    #[test]
+    fn hooks_resolve_relative_paths_against_the_worktree() {
+        let config =
+            parse("post_setup_cmd = 'scripts/attach.sh'\npre_remove_cmd = '/opt/detach'\n")
+                .unwrap();
+        let hooks = config.hooks(Path::new("/work/tree"));
+        assert_eq!(
+            hooks.post_setup_cmd.as_deref(),
+            Some(Path::new("/work/tree/scripts/attach.sh"))
+        );
+        assert_eq!(
+            hooks.pre_remove_cmd.as_deref(),
+            Some(Path::new("/opt/detach"))
+        );
+        assert!(
+            parse("")
+                .unwrap()
+                .hooks(Path::new("/w"))
+                .post_setup_cmd
+                .is_none()
+        );
     }
 }

@@ -33,13 +33,7 @@ pub(super) fn run(command: Option<&SkillCommand>, json_output: bool) -> Result<i
         destinations.push(("codex", home.join(".agents/skills/shoal/SKILL.md")));
     }
     if matches!(agent, SkillAgent::All | SkillAgent::Claude) {
-        let config = std::env::var_os("CLAUDE_CONFIG_DIR")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| home.join(".claude"));
-        ensure!(
-            config.is_absolute(),
-            "CLAUDE_CONFIG_DIR must be an absolute path"
-        );
+        let config = crate::env::claude_config_dir()?.unwrap_or_else(|| home.join(".claude"));
         destinations.push(("claude", config.join("skills/shoal/SKILL.md")));
     }
     let mut installed = Vec::new();

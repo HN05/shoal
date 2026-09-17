@@ -81,7 +81,9 @@ fn command(root: &Path) -> Command {
         .arg("--state-dir")
         .arg(root.join("state"))
         .env("HOME", root)
-        .env_remove("XDG_CONFIG_HOME");
+        .env_remove("XDG_CONFIG_HOME")
+        .env_remove("SHOAL_SCOPE_TOKEN")
+        .env_remove("SHOAL_EXECUTION_ID");
     command
 }
 

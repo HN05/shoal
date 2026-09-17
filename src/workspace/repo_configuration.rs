@@ -2,7 +2,7 @@
 use super::Manager;
 use crate::{
     model::Workspace,
-    repo_config::{self, LocalConfig, RepoConfig},
+    repo_config::{self, Hooks, LocalConfig, RepoConfig},
 };
 use anyhow::{Context, Result};
 use rusqlite::{OptionalExtension, params};
@@ -63,6 +63,14 @@ impl Manager {
                     .optional()?)
             })
             .await
+    }
+
+    pub async fn workspace_hooks(&self, selector: &str) -> Result<Hooks> {
+        let workspace = self.workspace(selector).await?;
+        Ok(self
+            .workspace_config(&workspace)
+            .await?
+            .hooks(&workspace.path))
     }
 
     /// The effective repository config: the locally saved override, or the

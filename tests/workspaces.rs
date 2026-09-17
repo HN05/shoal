@@ -193,6 +193,9 @@ fn cli(root: &Path) -> Command {
             ),
         )
         .env_remove("SHOAL_SHELL_DIRECTIVE")
+        // Tests may themselves run inside a Shoal execution.
+        .env_remove("SHOAL_SCOPE_TOKEN")
+        .env_remove("SHOAL_EXECUTION_ID")
         .env_remove("XDG_CONFIG_HOME")
         .env("GIT_CONFIG_GLOBAL", "/dev/null")
         .env("GIT_CONFIG_NOSYSTEM", "1");
@@ -4969,4 +4972,185 @@ fn setup_interruption_preserves_work_and_blocks_concurrent_execution() {
     assert!(path.join("setup-started").exists());
     fixture.ok(&["rm", "interrupted", "--yes", "--delete-branch"]);
     assert!(!path.exists());
+}
+
+#[test]
+fn lifecycle_hooks_run_untracked_after_setup_and_before_removal() {
+    let fixture = Fixture::new();
+    let home = fixture.root.path();
+    let scripts = [
+        ("setup.sh", "#!/bin/sh\nprintf setup > setup-done\n"),
+        (
+            "post-setup.sh",
+            r#"#!/bin/sh
+printf 'post-setup output\n'
+test -z "$SHOAL_SCOPE_TOKEN" || exit 81
+test -z "$SHOAL_EXECUTION_ID" || exit 82
+test -z "$SHOAL_SHELL_DIRECTIVE" || exit 83
+test "$SHOAL_HOOK" = post_setup || exit 84
+test -f setup-done || exit 85
+test -z "$SHOAL_TEST_FAIL_HOOK" || exit 5
+printf '%s\n%s\n' "$PWD" "$SHOAL_WORKSPACE" > "$HOME/post-setup-ran"
+sleep 30 < /dev/null > /dev/null 2>&1 &
+"#,
+        ),
+        (
+            "pre-remove.sh",
+            r#"#!/bin/sh
+test "$SHOAL_HOOK" = pre_remove || exit 86
+test -z "$SHOAL_SCOPE_TOKEN" || exit 87
+printf '%s\n%s\n' "$PWD" "$SHOAL_WORKSPACE" > "$HOME/pre-remove-ran"
+test ! -f fail-removal || { echo 'session still busy' >&2; exit 3; }
+"#,
+        ),
+    ];
+    for (name, body) in scripts {
+        fs::write(fixture.repo.join(name), body).unwrap();
+        fs::set_permissions(fixture.repo.join(name), fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    commit_resource_config(
+        &fixture.repo,
+        "setup_cmd = 'setup.sh'\npost_setup_cmd = 'post-setup.sh'\npre_remove_cmd = 'pre-remove.sh'\n",
+    );
+    let output = fixture
+        .command()
+        .args([
+            "--json",
+            "add",
+            fixture.repo.to_str().unwrap(),
+            "--name",
+            "hooked",
+        ])
+        .env("SHOAL_SHELL_DIRECTIVE", home.join("directive"))
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let workspace: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(workspace["state"], "ready");
+    assert!(String::from_utf8_lossy(&output.stderr).contains("post-setup output"));
+    let path = fs::canonicalize(workspace["path"].as_str().unwrap()).unwrap();
+    assert_eq!(
+        fs::read_to_string(home.join("post-setup-ran")).unwrap(),
+        format!("{}\nhooked\n", path.display())
+    );
+    let inspection = fixture.ok(&["inspect", "hooked"]);
+    assert_eq!(
+        inspection["executions"],
+        serde_json::json!([]),
+        "hooks and what they leave behind are not tracked executions"
+    );
+
+    // A failing hook keeps the ready workspace and does not start the agent.
+    let bin = home.join("bin");
+    fs::create_dir_all(&bin).unwrap();
+    fs::write(
+        bin.join("codex"),
+        "#!/bin/sh\nprintf agent > agent-started\n",
+    )
+    .unwrap();
+    fs::set_permissions(bin.join("codex"), fs::Permissions::from_mode(0o755)).unwrap();
+    let output = fixture
+        .command()
+        .args([
+            "add",
+            fixture.repo.to_str().unwrap(),
+            "--name",
+            "hook-fails",
+            "--agent",
+            "codex",
+        ])
+        .env("SHOAL_TEST_FAIL_HOOK", "1")
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("post_setup_cmd exited with 5"));
+    let failed = fixture.ok(&["inspect", "hook-fails"]);
+    assert_eq!(failed["workspace"]["state"], "ready");
+    let failed_path = Path::new(failed["workspace"]["path"].as_str().unwrap());
+    assert!(!failed_path.join("agent-started").exists());
+    assert_eq!(fixture.ok(&["prepare", "hook-fails"])["state"], "ready");
+    assert!(
+        fs::read_to_string(home.join("post-setup-ran"))
+            .unwrap()
+            .ends_with("\nhook-fails\n")
+    );
+
+    // The removal hook runs in the daemon before the worktree goes; failure retains it.
+    fs::write(path.join("fail-removal"), "busy").unwrap();
+    let output = fixture.run(&["rm", "hooked", "--yes", "--delete-branch"]);
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("pre_remove_cmd exited with 3"), "{stderr}");
+    assert!(stderr.contains("session still busy"), "{stderr}");
+    assert_eq!(
+        fs::read_to_string(home.join("pre-remove-ran")).unwrap(),
+        format!("{}\nhooked\n", path.display())
+    );
+    let retained = fixture.ok(&["inspect", "hooked"]);
+    assert_eq!(retained["workspace"]["state"], "ready");
+    assert!(path.join("tracked").exists());
+    fs::remove_file(path.join("fail-removal")).unwrap();
+    fixture.ok(&["rm", "hooked", "--yes", "--delete-branch"]);
+    assert!(!path.exists());
+    assert!(
+        !fixture
+            .ok(&["list"])
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|w| w["name"] == "hooked")
+    );
+}
+
+#[test]
+fn claude_launch_marks_the_workspace_trusted_in_claude_config() {
+    let fixture = Fixture::new();
+    let home = fixture.root.path();
+    let workspace = fixture.add("trusted");
+    let path = fs::canonicalize(workspace["path"].as_str().unwrap()).unwrap();
+    let key = path.to_str().unwrap();
+    let bin = home.join("bin");
+    fs::create_dir_all(&bin).unwrap();
+    fs::write(bin.join("claude"), "#!/bin/sh\nexit 0\n").unwrap();
+    fs::set_permissions(bin.join("claude"), fs::Permissions::from_mode(0o755)).unwrap();
+    let config = home.join(".claude.json");
+
+    // Without a Claude config, launch proceeds and creates nothing.
+    assert!(fixture.run(&["claude", "trusted"]).status.success());
+    assert!(!config.exists());
+
+    fs::write(&config, r#"{"numStartups": 1, "projects": {}}"#).unwrap();
+    assert!(fixture.run(&["claude", "trusted"]).status.success());
+    let root: Value = serde_json::from_str(&fs::read_to_string(&config).unwrap()).unwrap();
+    assert_eq!(root["numStartups"], 1);
+    assert_eq!(root["projects"][key]["hasTrustDialogAccepted"], true);
+
+    // An absolute CLAUDE_CONFIG_DIR selects that directory's config instead.
+    let config_dir = home.join("claude-config");
+    fs::create_dir(&config_dir).unwrap();
+    fs::write(config_dir.join(".claude.json"), r#"{"projects": {}}"#).unwrap();
+    fs::write(&config, r#"{"projects": {}}"#).unwrap();
+    let output = fixture
+        .command()
+        .args(["claude", "trusted"])
+        .env("CLAUDE_CONFIG_DIR", &config_dir)
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let overridden: Value =
+        serde_json::from_str(&fs::read_to_string(config_dir.join(".claude.json")).unwrap())
+            .unwrap();
+    assert_eq!(overridden["projects"][key]["hasTrustDialogAccepted"], true);
+    let untouched: Value = serde_json::from_str(&fs::read_to_string(&config).unwrap()).unwrap();
+    assert!(untouched["projects"][key].is_null());
+
+    // A bad override warns and still launches.
+    let output = fixture
+        .command()
+        .args(["claude", "trusted"])
+        .env("CLAUDE_CONFIG_DIR", "relative")
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    assert!(String::from_utf8_lossy(&output.stderr).contains("must be an absolute path"));
 }

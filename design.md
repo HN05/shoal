@@ -1,404 +1,224 @@
 # Shoal design
 
-Current product decisions and unresolved work. Command usage and configuration
-examples belong in the [usage guide](README.md) and [command reference](docs/reference.md); contributor rules belong in
-[AGENTS.md](AGENTS.md). Update decisions in place rather than appending milestone
-reports, test inventories, or investigation transcripts.
+Product decisions and open work. Usage belongs in [README.md](README.md),
+behavior in [docs/reference.md](docs/reference.md), contributor rules in
+[AGENTS.md](AGENTS.md). Change decisions in place; never append milestone
+reports, test inventories, or investigation notes.
 
 ## Purpose and boundaries
 
-Shoal manages local Git workspaces, executions, and shared development resources
-for humans and coding agents. Cleanup is part of resource ownership: a disposable
-workspace should not leave substantial run-owned data behind.
+Shoal manages local Git workspaces, executions, and shared development
+resources for humans and coding agents. Cleanup is part of resource ownership:
+a disposable workspace must not leave substantial run-owned data behind.
 
-Agents cooperate with Shoal's scope and allocations. Shoal does not prevent a
-hostile same-user process from bypassing them through Git, filesystem operations,
-or direct resource access. Filesystem restrictions are future work.
+Agents cooperate with Shoal's scope and allocations. Shoal does not stop a
+hostile same-user process from bypassing them through Git, the filesystem, or
+direct resource access; filesystem restrictions are future work.
 
-Keep caller-specific integration outside the core. Superlogical owns its terminal
-sessions and can request workspace preparation, execution, and removal. Macraft
-owns VM/container provisioning and guest lifetime. Shoal does not provision build
-tools, manage browsers, schedule agent tasks, or store agent conversations.
+Caller-specific integration stays outside the core. Superlogical owns its
+terminal sessions and requests preparation, execution, and removal; Macraft
+owns VM and container provisioning. Shoal does not provision build tools,
+manage browsers, schedule agent tasks, or store conversations. Agent shortcuts
+(`claude`, `codex`, `t3`) are thin launchers around the generic `exec` path;
+their agent-specific flags and setup are meant to become configurable defaults
+rather than deeper integration.
 
 ## Architecture
 
 One Rust binary provides the CLI, execution wrapper, and daemon. Each state
-directory has one daemon, shared across repositories, with a private Unix socket
-and versioned JSON protocol. The ordinary installation is per user; isolated
-state directories have independent allocations. The daemon owns persistent state
-in SQLite and coordinates allocation, lifecycle transitions, and recovery.
+directory has one daemon shared across repositories, with a private Unix
+socket and a versioned JSON protocol; the ordinary installation is per user.
+The daemon owns persistent state in SQLite and coordinates allocation,
+lifecycle transitions, and recovery.
 
 The execution wrapper owns terminal I/O, environment delivery, exit codes, and
-command process groups. It registers with the daemon and handles stop requests.
-The daemon does not proxy terminal sessions. A lost connection is not proof that
-an execution stopped or that its resources are available for reassignment.
+command process groups, registers with the daemon, and handles stop requests.
+The daemon never proxies terminals, and a lost connection is not proof that an
+execution stopped or that its resources are free.
 
-Use short transactions for atomic claims and typed lifecycle states. Keep slow
-external operations outside database transactions, retaining ownership through
-failure. Persisted and wire states use lowercase representations; unknown values
-are errors. Migrations preserve ownership records, and protocol mismatches require
-a compatible CLI and daemon.
+Use short transactions for atomic claims and typed lifecycle states with
+lowercase persisted and wire spellings; unknown values are errors. Keep slow
+external operations outside transactions while retaining ownership through
+failure. Migrations preserve ownership records; protocol mismatches require a
+matching CLI and daemon.
 
-Worktrunk creates and removes worktrees through Shoal's adapter, with isolated
+Worktrunk creates and removes worktrees through Shoal's adapter with isolated
 configuration and hooks disabled. Invoke external tools with argument arrays.
-Keep writable state outside the installed binary's directory so upgrades preserve
-it. Service setup manages one per-user launchd/systemd service; foreground mode
-supports environments without a service manager.
+Keep writable state outside the binary's directory. Service setup manages one
+per-user launchd/systemd service; foreground mode covers environments without
+a service manager. The service captures the installing shell's `PATH`.
 
-The shared HN05/homebrew-tap repository on GitHub provides two source-built channels in one
-formula: tagged releases by default and `--HEAD` for `main`. Project-specific
-build and packaging logic stays in Shoal's `scripts/install-homebrew.sh`; the tap
-selects sources, declares dependencies, and invokes that script. Release versions and
-immutable tags are explicitly selected by the formula; advancing `main` alone
-does not upgrade release installations. The initial release target is `v0.1.0`,
-pending publication. Channels share the binary, daemon, and skill paths; switching
-channels replaces the installation. Homebrew installs runtime dependencies and
-the bundled skill, but service registration and restarts remain explicit Shoal
-commands. Use the stable Homebrew opt executable path for service registration.
-
-Release preparation and publication live in Shoal. Actions → release accepts an
-explicit version or selects the next unused patch. One run updates Cargo versions,
-validates and builds, creates and merges a version PR under normal branch
-protection, then validates its exact merged commit, creates an immutable tag,
-and publishes the Forgejo release. It never tags a later main commit by accident.
-The automation token must have merge permission; no force-merge bypass is used.
-After publication, dependent Docker jobs in the same workflow update only Shoal's
-formula in two Forgejo taps over HTTPS using the published job's exact tag,
-using the HOMEBREW_TAP_TOKEN secret. HN05/homebrew-tap keeps Forgejo source URLs;
-HN05/homebrew-tap-github uses GitHub source URLs and push-mirrors to GitHub's
-HN05/homebrew-tap. The workflow writes only to Forgejo; it needs no GitHub write
-credential. Verify the GitHub source tag resolves to the same release commit
-before updating the GitHub-facing formula. A delayed source mirror fails that
-update for explicit retry without blocking the original tap's update.
-Refuse release downgrades or changed commit
-pins for an existing version. Concurrent tap pushes are retried against its
-latest main without force-pushing. Main-channel builds need no tap version bump.
+Distribution is a source-built Homebrew formula in the shared HN05 tap with a
+release channel (immutable tags, selected explicitly) and a `main` channel.
+Build and packaging logic lives in Shoal's `scripts/install-homebrew.sh`; the
+tap declares sources and dependencies. Releases are made by one Forgejo Actions
+workflow that bumps versions, validates, creates and merges a version PR under
+normal branch protection, tags the exact merged commit, publishes the release,
+and then updates both taps (Forgejo-sourced, and GitHub-sourced with a push
+mirror) using that tag. It never tags a later commit, downgrades, or force
+merges; tap updates retry against the tap's latest main without force pushes.
 
 ## Workspaces and Git
 
-Register local repositories in place or retain URL clones for reuse. Registration
-is idempotent by normalized origin URL, falling back to canonical local path.
-Repository identity remains distinct from its optional display name. Registration
-does not implicitly fetch. Workspace creation runs optional configured setup.
-Repository selectors accept the displayed source basename when unambiguous,
-including older clones stored under UUID directories. Explicit names take
-precedence over inferred names; use an ID, path, or source URL to disambiguate.
+Register local repositories in place or retain URL clones for reuse under
+`~/.local/share/shoal/repositories/<name>` (global `repositories_dir` or a
+one-off `--path` override; directories are reserved atomically and never
+reused or moved). Registration is idempotent by normalized origin URL, then
+canonical path, never fetches, and keeps a stable UUID separate from the
+display name. Workspaces stay under the state directory.
 
-New URL clones live in `~/.local/share/shoal/repositories/<name>`, separately from
-daemon state. Use the explicit registration name or a sanitized URL basename
-without `.git`; append `-2`, `-3`, etc. only on conflict. Reserve the directory
-atomically, respecting existing filesystem entries and recorded repository paths
-even if their checkout is missing. Repository IDs remain stable internal UUIDs.
-Global `repositories_dir` overrides their parent directory using an
-absolute path or a home-relative `~/` path. Create the directory only when cloning.
-Changing the setting requires a daemon restart and affects new clones only;
-existing repository paths and local registrations remain unchanged. Do not move
-existing clones automatically, because worktree identities depend on their Git
-metadata paths. Workspace directories remain under the state directory.
-`repo add <url> --path <directory>` overrides the clone destination for one repo.
-CLI relative paths resolve against the caller's directory. Never clone into an
-existing destination or silently ignore a path that differs from an existing
-registration. Local checkout registration requires no remote and keeps the
-checkout in place; `--path` applies only to URL cloning.
+A workspace branches from the repository default branch: `origin/HEAD`, the
+sole remote's HEAD, or the checkout's current branch without remotes, never a
+guessed `main`. The selected local default branch is fast-forwarded from its
+upstream first, preserving an ahead branch and refusing divergence, dirty or
+managed checkouts, and failed fetches. `--ref` starts elsewhere without
+refreshing, except when it names the default branch. Creation, default-branch
+refresh, setup, repository removal, and recovery share a per-repository Git gate.
 
-A workspace defaults to the repository's default branch. Resolve `origin/HEAD`,
-or the sole remote's HEAD when there is no origin; multiple remotes without origin
-are ambiguous. Creation and pull discover a missing symbolic remote HEAD with
-`ls-remote --symref` and cache it. Existing cached HEAD is authoritative until the
-user updates it with `git remote set-head`. Without remotes, use the registered
-checkout's current branch; a detached checkout requires an explicit base. Never
-guess `main` or `master`. Registration does not contact remotes for discovery.
+Creation accepts literal Git branch names and derives a portable, globally
+unique workspace name and directory from them; a normalization collision fails
+without touching existing work. Branch conflicts get numeric suffixes on the
+blocking component only, never changing the workspace name. Worktree Git
+metadata identity is recorded so moved or replaced directories are never
+adopted silently.
 
-Fast-forward the selected local default branch from its configured upstream before
-branching, even when the registered checkout is on another branch. Preserve an
-already-ahead default. Missing local branches, missing upstream in a repository
-with remotes, divergence, failed fetches, and dirty/managed default checkouts stop
-creation. Local repositories without remotes or upstreams need no refresh. An
-explicit `--ref` selects another starting point without refreshing the default;
-naming the detected default branch directly or with `refs/heads/` still refreshes
-it. Explicit refs use only local default metadata, remaining usable without remote
-default discovery. Refresh and creation
-share the repository Git gate. Registration alone does not refresh branches.
+Repository config may name `setup_cmd`, `post_setup_cmd`, and `pre_remove_cmd`:
+single executable paths resolved against the worktree, run directly without
+shell parsing or PATH lookup, with the worktree as working directory. Setup
+runs through the tracked wrapper with workspace scope; the daemon owns
+readiness and execution records, and `add` keeps the workspace preparing until
+setup exits cleanly with no survivors. Failures preserve files, branches, and
+leases; interactive callers choose delete, ignore (which repairs verified state
+first), or keep, while JSON callers get a nonzero exit. `prepare` reruns setup
+explicitly; nothing retries automatically.
 
-A workspace starts from committed history and has a stable name and directory.
-Creation accepts literal Git branch names validated by Git, preserving slashes,
-punctuation, Unicode, and names longer than the workspace-name limit. Reject
-previous-checkout shorthand rather than expanding it. Derive the workspace name
-from the requested branch: replace non-ASCII-alphanumeric characters other than
-hyphen/underscore with hyphens, trim leading hyphens/underscores, truncate to 64
-characters, and use `workspace` if empty. Names remain globally unique; a
-normalization collision fails without modifying the existing workspace. Selectors
-and completions use the resulting workspace name or ID, not branch aliases.
+Hooks are deliberately untracked user processes with the workspace identity
+but no scope token, because their purpose is to start or stop things that
+outlive the hook (a tmux session, say) without becoming execution survivors.
+The post-setup hook runs from the CLI with the terminal once the workspace is
+ready and before any agent; failure keeps the ready workspace. The pre-remove
+hook runs in the daemon inside the single removal path for manual, repository,
+and automatic removal, after checks pass and commands stop, bounded in time;
+failure retains the workspace. Both hook keys share the setup path rules.
 
-The branch receives numeric suffixes only on conflict. Suffix a blocking ancestor
-component when a branch occupies its namespace; otherwise suffix the leaf. `HEAD`
-and Worktrunk's `@` shortcut, along with full 40/64-character hex object-ID
-spellings, are reserved and receive suffixes. These suffixes do
-not change the derived workspace name or directory. Serialize branch selection
-and creation per repository; existing refs and ownership records reserve branch
-names. Record the worktree's Git metadata identity so moved or replaced directories
-cannot be silently adopted. Existing workspace names and records are unchanged.
-
-Repository config may set `setup_cmd` to an executable path. Relative paths resolve
-against the new worktree root, including when supplied through local repository
-config; absolute paths refer to the host filesystem. Execute the path directly,
-without shell parsing, PATH lookup, argument splitting, or inferred install commands.
-The executable must carry its own interpreter/shebang when needed. Its working
-directory is the worktree root. Setup uses the invoking CLI's tracked execution
-wrapper and environment, with workspace scope; the daemon owns readiness and
-execution records, never terminal I/O. Resources remain lazy.
-
-`add` keeps the workspace preparing until setup succeeds. Ordinary executions
-and agent launch require readiness. Setup failures preserve files, branches, and
-leases and mark the workspace failed. Interactive callers choose delete workspace,
-ignore and continue, or cancel (the default). Deletion confirms the exact worktree
-and branch and uses the shared removal path; it never deletes the registered
-repository. Ignoring explicitly repairs verified state before proceeding and
-cannot dismiss unresolved process ownership. JSON/noninteractive failures retain
-the workspace and return nonzero without prompting or starting the agent.
-`prepare [workspace]` explicitly reruns configured setup, including after failure;
-commands must tolerate partial previous runs. No automatic retry occurs. Unknown
-executions require reconciliation first; restart preserves interrupted setup as
-failed. JSON mode sends setup output to stderr and disconnects its stdin so stdout
-remains available for the workspace record and any subsequent agent output.
-
-Git operations have separate meanings:
-
-- `diff` compares against the recorded base branch's fork point, falling back to
-  merge-base. A fixed-commit base stays fixed. Preserve native Git diff settings;
-  advancing main alone must not appear as work done on the feature branch.
-- `pull` fast-forwards the repository default branch from its configured upstream.
-  It preserves an already-ahead default and refuses divergence, dirty checkouts, and that branch
-  checked out in a managed workspace. It does not merge into the feature branch.
-- `merge` imports any local or remote branch into the workspace's recorded branch.
-  Local sources take precedence; remote-only discovery requires an unambiguous
-  match, and explicit remote sources always fetch fresh data. Conflicts stay in
-  the worktree for ordinary Git resolution or abort. No automatic stash, reset,
-  push, or change to another workspace is implied.
-
-Fetches for these operations use private temporary refs rather than shared
-FETCH_HEAD. Merge runs through the tracked execution wrapper. Own-branch and
-worktree checks are cooperative safeguards; independent Git commands can race.
+`diff` compares against the recorded base's fork point (merge-base fallback,
+fixed commits stay fixed) with native Git settings, so advancing the base is
+never shown as work. `pull` fast-forwards the repository default branch only.
+`merge` imports any local or remote branch into the workspace's own branch,
+preferring local sources and requiring unambiguous remote discovery, and
+leaves conflicts for ordinary Git. Fetches use private temporary refs, merges
+run through the tracked wrapper, and own-branch checks are cooperative.
 
 ## Scope and user interfaces
 
-Commands launched through Shoal inherit a daemon-validated scope token. They may
-inspect and execute in their own workspace, merge into its branch, and manage its
-resources. `pull` for their repository's default branch is the narrow repository-management
-exception. Creation, removal, reconciliation, other-workspace access, and service
-administration belong to an unscoped caller. Nested executions retain scope;
-changing working directory does not expand it.
+Commands launched through Shoal inherit a daemon-validated scope token that
+confines them to their own workspace: inspect, execute, merge, resources, and
+`pull` of their repository default branch. Creation, removal, reconciliation,
+other workspaces, repository administration, and service control need an
+unscoped caller. Nested executions keep their scope.
 
-The CLI supports explicit targets and JSON for automation, with current-directory
-resolution and fzf for interactive selection. Noninteractive calls never open a
-picker. Rust selects navigation paths; the Bash/Zsh wrapper only changes directory
-and preserves status, without evaluating repository-provided shell code.
+The CLI takes explicit targets and `--json` for automation, and uses
+current-directory resolution and fzf interactively; noninteractive calls never
+open a picker. Rust chooses navigation paths; the Bash/Zsh wrapper only changes
+directory and never evaluates repository-provided code. Confirmations show the
+action and ask `[y/N]`, cancel on Enter, `n`, end of input, or Ctrl-C (also
+after a tracked execution in the same process), and are bypassed only by
+explicit flags such as `--yes`. Removal's branch choice stays separate from
+its confirmation; explicit branch flags skip the choice only.
 
-When approval is required, interactive commands show the action and ask `[y/N]`.
-Enter, `n`, end-of-input, and Ctrl-C cancel; invalid answers prompt again. Ctrl-C
-cancels every prompt, including after a tracked execution (such as a setup
-command) has run in the same CLI process. Explicit flags
-such as `--yes` bypass confirmation; noninteractive/JSON callers must use those
-flags. Workspace branch choices remain separate: Cancel, Keep branch, or Delete
-branch, followed by a concise confirmation showing file and branch effects.
-Explicit branch flags skip the choice, not confirmation. Suggested port changes
-use the same yes/no prompt. Already safe workspace removal needs no new prompt.
-
-Shell completion asks the installed binary for current command syntax on each
-Tab. Live repository, workspace, and resource targets use read-only daemon calls,
-respect the caller's state directory and scope, and time out after 500 ms. Never
-start a daemon or open a picker for completion. Commands, flags, fixed values,
-and filesystem paths remain completable without a daemon. Resource suggestions
-use an explicit workspace or the current worktree. Targets and subcommands come
-before flags; Zsh registration disables completion re-sorting for Shoal, including
+Completion queries the installed binary per Tab and uses read-only daemon calls
+with a 500 ms timeout for live targets, honoring state directory and scope and
+never starting a daemon or picker. Targets sort before flags, including in
 fzf-tab.
 
-Agent shortcuts use the execution wrapper. Codex CLI launches with
-`--sandbox danger-full-access --ask-for-approval=never`; Claude receives the
-workspace name for remote control. Generic `exec` forwards its command unchanged.
-Agent permission settings and Shoal's cooperative daemon scope are separate.
+Agent shortcuts use the execution wrapper: Codex CLI gets full access without
+approvals, Claude gets remote control named after the workspace and a persisted
+trust entry in its config (Claude offers no flag for this; its own error text
+names that entry). Codex's default mode is a global config value read at launch.
+`add --agent` launches only after creation, setup, and the post-setup hook
+succeed, or after an explicitly ignored setup failure, and retains the
+workspace whatever the agent does. Desktop handoffs (Codex app, T3) provide no
+tracking or scope; users disable automatic cleanup when that activity cannot
+be tracked.
 
-Codex's mode is optional for current-workspace/picker launches. Global
-`[codex].default_mode` selects `cli` (the default) or `app`; explicit positional
-modes override it. Read the default at launch time without a daemon restart.
-Named workspace launches retain the explicit mode before the workspace selector.
-
-`add --agent codex|claude` launches after successful worktree creation and configured
-setup, or after the user explicitly ignores a setup failure. Plain `add` creates without launching. Codex uses its
-configured default mode; arguments after `--` pass through to the agent.
-The CLI wrapper owns foreground execution and returns the agent's exit status;
-the daemon does not own terminal I/O. Retain the workspace on launch failure or
-agent exit so users can retry with existing shortcuts. Shell integration enters
-the workspace after the agent exits, including a nonzero exit. JSON mode emits
-the workspace record before unmodified agent output. App mode keeps its existing
-handoff-only lifecycle semantics.
-
-Desktop shortcuts hand an existing workspace directory to Codex or T3. A GUI
-launcher returning does not mean its agent session ended. Directory handoff alone
-provides neither execution tracking nor a scope token; disable automatic cleanup
-when independent GUI activity cannot be tracked reliably.
-
-The agent skill is distributed at user scope, so it works without a copy in each
-project or a Shoal-launched agent. `skill` exports the bundled instructions;
-`skill install` installs or refreshes them for Codex and/or Claude. Installation
-is independent of the daemon and cannot run from a scoped execution. Skill
-availability does not register a checkout or establish execution ownership.
-Homebrew builds embed the stable opt path of their packaged skill. Installation
-atomically replaces each agent's SKILL.md with a symlink to that path, preserving
-sibling files and following future upgrades. Other builds install a bundled copy
-which must be refreshed after upgrading. Never follow an old SKILL.md symlink
-when replacing it; missing packaged instructions fail installation explicitly.
+The skill is installed at user scope for Codex and Claude, independent of the
+daemon and never from a scoped execution. Homebrew builds link to the packaged
+skill; other builds copy it. Skill availability registers nothing.
 
 ## Resource ownership
 
-All reservations and leases belong to a worktree, not to the requesting command.
-They survive command exit, daemon restart, and failed removal. Allocation must be
-atomic, repeated lease names idempotent, and release explicit or part of successful
-workspace removal. Agents stop using a resource before releasing it.
+Reservations and leases belong to a worktree, survive command exit, restarts,
+and failed removal, are allocated atomically with idempotent lease names, and
+are released explicitly or by successful removal. Resources are lazy, never
+claimed at creation.
 
-Global TOML supplies machine policy. Repository TOML is read from the selected
-worktree at `.shoal.toml` or `.shoal/config.toml`; both together are an error.
-An optional local config is stored as TOML in the daemon database, keyed by stable
-repository ID and owned by its registration. `repo config --file` validates and
-copies it; `repo config` shows it and `--clear` removes it. It replaces the entire
-worktree config for all of that repository's workspaces, without reading or
-merging checkout files. Empty TOML explicitly chooses defaults; absent local
-config preserves worktree-file discovery and its dual-file error. Read config on
-each resource request, so changes need no restart and leave existing leases
-unchanged. Updates are unscoped repository administration and serialize with
-registration/removal; incomplete removal blocks updates. Rename, daemon restart,
-and workspace removal preserve local config. Successful repository deletion
-cascades its deletion in the same database transaction; failed removal retains it.
-Repository preferences cannot expand machine policy. Global resource pools span
-repositories within one daemon; repo pools span that repository's worktrees.
-Resources are acquired lazily, not during workspace creation.
+Global TOML is machine policy; repository TOML comes from the worktree
+(`.shoal.toml` or `.shoal/config.toml`, both together is an error) or from a
+local override stored in the database by repository ID, which replaces the
+whole worktree config and is deleted with the registration. Config is read per
+request, so changes need no restart and leave existing leases alone.
+Repository config cannot expand machine policy; global pools span
+repositories, repository pools span that repository's worktrees.
 
-### Ports
-
-TCP reservations are cooperative: probe availability, then record a unique port,
-lease name, and environment mapping. Shoal does not retain a listening socket or
-prevent unrelated processes from binding later. CLI overrides and explicit
-conflict policy control allocation; a suggestion is not a reservation. Export
-allocations to subsequent executions without claiming to update existing shells.
-
-### Simulators
-
-Simulator leases are exclusive. Use installed runtimes and mutate only devices
-recorded as Shoal-owned. Persist claims before simctl mutations and retain them
-after interrupted or failed operations. Active leases are never preempted;
-unallocated devices may be reclaimed to satisfy capacity limits or idle expiry.
-External booted devices count toward capacity but must not be mutated.
-
-Normal handoff preserves apps, data, and settings. A fresh or erased device needs
-an explicit `--clean --reason` request; release an existing lease before changing
-it to clean. Minimize erased apps when choosing a device and persist the audit
-record before destructive work. Failure to write the audit prevents mutation.
-Audit history survives workspace removal.
-
-Delete owned devices during workspace removal or idle expiry. If deletion fails,
-retain ownership for retry; completed cleanup steps are not rolled back merely
-because a later step fails. Installed runtimes and OS caches remain machine-owned.
-
-### Generic permits
-
-A semaphore lease consumes capacity in both its named pool and selected member.
-A standalone resource is a one-member pool. An rwlock member allows unlimited
-readers or one exclusive writer; all readers of that member share one pool slot,
-released by its final reader. New rwlock leases default to write. Changing lease
-mode or member requires release first; there is no atomic upgrade.
-
-Check definitions and both capacity limits in the same allocation transaction.
-Definition drift blocks new claims until definitions agree or existing leases
-are drained; it does not revoke existing permits or prevent their release.
-Bounded waiting provides no fairness, deadlock avoidance, or multi-resource
-transaction guarantee. Shoal tracks permits without managing the underlying
-resource's lifecycle or enforcing its use.
+Ports are cooperative TCP reservations: probe, record, export to later
+executions, never hold a socket. Simulator leases are exclusive over
+Shoal-created devices only: persist claims before mutating, keep them after
+failure, never preempt active leases, count external devices toward capacity,
+preserve device state on handoff, require `--clean --reason` for erasure with
+an audit record written before the destructive step, and delete devices on
+removal or idle expiry. Generic permits consume pool and member capacity in
+one transaction; rwlock members allow unlimited readers sharing one slot or one
+writer, default to write, and require release to change mode. Definition drift
+blocks new claims but never revokes permits. Shoal does not manage the
+underlying resources.
 
 ## Removal and recovery
 
-`repo rm <repository> --yes` permanently deletes the registered checkout (including
-local repositories), all its Shoal workspaces, branches, and owned resources. It
-stops managed executions through the shared workspace removal path and discards
-uncommitted and unpushed work. Refuse existing linked worktrees outside Shoal, redirected
-paths, and a checkout containing another registered repo or Shoal's state/home.
-Ignore missing linked directories only when Git reports their records prunable
-and unlocked. Existing paths (including dangling symlinks) and locked offline
-worktrees still block deletion. No separate global Git prune is necessary.
-Persist repository deletion progress before mutation; a failed cleanup retains
-remaining ownership and blocks new workspace creation until removal is retried.
-Deletion retries verify the recorded directory identity even after partial file
-deletion or daemon restart. Completed cleanup is not rolled back. Retain simulator
-audit history after repository deletion.
+Manual and automatic cleanup share one path: establish ownership, stop owned
+executions, run the pre-remove hook, remove owned simulators, remove the
+worktree, and release leases with the record. Failures retain what is needed
+to retry. Manual removal deletes a redundant branch (tree equal to the local
+default or its upstream) and otherwise requires an explicit keep or delete
+choice. Automatic cleanup removes only clean, fully pushed, idle worktrees with
+no executions, directory users, leases, or permits, rechecked immediately
+before deletion, without fetching. `repo rm` deletes the checkout and every
+workspace through that path, refuses external worktrees and dangerous paths,
+persists progress, and blocks new workspaces until an interrupted removal is
+retried.
 
-Manual and automatic cleanup share one removal path: establish ownership, stop
-owned executions, clean up owned simulator devices, remove the worktree, and
-release bookkeeping leases with the ownership record. Failures retain the records
-needed to retry. Access to a shared cache never makes it disposable workspace data.
-
-Manual removal deletes a redundant branch when the worktree is clean and its
-contents match the local default branch or its upstream. Default-branch lookup
-uses local metadata only during cleanup; an unknown default is not a match.
-Otherwise the caller explicitly chooses to
-keep or delete the branch. Keeping a branch preserves committed work only;
-removing a worktree discards its uncommitted files.
-
-Automatic cleanup is enabled by default after ten idle minutes. Eligibility
-requires a clean worktree whose HEAD is fully pushed according to locally known
-remote refs, no live or unknown executions or processes using the directory, and
-no active simulator leases or generic permits. Activity resets eligibility;
-failed inspection blocks removal. Recheck immediately before deleting. No
-implicit fetch or assumption that a detached GUI session ended is permitted.
-
-Reconciliation reports by default. Explicit repair preserves work and resource
-leases while restoring verified worktrees or clearing executions proven stopped.
-Startup audits ownership but never deletes work, kills processes, clears unknown
-executions, or releases leases. Interrupted lifecycle operations remain failed;
-disconnected executions remain unknown until reconciled.
-
-Verify native PID birth identity and same-user ownership before signaling
-survivors. Process-group membership or a reused PID alone is insufficient.
-Explicit acknowledgement of stopped legacy executions cannot bypass visible live
-processes. Process discovery is conservative, but is not complete containment of
-all detached descendants.
-
-Refuse cleanup of moved or replaced worktrees until ownership is resolved. For a
-confirmed missing directory, explicit removal cleans up its resources and stale
-Worktrunk registration while retaining the Git branch. Automatic cleanup never
-uses a failed or unverifiable workspace as permission to discard state.
+Reconciliation reports by default; repair restores verified worktrees and
+clears executions proven stopped while preserving work and leases. Startup
+audits but never deletes, kills, clears unknown executions, or releases leases.
+Survivors are signaled only after verifying PID birth identity and same-user
+ownership; acknowledgement cannot override visible live processes. Moved or
+replaced worktrees stay unresolved until restored; a missing directory is
+cleaned up only by explicit removal, retaining the branch.
 
 ## Remaining work
 
-Preserve the implementation order: CLI/daemon, workspaces, ports, simulators,
-lifecycle polish, then filesystem restrictions. The core resource and recovery
-workflow exists; the following work remains distinct from current behavior:
+Implementation order: CLI/daemon, workspaces, ports, simulators, lifecycle
+polish, then filesystem restrictions. Open items:
 
-- **External sessions:** define a generic attachment/hold and recovery contract
-  before promising lifecycle tracking or automatic cleanup for GUI agents.
-  App-specific hooks and launch adapters belong outside the core.
-- **Storage policy:** define ownership and retention for run data outside the
-  worktree, shared caches, logs, and retained artifacts. Numeric pruning limits
-  and retained audit-history policy remain open.
-- **Distribution and portability:** Publishing the first tagged release and
-  Homebrew bottles remain future work. Preserve stable service identity across upgrades. Native Linux
-  service and recovery validation remains outstanding.
-- **Execution environments:** host/guest and cross-user resource coordination are
-  unresolved. Independent state directories currently have independent capacity.
+- **Agent launchers:** move agent-specific flags and setup into configurable
+  defaults so `claude`, `codex`, and `t3` stop being special cases.
+- **External sessions:** a generic attach/hold contract before promising
+  tracking or cleanup for GUI agents.
+- **Storage policy:** ownership and retention for run data outside the
+  worktree, caches, logs, and audit history.
+- **Distribution:** Homebrew bottles; stable service identity across
+  upgrades; native Linux service and recovery validation.
+- **Execution environments:** host/guest and cross-user coordination;
+  independent state directories currently have independent capacity.
 
-### Filesystem restrictions: confirmed policy, not implemented
+### Filesystem restrictions: decided policy, not implemented
 
-Provide practical guardrails for cooperative agents and an explicit unrestricted
-mode. Read and write access are separate. Precedence is global deny, global
-allow, repository grant, then deny undeclared access. Global denies win even
-inside broadly allowed directories. There is no implicit whole-home grant.
-
-Define an inspectable baseline for the worktree, temporary storage, runtime
-dependencies, shared Git metadata, and required tool state. Resolve symlinks and
-distinguish writable access from cleanup ownership. Exact path syntax and launch
-profiles remain open. Unsupported policies must fail clearly rather than silently
-launching unrestricted or retrying a partially completed command.
-
-Seatbelt is the intended macOS backend. Landlock is a Linux candidate, not a
-selection; it must first demonstrate the required nested allow/deny semantics.
-Reconsider bubblewrap if those semantics or a separate filesystem view require
-it. Keep restrictions in the execution launcher, outside the resource daemon,
-and validate real builds, tools, and cleanup before committing to a backend.
+Provide guardrails for cooperative agents plus an explicit unrestricted mode.
+Read and write access are separate. Precedence is global deny, global allow,
+repository grant, then deny; global denies win inside allowed directories and
+there is no implicit whole-home grant. Define an inspectable baseline for the
+worktree, temporary storage, runtime dependencies, shared Git metadata, and
+tool state; resolve symlinks and separate writable access from cleanup
+ownership. Unsupported policies fail clearly rather than launching
+unrestricted. Seatbelt is the intended macOS backend; Landlock is a Linux
+candidate pending nested allow/deny semantics, with bubblewrap as fallback.
+Restrictions live in the launcher, not the daemon.

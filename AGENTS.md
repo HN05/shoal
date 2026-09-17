@@ -13,7 +13,10 @@ when behavior changes, distinguishing decisions from proposals.
 - Invoke external tools with argument arrays. Use Worktrunk for worktree
   operations and preserve Shoal's ownership records and cleanup policy.
 - Repository TOML lives at `.shoal.toml` or `.shoal/config.toml`; reject both
-  together when no local override exists. Optional local repository config lives
+  together when no local override exists. `setup_cmd` is tracked and gates
+  readiness; `post_setup_cmd` (CLI, after ready) and `pre_remove_cmd` (daemon,
+  inside the shared removal path) are untracked user processes with the
+  workspace identity and no scope token. Optional local repository config lives
   in daemon state, replaces the entire worktree config, and is deleted with its
   repository registration. Named ports are lazy, with CLI overrides and explicit
   conflict policy.
@@ -62,6 +65,16 @@ when behavior changes, distinguishing decisions from proposals.
 - `shoal diff` uses Git fork-point/merge-base against the recorded base branch;
   do not compare directly to today's main tip or a frozen commit after a rebase.
   Preserve native Git pager/external-diff configuration.
+
+## Documentation
+
+Keep documentation short and current. `tests/docs.rs` gives every Markdown
+file a line budget and rejects new Markdown files; trim before raising a
+budget. Say each thing once, where a reader looks for it: usage in README.md,
+behavior in docs/reference.md, decisions in design.md, contributor rules here.
+Edit the sentence that describes the changed behavior instead of appending a
+paragraph, and cut text that restates code, tests, history, or another
+section. No milestone reports, test inventories, or investigation notes.
 
 ## Validation
 

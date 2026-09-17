@@ -268,6 +268,9 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             Body::PulledBranch(manager.pull_default_branch(&workspace).await?)
         }
         Method::DiffBase { workspace } => Body::DiffBase(manager.diff_base(&workspace).await?),
+        Method::WorkspaceHooks { workspace } => {
+            Body::Hooks(manager.workspace_hooks(&workspace).await?)
+        }
         Method::ReservePort {
             workspace,
             name,

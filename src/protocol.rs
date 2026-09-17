@@ -13,13 +13,13 @@ use crate::{
     process_identity::Identity,
     recovery::{ReconcileOptions, Report},
     removal::{BranchChoice, RemovalCheck, RemovalResult},
-    repo_config::LocalConfig,
+    repo_config::{Hooks, LocalConfig},
     resources::{Overview, ResourceLease, ResourceRequest},
     sim_audit::AuditEntry,
     simulators::{SimRequest, Simulator, SimulatorCatalog},
 };
 
-pub const VERSION: u32 = 17;
+pub const VERSION: u32 = 18;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -100,6 +100,10 @@ pub enum Method {
         workspace: String,
     },
     DiffBase {
+        workspace: String,
+    },
+    /// The workspace's effective lifecycle hooks, resolved against its worktree.
+    WorkspaceHooks {
         workspace: String,
     },
     /// Long-lived: the connection stays open for the execution's lifetime.
@@ -200,6 +204,7 @@ pub enum Body {
     RemovalCheck(RemovalCheck),
     RemovalResult(RemovalResult),
     DiffBase(DiffBase),
+    Hooks(Hooks),
     PulledBranch(PulledBranch),
     Port(PortReservation),
     Ports(Vec<PortReservation>),

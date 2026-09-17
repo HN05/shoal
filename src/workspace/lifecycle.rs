@@ -1,6 +1,7 @@
 //! One removal path for explicit removal and automatic cleanup.
 use super::Manager;
 use crate::{
+    hooks::{self, Hook},
     removal::{self, BranchChoice, RemovalCheck, RemovalResult},
     state::WorkspaceState,
     worktrunk,
@@ -215,6 +216,15 @@ impl Manager {
                 || check.unpushed_commits == 0,
             "detached HEAD has unpushed commits; create a branch before choosing to keep it"
         );
+        // The hook sees the worktree intact; a failing hook retains it.
+        if let Some(command) = self
+            .workspace_config(workspace)
+            .await?
+            .hooks(&workspace.path)
+            .pre_remove_cmd
+        {
+            hooks::run_detached(Hook::PreRemove, workspace, &command, &self.paths).await?;
+        }
         // Live resources are removed before the directory; failed cleanup
         // retains their ownership records so removal can be retried.
         self.remove_simulators(&workspace.id).await?;

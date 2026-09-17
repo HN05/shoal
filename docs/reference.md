@@ -5,9 +5,9 @@ Detailed command behavior and configuration. Start with the [usage guide](../REA
 - [Installation and upgrades](#homebrew)
 - [Daemon](#daemon)
 - [Workspaces](#workspaces)
+- [Setup and hooks](#workspace-setup-and-hooks)
+- [Removal and cleanup](#remove-a-workspace)
 - [Ports](#port-reservations)
-- [Setup commands](#workspace-setup)
-- [Cleanup](#automatic-cleanup)
 - [Shell integration](#shell-navigation)
 - [Recovery](#recovery)
 - [Simulators](#simulators-macos)
@@ -16,65 +16,25 @@ Detailed command behavior and configuration. Start with the [usage guide](../REA
 
 ## Homebrew
 
-The shared [HN05 tap](https://github.com/HN05/homebrew-tap) offers two channels: tagged releases
-(the default) and the current `main` branch (`--HEAD`). Both build from source.
-Tap the repository once:
+The [HN05 tap](https://github.com/HN05/homebrew-tap) offers tagged releases (the
+default) and the current `main` branch (`--HEAD`). Both build from source and
+install Worktrunk, Git, fzf, and lsof as runtime dependencies.
 
 ```sh
 brew tap hn05/tap
-```
-
-Install a release:
-
-```sh
-brew install hn05/tap/shoal
-```
-
-Or track `main`:
-
-```sh
-brew install --HEAD hn05/tap/shoal
-```
-
-After installing either channel:
-
-```sh
+brew install hn05/tap/shoal            # Or: brew install --HEAD hn05/tap/shoal
 shoal skill install
 shoal setup
 ```
 
-The formula installs Worktrunk, Git, fzf, and lsof as runtime dependencies, and
-uses Rust to build. Shoal manages its own per-user service through `shoal setup`.
-To update releases:
-
-```sh
-brew update
-brew upgrade hn05/tap/shoal
-shoal daemon restart
-```
-
-To update `main`:
-
-```sh
-brew update
-brew upgrade --fetch-HEAD hn05/tap/shoal
-shoal daemon restart
-```
-
-The channels share one installation, daemon, and skill path. To switch, stop the
-daemon with `shoal daemon stop`, run `brew uninstall hn05/tap/shoal`, then use
-the desired install command above and run `shoal daemon start`. Shoal's state and
-user skill links remain outside the Homebrew package and are preserved.
-
-Installed skill links follow Homebrew's stable `opt` path automatically. Existing
-copied skills need one `shoal skill install` using the Homebrew binary to migrate.
-If another Shoal installation is earlier on PATH, use
-`"$(brew --prefix shoal)/bin/shoal"` explicitly or adjust PATH.
-
-Project-specific build and packaging logic lives in `scripts/install-homebrew.sh`
-in this repository. The shared tap only declares source versions, dependencies,
-and the invocation of that script. The selected release or main commit supplies
-its own build script and skill.
+Upgrade with `brew update && brew upgrade hn05/tap/shoal` (`--fetch-HEAD` for
+`main`), then `shoal daemon restart`. The channels share one installation,
+daemon, and skill path; to switch, run `shoal daemon stop`, uninstall, install
+the other channel, and `shoal daemon start`. State and skill links live outside
+the package and survive. Skill links follow Homebrew's stable `opt` path; a
+skill copied by an older install needs one `shoal skill install` to migrate.
+Build and packaging logic lives in `scripts/install-homebrew.sh`; the tap only
+declares versions and dependencies and invokes that script.
 
 ## Daemon
 
@@ -82,230 +42,140 @@ its own build script and skill.
 cargo install --path .
 shoal setup --dry-run       # Preview the OS service definition
 shoal setup                 # Register and start the per-user service
-shoal daemon status
-shoal daemon stop
-shoal daemon start
-shoal daemon restart
+shoal daemon status|stop|start|restart
 ```
 
-macOS uses a launchd LaunchAgent in `~/Library/LaunchAgents`; it requires a GUI
-login session. Linux uses a systemd user service. Minimal containers without a
-user service manager can run the daemon in the foreground instead:
+macOS uses a launchd LaunchAgent in `~/Library/LaunchAgents` (requires a GUI
+login session); Linux uses a systemd user service. Without a service manager,
+run `shoal --state-dir /tmp/shoal-dev daemon run` in the foreground and target
+it with the same `--state-dir` (or `SHOAL_STATE_DIR`). State defaults to
+`~/.local/state/shoal`; runtime state and the Unix socket are private to the
+user. Service commands target the one registered per-user service, whose state
+directory must match. `daemon status` exits 1 when offline.
 
-```sh
-shoal --state-dir /tmp/shoal-dev daemon run
-# In another terminal:
-shoal --state-dir /tmp/shoal-dev --json daemon status
-shoal --state-dir /tmp/shoal-dev daemon stop
-```
-
-State defaults to `~/.local/state/shoal`. `--state-dir` or `SHOAL_STATE_DIR` selects
-an isolated instance for development. Service commands target the one registered
-per-user service; its configured state directory must match. Runtime state and
-the Unix socket are private to the user. Status returns exit code 1 when offline.
-
-`shoal setup` preserves the invoked executable's symlink path where possible.
-A running daemon must be restarted after upgrading its binary. macOS
-daemon diagnostics go to `daemon.log` in the state directory; Linux uses the
-user journal (`journalctl --user -u shoal.service`).
-
-Service definition serialization and CLI-to-service control are tested with an
-isolated service-manager fixture. Tests do not install persistent user services.
-Native Linux service integration has not yet been exercised on a Linux host.
+`shoal setup` preserves the invoked executable's symlink path and captures the
+current `PATH` for the service, so install `wt`, `git`, `lsof`, and any hook
+tools first. Restart the daemon after upgrading its binary. macOS diagnostics go
+to `daemon.log` in the state directory; Linux uses `journalctl --user -u
+shoal.service`. Tests use an isolated service-manager fixture and never install
+a real service; native Linux service integration is untested on a Linux host.
 
 ## Workspaces
 
 ```sh
-shoal repo add /path/to/repo # Or a Git clone URL; register once
+shoal repo add /path/to/repo             # Or a Git clone URL; register once
 shoal repo add /path/to/repo --name my-project
 shoal repo rename my-project new-name
 shoal repo list
-shoal add /path/to/repo --name fix-login
-shoal add /path/to/repo --name fix-api --agent codex
-shoal cd                    # Fuzzy workspace picker, even inside a workspace
-shoal cd fix-login          # Enter through the shell function
-shoal cd -                  # Previous directory; refuses deleted destinations
+shoal add my-project --name fix-login
+shoal add my-project --name fix-api --agent codex -- "Fix the API timeout"
+shoal cd                                 # Fuzzy picker, even inside a workspace
+shoal cd fix-login                       # Enter through the shell function
+shoal cd -                               # Previous directory
 shoal exec fix-login -- cargo test
 shoal claude fix-login -- --help
-shoal codex                 # Current workspace or picker; defaults to cli
+shoal codex                              # Current workspace or picker; default mode
 shoal codex cli fix-login -- --help
-shoal codex app fix-login    # Open the Codex desktop app
-shoal t3 fix-login           # Open in the running T3 Code desktop app
+shoal codex app fix-login                # Codex desktop app
+shoal t3 fix-login                       # Running T3 Code desktop app
 shoal inspect fix-login
-shoal stop fix-login        # Stop commands; keep the worktree
-shoal rm fix-login          # Delete redundant branch, otherwise choose what to keep
-shoal rm fix-login --yes --keep-branch
-shoal rm fix-login --yes --delete-branch
+shoal stop fix-login                     # Stop commands; keep the worktree
+shoal rm fix-login                       # Remove; choose what to keep if work differs
 ```
 
-`add --agent codex|claude` starts the agent in the new workspace after worktree
-creation and configured setup succeed. Codex uses `codex.default_mode` below. Pass a prompt or other
-agent arguments after `--`, for example:
+Bare `shoal` opens an fzf list of workspaces (`shoal --help`, or bare `shoal`
+without a terminal, prints help). Enter enters the selection; Ctrl-D deletes,
+Ctrl-E runs Claude/Codex CLI, opens Codex/T3 apps, or runs a shell command,
+Ctrl-A adds, Ctrl-O inspects, Ctrl-S stops, Ctrl-F shows the diff. Each action
+returns to your shell.
 
-```sh
-shoal add my-project --name fix-api --agent codex -- "Fix the API timeout"
-```
+Omitted targets open an fzf picker; `rm`, `exec`, `claude`, `codex`, `t3`,
+`diff`, `pull`, and `merge` first use the workspace containing the current
+directory. `shoal add` offers repositories in most-recently-used order and
+prompts for a branch name. Noninteractive calls and `--json` never prompt;
+management commands support JSON output, while executed commands keep their
+own stdin, stdout, stderr, and exit code.
 
-CLI agents run in the current terminal through Shoal's tracked execution wrapper.
-The command returns the agent's exit code and retains the workspace, including
-when launch fails. With shell integration, your shell enters the new workspace
-after the agent exits. Creation failures never launch an agent. Setup failures
-must be explicitly ignored before launching. `--json` emits the workspace record
-first, followed by the agent's
-unmodified output.
+### Agents
 
-`shoal claude` appends `--remote-control <workspace-name>`, using the resolved
-workspace's name. `shoal codex cli` appends `--sandbox danger-full-access
---ask-for-approval=never`. Arguments after `--` are forwarded before these flags.
-Use `shoal exec ... -- claude/codex ...` for a custom invocation.
+`add --agent codex|claude` starts the agent after worktree creation, setup, and
+the post-setup hook succeed; arguments after `--` go to the agent. CLI agents
+run in your terminal through the tracked execution wrapper and return the
+agent's exit code; the workspace is retained even when launch fails. With shell
+integration, your shell enters the new workspace after the agent exits.
+`--json` emits the workspace record first, then the agent's unmodified output.
 
-`shoal codex` uses the default mode, initially `cli`. Set it in
-`~/.config/shoal/config.toml` (or `$XDG_CONFIG_HOME/shoal/config.toml`):
+`shoal claude` appends `--remote-control <workspace-name>`. It also marks the
+workspace directory as trusted in Claude Code's `~/.claude.json` (or
+`$CLAUDE_CONFIG_DIR/.claude.json`) when that file exists, so Claude starts
+without its workspace trust dialog. `shoal codex cli` appends `--sandbox
+danger-full-access --ask-for-approval=never`. Use `shoal exec ... -- claude` or
+`-- codex` for a custom invocation.
+
+`shoal codex` without `cli`/`app` uses `codex.default_mode` from
+`~/.config/shoal/config.toml` (or `$XDG_CONFIG_HOME/shoal/config.toml`),
+read at launch without a daemon restart:
 
 ```toml
 [codex]
 default_mode = "cli" # Or "app"
 ```
 
-This setting takes effect on the next launch without restarting the daemon.
-Explicit `shoal codex cli` and `shoal codex app` override it. To name a workspace,
-include the mode: `shoal codex cli fix-login`. Arguments after `--` work with
-either the default or an explicit mode.
+App launches run `codex app <path>` or `t3 app <path>` with any `--` arguments
+and preserve the launcher's output and exit code. They add no agent flags and
+provide no execution tracking, scope token, or port variables; T3's app must
+already be running. Disable automatic cleanup when using an app whose activity
+Shoal cannot track.
 
-App launches run
-`codex app <workspace-path>` or `t3 app <workspace-path>`, with optional arguments
-after `--` passed through unchanged. They add no agent flags and preserve the
-launcher's output and exit code. Install the corresponding CLI on your PATH;
-T3's desktop app must already be running. An omitted workspace uses the current
-workspace, otherwise fzf. App handoff does not track GUI sessions or supply their
-agents with Shoal execution scope or port variables. Disable automatic cleanup
-when using an app whose workspace activity Shoal cannot track reliably.
+### Branch and workspace names
 
+`--name` and the interactive prompt accept literal Git branch names, validated
+by Git and kept as spelled. The workspace name and directory
+`<state-dir>/workspaces/<name>` are derived from it: characters other than
+ASCII letters, digits, hyphens, and underscores become `-`, leading hyphens and
+underscores are dropped, the result is truncated to 64 characters, and an empty
+result becomes `workspace`. `feature/123-update-profile` yields the workspace
+`feature-123-update-profile`. Workspace names are unique across repositories;
+a collision fails without touching the existing workspace. Commands and
+completions use the workspace name or ID.
 
-Bare `shoal` opens an interactive workspace list. `shoal --help` shows help;
-without a terminal, bare `shoal` also shows help. The list offers:
+If the branch name is taken by a local branch, known remote branch, branch
+namespace, or retained Shoal record, the leaf gets `-2`, `-3`, etc.; when an
+ancestor blocks it, that component is suffixed (`feature` makes `feature/topic`
+into `feature-2/topic`). `HEAD`, Worktrunk's `@`, and full hex object IDs are
+reserved. Suffixes never change the derived workspace name.
 
-| Key | Action |
-| --- | --- |
-| Enter | Enter the selected workspace |
-| Ctrl-D | Delete, with confirmation when needed |
-| Ctrl-E | Run Claude/Codex CLI, open Codex/T3 apps, or run a shell command |
-| Ctrl-A | Add a workspace |
-| Ctrl-O | Inspect |
-| Ctrl-S | Stop managed commands |
-| Ctrl-F | Show workspace diff |
+### Base branch
 
-Each selection performs its action and returns to your shell. Entering a workspace
-requires the shell integration below; without it, Shoal prints the path.
+Creation branches from the repository's default branch: `origin/HEAD`, or the
+sole remote's HEAD without `origin` (several remotes without `origin` are
+ambiguous). A missing symbolic remote HEAD is discovered with `ls-remote` and
+cached; update it with `git remote set-head origin --auto`. Without remotes, the
+registered checkout's current branch is used; a detached checkout needs `--ref`.
 
-`shoal add` offers registered repositories
-in most-recently-used order and prompts for a name. Repository lists and pickers
-show readable repository names, including for managed clones. Pickers show just
-the name, adding `(hostname)` for duplicate names (and the source if still
-ambiguous). `repo list` includes each original path or URL.
-Commands with omitted workspace
-targets open an `fzf` picker; `rm`, `exec`, `claude`, `codex`, and `t3` first look for a workspace
-containing the current directory. Explicit targets bypass selection. Noninteractive
-calls and `--json` never prompt; management commands support JSON output, while
-executed commands retain their own stdin, stdout, stderr, and exit code.
+Before branching, Shoal fetches that local branch's upstream and fast-forwards
+it, even when the registered checkout is on another branch. A missing branch or
+upstream, failed fetch, divergence, or a dirty or managed default-branch
+checkout stops creation; an already-ahead branch is preserved. `--ref <git-ref>`
+starts elsewhere without refreshing anything, unless it names the default
+branch itself. Uncommitted files are not copied.
 
-`shoal add --name` and the interactive branch prompt accept literal Git branch
-names, validated by Git. The branch keeps the requested spelling, including
-slashes, punctuation, and Unicode. Workspaces live at
-`<state-dir>/workspaces/<name>` with a portable name derived from that input:
-replace characters other than ASCII letters/digits/hyphens/underscores with `-`,
-remove leading hyphens/underscores, and truncate to 64 characters. An empty result
-becomes `workspace`. For example:
+### Repositories
 
-```sh
-shoal add example-ios --name feature/123-update-profile
-# Branch:    feature/123-update-profile
-# Workspace: feature-123-update-profile
-shoal cd feature-123-update-profile
-```
+Register a local checkout in place (no remote required) or a clone URL. URL
+clones go to `~/.local/share/shoal/repositories/<name>`, named by `--name` or
+the URL basename without `.git`, suffixed `-2`, `-3` on conflict with files or
+recorded paths. Set `repositories_dir = "~/Projects/shoal-repositories"` in the
+global config (absolute or `~/` path, daemon restart required) to change the
+parent for new clones; existing registrations keep their paths. `repo add <url>
+--path <dir>` clones one repository to an exact new directory (relative to the
+current directory; `~/` allowed). Re-registering a URL with its existing path is
+fine; a different path is rejected.
 
-Workspace names are unique across repositories. Inputs that produce an occupied
-name fail without changing the existing workspace; choose a different name.
-Commands and completions use the resulting workspace name (or ID).
-
-Creation uses the repository's default branch, or `--ref <git-ref>`, on a new branch. If its name is
-taken, append `-2`, `-3`, etc. Local branches, known remote branches, branch
-namespaces, and retained Shoal records count as conflicts. If an ancestor blocks
-the branch, suffix that component: an existing `feature` makes `feature/topic`
-become `feature-2/topic`. Reserved names `HEAD` (Git), `@` (Worktrunk), and full
-40/64-character hex object-ID spellings also get a suffix. Branch conflict suffixes do not change the derived workspace name or
-directory. Existing branches and workspaces are not renamed.
-Uncommitted source files are not copied.
-Shoal reads `origin/HEAD` to find the default branch (for example, a repository may use
-`develop`). Without `origin`, it uses the sole remote; multiple remotes without
-`origin` are ambiguous. If the remote HEAD is not cached, creation and `pull`
-query it and cache the symbolic ref. To pick up a remote's renamed default branch,
-run `git remote set-head origin --auto` in the registered checkout.
-
-Before branching, Shoal fetches the selected local branch's configured upstream
-and fast-forwards it, even if the registered checkout is on another branch. An
-already-ahead branch is preserved. Missing local branches or upstreams, a failed
-fetch, divergence, or a dirty/managed default-branch checkout stop creation. With
-no remotes, the registered checkout's current branch is the default and needs no
-upstream. Detached local checkouts need an explicit `--ref`.
-
-An explicit `--ref` selects another starting point without refreshing the default
-branch. Naming the detected default branch directly or as `refs/heads/<branch>`
-still refreshes it. Explicit refs use only locally known default-branch metadata;
-they remain usable without contacting a remote to discover its default.
-
-Register an existing local checkout directly; no remote is required:
-
-```sh
-shoal repo add ~/Projects/local-project --name local-project
-shoal add local-project --name feature
-```
-
-The checkout stays in place. With no remote, creation uses its current committed
-branch; use `--ref <branch>` to select another starting point.
-
-The names shown by `shoal repo list` work as repository targets, including names
-inferred from URLs for older clones. Explicit `--name` values take precedence.
-If multiple repositories share an inferred name, use their ID, path, or source
-URL, or assign a unique name with `shoal repo rename`.
-
-URL repositories are cloned once into `~/.local/share/shoal/repositories/<name>`
-and retained for reuse, separately from daemon state. The directory uses `--name`
-when supplied, otherwise the URL's repository name without `.git`. If occupied,
-Shoal tries `<name>-2`, `<name>-3`, etc. Files, directories, symlinks, and recorded
-repository paths all reserve names. URL names are sanitized for directory use.
-Set the top-level
-`repositories_dir` in `~/.config/shoal/config.toml` (or
-`$XDG_CONFIG_HOME/shoal/config.toml`) to choose another location:
-
-```toml
-repositories_dir = "~/Projects/shoal-repositories"
-```
-
-Choose an exact clone directory for just one repository with `--path`:
-
-```sh
-shoal repo add https://example.com/team/project.git --path ~/Projects/project
-```
-
-`--path` overrides the global directory. Relative paths resolve from your current
-directory; `~/` is also supported. The destination must not exist yet. Register
-an existing checkout by passing it as the source instead. Re-registering a URL
-with its existing path is allowed; a different path is rejected rather than
-moving or duplicating the repository.
-
-For `repositories_dir`, use an absolute path or `~/` for your home directory,
-and restart the daemon after changing it. This setting applies to new URL clones.
-Existing registrations keep their recorded paths, including older clones under
-`<state-dir>/repositories`; local repositories stay in place. Workspaces remain
-under `<state-dir>/workspaces`.
-Registration does not fetch updates automatically.
-Registration reuses an existing repository when its source URL or local checkout's
-`origin` identifies the same remote, including HTTPS/SSH forms and optional `.git`
-suffixes. Checkouts without `origin` are identified by their canonical local path.
-Custom names can be set with `repo add --name` or `repo rename`, appear in pickers,
-and work as selectors (`shoal add my-project --name fix-login`). Explicit names
-are unique; naming an already registered URL updates its name without duplicating it.
+Registration is idempotent by normalized `origin` URL (HTTPS/SSH forms and
+`.git` suffixes match) or canonical local path, and never fetches. Names from
+`--name` or `repo rename` are unique and work as selectors alongside IDs, paths,
+and source URLs; inferred names work when unambiguous.
 
 ### Store repository config outside Git
 
@@ -315,24 +185,14 @@ shoal repo config my-project          # Print the saved TOML
 shoal repo config my-project --clear  # Return to worktree config
 ```
 
-Use the same TOML format as `.shoal.toml`, including ports, resources, resource
-pools, and simulator preferences. Shoal validates and copies the file into its
-state database; it does not modify the repository or keep a reference to the
-input file. Reimport the file to apply later edits. `--json` returns
-`repository_id` and `toml` (`null` when no local config is saved).
-
-The saved config replaces the entire worktree config for every existing and new
-workspace of this repository. Omitted settings use their normal defaults; the
-files are not merged. An empty file explicitly selects all defaults. Without a
-saved config, Shoal reads `.shoal.toml` or `.shoal/config.toml` from each worktree
-and rejects both together. Changes apply on the next resource request without a
-daemon restart; existing reservations and leases remain in place. Global machine
-policy and CLI overrides still apply.
-
-Local config survives daemon restarts, repo renames, and individual workspace
-removal. Successful `repo rm` deletes it with the repository registration; failed
-removal retains it for retry. Scoped workspace commands cannot administer this
-config.
+The file uses the `.shoal.toml` format and is validated and copied into Shoal's
+database; reimport it after edits. It replaces the entire worktree config for
+every workspace of that repository (no merging; an empty file selects all
+defaults) and applies on the next request without a restart. Without a saved
+config, Shoal reads `.shoal.toml` or `.shoal/config.toml` from each worktree
+and rejects both together. The saved config survives restarts, renames, and
+workspace removal; `repo rm` deletes it. `--json` returns `repository_id` and
+`toml`. Scoped workspace commands cannot administer it.
 
 ### Delete a repository
 
@@ -340,40 +200,31 @@ config.
 shoal repo rm my-project --yes
 ```
 
-Permanently deletes the repository checkout, all its Shoal workspaces and branches,
-and their ports, simulators, and resource leases, plus the locally saved repo
-config. Managed commands are stopped.
-This also deletes local repositories registered in place, including uncommitted
-and unpushed work. Interactive calls ask `Are you sure? [y/N]`; Enter, `n`, or
-Ctrl-C cancels. Pass `--yes` to skip the prompt (required for scripts and `--json`).
-Names, IDs, paths, and source URLs work as selectors. `repo remove` is an alias.
+Permanently deletes the checkout (including in-place local repositories with
+uncommitted or unpushed work), all its workspaces and branches, their ports,
+simulators, and leases, and the saved config, stopping managed commands first.
+Interactive calls ask `Are you sure? [y/N]`; `--yes` skips the prompt and is
+required for scripts and `--json`. `repo remove` is an alias.
 
-Existing linked worktrees outside Shoal must be removed separately first. Stale
-records for deleted directories do not block removal when Git marks them prunable.
-Locked worktrees remain protected, including on disconnected disks. Shoal refuses
-redirected paths and deletion that would include another registered repository or
-its state directory. If cleanup fails, completed steps stay completed and remaining
-records are retained. Retry the same command to finish; new workspace creation is
-blocked while repository deletion is incomplete. Simulator audit history is kept.
+Linked worktrees outside Shoal must be removed first; prunable stale records do
+not block, locked worktrees do. Shoal refuses redirected paths and deletions
+that would include another registered repository or its own state. If cleanup
+fails, completed steps stay done, remaining records are retained, and new
+workspace creation is blocked until the same command is retried.
 
 ### Pull the default branch
 
 ```sh
 shoal pull                 # Current workspace (or fzf); agents resolve to their own
-shoal pull fix-login
-shoal --json pull          # Branch name, previous/current commits, and whether it changed
+shoal --json pull          # Branch, previous/current commits, and whether it changed
 ```
 
-Fast-forwards the repository's default branch, selected as for `add`, from its
-configured upstream. Requires that local branch and its tracking configuration;
-the tracking remote may differ from the default remote. It does not merge or
-rebase the feature branch, stash edits, or force-update history. A checked-out
-default branch must be clean (including untracked files). Divergence is an error;
-an already-ahead branch stays unchanged. If the default branch is checked out in another
-Shoal-managed workspace, the request is refused. Otherwise Shoal updates its
-checkout, or just its ref when not checked out. Git hooks and recursive submodule
-updates are disabled. Scoped agents may request this only through their own
-workspace; repository/service administration remains unavailable to them.
+Fast-forwards the repository's default branch from its configured upstream
+(which may differ from the default remote). It does not touch the feature
+branch. A checked-out default branch must be clean; divergence or a default
+branch checked out in a managed workspace is an error. Hooks and recursive
+submodule updates are disabled. Scoped agents may pull only through their own
+workspace.
 
 ### Merge into your workspace branch
 
@@ -381,157 +232,98 @@ workspace; repository/service administration remains unavailable to them.
 shoal merge main
 shoal merge feature/api                    # Local, or discover a remote-only branch
 shoal merge feature/api --remote origin    # Fetch explicitly, even if local exists
-shoal merge origin/feature/api fix-login   # Qualified source and named destination
-shoal --json merge feature/api
+shoal merge origin/feature/api fix-login   # Qualified source, named destination
 ```
 
-The destination must be the workspace's recorded branch. Scoped agents can only
-target their own workspace. Local branches take precedence; otherwise Shoal
-queries configured remotes and fetches the branch even if it has never been
-fetched before. Multiple matches require `--remote`; an inaccessible remote
-prevents automatic discovery, so select a reachable remote explicitly. Qualified
-remote sources always fetch fresh data and reject deleted branches. Full
-`refs/heads/<branch>` and `refs/remotes/<remote>/<branch>` names are also accepted.
-
-Git can fast-forward or create a merge commit. Conflicts remain in your worktree
-for normal `git add`/`git commit` resolution or `git merge --abort`. There is no
-automatic stash, reset, push, or update of another branch. Hooks and recursive
-submodule updates are disabled. JSON includes `success`, `exit_code`, commit IDs,
-and Git's stdout/stderr; conflicts preserve Git's nonzero exit status. Fetch or
-validation errors use the usual CLI error output.
+The destination must be the workspace's recorded branch. Local branches take
+precedence; otherwise Shoal queries configured remotes and fetches the branch.
+Several matches or an unreachable remote require `--remote`. Qualified remote
+sources and full `refs/…` names always fetch fresh data. Git fast-forwards or
+creates a merge commit; conflicts stay in the worktree for `git commit` or `git
+merge --abort`, and `--json` reports `success`, `exit_code`, commits, and Git
+output. Nothing is stashed, reset, or pushed.
 
 ### Diff
 
 ```sh
-shoal diff fix-login
 shoal diff                 # Current workspace, otherwise fzf
 ```
 
-Shows changes from the fork point against the base branch recorded at creation.
-Moving that base branch or rebasing onto it does not include its commits in your
-diff. Git's fork-point detection uses the base branch's reflog, with merge-base
-as a fallback. For workspaces created from a fixed commit, the captured commit
-is used; older workspaces without base metadata use `main`.
+Runs native `git diff` (your pager and external diff apply) from the fork point
+of the base branch recorded at creation, using its reflog with merge-base as a
+fallback, so commits added to the base later are excluded even after a rebase.
+Fixed-commit bases use that commit; older workspaces without base metadata use
+`main`. Committed, staged, and unstaged tracked changes appear; untracked files
+follow Git. A missing or unrelated base is an error.
 
-Runs native `git diff`, preserving Git's configured pager and external diff
-command. Includes committed, staged, and unstaged tracked changes; untracked
-files follow normal Git behavior and do not appear. Missing/unrelated base refs
-produce an error rather than guessing another branch.
+### Workspace setup and hooks
 
-### Port reservations
-
-```sh
-shoal port reserve web fix-login --reason "Frontend dev server"
-shoal port reserve api fix-login --port 3001 --env API_PORT --reason "HTTP API"
-shoal port list fix-login
-shoal port list --all
-shoal port release web fix-login
-shoal exec fix-login -- sh -c 'my-server --port "$API_PORT"'
-```
-
-Each named TCP reservation belongs to a worktree. Omitting the workspace uses
-the current workspace or opens `fzf`. Repeating a name returns the same port;
-`--reason` can update its description. Changing the number or environment mapping
-requires release first. Reservations persist across command exits, `stop`, and
-daemon restarts. Successful manual or automatic worktree removal releases them;
-failed removal keeps them reserved.
-
-Subsequent `exec`, `claude`, and `codex cli` commands receive `SHOAL_PORT_<NAME>` by
-default (`web` becomes `SHOAL_PORT_WEB`), or the variable supplied with `--env`.
-An already-running process keeps its original environment. All management
-commands support `--json`; `inspect` also includes reservations.
-Nested Shoal executions clear the parent workspace's exported port variables
-before applying the target workspace's reservations.
-
-Automatic allocation defaults to TCP ports 49152–65535. Override the range in
-global config with `[ports]`, `start = 49152`, and `end = 65535`. An explicit
-`--port` may select any nonzero port the user can bind. Shoal checks IPv4/IPv6
-availability and prevents duplicate allocations within the daemon, then releases
-the probe socket so the application can bind. Reservations are cooperative:
-unrelated processes can still take a port later. UDP allocation is not implemented.
-
-Removal deletes the branch when the worktree is clean and its contents match
-local default branch or its configured upstream. The comparison is between Git trees;
-commit history can differ. Missing refs do not count as a match.
-
-Otherwise, `fzf` offers these choices, with Cancel selected by default:
-
-| Choice | Result |
-| --- | --- |
-| Cancel | Keep everything |
-| Keep branch | Delete workspace files only |
-| Delete branch | Delete workspace files and branch |
-
-The next prompt summarizes the workspace, files, and branch action and asks
-`Are you sure? [y/N]`; Ctrl-C cancels any Shoal prompt, including the setup-failure
-menu after `shoal add`. Both removal choices discard uncommitted/untracked files;
-keeping the branch saves committed work only. `--keep-branch` or `--delete-branch`
-skips the picker but still asks for confirmation. Noninteractive callers use
-`--yes --keep-branch` or
-`--yes --delete-branch`. `--yes` alone does not choose for differing/dirty work.
-
-Running processes do not block manual removal. Connected Shoal commands are
-stopped, along with identity-verified survivors of disconnected executions.
-External or unverified processes are left alone. Automatic cleanup
-still requires no active or unknown commands and no processes using the directory.
-Ignored worktree files are removed; shared caches remain untouched. Git protects
-branches checked out in another worktree; output reports the actual branch result.
-Worktrunk hooks are disabled. Use `setup_cmd` for workspace setup (see below).
-
-### Workspace setup
-
-Set a top-level `setup_cmd` in `.shoal.toml`, `.shoal/config.toml`, or the local
-repository config imported with `shoal repo config --file`:
+Repository config (`.shoal.toml`, `.shoal/config.toml`, or the imported local
+config) names up to three executables:
 
 ```toml
-setup_cmd = "scripts/setup.sh"
-# Or use an absolute path on this machine:
-# setup_cmd = "/opt/dev-tools/setup-project"
+setup_cmd = "scripts/setup.sh"        # Prepares the worktree; must exit 0
+post_setup_cmd = "scripts/attach.sh"  # After the workspace is ready, e.g. open tmux
+pre_remove_cmd = "scripts/detach.sh"  # Before the worktree is removed, e.g. close it
 ```
 
-Relative paths resolve from the new worktree's root, including local config paths;
-absolute paths are used as-is. The executable runs with the worktree as its working
-directory, using your CLI environment and Shoal workspace scope. Make scripts
-executable and include a shebang such as `#!/bin/sh`. The value is a single path;
-put arguments, multiple commands, and shell expressions inside the script.
+Each value is one path, relative to the worktree root or absolute, run with the
+worktree as working directory. Give scripts a shebang and put arguments and
+shell logic inside them. Setup is never inferred from package manifests.
 
-`shoal add` waits for setup before entering the worktree or launching `--agent`.
-If setup fails, interactive mode asks whether to delete the new workspace and its
-branch, ignore the failure and continue, or keep it for inspection (the default).
-Deleting requires confirmation and preserves the registered repository and other
-workspaces. Ignoring allows the requested agent to start once ownership and process
-checks pass.
-
-JSON/noninteractive mode returns nonzero and keeps the failed workspace. Setup
-output goes to stderr in JSON mode; no agent starts on failure. After inspecting
-partial changes, choose an explicit action:
+`setup_cmd` runs through the tracked execution wrapper with workspace scope and
+your CLI environment. `shoal add` waits for it before entering the worktree or
+launching an agent; the workspace stays `preparing` until it exits 0 with no
+surviving processes. On failure, interactive mode asks whether to delete the
+new workspace and branch, ignore the failure and continue, or keep it for
+inspection (default). JSON/noninteractive mode returns nonzero, keeps the
+workspace, and sends setup output to stderr. Then choose explicitly:
 
 ```sh
-shoal prepare fix-login                    # Retry setup, or rerun it later
-shoal reconcile fix-login --repair          # Ignore failure after ownership checks
-shoal rm fix-login --yes --delete-branch    # Delete only this workspace and branch
+shoal prepare fix-login                    # Rerun setup and the post-setup hook
+shoal reconcile fix-login --repair          # Ignore the failure after ownership checks
+shoal rm fix-login --yes --delete-branch    # Delete this workspace and branch
 ```
 
-Setup is never inferred from package manifests. Without `setup_cmd`, creation
-behaves as before. Retry scripts should tolerate partial previous runs.
+Hooks are untracked: they run as your own processes with `SHOAL_HOOK`
+(`post_setup` or `pre_remove`), `SHOAL_WORKSPACE`, `SHOAL_WORKSPACE_ID`, and
+`SHOAL_STATE_DIR`, without a scope token or port variables, so whatever they
+leave running (a tmux server, say) is not a Shoal execution. `post_setup_cmd`
+runs from the CLI with your terminal after `add` or `prepare` has a ready
+workspace and before any `--agent`; a nonzero exit keeps the workspace, skips
+the agent, and fails the command. `pre_remove_cmd` runs inside the daemon for
+`rm`, `repo rm`, and automatic cleanup, after the removal checks pass and
+managed commands stop, without a terminal and with a 60-second limit; a nonzero
+exit or timeout retains the workspace with the hook's stderr as its error. It
+is skipped when the worktree directory is already gone.
+
+### Remove a workspace
+
+Removal deletes the branch when the worktree is clean and its tree matches the
+local default branch or its upstream. Otherwise fzf offers Cancel (default),
+Keep branch (files only), or Delete branch, followed by a summary and `Are you
+sure? [y/N]`. Both choices discard uncommitted and untracked files.
+`--keep-branch` or `--delete-branch` skips the picker but not the confirmation;
+scripts use `--yes` with one of them, since `--yes` alone does not choose for
+dirty or differing work. Ctrl-C cancels any Shoal prompt.
+
+Running processes do not block manual removal: connected Shoal commands and
+identity-verified survivors are stopped, unrelated processes are left alone.
+Ignored files are removed, shared caches are not, and Git protects branches
+checked out elsewhere; output reports the actual branch result. Worktrunk hooks
+are disabled; use Shoal's setup and hooks instead. Removing the workspace
+containing your shell moves you to its repository root (or home).
 
 ### Automatic cleanup
 
-Enabled by default: an idle, clean, fully pushed worktree is removed after
-10 minutes. File changes (including ignored files), Git HEAD changes, and Shoal
-command activity reset the timer. Running commands, processes with a working
-directory in the worktree (including open shells), dirty files, unpushed commits,
-and failed checks prevent cleanup. Shoal checks about every 30 seconds and starts
-fresh timers after daemon restarts.
-
-“Pushed” means commits are reachable from locally known remote branches; Shoal
-does not fetch automatically. Automatic removal rechecks conditions and uses the
-same cleanup path as manual removal. Matching branches are deleted; other branches
-and shared caches are retained. Active simulator leases and resource permits
-prevent automatic removal. Successful removal releases port reservations and
-resource permits and deletes the worktree's managed simulators.
-
-Configure `~/.config/shoal/config.toml` (or `$XDG_CONFIG_HOME/shoal/config.toml`):
+Enabled by default: an idle, clean, fully pushed worktree is removed after 10
+minutes through the same path as manual removal. File changes (including
+ignored files), HEAD changes, and Shoal commands reset the timer; running or
+unknown commands, processes with a working directory in the worktree (open
+shells included), dirty files, unpushed commits, simulator leases, resource
+permits, and failed checks prevent it. "Pushed" means reachable from locally
+known remote branches; Shoal does not fetch. Sweeps run about every 30 seconds
+and timers restart with the daemon. `lsof` must be on the daemon's `PATH`.
 
 ```toml
 [auto_cleanup]
@@ -539,114 +331,32 @@ enabled = false # Default: true
 idle_minutes = 10
 ```
 
-Restart the daemon after changing this configuration. `lsof` must be available
-for process checks; failed inspection retains the workspace.
+Restart the daemon after changing this.
 
-### Shell navigation
-
-`shoal setup` prints this line to add to `.bashrc`/`.zshrc`. You can also run it
-in the current shell to load the Bash/Zsh function:
+### Port reservations
 
 ```sh
-source <(shoal shell init)
+shoal port reserve web fix-login --reason "Frontend dev server"
+shoal port reserve api --port 3001 --env API_PORT --reason "HTTP API"
+shoal port list fix-login              # --all for every workspace
+shoal port release web fix-login
+shoal ports                            # Configured and reserved ports here
+shoal exec fix-login -- sh -c 'my-server --port "$API_PORT"'
 ```
 
-With the function loaded, successful `add` enters the workspace. Removing the
-workspace containing your current directory moves you to its registered repository
-root (or home if that root is gone). `shoal cd` always opens fzf, including from
-inside a workspace; `shoal cd <name>` goes directly to that workspace. The picker
-omits workspaces whose directories are missing. Canceling leaves you in place.
+Named TCP reservations belong to the worktree, persist across command exits,
+`stop`, and restarts, and are released by successful removal. Repeating a name
+returns the same port (`--reason` may update it); changing the number or
+variable requires release first. Later `exec`, `claude`, and `codex cli`
+commands receive `SHOAL_PORT_<NAME>` or the `--env` variable; running
+processes keep their environment, and nested executions drop the parent's port
+variables. Automatic allocation uses 49152–65535, configurable with `[ports]`
+`start`/`end` in the global config; `--port` may name any nonzero port. Shoal
+probes IPv4/IPv6 availability and prevents duplicates within the daemon, but
+reservations are cooperative and unrelated processes can still bind. UDP is
+not supported.
 
-`shoal cd -` uses your shell's previous directory, including ordinary directories
-outside Shoal. If that directory was deleted (for example by `shoal rm`), it
-reports an error and leaves you where you are. History is local to each shell,
-using `OLDPWD`, with no daemon-wide history. Scoped agents cannot navigate outside
-their own worktree. Without shell integration the command prints the destination;
-JSON calls return its path and never change directories. `shoal cd` without a target requires an
-interactive terminal; noninteractive callers must give a name or `-`.
-
-Reload `source <(shoal shell init)` in existing terminals after upgrading to pass
-previous-directory state reliably. Shoal does not edit your shell configuration
-automatically.
-
-### Tab completion
-
-Reload the shell integration in existing terminals to enable completion in Bash
-or Zsh:
-
-```sh
-source <(shoal shell init)
-```
-
-Zsh's completion system is initialized if needed. Each Tab uses the installed
-binary's current command definitions, covering subcommands, flags, fixed values
-(including `codex cli`/`app`), and filesystem paths without a running daemon.
-Targets and subcommands appear before flags. Zsh registration preserves this
-order in fzf-tab as well; reload the shell integration to apply it.
-With the daemon running, completion also suggests registered repositories and
-workspaces across commands. It suggests resource pools, members, lease names,
-ports, and simulator lease names for the current or explicitly selected workspace.
-Live lookup respects `--state-dir`, `SHOAL_STATE_DIR`, and execution scope, times
-out after 500 ms, and never starts the daemon or opens a picker.
-For Bash versions that cannot source process substitutions, use
-`eval "$(shoal shell init)"` instead.
-
-To install completions separately, `shoal completions zsh` or
-`shoal completions bash` prints the script. Fish, PowerShell, and Elvish are also
-supported by `shoal completions <shell>`; `--json` returns a `script` field.
-You can still omit targets to use Shoal's interactive fzf selection.
-
-## Current scope
-
-The CLI/daemon, workspaces, named TCP ports, simulator sharing, cooperative
-resource pools, workspace setup, and explicit recovery are implemented. Filesystem
-restrictions and prebuilt Homebrew bottles remain future work.
-No Shoal filesystem sandbox is applied yet. Repository resource configuration
-uses TOML; additional configuration sections will be defined as they are added.
-
-### Recovery
-
-```sh
-shoal reconcile fix-login                  # Inspect without changing state
-shoal --json reconcile --all               # Reports for every workspace
-shoal reconcile fix-login --repair         # Repair verified state, retain work/resources
-shoal reconcile fix-login --repair --stop  # Also stop verified surviving commands
-```
-
-Without a name, use the current workspace or `fzf`. Reports return exit code 2
-while issues remain, or 0 when resolved; JSON is always an array of reports.
-Reconciliation is an unscoped management operation, unavailable inside `shoal exec`.
-
-Startup marks interrupted lifecycle operations as failed and disconnected
-executions as unknown. It checks worktree ownership without deleting files or
-releasing resources. Repair can restore a verified worktree to ready and clear
-stopped execution records. Connected commands are left running unless `--stop`
-is supplied. Moved worktrees must be restored to their recorded path; Shoal
-refuses replaced worktree metadata. For a deleted directory, repair leaves the
-workspace failed, then explicit `shoal rm` finishes resource cleanup and prunes
-its stale Worktrunk registration while retaining the Git branch.
-
-Executions record wrapper/child PID and start time plus a process-group ID.
-Descendants inherit `SHOAL_EXECUTION_ID`; Shoal checks visible markers and live
-ancestry to find detached survivors. It rechecks process identities before
-signaling and does not kill unverified process-group candidates. Normal wrapper
-completion cleans up its original process group; a visible detached survivor
-keeps the execution unknown and prevents automatic cleanup.
-
-Process inspection is cooperative, not complete containment. Hidden environments
-(including some macOS system programs), cleared markers, and older records can
-leave recovery uncertain. After independently checking that those processes have
-stopped, use `--repair --acknowledge-stopped`. Known live wrappers, descendants,
-unverified group candidates, and visible directory users still block clearing.
-Detached children that hide their marker and outlive their original process group
-may escape detection after normal command completion. Unknown records are never
-silently discarded at startup. Native Linux process recovery still needs testing
-on a Linux host.
-
-### Repo port defaults
-
-Use `.shoal.toml` or `.shoal/config.toml` (not both), or import an external file
-with `shoal repo config <repository> --file <file>`:
+Repository defaults, in `.shoal.toml` or the imported config:
 
 ```toml
 [ports]
@@ -658,26 +368,73 @@ env = "PORT"
 reason = "Frontend dev server"
 ```
 
-`shoal port reserve web` allocates on request. CLI flags override repo defaults.
-A conflict suggests an available number; fzf offers acceptance, while `--json`
-returns `reserved: false` and exits 2. Accept with `--port <suggested_port>`.
-`--on-conflict auto` accepts reassignment directly. `shoal ports` shows the current
-worktree's configured and reserved ports, including the actual numbers.
+`shoal port reserve web` allocates on request; CLI flags override. A conflict
+suggests a free port: fzf offers to accept it, `--json` returns `reserved:
+false` with exit 2, and `--port <suggested>` or `--on-conflict auto` accepts.
+
+### Shell navigation
+
+Add `source <(shoal shell init)` to `.bashrc`/`.zshrc` (or `eval "$(shoal shell
+init)"` for Bash without process substitution) and run it in open terminals,
+including after upgrades. The function lets `add` and `cd` enter workspaces
+and moves you out of a removed one. `shoal cd` always opens fzf, `shoal cd
+<name>` goes directly, and `shoal cd -` returns to the shell's previous
+directory (`OLDPWD`, per shell), refusing a deleted destination. Scoped agents
+cannot navigate outside their worktree. Without the function, Shoal prints the
+destination; `--json` returns the path and never changes directory.
+
+### Tab completion
+
+The same shell integration enables Bash and Zsh completion (Zsh's completion
+system is initialized if needed). Each Tab asks the installed binary for
+subcommands, flags, fixed values, and paths without a daemon; with a daemon
+running it also suggests repositories, workspaces, pools, members, lease names,
+ports, and simulator leases for the current or named workspace, honoring
+`--state-dir` and execution scope with a 500 ms timeout and never starting a
+daemon or picker. Targets sort before flags, also in fzf-tab. `shoal
+completions <shell>` prints scripts for Bash, Zsh, Fish, PowerShell, and Elvish.
+
+### Recovery
+
+```sh
+shoal reconcile fix-login                  # Report only
+shoal --json reconcile --all
+shoal reconcile fix-login --repair         # Repair verified state, retain work and leases
+shoal reconcile fix-login --repair --stop  # Also stop verified surviving commands
+```
+
+Exit 2 while issues remain, 0 when resolved; JSON is an array of reports.
+Reconciliation is unavailable inside scoped executions. Startup marks
+interrupted lifecycle operations failed and disconnected executions unknown,
+and audits worktrees without deleting files or releasing leases. Repair
+restores verified worktrees to ready and clears executions proven stopped;
+connected commands keep running unless `--stop`. Moved worktrees must return to
+their recorded path, replaced metadata is refused, and a deleted directory
+leaves the workspace failed until `shoal rm` cleans up its resources and stale
+Worktrunk registration while retaining the branch.
+
+Executions record wrapper and child identities plus a process group.
+Descendants inherit `SHOAL_EXECUTION_ID`, which recovery uses with live
+ancestry to find survivors; identities are rechecked before signaling, and
+unverified candidates are never killed. Detection is cooperative: hidden
+environments, cleared markers, and old records can leave it uncertain. After
+checking yourself that such processes stopped, use `--repair
+--acknowledge-stopped`; visible live processes still block. Linux recovery is
+untested on a Linux host.
 
 ### Scoped workspace commands
 
-Commands launched through `exec`, `claude`, and `codex cli` can inspect their own
-worktree, execute there, merge any local or remote branch into their own branch
-with `shoal merge`, manage resources, and pull the repository default branch with `shoal pull`.
-They cannot access other worktrees, remove workspaces, perform
-other repository administration, or administer the daemon. Nested
-commands keep that scope. Run a cross-workspace orchestrator outside `shoal exec`.
-Scope is cooperative; it does not restrict direct filesystem/Git operations.
+Commands launched through `exec`, `claude`, and `codex cli` carry a scope token
+that confines them to their own worktree: inspect, execute, `merge`, `diff`,
+resources, and `pull` of their repository's default branch. They cannot reach
+other worktrees, remove workspaces, administer repositories, or control the
+daemon; nested commands keep the scope. Scope is cooperative and does not
+restrict direct filesystem or Git operations.
 
 ## Simulators (macOS)
 
-Shoal creates, boots, shares, and cleans up its own Xcode simulators. Configure
-allowed profiles in `~/.config/shoal/config.toml`, then restart the daemon:
+Shoal creates, boots, shares, and deletes its own Xcode simulators. Configure
+profiles in the global config and restart the daemon:
 
 ```toml
 [simulators]
@@ -692,200 +449,112 @@ device = "iPhone 17"
 runtime = "iOS 26.5"
 ```
 
-Use `shoal sim catalog` to find names or identifiers installed on your machine.
-Repo config can set `[simulators] preferred = ["phone", "tablet"]`; explicit
-flags override it. No runtimes are downloaded. With global `allow_any = true`,
-other installed combinations can be requested with `--device`, `--runtime`, and
-`--reason`.
+`shoal sim catalog` lists installed device types and runtimes; nothing is
+downloaded. Repository config may set `[simulators] preferred = ["phone"]`;
+flags override it, and `allow_any = true` permits `--device`/`--runtime`
+requests with a `--reason`.
 
 ```sh
 shoal sim acquire                   # Current worktree, configured preference
 shoal sim acquire --profile phone --name tests --wait 60
-shoal sim list                      # Current worktree's devices
-shoal sim list --all                 # All managed devices (human callers)
-shoal sim release tests
-shoal sim release                   # Release the default lease
+shoal sim list                      # --all for every managed device
+shoal sim release tests             # Or the default lease
 ```
 
-Acquisition returns a ready device UDID; repeated requests for the same lease
-name return the same device. Use that UDID explicitly with `simctl` or
-`xcodebuild -destination 'platform=iOS Simulator,id=<UDID>'`. Leases belong to
-worktrees and survive command exit and daemon restart. Scope restrictions apply.
+Acquisition returns a ready device UDID; use it explicitly with `simctl` or
+`xcodebuild -destination 'platform=iOS Simulator,id=<UDID>'`. Repeating a lease
+name returns the same device. Leases belong to worktrees, survive command exit
+and restarts, block automatic removal, and are deleted with the workspace. At
+capacity, idle managed devices shut down first; active leases and personal
+simulators are never touched, external booted devices count toward the limit,
+and busy requests exit 2 unless `--wait <seconds>`. Released devices keep apps
+and settings until the idle timer deletes them (checked every 15 seconds).
+Failed operations retain records for retry. Only the default CoreSimulator
+device set and one daemon are covered.
 
-At capacity, Shoal shuts down idle managed devices first; active leases and
-personal simulators are never interrupted. External running simulators count
-against the limit. Busy requests exit 2, or retry with `--wait <seconds>`.
-Released instances keep apps and settings across worktrees during the reuse
-window, and are deleted when the idle timer expires (checked every 15 seconds). Worktree removal deletes its devices; active leases block automatic
-removal. Failed operations retain records for `sim release` or removal to retry.
-
-The scheduler covers the default CoreSimulator device set and one Shoal daemon.
-Indirect Xcode test/preview clones and cross-daemon scheduling remain future work.
-
-### Explicit clean devices and audit history
+### Clean devices and audit history
 
 ```sh
 shoal sim acquire --clean --reason "Verify first-launch permission prompts"
-shoal sim history                  # Current worktree
-shoal sim history --all            # Review requests across worktrees
-shoal --json sim history --all --limit 50
-shoal sim history --all --before 123 # Older entries
+shoal sim history                  # --all, --limit 50, --before <id>
 ```
 
-Normal handoff does not erase or reboot the device. A clean request returns a
-fresh or fully erased device, requires a nonempty reason, and cannot erase an
-active lease: release it first or request another lease name.
-
-Shoal creates a fresh device when there is room, preserving installed apps on
-existing devices. At the pool limit it minimizes the estimated number of user
-apps lost, either erasing an idle compatible device or replacing an idle device
-with fewer apps. Counts are captured while booted and cached on release; unknown
-counts rank after known counts. Zero apps alone does not prove settings are clean.
-
-History records workspace name/ID, execution ID (or unscoped caller), timestamps,
-reason, outcome, selected device, planned resets/evictions, estimated app loss,
-and whether an erase completed. Busy/failed requests are included; retries from
-one `--wait` call share one entry with an attempt count. History lives in Shoal's
-SQLite database, survives workspace/device deletion and daemon restarts, and is
-paginated with `--limit`/`--before`. Scoped commands see only their own history.
-Reasons enable review; Shoal does not automatically judge whether they justify
-cleaning. A caller deliberately erasing a device outside Shoal bypasses this
-cooperative audit, as it bypasses resource reservations.
-
+Normal handoff preserves device state. `--clean` returns a fresh or erased
+device, needs a reason, and cannot erase an active lease. Shoal prefers spare
+capacity, otherwise erases or replaces the idle device with the fewest known
+user apps. History records workspace, execution, reason, outcome, device,
+planned resets, estimated app loss, and whether the erase completed, including
+busy and failed attempts; it survives removal and restarts, and scoped commands
+see only their own entries. Erasing devices outside Shoal bypasses this audit.
 
 ## Cooperative resource pools
 
-Global config defines resources shared across repos; repo config (`.shoal.toml`
-or `.shoal/config.toml`) defines resources shared across that repo's branches.
-Both accept the same format:
+Global config defines resources shared across repositories; repository config
+defines resources shared across that repository's branches. Both use:
 
 ```toml
-# Standalone mutex. Raise capacity for a counting semaphore.
-[resources.signing]
+[resources.signing]            # Standalone mutex; raise capacity for a semaphore
 capacity = 1
 reason = "Signing service"
 
 [resource_pools.devices]
-capacity = 2                  # Total simultaneous permits across this pool
+capacity = 2                   # Total permits across the pool
 
 [resource_pools.devices.resources.alpha]
-capacity = 1                  # Exclusive use of alpha
+capacity = 1
 
 [resource_pools.devices.resources.beta]
-capacity = 2                  # Up to two users of beta, within the pool limit
+capacity = 2                   # Within the pool limit
 ```
 
-Member/standalone capacity defaults to 1. An omitted pool capacity defaults to
-its members' total capacity. Every pool must contain named members. Names use
-lowercase letters, digits, `_` or `-`, starting with a letter (max 64); capacities
-are 1–65535. Optional `reason` works on pools and resources.
+Capacities default to 1 (pools to their members' total); every pool needs
+members. Names are lowercase letters, digits, `_`, or `-`, starting with a
+letter, at most 64 characters; capacities are 1–65535.
 
 ```sh
-shoal resources                              # Configured capacities and own leases
+shoal resources                              # Capacities and own leases
 shoal resource acquire devices               # Any available member
 shoal resource acquire devices --resource beta --name tests --reason "Integration tests"
-shoal resource acquire signing --wait 60      # Wait for the standalone resource
-shoal resource list                          # Current worktree's actual leases
-shoal resource release devices
+shoal resource acquire signing --wait 60
+shoal resource list                          # --all for every workspace
 shoal resource release devices --name tests
-shoal resource release signing
 ```
 
-Acquisition is explicit and lazy. Each semaphore lease takes one slot from both
-the pool and selected member. An explicit member never silently changes to another.
-Repeating the same pool/lease name (default `default`) returns the existing
-permit; use distinct `--name` values for additional permits. Output always names
-the chosen resource. `--json` returns the lease, or `acquired: false` with exit 2
-when busy. `--wait` retries for up to the given seconds (max 3600); no fairness
-or atomic multi-resource acquisition is promised.
-
-Global names cannot be overridden by a different repo definition. Repo pools
-are keyed by registered repo identity, so equal names in unrelated repos are
-independent. A member's identity is its pool plus its name; the same spelling in
-another pool does not automatically represent the same physical resource.
-Restart the daemon for global config changes; repo config is read on request.
-While leases are active, conflicting definitions block new acquisitions until
-the definitions agree or the leases drain. Release still works after config edits
-or removal. All sharing is within one Shoal daemon.
-
-Shoal accounts for permits; it does not start, stop, isolate, or prevent direct
-use of generic resources. Stop using a resource before releasing it. Leases
-survive command exit and daemon restart, block automatic cleanup, and are freed
-by successful worktree removal. Failed removal retains them. Scoped agents can
-manage only their own leases; overview counts include other users without exposing
-their lease records. Human callers can use `resource list --all`.
-
+Each lease takes one slot from the pool and the chosen member; an explicit
+member never changes silently. Repeating a pool and lease name (default
+`default`) returns the existing permit. `--json` returns the lease or
+`acquired: false` with exit 2; `--wait` polls for up to 3600 seconds without
+fairness. Global names cannot be redefined by a repository; repository pools
+are keyed by repository, so equal names elsewhere are independent. Global
+changes need a restart, repository config is read per request, and conflicting
+definitions block new claims until they agree or leases drain. Leases survive
+command exit and restarts, block automatic cleanup, and are released by
+successful removal. Shoal accounts for permits only; stop using a resource
+before releasing it.
 
 ### Shared readers and exclusive writers
 
-Set `kind = "rwlock"` on a standalone resource or a pool member:
-
-```toml
-[resources.shared-cache]
-kind = "rwlock"
-
-# The same setting works under [resource_pools.<pool>.resources.<member>].
-```
-
-```sh
-shoal resource acquire shared-cache --mode read
-shoal resource release shared-cache
-shoal resource acquire shared-cache --mode write --wait 60
-shoal resource release shared-cache
-```
-
-Any number of read leases can coexist; a write lease excludes all other readers
-and writers of that resource. The lock is cooperative: a read lease is a promise
-to read, not filesystem enforcement. A new rwlock lease defaults to `write`;
-existing semaphore resources default to `permit`. Explicit read/write modes
-only select rwlock members, and `--mode permit` only selects semaphores.
-
-An rwlock's capacity must be 1 (the default). All readers on that member share
-one pool slot; a writer uses one slot. The slot is freed after its final lease is
-released. A pool may mix rwlocks and semaphores: its capacity counts occupied
-rwlock members plus semaphore permits. Further readers of an occupied member
-can join even when the pool has no free slots.
-
-Use different `--name` values for simultaneous leases within the same worktree.
-Repeating a lease name returns its existing mode; explicitly changing mode under
-that name is rejected. Release before acquiring another mode; upgrades and
-downgrades are not atomic. Writers may starve under a continuous stream of
-readers: waiting is bounded polling, with no queue or writer priority.
-
-`shoal resources` shows reader/writer counts and separate read/write availability;
-its numeric `used`/`available` fields count pool/member slots, not reader limits.
-Lease output always includes `mode`. Both modes survive daemon restarts, prevent
-automatic worktree cleanup, and are released on successful manual removal.
-Changing an active resource's kind requires draining its leases first.
+Set `kind = "rwlock"` on a standalone resource or pool member and acquire with
+`--mode read` or `--mode write` (new rwlock leases default to write; semaphores
+use `permit`). Readers coexist and share one pool slot, freed by the last
+release; a writer excludes everyone. Capacity must be 1. Repeating a lease
+name returns its mode; changing mode requires release first, and there is no
+writer priority. `shoal resources` shows reader and writer counts with
+separate read/write availability.
 
 ## Agent skill outside project repositories
 
-Install the skill bundled with the installed binary once at user scope. No
-running daemon or source checkout is needed:
-
 ```sh
 shoal skill install          # Codex and Claude Code
-shoal skill install codex    # Only Codex
-shoal skill install claude   # Only Claude Code
+shoal skill install codex    # Or: claude
 ```
 
-Homebrew installations symlink `SKILL.md` to the packaged skill through the stable
-Homebrew `opt` path, so upgrades refresh it automatically. Cargo installations
-copy the bundled instructions; repeat after upgrading to refresh them. Installation replaces
-the existing `SKILL.md` and preserves other files in the skill directory. Codex
-uses `~/.agents/skills/shoal/SKILL.md`; Claude uses
-`~/.claude/skills/shoal/SKILL.md`, honoring an absolute `CLAUDE_CONFIG_DIR` override.
-These are the documented user-level discovery locations for
-[Codex](https://learn.chatgpt.com/docs/build-skills) and
-[Claude Code](https://code.claude.com/docs/en/skills). The agent loads the skill when
-relevant; it need not be launched by Shoal. No project needs a copy of the skill.
-Run installation outside scoped workspace executions, since it updates user-level
-configuration. `shoal --json skill install` reports the installed agents and paths.
-
-An independently launched agent inside a managed worktree uses current-directory
-resolution for Shoal commands. Its enclosing session still lacks Shoal execution
-tracking and scope. In an ordinary checkout, use ordinary Git; Shoal resource
-leases still require a managed workspace. Installing the skill does not register
-or adopt a checkout. `shoal skill` still prints the bundled instructions;
-`shoal --json skill` returns the text in a `skill` field for
-integrations that manage their own instruction delivery.
+Installs the bundled `SKILL.md` at user scope with no daemon: Codex at
+`~/.agents/skills/shoal/SKILL.md`, Claude at `~/.claude/skills/shoal/SKILL.md`
+(honoring an absolute `CLAUDE_CONFIG_DIR`). Homebrew installs symlink to the
+packaged skill so upgrades apply automatically; Cargo installs copy it, so
+rerun after upgrading. Other files in the skill directory are preserved. Run it
+outside scoped executions. `shoal skill` prints the instructions (`--json`
+returns a `skill` field). An agent launched independently in a managed
+worktree uses current-directory resolution but has no execution tracking or
+scope; in an ordinary checkout, use ordinary Git.

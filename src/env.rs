@@ -1,5 +1,7 @@
 //! Environment variables Shoal reads or exports. Every `SHOAL_*` name lives
 //! here so wrapper, daemon, and process scanning agree on the contract.
+use anyhow::{Result, ensure};
+use std::path::PathBuf;
 
 /// Overrides the state directory; also isolates the daemon socket.
 pub const STATE_DIR: &str = "SHOAL_STATE_DIR";
@@ -15,12 +17,29 @@ pub const WORKSPACE_NAME: &str = "SHOAL_WORKSPACE";
 pub const RESERVED_PORT_ENV: &str = "SHOAL_RESERVED_PORT_ENV";
 /// Prefix of the default environment variable for a named port reservation.
 pub const PORT_PREFIX: &str = "SHOAL_PORT_";
+/// Which lifecycle hook is running: `post_setup` or `pre_remove`.
+pub const HOOK: &str = "SHOAL_HOOK";
 /// File the shell wrapper reads to change directory after the command exits.
 pub const SHELL_DIRECTIVE: &str = "SHOAL_SHELL_DIRECTIVE";
 /// The shell wrapper's `OLDPWD`, passed explicitly because it is shell-local.
 pub const PREVIOUS_DIR: &str = "SHOAL_PREVIOUS_DIR";
 /// clap dynamic-completion trigger variable.
 pub const COMPLETE: &str = "SHOAL_COMPLETE";
+/// Claude Code's configuration directory override (its `.claude.json` and skills).
+pub const CLAUDE_CONFIG_DIR: &str = "CLAUDE_CONFIG_DIR";
+
+/// The configured Claude Code directory, if any; a relative override is an error.
+pub fn claude_config_dir() -> Result<Option<PathBuf>> {
+    let Some(dir) = std::env::var_os(CLAUDE_CONFIG_DIR) else {
+        return Ok(None);
+    };
+    let dir = PathBuf::from(dir);
+    ensure!(
+        dir.is_absolute(),
+        "{CLAUDE_CONFIG_DIR} must be an absolute path"
+    );
+    Ok(Some(dir))
+}
 
 /// Variables a reserved port may never shadow when exported to a command.
 pub const PROTECTED: [&str; 4] = ["HOME", "PATH", "SHELL", "TMPDIR"];

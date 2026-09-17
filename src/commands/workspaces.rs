@@ -10,6 +10,7 @@ use crate::{
     config::Config,
     context::Context,
     env, execution,
+    hooks::{self, Hook},
     model::Workspace,
     protocol::{Body, Method},
     recovery::ReconcileOptions,
@@ -132,6 +133,7 @@ pub(super) async fn add(
         &workspace,
     )?;
     shell::navigate(&workspace.path, ctx.json)?;
+    run_post_setup(ctx, &workspace).await?;
     match agent {
         Some(Agent::Codex) => codex(ctx, codex_mode, Some(workspace.id), args).await,
         Some(Agent::Claude) => claude(ctx, Some(workspace.id), args).await,
@@ -145,8 +147,25 @@ pub(super) async fn prepare(ctx: &Context, workspace: Option<String>) -> Result<
     let Some(workspace) = prepare_workspace(ctx, &inspection.workspace).await? else {
         return Ok(1);
     };
+    run_post_setup(ctx, &workspace).await?;
     ctx.emit(&format!("Prepared {}", workspace.name), &workspace)?;
     Ok(0)
+}
+
+/// Run the repository's `post_setup_cmd`, if any, once the workspace is ready.
+/// A failure keeps the ready workspace and stops what would follow.
+async fn run_post_setup(ctx: &Context, workspace: &Workspace) -> Result<()> {
+    let hooks = request!(
+        &ctx.paths,
+        Method::WorkspaceHooks {
+            workspace: workspace.id.clone(),
+        },
+        Hooks
+    );
+    if let Some(command) = hooks.post_setup_cmd {
+        hooks::run_interactive(Hook::PostSetup, workspace, &command, &ctx.paths, ctx.json).await?;
+    }
+    Ok(())
 }
 
 /// Run the setup command, then let an interactive user decide what to do with
@@ -377,6 +396,15 @@ pub(super) async fn claude(
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let inspection = client::inspect(&ctx.paths, workspace).await?;
+    let trusted = env::claude_config_dir().and_then(|dir| {
+        let config = dir
+            .unwrap_or_else(|| ctx.paths.home.clone())
+            .join(".claude.json");
+        trust_claude_workspace(&config, &inspection.workspace.path)
+    });
+    if let Err(error) = trusted {
+        eprintln!("warning: could not mark the workspace as trusted for Claude Code: {error:#}");
+    }
     let command = std::iter::once("claude".into())
         .chain(args)
         .chain(["--remote-control".into(), inspection.workspace.name.into()])
@@ -435,4 +463,85 @@ pub(super) async fn open_app(
             format!("launch {program} app; install {program} and make it available on PATH")
         })?;
     Ok(execution::exit_code(status))
+}
+
+/// Record the workspace as trusted in Claude Code's `.claude.json` so
+/// `claude` starts without its workspace trust dialog. Returns whether the
+/// file changed; a missing file is left for Claude Code to create.
+fn trust_claude_workspace(config: &std::path::Path, workspace: &std::path::Path) -> Result<bool> {
+    use serde_json::Value;
+    let workspace = std::fs::canonicalize(workspace).unwrap_or_else(|_| workspace.to_owned());
+    let key = workspace
+        .to_str()
+        .context("workspace path is not UTF-8")?
+        .to_owned();
+    let text = match std::fs::read_to_string(config) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => return Err(error).with_context(|| format!("read {}", config.display())),
+    };
+    let mut root: Value =
+        serde_json::from_str(&text).with_context(|| format!("parse {}", config.display()))?;
+    let project = root
+        .as_object_mut()
+        .context("Claude config is not a JSON object")?
+        .entry("projects")
+        .or_insert_with(|| json!({}))
+        .as_object_mut()
+        .context("Claude config `projects` is not a JSON object")?
+        .entry(key)
+        .or_insert_with(|| json!({}))
+        .as_object_mut()
+        .context("Claude project entry is not a JSON object")?;
+    if project.get("hasTrustDialogAccepted") == Some(&Value::Bool(true)) {
+        return Ok(false);
+    }
+    project.insert("hasTrustDialogAccepted".into(), Value::Bool(true));
+    let directory = config.parent().context("Claude config has no parent")?;
+    let mut temporary = tempfile::NamedTempFile::new_in(directory)?;
+    serde_json::to_writer_pretty(&mut temporary, &root)?;
+    temporary
+        .as_file()
+        .set_permissions(std::fs::metadata(config)?.permissions())?;
+    temporary
+        .persist(config)
+        .with_context(|| format!("replace {}", config.display()))?;
+    Ok(true)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::Value;
+    use std::fs;
+
+    #[test]
+    fn claude_trust_adds_the_project_once_and_preserves_other_settings() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = dir.path().join(".claude.json");
+        let workspace = dir.path().join("ws");
+        fs::create_dir(&workspace).unwrap();
+        assert!(!trust_claude_workspace(&config, &workspace).unwrap());
+        assert!(!config.exists());
+        fs::write(
+            &config,
+            r#"{"numStartups": 3, "projects": {"/other": {"allowedTools": ["Bash"], "hasTrustDialogAccepted": false}}}"#,
+        )
+        .unwrap();
+        assert!(trust_claude_workspace(&config, &workspace).unwrap());
+        assert!(!trust_claude_workspace(&config, &workspace).unwrap());
+        let root: Value = serde_json::from_str(&fs::read_to_string(&config).unwrap()).unwrap();
+        assert_eq!(root["numStartups"], 3);
+        assert_eq!(root["projects"]["/other"]["allowedTools"], json!(["Bash"]));
+        assert_eq!(root["projects"]["/other"]["hasTrustDialogAccepted"], false);
+        let key = fs::canonicalize(&workspace).unwrap();
+        assert_eq!(
+            root["projects"][key.to_str().unwrap()]["hasTrustDialogAccepted"],
+            true
+        );
+        fs::write(&config, "{not json").unwrap();
+        assert!(trust_claude_workspace(&config, &workspace).is_err());
+        fs::write(&config, r#"{"projects": []}"#).unwrap();
+        assert!(trust_claude_workspace(&config, &workspace).is_err());
+    }
 }

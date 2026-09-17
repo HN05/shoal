@@ -12,6 +12,7 @@ mod env;
 mod execution;
 mod execution_processes;
 mod git;
+mod hooks;
 mod merge;
 mod model;
 mod paths;
