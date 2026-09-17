@@ -1,14 +1,23 @@
 //! Explicit repository deletion, retaining ownership and progress for retries.
-use super::Manager;
+use super::{Manager, ownership::device_inode};
 use crate::{
+    git,
     model::{Repository, RepositoryRemoval, Workspace},
-    removal::Choice,
+    removal::BranchChoice,
     state::WorkspaceState,
-    worktrunk,
 };
 use anyhow::{Context, Result, ensure};
 use rusqlite::{OptionalExtension, params};
-use std::{fs, os::unix::fs::MetadataExt, path::Path};
+use std::{fs, path::Path};
+
+/// Persisted progress of an interrupted removal.
+struct Progress {
+    /// Identity of the checkout directory when removal began; `None` when it
+    /// was already missing.
+    directory_id: Option<String>,
+    /// Workspaces are gone and file deletion has started.
+    deleting_files: bool,
+}
 
 impl Manager {
     pub(super) async fn ensure_repository_available(&self, id: &str) -> Result<()> {
@@ -28,120 +37,40 @@ impl Manager {
             .await
     }
 
-    pub async fn remove_repository(&self, selector: String) -> Result<RepositoryRemoval> {
+    pub async fn remove_repository(&self, selector: &str) -> Result<RepositoryRemoval> {
         // Registration cannot adopt or allocate a path during removal. The Git
         // gate also serializes with workspace creation, pull and reconciliation.
-        let _registry = self.repositories.lock().await;
-        let repo = self.repository(&selector).await?;
+        let _registry = self.registry_gate.lock().await;
+        let repo = self.repository(selector).await?;
         let gate = self.git_gate(&repo.id).await;
         let _git = gate.lock().await;
         let workspaces: Vec<_> = self
-            .list()
+            .list_workspaces()
             .await?
             .into_iter()
             .filter(|w| w.repository_id == repo.id)
             .collect();
         self.check_repository_boundaries(&repo, &workspaces).await?;
-        let id = repo.id.clone();
-        let progress: Option<(Option<String>, bool)> = self.store.run(move |db| {
-            Ok(db.query_row("SELECT directory_id,deleting_files FROM repository_removals WHERE repository_id=?1", [id],
-                |row| Ok((row.get(0)?, row.get(1)?))).optional()?)
-        }).await?;
-        let (identity, deleting_files) = match progress {
+        let progress = match self.removal_progress(&repo.id).await? {
             Some(progress) => progress,
-            None => (directory_identity(&repo.path)?, false),
+            None => Progress {
+                directory_id: directory_identity(&repo.path)?,
+                deleting_files: false,
+            },
         };
-        verify_directory(&repo.path, identity.as_deref(), deleting_files)?;
-        if deleting_files {
+        let identity = progress.directory_id.as_deref();
+        verify_directory(&repo.path, identity, progress.deleting_files)?;
+        if progress.deleting_files {
             ensure!(
                 workspaces.is_empty(),
                 "repository has workspaces after file deletion began"
             );
         } else {
-            if identity.is_some() {
-                check_checkout(&repo, &workspaces).await?;
-            } else {
-                ensure!(
-                    workspaces.is_empty(),
-                    "repository checkout is missing; restore it before removing its workspaces"
-                );
-            }
-            // Establish ownership for every workspace before deleting any of them.
-            for workspace in &workspaces {
-                ensure!(
-                    matches!(
-                        workspace.state,
-                        WorkspaceState::Ready | WorkspaceState::Failed
-                    ),
-                    "workspace {} is busy",
-                    workspace.name
-                );
-                if workspace.path.exists() {
-                    self.verify_worktree(workspace).await?;
-                } else {
-                    ensure!(
-                        workspace.state == WorkspaceState::Failed,
-                        "workspace {} is missing; reconcile it before repository removal",
-                        workspace.name
-                    );
-                    ensure!(
-                        self.missing_worktree(workspace).await?.is_none(),
-                        "workspace {} was moved; restore it before repository removal",
-                        workspace.name
-                    );
-                }
-            }
-            let (id, recorded_identity) = (repo.id.clone(), identity.clone());
-            self.store.run(move |db| {
-                db.execute("INSERT INTO repository_removals(repository_id,directory_id) VALUES (?1,?2) ON CONFLICT(repository_id) DO NOTHING", params![id, recorded_identity])?;
-                Ok(())
-            }).await?;
-            for workspace in &workspaces {
-                self.remove(
-                    workspace.id.clone(),
-                    Choice::DeleteBranch,
-                    std::process::id(),
-                )
-                .await
-                .with_context(|| {
-                    format!(
-                        "remove workspace {}; repository retained for retry",
-                        workspace.name
-                    )
-                })?;
-            }
-            verify_directory(&repo.path, identity.as_deref(), false)?;
-            if identity.is_some() {
-                // External Git commands may have created a worktree during cleanup.
-                check_checkout(&repo, &[]).await?;
-            }
-            let id = repo.id.clone();
-            self.store
-                .run(move |db| {
-                    db.execute(
-                        "UPDATE repository_removals SET deleting_files=1 WHERE repository_id=?1",
-                        [id],
-                    )?;
-                    Ok(())
-                })
+            self.remove_repository_workspaces(&repo, &workspaces, identity)
                 .await?;
         }
-        verify_directory(&repo.path, identity.as_deref(), true)?;
-        let path = repo.path.clone();
-        tokio::task::spawn_blocking(move || -> Result<()> {
-            match fs::remove_dir_all(&path) {
-                Ok(()) => Ok(()),
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-                Err(error) => Err(error).with_context(|| {
-                    format!("delete {}; retry shoal repo rm --yes", path.display())
-                }),
-            }
-        })
-        .await??;
-        ensure!(
-            directory_identity(&repo.path)?.is_none(),
-            "repository directory still exists; retry shoal repo rm --yes"
-        );
+        verify_directory(&repo.path, identity, true)?;
+        delete_checkout(repo.path.clone()).await?;
         let id = repo.id.clone();
         self.store
             .run(move |db| {
@@ -174,6 +103,108 @@ impl Manager {
         })
     }
 
+    async fn removal_progress(&self, id: &str) -> Result<Option<Progress>> {
+        let id = id.to_owned();
+        self.store
+            .run(move |db| {
+                Ok(db
+                    .query_row(
+                        "SELECT directory_id,deleting_files FROM repository_removals WHERE repository_id=?1",
+                        [id],
+                        |row| {
+                            Ok(Progress {
+                                directory_id: row.get(0)?,
+                                deleting_files: row.get(1)?,
+                            })
+                        },
+                    )
+                    .optional()?)
+            })
+            .await
+    }
+
+    /// Verify ownership of every workspace, record the removal, delete the
+    /// workspaces, then mark the checkout ready for deletion.
+    async fn remove_repository_workspaces(
+        &self,
+        repo: &Repository,
+        workspaces: &[Workspace],
+        identity: Option<&str>,
+    ) -> Result<()> {
+        if identity.is_some() {
+            check_checkout(repo, workspaces).await?;
+        } else {
+            ensure!(
+                workspaces.is_empty(),
+                "repository checkout is missing; restore it before removing its workspaces"
+            );
+        }
+        // Establish ownership for every workspace before deleting any of them.
+        for workspace in workspaces {
+            ensure!(
+                matches!(
+                    workspace.state,
+                    WorkspaceState::Ready | WorkspaceState::Failed
+                ),
+                "workspace {} is busy",
+                workspace.name
+            );
+            if workspace.path.exists() {
+                self.verify_worktree(workspace).await?;
+            } else {
+                ensure!(
+                    workspace.state == WorkspaceState::Failed,
+                    "workspace {} is missing; reconcile it before repository removal",
+                    workspace.name
+                );
+                ensure!(
+                    self.missing_worktree(workspace).await?.is_none(),
+                    "workspace {} was moved; restore it before repository removal",
+                    workspace.name
+                );
+            }
+        }
+        let (id, recorded_identity) = (repo.id.clone(), identity.map(str::to_owned));
+        self.store
+            .run(move |db| {
+                db.execute(
+                    "INSERT INTO repository_removals(repository_id,directory_id) VALUES (?1,?2) ON CONFLICT(repository_id) DO NOTHING",
+                    params![id, recorded_identity],
+                )?;
+                Ok(())
+            })
+            .await?;
+        for workspace in workspaces {
+            self.remove_workspace(
+                &workspace.id,
+                BranchChoice::DeleteBranch,
+                std::process::id(),
+            )
+            .await
+            .with_context(|| {
+                format!(
+                    "remove workspace {}; repository retained for retry",
+                    workspace.name
+                )
+            })?;
+        }
+        verify_directory(&repo.path, identity, false)?;
+        if identity.is_some() {
+            // External Git commands may have created a worktree during cleanup.
+            check_checkout(repo, &[]).await?;
+        }
+        let id = repo.id.clone();
+        self.store
+            .run(move |db| {
+                db.execute(
+                    "UPDATE repository_removals SET deleting_files=1 WHERE repository_id=?1",
+                    [id],
+                )?;
+                Ok(())
+            })
+            .await
+    }
+
     async fn check_repository_boundaries(
         &self,
         repo: &Repository,
@@ -193,7 +224,7 @@ impl Manager {
                 other.path.display()
             );
         }
-        for other in self.list().await? {
+        for other in self.list_workspaces().await? {
             ensure!(
                 workspaces.iter().any(|w| w.id == other.id) || !other.path.starts_with(&repo.path),
                 "repository directory contains another repository's workspace: {}",
@@ -204,6 +235,24 @@ impl Manager {
     }
 }
 
+async fn delete_checkout(path: std::path::PathBuf) -> Result<()> {
+    tokio::task::spawn_blocking(move || -> Result<()> {
+        match fs::remove_dir_all(&path) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(error)
+                .with_context(|| format!("delete {}; retry shoal repo rm --yes", path.display())),
+        }?;
+        ensure!(
+            directory_identity(&path)?.is_none(),
+            "repository directory still exists; retry shoal repo rm --yes"
+        );
+        Ok(())
+    })
+    .await?
+}
+
+/// `device:inode` of a real, non-redirected directory; `None` when missing.
 fn directory_identity(path: &Path) -> Result<Option<String>> {
     let metadata = match fs::symlink_metadata(path) {
         Ok(metadata) => metadata,
@@ -218,7 +267,7 @@ fn directory_identity(path: &Path) -> Result<Option<String>> {
         fs::canonicalize(path)? == path,
         "repository path was redirected; refusing deletion"
     );
-    Ok(Some(format!("{}:{}", metadata.dev(), metadata.ino())))
+    Ok(Some(device_inode(&metadata)))
 }
 
 fn verify_directory(path: &Path, expected: Option<&str>, allow_missing: bool) -> Result<()> {
@@ -230,8 +279,10 @@ fn verify_directory(path: &Path, expected: Option<&str>, allow_missing: bool) ->
     Ok(())
 }
 
+/// The checkout must be a plain repository whose only linked worktrees are
+/// the given Shoal workspaces.
 async fn check_checkout(repo: &Repository, workspaces: &[Workspace]) -> Result<()> {
-    let root = worktrunk::git(&repo.path, &["rev-parse", "--show-toplevel"]).await?;
+    let root = git::run(&repo.path, &["rev-parse", "--show-toplevel"]).await?;
     ensure!(
         fs::canonicalize(root.trim())? == repo.path,
         "repository path no longer points to its checkout root"
@@ -241,7 +292,7 @@ async fn check_checkout(repo: &Repository, workspaces: &[Workspace]) -> Result<(
         directory_identity(&git_dir)?.is_some(),
         "repository Git directory is missing"
     );
-    let common = worktrunk::git(
+    let common = git::run(
         &repo.path,
         &["rev-parse", "--path-format=absolute", "--git-common-dir"],
     )
@@ -250,46 +301,26 @@ async fn check_checkout(repo: &Repository, workspaces: &[Workspace]) -> Result<(
         fs::canonicalize(common.trim())? == git_dir,
         "repository uses external Git metadata; refusing deletion"
     );
-    let trees = worktrunk::git(&repo.path, &["worktree", "list", "--porcelain", "-z"]).await?;
-    for record in trees.split("\0\0") {
-        let fields: Vec<_> = record.split('\0').collect();
-        let Some(path) = fields
-            .iter()
-            .find_map(|field| field.strip_prefix("worktree "))
-        else {
-            continue;
-        };
-        let path = Path::new(path);
+    for tree in git::worktrees(&repo.path).await? {
         // Removing a directory outside Git leaves its registration behind.
         // Only ignore missing entries Git itself considers prunable; locked
         // worktrees may merely be on an unmounted disk. No global prune is needed
         // because successful repository deletion removes this metadata too.
-        let prunable = fields
-            .iter()
-            .any(|f| *f == "prunable" || f.starts_with("prunable "));
-        let locked = fields
-            .iter()
-            .any(|f| *f == "locked" || f.starts_with("locked "));
-        if prunable && !locked {
-            match fs::symlink_metadata(path) {
+        if tree.prunable && !tree.locked {
+            match fs::symlink_metadata(&tree.path) {
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
                 Err(error) => return Err(error).context("inspect linked worktree"),
                 Ok(_) => {}
             }
         }
+        let owned = workspaces.iter().any(|w| {
+            w.path == tree.path
+                || super::ownership::canonical_parent(&w.path).is_ok_and(|p| p == tree.path)
+        });
         ensure!(
-            path == repo.path
-                || workspaces.iter().any(|w| {
-                    let canonical = w
-                        .path
-                        .parent()
-                        .and_then(|parent| fs::canonicalize(parent).ok())
-                        .zip(w.path.file_name())
-                        .map(|(parent, name)| parent.join(name));
-                    w.path == path || canonical.as_deref() == Some(path)
-                }),
+            tree.path == repo.path || owned,
             "repository has a worktree outside Shoal: {}; remove it first",
-            path.display()
+            tree.path.display()
         );
     }
     Ok(())

@@ -1,16 +1,18 @@
 //! CLI requests and rendering for cooperative resources.
-use super::output;
-use crate::{cli::ResourceCommand, resources};
-use crate::{
-    client,
-    paths::Paths,
-    protocol::{Body, Method},
-    ui,
-};
-use anyhow::Result;
+use anyhow::{Result, bail};
 use serde_json::json;
 
-pub(super) async fn run(paths: &Paths, command: ResourceCommand, json_output: bool) -> Result<i32> {
+use super::{Attempt, EXIT_BUSY, retry_while_busy};
+use crate::{
+    cli::ResourceCommand,
+    client::{self, request},
+    context::{Context, optional},
+    protocol::{Body, Method},
+    resources::{Overview, ResourceKind, ResourceLease, ResourceRequest},
+    ui::{self, Fallback},
+};
+
+pub(super) async fn run(ctx: &Context, command: ResourceCommand) -> Result<i32> {
     match command {
         ResourceCommand::Acquire {
             mode,
@@ -21,53 +23,44 @@ pub(super) async fn run(paths: &Paths, command: ResourceCommand, json_output: bo
             reason,
             wait,
         } => {
-            let workspace = ui::workspace(paths, workspace, true, json_output).await?;
-            let request = resources::AcquireRequest {
+            let workspace =
+                ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+            let request = ResourceRequest {
                 mode,
                 pool,
                 resource,
                 name,
                 reason,
             };
-            let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(wait);
-            loop {
-                match client::call(
-                    paths,
-                    Method::ResourceAcquire {
-                        workspace: workspace.clone(),
-                        request: request.clone(),
-                    },
-                )
-                .await?
-                {
-                    Body::ResourceLease(lease) => {
-                        output(
-                            json_output,
-                            &format!(
-                                "{}/{} -> {} [{}] ({})",
-                                lease.pool, lease.name, lease.resource, lease.mode, lease.id
-                            ),
-                            serde_json::to_value(&lease)?,
-                        );
-                        return Ok(0);
-                    }
-                    Body::ResourceBusy { message } if tokio::time::Instant::now() >= deadline => {
-                        output(
-                            json_output,
-                            &message,
-                            json!({"acquired":false,"code":"resource_busy","pool":request.pool,"resource":request.resource,"message":message}),
-                        );
-                        return Ok(2);
-                    }
-                    Body::ResourceBusy { .. } => {
-                        tokio::time::sleep(
-                            std::time::Duration::from_secs(1).min(
-                                deadline.saturating_duration_since(tokio::time::Instant::now()),
-                            ),
-                        )
-                        .await
-                    }
-                    _ => anyhow::bail!("unexpected resource acquisition response"),
+            let outcome = retry_while_busy(wait, async || {
+                let method = Method::ResourceAcquire {
+                    workspace: workspace.clone(),
+                    request: request.clone(),
+                };
+                Ok(match client::call(&ctx.paths, method).await? {
+                    Body::ResourceLease(lease) => Attempt::Ready(lease),
+                    Body::ResourceBusy { message } => Attempt::Busy(message),
+                    _ => bail!("unexpected resource acquisition response"),
+                })
+            })
+            .await?;
+            match outcome {
+                Ok(lease) => {
+                    ctx.emit(&describe(&lease), &lease)?;
+                    Ok(0)
+                }
+                Err(message) => {
+                    ctx.emit(
+                        &message,
+                        json!({
+                            "acquired": false,
+                            "code": "resource_busy",
+                            "pool": request.pool,
+                            "resource": request.resource,
+                            "message": message,
+                        }),
+                    )?;
+                    Ok(EXIT_BUSY)
                 }
             }
         }
@@ -76,119 +69,103 @@ pub(super) async fn run(paths: &Paths, command: ResourceCommand, json_output: bo
             workspace,
             name,
         } => {
-            let workspace = ui::workspace(paths, workspace, true, json_output).await?;
-            client::call(
-                paths,
-                Method::ResourceRelease {
-                    workspace,
-                    pool,
-                    name,
-                },
-            )
-            .await?;
-            output(json_output, "Resource released", json!({"released":true}));
+            let workspace =
+                ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+            let method = Method::ResourceRelease {
+                workspace,
+                pool,
+                name,
+            };
+            client::call(&ctx.paths, method).await?;
+            ctx.emit("Resource released", json!({"released": true}))?;
+            Ok(0)
         }
         ResourceCommand::List { workspace, all } => {
-            let workspace = if all {
-                None
-            } else {
-                Some(ui::workspace(paths, workspace, true, json_output).await?)
-            };
-            let Body::ResourceLeases(leases) =
-                client::call(paths, Method::ResourceList { workspace }).await?
-            else {
-                anyhow::bail!("unexpected resource list response");
-            };
-            if json_output {
-                println!("{}", serde_json::to_string(&leases)?);
-            } else {
-                for lease in &leases {
-                    println!(
-                        "{}  {}/{} -> {} [{}]{}",
-                        lease.workspace_id,
-                        lease.pool,
-                        lease.name,
-                        lease.resource,
-                        lease.mode,
-                        lease
-                            .reason
-                            .as_ref()
-                            .map(|r| format!(" ({r})"))
-                            .unwrap_or_default()
-                    );
+            let workspace = ui::select_workspace_filter(ctx, workspace, all).await?;
+            let leases = request!(
+                &ctx.paths,
+                Method::ResourceList { workspace },
+                ResourceLeases
+            );
+            ctx.show(&leases, |leases| {
+                for lease in leases {
+                    println!("{}  {}", lease.workspace_id, describe_short(lease));
                 }
                 if leases.is_empty() {
                     println!("No resource leases");
                 }
-            }
+            })?;
+            Ok(0)
         }
     }
+}
+
+fn describe(lease: &ResourceLease) -> String {
+    format!(
+        "{}/{} -> {} [{}] ({})",
+        lease.pool, lease.name, lease.resource, lease.mode, lease.id
+    )
+}
+
+fn describe_short(lease: &ResourceLease) -> String {
+    format!(
+        "{}/{} -> {} [{}]{}",
+        lease.pool,
+        lease.name,
+        lease.resource,
+        lease.mode,
+        optional(lease.reason.as_deref(), |r| format!(" ({r})"))
+    )
+}
+
+pub(super) async fn overview(ctx: &Context, workspace: Option<String>) -> Result<i32> {
+    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    let overview = request!(
+        &ctx.paths,
+        Method::ResourceOverview { workspace },
+        ResourceOverview
+    );
+    ctx.show(&overview, render_overview)?;
     Ok(0)
 }
 
-pub(super) async fn overview(
-    paths: &Paths,
-    workspace: Option<String>,
-    json_output: bool,
-) -> Result<i32> {
-    let workspace = ui::workspace(paths, workspace, true, json_output).await?;
-    let Body::ResourceOverview(overview) =
-        client::call(paths, Method::ResourceOverview { workspace }).await?
-    else {
-        anyhow::bail!("unexpected resource overview response");
-    };
-    if json_output {
-        println!("{}", serde_json::to_string(&overview)?);
-    } else {
-        for pool in &overview.pools {
-            println!(
-                "{} ({}) {}/{} in use, {} available{}",
-                pool.name,
-                pool.scope,
-                pool.used,
-                pool.capacity,
-                pool.available,
-                if pool.configuration_matches {
-                    ""
-                } else {
-                    " [configuration changed; drain leases first]"
-                }
-            );
-            for resource in &pool.resources {
-                if resource.kind == resources::ResourceKind::Rwlock {
-                    println!(
-                        "  {}: {} readers, {} writers; read available: {}, write available: {}",
-                        resource.name,
-                        resource.readers,
-                        resource.writers,
-                        resource.read_available,
-                        resource.write_available
-                    );
-                } else {
-                    println!(
-                        "  {}: {}/{} in use, {} available",
-                        resource.name, resource.used, resource.capacity, resource.available
-                    );
-                }
+fn render_overview(overview: &Overview) {
+    for pool in &overview.pools {
+        println!(
+            "{} ({}) {}/{} in use, {} available{}",
+            pool.name,
+            pool.scope,
+            pool.used,
+            pool.capacity,
+            pool.available,
+            if pool.configuration_matches {
+                ""
+            } else {
+                " [configuration changed; drain leases first]"
+            }
+        );
+        for resource in &pool.resources {
+            if resource.kind == ResourceKind::Rwlock {
+                println!(
+                    "  {}: {} readers, {} writers; read available: {}, write available: {}",
+                    resource.name,
+                    resource.readers,
+                    resource.writers,
+                    resource.read_available,
+                    resource.write_available
+                );
+            } else {
+                println!(
+                    "  {}: {}/{} in use, {} available",
+                    resource.name, resource.used, resource.capacity, resource.available
+                );
             }
         }
-        for lease in &overview.leases {
-            println!(
-                "  lease {}/{} -> {} [{}]{}",
-                lease.pool,
-                lease.name,
-                lease.resource,
-                lease.mode,
-                lease
-                    .reason
-                    .as_ref()
-                    .map(|r| format!(" ({r})"))
-                    .unwrap_or_default()
-            );
-        }
-        if overview.pools.is_empty() && overview.leases.is_empty() {
-            println!("No configured resources or leases");
-        }
     }
-    Ok(0)
+    for lease in &overview.leases {
+        println!("  lease {}", describe_short(lease));
+    }
+    if overview.pools.is_empty() && overview.leases.is_empty() {
+        println!("No configured resources or leases");
+    }
 }

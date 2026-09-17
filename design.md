@@ -195,7 +195,9 @@ picker. Rust selects navigation paths; the Bash/Zsh wrapper only changes directo
 and preserves status, without evaluating repository-provided shell code.
 
 When approval is required, interactive commands show the action and ask `[y/N]`.
-Enter, `n`, and end-of-input cancel; invalid answers prompt again. Explicit flags
+Enter, `n`, end-of-input, and Ctrl-C cancel; invalid answers prompt again. Ctrl-C
+cancels every prompt, including after a tracked execution (such as a setup
+command) has run in the same CLI process. Explicit flags
 such as `--yes` bypass confirmation; noninteractive/JSON callers must use those
 flags. Workspace branch choices remain separate: Cancel, Keep branch, or Delete
 branch, followed by a concise confirmation showing file and branch effects.

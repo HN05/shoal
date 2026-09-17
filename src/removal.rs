@@ -1,12 +1,14 @@
+//! What removing a workspace would discard, and the caller's branch decision.
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-use crate::{model::Workspace, processes, worktrunk};
+use crate::{git, model::Workspace, processes};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RemovalCheck {
     pub workspace: Workspace,
     pub running_commands: usize,
+    /// Processes using the directory; only gathered for automatic cleanup.
     pub processes: Vec<String>,
     pub dirty: bool,
     pub unpushed_commits: u64,
@@ -15,9 +17,12 @@ pub struct RemovalCheck {
     pub matches_upstream: bool,
 }
 
+/// What happens to the workspace branch when its worktree is removed.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum Choice {
+pub enum BranchChoice {
+    /// Delete the branch only when it is redundant with the default branch or
+    /// its upstream; otherwise a choice is required.
     Auto,
     KeepBranch,
     DeleteBranch,
@@ -54,6 +59,7 @@ impl RemovalCheck {
         self.workspace.path.exists() && !self.can_delete_branch()
     }
 
+    /// Nothing would be lost: idle, clean, and fully pushed.
     pub fn safe(&self) -> bool {
         self.running_commands == 0
             && self.processes.is_empty()
@@ -62,7 +68,9 @@ impl RemovalCheck {
     }
 }
 
-pub async fn check(
+/// Gather Git state for a removal decision. `caller_pid == 0` marks automatic
+/// cleanup, which also treats processes in the directory as activity.
+pub async fn inspect(
     workspace: Workspace,
     running_commands: usize,
     caller_pid: u32,
@@ -78,46 +86,39 @@ pub async fn check(
         matches_default_branch: false,
         matches_upstream: false,
     };
-    if check.workspace.path.exists() {
-        check.dirty = !worktrunk::git(
-            &check.workspace.path,
-            &["status", "--porcelain", "--untracked-files=normal"],
-        )
+    if !check.workspace.path.exists() {
+        return Ok(check);
+    }
+    let path = &check.workspace.path;
+    check.dirty = !git::run(path, &["status", "--porcelain", "--untracked-files=normal"])
         .await?
         .is_empty();
-        check.unpushed_commits = worktrunk::git(
-            &check.workspace.path,
-            &["rev-list", "--count", "HEAD", "--not", "--remotes"],
-        )
+    check.unpushed_commits = git::run(path, &["rev-list", "--count", "HEAD", "--not", "--remotes"])
         .await?
         .trim()
         .parse()?;
-        let branch = worktrunk::git(&check.workspace.path, &["branch", "--show-current"]).await?;
-        let branch = branch.trim_end_matches('\n');
-        check.branch = (!branch.is_empty()).then(|| branch.to_owned());
-        let tree = worktrunk::git(&check.workspace.path, &["rev-parse", "HEAD^{tree}"]).await?;
-        if let Some(default_branch) = default_branch {
-            check.matches_default_branch = worktrunk::git(
-                &check.workspace.path,
-                &[
-                    "rev-parse",
-                    "--verify",
-                    &format!("refs/heads/{default_branch}^{{tree}}"),
-                ],
-            )
-            .await
-            .is_ok_and(|other| other == tree);
-        }
-        check.matches_upstream = worktrunk::git(
-            &check.workspace.path,
-            &["rev-parse", "--verify", "@{upstream}^{tree}"],
+    let branch = git::run(path, &["branch", "--show-current"]).await?;
+    let branch = branch.trim_end_matches('\n');
+    check.branch = (!branch.is_empty()).then(|| branch.to_owned());
+    let tree = git::run(path, &["rev-parse", "HEAD^{tree}"]).await?;
+    if let Some(default_branch) = default_branch {
+        check.matches_default_branch = git::run(
+            path,
+            &[
+                "rev-parse",
+                "--verify",
+                &format!("refs/heads/{default_branch}^{{tree}}"),
+            ],
         )
         .await
         .is_ok_and(|other| other == tree);
-        // Processes block automatic cleanup, never manual removal.
-        if caller_pid == 0 {
-            check.processes = processes::in_directory(&check.workspace.path).await?;
-        }
+    }
+    check.matches_upstream = git::run(path, &["rev-parse", "--verify", "@{upstream}^{tree}"])
+        .await
+        .is_ok_and(|other| other == tree);
+    // Processes block automatic cleanup, never manual removal.
+    if caller_pid == 0 {
+        check.processes = processes::in_directory(path).await?;
     }
     Ok(check)
 }

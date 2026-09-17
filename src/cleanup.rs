@@ -1,3 +1,4 @@
+//! Automatic removal of idle, clean, fully pushed worktrees.
 use anyhow::Result;
 use std::{
     collections::{HashMap, hash_map::DefaultHasher},
@@ -11,12 +12,22 @@ use tokio::time::{Instant, sleep};
 
 use crate::workspace::Manager;
 
+const SWEEP_INTERVAL: Duration = Duration::from_secs(30);
+
+/// When a workspace was last seen unchanged in a removable state.
+struct Idle {
+    snapshot: u64,
+    since: Instant,
+}
+
 #[derive(Default)]
 pub struct Timers {
-    idle: HashMap<String, (u64, Instant)>,
+    idle: HashMap<String, Idle>,
 }
 
 impl Timers {
+    /// Record the latest snapshot; returns true once it has stayed the same
+    /// for `delay`. `None` means the workspace is not removable and resets it.
     pub fn observe(
         &mut self,
         id: &str,
@@ -28,11 +39,17 @@ impl Timers {
             self.idle.remove(id);
             return false;
         };
-        let entry = self.idle.entry(id.into()).or_insert((snapshot, now));
-        if entry.0 != snapshot {
-            *entry = (snapshot, now);
+        let entry = self.idle.entry(id.into()).or_insert(Idle {
+            snapshot,
+            since: now,
+        });
+        if entry.snapshot != snapshot {
+            *entry = Idle {
+                snapshot,
+                since: now,
+            };
         }
-        now.duration_since(entry.1) >= delay
+        now.duration_since(entry.since) >= delay
     }
 }
 
@@ -66,7 +83,7 @@ pub fn fingerprint(root: &Path, head: &str, activity: u64) -> Result<u64> {
 }
 
 pub async fn sweep(manager: &Manager, timers: &mut Timers, delay: Duration) -> Result<()> {
-    let workspaces = manager.list().await?;
+    let workspaces = manager.list_workspaces().await?;
     timers
         .idle
         .retain(|id, _| workspaces.iter().any(|workspace| &workspace.id == id));
@@ -84,7 +101,7 @@ pub async fn sweep(manager: &Manager, timers: &mut Timers, delay: Duration) -> R
         };
         if timers.observe(&workspace.id, snapshot, Instant::now(), delay) {
             if let Some(snapshot) = snapshot {
-                match manager.remove_idle(workspace.id.clone(), snapshot).await {
+                match manager.remove_idle(&workspace.id, snapshot).await {
                     Ok(()) => eprintln!("auto cleanup removed {}", workspace.name),
                     Err(error) => eprintln!("auto cleanup retained {}: {error:#}", workspace.name),
                 }
@@ -101,7 +118,7 @@ pub async fn run(manager: Arc<Manager>, delay: Duration) {
         if let Err(error) = sweep(&manager, &mut timers, delay).await {
             eprintln!("auto cleanup: {error:#}");
         }
-        sleep(Duration::from_secs(30)).await;
+        sleep(SWEEP_INTERVAL).await;
     }
 }
 
@@ -123,11 +140,11 @@ mod tests {
 
     #[tokio::test]
     async fn cleanup_preserves_work_and_rechecks_activity_before_deleting() {
-        use crate::{paths::Paths, worktrunk};
+        use crate::{git, paths::Paths, ports::PortRequest, resources::ResourceRequest};
         let temp = tempfile::tempdir_in("/tmp").unwrap();
         let repository_dir = temp.path().join("repo");
         fs::create_dir(&repository_dir).unwrap();
-        let git = |args: &[&str]| {
+        let git_cmd = |args: &[&str]| {
             let output = std::process::Command::new("git")
                 .arg("-C")
                 .arg(&repository_dir)
@@ -142,10 +159,10 @@ mod tests {
                 String::from_utf8_lossy(&output.stderr)
             );
         };
-        git(&["init", "-b", "main"]);
+        git_cmd(&["init", "-b", "main"]);
         fs::write(repository_dir.join(".gitignore"), "ignored/\n").unwrap();
-        git(&["add", "."]);
-        git(&[
+        git_cmd(&["add", "."]);
+        git_cmd(&[
             "-c",
             "user.name=Shoal Test",
             "-c",
@@ -169,96 +186,68 @@ mod tests {
                 crate::resources::ResourceConfig::default(),
             );
         let repo = manager
-            .register(repository_dir.to_str().unwrap().into(), None, None)
+            .register_repository(repository_dir.to_str().unwrap().into(), None, None)
             .await
             .unwrap();
-        let workspace = manager.add(repo.id, "idle".into(), None).await.unwrap();
+        let workspace = manager
+            .create_workspace(&repo.id, "idle".into(), None)
+            .await
+            .unwrap();
+        let snapshot = |manager: &Arc<Manager>| {
+            let manager = manager.clone();
+            let id = workspace.id.clone();
+            async move { manager.cleanup_snapshot(&id).await.unwrap() }
+        };
+        let lease = |pool: &str, mode: Option<crate::resources::LockMode>| ResourceRequest {
+            mode,
+            pool: pool.into(),
+            name: "default".into(),
+            resource: None,
+            reason: None,
+        };
         assert!(
-            manager
-                .cleanup_snapshot(&workspace.id)
-                .await
-                .unwrap()
-                .is_none(),
+            snapshot(&manager).await.is_none(),
             "unpushed work must be retained"
         );
-        git(&["update-ref", "refs/remotes/origin/main", "HEAD"]);
+        git_cmd(&["update-ref", "refs/remotes/origin/main", "HEAD"]);
         manager
-            .acquire_resource(
-                workspace.id.clone(),
-                crate::resources::AcquireRequest {
-                    mode: None,
-                    pool: "test-lock".into(),
-                    name: "default".into(),
-                    resource: None,
-                    reason: None,
-                },
-            )
+            .acquire_resource(&workspace.id, lease("test-lock", None))
             .await
             .unwrap();
         assert!(
-            manager
-                .cleanup_snapshot(&workspace.id)
-                .await
-                .unwrap()
-                .is_none(),
+            snapshot(&manager).await.is_none(),
             "a resource lease must prevent automatic removal"
         );
         manager
-            .release_resource(workspace.id.clone(), "test-lock".into(), "default".into())
+            .release_resource(&workspace.id, "test-lock".into(), "default".into())
             .await
             .unwrap();
-        fs::write(
-            workspace.path.join(".shoal.toml"),
-            "[resources.cache]\nkind='rwlock'\n",
-        )
-        .unwrap();
+        let rwlock_config = workspace.path.join(".shoal.toml");
+        fs::write(&rwlock_config, "[resources.cache]\nkind='rwlock'\n").unwrap();
         for mode in [
             crate::resources::LockMode::Read,
             crate::resources::LockMode::Write,
         ] {
             manager
-                .acquire_resource(
-                    workspace.id.clone(),
-                    crate::resources::AcquireRequest {
-                        pool: "cache".into(),
-                        name: "default".into(),
-                        mode: Some(mode),
-                        resource: None,
-                        reason: None,
-                    },
-                )
+                .acquire_resource(&workspace.id, lease("cache", Some(mode)))
                 .await
                 .unwrap();
             // Remove config so only the lease can keep this clean/pushed worktree alive.
-            fs::remove_file(workspace.path.join(".shoal.toml")).unwrap();
-            assert!(
-                manager
-                    .cleanup_snapshot(&workspace.id)
-                    .await
-                    .unwrap()
-                    .is_none()
-            );
+            fs::remove_file(&rwlock_config).unwrap();
+            assert!(snapshot(&manager).await.is_none());
             manager
-                .release_resource(workspace.id.clone(), "cache".into(), "default".into())
+                .release_resource(&workspace.id, "cache".into(), "default".into())
                 .await
                 .unwrap();
-            fs::write(
-                workspace.path.join(".shoal.toml"),
-                "[resources.cache]\nkind='rwlock'\n",
-            )
-            .unwrap();
+            fs::write(&rwlock_config, "[resources.cache]\nkind='rwlock'\n").unwrap();
         }
-        fs::remove_file(workspace.path.join(".shoal.toml")).unwrap();
-        let original = manager
-            .cleanup_snapshot(&workspace.id)
-            .await
-            .unwrap()
-            .unwrap();
+        fs::remove_file(&rwlock_config).unwrap();
+        let original = snapshot(&manager).await.unwrap();
         manager
             .reserve_port(
-                workspace.id.clone(),
+                &workspace.id,
                 "web".into(),
-                crate::ports::PortOptions {
+                PortRequest {
                     reason: Some("cleanup test".into()),
                     ..Default::default()
                 },
@@ -266,39 +255,24 @@ mod tests {
             .await
             .unwrap();
         fs::write(workspace.path.join("dirty"), "retain me").unwrap();
-        assert!(
-            manager
-                .cleanup_snapshot(&workspace.id)
-                .await
-                .unwrap()
-                .is_none()
-        );
-        assert!(
-            manager
-                .remove_idle(workspace.id.clone(), original)
-                .await
-                .is_err()
-        );
+        assert!(snapshot(&manager).await.is_none());
+        assert!(manager.remove_idle(&workspace.id, original).await.is_err());
         fs::remove_file(workspace.path.join("dirty")).unwrap();
-        let before_command = manager
-            .cleanup_snapshot(&workspace.id)
+        let before_command = snapshot(&manager).await.unwrap();
+        let (plan, _) = manager
+            .begin_execution(
+                &workspace.id,
+                None,
+                crate::workspace::ExecutionKind::Command,
+            )
             .await
-            .unwrap()
             .unwrap();
-        let (plan, _) = manager.begin(workspace.id.clone(), None).await.unwrap();
-        assert!(
-            manager
-                .cleanup_snapshot(&workspace.id)
-                .await
-                .unwrap()
-                .is_none()
-        );
-        manager.finish(plan.id, true).await.unwrap();
-        let after_command = manager
-            .cleanup_snapshot(&workspace.id)
+        assert!(snapshot(&manager).await.is_none());
+        manager
+            .finish_execution(plan.id, crate::workspace::ExecutionKind::Command, Some(0))
             .await
-            .unwrap()
             .unwrap();
+        let after_command = snapshot(&manager).await.unwrap();
         assert_ne!(
             before_command, after_command,
             "short executions must reset the timer"
@@ -307,29 +281,28 @@ mod tests {
         fs::write(workspace.path.join("ignored/build-output"), "build").unwrap();
         assert!(
             manager
-                .remove_idle(workspace.id.clone(), after_command)
+                .remove_idle(&workspace.id, after_command)
                 .await
                 .is_err(),
             "ignored file updates must reset the timer"
         );
-        let snapshot = manager
-            .cleanup_snapshot(&workspace.id)
-            .await
-            .unwrap()
-            .unwrap();
+        let final_snapshot = snapshot(&manager).await.unwrap();
         let mut timers = Timers::default();
         timers.idle.insert(
             workspace.id.clone(),
-            (snapshot, Instant::now() - Duration::from_secs(600)),
+            Idle {
+                snapshot: final_snapshot,
+                since: Instant::now() - Duration::from_secs(600),
+            },
         );
         sweep(&manager, &mut timers, Duration::from_secs(600))
             .await
             .unwrap();
         assert!(!workspace.path.exists());
-        assert!(manager.list().await.unwrap().is_empty());
+        assert!(manager.list_workspaces().await.unwrap().is_empty());
         assert!(manager.list_ports(None).await.unwrap().is_empty());
         assert_eq!(
-            worktrunk::git(
+            git::run(
                 &repository_dir,
                 &[
                     "for-each-ref",

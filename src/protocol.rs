@@ -1,10 +1,25 @@
+//! Newline-delimited JSON over the daemon's Unix socket. Bump [`VERSION`]
+//! whenever a request, response, or event changes shape or spelling.
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 
-use crate::model::{ExecutionPlan, Inspection, Repository, Workspace};
+use crate::{
+    model::{
+        DiffBase, ExecutionPlan, Inspection, PortOverview, PortReservation, PortSuggestion,
+        PulledBranch, Repository, RepositoryRemoval, Workspace,
+    },
+    ports::PortRequest,
+    process_identity::Identity,
+    recovery::{ReconcileOptions, Report},
+    removal::{BranchChoice, RemovalCheck, RemovalResult},
+    repo_config::LocalConfig,
+    resources::{Overview, ResourceLease, ResourceRequest},
+    sim_audit::AuditEntry,
+    simulators::{SimRequest, Simulator, SimulatorCatalog},
+};
 
-pub const VERSION: u32 = 16;
+pub const VERSION: u32 = 17;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -16,45 +31,27 @@ pub struct Request {
     pub scope: Option<String>,
 }
 
+impl Request {
+    /// A request from this process, carrying its workspace scope token if any.
+    pub fn new(method: Method) -> Self {
+        Self {
+            protocol: VERSION,
+            id: 1,
+            method,
+            scope: crate::env::scope_token(),
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Method {
-    ResourceAcquire {
-        workspace: String,
-        request: crate::resources::AcquireRequest,
-    },
-    ResourceRelease {
-        workspace: String,
-        pool: String,
-        name: String,
-    },
-    ResourceList {
-        workspace: Option<String>,
-    },
-    ResourceOverview {
-        workspace: String,
-    },
-    SimCatalog,
-    SimHistory {
-        workspace: Option<String>,
-        limit: u32,
-        before: Option<i64>,
-    },
-    SimList {
-        workspace: Option<String>,
-    },
-    SimAcquire {
-        workspace: String,
-        request: crate::simulators::SimRequest,
-    },
-    SimRelease {
-        workspace: String,
-        name: String,
-    },
+    // Daemon administration.
     Status,
     Shutdown,
-    Repositories,
-    Register {
+    // Repositories.
+    ListRepositories,
+    RegisterRepository {
         source: String,
         name: Option<String>,
         path: Option<std::path::PathBuf>,
@@ -73,62 +70,97 @@ pub enum Method {
     RemoveRepository {
         repository: String,
     },
-    Add {
+    // Workspaces.
+    CreateWorkspace {
         repository: String,
         name: String,
         base: Option<String>,
     },
-    List,
+    ListWorkspaces,
+    InspectWorkspace {
+        workspace: String,
+    },
+    StopWorkspace {
+        workspace: String,
+    },
+    CheckRemoval {
+        workspace: String,
+        caller_pid: u32,
+    },
+    RemoveWorkspace {
+        workspace: String,
+        choice: BranchChoice,
+        caller_pid: u32,
+    },
+    Reconcile {
+        workspace: Option<String>,
+        options: ReconcileOptions,
+    },
     PullDefaultBranch {
         workspace: String,
     },
     DiffBase {
         workspace: String,
     },
+    /// Long-lived: the connection stays open for the execution's lifetime.
+    Execute {
+        workspace: String,
+        wrapper: Identity,
+    },
+    /// Like [`Method::Execute`], running the configured setup command.
+    Prepare {
+        workspace: String,
+        wrapper: Identity,
+    },
+    // Ports.
     ReservePort {
         workspace: String,
         name: String,
-        port: Option<u16>,
-        env_var: Option<String>,
-        reason: Option<String>,
-        on_conflict: Option<crate::repo_config::ConflictPolicy>,
-    },
-    Ports {
-        workspace: Option<String>,
+        request: PortRequest,
     },
     ReleasePort {
         workspace: String,
         name: String,
     },
+    ListPorts {
+        workspace: Option<String>,
+    },
     PortOverview {
         workspace: String,
     },
-    Reconcile {
+    // Cooperative resources.
+    ResourceAcquire {
+        workspace: String,
+        request: ResourceRequest,
+    },
+    ResourceRelease {
+        workspace: String,
+        pool: String,
+        name: String,
+    },
+    ResourceList {
         workspace: Option<String>,
-        options: crate::recovery::Options,
     },
-    Inspect {
+    ResourceOverview {
         workspace: String,
     },
-    Remove {
-        workspace: String,
-        choice: crate::removal::Choice,
-        caller_pid: u32,
+    // Simulators.
+    SimCatalog,
+    SimList {
+        workspace: Option<String>,
     },
-    CheckRemoval {
+    SimAcquire {
         workspace: String,
-        caller_pid: u32,
+        request: SimRequest,
     },
-    Stop {
+    SimRelease {
         workspace: String,
+        name: String,
     },
-    Prepare {
-        workspace: String,
-        wrapper: crate::process_identity::Identity,
-    },
-    Execute {
-        workspace: String,
-        wrapper: crate::process_identity::Identity,
+    SimHistory {
+        workspace: Option<String>,
+        limit: u32,
+        before: Option<i64>,
     },
 }
 
@@ -140,38 +172,57 @@ pub struct Response {
     pub body: Body,
 }
 
+impl Response {
+    pub fn new(id: u64, body: Body) -> Self {
+        Self {
+            protocol: VERSION,
+            id,
+            body,
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data", rename_all = "snake_case")]
 pub enum Body {
-    ResourceLease(crate::resources::ResourceLease),
-    ResourceLeases(Vec<crate::resources::ResourceLease>),
-    ResourceOverview(crate::resources::Overview),
-    ResourceBusy { message: String },
+    Ok,
+    Error { code: String, message: String },
     Status(Status),
     Repositories(Vec<Repository>),
     Repository(Repository),
-    RepositoryConfig(crate::repo_config::LocalConfig),
-    RepositoryRemoved(crate::model::RepositoryRemoval),
+    RepositoryConfig(LocalConfig),
+    RepositoryRemoved(RepositoryRemoval),
     Workspace(Workspace),
     Workspaces(Vec<Workspace>),
     Inspection(Inspection),
-    Reconciliation(Vec<crate::recovery::Report>),
+    Reconciliation(Vec<Report>),
     Execution(ExecutionPlan),
-    RemovalCheck(crate::removal::RemovalCheck),
-    RemovalResult(crate::removal::RemovalResult),
-    DiffBase(crate::model::DiffBase),
-    PulledBranch(crate::model::PulledBranch),
-    Port(crate::model::PortReservation),
-    Ports(Vec<crate::model::PortReservation>),
-    PortSuggestion(crate::model::PortSuggestion),
-    PortOverview(crate::model::PortOverview),
-    Simulators(Vec<crate::simulators::Simulator>),
-    Simulator(crate::simulators::Simulator),
+    RemovalCheck(RemovalCheck),
+    RemovalResult(RemovalResult),
+    DiffBase(DiffBase),
+    PulledBranch(PulledBranch),
+    Port(PortReservation),
+    Ports(Vec<PortReservation>),
+    PortSuggestion(PortSuggestion),
+    PortOverview(PortOverview),
+    ResourceLease(ResourceLease),
+    ResourceLeases(Vec<ResourceLease>),
+    ResourceOverview(Overview),
+    ResourceBusy { message: String },
+    Simulator(Simulator),
+    Simulators(Vec<Simulator>),
     SimBusy { message: String },
-    SimCatalog(serde_json::Value),
-    SimHistory(Vec<crate::sim_audit::AuditEntry>),
-    Ok,
-    Error { code: String, message: String },
+    SimCatalog(SimulatorCatalog),
+    SimHistory(Vec<AuditEntry>),
+}
+
+impl Body {
+    pub fn error(code: &str, error: impl std::fmt::Display) -> Self {
+        Self::Error {
+            code: code.into(),
+            message: error.to_string(),
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -182,11 +233,12 @@ pub struct Status {
     pub managed: bool,
 }
 
+/// Wrapper → daemon messages after an [`Method::Execute`] response.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ExecutionEvent {
     Started {
-        child: Option<crate::process_identity::Identity>,
+        child: Option<Identity>,
         group_id: u32,
     },
     Finished {
@@ -194,6 +246,7 @@ pub enum ExecutionEvent {
     },
 }
 
+/// Daemon → wrapper messages during an execution.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Control {

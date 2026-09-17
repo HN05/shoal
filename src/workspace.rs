@@ -6,9 +6,14 @@ mod registry;
 mod repo_configuration;
 mod repo_removal;
 
+pub use executions::ExecutionKind;
+
 use crate::{
+    config::Config,
+    git,
     model::{Inspection, Workspace},
     paths::Paths,
+    scope::Caller,
     state::WorkspaceState,
     store::{self, Store},
     worktrunk,
@@ -21,17 +26,40 @@ use uuid::Uuid;
 
 pub struct Manager {
     pub store: Store,
-    pub config: crate::config::Config,
+    pub config: Config,
     paths: Paths,
-    pub sim_gate: Mutex<()>,
-    repositories: Mutex<()>,
+    /// Serializes every simctl transition.
+    pub(crate) simulator_gate: Mutex<()>,
+    /// Serializes repository registration, removal, and local config changes.
+    registry_gate: Mutex<()>,
+    /// Per-repository gate for ref updates and worktree creation/removal.
     git_gates: Mutex<HashMap<String, Arc<Mutex<()>>>>,
-    pub scopes: Mutex<HashMap<String, (String, String)>>,
-    active: Mutex<HashMap<String, watch::Sender<bool>>>,
+    /// Scope token → the execution it was issued to.
+    scopes: Mutex<HashMap<String, Caller>>,
+    /// Connected executions and the channel that asks their wrapper to stop.
+    connections: Mutex<HashMap<String, watch::Sender<bool>>>,
+    /// Per-workspace activity counters folded into cleanup fingerprints.
     activity: Mutex<HashMap<String, u64>>,
 }
 
 impl Manager {
+    pub async fn open(paths: Paths) -> Result<Arc<Self>> {
+        fs::create_dir_all(paths.workspaces_dir())?;
+        // Avoid inheriting personal Worktrunk hooks and layout preferences.
+        fs::write(paths.worktrunk_config(), "# Managed by Shoal.\n")?;
+        Ok(Arc::new(Self {
+            config: Config::load(&paths)?,
+            store: Store::open(paths.database()).await?,
+            paths,
+            simulator_gate: Mutex::new(()),
+            registry_gate: Mutex::new(()),
+            git_gates: Mutex::new(HashMap::new()),
+            scopes: Mutex::new(HashMap::new()),
+            connections: Mutex::new(HashMap::new()),
+            activity: Mutex::new(HashMap::new()),
+        }))
+    }
+
     pub(crate) async fn git_gate(&self, repository: &str) -> Arc<Mutex<()>> {
         self.git_gates
             .lock()
@@ -41,24 +69,16 @@ impl Manager {
             .clone()
     }
 
-    pub async fn open(paths: Paths) -> Result<Arc<Self>> {
-        fs::create_dir_all(paths.state.join("workspaces"))?;
-        // Avoid inheriting personal Worktrunk hooks and layout preferences.
-        fs::write(paths.state.join("worktrunk.toml"), "# Managed by Shoal.\n")?;
-        Ok(Arc::new(Self {
-            config: crate::config::Config::load(&paths)?,
-            store: Store::open(paths.state.join("state.db")).await?,
-            paths,
-            sim_gate: Mutex::new(()),
-            repositories: Mutex::new(()),
-            git_gates: Mutex::new(HashMap::new()),
-            scopes: Mutex::new(HashMap::new()),
-            active: Mutex::new(HashMap::new()),
-            activity: Mutex::new(HashMap::new()),
-        }))
+    pub(crate) async fn caller(&self, token: &str) -> Option<Caller> {
+        self.scopes.lock().await.get(token).cloned()
     }
 
-    pub async fn list(&self) -> Result<Vec<Workspace>> {
+    /// Bind a scope token to the execution it was issued to.
+    pub(crate) async fn issue_scope(&self, token: String, caller: Caller) {
+        self.scopes.lock().await.insert(token, caller);
+    }
+
+    pub async fn list_workspaces(&self) -> Result<Vec<Workspace>> {
         self.store
             .run(|db| {
                 Ok(db
@@ -69,7 +89,9 @@ impl Manager {
             .await
     }
 
-    pub async fn get(&self, selector: String) -> Result<Workspace> {
+    /// Look a workspace up by ID or name.
+    pub async fn workspace(&self, selector: &str) -> Result<Workspace> {
+        let selector = selector.to_owned();
         self.store
             .run(move |db| {
                 db.query_row(
@@ -83,33 +105,41 @@ impl Manager {
             .await
     }
 
-    pub async fn inspect(&self, selector: String) -> Result<Inspection> {
-        let workspace = self.get(selector).await?;
-        let simulators = self.simulators(Some(workspace.id.clone())).await?;
+    /// Resolve an optional selector to a workspace ID filter.
+    pub async fn workspace_filter(&self, selector: Option<&str>) -> Result<Option<String>> {
+        match selector {
+            Some(selector) => Ok(Some(self.workspace(selector).await?.id)),
+            None => Ok(None),
+        }
+    }
+
+    pub async fn inspect_workspace(&self, selector: &str) -> Result<Inspection> {
+        let workspace = self.workspace(selector).await?;
+        let simulators = self.list_simulators(Some(&workspace.id)).await?;
         self.store
             .run(move |db| {
                 Ok(Inspection {
-                    resources: crate::resources::leases(db, Some(&workspace.id))?,
-                    simulators,
                     executions: store::executions(db, &workspace.id)?,
                     ports: store::ports(db, Some(&workspace.id))?,
+                    resources: crate::resources::leases(db, Some(&workspace.id))?,
+                    simulators,
                     workspace,
                 })
             })
             .await
     }
 
-    pub async fn add(
+    pub async fn create_workspace(
         &self,
-        repository: String,
+        repository: &str,
         name: String,
         base: Option<String>,
     ) -> Result<Workspace> {
-        let repo = self.repository(&repository).await?;
+        let repo = self.repository(repository).await?;
         // Ask Git about branch syntax, independently of the directory name.
         // Preserve the historical HEAD -> HEAD-2 conflict behavior.
         let checked = if name == "HEAD" { "HEAD-2" } else { &name };
-        let validated = worktrunk::git(&repo.path, &["check-ref-format", "--branch", checked])
+        let validated = git::run(&repo.path, &["check-ref-format", "--branch", checked])
             .await
             .context("invalid Git branch name")?;
         ensure!(
@@ -122,14 +152,13 @@ impl Manager {
         self.repository(&repo.id).await?;
         self.ensure_repository_available(&repo.id).await?;
         let branch = self.available_branch(&repo, &name).await?;
-        let name = workspace_name(&name);
-        let id = Uuid::new_v4().to_string();
+        let name = derive_workspace_name(&name);
         let workspace = Workspace {
-            branch,
-            id,
+            id: Uuid::new_v4().to_string(),
             repository_id: repo.id.clone(),
-            path: self.paths.state.join("workspaces").join(&name),
+            path: self.paths.workspaces_dir().join(&name),
             name,
+            branch,
             state: WorkspaceState::Preparing,
             error: None,
             base_commit: None,
@@ -142,85 +171,16 @@ impl Manager {
             "workspace path already exists: {}",
             workspace.path.display()
         );
-        let record = workspace.clone();
-        self.store.run(move |db| {
-            let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
-            ensure!(!tx.query_row("SELECT EXISTS(SELECT 1 FROM workspaces WHERE name=?1)", [&record.name], |r| r.get::<_, bool>(0))?, "workspace name already exists: {}", record.name);
-            tx.execute("INSERT INTO workspaces (id,repository_id,name,path,branch,state) VALUES (?1,?2,?3,?4,?5,?6)", params![record.id, record.repository_id, record.name, record.path.to_str(), record.branch, record.state])?;
-            tx.execute("UPDATE repositories SET last_used=(SELECT COALESCE(MAX(last_used),0)+1 FROM repositories) WHERE id=?1", [record.repository_id])?;
-            tx.commit()?;
-            Ok(())
-        }).await?;
-        let result = async {
-            let default = crate::default_branch::resolve(&repo.path, base.is_none()).await;
-            // An explicit ref remains an escape hatch when remote default-branch
-            // discovery is unavailable. It does not implicitly refresh another ref.
-            let default = if base.is_none() {
-                Some(default?)
-            } else {
-                default.ok()
-            };
-            let default_ref = default.as_ref().map(|name| format!("refs/heads/{name}"));
-            let base = base
-                .as_deref()
-                .or(default_ref.as_deref())
-                .context("workspace base is unknown")?;
-            let refresh = default.as_deref() == Some(base) || default_ref.as_deref() == Some(base);
-            if refresh {
-                self.refresh_default_branch(&repo, default.as_deref().unwrap(), true)
-                    .await
-                    .context("could not refresh the default branch before creating workspace")?;
-            }
-            let base = if refresh {
-                default_ref.as_deref().unwrap()
-            } else {
-                base
-            };
-            let commit = worktrunk::git(
-                &repo.path,
-                &["rev-parse", "--verify", &format!("{base}^{{commit}}")],
-            )
-            .await?
-            .trim()
-            .to_owned();
-            let reference =
-                worktrunk::git(&repo.path, &["rev-parse", "--symbolic-full-name", base]).await?;
-            let reference = reference.trim_end_matches('\n');
-            let reference = reference.starts_with("refs/").then(|| reference.to_owned());
-            let (record_id, record_commit) = (workspace.id.clone(), commit.clone());
-            self.store
-                .run(move |db| {
-                    db.execute(
-                        "UPDATE workspaces SET base_commit=?2,base_ref=?3 WHERE id=?1",
-                        params![record_id, record_commit, reference],
-                    )?;
-                    Ok(())
-                })
-                .await?;
-            worktrunk::create(
-                &repo.path,
-                &self.paths.state.join("worktrunk.toml"),
-                &workspace.path,
-                &workspace.branch,
-                &commit,
-            )
-            .await?;
-            self.record_worktree_identity(&workspace).await?;
-            Ok::<_, anyhow::Error>(self.workspace_config(&workspace).await?.setup_cmd.is_some())
-        }
-        .await;
+        self.insert_workspace(workspace.clone()).await?;
+        let result = self.materialize_worktree(&repo, &workspace, base).await;
         match result {
-            Ok(setup) => {
-                self.set_state(
-                    &workspace.id,
-                    if setup {
-                        WorkspaceState::Preparing
-                    } else {
-                        WorkspaceState::Ready
-                    },
-                    None,
-                )
-                .await?
+            Ok(needs_setup) => {
+                let state = if needs_setup {
+                    WorkspaceState::Preparing
+                } else {
+                    WorkspaceState::Ready
+                };
+                self.set_state(&workspace.id, state, None).await?;
             }
             Err(error) => {
                 self.set_state(
@@ -235,7 +195,102 @@ impl Manager {
                 );
             }
         }
-        self.get(workspace.id).await
+        self.workspace(&workspace.id).await
+    }
+
+    async fn insert_workspace(&self, record: Workspace) -> Result<()> {
+        self.store
+            .run(move |db| {
+                let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
+                let taken: bool = tx.query_row(
+                    "SELECT EXISTS(SELECT 1 FROM workspaces WHERE name=?1)",
+                    [&record.name],
+                    |r| r.get(0),
+                )?;
+                ensure!(!taken, "workspace name already exists: {}", record.name);
+                tx.execute(
+                    "INSERT INTO workspaces (id,repository_id,name,path,branch,state) VALUES (?1,?2,?3,?4,?5,?6)",
+                    params![
+                        record.id,
+                        record.repository_id,
+                        record.name,
+                        record.path.to_str(),
+                        record.branch,
+                        record.state
+                    ],
+                )?;
+                tx.execute(
+                    "UPDATE repositories SET last_used=(SELECT COALESCE(MAX(last_used),0)+1 FROM repositories) WHERE id=?1",
+                    [record.repository_id],
+                )?;
+                tx.commit()?;
+                Ok(())
+            })
+            .await
+    }
+
+    /// Resolve the base ref, record it, and create the worktree. Returns
+    /// whether a setup command still has to run.
+    async fn materialize_worktree(
+        &self,
+        repo: &crate::model::Repository,
+        workspace: &Workspace,
+        base: Option<String>,
+    ) -> Result<bool> {
+        let default = crate::default_branch::resolve(&repo.path, base.is_none()).await;
+        // An explicit ref remains an escape hatch when remote default-branch
+        // discovery is unavailable. It does not implicitly refresh another ref.
+        let default = if base.is_none() {
+            Some(default?)
+        } else {
+            default.ok()
+        };
+        let default_ref = default.as_ref().map(|name| format!("refs/heads/{name}"));
+        let base = base
+            .as_deref()
+            .or(default_ref.as_deref())
+            .context("workspace base is unknown")?;
+        let refresh = default.as_deref() == Some(base) || default_ref.as_deref() == Some(base);
+        if refresh {
+            self.refresh_default_branch(repo, default.as_deref().unwrap(), true)
+                .await
+                .context("could not refresh the default branch before creating workspace")?;
+        }
+        let base = if refresh {
+            default_ref.as_deref().unwrap()
+        } else {
+            base
+        };
+        let commit = git::run(
+            &repo.path,
+            &["rev-parse", "--verify", &format!("{base}^{{commit}}")],
+        )
+        .await?
+        .trim()
+        .to_owned();
+        let reference = git::run(&repo.path, &["rev-parse", "--symbolic-full-name", base]).await?;
+        let reference = reference.trim_end_matches('\n');
+        let reference = reference.starts_with("refs/").then(|| reference.to_owned());
+        let (id, recorded_commit) = (workspace.id.clone(), commit.clone());
+        self.store
+            .run(move |db| {
+                db.execute(
+                    "UPDATE workspaces SET base_commit=?2,base_ref=?3 WHERE id=?1",
+                    params![id, recorded_commit, reference],
+                )?;
+                Ok(())
+            })
+            .await?;
+        worktrunk::create(
+            &repo.path,
+            &self.paths.worktrunk_config(),
+            &workspace.path,
+            &workspace.branch,
+            &commit,
+        )
+        .await?;
+        self.record_worktree_identity(workspace).await?;
+        Ok(self.workspace_config(workspace).await?.setup_cmd.is_some())
     }
 
     pub(crate) async fn set_state(
@@ -256,13 +311,46 @@ impl Manager {
             .await
     }
 
+    /// Move a ready or failed workspace into a transient lifecycle state,
+    /// excluding every other lifecycle operation until it is restored.
+    pub(crate) async fn reserve_lifecycle(&self, id: &str, state: WorkspaceState) -> Result<()> {
+        let id = id.to_owned();
+        self.store
+            .run(move |db| {
+                let changed = db.execute(
+                    "UPDATE workspaces SET state=?2 WHERE id=?1 AND state IN (?3,?4)",
+                    params![id, state, WorkspaceState::Ready, WorkspaceState::Failed],
+                )?;
+                ensure!(
+                    changed == 1,
+                    "workspace is busy with another lifecycle operation"
+                );
+                Ok(())
+            })
+            .await
+    }
+
+    /// Record activity so automatic cleanup restarts its idle timer.
     pub async fn touch(&self, id: &str) {
         *self.activity.lock().await.entry(id.to_owned()).or_default() += 1;
+    }
+
+    pub(crate) async fn activity(&self, id: &str) -> u64 {
+        self.activity.lock().await.get(id).copied().unwrap_or(0)
+    }
+
+    /// Drop in-memory bookkeeping for a workspace that no longer exists.
+    pub(crate) async fn forget_workspace(&self, id: &str) {
+        self.activity.lock().await.remove(id);
+        self.scopes
+            .lock()
+            .await
+            .retain(|_, caller| caller.workspace_id != id);
     }
 }
 
 /// Keep directory/selector names portable without restricting Git branch syntax.
-fn workspace_name(branch: &str) -> String {
+fn derive_workspace_name(branch: &str) -> String {
     let name: String = branch
         .chars()
         .map(|c| {
@@ -277,19 +365,6 @@ fn workspace_name(branch: &str) -> String {
     if name.is_empty() {
         "workspace".into()
     } else {
-        name.chars().take(64).collect()
+        name.chars().take(crate::validate::MAX_NAME_LEN).collect()
     }
-}
-
-pub(crate) fn validate_name(name: &str) -> Result<()> {
-    ensure!(
-        !name.is_empty()
-            && name.len() <= 64
-            && name.as_bytes()[0].is_ascii_alphanumeric()
-            && name
-                .bytes()
-                .all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_'),
-        "workspace names must be 1–64 ASCII letters, digits, hyphens or underscores, starting with a letter or digit"
-    );
-    Ok(())
 }

@@ -1,3 +1,5 @@
+//! CLI side of the daemon protocol: one request per connection, plus typed
+//! helpers for the queries every command shares.
 use std::{io, time::Duration};
 
 use anyhow::{Context, Result, bail, ensure};
@@ -7,69 +9,103 @@ use tokio::{
 };
 
 use crate::{
+    model::{Inspection, Repository, Workspace},
     paths::Paths,
     protocol::{self, Body, Method, Request, Response, Status},
 };
 
+/// Send `method` and return the open stream with the daemon's first reply,
+/// including [`Body::Error`]. Executions keep using the stream; [`call`] drops it.
+pub async fn open(paths: &Paths, method: Method) -> Result<(UnixStream, Body)> {
+    let mut stream = UnixStream::connect(&paths.socket).await.with_context(|| {
+        format!(
+            "connect to {}; run `shoal setup` or `shoal daemon start`",
+            paths.socket.display()
+        )
+    })?;
+    let request = Request::new(method);
+    protocol::write(&mut stream, &request).await?;
+    let reply: Response = protocol::read(&mut stream).await?;
+    ensure!(
+        reply.protocol == protocol::VERSION,
+        "daemon protocol mismatch; restart the daemon with the installed version"
+    );
+    ensure!(reply.id == request.id, "unexpected daemon response ID");
+    Ok((stream, reply.body))
+}
+
+/// One request; daemon errors become `code: message` failures.
 pub async fn call(paths: &Paths, method: Method) -> Result<Body> {
     let seconds = if matches!(method, Method::Status | Method::Shutdown) {
         3
     } else {
         3600
     };
-    timeout(Duration::from_secs(seconds), async {
-        let mut stream = UnixStream::connect(&paths.socket).await.with_context(|| {
-            format!(
-                "connect to {}; run `shoal setup` or `shoal daemon start`",
-                paths.socket.display()
-            )
-        })?;
-        protocol::write(
-            &mut stream,
-            &Request {
-                scope: std::env::var("SHOAL_SCOPE_TOKEN").ok(),
-                protocol: protocol::VERSION,
-                id: 1,
-                method,
-            },
-        )
-        .await?;
-        let reply: Response = protocol::read(&mut stream).await?;
-        ensure!(
-            reply.protocol == protocol::VERSION,
-            "daemon protocol mismatch; restart the daemon with the installed version"
-        );
-        ensure!(reply.id == 1, "unexpected daemon response ID");
-        match reply.body {
-            Body::Error { code, message } => bail!("{code}: {message}"),
-            result => Ok(result),
-        }
-    })
-    .await
-    .context("daemon request timed out")?
+    let (_stream, body) = timeout(Duration::from_secs(seconds), open(paths, method))
+        .await
+        .context("daemon request timed out")??;
+    match body {
+        Body::Error { code, message } => bail!("{code}: {message}"),
+        body => Ok(body),
+    }
 }
 
+/// Call the daemon and unwrap the expected [`Body`] variant.
+///
+/// `request!(paths, Method::InspectWorkspace { workspace }, Inspection)`
+macro_rules! request {
+    ($paths:expr, $method:expr, $variant:ident) => {
+        match $crate::client::call($paths, $method).await? {
+            $crate::protocol::Body::$variant(value) => value,
+            _ => ::anyhow::bail!(
+                "unexpected daemon response; expected {}",
+                stringify!($variant)
+            ),
+        }
+    };
+}
+pub(crate) use request;
+
+pub async fn inspect(paths: &Paths, workspace: String) -> Result<Inspection> {
+    Ok(request!(
+        paths,
+        Method::InspectWorkspace { workspace },
+        Inspection
+    ))
+}
+
+/// Workspaces visible to this caller; the daemon filters scoped requests.
+pub async fn workspaces(paths: &Paths) -> Result<Vec<Workspace>> {
+    Ok(request!(paths, Method::ListWorkspaces, Workspaces))
+}
+
+pub async fn repositories(paths: &Paths) -> Result<Vec<Repository>> {
+    Ok(request!(paths, Method::ListRepositories, Repositories))
+}
+
+/// `None` when no daemon is listening on the socket.
 pub async fn status(paths: &Paths) -> Result<Option<Status>> {
     match call(paths, Method::Status).await {
         Ok(Body::Status(status)) => Ok(Some(status)),
         Ok(_) => bail!("unexpected status response"),
-        Err(error)
-            if error
-                .chain()
-                .filter_map(|e| e.downcast_ref::<io::Error>())
-                .any(|e| {
-                    matches!(
-                        e.kind(),
-                        io::ErrorKind::NotFound | io::ErrorKind::ConnectionRefused
-                    )
-                }) =>
-        {
-            Ok(None)
-        }
+        Err(error) if is_unreachable(&error) => Ok(None),
         Err(error) => Err(error),
     }
 }
 
+fn is_unreachable(error: &anyhow::Error) -> bool {
+    error
+        .chain()
+        .filter_map(|e| e.downcast_ref::<io::Error>())
+        .any(|e| {
+            matches!(
+                e.kind(),
+                io::ErrorKind::NotFound | io::ErrorKind::ConnectionRefused
+            )
+        })
+}
+
+/// Wait up to ten seconds for the daemon to be running (or stopped).
 pub async fn wait(paths: &Paths, running: bool) -> Result<()> {
     let deadline = Instant::now() + Duration::from_secs(10);
     loop {

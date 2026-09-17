@@ -6,7 +6,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 #[command(version, about)]
 pub struct Cli {
     /// Override Shoal's state directory (also isolates the daemon).
-    #[arg(long, global = true, env = "SHOAL_STATE_DIR")]
+    #[arg(long, global = true, env = crate::env::STATE_DIR)]
     pub state_dir: Option<PathBuf>,
     /// Emit machine-readable output.
     #[arg(long, global = true)]
@@ -170,6 +170,23 @@ pub enum Command {
         #[command(subcommand)]
         command: DaemonCommand,
     },
+}
+
+impl Command {
+    /// Lifecycle and service administration is denied to scoped workspace
+    /// processes; everything else is ordinary workspace work.
+    pub fn is_administrative(&self) -> bool {
+        matches!(
+            self,
+            Command::Setup { .. }
+                | Command::Daemon {
+                    command: DaemonCommand::Run { .. }
+                        | DaemonCommand::Start
+                        | DaemonCommand::Stop
+                        | DaemonCommand::Restart
+                }
+        )
+    }
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, ValueEnum, serde::Deserialize)]

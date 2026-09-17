@@ -8,8 +8,8 @@ use anyhow::{Context, Result};
 use rusqlite::{OptionalExtension, params};
 
 impl Manager {
-    pub async fn repository_config(&self, selector: String) -> Result<LocalConfig> {
-        let repo = self.repository(&selector).await?;
+    pub async fn repository_config(&self, selector: &str) -> Result<LocalConfig> {
+        let repo = self.repository(selector).await?;
         Ok(LocalConfig {
             toml: self.local_repository_config(&repo.id).await?,
             repository_id: repo.id,
@@ -18,15 +18,15 @@ impl Manager {
 
     pub async fn set_repository_config(
         &self,
-        selector: String,
+        selector: &str,
         toml: Option<String>,
     ) -> Result<LocalConfig> {
         if let Some(text) = &toml {
             repo_config::parse(text).context("invalid local repository config")?;
         }
         // Serialize changes with registration/removal and retain config on failed cleanup.
-        let _registry = self.repositories.lock().await;
-        let repo = self.repository(&selector).await?;
+        let _registry = self.registry_gate.lock().await;
+        let repo = self.repository(selector).await?;
         self.ensure_repository_available(&repo.id).await?;
         self.store
             .run(move |db| {
@@ -65,6 +65,8 @@ impl Manager {
             .await
     }
 
+    /// The effective repository config: the locally saved override, or the
+    /// worktree's own `.shoal.toml`.
     pub(crate) async fn workspace_config(&self, workspace: &Workspace) -> Result<RepoConfig> {
         match self
             .local_repository_config(&workspace.repository_id)

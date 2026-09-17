@@ -344,8 +344,8 @@ Permanently deletes the repository checkout, all its Shoal workspaces and branch
 and their ports, simulators, and resource leases, plus the locally saved repo
 config. Managed commands are stopped.
 This also deletes local repositories registered in place, including uncommitted
-and unpushed work. Interactive calls ask `Are you sure? [y/N]`; Enter or `n`
-cancels. Pass `--yes` to skip the prompt (required for scripts and `--json`).
+and unpushed work. Interactive calls ask `Are you sure? [y/N]`; Enter, `n`, or
+Ctrl-C cancels. Pass `--yes` to skip the prompt (required for scripts and `--json`).
 Names, IDs, paths, and source URLs work as selectors. `repo remove` is an alias.
 
 Existing linked worktrees outside Shoal must be removed separately first. Stale
@@ -463,7 +463,8 @@ Otherwise, `fzf` offers these choices, with Cancel selected by default:
 | Delete branch | Delete workspace files and branch |
 
 The next prompt summarizes the workspace, files, and branch action and asks
-`Are you sure? [y/N]`. Both removal choices discard uncommitted/untracked files;
+`Are you sure? [y/N]`; Ctrl-C cancels any Shoal prompt, including the setup-failure
+menu after `shoal add`. Both removal choices discard uncommitted/untracked files;
 keeping the branch saves committed work only. `--keep-branch` or `--delete-branch`
 skips the picker but still asks for confirmation. Noninteractive callers use
 `--yes --keep-branch` or

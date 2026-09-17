@@ -1,42 +1,51 @@
 //! CLI OS-service administration, including offline/protocol-upgrade handling.
-use super::output;
-use crate::{cli::DaemonCommand, daemon, service, shell};
-use crate::{client, paths::Paths, protocol::Method};
-use anyhow::Result;
-use anyhow::ensure;
-use serde_json::json;
 use std::path::PathBuf;
 
+use anyhow::{Result, ensure};
+use serde_json::json;
+
+use crate::{
+    cli::DaemonCommand,
+    client,
+    context::Context,
+    daemon,
+    paths::Paths,
+    protocol::Method,
+    service::{self, Platform},
+    shell,
+};
+
 pub(super) async fn setup(
-    paths: &Paths,
+    ctx: &Context,
     dry_run: bool,
     executable: Option<PathBuf>,
-    json_output: bool,
 ) -> Result<i32> {
     let executable = service::executable(executable)?;
+    let platform = Platform::current()?;
     if dry_run {
-        let definition = service::definition(paths, &executable, service::Platform::current()?)?;
-        if json_output {
-            println!("{}", serde_json::to_string(&definition)?);
-        } else {
+        let definition = service::definition(&ctx.paths, &executable, platform)?;
+        ctx.show(&definition, |definition| {
             println!("# {}\n{}", definition.path.display(), definition.content);
-        }
+        })?;
         return Ok(0);
     }
-    if let Some(status) = client::status(paths).await? {
+    if let Some(status) = client::status(&ctx.paths).await? {
         ensure!(
             status.managed,
             "a foreground daemon is running; stop it before setting up the service"
         );
     }
-    service::setup(paths, &executable).await?;
-    client::wait(paths, true).await?;
-    output(
-        json_output,
+    service::setup(&ctx.paths, &executable).await?;
+    client::wait(&ctx.paths, true).await?;
+    ctx.emit(
         "Daemon service installed and running",
-        json!({"running": true, "service_file": service::file(paths, service::Platform::current()?), "shell_init": shell::INIT_COMMAND}),
-    );
-    if !json_output {
+        json!({
+            "running": true,
+            "service_file": service::file(&ctx.paths, platform),
+            "shell_init": shell::INIT_COMMAND,
+        }),
+    )?;
+    if !ctx.json {
         println!(
             "\nAdd this line to ~/.zshrc or ~/.bashrc for directory navigation and tab completion:\n\n{}",
             shell::INIT_COMMAND
@@ -45,54 +54,55 @@ pub(super) async fn setup(
     Ok(0)
 }
 
-pub(super) async fn run(paths: Paths, command: DaemonCommand, json_output: bool) -> Result<i32> {
+pub(super) async fn run(ctx: Context, command: DaemonCommand) -> Result<i32> {
     match command {
-        DaemonCommand::Run { managed } => daemon::run(paths, managed).await?,
+        DaemonCommand::Run { managed } => daemon::run(ctx.paths, managed).await?,
         DaemonCommand::Status => {
-            let status = client::status(&paths).await?;
+            let status = client::status(&ctx.paths).await?;
             let running = status.is_some();
             let message = status
                 .as_ref()
                 .map(|s| format!("Daemon running (PID {}, version {})", s.pid, s.version))
                 .unwrap_or_else(|| "Daemon is not running".into());
-            output(
-                json_output,
+            ctx.emit(
                 &message,
-                json!({"running": running, "daemon": status, "socket": paths.socket}),
-            );
+                json!({"running": running, "daemon": status, "socket": ctx.paths.socket}),
+            )?;
             return Ok(if running { 0 } else { 1 });
         }
         DaemonCommand::Start => {
-            service::start(&paths).await?;
-            client::wait(&paths, true).await?;
-            output(json_output, "Daemon started", json!({"running": true}));
+            service::start(&ctx.paths).await?;
+            client::wait(&ctx.paths, true).await?;
+            ctx.emit("Daemon started", json!({"running": true}))?;
         }
         DaemonCommand::Stop => {
-            stop(&paths).await?;
-            output(json_output, "Daemon stopped", json!({"running": false}));
+            stop(&ctx.paths).await?;
+            ctx.emit("Daemon stopped", json!({"running": false}))?;
         }
         DaemonCommand::Restart => {
             // Service administration must still work after a protocol upgrade.
-            if let Ok(Some(status)) = client::status(&paths).await {
+            if let Ok(Some(status)) = client::status(&ctx.paths).await {
                 ensure!(
                     status.managed,
                     "foreground daemon: stop it and run `shoal daemon run` again"
                 );
             }
-            stop(&paths).await?;
-            service::start(&paths).await?;
-            client::wait(&paths, true).await?;
-            output(json_output, "Daemon restarted", json!({"running": true}));
+            stop(&ctx.paths).await?;
+            service::start(&ctx.paths).await?;
+            client::wait(&ctx.paths, true).await?;
+            ctx.emit("Daemon restarted", json!({"running": true}))?;
         }
     }
     Ok(0)
 }
+
+/// Stop a foreground daemon over the socket, or a managed one via the OS.
 async fn stop(paths: &Paths) -> Result<()> {
     match client::status(paths).await {
         Ok(Some(status)) if !status.managed => {
             client::call(paths, Method::Shutdown).await?;
         }
-        Err(error) if !service::file(paths, service::Platform::current()?).exists() => {
+        Err(error) if !service::file(paths, Platform::current()?).exists() => {
             return Err(error);
         }
         _ => service::stop(paths).await?,

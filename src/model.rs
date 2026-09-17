@@ -1,11 +1,21 @@
+//! Records shared by the daemon, its SQLite store, and CLI output.
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+
+use crate::{
+    process_identity::Identity,
+    repo_config::{ConflictPolicy, PortDefinition},
+    resources::ResourceLease,
+    simulators::Simulator,
+    state::{ExecutionState, WorkspaceState},
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Repository {
     pub id: String,
     pub path: PathBuf,
     pub source: String,
+    /// Monotonic usage counter; higher means more recently used.
     pub last_used: i64,
     pub name: Option<String>,
 }
@@ -25,39 +35,58 @@ pub struct Workspace {
     pub name: String,
     pub path: PathBuf,
     pub branch: String,
-    pub state: crate::state::WorkspaceState,
+    pub state: WorkspaceState,
     pub error: Option<String>,
     pub base_commit: Option<String>,
     pub base_ref: Option<String>,
+    /// Git's per-worktree admin directory and its device:inode identity, used
+    /// to verify the worktree was not moved or replaced.
     pub git_dir: Option<PathBuf>,
     pub git_dir_id: Option<String>,
+}
+
+impl Workspace {
+    /// True when `path` (canonical) lies inside this worktree.
+    pub fn contains(&self, path: &Path) -> bool {
+        std::fs::canonicalize(&self.path).is_ok_and(|root| path.starts_with(root))
+    }
+
+    /// The most deeply nested workspace containing `path`.
+    pub fn innermost<'a>(workspaces: &'a [Workspace], path: &Path) -> Option<&'a Workspace> {
+        workspaces
+            .iter()
+            .filter(|w| w.contains(path))
+            .max_by_key(|w| w.path.components().count())
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Execution {
     pub id: String,
     pub workspace_id: String,
-    pub state: crate::state::ExecutionState,
-    pub wrapper: Option<crate::process_identity::Identity>,
-    pub child: Option<crate::process_identity::Identity>,
+    pub state: ExecutionState,
+    pub wrapper: Option<Identity>,
+    pub child: Option<Identity>,
     pub group_id: Option<u32>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Inspection {
-    pub resources: Vec<crate::resources::ResourceLease>,
-    pub simulators: Vec<crate::simulators::Simulator>,
     pub workspace: Workspace,
     pub executions: Vec<Execution>,
     pub ports: Vec<PortReservation>,
+    pub resources: Vec<ResourceLease>,
+    pub simulators: Vec<Simulator>,
 }
 
+/// Everything the execution wrapper needs to launch a tracked command.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ExecutionPlan {
-    pub setup_cmd: Option<PathBuf>,
-    pub scope_token: String,
     pub id: String,
     pub workspace: Workspace,
+    pub scope_token: String,
+    /// Absolute setup command path for `Method::Prepare`; `None` for commands.
+    pub setup_cmd: Option<PathBuf>,
     pub ports: Vec<PortReservation>,
 }
 
@@ -68,12 +97,6 @@ pub struct PortReservation {
     pub port: u16,
     pub env_var: String,
     pub reason: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct DiffBase {
-    pub workspace_id: String,
-    pub commit: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -90,8 +113,14 @@ pub struct PortSuggestion {
 pub struct PortOverview {
     pub workspace: Workspace,
     pub reserved: Vec<PortReservation>,
-    pub configured: std::collections::BTreeMap<String, crate::repo_config::PortDefinition>,
-    pub on_conflict: crate::repo_config::ConflictPolicy,
+    pub configured: std::collections::BTreeMap<String, PortDefinition>,
+    pub on_conflict: ConflictPolicy,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DiffBase {
+    pub workspace_id: String,
+    pub commit: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

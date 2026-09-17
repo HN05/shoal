@@ -1,8 +1,17 @@
+//! SQLite persistence: schema migrations, row mappers, and the small
+//! guards every mutation shares.
 use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, Row};
+use serde::{Serialize, de::DeserializeOwned};
 use std::{path::PathBuf, time::Duration};
 
-use crate::model::{Execution, PortReservation, Repository, Workspace};
+use crate::{
+    model::{Execution, PortReservation, Repository, Workspace},
+    state::WorkspaceState,
+};
+
+/// Schema version written by this build; older databases are migrated on open.
+const SCHEMA_VERSION: i64 = 12;
 
 #[derive(Clone)]
 pub struct Store {
@@ -12,77 +21,11 @@ pub struct Store {
 impl Store {
     pub async fn open(path: PathBuf) -> Result<Self> {
         let store = Self { path };
-        store.run(|db| {
-            let version: i64 = db.query_row("PRAGMA user_version", [], |r| r.get(0))?;
-            ensure!(version <= 12, "state database was written by a newer Shoal version");
-            db.execute_batch("BEGIN;
-                CREATE TABLE IF NOT EXISTS repositories (
-                    id TEXT PRIMARY KEY, path TEXT NOT NULL UNIQUE, source TEXT NOT NULL, last_used INTEGER NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS workspaces (
-                    id TEXT PRIMARY KEY, repository_id TEXT NOT NULL REFERENCES repositories(id),
-                    name TEXT NOT NULL UNIQUE, path TEXT NOT NULL UNIQUE, branch TEXT NOT NULL,
-                    state TEXT NOT NULL, error TEXT
-                );
-                CREATE TABLE IF NOT EXISTS executions (
-                    id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id), state TEXT NOT NULL
-                );
-                UPDATE executions SET state='unknown' WHERE state='running';
-                UPDATE workspaces SET state='failed', error='daemon stopped during workspace operation; inspect before cleanup'
-                    WHERE state IN ('preparing', 'removing', 'stopping', 'reconciling');")?;
-            if version < 2 {
-                db.execute_batch("ALTER TABLE workspaces ADD COLUMN base_commit TEXT;
-                    ALTER TABLE workspaces ADD COLUMN base_ref TEXT;")?;
-            }
-            db.execute_batch("CREATE TABLE IF NOT EXISTS ports (
-                workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-                name TEXT NOT NULL, port INTEGER NOT NULL UNIQUE CHECK(port BETWEEN 1 AND 65535),
-                env_var TEXT NOT NULL, PRIMARY KEY(workspace_id, name), UNIQUE(workspace_id, env_var)
-            );")?;
-            if version < 4 { db.execute_batch("ALTER TABLE repositories ADD COLUMN name TEXT;")?; }
-            if version < 5 { db.execute_batch("ALTER TABLE ports ADD COLUMN reason TEXT;")?; }
-            db.execute_batch("CREATE UNIQUE INDEX IF NOT EXISTS repository_names ON repositories(name) WHERE name IS NOT NULL;
-                CREATE TABLE IF NOT EXISTS simulators(id TEXT PRIMARY KEY, record TEXT NOT NULL);
-                CREATE TABLE IF NOT EXISTS simulator_clean_requests (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT, request_id TEXT NOT NULL UNIQUE,
-                    workspace_id TEXT NOT NULL, record TEXT NOT NULL
-                );
-                CREATE INDEX IF NOT EXISTS clean_requests_workspace ON simulator_clean_requests(workspace_id,id);
-                UPDATE simulator_clean_requests SET record=json_set(record, '$.status', 'interrupted') WHERE json_extract(record, '$.status')='requested';
-                CREATE TABLE IF NOT EXISTS resource_pools (
-                    scope TEXT NOT NULL, name TEXT NOT NULL, definition TEXT NOT NULL, PRIMARY KEY(scope,name)
-                );
-                CREATE TABLE IF NOT EXISTS resource_leases (
-                    id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-                    scope TEXT NOT NULL, pool TEXT NOT NULL, name TEXT NOT NULL, resource TEXT NOT NULL,
-                    reason TEXT, created_at INTEGER NOT NULL, UNIQUE(workspace_id,pool,name),
-                    FOREIGN KEY(scope,pool) REFERENCES resource_pools(scope,name)
-                );
-                CREATE INDEX IF NOT EXISTS resource_lease_pool ON resource_leases(scope,pool);")?;
-            if version < 9 {
-                db.execute_batch("ALTER TABLE resource_leases ADD COLUMN mode TEXT NOT NULL DEFAULT 'permit' CHECK(mode IN ('permit','read','write'));")?;
-            }
-            if version < 10 {
-                db.execute_batch("ALTER TABLE workspaces ADD COLUMN git_dir TEXT;
-                    ALTER TABLE workspaces ADD COLUMN git_dir_id TEXT;
-                    ALTER TABLE executions ADD COLUMN wrapper TEXT;
-                    ALTER TABLE executions ADD COLUMN child TEXT;
-                    ALTER TABLE executions ADD COLUMN group_id INTEGER;")?;
-            }
-            db.execute_batch("CREATE TABLE IF NOT EXISTS repository_removals (
-                repository_id TEXT PRIMARY KEY REFERENCES repositories(id) ON DELETE CASCADE,
-                directory_id TEXT,
-                deleting_files INTEGER NOT NULL DEFAULT 0 CHECK(deleting_files IN (0,1))
-            );
-            CREATE TABLE IF NOT EXISTS repository_configs (
-                repository_id TEXT PRIMARY KEY REFERENCES repositories(id) ON DELETE CASCADE,
-                toml TEXT NOT NULL
-            ); PRAGMA user_version=12; COMMIT;")?;
-            Ok(())
-        }).await?;
+        store.run(migrate).await?;
         Ok(store)
     }
 
+    /// Run `operation` on a fresh connection on the blocking pool.
     pub async fn run<T: Send + 'static>(
         &self,
         operation: impl FnOnce(&mut Connection) -> Result<T> + Send + 'static,
@@ -97,6 +40,133 @@ impl Store {
         .await
         .context("database worker failed")?
     }
+}
+
+fn migrate(db: &mut Connection) -> Result<()> {
+    let version: i64 = db.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+    ensure!(
+        version <= SCHEMA_VERSION,
+        "state database was written by a newer Shoal version"
+    );
+    // Interrupted operations are quarantined rather than assumed complete.
+    db.execute_batch(
+        "BEGIN;
+        CREATE TABLE IF NOT EXISTS repositories (
+            id TEXT PRIMARY KEY, path TEXT NOT NULL UNIQUE, source TEXT NOT NULL, last_used INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS workspaces (
+            id TEXT PRIMARY KEY, repository_id TEXT NOT NULL REFERENCES repositories(id),
+            name TEXT NOT NULL UNIQUE, path TEXT NOT NULL UNIQUE, branch TEXT NOT NULL,
+            state TEXT NOT NULL, error TEXT
+        );
+        CREATE TABLE IF NOT EXISTS executions (
+            id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id), state TEXT NOT NULL
+        );
+        UPDATE executions SET state='unknown' WHERE state='running';
+        UPDATE workspaces SET state='failed', error='daemon stopped during workspace operation; inspect before cleanup'
+            WHERE state IN ('preparing', 'removing', 'stopping', 'reconciling');",
+    )?;
+    if version < 2 {
+        db.execute_batch(
+            "ALTER TABLE workspaces ADD COLUMN base_commit TEXT;
+            ALTER TABLE workspaces ADD COLUMN base_ref TEXT;",
+        )?;
+    }
+    db.execute_batch(
+        "CREATE TABLE IF NOT EXISTS ports (
+            workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+            name TEXT NOT NULL, port INTEGER NOT NULL UNIQUE CHECK(port BETWEEN 1 AND 65535),
+            env_var TEXT NOT NULL, PRIMARY KEY(workspace_id, name), UNIQUE(workspace_id, env_var)
+        );",
+    )?;
+    if version < 4 {
+        db.execute_batch("ALTER TABLE repositories ADD COLUMN name TEXT;")?;
+    }
+    if version < 5 {
+        db.execute_batch("ALTER TABLE ports ADD COLUMN reason TEXT;")?;
+    }
+    db.execute_batch(
+        "CREATE UNIQUE INDEX IF NOT EXISTS repository_names ON repositories(name) WHERE name IS NOT NULL;
+        CREATE TABLE IF NOT EXISTS simulators(id TEXT PRIMARY KEY, record TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS simulator_clean_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, request_id TEXT NOT NULL UNIQUE,
+            workspace_id TEXT NOT NULL, record TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS clean_requests_workspace ON simulator_clean_requests(workspace_id,id);
+        UPDATE simulator_clean_requests SET record=json_set(record, '$.status', 'interrupted') WHERE json_extract(record, '$.status')='requested';
+        CREATE TABLE IF NOT EXISTS resource_pools (
+            scope TEXT NOT NULL, name TEXT NOT NULL, definition TEXT NOT NULL, PRIMARY KEY(scope,name)
+        );
+        CREATE TABLE IF NOT EXISTS resource_leases (
+            id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+            scope TEXT NOT NULL, pool TEXT NOT NULL, name TEXT NOT NULL, resource TEXT NOT NULL,
+            reason TEXT, created_at INTEGER NOT NULL, UNIQUE(workspace_id,pool,name),
+            FOREIGN KEY(scope,pool) REFERENCES resource_pools(scope,name)
+        );
+        CREATE INDEX IF NOT EXISTS resource_lease_pool ON resource_leases(scope,pool);",
+    )?;
+    if version < 9 {
+        db.execute_batch(
+            "ALTER TABLE resource_leases ADD COLUMN mode TEXT NOT NULL DEFAULT 'permit' CHECK(mode IN ('permit','read','write'));",
+        )?;
+    }
+    if version < 10 {
+        db.execute_batch(
+            "ALTER TABLE workspaces ADD COLUMN git_dir TEXT;
+            ALTER TABLE workspaces ADD COLUMN git_dir_id TEXT;
+            ALTER TABLE executions ADD COLUMN wrapper TEXT;
+            ALTER TABLE executions ADD COLUMN child TEXT;
+            ALTER TABLE executions ADD COLUMN group_id INTEGER;",
+        )?;
+    }
+    db.execute_batch(&format!(
+        "CREATE TABLE IF NOT EXISTS repository_removals (
+            repository_id TEXT PRIMARY KEY REFERENCES repositories(id) ON DELETE CASCADE,
+            directory_id TEXT,
+            deleting_files INTEGER NOT NULL DEFAULT 0 CHECK(deleting_files IN (0,1))
+        );
+        CREATE TABLE IF NOT EXISTS repository_configs (
+            repository_id TEXT PRIMARY KEY REFERENCES repositories(id) ON DELETE CASCADE,
+            toml TEXT NOT NULL
+        );
+        PRAGMA user_version={SCHEMA_VERSION};
+        COMMIT;"
+    ))?;
+    Ok(())
+}
+
+/// Fail unless the workspace is ready; resources may only change then.
+pub fn require_ready(db: &Connection, workspace_id: &str) -> Result<()> {
+    let ready: bool = db.query_row(
+        "SELECT state=?2 FROM workspaces WHERE id=?1",
+        rusqlite::params![workspace_id, WorkspaceState::Ready],
+        |row| row.get(0),
+    )?;
+    ensure!(ready, "workspace is not ready");
+    Ok(())
+}
+
+/// Serialize an optional value for a JSON text column.
+pub fn json_text<T: Serialize>(value: Option<&T>) -> Result<Option<String>> {
+    value
+        .map(serde_json::to_string)
+        .transpose()
+        .map_err(Into::into)
+}
+
+/// Parse an optional JSON text column, reporting failures as SQL conversions.
+fn json_column<T: DeserializeOwned>(row: &Row<'_>, index: usize) -> rusqlite::Result<Option<T>> {
+    row.get::<_, Option<String>>(index)?
+        .map(|json| {
+            serde_json::from_str(&json).map_err(|error| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    index,
+                    rusqlite::types::Type::Text,
+                    Box::new(error),
+                )
+            })
+        })
+        .transpose()
 }
 
 pub fn repository(row: &Row<'_>) -> rusqlite::Result<Repository> {
@@ -126,36 +196,35 @@ pub fn workspace(row: &Row<'_>) -> rusqlite::Result<Workspace> {
 }
 
 pub fn ports(db: &Connection, workspace_id: Option<&str>) -> Result<Vec<PortReservation>> {
-    Ok(db.prepare("SELECT workspace_id,name,port,env_var,reason FROM ports WHERE ?1 IS NULL OR workspace_id=?1 ORDER BY workspace_id,name")?
-        .query_map([workspace_id], |row| Ok(PortReservation {
-            workspace_id: row.get(0)?, name: row.get(1)?, port: row.get(2)?, env_var: row.get(3)?,
-            reason: row.get(4)?,
-        }))?.collect::<rusqlite::Result<Vec<_>>>()?)
+    Ok(db
+        .prepare(
+            "SELECT workspace_id,name,port,env_var,reason FROM ports WHERE ?1 IS NULL OR workspace_id=?1 ORDER BY workspace_id,name",
+        )?
+        .query_map([workspace_id], |row| {
+            Ok(PortReservation {
+                workspace_id: row.get(0)?,
+                name: row.get(1)?,
+                port: row.get(2)?,
+                env_var: row.get(3)?,
+                reason: row.get(4)?,
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
 pub fn executions(db: &Connection, workspace_id: &str) -> Result<Vec<Execution>> {
     Ok(db
-        .prepare("SELECT id, workspace_id, state, wrapper, child, group_id FROM executions WHERE workspace_id=?1")?
-        .query_map([workspace_id], |r| {
+        .prepare(
+            "SELECT id, workspace_id, state, wrapper, child, group_id FROM executions WHERE workspace_id=?1",
+        )?
+        .query_map([workspace_id], |row| {
             Ok(Execution {
-                id: r.get(0)?,
-                workspace_id: r.get(1)?,
-                state: r.get(2)?,
-                child: r.get::<_, Option<String>>(4)?.map(|json| serde_json::from_str(&json)
-                    .map_err(|error| rusqlite::Error::FromSqlConversionFailure(4, rusqlite::types::Type::Text, Box::new(error)))).transpose()?,
-                group_id: r.get(5)?,
-                wrapper: r
-                    .get::<_, Option<String>>(3)?
-                    .map(|json| {
-                        serde_json::from_str(&json).map_err(|error| {
-                            rusqlite::Error::FromSqlConversionFailure(
-                                3,
-                                rusqlite::types::Type::Text,
-                                Box::new(error),
-                            )
-                        })
-                    })
-                    .transpose()?,
+                id: row.get(0)?,
+                workspace_id: row.get(1)?,
+                state: row.get(2)?,
+                wrapper: json_column(row, 3)?,
+                child: json_column(row, 4)?,
+                group_id: row.get(5)?,
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?)

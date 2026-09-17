@@ -1,469 +1,403 @@
 //! CLI workspace workflows; all state mutations go through the daemon.
-use super::output;
-use crate::{
-    client,
-    paths::Paths,
-    protocol::{Body, Method},
-    ui,
-};
-use crate::{execution, removal, shell};
-use anyhow::ensure;
-use anyhow::{Context, Result};
-use serde_json::json;
-use std::ffi::OsString;
+use std::{ffi::OsString, path::PathBuf};
 
-pub(super) async fn pull(
-    paths: &Paths,
-    workspace: Option<String>,
-    json_output: bool,
-) -> Result<i32> {
-    let workspace = ui::workspace(paths, workspace, true, json_output).await?;
-    let Body::PulledBranch(result) =
-        client::call(paths, Method::PullDefaultBranch { workspace }).await?
-    else {
-        anyhow::bail!("unexpected pull response");
-    };
-    if json_output {
-        println!("{}", serde_json::to_string(&result)?);
-    } else if result.updated {
-        println!("Updated {} to {}", result.branch, result.commit);
-    } else {
-        println!(
-            "{} is already up to date ({})",
-            result.branch, result.commit
-        );
-    }
+use anyhow::{Context as _, Result, bail, ensure};
+use serde_json::json;
+
+use crate::{
+    cli::{Agent, CodexMode},
+    client::{self, request},
+    config::Config,
+    context::Context,
+    env, execution,
+    model::Workspace,
+    protocol::{Body, Method},
+    recovery::ReconcileOptions,
+    removal::{BranchChoice, RemovalCheck, RemovalResult},
+    shell,
+    state::WorkspaceState,
+    ui::{self, Fallback},
+};
+
+pub(super) async fn pull(ctx: &Context, workspace: Option<String>) -> Result<i32> {
+    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    let result = request!(
+        &ctx.paths,
+        Method::PullDefaultBranch { workspace },
+        PulledBranch
+    );
+    ctx.show(&result, |result| {
+        if result.updated {
+            println!("Updated {} to {}", result.branch, result.commit);
+        } else {
+            println!(
+                "{} is already up to date ({})",
+                result.branch, result.commit
+            );
+        }
+    })?;
     Ok(0)
 }
 
-pub(super) async fn diff(
-    paths: &Paths,
-    workspace: Option<String>,
-    json_output: bool,
-) -> Result<i32> {
-    let workspace = ui::workspace(paths, workspace, true, json_output).await?;
-    let base = match client::call(paths, Method::DiffBase { workspace }).await? {
-        Body::DiffBase(base) => base,
-        _ => anyhow::bail!("unexpected diff base response"),
-    };
+pub(super) async fn diff(ctx: &Context, workspace: Option<String>) -> Result<i32> {
+    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    let base = request!(&ctx.paths, Method::DiffBase { workspace }, DiffBase);
     execution::run(
-        paths,
+        &ctx.paths,
         base.workspace_id,
         vec!["git".into(), "diff".into(), base.commit.into(), "--".into()],
     )
     .await
 }
 
-pub(super) async fn cd(paths: &Paths, workspace: Option<String>, json_output: bool) -> Result<i32> {
+pub(super) async fn cd(ctx: &Context, workspace: Option<String>) -> Result<i32> {
     if workspace.as_deref() == Some("-") {
         let destination = shell::previous_directory()?;
-        if std::env::var_os("SHOAL_SCOPE_TOKEN").is_some() {
-            let workspaces = ui::workspaces(paths).await?;
+        if env::is_scoped() {
+            let workspaces = client::workspaces(&ctx.paths).await?;
             ensure!(
-                workspaces.iter().any(|w| std::fs::canonicalize(&w.path)
-                    .is_ok_and(|root| destination.starts_with(root))),
+                workspaces.iter().any(|w| w.contains(&destination)),
                 "workspace processes cannot navigate outside their worktree"
             );
         }
-        output(
-            json_output,
-            &destination.display().to_string(),
-            json!({"path": destination}),
-        );
-        shell::navigate(&destination, json_output)?;
+        navigate(ctx, &destination)?;
     } else {
         let workspace = match workspace {
             Some(workspace) => workspace,
-            None => ui::workspace_picker(paths, json_output).await?,
+            None => ui::workspace_picker(ctx).await?,
         };
-        enter_workspace(paths, workspace, json_output).await?;
+        let inspection = client::inspect(&ctx.paths, workspace).await?;
+        ensure!(
+            inspection.workspace.path.is_dir(),
+            "workspace directory is missing"
+        );
+        navigate(ctx, &inspection.workspace.path)?;
     }
     Ok(0)
 }
 
+/// Report the destination and ask the shell wrapper to change directory.
+fn navigate(ctx: &Context, path: &std::path::Path) -> Result<()> {
+    ctx.emit(&path.display().to_string(), json!({"path": path}))?;
+    shell::navigate(path, ctx.json)
+}
+
 pub(super) async fn add(
-    paths: &Paths,
+    ctx: &Context,
     repository: Option<String>,
     name: Option<String>,
     base: Option<String>,
-    agent: Option<crate::cli::Agent>,
+    agent: Option<Agent>,
     args: Vec<OsString>,
-    json_output: bool,
 ) -> Result<i32> {
     // Validate launch configuration before creating a workspace.
-    let codex_mode = if matches!(agent, Some(crate::cli::Agent::Codex)) {
-        Some(crate::config::Config::load(paths)?.codex.default_mode)
-    } else {
-        None
+    let codex_mode = match agent {
+        Some(Agent::Codex) => Some(Config::load(&ctx.paths)?.codex.default_mode),
+        _ => None,
     };
     let repository = match repository {
         Some(repo) => ui::repository_selector(repo)?,
         None => ui::pick(
+            ctx,
             "Repository> ",
-            ui::repository_choices(ui::repositories(paths).await?).await?,
-            json_output,
+            ui::repository_choices(client::repositories(&ctx.paths).await?).await?,
         )?,
     };
     let name = match name {
         Some(name) => name,
-        None => ui::input("Branch name", json_output)?,
+        None => ui::input(ctx, "Branch name")?,
     };
-    match client::call(
-        paths,
-        Method::Add {
+    let mut workspace = request!(
+        &ctx.paths,
+        Method::CreateWorkspace {
             repository,
             name,
             base,
         },
-    )
-    .await?
-    {
-        Body::Workspace(mut workspace) => {
-            if workspace.state == crate::state::WorkspaceState::Preparing {
-                let Some(prepared) = prepare_workspace(paths, &workspace, json_output).await?
-                else {
-                    return Ok(1);
-                };
-                workspace = prepared;
-            }
-            output(
-                json_output,
-                &format!(
-                    "Created {} on branch {} at {}",
-                    workspace.name,
-                    workspace.branch,
-                    workspace.path.display()
-                ),
-                serde_json::to_value(&workspace)?,
-            );
-            shell::navigate(&workspace.path, json_output)?;
-            match agent {
-                Some(crate::cli::Agent::Codex) => {
-                    codex(paths, codex_mode, Some(workspace.id), args, json_output).await
-                }
-                Some(crate::cli::Agent::Claude) => {
-                    claude(paths, Some(workspace.id), args, json_output).await
-                }
-                None => Ok(0),
-            }
-        }
-        _ => anyhow::bail!("unexpected workspace response"),
+        Workspace
+    );
+    if workspace.state == WorkspaceState::Preparing {
+        let Some(prepared) = prepare_workspace(ctx, &workspace).await? else {
+            return Ok(1);
+        };
+        workspace = prepared;
+    }
+    ctx.emit(
+        &format!(
+            "Created {} on branch {} at {}",
+            workspace.name,
+            workspace.branch,
+            workspace.path.display()
+        ),
+        &workspace,
+    )?;
+    shell::navigate(&workspace.path, ctx.json)?;
+    match agent {
+        Some(Agent::Codex) => codex(ctx, codex_mode, Some(workspace.id), args).await,
+        Some(Agent::Claude) => claude(ctx, Some(workspace.id), args).await,
+        None => Ok(0),
     }
 }
 
-pub(super) async fn prepare(
-    paths: &Paths,
-    workspace: Option<String>,
-    json_output: bool,
-) -> Result<i32> {
-    let workspace = ui::workspace(paths, workspace, true, json_output).await?;
-    let Body::Inspection(inspection) = client::call(paths, Method::Inspect { workspace }).await?
-    else {
-        anyhow::bail!("unexpected inspection response");
-    };
-    let Some(workspace) = prepare_workspace(paths, &inspection.workspace, json_output).await?
-    else {
+pub(super) async fn prepare(ctx: &Context, workspace: Option<String>) -> Result<i32> {
+    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    let inspection = client::inspect(&ctx.paths, workspace).await?;
+    let Some(workspace) = prepare_workspace(ctx, &inspection.workspace).await? else {
         return Ok(1);
     };
-    output(
-        json_output,
-        &format!("Prepared {}", workspace.name),
-        serde_json::to_value(workspace)?,
-    );
+    ctx.emit(&format!("Prepared {}", workspace.name), &workspace)?;
     Ok(0)
 }
 
-async fn prepare_workspace(
-    paths: &Paths,
-    workspace: &crate::model::Workspace,
-    json_output: bool,
-) -> Result<Option<crate::model::Workspace>> {
-    let result = execution::prepare(paths, workspace.id.clone(), json_output).await;
-    let failure = match result {
+/// Run the setup command, then let an interactive user decide what to do with
+/// a failed workspace. `None` means the workspace was deleted or kept as-is.
+async fn prepare_workspace(ctx: &Context, workspace: &Workspace) -> Result<Option<Workspace>> {
+    let failure = match execution::prepare(&ctx.paths, workspace.id.clone(), ctx.json).await {
         Ok(0) => None,
         Ok(code) => Some(format!("setup command exited with status {code}")),
         Err(error) => Some(format!("{error:#}")),
     };
     if let Some(error) = failure {
+        let name = &workspace.name;
         ensure!(
-            ui::is_interactive(json_output),
-            "setup failed for {}: {error}; workspace retained. Retry with `shoal prepare {}`, ignore with `shoal reconcile {} --repair`, or delete with `shoal rm {} --yes --delete-branch`",
-            workspace.name,
-            workspace.name,
-            workspace.name,
-            workspace.name
+            ctx.interactive(),
+            "setup failed for {name}: {error}; workspace retained. Retry with `shoal prepare {name}`, ignore with `shoal reconcile {name} --repair`, or delete with `shoal rm {name} --yes --delete-branch`"
         );
-        eprintln!("Setup failed for {}: {error}", workspace.name);
+        eprintln!("Setup failed for {name}: {error}");
         match ui::setup_failure_choice()? {
             ui::SetupFailureChoice::Delete => {
-                if ui::confirm(
-                    &format!(
-                        "Delete workspace {} at {} and its branch {} (including setup changes)?",
-                        workspace.name,
-                        workspace.path.display(),
-                        workspace.branch
-                    ),
-                    false,
-                    "--yes",
-                )? {
-                    client::call(
-                        paths,
-                        Method::Remove {
-                            workspace: workspace.id.clone(),
-                            choice: removal::Choice::DeleteBranch,
-                            caller_pid: std::process::id(),
-                        },
-                    )
-                    .await?;
-                    eprintln!("Deleted workspace {}", workspace.name);
-                }
+                delete_failed_workspace(ctx, workspace).await?;
                 return Ok(None);
             }
-            ui::SetupFailureChoice::Ignore => {
-                let Body::Reconciliation(reports) = client::call(
-                    paths,
-                    Method::Reconcile {
-                        workspace: Some(workspace.id.clone()),
-                        options: crate::recovery::Options {
-                            repair: true,
-                            ..Default::default()
-                        },
-                    },
-                )
-                .await?
-                else {
-                    anyhow::bail!("unexpected reconciliation response");
-                };
-                ensure!(
-                    reports
-                        .iter()
-                        .all(|r| r.workspace.state == crate::state::WorkspaceState::Ready),
-                    "workspace still has unresolved ownership or processes; inspect with shoal reconcile"
-                );
-            }
+            ui::SetupFailureChoice::Ignore => ignore_setup_failure(ctx, workspace).await?,
             ui::SetupFailureChoice::Cancel => return Ok(None),
         }
     }
-    let Body::Inspection(inspection) = client::call(
-        paths,
-        Method::Inspect {
-            workspace: workspace.id.clone(),
-        },
-    )
-    .await?
-    else {
-        anyhow::bail!("unexpected inspection response");
-    };
+    let inspection = client::inspect(&ctx.paths, workspace.id.clone()).await?;
     ensure!(
-        inspection.workspace.state == crate::state::WorkspaceState::Ready,
+        inspection.workspace.state == WorkspaceState::Ready,
         "workspace setup did not complete"
     );
     Ok(Some(inspection.workspace))
 }
 
-pub(super) async fn list(paths: &Paths, json_output: bool) -> Result<i32> {
-    let workspaces = ui::workspaces(paths).await?;
-    if json_output {
-        println!("{}", serde_json::to_string(&workspaces)?);
-    } else {
-        for w in workspaces {
-            println!(
-                "{}  {}  {}  {}",
-                w.name,
-                w.state,
-                w.branch,
-                w.path.display()
-            );
-        }
+async fn delete_failed_workspace(ctx: &Context, workspace: &Workspace) -> Result<()> {
+    let confirmed = ui::confirm(
+        ctx,
+        &format!(
+            "Delete workspace {} at {} and its branch {} (including setup changes)?",
+            workspace.name,
+            workspace.path.display(),
+            workspace.branch
+        ),
+        "--yes",
+    )?;
+    if confirmed {
+        client::call(
+            &ctx.paths,
+            Method::RemoveWorkspace {
+                workspace: workspace.id.clone(),
+                choice: BranchChoice::DeleteBranch,
+                caller_pid: std::process::id(),
+            },
+        )
+        .await?;
+        eprintln!("Deleted workspace {}", workspace.name);
     }
-    Ok(0)
+    Ok(())
 }
 
-pub(super) async fn inspect(
-    paths: &Paths,
-    workspace: Option<String>,
-    json_output: bool,
-) -> Result<i32> {
-    let workspace = ui::workspace(paths, workspace, false, json_output).await?;
-    match client::call(paths, Method::Inspect { workspace }).await? {
-        Body::Inspection(inspection) => {
-            if json_output {
-                println!("{}", serde_json::to_string(&inspection)?);
-            } else {
-                println!("{}", serde_json::to_string_pretty(&inspection)?);
-            }
-        }
-        _ => anyhow::bail!("unexpected inspection response"),
-    }
-    Ok(0)
-}
-
-pub(super) async fn stop(
-    paths: &Paths,
-    workspace: Option<String>,
-    json_output: bool,
-) -> Result<i32> {
-    let workspace = ui::workspace(paths, workspace, false, json_output).await?;
-    client::call(paths, Method::Stop { workspace }).await?;
-    output(
-        json_output,
-        "Workspace processes stopped",
-        json!({"stopped": true}),
+async fn ignore_setup_failure(ctx: &Context, workspace: &Workspace) -> Result<()> {
+    let reports = request!(
+        &ctx.paths,
+        Method::Reconcile {
+            workspace: Some(workspace.id.clone()),
+            options: ReconcileOptions {
+                repair: true,
+                ..Default::default()
+            },
+        },
+        Reconciliation
     );
+    ensure!(
+        reports
+            .iter()
+            .all(|r| r.workspace.state == WorkspaceState::Ready),
+        "workspace still has unresolved ownership or processes; inspect with shoal reconcile"
+    );
+    Ok(())
+}
+
+pub(super) async fn list(ctx: &Context) -> Result<i32> {
+    let workspaces = client::workspaces(&ctx.paths).await?;
+    ctx.show(&workspaces, |workspaces| {
+        for workspace in workspaces {
+            println!("{}", ui::workspace_label(workspace));
+        }
+    })?;
+    Ok(0)
+}
+
+pub(super) async fn inspect(ctx: &Context, workspace: Option<String>) -> Result<i32> {
+    let workspace = ui::select_workspace(ctx, workspace, Fallback::Picker).await?;
+    let inspection = client::inspect(&ctx.paths, workspace).await?;
+    ctx.show(&inspection, |inspection| {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(inspection).unwrap_or_default()
+        );
+    })?;
+    Ok(0)
+}
+
+pub(super) async fn stop(ctx: &Context, workspace: Option<String>) -> Result<i32> {
+    let workspace = ui::select_workspace(ctx, workspace, Fallback::Picker).await?;
+    client::call(&ctx.paths, Method::StopWorkspace { workspace }).await?;
+    ctx.emit("Workspace processes stopped", json!({"stopped": true}))?;
     Ok(0)
 }
 
 pub(super) async fn remove(
-    paths: &Paths,
+    ctx: &Context,
     workspace: Option<String>,
     yes: bool,
     keep_branch: bool,
     delete_branch: bool,
-    json_output: bool,
 ) -> Result<i32> {
-    let workspace = ui::workspace(paths, workspace, true, json_output).await?;
+    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let caller_pid = std::process::id();
-    let check = match client::call(
-        paths,
+    let check = request!(
+        &ctx.paths,
         Method::CheckRemoval {
             workspace: workspace.clone(),
             caller_pid,
         },
-    )
-    .await?
-    {
-        Body::RemovalCheck(check) => check,
-        _ => anyhow::bail!("unexpected removal check response"),
-    };
+        RemovalCheck
+    );
     let choice = if keep_branch {
-        removal::Choice::KeepBranch
+        BranchChoice::KeepBranch
     } else if delete_branch {
-        removal::Choice::DeleteBranch
+        BranchChoice::DeleteBranch
     } else if !check.needs_choice() {
-        removal::Choice::Auto
+        BranchChoice::Auto
     } else {
         ensure!(
             !yes,
             "choose --keep-branch or --delete-branch with --yes for a dirty or differing workspace"
         );
-        ui::choose_removal(&check, json_output)?
+        ui::choose_removal(ctx, &check)?
     };
     if !yes && (check.needs_choice() || keep_branch || delete_branch) {
-        let branch_action = match choice {
-            removal::Choice::KeepBranch => "keep",
-            removal::Choice::DeleteBranch => "delete (including unpushed commits)",
-            removal::Choice::Auto => "delete (redundant)",
-        };
-        ensure!(
-            ui::confirm(
-                &format!(
-                    "Remove workspace: {}\nFiles:  delete, including uncommitted changes\nBranch: {} — {branch_action}",
-                    check.workspace.name,
-                    check.branch.as_deref().unwrap_or("none")
-                ),
-                json_output,
-                "--yes",
-            )?,
-            "workspace removal canceled"
-        );
+        confirm_removal(ctx, &check, choice)?;
     }
-    let inspection = match client::call(
-        paths,
-        Method::Inspect {
-            workspace: workspace.clone(),
-        },
-    )
-    .await?
-    {
-        Body::Inspection(inspection) => inspection,
-        _ => anyhow::bail!("unexpected inspection response"),
-    };
-    let cwd = std::env::current_dir()?;
-    let inside =
-        std::fs::canonicalize(&inspection.workspace.path).is_ok_and(|root| cwd.starts_with(root));
-    let destination = if inside {
-        ui::repositories(paths)
-            .await?
-            .into_iter()
-            .find(|r| r.id == inspection.workspace.repository_id)
-            .map(|r| r.path)
-    } else {
-        None
-    };
+    // Leave the directory before it disappears under the shell.
+    let escape = escape_destination(ctx, &check.workspace).await?;
     let result = client::call(
-        paths,
-        Method::Remove {
+        &ctx.paths,
+        Method::RemoveWorkspace {
             workspace,
             choice,
             caller_pid,
         },
     )
     .await;
-    if inside && (result.is_ok() || !cwd.exists()) {
-        let destination = destination
-            .filter(|p| p.is_dir())
-            .unwrap_or_else(|| paths.home.clone());
-        shell::navigate(&destination, json_output)?;
+    if let Some(destination) = escape {
+        if result.is_ok() || !std::env::current_dir()?.exists() {
+            shell::navigate(&destination, ctx.json)?;
+        }
     }
-    let result = match result? {
-        Body::RemovalResult(result) => result,
-        _ => anyhow::bail!("unexpected removal response"),
+    let Body::RemovalResult(result) = result? else {
+        bail!("unexpected removal response");
     };
-    let message = match (&result.branch, result.branch_deleted) {
+    ctx.emit(&removal_message(&result), &result)?;
+    Ok(0)
+}
+
+fn confirm_removal(ctx: &Context, check: &RemovalCheck, choice: BranchChoice) -> Result<()> {
+    let branch_action = match choice {
+        BranchChoice::KeepBranch => "keep",
+        BranchChoice::DeleteBranch => "delete (including unpushed commits)",
+        BranchChoice::Auto => "delete (redundant)",
+    };
+    ensure!(
+        ui::confirm(
+            ctx,
+            &format!(
+                "Remove workspace: {}\nFiles:  delete, including uncommitted changes\nBranch: {} — {branch_action}",
+                check.workspace.name,
+                check.branch.as_deref().unwrap_or("none")
+            ),
+            "--yes",
+        )?,
+        "workspace removal canceled"
+    );
+    Ok(())
+}
+
+/// Where the shell should go if the current directory is inside `workspace`:
+/// its repository checkout, or home when that is unavailable.
+async fn escape_destination(ctx: &Context, workspace: &Workspace) -> Result<Option<PathBuf>> {
+    let cwd = std::env::current_dir()?;
+    if !workspace.contains(&cwd) {
+        return Ok(None);
+    }
+    let repository = client::repositories(&ctx.paths)
+        .await?
+        .into_iter()
+        .find(|r| r.id == workspace.repository_id)
+        .map(|r| r.path)
+        .filter(|p| p.is_dir());
+    Ok(Some(repository.unwrap_or_else(|| ctx.paths.home.clone())))
+}
+
+fn removal_message(result: &RemovalResult) -> String {
+    match (&result.branch, result.branch_deleted) {
         (Some(branch), true) => format!("Workspace and Git branch {branch} removed"),
         (Some(branch), false) => format!(
             "Workspace removed; Git branch {branch} retained ({})",
             result.branch_outcome
         ),
         (None, _) => "Workspace removed".into(),
-    };
-    output(json_output, &message, serde_json::to_value(&result)?);
-    Ok(0)
+    }
 }
 
 pub(super) async fn exec(
-    paths: &Paths,
+    ctx: &Context,
     workspace: Option<String>,
     command: Vec<OsString>,
-    json_output: bool,
 ) -> Result<i32> {
-    let workspace = ui::workspace(paths, workspace, true, json_output).await?;
-    execution::run(paths, workspace, command).await
+    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    execution::run(&ctx.paths, workspace, command).await
 }
 
 pub(super) async fn claude(
-    paths: &Paths,
+    ctx: &Context,
     workspace: Option<String>,
     args: Vec<OsString>,
-    json_output: bool,
 ) -> Result<i32> {
-    let workspace = ui::workspace(paths, workspace, true, json_output).await?;
-    let Body::Inspection(inspection) = client::call(paths, Method::Inspect { workspace }).await?
-    else {
-        anyhow::bail!("unexpected workspace response");
-    };
+    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    let inspection = client::inspect(&ctx.paths, workspace).await?;
     let command = std::iter::once("claude".into())
         .chain(args)
         .chain(["--remote-control".into(), inspection.workspace.name.into()])
         .collect();
-    execution::run(paths, inspection.workspace.id, command).await
+    execution::run(&ctx.paths, inspection.workspace.id, command).await
 }
 
 pub(super) async fn codex(
-    paths: &Paths,
-    mode: Option<crate::cli::CodexMode>,
+    ctx: &Context,
+    mode: Option<CodexMode>,
     workspace: Option<String>,
     args: Vec<OsString>,
-    json_output: bool,
 ) -> Result<i32> {
     let mode = match mode {
         Some(mode) => mode,
-        None => crate::config::Config::load(paths)?.codex.default_mode,
+        None => Config::load(&ctx.paths)?.codex.default_mode,
     };
-    if matches!(mode, crate::cli::CodexMode::App) {
-        return open_app(paths, workspace, "codex", args, json_output).await;
+    if mode == CodexMode::App {
+        return open_app(ctx, workspace, "codex", args).await;
     }
-    let workspace = ui::workspace(paths, workspace, true, json_output).await?;
+    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let command = std::iter::once("codex".into())
         .chain(args)
         .chain([
@@ -472,24 +406,19 @@ pub(super) async fn codex(
             "--ask-for-approval=never".into(),
         ])
         .collect();
-    execution::run(paths, workspace, command).await
+    execution::run(&ctx.paths, workspace, command).await
 }
 
 /// Desktop launchers hand the directory to another process. Their short-lived
 /// command is not the agent session and must not own/kill the app's process group.
 pub(super) async fn open_app(
-    paths: &Paths,
+    ctx: &Context,
     workspace: Option<String>,
     program: &str,
     args: Vec<OsString>,
-    json_output: bool,
 ) -> Result<i32> {
-    use std::os::unix::process::ExitStatusExt;
-    let workspace = ui::workspace(paths, workspace, true, json_output).await?;
-    let Body::Inspection(inspection) = client::call(paths, Method::Inspect { workspace }).await?
-    else {
-        anyhow::bail!("unexpected workspace response");
-    };
+    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    let inspection = client::inspect(&ctx.paths, workspace).await?;
     ensure!(
         inspection.workspace.path.is_dir(),
         "workspace directory is missing"
@@ -499,30 +428,11 @@ pub(super) async fn open_app(
         .arg(&inspection.workspace.path)
         .args(args)
         .current_dir(&inspection.workspace.path)
-        .env_remove("SHOAL_SHELL_DIRECTIVE")
+        .env_remove(env::SHELL_DIRECTIVE)
         .status()
         .await
         .with_context(|| {
             format!("launch {program} app; install {program} and make it available on PATH")
         })?;
-    Ok(status
-        .code()
-        .unwrap_or_else(|| 128 + status.signal().unwrap_or(1)))
-}
-
-async fn enter_workspace(paths: &Paths, workspace: String, json_output: bool) -> Result<()> {
-    let Body::Inspection(inspection) = client::call(paths, Method::Inspect { workspace }).await?
-    else {
-        anyhow::bail!("unexpected inspection response");
-    };
-    ensure!(
-        inspection.workspace.path.is_dir(),
-        "workspace directory is missing"
-    );
-    output(
-        json_output,
-        &inspection.workspace.path.display().to_string(),
-        json!({"path": inspection.workspace.path}),
-    );
-    shell::navigate(&inspection.workspace.path, json_output)
+    Ok(execution::exit_code(status))
 }

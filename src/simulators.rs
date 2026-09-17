@@ -1,3 +1,5 @@
+//! Exclusive, worktree-owned Xcode simulator leases. Claims are persisted
+//! before every simctl mutation so interrupted work can be reconciled.
 use anyhow::{Result, bail, ensure};
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
@@ -7,7 +9,14 @@ use std::{
 };
 use uuid::Uuid;
 
-use crate::{simctl, workspace::Manager};
+use crate::{
+    model::Workspace,
+    sim_audit::{CleanAction, CleanRequest, CleanRequestStatus, EvictedDevice},
+    simctl::{self, Inventory},
+    state::{WorkspaceState, states},
+    validate,
+    workspace::Manager,
+};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -16,16 +25,18 @@ pub struct Profile {
     pub runtime: String,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct SimConfig {
     pub max_booted: usize,
     pub max_devices: usize,
     pub idle_seconds: u64,
+    /// Allow devices outside the configured profiles (with a reason).
     pub allow_any: bool,
     pub default: Option<String>,
     pub profiles: BTreeMap<String, Profile>,
 }
+
 impl Default for SimConfig {
     fn default() -> Self {
         Self {
@@ -38,6 +49,7 @@ impl Default for SimConfig {
         }
     }
 }
+
 impl SimConfig {
     pub fn validate(&self) -> Result<()> {
         ensure!(
@@ -58,7 +70,7 @@ impl SimConfig {
             );
         }
         for (name, profile) in &self.profiles {
-            crate::workspace::validate_name(name)?;
+            validate::name("simulator profile", name)?;
             ensure!(
                 !profile.device.is_empty() && !profile.runtime.is_empty(),
                 "simulator profile {name} requires a device and runtime"
@@ -70,6 +82,7 @@ impl SimConfig {
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct SimRequest {
+    /// Client-generated UUID that makes clean requests idempotent and auditable.
     pub request_id: String,
     pub clean: bool,
     pub name: String,
@@ -79,10 +92,20 @@ pub struct SimRequest {
     pub reason: Option<String>,
 }
 
+states!(SimulatorState {
+    /// Claimed; simctl create has not returned a UDID yet.
+    Creating => "creating",
+    /// Claimed; booting (or erasing) for a lease.
+    Booting => "booting",
+    Leased => "leased",
+    /// Released and reusable until the idle policy deletes it.
+    Idle => "idle",
+    /// A simctl step failed; release deletes the device.
+    Failed => "failed",
+});
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Simulator {
-    #[serde(default)]
-    pub installed_apps: Option<usize>,
     pub id: String,
     pub udid: Option<String>,
     pub device: String,
@@ -91,15 +114,47 @@ pub struct Simulator {
     pub last_workspace_id: Option<String>,
     pub lease_name: Option<String>,
     pub reason: Option<String>,
-    pub state: String,
+    pub state: SimulatorState,
     pub last_used: u64,
     pub error: Option<String>,
+    /// User apps counted at release; `None` when unknown.
+    #[serde(default)]
+    pub installed_apps: Option<usize>,
+}
+
+impl Simulator {
+    fn is_leased_by(&self, workspace_id: &str, name: &str) -> bool {
+        self.workspace_id.as_deref() == Some(workspace_id)
+            && self.lease_name.as_deref() == Some(name)
+    }
+
+    fn device<'a>(&self, inventory: &'a Inventory) -> Option<&'a simctl::Device> {
+        self.udid.as_deref().and_then(|udid| inventory.device(udid))
+    }
+
+    fn is_booted(&self, inventory: &Inventory) -> bool {
+        self.device(inventory).is_some_and(|d| d.state == "Booted")
+    }
+
+    /// Eviction cost; unknown counts sort last.
+    fn app_cost(&self) -> usize {
+        self.installed_apps.unwrap_or(usize::MAX)
+    }
+}
+
+/// What `shoal sim catalog` shows: what could be created, and the policy.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SimulatorCatalog {
+    pub device_types: Vec<simctl::DeviceType>,
+    pub runtimes: Vec<simctl::Runtime>,
+    pub policy: SimConfig,
 }
 
 pub enum Acquisition {
     Acquired(Box<Simulator>),
     Busy(String),
 }
+
 pub(crate) fn now() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -108,7 +163,22 @@ pub(crate) fn now() -> u64 {
 }
 
 impl Manager {
-    pub async fn simulators(&self, owner: Option<String>) -> Result<Vec<Simulator>> {
+    pub async fn simulator_catalog(&self) -> Result<SimulatorCatalog> {
+        let inventory = simctl::inventory().await?;
+        Ok(SimulatorCatalog {
+            device_types: inventory.devicetypes,
+            runtimes: inventory
+                .runtimes
+                .into_iter()
+                .filter(|r| r.is_available)
+                .collect(),
+            policy: self.config.simulators.clone(),
+        })
+    }
+
+    /// Managed simulators, optionally those currently or last owned by a workspace.
+    pub async fn list_simulators(&self, owner: Option<&str>) -> Result<Vec<Simulator>> {
+        let owner = owner.map(str::to_owned);
         self.store
             .run(move |db| {
                 let records = db
@@ -131,17 +201,21 @@ impl Manager {
 
     async fn save_sim(&self, sim: &Simulator) -> Result<()> {
         let (id, record) = (sim.id.clone(), serde_json::to_string(sim)?);
-        self.store.run(move |db| { db.execute("INSERT INTO simulators(id,record) VALUES (?1,?2) ON CONFLICT(id) DO UPDATE SET record=excluded.record", params![id,record])?; Ok(()) }).await
+        self.store
+            .run(move |db| {
+                db.execute(
+                    "INSERT INTO simulators(id,record) VALUES (?1,?2) ON CONFLICT(id) DO UPDATE SET record=excluded.record",
+                    params![id, record],
+                )?;
+                Ok(())
+            })
+            .await
     }
 
     /// Resolve a creation interrupted between simctl returning and saving its UDID.
-    async fn reconcile_sim(
-        &self,
-        sim: &mut Simulator,
-        inventory: &simctl::Inventory,
-    ) -> Result<()> {
+    async fn reconcile_sim(&self, sim: &mut Simulator, inventory: &Inventory) -> Result<()> {
         if sim.udid.is_none() {
-            let expected = format!("shoal-{}", sim.id);
+            let expected = device_name(sim);
             if let Some(device) = inventory
                 .devices
                 .values()
@@ -157,7 +231,7 @@ impl Manager {
 
     async fn shutdown_sim(&self, sim: &Simulator) -> Result<()> {
         let inventory = simctl::inventory().await?;
-        if let Some(device) = sim.udid.as_deref().and_then(|u| inventory.device(u)) {
+        if let Some(device) = sim.device(&inventory) {
             if device.state != "Shutdown" {
                 simctl::run(&["shutdown", &device.udid]).await?;
             }
@@ -197,12 +271,12 @@ impl Manager {
 
     pub async fn acquire_simulator(
         &self,
-        selector: String,
+        selector: &str,
         request: SimRequest,
         execution_id: Option<String>,
     ) -> Result<Acquisition> {
-        let _guard = self.sim_gate.lock().await;
-        let workspace = self.get(selector).await?;
+        let _guard = self.simulator_gate.lock().await;
+        let workspace = self.workspace(selector).await?;
         let mut audit = if request.clean {
             Some(
                 self.start_clean_request(&workspace, &request, execution_id)
@@ -212,22 +286,22 @@ impl Manager {
             None
         };
         let result = self
-            .acquire_simulator_inner(workspace, request, &mut audit)
+            .allocate_simulator(workspace, request, &mut audit)
             .await;
         if let Some(mut audit) = audit {
             audit.updated_at = now();
             match &result {
                 Ok(Acquisition::Acquired(sim)) => {
-                    audit.status = "acquired".into();
+                    audit.status = CleanRequestStatus::Acquired;
                     audit.simulator_id = Some(sim.id.clone());
                     audit.udid = sim.udid.clone();
                 }
                 Ok(Acquisition::Busy(message)) => {
-                    audit.status = "busy".into();
+                    audit.status = CleanRequestStatus::Busy;
                     audit.error = Some(message.clone());
                 }
                 Err(error) => {
-                    audit.status = "failed".into();
+                    audit.status = CleanRequestStatus::Failed;
                     audit.error = Some(format!("{error:#}"));
                 }
             }
@@ -236,38 +310,33 @@ impl Manager {
         result
     }
 
-    async fn acquire_simulator_inner(
+    /// All simctl transitions are serialized by the caller. Never hold a SQLite
+    /// transaction across a boot; other requests must remain responsive.
+    async fn allocate_simulator(
         &self,
-        workspace: crate::model::Workspace,
+        workspace: Workspace,
         request: SimRequest,
-        audit: &mut Option<crate::sim_audit::CleanRequest>,
+        audit: &mut Option<CleanRequest>,
     ) -> Result<Acquisition> {
-        crate::workspace::validate_name(&request.name)?;
-        ensure!(
-            request.reason.as_ref().is_none_or(|s| !s.trim().is_empty()
-                && s.len() <= 256
-                && !s.contains(['\n', '\r'])),
-            "simulator reason must be a nonempty single line (max 256 bytes)"
-        );
-        // All simctl transitions are serialized. Never hold a SQLite transaction
-        // across a boot; other resource/workspace requests remain responsive.
+        validate::name("simulator lease", &request.name)?;
+        validate::reason("simulator", request.reason.as_deref())?;
         ensure!(
             !request.clean || request.reason.is_some(),
             "--clean requires --reason explaining why a clean device is necessary"
         );
         ensure!(
-            workspace.state == crate::state::WorkspaceState::Ready,
+            workspace.state == WorkspaceState::Ready,
             "workspace is not ready"
         );
         self.touch(&workspace.id).await;
-        let mut records = self.simulators(None).await?;
+        let limits = &self.config.simulators;
+        let mut records = self.list_simulators(None).await?;
         let mut inventory = simctl::inventory().await?;
         let explicit =
             request.profile.is_some() || request.device.is_some() || request.runtime.is_some();
-        let existing = records.iter().position(|s| {
-            s.workspace_id.as_ref() == Some(&workspace.id)
-                && s.lease_name.as_ref() == Some(&request.name)
-        });
+        let existing = records
+            .iter()
+            .position(|s| s.is_leased_by(&workspace.id, &request.name));
         let profile = if existing.is_some() && !explicit {
             None
         } else {
@@ -290,14 +359,12 @@ impl Manager {
             }
             self.reconcile_sim(sim, &inventory).await?;
             ensure!(
-                sim.state == "leased",
+                sim.state == SimulatorState::Leased,
                 "simulator allocation is {}; release it to clean up and retry",
                 sim.state
             );
             ensure!(
-                sim.udid
-                    .as_deref()
-                    .and_then(|u| inventory.device(u))
+                sim.device(&inventory)
                     .is_some_and(|d| d.is_available && d.state == "Booted"),
                 "leased simulator is no longer booted/available; release it and acquire again"
             );
@@ -305,20 +372,15 @@ impl Manager {
         }
         let profile = profile.unwrap();
         // Cache live counts without booting stopped devices just to inspect them.
-        if request.clean && records.len() >= self.config.simulators.max_devices {
+        if request.clean && records.len() >= limits.max_devices {
             for sim in records.iter_mut().filter(|s| s.workspace_id.is_none()) {
-                if sim
-                    .udid
-                    .as_deref()
-                    .and_then(|u| inventory.device(u))
-                    .is_some_and(|d| d.state == "Booted")
-                {
+                if sim.is_booted(&inventory) {
                     sim.installed_apps = simctl::user_app_count(sim.udid.as_deref().unwrap())
                         .await
                         .ok();
                 }
             }
-            records.sort_by_key(|s| (s.installed_apps.unwrap_or(usize::MAX), s.last_used));
+            records.sort_by_key(|s| (s.app_cost(), s.last_used));
         } else {
             records.sort_by_key(|s| std::cmp::Reverse(s.last_used));
         }
@@ -326,84 +388,76 @@ impl Manager {
             .iter()
             .find(|s| {
                 s.workspace_id.is_none()
-                    && s.state == "idle"
+                    && s.state == SimulatorState::Idle
                     && s.device == profile.device
                     && s.runtime == profile.runtime
-                    && s.udid
-                        .as_deref()
-                        .and_then(|u| inventory.device(u))
-                        .is_some_and(|d| d.is_available)
+                    && s.device(&inventory).is_some_and(|d| d.is_available)
             })
             .cloned();
         if request.clean {
             // Spare capacity costs zero reinstalls. At capacity, replacing an
             // incompatible empty device can cost less than erasing a useful one.
-            let evictions_needed = records
-                .len()
-                .saturating_sub(self.config.simulators.max_devices)
-                + 1;
+            let evictions_needed = records.len().saturating_sub(limits.max_devices) + 1;
             let eviction_candidates: Vec<_> = records
                 .iter()
                 .filter(|s| s.workspace_id.is_none())
                 .take(evictions_needed)
                 .collect();
-            let eviction_cost = eviction_candidates.iter().fold(0usize, |cost, s| {
-                cost.saturating_add(s.installed_apps.unwrap_or(usize::MAX))
-            });
+            let eviction_cost = eviction_candidates
+                .iter()
+                .fold(0usize, |cost, s| cost.saturating_add(s.app_cost()));
             let cheaper_eviction = eviction_candidates.len() == evictions_needed
                 && reusable
                     .as_ref()
-                    .is_some_and(|r| eviction_cost < r.installed_apps.unwrap_or(usize::MAX));
-            if records.len() < self.config.simulators.max_devices || cheaper_eviction {
+                    .is_some_and(|r| eviction_cost < r.app_cost());
+            if records.len() < limits.max_devices || cheaper_eviction {
                 reusable = None;
             }
         }
-        let reuse_running = reusable
-            .as_ref()
-            .and_then(|s| s.udid.as_deref())
-            .and_then(|u| inventory.device(u))
-            .is_some_and(|d| d.state == "Booted");
+        let reuse_running = reusable.as_ref().is_some_and(|s| s.is_booted(&inventory));
         let mut idle: Vec<_> = records
             .iter()
             .filter(|s| s.workspace_id.is_none() && reusable.as_ref().is_none_or(|r| r.id != s.id))
             .cloned()
             .collect();
         if request.clean {
-            idle.sort_by_key(|s| (s.installed_apps.unwrap_or(usize::MAX), s.last_used));
+            idle.sort_by_key(|s| (s.app_cost(), s.last_used));
         } else {
             idle.sort_by_key(|s| s.last_used);
         }
         // External devices count toward the budget but are never shut down.
         for sim in &idle {
-            if inventory.running_count() < self.config.simulators.max_booted
-                || (reuse_running && inventory.running_count() <= self.config.simulators.max_booted)
+            if inventory.running_count() < limits.max_booted
+                || (reuse_running && inventory.running_count() <= limits.max_booted)
             {
                 break;
             }
             self.shutdown_sim(sim).await?;
             inventory = simctl::inventory().await?;
         }
-        if inventory.running_count() >= self.config.simulators.max_booted
-            && !(reuse_running && inventory.running_count() == self.config.simulators.max_booted)
+        if inventory.running_count() >= limits.max_booted
+            && !(reuse_running && inventory.running_count() == limits.max_booted)
         {
-            return Ok(Acquisition::Busy("simulator running limit reached; active leases or external simulators occupy all slots".into()));
+            return Ok(Acquisition::Busy(
+                "simulator running limit reached; active leases or external simulators occupy all slots".into(),
+            ));
         }
         if reusable.is_none() {
             let mut count = records.len();
             let mut candidates = idle.iter().cloned();
-            while count >= self.config.simulators.max_devices {
+            while count >= limits.max_devices {
                 let Some(mut oldest) = candidates.next() else {
                     return Ok(Acquisition::Busy(
                         "all managed simulator devices are allocated".into(),
                     ));
                 };
                 if let Some(audit) = audit.as_mut() {
-                    audit.evicted.push(crate::sim_audit::EvictedDevice {
+                    audit.evicted.push(EvictedDevice {
                         id: oldest.id.clone(),
                         udid: oldest.udid.clone(),
                         installed_apps: oldest.installed_apps,
                     });
-                    audit.action = Some("create_after_eviction".into());
+                    audit.action = Some(CleanAction::CreateAfterEviction);
                     self.save_clean_request(audit).await?;
                 }
                 self.delete_sim(&mut oldest).await?;
@@ -411,7 +465,6 @@ impl Manager {
             }
         }
         let mut sim = reusable.unwrap_or_else(|| Simulator {
-            installed_apps: Some(0),
             id: Uuid::new_v4().to_string(),
             udid: None,
             device: profile.device,
@@ -420,9 +473,10 @@ impl Manager {
             last_workspace_id: None,
             lease_name: None,
             reason: None,
-            state: "creating".into(),
+            state: SimulatorState::Creating,
             last_used: now(),
             error: None,
+            installed_apps: Some(0),
         });
         let needs_reset = request.clean && sim.udid.is_some();
         if let Some(audit) = audit.as_mut() {
@@ -430,123 +484,92 @@ impl Manager {
             audit.udid = sim.udid.clone();
             audit.apps_removed = needs_reset.then_some(sim.installed_apps).flatten();
             if audit.action.is_none() {
-                audit.action = Some(if needs_reset { "erase" } else { "create" }.into());
+                audit.action = Some(if needs_reset {
+                    CleanAction::Erase
+                } else {
+                    CleanAction::Create
+                });
             }
             self.save_clean_request(audit).await?;
         }
         sim.workspace_id = Some(workspace.id.clone());
         sim.lease_name = Some(request.name);
         sim.reason = request.reason;
-        sim.state = "booting".into();
+        sim.state = SimulatorState::Booting;
         sim.error = None;
         self.save_sim(&sim).await?; // ownership precedes every external mutation
-        let result = async {
-            if sim.udid.is_none() {
-                let udid = simctl::run(&[
-                    "create",
-                    &format!("shoal-{}", sim.id),
-                    &sim.device,
-                    &sim.runtime,
-                ])
-                .await?;
-                Uuid::parse_str(&udid)?;
-                sim.udid = Some(udid);
-                self.save_sim(&sim).await?;
-                if let Some(audit) = audit.as_mut() {
-                    audit.udid = sim.udid.clone();
-                    self.save_clean_request(audit).await?;
-                }
-            }
-            let udid = sim.udid.clone().unwrap();
-            if needs_reset {
-                self.shutdown_sim(&sim).await?;
-                simctl::run(&["erase", &udid]).await?;
-                sim.installed_apps = Some(0);
-                if let Some(audit) = audit.as_mut() {
-                    audit.erase_completed = true;
-                    self.save_clean_request(audit).await?;
-                }
-            }
-            simctl::run(&["bootstatus", &udid, "-b"]).await?;
-            ensure!(
-                simctl::inventory()
-                    .await?
-                    .device(&udid)
-                    .is_some_and(|d| d.state == "Booted" && d.is_available),
-                "simulator did not finish booting"
-            );
-            // Removal may have started while simctl was running. Its cleanup waits
-            // for our gate, so retain the claim and let that path remove it.
-            ensure!(
-                self.get(workspace.id.clone()).await?.state == crate::state::WorkspaceState::Ready,
-                "workspace removal started during simulator boot"
-            );
-            Ok::<(), anyhow::Error>(())
-        }
-        .await;
+        let result = self.boot(&mut sim, &workspace, needs_reset, audit).await;
         sim.last_used = now();
         sim.last_workspace_id = Some(workspace.id);
         if let Err(error) = result {
-            sim.state = "failed".into();
+            sim.state = SimulatorState::Failed;
             sim.error = Some(format!("{error:#}"));
             self.save_sim(&sim).await?;
             return Err(error);
         }
-        sim.state = "leased".into();
+        sim.state = SimulatorState::Leased;
         self.save_sim(&sim).await?;
         Ok(Acquisition::Acquired(Box::new(sim)))
     }
 
+    /// Create the device if needed, optionally erase it, and boot it.
+    async fn boot(
+        &self,
+        sim: &mut Simulator,
+        workspace: &Workspace,
+        needs_reset: bool,
+        audit: &mut Option<CleanRequest>,
+    ) -> Result<()> {
+        if sim.udid.is_none() {
+            let udid =
+                simctl::run(&["create", &device_name(sim), &sim.device, &sim.runtime]).await?;
+            Uuid::parse_str(&udid)?;
+            sim.udid = Some(udid);
+            self.save_sim(sim).await?;
+            if let Some(audit) = audit.as_mut() {
+                audit.udid = sim.udid.clone();
+                self.save_clean_request(audit).await?;
+            }
+        }
+        let udid = sim.udid.clone().unwrap();
+        if needs_reset {
+            self.shutdown_sim(sim).await?;
+            simctl::run(&["erase", &udid]).await?;
+            sim.installed_apps = Some(0);
+            if let Some(audit) = audit.as_mut() {
+                audit.erase_completed = true;
+                self.save_clean_request(audit).await?;
+            }
+        }
+        simctl::run(&["bootstatus", &udid, "-b"]).await?;
+        ensure!(
+            simctl::inventory()
+                .await?
+                .device(&udid)
+                .is_some_and(|d| d.state == "Booted" && d.is_available),
+            "simulator did not finish booting"
+        );
+        // Removal may have started while simctl was running. Its cleanup waits
+        // for our gate, so retain the claim and let that path remove it.
+        ensure!(
+            self.workspace(&workspace.id).await?.state == WorkspaceState::Ready,
+            "workspace removal started during simulator boot"
+        );
+        Ok(())
+    }
+
     async fn resolve_profile(
         &self,
-        workspace: &crate::model::Workspace,
+        workspace: &Workspace,
         request: &SimRequest,
-        inventory: &simctl::Inventory,
+        inventory: &Inventory,
     ) -> Result<Profile> {
         let config = &self.config.simulators;
         ensure!(
             request.profile.is_none() || (request.device.is_none() && request.runtime.is_none()),
             "use either --profile or --device with --runtime"
         );
-        let resolve = |profile: &Profile| -> Result<Profile> {
-            let devices: Vec<_> = inventory
-                .devicetypes
-                .iter()
-                .filter(|d| d.identifier == profile.device || d.name == profile.device)
-                .collect();
-            let runtimes: Vec<_> = inventory
-                .runtimes
-                .iter()
-                .filter(|r| {
-                    r.is_available && (r.identifier == profile.runtime || r.name == profile.runtime)
-                })
-                .collect();
-            ensure!(
-                devices.len() == 1,
-                "device type is unavailable or ambiguous: {}",
-                profile.device
-            );
-            ensure!(
-                runtimes.len() == 1,
-                "runtime is not installed/available or is ambiguous: {}; Shoal does not download runtimes",
-                profile.runtime
-            );
-            ensure!(
-                runtimes[0]
-                    .supported_device_types
-                    .as_ref()
-                    .is_none_or(|types| types
-                        .iter()
-                        .any(|d| d.identifier == devices[0].identifier)),
-                "device type {} is incompatible with runtime {}",
-                profile.device,
-                profile.runtime
-            );
-            Ok(Profile {
-                device: devices[0].identifier.clone(),
-                runtime: runtimes[0].identifier.clone(),
-            })
-        };
+        let resolve = |profile: &Profile| resolve_profile(inventory, profile);
         let profile = if request.device.is_some() || request.runtime.is_some() {
             let (Some(device), Some(runtime)) = (&request.device, &request.runtime) else {
                 bail!("--device and --runtime are required together");
@@ -611,24 +634,21 @@ impl Manager {
         Ok(profile)
     }
 
-    pub async fn release_simulator(&self, selector: String, name: String) -> Result<()> {
-        let _guard = self.sim_gate.lock().await;
-        let workspace = self.get(selector).await?;
+    pub async fn release_simulator(&self, selector: &str, name: String) -> Result<()> {
+        let _guard = self.simulator_gate.lock().await;
+        let workspace = self.workspace(selector).await?;
         ensure!(
-            workspace.state == crate::state::WorkspaceState::Ready,
+            workspace.state == WorkspaceState::Ready,
             "workspace is not ready"
         );
         self.touch(&workspace.id).await;
         let mut sim = self
-            .simulators(Some(workspace.id.clone()))
+            .list_simulators(Some(&workspace.id))
             .await?
             .into_iter()
-            .find(|s| {
-                s.workspace_id.as_ref() == Some(&workspace.id)
-                    && s.lease_name.as_ref() == Some(&name)
-            })
+            .find(|s| s.is_leased_by(&workspace.id, &name))
             .ok_or_else(|| anyhow::anyhow!("unknown simulator lease: {name}"))?;
-        if sim.state != "leased" {
+        if sim.state != SimulatorState::Leased {
             return self.delete_sim(&mut sim).await;
         }
         sim.installed_apps = match sim.udid.as_deref() {
@@ -637,32 +657,77 @@ impl Manager {
         };
         sim.last_workspace_id = sim.workspace_id.take();
         sim.lease_name = None;
-        sim.state = "idle".into();
+        sim.state = SimulatorState::Idle;
         sim.last_used = now();
         self.save_sim(&sim).await
     }
 
     pub async fn remove_simulators(&self, owner: &str) -> Result<()> {
-        let _guard = self.sim_gate.lock().await;
-        for mut sim in self.simulators(Some(owner.into())).await? {
+        let _guard = self.simulator_gate.lock().await;
+        for mut sim in self.list_simulators(Some(owner)).await? {
             self.delete_sim(&mut sim).await?;
         }
         Ok(())
     }
 
+    /// Delete expired idle devices to bound both storage and file count.
+    /// Compatible devices can be reused during the grace period.
     pub async fn expire_simulators(&self) -> Result<()> {
-        let Ok(_guard) = self.sim_gate.try_lock() else {
+        let Ok(_guard) = self.simulator_gate.try_lock() else {
             return Ok(());
         };
-        for mut sim in self.simulators(None).await? {
+        for mut sim in self.list_simulators(None).await? {
             if sim.workspace_id.is_none()
                 && now().saturating_sub(sim.last_used) >= self.config.simulators.idle_seconds
             {
-                // Delete expired idle devices to bound both storage and file count.
-                // Compatible devices can be reused during the grace period.
                 self.delete_sim(&mut sim).await?;
             }
         }
         Ok(())
     }
+}
+
+/// The simctl device name Shoal gives its own devices.
+fn device_name(sim: &Simulator) -> String {
+    format!("shoal-{}", sim.id)
+}
+
+/// Match a profile's device/runtime names or identifiers against what is
+/// installed, returning canonical identifiers.
+fn resolve_profile(inventory: &Inventory, profile: &Profile) -> Result<Profile> {
+    let devices: Vec<_> = inventory
+        .devicetypes
+        .iter()
+        .filter(|d| d.identifier == profile.device || d.name == profile.device)
+        .collect();
+    let runtimes: Vec<_> = inventory
+        .runtimes
+        .iter()
+        .filter(|r| {
+            r.is_available && (r.identifier == profile.runtime || r.name == profile.runtime)
+        })
+        .collect();
+    ensure!(
+        devices.len() == 1,
+        "device type is unavailable or ambiguous: {}",
+        profile.device
+    );
+    ensure!(
+        runtimes.len() == 1,
+        "runtime is not installed/available or is ambiguous: {}; Shoal does not download runtimes",
+        profile.runtime
+    );
+    ensure!(
+        runtimes[0]
+            .supported_device_types
+            .as_ref()
+            .is_none_or(|types| types.iter().any(|d| d.identifier == devices[0].identifier)),
+        "device type {} is incompatible with runtime {}",
+        profile.device,
+        profile.runtime
+    );
+    Ok(Profile {
+        device: devices[0].identifier.clone(),
+        runtime: runtimes[0].identifier.clone(),
+    })
 }

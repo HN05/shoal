@@ -1,5 +1,6 @@
 //! CLI dispatch. Domain handlers own requests, prompts, and rendering;
 //! daemon modules own lifecycle and allocation policy.
+mod menu;
 mod ports;
 mod recovery;
 mod repositories;
@@ -9,108 +10,94 @@ mod simulators;
 mod skill;
 mod workspaces;
 
-use crate::{
-    cli::{Cli, Command, DaemonCommand, ShellCommand},
-    paths::Paths,
-    shell, ui,
-};
+use std::time::Duration;
+
 use anyhow::{Result, ensure};
 use clap::CommandFactory;
 use serde_json::json;
+use tokio::time::{Instant, sleep};
+
+use crate::{
+    cli::{Cli, Command, ShellCommand},
+    context::Context,
+    env,
+    paths::Paths,
+    shell,
+};
 
 pub(crate) async fn run(cli: Cli) -> Result<i32> {
     // Skill delivery is independent of daemon state and socket-path limits.
     if let Some(Command::Skill { command }) = &cli.command {
         return skill::run(command.as_ref(), cli.json);
     }
-    if cli.command.is_none() && !ui::is_interactive(cli.json) {
+    if cli.command.is_none() && !Context::is_interactive(cli.json) {
         Cli::command().print_help()?;
         return Ok(0);
     }
-    let paths = Paths::new(cli.state_dir)?;
+    let ctx = Context::new(Paths::new(cli.state_dir)?, cli.json);
     let command = match cli.command {
         Some(command) => command,
-        None => ui::workspace_menu(&paths).await?,
+        None => menu::choose(&ctx).await?,
     };
-    if std::env::var_os("SHOAL_SCOPE_TOKEN").is_some() {
-        ensure!(
-            !matches!(
-                &command,
-                Command::Setup { .. }
-                    | Command::Daemon {
-                        command: DaemonCommand::Run { .. }
-                            | DaemonCommand::Start
-                            | DaemonCommand::Stop
-                            | DaemonCommand::Restart
-                    }
-            ),
-            "workspace processes cannot administer Shoal"
-        );
-    }
+    ensure!(
+        !(env::is_scoped() && command.is_administrative()),
+        "workspace processes cannot administer Shoal"
+    );
     match command {
-        Command::Skill { command } => skill::run(command.as_ref(), cli.json),
-        Command::Resource { command } => resources::run(&paths, command, cli.json).await,
-        Command::Resources { workspace } => resources::overview(&paths, workspace, cli.json).await,
-        Command::Sim { command } => simulators::run(&paths, command, cli.json).await,
-        Command::Port { command } => ports::run(&paths, command, cli.json).await,
-        Command::Ports { workspace } => ports::overview(&paths, workspace, cli.json).await,
-        Command::Pull { workspace } => workspaces::pull(&paths, workspace, cli.json).await,
-        Command::Merge {
-            branch,
-            workspace,
-            remote,
-        } => crate::merge::run(&paths, workspace, branch, remote, cli.json).await,
-        Command::MergeInternal { branch, remote } => {
-            crate::merge::worker(&paths, branch, remote, cli.json).await
+        Command::Skill { command } => skill::run(command.as_ref(), ctx.json),
+        Command::Completions { shell } => {
+            let script = shell::completions(shell)?;
+            ctx.emit(&script, json!({"script": script}))?;
+            Ok(0)
         }
-        Command::Diff { workspace } => workspaces::diff(&paths, workspace, cli.json).await,
-        Command::Cd { workspace } => workspaces::cd(&paths, workspace, cli.json).await,
-        Command::Repo { command } => repositories::run(&paths, command, cli.json).await,
+        Command::Shell {
+            command: ShellCommand::Init,
+        } => {
+            ctx.emit(shell::INIT, json!({"script": shell::INIT}))?;
+            Ok(0)
+        }
+        Command::Repo { command } => repositories::run(&ctx, command).await,
         Command::Add {
             repository,
             name,
             base,
             agent,
             args,
-        } => workspaces::add(&paths, repository, name, base, agent, args, cli.json).await,
-        Command::Prepare { workspace } => workspaces::prepare(&paths, workspace, cli.json).await,
-        Command::List => workspaces::list(&paths, cli.json).await,
-        Command::Inspect { workspace } => workspaces::inspect(&paths, workspace, cli.json).await,
-        Command::Stop { workspace } => workspaces::stop(&paths, workspace, cli.json).await,
+        } => workspaces::add(&ctx, repository, name, base, agent, args).await,
+        Command::Prepare { workspace } => workspaces::prepare(&ctx, workspace).await,
+        Command::List => workspaces::list(&ctx).await,
+        Command::Cd { workspace } => workspaces::cd(&ctx, workspace).await,
+        Command::Diff { workspace } => workspaces::diff(&ctx, workspace).await,
+        Command::Pull { workspace } => workspaces::pull(&ctx, workspace).await,
+        Command::Merge {
+            branch,
+            workspace,
+            remote,
+        } => crate::merge::run(&ctx, workspace, branch, remote).await,
+        Command::MergeInternal { branch, remote } => {
+            crate::merge::worker(&ctx, branch, remote).await
+        }
+        Command::Inspect { workspace } => workspaces::inspect(&ctx, workspace).await,
+        Command::Stop { workspace } => workspaces::stop(&ctx, workspace).await,
         Command::Rm {
             workspace,
             yes,
             keep_branch,
             delete_branch,
-        } => workspaces::remove(&paths, workspace, yes, keep_branch, delete_branch, cli.json).await,
-        Command::Exec { workspace, command } => {
-            workspaces::exec(&paths, workspace, command, cli.json).await
-        }
-        Command::Claude { workspace, args } => {
-            workspaces::claude(&paths, workspace, args, cli.json).await
-        }
+        } => workspaces::remove(&ctx, workspace, yes, keep_branch, delete_branch).await,
+        Command::Exec { workspace, command } => workspaces::exec(&ctx, workspace, command).await,
+        Command::Claude { workspace, args } => workspaces::claude(&ctx, workspace, args).await,
         Command::Codex {
             mode,
             workspace,
             args,
-        } => workspaces::codex(&paths, mode, workspace, args, cli.json).await,
-        Command::T3 { workspace, args } => {
-            workspaces::open_app(&paths, workspace, "t3", args, cli.json).await
-        }
-        Command::Completions { shell } => {
-            let script = crate::shell::completions(shell)?;
-            if cli.json {
-                println!("{}", json!({"script": script}));
-            } else {
-                print!("{script}");
-            }
-            Ok(0)
-        }
-        Command::Setup {
-            dry_run,
-            executable,
-        } => service::setup(&paths, dry_run, executable, cli.json).await,
-        Command::Daemon { command } => service::run(paths, command, cli.json).await,
+        } => workspaces::codex(&ctx, mode, workspace, args).await,
+        Command::T3 { workspace, args } => workspaces::open_app(&ctx, workspace, "t3", args).await,
+        Command::Port { command } => ports::run(&ctx, command).await,
+        Command::Ports { workspace } => ports::overview(&ctx, workspace).await,
+        Command::Resource { command } => resources::run(&ctx, command).await,
+        Command::Resources { workspace } => resources::overview(&ctx, workspace).await,
+        Command::Sim { command } => simulators::run(&ctx, command).await,
         Command::Reconcile {
             workspace,
             all,
@@ -118,36 +105,45 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             stop,
             acknowledge_stopped,
         } => {
-            recovery::run(
-                &paths,
-                workspace,
-                all,
-                crate::recovery::Options {
-                    repair,
-                    stop,
-                    acknowledge_stopped,
-                },
-                cli.json,
-            )
-            .await
+            let options = crate::recovery::ReconcileOptions {
+                repair,
+                stop,
+                acknowledge_stopped,
+            };
+            recovery::run(&ctx, workspace, all, options).await
         }
-        Command::Shell {
-            command: ShellCommand::Init,
-        } => {
-            if cli.json {
-                println!("{}", json!({"script": shell::INIT}));
-            } else {
-                print!("{}", shell::INIT);
-            }
-            Ok(0)
-        }
+        Command::Setup {
+            dry_run,
+            executable,
+        } => service::setup(&ctx, dry_run, executable).await,
+        Command::Daemon { command } => service::run(ctx, command).await,
     }
 }
 
-fn output(json_output: bool, message: &str, value: serde_json::Value) {
-    if json_output {
-        println!("{value}");
-    } else {
-        println!("{message}");
+/// Exit status for a request the daemon declined because capacity is busy.
+pub(crate) const EXIT_BUSY: i32 = 2;
+
+/// One attempt at an operation the daemon may report as temporarily busy.
+pub(crate) enum Attempt<T> {
+    Ready(T),
+    Busy(String),
+}
+
+/// Retry `attempt` about once a second until it succeeds or `wait_seconds`
+/// pass. Returns the last busy message on timeout.
+pub(crate) async fn retry_while_busy<T>(
+    wait_seconds: u64,
+    mut attempt: impl AsyncFnMut() -> Result<Attempt<T>>,
+) -> Result<Result<T, String>> {
+    let deadline = Instant::now() + Duration::from_secs(wait_seconds);
+    loop {
+        match attempt().await? {
+            Attempt::Ready(value) => return Ok(Ok(value)),
+            Attempt::Busy(message) if Instant::now() >= deadline => return Ok(Err(message)),
+            Attempt::Busy(_) => {
+                let remaining = deadline.saturating_duration_since(Instant::now());
+                sleep(Duration::from_secs(1).min(remaining)).await;
+            }
+        }
     }
 }

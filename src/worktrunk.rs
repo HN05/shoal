@@ -1,38 +1,16 @@
-use anyhow::{Context, Result, bail, ensure};
+//! Worktree creation and removal through Worktrunk (`wt`).
+use anyhow::{Context, Result, ensure};
 use serde_json::Value;
-use std::{path::Path, process::Stdio};
+use std::path::Path;
 use tokio::process::Command;
 
-pub async fn run(mut command: Command) -> Result<String> {
-    let program = command
-        .as_std()
-        .get_program()
-        .to_string_lossy()
-        .into_owned();
-    let output = command
-        .stdin(Stdio::null())
-        .kill_on_drop(true)
-        .output()
-        .await
-        .with_context(|| {
-            format!("run {program}; ensure it is installed and on the daemon's PATH")
-        })?;
-    if !output.status.success() {
-        let diagnostic = String::from_utf8_lossy(&output.stderr);
-        // Keep errors within the control protocol frame limit.
-        bail!(
-            "{program} failed ({}): {}",
-            output.status,
-            diagnostic.chars().take(8192).collect::<String>()
-        );
-    }
-    String::from_utf8(output.stdout).context("tool output is not UTF-8")
-}
+use crate::{removal::RemovalResult, subprocess};
 
-pub async fn git(repo: &Path, args: &[&str]) -> Result<String> {
-    let mut command = Command::new("git");
-    command.arg("-C").arg(repo).args(args);
-    run(command).await
+fn command(repository_dir: &Path, worktrunk_config: &Path) -> Command {
+    let mut command = Command::new("wt");
+    command.arg("--config").arg(worktrunk_config);
+    command.arg("-C").arg(repository_dir);
+    command
 }
 
 pub async fn create(
@@ -65,8 +43,8 @@ pub async fn create(
             "--no-hooks",
             "--format=json",
         ]);
-    let result: Value =
-        serde_json::from_str(&run(command).await?).context("invalid Worktrunk creation result")?;
+    let result: Value = serde_json::from_str(&subprocess::output(command).await?)
+        .context("invalid Worktrunk creation result")?;
     ensure!(
         result["action"] == "created",
         "Worktrunk did not create a new workspace: {result}"
@@ -87,14 +65,9 @@ pub async fn remove(
     workspace_dir: &Path,
     force_files: bool,
     delete_branch: bool,
-) -> Result<crate::removal::RemovalResult> {
-    let mut command = Command::new("wt");
-    command
-        .arg("--config")
-        .arg(worktrunk_config)
-        .arg("-C")
-        .arg(repository_dir)
-        .args(["remove", "--foreground", "--no-hooks", "--format=json"]);
+) -> Result<RemovalResult> {
+    let mut command = command(repository_dir, worktrunk_config);
+    command.args(["remove", "--foreground", "--no-hooks", "--format=json"]);
     command.arg(if delete_branch {
         "--force-delete"
     } else {
@@ -104,8 +77,8 @@ pub async fn remove(
         command.arg("--force");
     }
     command.arg("--").arg(workspace_dir);
-    let result: Value =
-        serde_json::from_str(&run(command).await?).context("invalid Worktrunk removal result")?;
+    let result: Value = serde_json::from_str(&subprocess::output(command).await?)
+        .context("invalid Worktrunk removal result")?;
     let result = match result.as_array() {
         Some(entries) => {
             ensure!(
@@ -124,7 +97,7 @@ pub async fn remove(
         .as_str()
         .context("Worktrunk omitted branch outcome")?
         .to_owned();
-    Ok(crate::removal::RemovalResult {
+    Ok(RemovalResult {
         removed: true,
         branch: result["branch"].as_str().map(str::to_owned),
         branch_deleted: branch_outcome == "deleted",

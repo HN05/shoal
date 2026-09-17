@@ -1,37 +1,76 @@
+//! Interactive input: confirmations, free-text prompts, fzf pickers, and the
+//! labels shown in them. Every prompt requires a terminal and can be canceled
+//! with Ctrl-C; non-interactive callers must pass explicit flags instead.
 use std::{
-    io::{self, IsTerminal, Write},
+    io::{self, Write},
+    path::Path,
     process::{Command, Stdio},
 };
 
+use anyhow::{Context as _, Result, bail, ensure};
+
 use crate::{
     client,
+    context::Context,
     model::{Repository, Workspace},
-    paths::Paths,
-    protocol::{Body, Method},
+    removal::{BranchChoice, RemovalCheck},
 };
-use anyhow::{Context, Result, bail, ensure};
 
-pub fn is_interactive(json: bool) -> bool {
-    !json && io::stdin().is_terminal() && io::stderr().is_terminal()
-}
-
-fn interactive(json: bool) -> Result<()> {
+fn require_interactive(ctx: &Context) -> Result<()> {
     ensure!(
-        is_interactive(json),
+        ctx.interactive(),
         "missing argument; pass an explicit target/name in non-interactive mode"
     );
     Ok(())
 }
 
+/// Ctrl-C must cancel a prompt even after the execution wrapper registered its
+/// own SIGINT handlers (which persist for the process lifetime and would
+/// otherwise swallow the keystroke). Restore the default disposition for the
+/// duration of the read, then put the previous handler back.
+struct InterruptCancels(libc::sigaction);
+
+impl InterruptCancels {
+    fn install() -> Self {
+        // SAFETY: plain sigaction calls on this process; the previous action is
+        // captured in full (handler, mask, and flags) and restored on drop.
+        unsafe {
+            let mut default: libc::sigaction = std::mem::zeroed();
+            default.sa_sigaction = libc::SIG_DFL;
+            libc::sigemptyset(&mut default.sa_mask);
+            let mut previous: libc::sigaction = std::mem::zeroed();
+            libc::sigaction(libc::SIGINT, &default, &mut previous);
+            Self(previous)
+        }
+    }
+}
+
+impl Drop for InterruptCancels {
+    fn drop(&mut self) {
+        // SAFETY: restores the action captured in `install`.
+        unsafe {
+            libc::sigaction(libc::SIGINT, &self.0, std::ptr::null_mut());
+        }
+    }
+}
+
+/// Read one answer from the terminal. `None` at end of input.
+fn read_answer(input: &mut impl io::BufRead) -> Result<Option<String>> {
+    let _cancel = InterruptCancels::install();
+    let mut answer = String::new();
+    if input.read_line(&mut answer)? == 0 {
+        return Ok(None);
+    }
+    Ok(Some(answer.trim().to_ascii_lowercase()))
+}
+
 /// Approval stays in the CLI. Piped/JSON callers must opt in explicitly.
-pub fn confirm(action: &str, json: bool, flag: &str) -> Result<bool> {
+pub fn confirm(ctx: &Context, action: &str, flag: &str) -> Result<bool> {
     ensure!(
-        is_interactive(json),
+        ctx.interactive(),
         "{action}; confirmation required in non-interactive mode; pass {flag}"
     );
-    let mut input = io::stdin().lock();
-    let mut output = io::stderr().lock();
-    confirm_with_io(action, &mut input, &mut output)
+    confirm_with_io(action, &mut io::stdin().lock(), &mut io::stderr().lock())
 }
 
 fn confirm_with_io(
@@ -43,14 +82,10 @@ fn confirm_with_io(
     loop {
         write!(output, "Are you sure? [y/N] ")?;
         output.flush()?;
-        let mut answer = String::new();
-        if input.read_line(&mut answer)? == 0 {
-            return Ok(false);
-        }
-        match answer.trim().to_ascii_lowercase().as_str() {
-            "y" | "yes" => return Ok(true),
-            "" | "n" | "no" => return Ok(false),
-            _ => writeln!(output, "Please enter y or n.")?,
+        match read_answer(input)?.as_deref() {
+            None | Some("" | "n" | "no") => return Ok(false),
+            Some("y" | "yes") => return Ok(true),
+            Some(_) => writeln!(output, "Please enter y or n.")?,
         }
     }
 }
@@ -76,26 +111,31 @@ fn setup_failure_with_io(
             "Setup failed: [d]elete workspace, [i]gnore and continue, or [c]ancel (keep for inspection) [c]: "
         )?;
         output.flush()?;
-        let mut answer = String::new();
-        if input.read_line(&mut answer)? == 0 {
-            return Ok(SetupFailureChoice::Cancel);
-        }
-        match answer.trim().to_ascii_lowercase().as_str() {
-            "d" | "delete" => return Ok(SetupFailureChoice::Delete),
-            "i" | "ignore" => return Ok(SetupFailureChoice::Ignore),
-            "" | "c" | "cancel" => return Ok(SetupFailureChoice::Cancel),
-            _ => writeln!(output, "Please enter d, i, or c.")?,
+        match read_answer(input)?.as_deref() {
+            None | Some("" | "c" | "cancel") => return Ok(SetupFailureChoice::Cancel),
+            Some("d" | "delete") => return Ok(SetupFailureChoice::Delete),
+            Some("i" | "ignore") => return Ok(SetupFailureChoice::Ignore),
+            Some(_) => writeln!(output, "Please enter d, i, or c.")?,
         }
     }
 }
 
-pub fn choose_removal(
-    check: &crate::removal::RemovalCheck,
-    json: bool,
-) -> Result<crate::removal::Choice> {
+pub fn input(ctx: &Context, prompt: &str) -> Result<String> {
+    require_interactive(ctx)?;
+    eprint!("{prompt}: ");
+    io::stderr().flush()?;
+    let _cancel = InterruptCancels::install();
+    let mut value = String::new();
+    io::stdin().read_line(&mut value)?;
+    let value = value.trim_end_matches(['\r', '\n']).to_owned();
+    ensure!(!value.is_empty(), "canceled: no value supplied");
+    Ok(value)
+}
+
+pub fn choose_removal(ctx: &Context, check: &RemovalCheck) -> Result<BranchChoice> {
     let warnings = check.warnings();
     ensure!(
-        !json && io::stdin().is_terminal() && io::stderr().is_terminal(),
+        ctx.interactive(),
         "removal requires a branch choice: {}. Pass --yes with --keep-branch or --delete-branch",
         warnings.join("; ")
     );
@@ -105,6 +145,7 @@ pub fn choose_removal(
         eprintln!("  - {warning}");
     }
     let choice = pick(
+        ctx,
         "Branch action> ",
         vec![
             ("abort".into(), "Cancel         Keep everything".into()),
@@ -117,37 +158,41 @@ pub fn choose_removal(
                 "Delete branch  Delete workspace files and branch".into(),
             ),
         ],
-        json,
     )?;
     match choice.as_str() {
-        "keep" => Ok(crate::removal::Choice::KeepBranch),
-        "delete" => Ok(crate::removal::Choice::DeleteBranch),
+        "keep" => Ok(BranchChoice::KeepBranch),
+        "delete" => Ok(BranchChoice::DeleteBranch),
         _ => bail!("removal canceled"),
     }
 }
 
-pub fn input(prompt: &str, json: bool) -> Result<String> {
-    interactive(json)?;
-    eprint!("{prompt}: ");
-    io::stderr().flush()?;
-    let mut value = String::new();
-    io::stdin().read_line(&mut value)?;
-    let value = value.trim_end_matches(['\r', '\n']).to_owned();
-    ensure!(!value.is_empty(), "canceled: no value supplied");
-    Ok(value)
+/// `(id, label)` pairs; the id is returned, only the label is shown.
+pub type Entries = Vec<(String, String)>;
+
+/// Result of an fzf picker with key bindings: which key (empty for Enter) and
+/// which entry id.
+pub struct Picked {
+    pub key: String,
+    pub id: String,
 }
 
-pub fn pick(prompt: &str, entries: Vec<(String, String)>, json: bool) -> Result<String> {
-    Ok(pick_with_actions(prompt, entries, json, None)?.1)
+/// fzf key bindings offered in a picker: the `--expect` key list and header.
+pub struct KeyBindings {
+    pub keys: &'static str,
+    pub header: &'static str,
 }
 
-fn pick_with_actions(
+pub fn pick(ctx: &Context, prompt: &str, entries: Entries) -> Result<String> {
+    Ok(pick_with_keys(ctx, prompt, entries, None)?.id)
+}
+
+pub fn pick_with_keys(
+    ctx: &Context,
     prompt: &str,
-    entries: Vec<(String, String)>,
-    json: bool,
-    actions: Option<(&str, &str)>,
-) -> Result<(String, String)> {
-    interactive(json)?;
+    entries: Entries,
+    bindings: Option<KeyBindings>,
+) -> Result<Picked> {
+    require_interactive(ctx)?;
     ensure!(
         !entries.is_empty(),
         "nothing to select; register a repository with `shoal repo add <path-or-url>` or create a workspace with `shoal add`"
@@ -166,10 +211,10 @@ fn pick_with_actions(
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit());
-    if let Some((keys, header)) = actions {
+    if let Some(bindings) = &bindings {
         command
-            .arg(format!("--expect={keys}"))
-            .args(["--header", header]);
+            .arg(format!("--expect={}", bindings.keys))
+            .args(["--header", bindings.header]);
     }
     let mut picker = command
         .spawn()
@@ -186,7 +231,7 @@ fn pick_with_actions(
     let output = picker.wait_with_output()?;
     ensure!(output.status.success(), "selection canceled");
     let output = String::from_utf8(output.stdout)?;
-    let (action, selected) = if actions.is_some() {
+    let (key, selected) = if bindings.is_some() {
         output.split_once('\n').context("picker omitted action")?
     } else {
         ("", output.as_str())
@@ -201,131 +246,98 @@ fn pick_with_actions(
         entries.iter().any(|entry| entry.0 == id),
         "picker returned an unknown item"
     );
-    Ok((action.to_owned(), id))
-}
-
-pub async fn workspace_menu(paths: &Paths) -> Result<crate::cli::Command> {
-    use crate::cli::Command;
-    let repos = repository_choices(repositories(paths).await?).await?;
-    let mut entries: Vec<_> = workspaces(paths)
-        .await?
-        .into_iter()
-        .map(|w| {
-            let repo = repos
-                .iter()
-                .find(|(id, _)| id == &w.repository_id)
-                .map(|(_, name)| name.as_str())
-                .unwrap_or("unknown repository");
-            (
-                w.id,
-                format!("{}  {repo}  {}  {}", w.name, w.state, w.branch),
-            )
-        })
-        .collect();
-    let scoped = std::env::var_os("SHOAL_SCOPE_TOKEN").is_some();
-    if !scoped {
-        entries.push(("add-workspace".into(), "+ Add workspace".into()));
-    }
-    let (action, id) = pick_with_actions(
-        "Shoal> ",
-        entries,
-        false,
-        Some(if scoped {
-            (
-                "ctrl-e,ctrl-o,ctrl-f",
-                "enter: enter   ctrl-e: execute   ctrl-o: inspect   ctrl-f: diff",
-            )
-        } else {
-            (
-                "ctrl-d,ctrl-e,ctrl-a,ctrl-o,ctrl-s,ctrl-f",
-                "enter: enter   ctrl-d: delete   ctrl-e: execute   ctrl-a: add   ctrl-o: inspect   ctrl-s: stop   ctrl-f: diff",
-            )
-        }),
-    )?;
-    if action == "ctrl-a" || (action.is_empty() && id == "add-workspace") {
-        return Ok(Command::Add {
-            repository: None,
-            name: None,
-            base: None,
-            agent: None,
-            args: vec![],
-        });
-    }
-    ensure!(id != "add-workspace", "select a workspace for this action");
-    let workspace = Some(id);
-    Ok(match action.as_str() {
-        "" => Command::Cd { workspace },
-        "ctrl-d" => Command::Rm {
-            workspace,
-            yes: false,
-            keep_branch: false,
-            delete_branch: false,
-        },
-        "ctrl-o" => Command::Inspect { workspace },
-        "ctrl-s" => Command::Stop { workspace },
-        "ctrl-f" => Command::Diff { workspace },
-        "ctrl-e" => match pick(
-            "Execute> ",
-            [
-                "claude",
-                "codex cli",
-                "codex app",
-                "t3",
-                "custom shell command",
-            ]
-            .into_iter()
-            .map(|s| (s.into(), s.into()))
-            .collect(),
-            false,
-        )?
-        .as_str()
-        {
-            "claude" => Command::Claude {
-                workspace,
-                args: vec![],
-            },
-            mode @ ("codex cli" | "codex app") => Command::Codex {
-                mode: Some(if mode == "codex cli" {
-                    crate::cli::CodexMode::Cli
-                } else {
-                    crate::cli::CodexMode::App
-                }),
-                workspace,
-                args: vec![],
-            },
-            "t3" => Command::T3 {
-                workspace,
-                args: vec![],
-            },
-            _ => Command::Exec {
-                workspace,
-                command: vec![
-                    "sh".into(),
-                    "-c".into(),
-                    input("Shell command", false)?.into(),
-                ],
-            },
-        },
-        _ => bail!("unknown picker action"),
+    Ok(Picked {
+        key: key.to_owned(),
+        id,
     })
 }
 
-pub async fn repositories(paths: &Paths) -> Result<Vec<Repository>> {
-    match client::call(paths, Method::Repositories).await? {
-        Body::Repositories(repos) => Ok(repos),
-        _ => bail!("unexpected repository response"),
+/// How to choose a workspace when the command line names none.
+#[derive(Clone, Copy)]
+pub enum Fallback {
+    /// Use the worktree containing the current directory, else open the picker.
+    CurrentDirectory,
+    /// Always open the picker.
+    Picker,
+}
+
+pub async fn select_workspace(
+    ctx: &Context,
+    explicit: Option<String>,
+    fallback: Fallback,
+) -> Result<String> {
+    if let Some(selector) = explicit {
+        return Ok(selector);
     }
+    let workspaces = client::workspaces(&ctx.paths).await?;
+    if crate::env::is_scoped() {
+        // The daemon filters and authorizes the list, so this stays bound to
+        // the execution even when the process changes its working directory.
+        return workspaces
+            .first()
+            .map(|w| w.id.clone())
+            .context("scoped workspace is unavailable");
+    }
+    if matches!(fallback, Fallback::CurrentDirectory) {
+        let cwd = std::fs::canonicalize(std::env::current_dir()?)?;
+        if let Some(workspace) = Workspace::innermost(&workspaces, &cwd) {
+            return Ok(workspace.id.clone());
+        }
+    }
+    pick_workspace(ctx, workspaces)
+}
+
+/// `Some(workspace)` unless `--all` was passed.
+pub async fn select_workspace_filter(
+    ctx: &Context,
+    explicit: Option<String>,
+    all: bool,
+) -> Result<Option<String>> {
+    if all {
+        return Ok(None);
+    }
+    select_workspace(ctx, explicit, Fallback::CurrentDirectory)
+        .await
+        .map(Some)
+}
+
+/// Always run the picker, including for scoped callers (whose list is filtered).
+pub async fn workspace_picker(ctx: &Context) -> Result<String> {
+    let workspaces = client::workspaces(&ctx.paths)
+        .await?
+        .into_iter()
+        .filter(|w| w.path.is_dir())
+        .collect();
+    pick_workspace(ctx, workspaces)
+}
+
+fn pick_workspace(ctx: &Context, workspaces: Vec<Workspace>) -> Result<String> {
+    pick(
+        ctx,
+        "Workspace> ",
+        workspaces
+            .into_iter()
+            .map(|w| (w.id.clone(), workspace_label(&w)))
+            .collect(),
+    )
+}
+
+pub fn workspace_label(workspace: &Workspace) -> String {
+    format!(
+        "{}  {}  {}  {}",
+        workspace.name,
+        workspace.state,
+        workspace.branch,
+        workspace.path.display()
+    )
 }
 
 pub fn repository_label(repo: &Repository) -> String {
-    format!("{}  {}", repository_name(repo), repo.source)
+    format!("{}  {}", crate::repository::name(repo), repo.source)
 }
 
-fn repository_name(repo: &Repository) -> &str {
-    crate::repository::name(repo)
-}
-
-pub async fn repository_choices(mut repos: Vec<Repository>) -> Result<Vec<(String, String)>> {
+/// Picker entries that stay unambiguous when repositories share a name.
+pub async fn repository_choices(mut repos: Vec<Repository>) -> Result<Entries> {
     for repo in &mut repos {
         if let Some(url) = crate::repository::remote_url(&repo.source).await? {
             repo.source = url;
@@ -334,18 +346,17 @@ pub async fn repository_choices(mut repos: Vec<Repository>) -> Result<Vec<(Strin
     let labels: Vec<_> = repos
         .iter()
         .map(|repo| {
-            let name = repository_name(repo);
-            if repos.iter().filter(|r| repository_name(r) == name).count() == 1 {
+            let name = crate::repository::name(repo);
+            let shared = repos
+                .iter()
+                .filter(|r| crate::repository::name(r) == name)
+                .count()
+                > 1;
+            if !shared {
                 return name.to_owned();
             }
-            let host = repo
-                .source
-                .split_once("://")
-                .map(|(_, rest)| rest.split('/').next().unwrap_or(rest))
-                .or_else(|| repo.source.split_once(':').map(|(host, _)| host))
-                .filter(|host| !host.is_empty());
-            match host {
-                Some(host) => format!("{name} ({})", host.rsplit('@').next().unwrap_or(host)),
+            match crate::repository::host(&repo.source) {
+                Some(host) => format!("{name} ({host})"),
                 None => format!("{name} (local)"),
             }
         })
@@ -365,78 +376,9 @@ pub async fn repository_choices(mut repos: Vec<Repository>) -> Result<Vec<(Strin
         .collect())
 }
 
-pub async fn workspaces(paths: &Paths) -> Result<Vec<Workspace>> {
-    match client::call(paths, Method::List).await? {
-        Body::Workspaces(workspaces) => Ok(workspaces),
-        _ => bail!("unexpected workspace response"),
-    }
-}
-
-pub async fn workspace(
-    paths: &Paths,
-    explicit: Option<String>,
-    current: bool,
-    json: bool,
-) -> Result<String> {
-    if let Some(name) = explicit {
-        return Ok(name);
-    }
-    let workspaces = workspaces(paths).await?;
-    if std::env::var_os("SHOAL_SCOPE_TOKEN").is_some() {
-        // List is filtered and authorized by the daemon, so this remains bound
-        // to the execution even when the process changes its working directory.
-        return workspaces
-            .first()
-            .map(|w| w.id.clone())
-            .context("scoped workspace is unavailable");
-    }
-    if current {
-        let cwd = std::fs::canonicalize(std::env::current_dir()?)?;
-        if let Some(workspace) = workspaces
-            .iter()
-            .filter(|w| std::fs::canonicalize(&w.path).is_ok_and(|root| cwd.starts_with(root)))
-            .max_by_key(|w| w.path.components().count())
-        {
-            return Ok(workspace.id.clone());
-        }
-    }
-    pick_workspace(workspaces, json)
-}
-
-pub async fn workspace_picker(paths: &Paths, json: bool) -> Result<String> {
-    // Always run the picker, including for scoped callers (whose list is filtered).
-    let workspaces = workspaces(paths)
-        .await?
-        .into_iter()
-        .filter(|w| w.path.is_dir())
-        .collect();
-    pick_workspace(workspaces, json)
-}
-
-fn pick_workspace(workspaces: Vec<Workspace>, json: bool) -> Result<String> {
-    pick(
-        "Workspace> ",
-        workspaces
-            .into_iter()
-            .map(|w| {
-                (
-                    w.id,
-                    format!(
-                        "{}  {}  {}  {}",
-                        w.name,
-                        w.state,
-                        w.branch,
-                        w.path.display()
-                    ),
-                )
-            })
-            .collect(),
-        json,
-    )
-}
-
+/// Existing local paths become canonical so the daemon matches them by path.
 pub fn repository_selector(value: String) -> Result<String> {
-    if std::path::Path::new(&value).exists() {
+    if Path::new(&value).exists() {
         Ok(std::fs::canonicalize(&value)?
             .to_str()
             .context("repository path is not UTF-8")?

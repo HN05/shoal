@@ -6,23 +6,23 @@ use clap::{Command, CommandFactory};
 use clap_complete::engine::{ArgValueCompleter, CompletionCandidate};
 
 use crate::{
-    client,
+    client, env,
     model::Workspace,
     paths::Paths,
     protocol::{Body, Method},
 };
 
-pub const ENV: &str = "SHOAL_COMPLETE";
-
+/// What was already typed on the command line when completion was requested.
 #[derive(Default)]
-struct Context {
+struct Typed {
     state: Option<PathBuf>,
     workspace: Option<String>,
     pool: Option<String>,
 }
 
+/// Live values an argument can be completed with.
 #[derive(Clone, Copy)]
-enum Kind {
+enum Target {
     Repositories,
     Workspaces,
     Pools,
@@ -39,14 +39,14 @@ pub fn command() -> Command {
         .skip_while(|s| s != "--")
         .skip(1)
         .collect();
-    let mut context = Context::default();
+    let mut typed = Typed::default();
     if !words.is_empty() {
         if let Ok(matches) = command
             .clone()
             .ignore_errors(true)
             .try_get_matches_from(words)
         {
-            context.state = matches
+            typed.state = matches
                 .try_get_one::<PathBuf>("state_dir")
                 .ok()
                 .flatten()
@@ -55,36 +55,37 @@ pub fn command() -> Command {
             while let Some((_, child)) = leaf.subcommand() {
                 leaf = child;
             }
-            context.workspace = value(leaf, "workspace");
-            context.pool = value(leaf, "pool");
+            typed.workspace = value(leaf, "workspace");
+            typed.pool = value(leaf, "pool");
         }
     }
-    decorate(command, "", Arc::new(context))
+    decorate(command, "", Arc::new(typed))
 }
 
 fn value(matches: &clap::ArgMatches, id: &str) -> Option<String> {
     matches.try_get_one::<String>(id).ok().flatten().cloned()
 }
 
-fn decorate(command: Command, parent: &str, context: Arc<Context>) -> Command {
+/// Attach live completers to the arguments that name daemon-managed objects.
+fn decorate(command: Command, parent: &str, typed: Arc<Typed>) -> Command {
     let name = command.get_name().to_owned();
     command
         .mut_args(|arg| {
-            let kind = match (arg.get_id().as_str(), parent, name.as_str()) {
-                ("repository", _, _) => Some(Kind::Repositories),
-                ("workspace", _, _) => Some(Kind::Workspaces),
-                ("pool", "resource", _) => Some(Kind::Pools),
-                ("resource", "resource", _) => Some(Kind::Members),
-                ("name", "resource", "release") => Some(Kind::ResourceNames),
-                ("name", "port", "reserve") => Some(Kind::Ports),
-                ("name", "port", "release") => Some(Kind::ReservedPorts),
-                ("name", "sim", "release") => Some(Kind::SimNames),
+            let target = match (arg.get_id().as_str(), parent, name.as_str()) {
+                ("repository", _, _) => Some(Target::Repositories),
+                ("workspace", _, _) => Some(Target::Workspaces),
+                ("pool", "resource", _) => Some(Target::Pools),
+                ("resource", "resource", _) => Some(Target::Members),
+                ("name", "resource", "release") => Some(Target::ResourceNames),
+                ("name", "port", "reserve") => Some(Target::Ports),
+                ("name", "port", "release") => Some(Target::ReservedPorts),
+                ("name", "sim", "release") => Some(Target::SimNames),
                 _ => None,
             };
-            if let Some(kind) = kind {
-                let context = context.clone();
+            if let Some(target) = target {
+                let typed = typed.clone();
                 arg.add(ArgValueCompleter::new(move |current: &OsStr| {
-                    context.complete(kind, current)
+                    typed.complete(target, current)
                 }))
             } else if parent == "repo" && name == "add" && arg.get_id() == "source" {
                 arg.value_hint(clap::ValueHint::DirPath)
@@ -92,11 +93,11 @@ fn decorate(command: Command, parent: &str, context: Arc<Context>) -> Command {
                 arg
             }
         })
-        .mut_subcommands(|subcommand| decorate(subcommand, &name, context.clone()))
+        .mut_subcommands(|subcommand| decorate(subcommand, &name, typed.clone()))
 }
 
-impl Context {
-    fn complete(&self, kind: Kind, current: &OsStr) -> Vec<CompletionCandidate> {
+impl Typed {
+    fn complete(&self, target: Target, current: &OsStr) -> Vec<CompletionCandidate> {
         let Some(current) = current.to_str() else {
             return vec![];
         };
@@ -107,7 +108,7 @@ impl Context {
             return vec![];
         };
         let values = runtime.block_on(async {
-            tokio::time::timeout(Duration::from_millis(500), self.candidates(kind, current)).await
+            tokio::time::timeout(Duration::from_millis(500), self.candidates(target, current)).await
         });
         let Ok(Ok(mut values)) = values else {
             return vec![];
@@ -123,54 +124,20 @@ impl Context {
         values
     }
 
-    async fn candidates(&self, kind: Kind, current: &str) -> Result<Vec<CompletionCandidate>> {
+    async fn candidates(&self, target: Target, current: &str) -> Result<Vec<CompletionCandidate>> {
         let state = self
             .state
             .clone()
-            .or_else(|| std::env::var_os("SHOAL_STATE_DIR").map(PathBuf::from));
+            .or_else(|| std::env::var_os(env::STATE_DIR).map(PathBuf::from));
         let paths = Paths::new(state)?;
-        if matches!(kind, Kind::Repositories) {
-            let Body::Repositories(repos) = client::call(&paths, Method::Repositories).await?
-            else {
-                return Ok(vec![]);
-            };
-            let mut candidates = vec![];
-            for repo in &repos {
-                let name = crate::repository::name(repo);
-                let unique = repo.name.is_some()
-                    || repos
-                        .iter()
-                        .filter(|r| crate::repository::name(r) == name)
-                        .count()
-                        == 1;
-                let target = if unique {
-                    name.to_owned()
-                } else {
-                    repo.path.to_string_lossy().into_owned()
-                };
-                candidates
-                    .push(CompletionCandidate::new(target).help(Some(repo.source.clone().into())));
-                if !current.is_empty() {
-                    for alternate in [
-                        &repo.id,
-                        &repo.source,
-                        &repo.path.to_string_lossy().into_owned(),
-                    ] {
-                        if alternate.starts_with(current) {
-                            candidates.push(
-                                CompletionCandidate::new(alternate.clone())
-                                    .help(Some(name.to_owned().into())),
-                            );
-                        }
-                    }
-                }
-            }
-            return Ok(candidates);
+        if matches!(target, Target::Repositories) {
+            return Ok(repository_candidates(
+                &client::repositories(&paths).await?,
+                current,
+            ));
         }
-        let Body::Workspaces(workspaces) = client::call(&paths, Method::List).await? else {
-            return Ok(vec![]);
-        };
-        if matches!(kind, Kind::Workspaces) {
+        let workspaces = client::workspaces(&paths).await?;
+        if matches!(target, Target::Workspaces) {
             return Ok(workspaces
                 .into_iter()
                 .map(|w| CompletionCandidate::new(w.name))
@@ -178,76 +145,106 @@ impl Context {
         }
         let workspace = self
             .workspace(&workspaces)
-            .context("no current workspace")?;
-        let target = workspace.id.clone();
+            .context("no current workspace")?
+            .id
+            .clone();
         let mut names = vec![];
-        match kind {
-            Kind::Pools | Kind::Members | Kind::ResourceNames => {
+        match target {
+            Target::Pools | Target::Members | Target::ResourceNames => {
                 if let Body::ResourceOverview(overview) =
-                    client::call(&paths, Method::ResourceOverview { workspace: target }).await?
+                    client::call(&paths, Method::ResourceOverview { workspace }).await?
                 {
-                    match kind {
-                        Kind::Pools => names.extend(overview.pools.into_iter().map(|p| p.name)),
-                        Kind::Members => names.extend(
+                    match target {
+                        Target::Pools => names.extend(overview.pools.into_iter().map(|p| p.name)),
+                        Target::Members => names.extend(
                             overview
                                 .pools
                                 .into_iter()
                                 .filter(|p| Some(&p.name) == self.pool.as_ref())
                                 .flat_map(|p| p.resources.into_iter().map(|r| r.name)),
                         ),
-                        Kind::ResourceNames => names.extend(
+                        _ => names.extend(
                             overview
                                 .leases
                                 .into_iter()
                                 .filter(|l| Some(&l.pool) == self.pool.as_ref())
                                 .map(|l| l.name),
                         ),
-                        _ => unreachable!(),
                     }
                 }
             }
-            Kind::Ports | Kind::ReservedPorts => {
+            Target::Ports | Target::ReservedPorts => {
                 if let Body::PortOverview(overview) =
-                    client::call(&paths, Method::PortOverview { workspace: target }).await?
+                    client::call(&paths, Method::PortOverview { workspace }).await?
                 {
-                    if matches!(kind, Kind::Ports) {
+                    if matches!(target, Target::Ports) {
                         names.extend(overview.configured.into_keys());
                     }
                     names.extend(overview.reserved.into_iter().map(|p| p.name));
                 }
             }
-            Kind::SimNames => {
-                if let Body::Simulators(simulators) = client::call(
-                    &paths,
-                    Method::SimList {
-                        workspace: Some(target),
-                    },
-                )
-                .await?
-                {
+            Target::SimNames => {
+                let method = Method::SimList {
+                    workspace: Some(workspace),
+                };
+                if let Body::Simulators(simulators) = client::call(&paths, method).await? {
                     names.extend(simulators.into_iter().filter_map(|s| s.lease_name));
                 }
             }
-            _ => unreachable!(),
+            Target::Repositories | Target::Workspaces => unreachable!(),
         }
         Ok(names.into_iter().map(CompletionCandidate::new).collect())
     }
 
+    /// The explicitly typed workspace, else the one containing the current
+    /// directory, else the scoped execution's own workspace.
     fn workspace<'a>(&self, workspaces: &'a [Workspace]) -> Option<&'a Workspace> {
         if let Some(selector) = &self.workspace {
             return workspaces
                 .iter()
                 .find(|w| &w.name == selector || &w.id == selector);
         }
-        let current = std::env::current_dir().ok();
-        workspaces
-            .iter()
-            .filter(|w| {
-                current.as_ref().is_some_and(|cwd| {
-                    std::fs::canonicalize(&w.path).is_ok_and(|path| cwd.starts_with(path))
-                })
-            })
-            .max_by_key(|w| w.path.components().count())
-            .or_else(|| std::env::var_os("SHOAL_SCOPE_TOKEN").and_then(|_| workspaces.first()))
+        std::env::current_dir()
+            .ok()
+            .and_then(|cwd| Workspace::innermost(workspaces, &cwd))
+            .or_else(|| env::is_scoped().then(|| workspaces.first()).flatten())
     }
+}
+
+/// Unique display names, with IDs, sources, and paths as prefix-matched extras.
+fn repository_candidates(
+    repos: &[crate::model::Repository],
+    current: &str,
+) -> Vec<CompletionCandidate> {
+    let mut candidates = vec![];
+    for repo in repos {
+        let name = crate::repository::name(repo);
+        let unique = repo.name.is_some()
+            || repos
+                .iter()
+                .filter(|r| crate::repository::name(r) == name)
+                .count()
+                == 1;
+        let target = if unique {
+            name.to_owned()
+        } else {
+            repo.path.to_string_lossy().into_owned()
+        };
+        candidates.push(CompletionCandidate::new(target).help(Some(repo.source.clone().into())));
+        if !current.is_empty() {
+            for alternate in [
+                &repo.id,
+                &repo.source,
+                &repo.path.to_string_lossy().into_owned(),
+            ] {
+                if alternate.starts_with(current) {
+                    candidates.push(
+                        CompletionCandidate::new(alternate.clone())
+                            .help(Some(name.to_owned().into())),
+                    );
+                }
+            }
+        }
+    }
+    candidates
 }

@@ -4,11 +4,14 @@ mod client;
 mod commands;
 mod completion;
 mod config;
+mod context;
 mod daemon;
 mod default_branch;
 mod diff;
+mod env;
 mod execution;
 mod execution_processes;
+mod git;
 mod merge;
 mod model;
 mod paths;
@@ -30,7 +33,9 @@ mod simctl;
 mod simulators;
 mod state;
 mod store;
+mod subprocess;
 mod ui;
+mod validate;
 mod workspace;
 mod worktrunk;
 
@@ -40,7 +45,7 @@ use serde_json::json;
 
 fn main() {
     clap_complete::CompleteEnv::with_factory(completion::command)
-        .var(completion::ENV)
+        .var(env::COMPLETE)
         .complete();
     run_cli();
 }

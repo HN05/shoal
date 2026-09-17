@@ -56,9 +56,10 @@ pub async fn scan(ids: HashSet<String>) -> Result<Scan> {
     }
     let mut command = tokio::process::Command::new("ps");
     command.args(["-ax", "-o", "pid=,uid="]).env("LC_ALL", "C");
-    let output = tokio::time::timeout(Duration::from_secs(10), crate::worktrunk::run(command))
+    let output = tokio::time::timeout(Duration::from_secs(10), crate::subprocess::output(command))
         .await
         .context("process inventory timed out")??;
+    let marker = format!("{}=", crate::env::EXECUTION_ID).into_bytes();
     tokio::task::spawn_blocking(move || {
         let mut scan = Scan::default();
         for line in output.lines() {
@@ -76,7 +77,7 @@ pub async fn scan(ids: HashSet<String>) -> Result<Scan> {
                 Ok(environment) if !environment.is_empty() => {
                     if let Some(id) = environment
                         .iter()
-                        .find_map(|entry| entry.strip_prefix(b"SHOAL_EXECUTION_ID="))
+                        .find_map(|entry| entry.strip_prefix(marker.as_slice()))
                         .and_then(|id| std::str::from_utf8(id).ok())
                         .filter(|id| ids.contains(*id))
                     {
@@ -269,7 +270,7 @@ pub async fn related(
         .args(["-ax", "-o", "pid=,uid=,pgid=,ppid="])
         .env("LC_ALL", "C");
     let output =
-        tokio::time::timeout(Duration::from_secs(10), crate::worktrunk::run(command)).await??;
+        tokio::time::timeout(Duration::from_secs(10), crate::subprocess::output(command)).await??;
     let mut rows = Vec::new();
     for line in output.lines() {
         let fields: Vec<u32> = line
@@ -362,7 +363,7 @@ mod tests {
                 "--ignored",
             ])
             .stdout(std::process::Stdio::null())
-            .env("SHOAL_EXECUTION_ID", &id)
+            .env(crate::env::EXECUTION_ID, &id)
             .kill_on_drop(true)
             .spawn()
             .unwrap();

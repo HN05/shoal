@@ -1,11 +1,11 @@
 //! Typed lifecycle states; persisted and wire spellings remain stable.
-use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
-use serde::{Deserialize, Serialize};
 
+/// A closed set of lowercase state names with matching serde, `Display`, and
+/// SQLite conversions. Unknown values are rejected everywhere.
 macro_rules! states {
-    ($name:ident { $($variant:ident => $wire:literal),+ $(,)? }) => {
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-        pub enum $name { $(#[serde(rename = $wire)] $variant),+ }
+    ($name:ident { $($(#[$meta:meta])* $variant:ident => $wire:literal),+ $(,)? }) => {
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, ::serde::Serialize, ::serde::Deserialize)]
+        pub enum $name { $($(#[$meta])* #[serde(rename = $wire)] $variant),+ }
 
         impl $name {
             pub const fn as_str(self) -> &'static str {
@@ -15,20 +15,23 @@ macro_rules! states {
         impl std::fmt::Display for $name {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { f.write_str(self.as_str()) }
         }
-        impl ToSql for $name {
-            fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> { Ok(ToSqlOutput::Borrowed(ValueRef::Text(self.as_str().as_bytes()))) }
+        impl ::rusqlite::types::ToSql for $name {
+            fn to_sql(&self) -> ::rusqlite::Result<::rusqlite::types::ToSqlOutput<'_>> {
+                Ok(::rusqlite::types::ToSqlOutput::Borrowed(::rusqlite::types::ValueRef::Text(self.as_str().as_bytes())))
+            }
         }
-        impl FromSql for $name {
-            fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        impl ::rusqlite::types::FromSql for $name {
+            fn column_result(value: ::rusqlite::types::ValueRef<'_>) -> ::rusqlite::types::FromSqlResult<Self> {
                 match value.as_str()? {
                     $($wire => Ok(Self::$variant),)+
-                    other => Err(FromSqlError::Other(Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData,
+                    other => Err(::rusqlite::types::FromSqlError::Other(Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData,
                         format!("invalid {}: {other}", stringify!($name)))))),
                 }
             }
         }
     };
 }
+pub(crate) use states;
 
 states!(WorkspaceState {
     Preparing => "preparing",

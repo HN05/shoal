@@ -1,31 +1,41 @@
+//! Cooperative caller scope. The daemon validates every scoped request,
+//! including direct protocol clients; this is not a security boundary against
+//! the OS user.
 use crate::{protocol::Method, workspace::Manager};
 use anyhow::{Result, bail, ensure};
 
-/// Cooperative caller scope. The daemon validates every scoped request, including
-/// direct protocol clients; this is not a security boundary against the OS user.
+/// The execution a scope token belongs to.
+#[derive(Debug, Clone)]
+pub struct Caller {
+    pub execution_id: String,
+    pub workspace_id: String,
+}
+
+/// Resolve `token` and confine `method` to the caller's own workspace. Optional
+/// workspace filters default to it; other targets must already name it.
 pub async fn authorize(
     manager: &Manager,
     token: Option<&str>,
     method: &mut Method,
-) -> Result<Option<String>> {
+) -> Result<Option<Caller>> {
     let Some(token) = token else {
         return Ok(None);
     };
-    let owner = manager
-        .scopes
-        .lock()
+    let caller = manager
+        .caller(token)
         .await
-        .get(token)
-        .map(|(_, owner)| owner.clone())
         .ok_or_else(|| anyhow::anyhow!("expired or unknown workspace scope"))?;
+    let owner = &caller.workspace_id;
     let target = match method {
-        Method::Status | Method::List | Method::Repositories | Method::SimCatalog => None,
+        Method::Status | Method::ListWorkspaces | Method::ListRepositories | Method::SimCatalog => {
+            None
+        }
         Method::ResourceAcquire { workspace, .. }
         | Method::ResourceRelease { workspace, .. }
         | Method::ResourceOverview { workspace }
         | Method::SimAcquire { workspace, .. }
         | Method::SimRelease { workspace, .. }
-        | Method::Inspect { workspace }
+        | Method::InspectWorkspace { workspace }
         | Method::DiffBase { workspace }
         | Method::PullDefaultBranch { workspace }
         | Method::Execute { workspace, .. }
@@ -33,7 +43,7 @@ pub async fn authorize(
         | Method::ReleasePort { workspace, .. }
         | Method::PortOverview { workspace } => Some(workspace),
         Method::ResourceList { workspace }
-        | Method::Ports { workspace }
+        | Method::ListPorts { workspace }
         | Method::SimList { workspace }
         | Method::SimHistory { workspace, .. } => {
             Some(workspace.get_or_insert_with(|| owner.clone()))
@@ -44,10 +54,10 @@ pub async fn authorize(
     };
     if let Some(target) = target {
         ensure!(
-            manager.get(target.clone()).await?.id == owner,
+            manager.workspace(target).await?.id == *owner,
             "workspace processes cannot access another worktree"
         );
         *target = owner.clone();
     }
-    Ok(Some(owner))
+    Ok(Some(caller))
 }

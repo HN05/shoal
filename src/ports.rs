@@ -1,35 +1,42 @@
+//! Cooperative TCP port reservations owned by a worktree.
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{TransactionBehavior, params};
+use serde::{Deserialize, Serialize};
 use std::{
     io,
-    net::{Ipv4Addr, Ipv6Addr},
+    net::{Ipv4Addr, Ipv6Addr, SocketAddr},
 };
 
 use crate::{
+    env,
     model::{PortOverview, PortReservation, PortSuggestion},
     repo_config::ConflictPolicy,
-    store,
+    store, validate,
     workspace::Manager,
 };
 
-#[derive(Default)]
-pub struct PortOptions {
-    pub requested: Option<u16>,
+/// Caller overrides for a named port; unset fields fall back to the
+/// repository's port definition.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct PortRequest {
+    pub port: Option<u16>,
     pub env_var: Option<String>,
     pub reason: Option<String>,
     pub on_conflict: Option<ConflictPolicy>,
 }
+
 pub enum ReserveOutcome {
     Reserved(PortReservation),
+    /// The preferred port is taken and policy asks the caller to confirm.
     Suggested(PortSuggestion),
 }
 
+/// Probe the port on both wildcard addresses without SO_REUSEADDR: a standard
+/// TcpListener enables it and can miss a loopback listener on macOS.
 fn available(port: u16) -> Result<bool> {
-    // No SO_REUSEADDR: a standard TcpListener enables it and can miss a
-    // loopback listener when probing a wildcard address on macOS.
     for address in [
-        std::net::SocketAddr::from((Ipv4Addr::UNSPECIFIED, port)),
-        std::net::SocketAddr::from((Ipv6Addr::UNSPECIFIED, port)),
+        SocketAddr::from((Ipv4Addr::UNSPECIFIED, port)),
+        SocketAddr::from((Ipv6Addr::UNSPECIFIED, port)),
     ] {
         let probe = || -> io::Result<()> {
             let domain = if address.is_ipv4() {
@@ -69,20 +76,40 @@ fn available(port: u16) -> Result<bool> {
     Ok(true)
 }
 
+/// `SHOAL_PORT_<NAME>`, the variable a reservation exports unless overridden.
+fn default_env_var(name: &str) -> String {
+    format!(
+        "{}{}",
+        env::PORT_PREFIX,
+        name.replace('-', "_").to_ascii_uppercase()
+    )
+}
+
+fn validate_env_var(env_var: &str, default: &str) -> Result<()> {
+    ensure!(
+        !env_var.is_empty()
+            && (env_var.as_bytes()[0].is_ascii_uppercase() || env_var.starts_with('_'))
+            && env_var
+                .bytes()
+                .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == b'_'),
+        "invalid port environment variable"
+    );
+    ensure!(
+        !env::PROTECTED.contains(&env_var)
+            && (!env_var.starts_with("SHOAL_") || env_var == default),
+        "port environment variable conflicts with the execution environment"
+    );
+    Ok(())
+}
+
 impl Manager {
     pub async fn reserve_port(
         &self,
-        selector: String,
+        selector: &str,
         name: String,
-        options: PortOptions,
+        request: PortRequest,
     ) -> Result<ReserveOutcome> {
-        let PortOptions {
-            requested: explicit_port,
-            env_var: explicit_env,
-            reason: explicit_reason,
-            on_conflict,
-        } = options;
-        let workspace = self.get(selector).await?;
+        let workspace = self.workspace(selector).await?;
         let config = self.workspace_config(&workspace).await?;
         let definition = config
             .ports
@@ -90,68 +117,42 @@ impl Manager {
             .get(&name)
             .cloned()
             .unwrap_or_default();
-        let requested = explicit_port.or(definition.port);
-        let env_var = explicit_env.clone().or(definition.env);
-        let reason = explicit_reason.clone().or(definition.reason);
-        let policy = on_conflict
+        let preferred = request.port.or(definition.port);
+        let env_var = request.env_var.clone().or(definition.env);
+        let reason = request.reason.clone().or(definition.reason);
+        let policy = request
+            .on_conflict
             .or(definition.on_conflict)
             .unwrap_or(config.ports.on_conflict);
-        ensure!(
-            !name.is_empty()
-                && name.len() <= 64
-                && name.as_bytes()[0].is_ascii_lowercase()
-                && name.bytes().all(|c| c.is_ascii_lowercase()
-                    || c.is_ascii_digit()
-                    || c == b'_'
-                    || c == b'-'),
-            "port names must start with a lowercase letter and contain only lowercase letters, digits, _ or - (max 64)"
-        );
-        ensure!(requested != Some(0), "port zero cannot be reserved");
-        ensure!(
-            reason.as_ref().is_none_or(|text| !text.trim().is_empty()
-                && text.len() <= 256
-                && !text.contains(['\n', '\r'])),
-            "port reason must be a nonempty single line (max 256 bytes)"
-        );
-        let default_env = format!("SHOAL_PORT_{}", name.replace('-', "_").to_ascii_uppercase());
-        if let Some(env) = &env_var {
-            ensure!(
-                !env.is_empty()
-                    && (env.as_bytes()[0].is_ascii_uppercase() || env.starts_with('_'))
-                    && env
-                        .bytes()
-                        .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == b'_'),
-                "invalid port environment variable"
-            );
-            ensure!(
-                !matches!(env.as_str(), "HOME" | "PATH" | "SHELL" | "TMPDIR")
-                    && (!env.starts_with("SHOAL_") || env == &default_env),
-                "port environment variable conflicts with the execution environment"
-            );
+        validate::lowercase_name("port", &name)?;
+        ensure!(preferred != Some(0), "port zero cannot be reserved");
+        validate::reason("port", reason.as_deref())?;
+        let default_env = default_env_var(&name);
+        if let Some(env_var) = &env_var {
+            validate_env_var(env_var, &default_env)?;
         }
         self.touch(&workspace.id).await;
         let range = self.config.ports;
         self.store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
-                let ready: bool = tx.query_row(
-                    "SELECT state='ready' FROM workspaces WHERE id=?1",
-                    [&workspace.id],
-                    |row| row.get(0),
-                )?;
-                ensure!(ready, "workspace is not ready");
+                store::require_ready(&tx, &workspace.id)?;
                 let existing = store::ports(&tx, Some(&workspace.id))?;
                 if let Some(reservation) = existing.iter().find(|p| p.name == name) {
                     ensure!(
-                        explicit_port.is_none_or(|port| port == reservation.port)
-                            && explicit_env
+                        request.port.is_none_or(|port| port == reservation.port)
+                            && request
+                                .env_var
                                 .as_ref()
                                 .is_none_or(|env| env == &reservation.env_var),
                         "port name already reserved with different settings; release it first"
                     );
                     let mut reservation = reservation.clone();
-                    if let Some(reason) = explicit_reason {
-                        tx.execute("UPDATE ports SET reason=?3 WHERE workspace_id=?1 AND name=?2", params![workspace.id,name,reason])?;
+                    if let Some(reason) = request.reason {
+                        tx.execute(
+                            "UPDATE ports SET reason=?3 WHERE workspace_id=?1 AND name=?2",
+                            params![workspace.id, name, reason],
+                        )?;
                         reservation.reason = Some(reason);
                     }
                     tx.commit()?;
@@ -163,24 +164,40 @@ impl Manager {
                     "environment variable already assigned to another port"
                 );
                 let reserved = store::ports(&tx, None)?;
-                let free = |port| -> Result<bool> { Ok(!reserved.iter().any(|p| p.port == port) && available(port)?) };
-                let preferred_free = match requested { Some(port) => free(port)?, None => false };
-                let port = if preferred_free {
-                    requested.unwrap()
-                } else {
-                    let mut selected = None;
-                    for port in range.start..=range.end {
-                        if free(port)? { selected = Some(port); break; }
-                    }
-                    let Some(port) = selected else { bail!("no available TCP ports in {}..={}", range.start, range.end); };
-                    if let Some(requested_port) = requested {
-                        if matches!(policy, ConflictPolicy::Suggest) {
-                            return Ok(ReserveOutcome::Suggested(PortSuggestion {
-                                workspace_id: workspace.id, name, requested_port, suggested_port: port, env_var, reason,
-                            }));
+                let free = |port| -> Result<bool> {
+                    Ok(!reserved.iter().any(|p| p.port == port) && available(port)?)
+                };
+                let port = match preferred {
+                    Some(port) if free(port)? => port,
+                    _ => {
+                        let mut selected = None;
+                        for port in range.start..=range.end {
+                            if free(port)? {
+                                selected = Some(port);
+                                break;
+                            }
                         }
+                        let Some(port) = selected else {
+                            bail!(
+                                "no available TCP ports in {}..={}",
+                                range.start,
+                                range.end
+                            );
+                        };
+                        if let Some(requested_port) = preferred {
+                            if matches!(policy, ConflictPolicy::Suggest) {
+                                return Ok(ReserveOutcome::Suggested(PortSuggestion {
+                                    workspace_id: workspace.id,
+                                    name,
+                                    requested_port,
+                                    suggested_port: port,
+                                    env_var,
+                                    reason,
+                                }));
+                            }
+                        }
+                        port
                     }
-                    port
                 };
                 tx.execute(
                     "INSERT INTO ports (workspace_id,name,port,env_var,reason) VALUES (?1,?2,?3,?4,?5)",
@@ -198,10 +215,10 @@ impl Manager {
             .await
     }
 
-    pub async fn port_overview(&self, selector: String) -> Result<PortOverview> {
-        let workspace = self.get(selector).await?;
+    pub async fn port_overview(&self, selector: &str) -> Result<PortOverview> {
+        let workspace = self.workspace(selector).await?;
         let config = self.workspace_config(&workspace).await?;
-        let reserved = self.list_ports(Some(workspace.id.clone())).await?;
+        let reserved = self.list_ports(Some(&workspace.id)).await?;
         Ok(PortOverview {
             workspace,
             reserved,
@@ -210,28 +227,20 @@ impl Manager {
         })
     }
 
-    pub async fn list_ports(&self, selector: Option<String>) -> Result<Vec<PortReservation>> {
-        let workspace_id = match selector {
-            Some(selector) => Some(self.get(selector).await?.id),
-            None => None,
-        };
+    pub async fn list_ports(&self, selector: Option<&str>) -> Result<Vec<PortReservation>> {
+        let workspace_id = self.workspace_filter(selector).await?;
         self.store
             .run(move |db| store::ports(db, workspace_id.as_deref()))
             .await
     }
 
-    pub async fn release_port(&self, selector: String, name: String) -> Result<()> {
-        let workspace = self.get(selector).await?;
+    pub async fn release_port(&self, selector: &str, name: String) -> Result<()> {
+        let workspace = self.workspace(selector).await?;
         self.touch(&workspace.id).await;
         self.store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
-                let ready: bool = tx.query_row(
-                    "SELECT state='ready' FROM workspaces WHERE id=?1",
-                    [&workspace.id],
-                    |row| row.get(0),
-                )?;
-                ensure!(ready, "workspace is not ready");
+                store::require_ready(&tx, &workspace.id)?;
                 ensure!(
                     tx.execute(
                         "DELETE FROM ports WHERE workspace_id=?1 AND name=?2",

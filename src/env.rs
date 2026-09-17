@@ -1,0 +1,44 @@
+//! Environment variables Shoal reads or exports. Every `SHOAL_*` name lives
+//! here so wrapper, daemon, and process scanning agree on the contract.
+
+/// Overrides the state directory; also isolates the daemon socket.
+pub const STATE_DIR: &str = "SHOAL_STATE_DIR";
+/// Cooperative scope token given to processes launched through the wrapper.
+pub const SCOPE_TOKEN: &str = "SHOAL_SCOPE_TOKEN";
+/// Execution marker used to discover owned processes during recovery.
+pub const EXECUTION_ID: &str = "SHOAL_EXECUTION_ID";
+pub const WORKSPACE_ID: &str = "SHOAL_WORKSPACE_ID";
+/// Legacy alias of [`WORKSPACE_ID`] kept for existing agent integrations.
+pub const RUN_ID: &str = "SHOAL_RUN_ID";
+pub const WORKSPACE_NAME: &str = "SHOAL_WORKSPACE";
+/// Colon-separated names of the port variables exported to the command.
+pub const RESERVED_PORT_ENV: &str = "SHOAL_RESERVED_PORT_ENV";
+/// Prefix of the default environment variable for a named port reservation.
+pub const PORT_PREFIX: &str = "SHOAL_PORT_";
+/// File the shell wrapper reads to change directory after the command exits.
+pub const SHELL_DIRECTIVE: &str = "SHOAL_SHELL_DIRECTIVE";
+/// The shell wrapper's `OLDPWD`, passed explicitly because it is shell-local.
+pub const PREVIOUS_DIR: &str = "SHOAL_PREVIOUS_DIR";
+/// clap dynamic-completion trigger variable.
+pub const COMPLETE: &str = "SHOAL_COMPLETE";
+
+/// Variables a reserved port may never shadow when exported to a command.
+pub const PROTECTED: [&str; 4] = ["HOME", "PATH", "SHELL", "TMPDIR"];
+
+/// Whether an inherited variable named in [`RESERVED_PORT_ENV`] may be dropped
+/// before launching a command: never the protected set or Shoal's own
+/// variables other than port exports.
+pub fn is_port_export(name: &str) -> bool {
+    !name.is_empty()
+        && !PROTECTED.contains(&name)
+        && (!name.starts_with("SHOAL_") || name.starts_with(PORT_PREFIX))
+}
+
+pub fn scope_token() -> Option<String> {
+    std::env::var(SCOPE_TOKEN).ok()
+}
+
+/// True when this process runs inside a tracked workspace execution.
+pub fn is_scoped() -> bool {
+    std::env::var_os(SCOPE_TOKEN).is_some()
+}

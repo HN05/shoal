@@ -1,3 +1,6 @@
+//! Tracked execution wrapper. The CLI process launches the command inside the
+//! workspace, hands it the terminal, forwards daemon stop requests, and reports
+//! completion. The daemon never touches terminal I/O.
 use anyhow::{Context, Result, bail, ensure};
 use std::{
     ffi::OsString,
@@ -14,52 +17,59 @@ use tokio::{
 };
 
 use crate::{
+    client, env,
+    model::ExecutionPlan,
     paths::Paths,
-    protocol::{self, Body, Control, ExecutionEvent, Method, Request, Response},
+    process_identity,
+    protocol::{self, Body, Control, ExecutionEvent, Method},
 };
+
+/// Exit status as a shell would report it: the code, or 128 + signal.
+pub fn exit_code(status: ExitStatus) -> i32 {
+    status
+        .code()
+        .unwrap_or_else(|| 128 + status.signal().unwrap_or(1))
+}
+
+#[derive(Clone, Copy)]
+enum Mode {
+    /// An arbitrary command chosen by the caller.
+    Command,
+    /// The repository's configured setup command; `json` keeps stdout clean.
+    Setup { json: bool },
+}
+
+impl Mode {
+    fn is_setup(self) -> bool {
+        matches!(self, Mode::Setup { .. })
+    }
+}
 
 pub async fn run(paths: &Paths, workspace: String, command: Vec<OsString>) -> Result<i32> {
     ensure!(!command.is_empty(), "a command is required after --");
-    run_command(paths, workspace, command, false, false).await
+    run_tracked(paths, workspace, command, Mode::Command).await
 }
 
 pub async fn prepare(paths: &Paths, workspace: String, json: bool) -> Result<i32> {
-    run_command(paths, workspace, vec![], true, json).await
+    run_tracked(paths, workspace, vec![], Mode::Setup { json }).await
 }
 
-async fn run_command(
+async fn run_tracked(
     paths: &Paths,
     workspace: String,
     command: Vec<OsString>,
-    setup: bool,
-    json: bool,
+    mode: Mode,
 ) -> Result<i32> {
-    let wrapper = crate::process_identity::capture(std::process::id())?
+    let wrapper = process_identity::capture(std::process::id())?
         .context("cannot identify execution wrapper")?;
-    let method = if setup {
-        Method::Prepare { workspace, wrapper }
-    } else {
-        Method::Execute { workspace, wrapper }
+    let method = match mode {
+        Mode::Setup { .. } => Method::Prepare { workspace, wrapper },
+        Mode::Command => Method::Execute { workspace, wrapper },
     };
-    let mut stream = UnixStream::connect(&paths.socket)
+    let (mut stream, body) = timeout(Duration::from_secs(5), client::open(paths, method))
         .await
-        .context("connect to daemon")?;
-    protocol::write(
-        &mut stream,
-        &Request {
-            scope: std::env::var("SHOAL_SCOPE_TOKEN").ok(),
-            protocol: protocol::VERSION,
-            id: 1,
-            method,
-        },
-    )
-    .await?;
-    let response: Response = timeout(Duration::from_secs(5), protocol::read(&mut stream)).await??;
-    ensure!(
-        response.protocol == protocol::VERSION && response.id == 1,
-        "daemon protocol mismatch"
-    );
-    let plan = match response.body {
+        .context("daemon did not start the execution in time")??;
+    let plan = match body {
         Body::Execution(plan) => plan,
         Body::Error { message, .. } => bail!("{message}"),
         _ => bail!("unexpected execution response"),
@@ -68,82 +78,12 @@ async fn run_command(
         Some(path) => vec![path.as_os_str().to_owned()],
         None => command,
     };
-    let result = async {
-        let mut terminate = signal(SignalKind::terminate())?;
-        let mut interrupt = signal(SignalKind::interrupt())?;
-        let mut quit = signal(SignalKind::quit())?;
-        let mut process = Command::new(&command[0]);
-        // Refresh inherited port exports, including reservations released since launch.
-        for (name, _) in std::env::vars_os() {
-            if name.to_str().is_some_and(|name| name.starts_with("SHOAL_PORT_")) {
-                process.env_remove(name);
-            }
-        }
-        if let Ok(names) = std::env::var("SHOAL_RESERVED_PORT_ENV") {
-            for name in names.split(':').filter(|name| !name.is_empty()
-                && !matches!(*name, "HOME" | "PATH" | "SHELL" | "TMPDIR")
-                && (!name.starts_with("SHOAL_") || name.starts_with("SHOAL_PORT_"))) {
-                process.env_remove(name);
-            }
-        }
-        let mut child = process.args(&command[1..])
-            .current_dir(&plan.workspace.path)
-            .env("SHOAL_SCOPE_TOKEN", &plan.scope_token)
-            .env("SHOAL_EXECUTION_ID", &plan.id)
-            .env("SHOAL_WORKSPACE_ID", &plan.workspace.id)
-            .env("SHOAL_RUN_ID", &plan.workspace.id)
-            .env("SHOAL_WORKSPACE", &plan.workspace.name)
-            .env("SHOAL_STATE_DIR", &paths.state)
-            .envs(plan.ports.iter().map(|port| (&port.env_var, port.port.to_string())))
-            .env("SHOAL_RESERVED_PORT_ENV", plan.ports.iter().map(|port| port.env_var.as_str()).collect::<Vec<_>>().join(":"))
-            .env_remove("SHOAL_SHELL_DIRECTIVE")
-            .stdin(if setup && json { Stdio::null() } else { Stdio::inherit() }).stdout(if setup && json { Stdio::from(std::io::stderr()) } else { Stdio::inherit() }).stderr(Stdio::inherit())
-            .process_group(0).kill_on_drop(true).spawn().context("launch workspace command")?;
-        let group = ProcessGroup(child.id().context("child PID unavailable")? as i32);
-        protocol::write(&mut stream, &ExecutionEvent::Started {
-            child: crate::process_identity::capture(group.0 as u32)?, group_id: group.0 as u32,
-        }).await?;
-        ensure!(matches!(timeout(Duration::from_secs(10), protocol::read::<Control>(&mut stream)).await??,
-            Control::Started), "daemon did not acknowledge process registration");
-        let _terminal = Terminal::give_to(group.0)?;
-        group.send(libc::SIGCONT);
-        let control = protocol::read::<Control>(&mut stream);
-        tokio::pin!(control);
-        let status = tokio::select! {
-            status = child.wait() => status?,
-            result = &mut control => {
-                let status = stop(&mut child, &group, libc::SIGTERM).await?;
-                result.context("daemon disconnected; command stopped, execution requires reconciliation")?;
-                status
-            }
-            _ = terminate.recv() => stop(&mut child, &group, libc::SIGTERM).await?,
-            _ = interrupt.recv() => stop(&mut child, &group, libc::SIGINT).await?,
-            _ = quit.recv() => stop(&mut child, &group, libc::SIGQUIT).await?,
-        };
-        // A command owns its process group; descendants do not outlive its lease.
-        drop(group);
-        Ok::<i32, anyhow::Error>(status.code().unwrap_or_else(|| 128 + status.signal().unwrap_or(1)))
-    }.await;
+    let result = supervise(&mut stream, paths, &plan, &command, mode).await;
     let code = result.as_ref().copied().unwrap_or(1);
     // Report only after child/process-group cleanup. A lost connection never
     // grants the daemon permission to assume processes stopped.
-    let report = timeout(Duration::from_secs(20), async {
-        protocol::write(&mut stream, &ExecutionEvent::Finished { exit_code: code }).await?;
-        loop {
-            if let Control::Finished { complete } = protocol::read::<Control>(&mut stream).await? {
-                if !complete {
-                    eprintln!("warning: execution has surviving or unverified processes; run shoal reconcile to inspect it");
-                    ensure!(!setup, "setup has surviving or unverified processes");
-                }
-                break;
-            }
-        }
-        Ok::<(), anyhow::Error>(())
-    })
-    .await
-    .context("execution completion acknowledgement timed out")
-    .and_then(|r| r);
-    if setup {
+    let report = report_completion(&mut stream, code, mode).await;
+    if mode.is_setup() {
         report?;
     } else if let Err(error) = report {
         eprintln!("warning: unable to report execution completion: {error:#}");
@@ -151,8 +91,141 @@ async fn run_command(
     result
 }
 
+/// Launch the command, register its process group, and wait for it to exit or
+/// for a stop request.
+async fn supervise(
+    stream: &mut UnixStream,
+    paths: &Paths,
+    plan: &ExecutionPlan,
+    command: &[OsString],
+    mode: Mode,
+) -> Result<i32> {
+    let mut terminate = signal(SignalKind::terminate())?;
+    let mut interrupt = signal(SignalKind::interrupt())?;
+    let mut quit = signal(SignalKind::quit())?;
+    let mut child = spawn(paths, plan, command, mode)?;
+    let group = ProcessGroup(child.id().context("child PID unavailable")? as i32);
+    protocol::write(
+        stream,
+        &ExecutionEvent::Started {
+            child: process_identity::capture(group.pid())?,
+            group_id: group.pid(),
+        },
+    )
+    .await?;
+    let acknowledged =
+        timeout(Duration::from_secs(10), protocol::read::<Control>(stream)).await??;
+    ensure!(
+        matches!(acknowledged, Control::Started),
+        "daemon did not acknowledge process registration"
+    );
+    let _terminal = Terminal::give_to(group.0)?;
+    // The child may have been stopped by SIGTTIN/SIGTTOU before it became the
+    // foreground group.
+    group.send(libc::SIGCONT);
+    let control = protocol::read::<Control>(stream);
+    tokio::pin!(control);
+    let status = tokio::select! {
+        status = child.wait() => status?,
+        result = &mut control => {
+            let status = stop(&mut child, &group, libc::SIGTERM).await?;
+            result.context("daemon disconnected; command stopped, execution requires reconciliation")?;
+            status
+        }
+        _ = terminate.recv() => stop(&mut child, &group, libc::SIGTERM).await?,
+        _ = interrupt.recv() => stop(&mut child, &group, libc::SIGINT).await?,
+        _ = quit.recv() => stop(&mut child, &group, libc::SIGQUIT).await?,
+    };
+    // A command owns its process group; descendants do not outlive its lease.
+    drop(group);
+    Ok(exit_code(status))
+}
+
+fn spawn(paths: &Paths, plan: &ExecutionPlan, command: &[OsString], mode: Mode) -> Result<Child> {
+    let mut process = Command::new(&command[0]);
+    process
+        .args(&command[1..])
+        .current_dir(&plan.workspace.path);
+    configure_environment(&mut process, paths, plan);
+    let quiet = matches!(mode, Mode::Setup { json: true });
+    process
+        .stdin(if quiet {
+            Stdio::null()
+        } else {
+            Stdio::inherit()
+        })
+        .stdout(if quiet {
+            Stdio::from(std::io::stderr())
+        } else {
+            Stdio::inherit()
+        })
+        .stderr(Stdio::inherit())
+        .process_group(0)
+        .kill_on_drop(true)
+        .spawn()
+        .context("launch workspace command")
+}
+
+/// Export the execution's identity and port reservations, dropping stale port
+/// variables inherited from an enclosing execution.
+fn configure_environment(process: &mut Command, paths: &Paths, plan: &ExecutionPlan) {
+    for (name, _) in std::env::vars_os() {
+        if name
+            .to_str()
+            .is_some_and(|name| name.starts_with(env::PORT_PREFIX))
+        {
+            process.env_remove(name);
+        }
+    }
+    if let Ok(names) = std::env::var(env::RESERVED_PORT_ENV) {
+        for name in names.split(':').filter(|name| env::is_port_export(name)) {
+            process.env_remove(name);
+        }
+    }
+    let exported: Vec<_> = plan.ports.iter().map(|p| p.env_var.as_str()).collect();
+    process
+        .env(env::SCOPE_TOKEN, &plan.scope_token)
+        .env(env::EXECUTION_ID, &plan.id)
+        .env(env::WORKSPACE_ID, &plan.workspace.id)
+        .env(env::RUN_ID, &plan.workspace.id)
+        .env(env::WORKSPACE_NAME, &plan.workspace.name)
+        .env(env::STATE_DIR, &paths.state)
+        .envs(plan.ports.iter().map(|p| (&p.env_var, p.port.to_string())))
+        .env(env::RESERVED_PORT_ENV, exported.join(":"))
+        .env_remove(env::SHELL_DIRECTIVE);
+}
+
+async fn report_completion(stream: &mut UnixStream, code: i32, mode: Mode) -> Result<()> {
+    let exchange = async {
+        protocol::write(stream, &ExecutionEvent::Finished { exit_code: code }).await?;
+        loop {
+            if let Control::Finished { complete } = protocol::read::<Control>(stream).await? {
+                if !complete {
+                    eprintln!(
+                        "warning: execution has surviving or unverified processes; run shoal reconcile to inspect it"
+                    );
+                    ensure!(
+                        !mode.is_setup(),
+                        "setup has surviving or unverified processes"
+                    );
+                }
+                return Ok(());
+            }
+        }
+    };
+    timeout(Duration::from_secs(20), exchange)
+        .await
+        .context("execution completion acknowledgement timed out")?
+}
+
+/// The command's process group; killed when dropped.
 struct ProcessGroup(i32);
+
 impl ProcessGroup {
+    fn pid(&self) -> u32 {
+        self.0 as u32
+    }
+
     fn send(&self, signal: i32) {
         // SAFETY: this is the process group of the child just spawned here.
         unsafe {
@@ -160,6 +233,7 @@ impl ProcessGroup {
         }
     }
 }
+
 impl Drop for ProcessGroup {
     fn drop(&mut self) {
         self.send(libc::SIGKILL);
@@ -177,10 +251,12 @@ async fn stop(child: &mut Child, group: &ProcessGroup, signal: i32) -> Result<Ex
     }
 }
 
+/// Foreground terminal ownership lent to the command; restored when dropped.
 struct Terminal {
     previous_group: i32,
     previous_handler: libc::sighandler_t,
 }
+
 impl Terminal {
     fn give_to(group: i32) -> Result<Option<Self>> {
         if !std::io::stdin().is_terminal() {
@@ -206,6 +282,7 @@ impl Terminal {
         Ok(Some(terminal))
     }
 }
+
 impl Drop for Terminal {
     fn drop(&mut self) {
         // SAFETY: restore the foreground group and handler captured above.

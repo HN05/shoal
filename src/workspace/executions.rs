@@ -3,8 +3,9 @@
 use super::Manager;
 use crate::{
     execution_processes::Processes,
-    model::ExecutionPlan,
-    process_identity as process,
+    model::{Execution, ExecutionPlan},
+    process_identity::{self as process, Identity},
+    scope::Caller,
     state::{ExecutionState, WorkspaceState},
     store,
 };
@@ -17,20 +18,24 @@ use tokio::{
 };
 use uuid::Uuid;
 
-impl Manager {
-    pub async fn begin(
-        &self,
-        selector: String,
-        wrapper: Option<process::Identity>,
-    ) -> Result<(ExecutionPlan, watch::Receiver<bool>)> {
-        self.begin_command(selector, wrapper, false).await
-    }
+/// What a tracked execution runs, which decides its lifecycle rules.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExecutionKind {
+    /// A caller-chosen command in a ready workspace.
+    Command,
+    /// The repository's setup command; exclusive, and its exit decides whether
+    /// the workspace becomes ready.
+    Setup,
+}
 
-    pub async fn begin_command(
+impl Manager {
+    /// Register an execution and issue its scope token. The returned receiver
+    /// fires when the workspace asks its commands to stop.
+    pub async fn begin_execution(
         &self,
-        selector: String,
-        wrapper: Option<process::Identity>,
-        setup: bool,
+        selector: &str,
+        wrapper: Option<Identity>,
+        kind: ExecutionKind,
     ) -> Result<(ExecutionPlan, watch::Receiver<bool>)> {
         if let Some(wrapper) = &wrapper {
             ensure!(
@@ -38,33 +43,27 @@ impl Manager {
                 "execution wrapper is no longer alive"
             );
         }
+        let setup = kind == ExecutionKind::Setup;
         // Coordinate registration and stop notification without holding the map
         // during any external command or lifetime of the agent.
-        let workspace = self.get(selector).await?;
+        let workspace = self.workspace(selector).await?;
         let gate = self.git_gate(&workspace.repository_id).await;
         let _guard = if setup { Some(gate.lock().await) } else { None };
-        let mut active = self.active.lock().await;
-        let workspace = self.get(workspace.id).await?;
+        let mut connections = self.connections.lock().await;
+        let workspace = self.workspace(&workspace.id).await?;
         let setup_cmd = if setup {
-            Some(
-                workspace.path.join(
-                    self.workspace_config(&workspace)
-                        .await?
-                        .setup_cmd
-                        .context("no setup_cmd configured")?,
-                ),
-            )
+            let command = self
+                .workspace_config(&workspace)
+                .await?
+                .setup_cmd
+                .context("no setup_cmd configured")?;
+            Some(workspace.path.join(command))
         } else {
             None
         };
         ensure!(workspace.path.is_dir(), "workspace directory is missing");
         self.verify_worktree(&workspace).await?;
-        *self
-            .activity
-            .lock()
-            .await
-            .entry(workspace.id.clone())
-            .or_default() += 1;
+        self.touch(&workspace.id).await;
         let id = Uuid::new_v4().to_string();
         let (execution_id, workspace_id) = (id.clone(), workspace.id.clone());
         let ports = self
@@ -72,12 +71,24 @@ impl Manager {
             .run(move |db| {
                 let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
                 if setup {
-                    let busy: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM executions WHERE workspace_id=?1)", [&workspace_id], |r| r.get(0))?;
+                    let busy: bool = tx.query_row(
+                        "SELECT EXISTS(SELECT 1 FROM executions WHERE workspace_id=?1)",
+                        [&workspace_id],
+                        |r| r.get(0),
+                    )?;
                     ensure!(!busy, "workspace has active or unknown executions");
-                    ensure!(tx.execute("UPDATE workspaces SET state='preparing',error=NULL WHERE id=?1 AND state IN ('ready','failed','preparing')", [&workspace_id])? == 1, "workspace is busy");
+                    let reserved = tx.execute(
+                        "UPDATE workspaces SET state=?2,error=NULL WHERE id=?1 AND state IN (?3,?4,?2)",
+                        params![
+                            workspace_id,
+                            WorkspaceState::Preparing,
+                            WorkspaceState::Ready,
+                            WorkspaceState::Failed
+                        ],
+                    )?;
+                    ensure!(reserved == 1, "workspace is busy");
                 } else {
-                    let ready: bool = tx.query_row("SELECT state='ready' FROM workspaces WHERE id=?1", [&workspace_id], |r| r.get(0))?;
-                    ensure!(ready, "workspace is not ready");
+                    store::require_ready(&tx, &workspace_id)?;
                 }
                 tx.execute(
                     "INSERT INTO executions(id,workspace_id,state,wrapper) VALUES (?1,?2,?3,?4)",
@@ -85,7 +96,7 @@ impl Manager {
                         execution_id,
                         workspace_id,
                         ExecutionState::Running,
-                        wrapper.map(|w| serde_json::to_string(&w)).transpose()?
+                        store::json_text(wrapper.as_ref())?
                     ],
                 )?;
                 let ports = store::ports(&tx, Some(&workspace_id))?;
@@ -94,18 +105,22 @@ impl Manager {
             })
             .await?;
         let (sender, receiver) = watch::channel(false);
-        active.insert(id.clone(), sender);
+        connections.insert(id.clone(), sender);
         let scope_token = Uuid::new_v4().to_string();
-        self.scopes
-            .lock()
-            .await
-            .insert(scope_token.clone(), (id.clone(), workspace.id.clone()));
+        self.issue_scope(
+            scope_token.clone(),
+            Caller {
+                execution_id: id.clone(),
+                workspace_id: workspace.id.clone(),
+            },
+        )
+        .await;
         Ok((
             ExecutionPlan {
-                setup_cmd,
-                scope_token,
                 id,
                 workspace,
+                scope_token,
+                setup_cmd,
                 ports,
             },
             receiver,
@@ -115,7 +130,7 @@ impl Manager {
     pub async fn record_execution_child(
         &self,
         id: String,
-        child: Option<process::Identity>,
+        child: Option<Identity>,
         group_id: u32,
     ) -> Result<()> {
         ensure!(
@@ -126,37 +141,59 @@ impl Manager {
             child.as_ref().is_none_or(|child| child.pid == group_id),
             "child must lead its execution process group"
         );
-        self.store.run(move |db| {
-            ensure!(db.execute("UPDATE executions SET child=?2,group_id=?3 WHERE id=?1 AND group_id IS NULL",
-                params![id, child.map(|c| serde_json::to_string(&c)).transpose()?, group_id])? == 1,
-                "execution already registered or no longer exists");
-            Ok(())
-        }).await
+        self.store
+            .run(move |db| {
+                let updated = db.execute(
+                    "UPDATE executions SET child=?2,group_id=?3 WHERE id=?1 AND group_id IS NULL",
+                    params![id, store::json_text(child.as_ref())?, group_id],
+                )?;
+                ensure!(
+                    updated == 1,
+                    "execution already registered or no longer exists"
+                );
+                Ok(())
+            })
+            .await
     }
 
-    pub async fn finish(&self, id: String, complete: bool) -> Result<bool> {
-        self.finish_command(id, complete, None).await
-    }
-
-    pub async fn finish_command(
+    /// Close an execution. `exit_code` is `None` when the wrapper disconnected
+    /// without reporting; such executions stay recorded as unknown. Returns
+    /// whether every owned process is verifiably gone.
+    pub async fn finish_execution(
         &self,
         id: String,
-        complete: bool,
-        setup: Option<(String, i32)>,
+        kind: ExecutionKind,
+        exit_code: Option<i32>,
     ) -> Result<bool> {
-        let complete = if complete {
-            match process::scan(HashSet::from([id.clone()])).await {
+        let complete = match exit_code {
+            Some(_) => match process::scan(HashSet::from([id.clone()])).await {
                 Ok(scan) => scan.processes.is_empty(),
                 Err(_) => false,
-            }
-        } else {
-            false
+            },
+            None => false,
         };
-        let mut active = self.active.lock().await;
+        let mut connections = self.connections.lock().await;
         let record_id = id.clone();
         self.store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
+                if kind == ExecutionKind::Setup {
+                    let code = exit_code.unwrap_or(1);
+                    let error = (!(complete && code == 0)).then(|| {
+                        format!(
+                            "setup failed (exit {code}, processes stopped: {complete}); retry with shoal prepare"
+                        )
+                    });
+                    let state = if error.is_none() {
+                        WorkspaceState::Ready
+                    } else {
+                        WorkspaceState::Failed
+                    };
+                    tx.execute(
+                        "UPDATE workspaces SET state=?2,error=?3 WHERE id=(SELECT workspace_id FROM executions WHERE id=?1) AND state=?4",
+                        params![record_id, state, error, WorkspaceState::Preparing],
+                    )?;
+                }
                 if complete {
                     tx.execute("DELETE FROM executions WHERE id=?1", [record_id])?;
                 } else {
@@ -165,41 +202,21 @@ impl Manager {
                         params![record_id, ExecutionState::Unknown],
                     )?;
                 }
-                if let Some((workspace, code)) = setup {
-                    let error = (!(complete && code == 0)).then(|| format!("setup failed (exit {code}, processes stopped: {complete}); retry with shoal prepare"));
-                    tx.execute("UPDATE workspaces SET state=?2,error=?3 WHERE id=?1 AND state='preparing'", params![workspace, if error.is_none() { WorkspaceState::Ready } else { WorkspaceState::Failed }, error])?;
-                }
                 tx.commit()?;
                 Ok(())
             })
             .await?;
-        active.remove(&id);
+        connections.remove(&id);
         self.scopes
             .lock()
             .await
-            .retain(|_, (execution, _)| execution != &id);
+            .retain(|_, caller| caller.execution_id != id);
         Ok(complete)
     }
 
-    pub async fn stop(&self, selector: String) -> Result<()> {
-        let workspace = self.get(selector).await?;
-        let id = workspace.id.clone();
-        self.store
-            .run(move |db| {
-                ensure!(
-                    db.execute(
-                        "UPDATE workspaces SET state=?2 WHERE id=?1 AND state IN (?3,?4)",
-                        params![
-                            id,
-                            WorkspaceState::Stopping,
-                            WorkspaceState::Ready,
-                            WorkspaceState::Failed
-                        ]
-                    )? == 1,
-                    "workspace is busy or not ready"
-                );
-                Ok(())
-            })
+    pub async fn stop_workspace(&self, selector: &str) -> Result<()> {
+        let workspace = self.workspace(selector).await?;
+        self.reserve_lifecycle(&workspace.id, WorkspaceState::Stopping)
             .await?;
         let result = self.stop_executions(&workspace.id, false).await;
         self.set_state(
@@ -215,11 +232,7 @@ impl Manager {
         result
     }
 
-    async fn stop_disconnected(
-        &self,
-        execution: &crate::model::Execution,
-        manual_removal: bool,
-    ) -> Result<()> {
+    async fn stop_disconnected(&self, execution: &Execution, manual_removal: bool) -> Result<()> {
         let scan = process::scan(HashSet::from([execution.id.clone()])).await?;
         let processes = Processes::inspect(execution, &scan).await?;
         processes.stop().await?;
@@ -251,11 +264,13 @@ impl Manager {
         Ok(())
     }
 
+    /// Ask connected wrappers to stop and signal disconnected survivors.
+    /// `allow_disconnected` relaxes the ownership proof for manual removal.
     pub(super) async fn stop_executions(&self, id: &str, allow_disconnected: bool) -> Result<()> {
         let id = id.to_owned();
         let deadline = Instant::now() + Duration::from_secs(10);
         loop {
-            let active = self.active.lock().await;
+            let connections = self.connections.lock().await;
             let query_id = id.clone();
             let executions = self
                 .store
@@ -267,7 +282,7 @@ impl Manager {
             let mut connected = 0;
             let mut disconnected = Vec::new();
             for execution in executions {
-                match active
+                match connections
                     .get(&execution.id)
                     .filter(|sender| !sender.is_closed())
                 {
@@ -284,7 +299,7 @@ impl Manager {
             // Native scans and TERM/KILL waits must not block other workspaces'
             // launches or completion acknowledgements. This workspace's lifecycle
             // reservation already prevents new executions here.
-            drop(active);
+            drop(connections);
             for execution in disconnected {
                 self.stop_disconnected(&execution, allow_disconnected)
                     .await?;
@@ -299,8 +314,9 @@ impl Manager {
             sleep(Duration::from_millis(50)).await;
         }
     }
+
     pub(crate) async fn execution_connected(&self, id: &str) -> bool {
-        self.active
+        self.connections
             .lock()
             .await
             .get(id)

@@ -1,3 +1,5 @@
+//! Audit trail for clean-device requests. Persisted before any destructive
+//! simctl action and retained after the workspace is gone.
 use anyhow::{Result, ensure};
 use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
@@ -5,8 +7,29 @@ use serde::{Deserialize, Serialize};
 use crate::{
     model::Workspace,
     simulators::{SimRequest, now},
+    state::states,
     workspace::Manager,
 };
+
+states!(CleanRequestStatus {
+    /// Recorded; the allocation is in progress.
+    Requested => "requested",
+    Acquired => "acquired",
+    /// No capacity; the same request ID may retry.
+    Busy => "busy",
+    Failed => "failed",
+    /// The daemon stopped while the request was in progress.
+    Interrupted => "interrupted",
+});
+
+states!(CleanAction {
+    /// A fresh device was created.
+    Create => "create",
+    /// An existing idle device was erased.
+    Erase => "erase",
+    /// Idle devices were deleted to make room, then a fresh one created.
+    CreateAfterEviction => "create_after_eviction",
+});
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct EvictedDevice {
@@ -25,8 +48,8 @@ pub struct CleanRequest {
     pub updated_at: u64,
     pub attempts: u64,
     pub request: SimRequest,
-    pub status: String,
-    pub action: Option<String>,
+    pub status: CleanRequestStatus,
+    pub action: Option<CleanAction>,
     pub simulator_id: Option<String>,
     pub udid: Option<String>,
     pub apps_removed: Option<usize>,
@@ -43,6 +66,8 @@ pub struct AuditEntry {
 }
 
 impl Manager {
+    /// Record a clean request before acting on it. A busy request may be
+    /// retried under the same ID; anything else needs a new one.
     pub async fn start_clean_request(
         &self,
         workspace: &Workspace,
@@ -72,10 +97,10 @@ impl Manager {
                 "clean request ID already belongs to a different request"
             );
             ensure!(
-                audit.status == "busy",
+                audit.status == CleanRequestStatus::Busy,
                 "clean request already completed or interrupted; inspect its history before retrying with a new request ID"
             );
-            audit.status = "requested".into();
+            audit.status = CleanRequestStatus::Requested;
             audit.updated_at = now();
             audit.attempts += 1;
             audit.error = None;
@@ -90,7 +115,7 @@ impl Manager {
                 updated_at: now(),
                 attempts: 1,
                 request: request.clone(),
-                status: "requested".into(),
+                status: CleanRequestStatus::Requested,
                 action: None,
                 simulator_id: None,
                 udid: None,
@@ -112,10 +137,15 @@ impl Manager {
             audit.workspace_id.clone(),
             serde_json::to_string(audit)?,
         );
-        self.store.run(move |db| {
-            db.execute("INSERT INTO simulator_clean_requests(request_id,workspace_id,record) VALUES (?1,?2,?3) ON CONFLICT(request_id) DO UPDATE SET record=excluded.record", params![id,owner,record])?;
-            Ok(())
-        }).await
+        self.store
+            .run(move |db| {
+                db.execute(
+                    "INSERT INTO simulator_clean_requests(request_id,workspace_id,record) VALUES (?1,?2,?3) ON CONFLICT(request_id) DO UPDATE SET record=excluded.record",
+                    params![id, owner, record],
+                )?;
+                Ok(())
+            })
+            .await
     }
 
     pub async fn clean_history(
@@ -128,10 +158,26 @@ impl Manager {
             (1..=50).contains(&limit),
             "history limit must be between 1 and 50"
         );
-        self.store.run(move |db| {
-            let records = db.prepare("SELECT id,record FROM simulator_clean_requests WHERE (?1 IS NULL OR workspace_id=?1) AND (?2 IS NULL OR id<?2) ORDER BY id DESC LIMIT ?3")?
-                .query_map(params![owner,before,limit], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))?.collect::<rusqlite::Result<Vec<_>>>()?;
-            records.into_iter().map(|(id, record)| Ok(AuditEntry { id, request: serde_json::from_str(&record)? })).collect()
-        }).await
+        self.store
+            .run(move |db| {
+                let records = db
+                    .prepare(
+                        "SELECT id,record FROM simulator_clean_requests WHERE (?1 IS NULL OR workspace_id=?1) AND (?2 IS NULL OR id<?2) ORDER BY id DESC LIMIT ?3",
+                    )?
+                    .query_map(params![owner, before, limit], |r| {
+                        Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?))
+                    })?
+                    .collect::<rusqlite::Result<Vec<_>>>()?;
+                records
+                    .into_iter()
+                    .map(|(id, record)| {
+                        Ok(AuditEntry {
+                            id,
+                            request: serde_json::from_str(&record)?,
+                        })
+                    })
+                    .collect()
+            })
+            .await
     }
 }

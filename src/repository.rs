@@ -1,8 +1,10 @@
+//! Repository naming and identity derived from a source path or URL.
 use anyhow::Result;
 use std::path::Path;
 
-use crate::worktrunk;
+use crate::git;
 
+/// The explicit name, or the last path component of the source.
 pub fn name(repo: &crate::model::Repository) -> &str {
     repo.name
         .as_deref()
@@ -15,10 +17,11 @@ pub fn source_name(source: &str) -> &str {
     name.strip_suffix(".git").unwrap_or(name)
 }
 
+/// A filesystem-safe clone directory name derived from the source.
 pub fn directory_name(source: &str) -> String {
     let name: String = source_name(source)
         .chars()
-        .take(64)
+        .take(crate::validate::MAX_NAME_LEN)
         .map(|c| {
             if c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.') {
                 c
@@ -35,6 +38,17 @@ pub fn directory_name(source: &str) -> String {
     }
 }
 
+/// The host part of a remote URL (`https://user@host/...` or `user@host:...`),
+/// without credentials.
+pub fn host(source: &str) -> Option<&str> {
+    let authority = source
+        .split_once("://")
+        .map(|(_, rest)| rest.split('/').next().unwrap_or(rest))
+        .or_else(|| source.split_once(':').map(|(host, _)| host))
+        .filter(|host| !host.is_empty())?;
+    Some(authority.rsplit('@').next().unwrap_or(authority))
+}
+
 /// Local checkouts use origin; clones retain their original source URL even
 /// when their checkout is temporarily unavailable. No network access is needed.
 pub async fn identity(source: &str) -> Result<Option<String>> {
@@ -43,11 +57,11 @@ pub async fn identity(source: &str) -> Result<Option<String>> {
 
 pub async fn remote_url(source: &str) -> Result<Option<String>> {
     let url = if Path::new(source).exists() {
-        let remotes = worktrunk::git(Path::new(source), &["remote"]).await?;
+        let remotes = git::run(Path::new(source), &["remote"]).await?;
         if !remotes.lines().any(|remote| remote == "origin") {
             return Ok(None);
         }
-        worktrunk::git(Path::new(source), &["remote", "get-url", "origin"])
+        git::run(Path::new(source), &["remote", "get-url", "origin"])
             .await?
             .trim()
             .to_owned()
@@ -57,6 +71,7 @@ pub async fn remote_url(source: &str) -> Result<Option<String>> {
     Ok(Some(url))
 }
 
+/// Normalize equivalent transports of one remote to a comparable key.
 fn url_key(url: &str) -> String {
     let remote = if let Some((scheme, rest)) = url.split_once("://") {
         if !matches!(scheme, "http" | "https" | "ssh" | "git") {
@@ -77,7 +92,7 @@ fn url_key(url: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{directory_name, url_key};
+    use super::{directory_name, host, url_key};
 
     #[test]
     fn clone_directory_names_are_readable_single_components() {
@@ -101,6 +116,16 @@ mod tests {
             directory_name(&format!("https://example.com/{}", "a".repeat(300))).len(),
             64
         );
+    }
+
+    #[test]
+    fn hosts_drop_credentials_and_paths() {
+        assert_eq!(
+            host("https://user@example.com/team/repo"),
+            Some("example.com")
+        );
+        assert_eq!(host("git@example.com:team/repo.git"), Some("example.com"));
+        assert_eq!(host("/local/checkout"), None);
     }
 
     #[test]

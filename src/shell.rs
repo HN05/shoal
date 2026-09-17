@@ -36,7 +36,7 @@ pub fn completions(shell: clap_complete::Shell) -> Result<String> {
         .context("unsupported completion shell")?;
     let executable = crate::service::executable(None)?;
     adapter.write_registration(
-        crate::completion::ENV,
+        crate::env::COMPLETE,
         "shoal",
         "shoal",
         executable
@@ -57,7 +57,7 @@ pub fn navigate(path: &Path, json: bool) -> Result<()> {
     if json {
         return Ok(());
     }
-    if let Some(destination) = std::env::var_os("SHOAL_SHELL_DIRECTIVE") {
+    if let Some(destination) = std::env::var_os(crate::env::SHELL_DIRECTIVE) {
         let path = path
             .to_str()
             .context("shell navigation path is not UTF-8")?;
@@ -73,7 +73,7 @@ pub fn navigate(path: &Path, json: bool) -> Result<()> {
 /// OLDPWD is shell-local state, so the wrapper passes it explicitly. There is no
 /// daemon-wide history to leak navigation between independent terminals.
 pub fn previous_directory() -> Result<PathBuf> {
-    let previous = std::env::var_os("SHOAL_PREVIOUS_DIR")
+    let previous = std::env::var_os(crate::env::PREVIOUS_DIR)
         .or_else(|| std::env::var_os("OLDPWD"))
         .filter(|p| !p.is_empty())
         .context("no previous directory; use the shell integration and change directory first")?;

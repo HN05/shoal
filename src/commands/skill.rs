@@ -23,7 +23,7 @@ pub(super) fn run(command: Option<&SkillCommand>, json_output: bool) -> Result<i
         return Ok(0);
     };
     ensure!(
-        std::env::var_os("SHOAL_SCOPE_TOKEN").is_none(),
+        !crate::env::is_scoped(),
         "workspace processes cannot install user-level skills; run shoal skill install outside the scoped execution"
     );
     let home = PathBuf::from(std::env::var_os("HOME").context("HOME is not set")?);

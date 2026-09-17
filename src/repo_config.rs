@@ -70,16 +70,8 @@ pub fn parse(text: &str) -> Result<RepoConfig> {
         );
     }
     for (name, definition) in &config.ports.definitions {
-        ensure!(
-            !name.is_empty()
-                && name.len() <= 64
-                && name.as_bytes()[0].is_ascii_lowercase()
-                && name.bytes().all(|c| c.is_ascii_lowercase()
-                    || c.is_ascii_digit()
-                    || c == b'_'
-                    || c == b'-'),
-            "invalid configured port name: {name}"
-        );
+        crate::validate::lowercase_name("port", name)
+            .with_context(|| format!("invalid configured port name: {name}"))?;
         ensure!(
             definition.port != Some(0),
             "configured port {name} cannot use port zero"

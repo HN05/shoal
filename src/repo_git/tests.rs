@@ -62,7 +62,7 @@ impl Fixture {
         .await
         .unwrap();
         let repo_id = manager
-            .register(repo.to_str().unwrap().into(), None, None)
+            .register_repository(repo.to_str().unwrap().into(), None, None)
             .await
             .unwrap()
             .id;
@@ -76,7 +76,7 @@ impl Fixture {
 
     async fn add(&self, name: &str) -> crate::model::Workspace {
         self.manager
-            .add(self.repo_id.clone(), name.into(), None)
+            .create_workspace(&self.repo_id, name.into(), None)
             .await
             .unwrap()
     }
@@ -136,7 +136,7 @@ async fn names_suffix_only_conflicts_and_serialize_concurrent_adds() {
     assert_eq!(workspace.path.file_name().unwrap(), "feature");
     assert_eq!(f.add("main").await.branch, "main-2");
     f.manager
-        .remove(workspace.id, crate::removal::Choice::KeepBranch, 0)
+        .remove_workspace(&workspace.id, crate::removal::BranchChoice::KeepBranch, 0)
         .await
         .unwrap();
     assert_eq!(f.add("feature").await.branch, "feature-6");
@@ -168,34 +168,26 @@ async fn remote_default_controls_creation_pull_diff_and_removal() {
         );
         assert!(
             f.manager
-                .check_removal(workspace.id.clone(), 0)
+                .check_removal(&workspace.id, 0)
                 .await
                 .unwrap()
                 .can_delete_branch()
         );
         assert_eq!(
-            f.manager
-                .diff_base(workspace.id.clone())
-                .await
-                .unwrap()
-                .commit,
+            f.manager.diff_base(&workspace.id).await.unwrap().commit,
             expected.trim()
         );
         fs::write(author.join("upstream"), "newer\n").unwrap();
         commit(&author, "upstream");
         git(&author, &["push", "origin", branch]);
-        let result = f
-            .manager
-            .pull_default_branch(workspace.id.clone())
-            .await
-            .unwrap();
+        let result = f.manager.pull_default_branch(&workspace.id).await.unwrap();
         assert_eq!(result.branch, branch);
         assert!(result.updated);
         assert_eq!(result.commit, git(&author, &["rev-parse", "HEAD"]).trim());
         assert_eq!(git(&workspace.path, &["rev-parse", "HEAD"]), expected);
         assert_eq!(git(&f.repo, &["rev-parse", "main"]), before);
         assert_eq!(
-            f.manager.diff_base(workspace.id).await.unwrap().commit,
+            f.manager.diff_base(&workspace.id).await.unwrap().commit,
             expected.trim()
         );
     }
@@ -216,8 +208,8 @@ async fn non_main_default_refresh_preserves_safety_and_explicit_overrides() {
     {
         let error = f
             .manager
-            .add(
-                f.repo_id.clone(),
+            .create_workspace(
+                &f.repo_id,
                 format!("blocked-{index}"),
                 base.map(str::to_owned),
             )
@@ -232,7 +224,7 @@ async fn non_main_default_refresh_preserves_safety_and_explicit_overrides() {
     }
     let explicit = f
         .manager
-        .add(f.repo_id.clone(), "explicit".into(), Some("main".into()))
+        .create_workspace(&f.repo_id, "explicit".into(), Some("main".into()))
         .await
         .unwrap();
     assert_eq!(git(&explicit.path, &["rev-parse", "HEAD"]), before);
@@ -254,16 +246,12 @@ async fn local_defaults_and_unavailable_or_ambiguous_remote_defaults() {
     git(&f.repo, &["checkout", "--detach"]);
     assert!(
         f.manager
-            .add(f.repo_id.clone(), "detached".into(), None)
+            .create_workspace(&f.repo_id, "detached".into(), None)
             .await
             .is_err()
     );
     f.manager
-        .add(
-            f.repo_id.clone(),
-            "explicit-detached".into(),
-            Some("trunk".into()),
-        )
+        .create_workspace(&f.repo_id, "explicit-detached".into(), Some("trunk".into()))
         .await
         .unwrap();
     git(&f.repo, &["switch", "trunk"]);
@@ -278,16 +266,12 @@ async fn local_defaults_and_unavailable_or_ambiguous_remote_defaults() {
     );
     assert!(
         f.manager
-            .add(f.repo_id.clone(), "offline".into(), None)
+            .create_workspace(&f.repo_id, "offline".into(), None)
             .await
             .is_err()
     );
     f.manager
-        .add(
-            f.repo_id.clone(),
-            "explicit-offline".into(),
-            Some("trunk".into()),
-        )
+        .create_workspace(&f.repo_id, "explicit-offline".into(), Some("trunk".into()))
         .await
         .unwrap();
     git(
@@ -296,7 +280,7 @@ async fn local_defaults_and_unavailable_or_ambiguous_remote_defaults() {
     );
     let error = f
         .manager
-        .add(f.repo_id.clone(), "ambiguous".into(), None)
+        .create_workspace(&f.repo_id, "ambiguous".into(), None)
         .await
         .unwrap_err();
     assert!(
@@ -336,10 +320,14 @@ async fn pull_updates_main_preserves_feature_and_enforces_scope() {
     git(&f.repo, &["remote", "rename", "origin", "source"]);
     let expected = git(&author, &["rev-parse", "HEAD"]);
     f.manager
-        .scopes
-        .lock()
-        .await
-        .insert("token".into(), ("execution".into(), workspace.id.clone()));
+        .issue_scope(
+            "token".into(),
+            scope::Caller {
+                execution_id: "execution".into(),
+                workspace_id: workspace.id.clone(),
+            },
+        )
+        .await;
     let mut denied = Method::PullDefaultBranch {
         workspace: "other".into(),
     };
@@ -358,7 +346,7 @@ async fn pull_updates_main_preserves_feature_and_enforces_scope() {
         panic!("wrong method")
     };
     assert_eq!(target, workspace.id);
-    let result = f.manager.pull_default_branch(target).await.unwrap();
+    let result = f.manager.pull_default_branch(&target).await.unwrap();
     assert!(result.updated);
     assert_eq!(result.previous_commit, before.trim());
     assert_eq!(result.commit, expected.trim());
@@ -366,7 +354,7 @@ async fn pull_updates_main_preserves_feature_and_enforces_scope() {
     assert_eq!(git(&workspace.path, &["rev-parse", "HEAD"]), before);
     assert!(
         !f.manager
-            .pull_default_branch("worker".into())
+            .pull_default_branch("worker")
             .await
             .unwrap()
             .updated
@@ -384,7 +372,7 @@ async fn pull_refuses_missing_upstream_dirty_and_diverged_main() {
     f.add("worker").await;
     assert!(
         f.manager
-            .pull_default_branch("worker".into())
+            .pull_default_branch("worker")
             .await
             .unwrap_err()
             .to_string()
@@ -395,7 +383,7 @@ async fn pull_refuses_missing_upstream_dirty_and_diverged_main() {
     fs::write(f.repo.join("tracked"), "local edits\n").unwrap();
     assert!(
         f.manager
-            .pull_default_branch("worker".into())
+            .pull_default_branch("worker")
             .await
             .unwrap_err()
             .to_string()
@@ -410,7 +398,7 @@ async fn pull_refuses_missing_upstream_dirty_and_diverged_main() {
     let diverged = git(&f.repo, &["rev-parse", "main"]);
     assert!(
         f.manager
-            .pull_default_branch("worker".into())
+            .pull_default_branch("worker")
             .await
             .unwrap_err()
             .to_string()
@@ -430,7 +418,7 @@ async fn pull_handles_unchecked_ahead_and_separate_main_checkouts() {
     git(&f.repo, &["switch", "-c", "source-branch"]);
     assert!(
         f.manager
-            .pull_default_branch("worker".into())
+            .pull_default_branch("worker")
             .await
             .unwrap()
             .updated
@@ -441,7 +429,7 @@ async fn pull_handles_unchecked_ahead_and_separate_main_checkouts() {
     git(&author, &["push", "--force", "origin", "main"]);
     assert!(
         !f.manager
-            .pull_default_branch("worker".into())
+            .pull_default_branch("worker")
             .await
             .unwrap()
             .updated
@@ -457,7 +445,7 @@ async fn pull_handles_unchecked_ahead_and_separate_main_checkouts() {
     );
     assert!(
         f.manager
-            .pull_default_branch("worker".into())
+            .pull_default_branch("worker")
             .await
             .unwrap()
             .updated
@@ -479,7 +467,7 @@ async fn pull_refuses_main_in_managed_workspace() {
     git(&workspace.path, &["switch", "main"]);
     assert!(
         f.manager
-            .pull_default_branch("caller".into())
+            .pull_default_branch("caller")
             .await
             .unwrap_err()
             .to_string()
@@ -507,8 +495,8 @@ async fn creation_refreshes_main_instead_of_using_checkout_head() {
         let expected = git(&author, &["rev-parse", "HEAD"]);
         let workspace = f
             .manager
-            .add(
-                f.repo_id.clone(),
+            .create_workspace(
+                &f.repo_id,
                 format!("worker-{index}"),
                 base.map(str::to_owned),
             )
@@ -574,7 +562,7 @@ async fn creation_refuses_failed_refreshes_without_creating_a_branch() {
         let before = git(&f.repo, &["rev-parse", "main"]);
         let error = f
             .manager
-            .add(f.repo_id.clone(), "worker".into(), None)
+            .create_workspace(&f.repo_id, "worker".into(), None)
             .await
             .unwrap_err();
         assert!(
@@ -589,7 +577,7 @@ async fn creation_refuses_failed_refreshes_without_creating_a_branch() {
             ),
             ""
         );
-        let failed = f.manager.get("worker".into()).await.unwrap();
+        let failed = f.manager.workspace("worker").await.unwrap();
         assert_eq!(failed.state, crate::state::WorkspaceState::Failed);
         assert!(!failed.path.exists());
     }
@@ -605,11 +593,7 @@ async fn creation_honors_explicit_history_and_preserves_ahead_main() {
     for (index, base) in ["HEAD", original.trim()].into_iter().enumerate() {
         let workspace = f
             .manager
-            .add(
-                f.repo_id.clone(),
-                format!("explicit-{index}"),
-                Some(base.into()),
-            )
+            .create_workspace(&f.repo_id, format!("explicit-{index}"), Some(base.into()))
             .await
             .unwrap();
         assert_eq!(git(&workspace.path, &["rev-parse", "HEAD"]), original);
