@@ -1,0 +1,134 @@
+# PR and main checks on the shared Linux Docker runner; the rust job is intended
+# as the required check on the `main` protection rule.
+#
+# A PR whose only `area/` label is `area/docs` runs only the documentation
+# guard (`cargo test --test docs`): the gate job reads the labels and the rust
+# job narrows itself, which still reports a status for the required check.
+# Pushes to main and dispatches always run everything.
+#
+# No JavaScript actions (actions/checkout, actions/cache): the runner would have
+# to inject Node into the job container, which does not work under Podman. Hence
+# the plain-git checkout, and caching by the runner rather than the workflow;
+# its config mounts host directories into every job container:
+#   /var/cache/ci/cargo/registry -> /usr/local/cargo/registry
+#   /var/cache/ci/cargo/git      -> /usr/local/cargo/git
+#   /var/cache/ci/target         -> /ci-target
+# Every step that runs cargo in /ci-target (here and in release.yml) first
+# sources .forgejo/scripts/lock-target-dir.sh, which holds a flock on the
+# directory for the rest of the step, and runs `cargo clean -p shoal` before
+# its first build so another branch's build of the crate is never taken as
+# fresh. The directories grow without bound; clear /var/cache/ci/target on the
+# runner host when it gets large.
+
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  # Clean builds are faster without incremental artefacts or test debuginfo.
+  CARGO_INCREMENTAL: "0"
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_TEST_DEBUG: "0"
+
+jobs:
+  gate:
+    name: gate (docs-only PRs run only the docs guard)
+    runs-on: docker
+    container:
+      # Same local image as the rust job; it carries curl and jq.
+      image: git.henriknordvik.com/hn05/ci-shoal:1.98
+    outputs:
+      docs_only: ${{ steps.labels.outputs.docs_only }}
+    steps:
+      - name: Read the PR's area labels
+        id: labels
+        env:
+          EVENT: ${{ github.event_name }}
+          ACTION: ${{ github.event.action }}
+          TOKEN: ${{ github.token }}
+          API: ${{ github.api_url }}/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}
+        run: |
+          set -o pipefail
+          if [ "$EVENT" != pull_request ]; then
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Labels are added right after `fj pr create`, so only the opened run can race them.
+          if [ "$ACTION" = opened ]; then sleep 15; fi
+          # A failed lookup must not narrow the checks: fall through to running them all.
+          labels=$(curl -sf --max-time 20 -H "Authorization: token $TOKEN" "$API" | jq -r '.labels[].name') \
+            || { echo "label lookup failed; running every check"; labels=""; }
+          areas=$(printf '%s\n' "$labels" | grep '^area/' || true)
+          echo "area labels: ${areas:-none}"
+          if [ "$areas" = "area/docs" ]; then
+            echo "docs-only PR: only the documentation guard runs"
+            echo "docs_only=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  rust:
+    name: rust (fmt, clippy, test, scripts)
+    needs: gate
+    # A failed gate leaves the output empty and every check runs.
+    if: "!cancelled()"
+    runs-on: docker
+    container:
+      # Built from .forgejo/ci-image/Containerfile on the runner host; the tag is
+      # the Rust version.
+      image: git.henriknordvik.com/hn05/ci-shoal:1.98
+    env:
+      # Runner-mounted volume; a plain directory when unmounted.
+      CARGO_TARGET_DIR: /ci-target
+      DOCS_ONLY: ${{ needs.gate.outputs.docs_only }}
+    steps:
+      - name: Checkout
+        run: |
+          git init -q .
+          git remote add origin "${{ github.server_url }}/${{ github.repository }}.git"
+          git -c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:${{ github.token }}' | base64 | tr -d '\n')" \
+            fetch -q --depth 1 origin "${{ github.sha }}"
+          git checkout -q FETCH_HEAD
+
+      - name: Toolchain (baked into the image)
+        run: rustc --version && cargo clippy --version && wt --version
+
+      - name: Cache state (runner-mounted volumes)
+        run: |
+          for d in /usr/local/cargo/registry /usr/local/cargo/git /ci-target; do
+            if mountpoint -q "$d" 2>/dev/null; then
+              echo "$d: mounted, $(du -sh "$d" 2>/dev/null | cut -f1)"
+            else
+              echo "$d: not a mount point (runner cache volumes missing; build is uncached)"
+            fi
+          done
+          mkdir -p /ci-target
+
+      - name: Release script tests
+        if: env.DOCS_ONLY != 'true'
+        run: python3 -m unittest discover -s scripts -p 'test_*.py'
+
+      - name: cargo fmt --check
+        if: env.DOCS_ONLY != 'true'
+        run: cargo fmt --all -- --check
+
+      # One step, because the lock lasts as long as the step's shell.
+      - name: cargo clippy and cargo test (holding /ci-target)
+        run: |
+          . .forgejo/scripts/lock-target-dir.sh
+          cargo clean -p shoal
+          if [ "$DOCS_ONLY" = true ]; then
+            cargo test --locked --test docs
+            exit 0
+          fi
+          cargo clippy --locked --all-targets -- -D warnings
+          cargo test --locked

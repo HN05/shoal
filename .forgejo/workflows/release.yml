@@ -18,10 +18,15 @@ jobs:
       tag: ${{ steps.publish.outputs.tag }}
     runs-on: docker
     container:
-      image: rust:1.98-trixie
+      # Built from .forgejo/ci-image/Containerfile on the runner host; bump the
+      # tag together with ci.yml.
+      image: git.henriknordvik.com/hn05/ci-shoal:1.98
     defaults:
       run:
         shell: bash
+    env:
+      # Runner-mounted volume shared with ci.yml; see its header comment.
+      CARGO_TARGET_DIR: /ci-target
     steps:
       - name: Check configuration
         env:
@@ -32,12 +37,6 @@ jobs:
           test "$REF" = refs/heads/main || { echo 'Select main to release'; exit 1; }
           test -n "$TOKEN" || { echo 'Configure RELEASE_AUTOMATION_TOKEN'; exit 1; }
           test -n "$TAP_TOKEN" || { echo 'Configure HOMEBREW_TAP_TOKEN'; exit 1; }
-      - name: Install build tools
-        run: |
-          apt-get update
-          apt-get install -y --no-install-recommends git lsof zsh python3 ca-certificates
-          rustup component add rustfmt clippy
-          cargo install --locked worktrunk --version 0.78.0
       - name: Check out main
         env:
           SERVER: ${{ github.server_url }}
@@ -63,6 +62,9 @@ jobs:
           export GIT_CONFIG_VALUE_0="Authorization: basic $(printf 'x-access-token:%s' "$TOKEN" | base64 | tr -d '\n')"
           unset TOKEN
           cd source
+          # release.py builds and tests in /ci-target; hold it for the whole step.
+          . .forgejo/scripts/lock-target-dir.sh
+          cargo clean -p shoal
           if [ -n "$REQUESTED_VERSION" ]; then
             python3 scripts/release.py run "$REQUESTED_VERSION"
           else
@@ -83,12 +85,8 @@ jobs:
           - tap: homebrew-tap-github
             source: github
     container:
-      image: debian:trixie-slim
+      image: git.henriknordvik.com/hn05/ci-shoal:1.98
     steps:
-      - name: Install tools
-        run: |
-          apt-get update
-          apt-get install -y --no-install-recommends git python3 ca-certificates
       - name: Check out release
         env:
           RELEASE_TAG: ${{ needs.publish.outputs.tag }}

@@ -1,0 +1,62 @@
+# Advisory review-bot reviews use .review/review.md with a configurable primary agent and automatic fallback.
+name: review
+
+on:
+  pull_request:
+    types: [opened, reopened, labeled]
+
+# Forgejo sends label_updated with the PR's labels, without a label object.
+# Label changes must queue behind an active review, including skipped jobs.
+concurrency:
+  group: review-${{ github.event.pull_request.number }}
+  cancel-in-progress: ${{ github.event.action != 'label_updated' }}
+
+jobs:
+  review:
+    name: review-bot
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository
+      && !contains(github.event.pull_request.labels.*.name, 'review/none')
+      && (
+        github.event.action == 'opened'
+        || github.event.action == 'reopened'
+        || contains(github.event.pull_request.labels.*.name, 'review/default')
+        || contains(github.event.pull_request.labels.*.name, 'review/codex')
+        || contains(github.event.pull_request.labels.*.name, 'review/claude')
+      )
+    runs-on: docker
+    container:
+      image: docker.io/library/node:22-bookworm
+      # Runner-hosted subscription logins for both reviewers; no repo secrets.
+      volumes:
+        - /var/lib/review-bot/claude:/var/lib/review-bot/claude
+        - /var/lib/review-bot/codex:/var/lib/review-bot/codex
+    steps:
+      - name: Check whether review is suppressed
+        id: labels
+        env:
+          TOKEN: ${{ github.token }}
+          API: ${{ github.api_url }}/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}
+        run: |
+          echo "event action: ${{ github.event.action }}"
+          # Only the opened run can race the labels; a label run already saw them.
+          if [ "${{ github.event.action }}" = "opened" ]; then sleep 15; fi
+          # A failed lookup must not fail the job: fall through to reviewing.
+          labels=$(curl -sf -H "Authorization: token $TOKEN" "$API" | node -e '
+            let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>{
+              try { console.log(JSON.parse(s).labels.map(l=>l.name).join(" ")) } catch { process.exit(1) } })') \
+            || { echo "label lookup failed; reviewing anyway"; labels=""; }
+          echo "labels: ${labels:-none}"
+          case " $labels " in
+            *" review/none "*) echo "skip=true" >> "$GITHUB_OUTPUT"; echo "review suppressed" ;;
+            *) echo "skip=false" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - uses: https://git.henriknordvik.com/HN05/review-bot@main
+        if: steps.labels.outputs.skip != 'true'
+        with:
+          agent: ${{ vars.REVIEW_AGENT || 'codex' }}
+          rerun-label: review/default
+          instructions-file: .review/review.md
+          claude-auth-dir: /var/lib/review-bot/claude
+          codex-auth-dir: /var/lib/review-bot/codex

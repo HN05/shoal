@@ -4,7 +4,9 @@
 use std::{path::Path, process::Command};
 
 const BUDGETS: &[(&str, usize)] = &[
-    ("AGENTS.md", 110),
+    // Review-bot brief; the action reads this path, so it cannot fold into AGENTS.md.
+    (".review/review.md", 60),
+    ("AGENTS.md", 125),
     ("CLAUDE.md", 5),
     ("README.md", 160),
     ("SKILL.md", 120),

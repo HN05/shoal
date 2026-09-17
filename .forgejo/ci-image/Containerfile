@@ -1,0 +1,36 @@
+# CI image for ci.yml and release.yml. Everything the jobs would otherwise
+# install per run lives here, and the tag is the Rust version: never a floating
+# tag, so a run can say which toolchain it used.
+#
+# Build with ./build.sh on the runner host, then bump ARG RUST below and the
+# `image:` tags in every workflow that uses this image. See AGENTS.md "CI".
+
+ARG RUST=1.98
+FROM docker.io/library/rust:${RUST}-trixie
+
+# The daemon and workspace tests spawn these: git and Worktrunk for worktrees,
+# lsof for port checks, zsh and bash as user shells, python3 for the xcrun
+# fixture and the release scripts. curl and jq serve the label gate in ci.yml.
+RUN rustup component add rustfmt clippy \
+ && apt-get update -qq \
+ && apt-get install -y -qq --no-install-recommends \
+      git \
+      ca-certificates \
+      lsof \
+      zsh \
+      python3 \
+      curl \
+      jq \
+ && rm -rf /var/lib/apt/lists/*
+
+# Worktrunk is pinned because Shoal drives its CLI. --locked builds it against
+# its own lockfile, so an upstream release cannot break this image. Every layer
+# drops the registry it downloaded: layers are additive, so sources left here
+# would survive a later RUN that deletes them, and the runner mounts the host's
+# registry over that path at run time anyway.
+RUN cargo install --locked worktrunk --version 0.78.0 \
+ && rm -rf "$CARGO_HOME/registry"
+
+# Sanity: the versions the jobs will run with, visible in `podman build` output.
+RUN rustc --version && cargo clippy --version && cargo fmt --version \
+ && wt --version && git --version && lsof -v 2>&1 | head -1 && zsh --version && python3 --version && jq --version

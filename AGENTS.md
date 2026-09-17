@@ -83,6 +83,26 @@ Run `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, and
 state directories and repositories. Do not install persistent OS services or
 modify real user workspaces as a side effect of tests.
 
+## CI
+
+`.forgejo/workflows/ci.yml` runs on pull requests and pushes to `main`. Its
+`rust` job (the required check) runs `cargo fmt --check`, clippy, `cargo test`
+and the Python release-script tests; a PR whose only `area/` label is
+`area/docs` runs just the documentation guard. Jobs use the image built from
+`.forgejo/ci-image/Containerfile` (`git.henriknordvik.com/hn05/ci-shoal:<rust
+version>`), so a run installs nothing: new CI tooling goes into the
+Containerfile, and only the owner rebuilds it with `.forgejo/ci-image/build.sh`
+on the runner host, then bumps the `image:` tag in every workflow. Cargo builds
+share the runner-mounted `/ci-target`; every step that runs cargo there sources
+`.forgejo/scripts/lock-target-dir.sh` first and runs `cargo clean -p shoal`.
+`.forgejo/workflows/review.yml` posts an advisory review-bot review when a PR
+opens and whenever `review/default`, `review/claude` or `review/codex` is
+added; `review/none` suppresses it. `.review/review.md` is its project brief;
+keep it current when a rule here or in `design.md` changes. Issues and PRs
+carry `area/`, `type/` and `complexity/` labels; `.forgejo/scripts/labels.sh`
+creates the scheme. Push the branch and let CI verify instead of running the
+full suite locally first.
+
 ## Subagent approval
 
 Do not spawn subagents, delegate work, or launch additional agent sessions

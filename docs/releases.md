@@ -26,6 +26,7 @@ never moved. If publication succeeded but a tap update failed, rerun the failed
 jobs in the same workflow run; they reuse the published tag rather than creating
 another release.
 
-Builds use the public Rust image and install a pinned Worktrunk version.
+Builds run in the CI image described in AGENTS.md, which carries the pinned
+Rust toolchain and Worktrunk.
 The release remains source-built through Homebrew; prebuilt bottles
 are not produced by this workflow.
