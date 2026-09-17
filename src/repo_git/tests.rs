@@ -687,6 +687,19 @@ async fn existing_branch_refuses_other_checkouts_and_name_collisions() {
     git(&f.repo, &["switch", "--detach"]);
     let main = f.manager.open_branch(&f.repo_id, "main").await.unwrap();
     assert_eq!(main.workspace.branch, "main");
+    f.manager
+        .remove_workspace(
+            &main.workspace.id,
+            crate::removal::BranchChoice::KeepBranch,
+            0,
+        )
+        .await
+        .unwrap();
+    assert!(!main.workspace.path.exists());
+    assert_eq!(
+        git(&f.repo, &["rev-parse", "main"]),
+        git(&f.repo, &["rev-parse", "HEAD"])
+    );
 }
 
 #[tokio::test]
@@ -810,4 +823,30 @@ async fn existing_tracking_branch_fast_forwards_and_refuses_divergence() {
             .is_err()
     );
     assert_eq!(git(&f.repo, &["rev-parse", "diverged"]), before);
+}
+
+#[tokio::test]
+async fn existing_default_branch_survives_normal_workspace_removal() {
+    let f = Fixture::new().await;
+    f.remote();
+    git(
+        &f.repo,
+        &[
+            "symbolic-ref",
+            "refs/remotes/origin/HEAD",
+            "refs/remotes/origin/main",
+        ],
+    );
+    git(&f.repo, &["switch", "--detach"]);
+    let opened = f.manager.open_branch(&f.repo_id, "main").await.unwrap();
+    let before = git(&f.repo, &["rev-parse", "main"]);
+    let removed = f
+        .manager
+        .remove_workspace(&opened.workspace.id, crate::removal::BranchChoice::Auto, 0)
+        .await
+        .unwrap();
+    assert!(!removed.branch_deleted);
+    assert!(!opened.workspace.path.exists());
+    assert_eq!(git(&f.repo, &["rev-parse", "main"]), before);
+    assert!(f.manager.open_branch(&f.repo_id, "main").await.is_ok());
 }

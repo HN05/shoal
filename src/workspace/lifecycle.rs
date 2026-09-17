@@ -222,8 +222,11 @@ impl Manager {
             .await?;
         removal.verify(&check, Stage::AfterStop)?;
         let choice = removal.choice();
+        let default_branch = crate::default_branch::resolve(&repo.path, false).await.ok();
         let delete_branch = match choice {
-            BranchChoice::Auto => check.can_delete_branch(),
+            BranchChoice::Auto => {
+                check.can_delete_branch() && check.branch.as_deref() != default_branch.as_deref()
+            }
             BranchChoice::KeepBranch => false,
             BranchChoice::DeleteBranch => true,
         };

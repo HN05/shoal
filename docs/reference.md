@@ -317,8 +317,8 @@ is skipped when the worktree directory is already gone.
 
 ### Remove a workspace
 
-Removal deletes the branch when the worktree is clean and its tree matches the
-local default branch or its upstream. Otherwise fzf offers Cancel (default),
+Removal retains the default branch unless `--delete-branch`; other clean branches
+matching the default or upstream are deleted. Otherwise fzf offers Cancel (default),
 Keep branch (files only), or Delete branch, followed by a summary and `Are you
 sure? [y/N]`. Both choices discard uncommitted and untracked files.
 `--keep-branch` or `--delete-branch` skips the picker but not the confirmation;

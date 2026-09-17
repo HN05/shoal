@@ -32,7 +32,7 @@ when behavior changes, distinguishing decisions from proposals.
 - Global TOML configuration supports `[auto_cleanup]` with `enabled` (default
   true) and `idle_minutes` (default 10). Automatic removal is only for idle,
   clean, fully pushed worktrees, or worktrees deleted outside Shoal. Keep one removal path for manual and automatic
-  cleanup; future resource leases belong to the worktree and must be released
+  cleanup, retaining the default branch unless explicitly deleted. Leases are released
   before its directory and ownership record are removed.
 - TCP port reservations are cooperative and owned by the worktree. Keep them
   across command exits and failed removal; successful removal releases them with

@@ -191,7 +191,8 @@ executions, run the pre-remove hook, remove owned simulators, remove the
 worktree, and release leases with the record. Failures retain what is needed
 to retry. Manual removal deletes a redundant branch (tree equal to the local
 default or its upstream) and otherwise requires an explicit keep or delete
-choice. Automatic cleanup removes only clean, fully pushed, idle worktrees with
+choice. The default branch is retained unless deletion is explicit. Automatic
+cleanup removes only clean, fully pushed, idle worktrees with
 no executions, directory users, leases, or permits, rechecked immediately
 before deletion, without fetching. `repo rm` deletes the checkout and every
 workspace through that path, refuses external worktrees and dangerous paths,

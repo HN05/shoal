@@ -40,20 +40,7 @@ pub async fn create(
         // Worktrunk otherwise routes the default branch to the main checkout,
         // ignoring worktree-path. Use a full ref for this invocation only:
         // it still resolves, but cannot equal a literal branch name.
-        let count: usize = std::env::var("GIT_CONFIG_COUNT")
-            .unwrap_or_else(|_| "0".into())
-            .parse()
-            .context("invalid GIT_CONFIG_COUNT")?;
-        command
-            .env("GIT_CONFIG_COUNT", (count + 1).to_string())
-            .env(
-                format!("GIT_CONFIG_KEY_{count}"),
-                "worktrunk.default-branch",
-            )
-            .env(
-                format!("GIT_CONFIG_VALUE_{count}"),
-                format!("refs/heads/{branch}"),
-            );
+        default_branch_override(&mut command, &format!("refs/heads/{branch}"))?;
     }
     command.args([branch, "--no-cd", "--no-hooks", "--format=json"]);
     let result: Value = serde_json::from_str(&subprocess::output(command).await?)
@@ -72,6 +59,21 @@ pub async fn create(
     Ok(())
 }
 
+fn default_branch_override(command: &mut Command, reference: &str) -> Result<()> {
+    let count: usize = std::env::var("GIT_CONFIG_COUNT")
+        .unwrap_or_else(|_| "0".into())
+        .parse()
+        .context("invalid GIT_CONFIG_COUNT")?;
+    command
+        .env("GIT_CONFIG_COUNT", (count + 1).to_string())
+        .env(
+            format!("GIT_CONFIG_KEY_{count}"),
+            "worktrunk.default-branch",
+        )
+        .env(format!("GIT_CONFIG_VALUE_{count}"), reference);
+    Ok(())
+}
+
 pub async fn remove(
     repository_dir: &Path,
     worktrunk_config: &Path,
@@ -80,6 +82,9 @@ pub async fn remove(
     delete_branch: bool,
 ) -> Result<RemovalResult> {
     let mut command = command(repository_dir, worktrunk_config);
+    // Shoal has verified ownership and made the branch-retention decision.
+    // Worktrunk otherwise refuses even --no-delete-branch for the default branch.
+    default_branch_override(&mut command, "HEAD")?;
     command.args(["remove", "--foreground", "--no-hooks", "--format=json"]);
     command.arg(if delete_branch {
         "--force-delete"
