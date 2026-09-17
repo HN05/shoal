@@ -90,13 +90,13 @@ shoal rm fix-login                       # Remove; choose what to keep if work d
 ```
 
 Bare `shoal` opens an fzf list of workspaces (`shoal --help`, or bare `shoal`
-without a terminal, prints help). Enter enters the selection; Ctrl-D deletes,
-Ctrl-E runs Claude/Codex CLI, opens Codex/T3 apps, or runs a shell command,
-Ctrl-A adds, Ctrl-O inspects, Ctrl-S stops, Ctrl-F shows the diff. Each action
-returns to your shell.
+without a terminal, prints help). Enter enters the selection; Ctrl-D deletes, Ctrl-E
+runs Claude/Codex CLI, opens Codex/T3 apps, or runs a shell command, Ctrl-A adds,
+Ctrl-O inspects, Ctrl-S stops, Ctrl-F shows the diff. Each action returns to your
+shell.
 
 Omitted targets open an fzf picker; `rm`, `exec`, `claude`, `codex`, `t3`,
-`diff`, `pull`, and `merge` first use the workspace containing the current
+`diff`, `pull`, `merge`, and `land` first use the workspace containing the current
 directory. `shoal add` offers repositories in most-recently-used order, then
 a new-branch prompt or existing-branch picker. Noninteractive and JSON calls never prompt;
 management commands support JSON output, while executed commands keep their
@@ -129,9 +129,8 @@ default_mode = "cli" # Or "app"
 
 App launches run `codex app <path>` or `t3 app <path>` with any `--` arguments
 and preserve the launcher's output and exit code. They add no agent flags and
-provide no execution tracking, scope token, or port variables; T3's app must
-already be running. Disable automatic cleanup when using an app whose activity
-Shoal cannot track.
+provide no execution tracking, scope token, or port variables (so automatic
+cleanup cannot see their activity); T3's app must already be running.
 
 ### Branch and workspace names
 `--name` creates a literal Git branch; `--branch <branch|remote/branch>` uses an
@@ -169,17 +168,16 @@ workspaces diff against the local default, or their opening commit if on it or u
 ### Repositories
 
 Register a local checkout in place (no remote required) or a clone URL. Each
-repository gets `~/shoal/<name>/`, named by `--name` or the source basename
-without `.git`, suffixed `-2`, `-3` on conflict with files or recorded paths;
-its workspaces are created inside it and a URL clone lives there as
-`.checkout`. A local checkout already at `~/shoal/<name>/<anything>` keeps
-that directory. `root_dir = "~/Projects"` (formerly `repositories_dir`) in the
-global config (absolute or `~/` path outside Shoal's state directory and every
-checkout; daemon restart required) changes the parent for new registrations;
-existing ones keep their paths, as do workspaces created before this layout.
-`repo add <url> --path <dir>` clones one repository to an exact new directory
-(relative to the current directory; `~/` allowed). Re-registering a URL with
-its existing path is fine; a different path is rejected.
+repository gets `~/shoal/<name>/`, named by `--name` or the source basename without
+`.git`, suffixed `-2`, `-3` on conflict with files or recorded paths; its workspaces
+are created inside it and a URL clone lives there as `.checkout`. A local checkout
+already at `~/shoal/<name>/<anything>` keeps that directory. `root_dir =
+"~/Projects"` in the global config (absolute or `~/` path outside Shoal's state
+directory and every checkout; daemon restart required) changes the parent for new
+registrations; existing ones keep their paths, as do workspaces created before this
+layout. `repo add <url> --path <dir>` clones one repository to an exact new
+directory (relative to the current directory; `~/` allowed). Re-registering a URL
+with its existing path is fine; a different path is rejected.
 
 Registration is idempotent by normalized `origin` URL (HTTPS/SSH forms and
 `.git` suffixes match) or canonical local path, and never fetches. Clone URLs
@@ -215,7 +213,6 @@ uncommitted or unpushed work), all its workspaces and branches, their ports,
 simulators, and leases, and the saved config, stopping managed commands first.
 Interactive calls ask `Are you sure? [y/N]`; `--yes` skips the prompt and is
 required for scripts and `--json`. `repo remove` is an alias.
-
 Linked worktrees outside Shoal must be removed first; prunable stale records do
 not block, locked worktrees do. Shoal refuses redirected paths and deletions
 that would include another registered repository or its own state. If cleanup
@@ -230,11 +227,11 @@ shoal --json pull          # Branch, previous/current commits, and whether it ch
 ```
 
 Fast-forwards the repository's default branch from its configured upstream
-(which may differ from the default remote). It does not touch the feature
-branch. A checked-out default branch must be clean; divergence or a default
-branch checked out in a managed workspace is an error. Hooks and recursive
-submodule updates are disabled. Scoped agents cannot pull; `shoal merge`
-refreshes its source for them.
+(which may differ from the default remote), never the feature branch. A
+repository without remotes has nothing to pull and reports that. A checked-out
+default branch must be clean; divergence or a default branch checked out in a
+managed workspace is an error. Hooks and recursive submodule updates are
+disabled. Scoped agents cannot pull; `shoal merge` refreshes its source for them.
 
 ### Merge into your workspace branch
 
@@ -256,6 +253,18 @@ sources and full `refs/…` names always fetch fresh data. Git fast-forwards or
 creates a merge commit; conflicts stay in the worktree for `git commit` or `git
 merge --abort`, and `--json` reports `success`, `exit_code`, commits, and Git
 output. Nothing is stashed, reset, or pushed.
+
+### Land into the default branch
+
+`shoal land [workspace]` merges the workspace's recorded branch into the
+repository default branch for repositories without a remote or pull-request
+flow; nothing is pushed. The default branch is refreshed under the `pull` rules
+when it has an upstream; both checkouts must be clean, the default outside
+managed workspaces and the workspace on its branch. Git fast-forwards or creates
+a merge commit in the default checkout. A merge that does not apply cleanly is
+aborted: run `shoal merge <default>` in the workspace, resolve there, and land
+again. Scoped agents cannot land. Landed commits count as pushed for `rm` and
+automatic cleanup.
 
 ### Diff
 
@@ -283,7 +292,7 @@ pre_remove_cmd = "scripts/detach.sh"  # Before the worktree is removed, e.g. clo
 
 Each value is one path, relative to the worktree root or absolute, run with the
 worktree as working directory. Give scripts a shebang and put arguments and
-shell logic inside them. Setup is never inferred from package manifests.
+shell logic inside them.
 
 `setup_cmd` runs through the tracked execution wrapper with workspace scope and
 your CLI environment. `shoal add` waits for it before entering the worktree or
@@ -299,25 +308,26 @@ shoal reconcile fix-login --repair          # Ignore the failure after ownership
 shoal rm fix-login --yes --delete-branch    # Delete this workspace and branch
 ```
 
-Hooks are untracked: they run as your own processes with `SHOAL_HOOK`
-(`post_setup` or `pre_remove`), `SHOAL_WORKSPACE`, `SHOAL_WORKSPACE_ID`, and
-`SHOAL_STATE_DIR`, without a scope token or port variables, so whatever they
-leave running (a tmux server, say) is not a Shoal execution. `post_setup_cmd`
-runs from the CLI with your terminal after `add` or `prepare` has a ready
-workspace and before any `--agent`; a nonzero exit keeps the workspace, skips
-the agent, and fails the command. `pre_remove_cmd` runs inside the daemon for
-`rm`, `repo rm`, and automatic cleanup, after the removal checks pass and
-managed commands stop, without a terminal and with a 60-second limit; a nonzero
-exit or timeout retains the workspace with the hook's stderr as its error. It
-is skipped when the worktree directory is already gone.
+Hooks are untracked: they run as your own processes with `SHOAL_HOOK` (`post_setup`
+or `pre_remove`), `SHOAL_WORKSPACE`, `SHOAL_WORKSPACE_ID`, and `SHOAL_STATE_DIR`,
+without a scope token or port variables, so whatever they leave running (a tmux
+server, say) is not a Shoal execution. `post_setup_cmd` runs from the CLI with your
+terminal after `add` or `prepare` has a ready workspace and before any `--agent`; a
+nonzero exit keeps the workspace, skips the agent, and fails the command.
+`pre_remove_cmd` runs inside the daemon for `rm`, `repo rm`, and automatic cleanup,
+after the removal checks pass and managed commands stop, without a terminal and with
+a 60-second limit; a nonzero exit or timeout retains the workspace with the hook's
+stderr as its error. It is skipped when the worktree directory is already gone.
 
 ### Remove a workspace
 
-Removal retains the default branch unless `--delete-branch`; clean branches
-matching default/upstream are deleted. Otherwise fzf offers Cancel (default),
-Keep branch, or Delete branch, then `Are you sure? [y/N]`. Both choices discard
-uncommitted files. `--keep-branch`/`--delete-branch` skips the picker; add `--yes`
-to skip confirmation. `--yes` alone cannot choose for dirty/differing work.
+Removal retains the default branch unless `--delete-branch`; other clean branches
+matching the default or upstream, or merged into the default, are deleted.
+Otherwise fzf offers Cancel (default), Keep branch (files only), or Delete branch,
+followed by a summary and `Are you sure? [y/N]`. Both choices discard uncommitted
+and untracked files. `--keep-branch` or `--delete-branch` skips the picker but not
+the confirmation; scripts use `--yes` with one of them, since `--yes` alone does
+not choose for dirty or differing work. Ctrl-C cancels any Shoal prompt.
 
 Manual removal stops tracked commands and verified survivors, leaving unrelated
 processes alone. Ignored files go; shared caches stay; Worktrunk hooks are disabled.
@@ -343,7 +353,7 @@ retaining branches; moved worktrees or recorded commands need manual recovery.
 File changes (including ignored files), HEAD and commands reset the timer.
 Running/unknown commands, directory users (including shells), dirty/unpushed work,
 simulator leases, permits and failed checks block cleanup. Pushed means reachable
-from locally known remote branches; no fetch. Sweeps run about every 30 seconds;
+from locally known remote branches or the local default branch; no fetch. Sweeps run about every 30 seconds;
 timers reset on restart. The daemon needs `lsof` on PATH.
 
 ```toml
@@ -365,17 +375,16 @@ shoal ports                            # Configured and reserved ports here
 shoal exec fix-login -- sh -c 'my-server --port "$API_PORT"'
 ```
 
-Named TCP reservations belong to the worktree, persist across command exits,
-`stop`, and restarts, and are released by successful removal. Repeating a name
-returns the same port (`--reason` may update it); changing the number or
-variable requires release first. Later `exec`, `claude`, and `codex cli`
-commands receive `SHOAL_PORT_<NAME>` or the `--env` variable; running
-processes keep their environment, and nested executions drop the parent's port
-variables. Automatic allocation uses 49152–65535, configurable with `[ports]`
-`start`/`end` in the global config; `--port` may name any nonzero port. Shoal
-probes IPv4/IPv6 availability and prevents duplicates within the daemon, but
-reservations are cooperative and unrelated processes can still bind. UDP is
-not supported.
+Named TCP reservations belong to the worktree, persist across command exits, `stop`,
+and restarts, and are released by successful removal. Repeating a name returns the
+same port (`--reason` may update it); changing the number or variable requires
+release first. Later `exec`, `claude`, and `codex cli` commands receive
+`SHOAL_PORT_<NAME>` or the `--env` variable; running processes keep their
+environment, and nested executions drop the parent's port variables. Automatic
+allocation uses 49152–65535, configurable with `[ports]` `start`/`end` in the global
+config; `--port` may name any nonzero port. Shoal probes IPv4/IPv6 availability and
+prevents duplicates within the daemon, but reservations are cooperative and
+unrelated processes can still bind. UDP is not supported.
 
 Repository defaults, in `.shoal.toml` or the imported config:
 
@@ -406,14 +415,14 @@ destination; `--json` returns the path and never changes directory.
 
 ### Tab completion
 
-The same shell integration enables Bash and Zsh completion (Zsh's completion
-system is initialized if needed). Each Tab asks the installed binary for
-subcommands, flags, fixed values, and paths without a daemon; with a daemon
-running it also suggests repositories, workspaces, pools, members, lease names,
-ports, and simulator leases for the current or named workspace, honoring
-`--state-dir` and execution scope with a 500 ms timeout and never starting a
-daemon or picker. Targets sort before flags, also in fzf-tab. `shoal
-completions <shell>` prints scripts for Bash, Zsh, Fish, PowerShell, and Elvish.
+The same shell integration enables Bash and Zsh completion (initializing Zsh's
+completion system if needed). Each Tab asks the installed binary for
+subcommands, flags, fixed values, and paths without a daemon; with one running
+it also suggests repositories, workspaces, pools, members, lease names, ports,
+and simulator leases for the current or named workspace, honoring `--state-dir`
+and scope with a 500 ms timeout, never starting a daemon or picker. Targets sort
+before flags, also in fzf-tab. `shoal completions <shell>` prints scripts for
+Bash, Zsh, Fish, PowerShell, and Elvish.
 
 ### Recovery
 
@@ -425,29 +434,27 @@ shoal reconcile fix-login --repair --stop  # Also stop verified surviving comman
 ```
 
 Exit 2 while issues remain, 0 when resolved; JSON is an array of reports.
-Reconciliation is unavailable inside scoped executions. Startup marks
-interrupted lifecycle operations failed and disconnected executions unknown,
-and audits worktrees without deleting files or releasing leases. Repair
-restores verified worktrees to ready and clears executions proven stopped;
-connected commands keep running unless `--stop`. Moved worktrees must return to
-their recorded path, replaced metadata is refused, and a deleted directory is
-forgotten by the next cleanup sweep or `shoal rm`, retaining the branch.
+Reconciliation is unavailable inside scoped executions. Startup marks interrupted
+lifecycle operations failed and disconnected executions unknown, and audits
+worktrees without deleting files or releasing leases. Repair restores verified
+worktrees to ready and clears executions proven stopped; connected commands keep
+running unless `--stop`. Moved worktrees must return to their recorded path,
+replaced metadata is refused, and a deleted directory is forgotten by the next
+cleanup sweep or `shoal rm`, retaining the branch.
 
-Executions record wrapper and child identities plus a process group.
-Descendants inherit `SHOAL_EXECUTION_ID`, which recovery uses with live
-ancestry to find survivors; identities are rechecked before signaling, and
-unverified candidates are never killed. Detection is cooperative: hidden
-environments, cleared markers, and old records can leave it uncertain. After
-checking yourself that such processes stopped, use `--repair
---acknowledge-stopped`; visible live processes still block. Linux recovery is
-untested on a Linux host.
+Executions record wrapper and child identities plus a process group. Descendants
+inherit `SHOAL_EXECUTION_ID`, which recovery uses with live ancestry to find
+survivors; identities are rechecked before signaling, and unverified candidates are
+never killed. Detection is cooperative: hidden environments, cleared markers, and
+old records can leave it uncertain. After checking yourself that such processes
+stopped, use `--repair --acknowledge-stopped`; visible live processes still block.
 
 ### Scoped workspace commands
 
 PR watches and merge acknowledgements are own-workspace scope exceptions.
 Commands launched through `exec`, `claude`, and `codex cli` carry a scope token
 that confines them to their own worktree: inspect, execute, `merge`, `diff`,
-and resources. They cannot `pull`, reach other worktrees, remove workspaces,
+and resources. They cannot `pull`, `land`, reach other worktrees, remove workspaces,
 administer repositories, or control the daemon; nested commands keep the scope. Scope is cooperative and does not
 restrict direct filesystem or Git operations.
 
@@ -482,15 +489,14 @@ shoal sim release tests             # Or the default lease
 ```
 
 Acquisition returns a ready device UDID; use it explicitly with `simctl` or
-`xcodebuild -destination 'platform=iOS Simulator,id=<UDID>'`. Repeating a lease
-name returns the same device. Leases belong to worktrees, survive command exit
-and restarts, block automatic removal, and are deleted with the workspace. At
-capacity, idle managed devices shut down first; active leases and personal
-simulators are never touched, external booted devices count toward the limit,
-and busy requests exit 2 unless `--wait <seconds>`. Released devices keep apps
-and settings until the idle timer deletes them (checked every 15 seconds).
-Failed operations retain records for retry. Only the default CoreSimulator
-device set and one daemon are covered.
+`xcodebuild -destination 'platform=iOS Simulator,id=<UDID>'`. Repeating a lease name
+returns the same device. Leases belong to worktrees, survive command exit and
+restarts, block automatic removal, and are deleted with the workspace. At capacity,
+idle managed devices shut down first; active leases and personal simulators are
+never touched, external booted devices count toward the limit, and busy requests
+exit 2 unless `--wait <seconds>`. Released devices keep apps and settings until the
+idle timer deletes them (checked every 15 seconds). Failed operations retain records
+for retry. Only the default CoreSimulator device set and one daemon are covered.
 
 ### Clean devices and audit history
 
@@ -540,17 +546,16 @@ shoal resource list                          # --all for every workspace
 shoal resource release devices --name tests
 ```
 
-Each lease takes one slot from the pool and the chosen member; an explicit
-member never changes silently. Repeating a pool and lease name (default
-`default`) returns the existing permit. `--json` returns the lease or
-`acquired: false` with exit 2; `--wait` polls for up to 3600 seconds without
-fairness. Global names cannot be redefined by a repository; repository pools
-are keyed by repository, so equal names elsewhere are independent. Global
-changes need a restart, repository config is read per request, and conflicting
-definitions block new claims until they agree or leases drain. Leases survive
-command exit and restarts, block automatic cleanup, and are released by
-successful removal. Shoal accounts for permits only; stop using a resource
-before releasing it.
+Each lease takes one slot from the pool and the chosen member; an explicit member
+never changes silently. Repeating a pool and lease name (default `default`) returns
+the existing permit. `--json` returns the lease or `acquired: false` with exit 2;
+`--wait` polls for up to 3600 seconds without fairness. Global names cannot be
+redefined by a repository; repository pools are keyed by repository, so equal names
+elsewhere are independent. Global changes need a restart, repository config is read
+per request, and conflicting definitions block new claims until they agree or leases
+drain. Leases survive command exit and restarts, block automatic cleanup, and are
+released by successful removal. Shoal accounts for permits only; stop using a
+resource before releasing it.
 
 ### Shared readers and exclusive writers
 
@@ -575,6 +580,4 @@ Installs the bundled `SKILL.md` at user scope with no daemon: Codex at
 packaged skill so upgrades apply automatically; Cargo installs copy it, so
 rerun after upgrading. Other files in the skill directory are preserved. Run it
 outside scoped executions. `shoal skill` prints the instructions (`--json`
-returns a `skill` field). An agent launched independently in a managed
-worktree uses current-directory resolution but has no execution tracking or
-scope; in an ordinary checkout, use ordinary Git.
+returns a `skill` field).

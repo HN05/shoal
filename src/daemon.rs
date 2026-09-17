@@ -279,6 +279,9 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::PullDefaultBranch { workspace } => {
             Body::PulledBranch(manager.pull_default_branch(&workspace).await?)
         }
+        Method::LandWorkspace { workspace } => {
+            Body::LandedBranch(manager.land_workspace(&workspace).await?)
+        }
         Method::RefreshMergeSource { workspace, branch } => {
             Body::PulledBranch(manager.refresh_merge_source(&workspace, &branch).await?)
         }

@@ -4512,8 +4512,7 @@ fn merge_preserves_conflicts_and_refuses_changed_destination_branch() {
     assert!(
         fs::read_to_string(path.join("tracked"))
             .unwrap()
-            .contains("<<<<<<<")
-    );
+            .contains("    );
     git(path, &["merge", "--abort"]);
     git(path, &["switch", "-c", "unowned"]);
     let output = fixture.run(&["merge", "other", "worker"]);
@@ -5689,6 +5688,7 @@ fn interactive_add_picks_existing_branch_and_reopens_workspace() {
     assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
 }
 
+<<<<<<< HEAD
 fn wait_removed(fixture: &Fixture, name: &str) {
     let deadline = Instant::now() + Duration::from_secs(15);
     while fixture
@@ -5943,4 +5943,36 @@ fn merged_rechecks_head_after_pre_remove_hook() {
     fixture.ok(&["merged", "hook"]);
     wait_pr_error(&fixture, "hook", "HEAD changed during pre-remove hook");
     assert!(Path::new(workspace["path"].as_str().unwrap()).exists());
+}
+
+#[test]
+fn land_merges_into_main_without_a_remote_and_is_denied_to_scoped_processes() {
+    let fixture = Fixture::new();
+    let worker = fixture.add("worker");
+    let path = Path::new(worker["path"].as_str().unwrap());
+    merge_commit(path, "landed", "from the workspace\n");
+    let expected = git(path, &["rev-parse", "HEAD"]);
+    let before = git(&fixture.repo, &["rev-parse", "main"]);
+    let binary = env!("CARGO_BIN_EXE_shoal");
+    let denied = fixture.run(&["exec", "worker", "--", binary, "--json", "land"]);
+    assert!(!denied.status.success());
+    assert!(String::from_utf8_lossy(&denied.stderr).contains("cannot land"));
+    assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), before);
+    let result = fixture.ok(&["land", "worker"]);
+    assert_eq!(result["updated"], true);
+    assert_eq!(result["fast_forward"], true);
+    assert_eq!(result["default_branch"], "main");
+    assert_eq!(result["previous_commit"], before.trim());
+    assert_eq!(result["commit"], expected.trim());
+    assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), expected);
+    assert_eq!(
+        fs::read_to_string(fixture.repo.join("landed")).unwrap(),
+        "from the workspace\n"
+    );
+    assert_eq!(fixture.ok(&["land", "worker"])["updated"], false);
+    // Pulling without remotes is a no-op, and landed work needs no branch choice.
+    let pulled = fixture.ok(&["pull", "worker"]);
+    assert_eq!(pulled["updated"], false);
+    assert!(pulled["skipped"].as_str().unwrap().contains("no remotes"));
+    assert_eq!(fixture.ok(&["rm", "worker"])["branch_deleted"], true);
 }

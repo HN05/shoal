@@ -389,6 +389,13 @@ async fn pull_updates_main_preserves_feature_and_enforces_scope() {
 async fn pull_refuses_missing_upstream_dirty_and_diverged_main() {
     let f = Fixture::new().await;
     f.add("worker").await;
+    // A repository without remotes has nothing to pull and says so.
+    let pulled = f.manager.pull_default_branch("worker").await.unwrap();
+    assert!(!pulled.updated);
+    assert!(pulled.skipped.unwrap().contains("no remotes"));
+    let before = git(&f.repo, &["rev-parse", "main"]);
+    f.remote();
+    git(&f.repo, &["branch", "--unset-upstream", "main"]);
     assert!(
         f.manager
             .pull_default_branch("worker")
@@ -397,8 +404,10 @@ async fn pull_refuses_missing_upstream_dirty_and_diverged_main() {
             .to_string()
             .contains("no branch upstream")
     );
-    let before = git(&f.repo, &["rev-parse", "main"]);
-    f.remote();
+    git(
+        &f.repo,
+        &["branch", "--set-upstream-to=origin/main", "main"],
+    );
     fs::write(f.repo.join("tracked"), "local edits\n").unwrap();
     assert!(
         f.manager
@@ -867,4 +876,166 @@ async fn existing_default_branch_survives_normal_workspace_removal() {
     assert!(!opened.workspace.path.exists());
     assert_eq!(git(&f.repo, &["rev-parse", "main"]), before);
     assert!(f.manager.open_branch(&f.repo_id, "main").await.is_ok());
+}
+
+#[tokio::test]
+async fn land_fast_forwards_merges_and_aborts_conflicts_without_a_remote() {
+    let f = Fixture::new().await;
+    let workspace = f.add("worker").await;
+    let landed = f.manager.land_workspace("worker").await.unwrap();
+    assert!(!landed.updated);
+    assert_eq!(landed.commit, git(&f.repo, &["rev-parse", "main"]).trim());
+    fs::write(workspace.path.join("feature"), "work\n").unwrap();
+    commit(&workspace.path, "feature");
+    let expected = git(&workspace.path, &["rev-parse", "HEAD"]);
+    let landed = f.manager.land_workspace("worker").await.unwrap();
+    assert!(landed.updated && landed.fast_forward);
+    assert_eq!(landed.default_branch, "main");
+    assert_eq!(landed.commit, expected.trim());
+    assert!(landed.default_refresh.skipped.is_some());
+    assert_eq!(git(&f.repo, &["rev-parse", "main"]), expected);
+    assert_eq!(
+        fs::read_to_string(f.repo.join("feature")).unwrap(),
+        "work\n"
+    );
+    // Diverged histories get a merge commit in the default checkout.
+    fs::write(f.repo.join("tracked"), "main side\n").unwrap();
+    commit(&f.repo, "tracked");
+    fs::write(workspace.path.join("feature"), "more\n").unwrap();
+    commit(&workspace.path, "feature");
+    let landed = f.manager.land_workspace("worker").await.unwrap();
+    assert!(landed.updated && !landed.fast_forward);
+    assert_eq!(
+        git(&f.repo, &["rev-list", "--count", "--merges", "main"]),
+        "1\n"
+    );
+    assert_eq!(
+        fs::read_to_string(f.repo.join("feature")).unwrap(),
+        "more\n"
+    );
+    assert_eq!(git(&f.repo, &["status", "--porcelain"]), "");
+    // Landed work counts as retained, and the merged branch is redundant.
+    let check = f.manager.check_removal(&workspace.id, 0).await.unwrap();
+    assert_eq!(check.unpushed_commits, 0);
+    assert!(check.can_delete_branch());
+    // A conflicting merge is aborted and leaves the default checkout untouched.
+    fs::write(f.repo.join("tracked"), "main again\n").unwrap();
+    commit(&f.repo, "tracked");
+    let main = git(&f.repo, &["rev-parse", "main"]);
+    fs::write(workspace.path.join("tracked"), "worker again\n").unwrap();
+    commit(&workspace.path, "tracked");
+    let error = f.manager.land_workspace("worker").await.unwrap_err();
+    assert!(error.to_string().contains("shoal merge main"), "{error:#}");
+    assert_eq!(git(&f.repo, &["rev-parse", "main"]), main);
+    assert_eq!(git(&f.repo, &["status", "--porcelain"]), "");
+    assert!(!f.repo.join(".git/MERGE_HEAD").exists());
+    assert_eq!(
+        fs::read_to_string(f.repo.join("tracked")).unwrap(),
+        "main again\n"
+    );
+    let check = f.manager.check_removal(&workspace.id, 0).await.unwrap();
+    assert_eq!(check.unpushed_commits, 1);
+    assert!(!check.can_delete_branch());
+}
+
+#[tokio::test]
+async fn land_refuses_dirty_checkouts_other_branches_and_scoped_callers() {
+    let f = Fixture::new().await;
+    let workspace = f.add("worker").await;
+    f.add("caller").await;
+    fs::write(workspace.path.join("feature"), "work\n").unwrap();
+    commit(&workspace.path, "feature");
+    let main = git(&f.repo, &["rev-parse", "main"]);
+    fs::write(f.repo.join("scratch"), "").unwrap();
+    let error = f.manager.land_workspace("worker").await.unwrap_err();
+    assert!(
+        format!("{error:#}").contains("uncommitted or untracked"),
+        "{error:#}"
+    );
+    fs::remove_file(f.repo.join("scratch")).unwrap();
+    fs::write(workspace.path.join("scratch"), "").unwrap();
+    let error = f.manager.land_workspace("worker").await.unwrap_err();
+    assert!(
+        format!("{error:#}").contains("not ready to land"),
+        "{error:#}"
+    );
+    fs::remove_file(workspace.path.join("scratch")).unwrap();
+    git(&workspace.path, &["switch", "--detach"]);
+    let error = f.manager.land_workspace("worker").await.unwrap_err();
+    assert!(format!("{error:#}").contains("not on worker"), "{error:#}");
+    git(&workspace.path, &["switch", "worker"]);
+    assert_eq!(git(&f.repo, &["rev-parse", "main"]), main);
+    f.manager
+        .issue_scope(
+            "token".into(),
+            scope::Caller {
+                execution_id: "execution".into(),
+                workspace_id: workspace.id.clone(),
+            },
+        )
+        .await;
+    let mut denied = Method::LandWorkspace {
+        workspace: workspace.id.clone(),
+    };
+    assert!(
+        scope::authorize(&f.manager, Some("token"), &mut denied)
+            .await
+            .unwrap_err()
+            .to_string()
+            .contains("cannot land")
+    );
+}
+
+#[tokio::test]
+async fn land_refreshes_the_default_branch_and_needs_it_outside_workspaces() {
+    let f = Fixture::new().await;
+    let workspace = f.add("worker").await;
+    let author = f.remote();
+    let upstream = git(&author, &["rev-parse", "HEAD"]);
+    fs::write(workspace.path.join("feature"), "work\n").unwrap();
+    commit(&workspace.path, "feature");
+    let landed = f.manager.land_workspace("worker").await.unwrap();
+    assert!(landed.default_refresh.updated);
+    assert_eq!(landed.default_refresh.commit, upstream.trim());
+    assert!(landed.updated && !landed.fast_forward);
+    assert_eq!(
+        git(&f.repo, &["rev-parse", "main^1"]).trim(),
+        upstream.trim()
+    );
+    assert_eq!(
+        fs::read_to_string(f.repo.join("feature")).unwrap(),
+        "work\n"
+    );
+    assert_eq!(
+        fs::read_to_string(f.repo.join("upstream")).unwrap(),
+        "remote\n"
+    );
+    assert_eq!(git(&f.repo, &["for-each-ref", "refs/shoal/"]), "");
+    // Without a checkout of the default branch only fast-forwards land.
+    git(&f.repo, &["switch", "-c", "side"]);
+    let main = git(&f.repo, &["rev-parse", "main"]);
+    fs::write(workspace.path.join("feature"), "diverged\n").unwrap();
+    commit(&workspace.path, "feature");
+    let error = f.manager.land_workspace("worker").await.unwrap_err();
+    assert!(error.to_string().contains("not checked out"), "{error:#}");
+    assert_eq!(git(&f.repo, &["rev-parse", "main"]), main);
+    git(&workspace.path, &["merge", "--no-edit", "main"]);
+    let expected = git(&workspace.path, &["rev-parse", "HEAD"]);
+    let landed = f.manager.land_workspace("worker").await.unwrap();
+    assert!(landed.updated && landed.fast_forward);
+    assert_eq!(git(&f.repo, &["rev-parse", "main"]), expected);
+    // A managed workspace holding the default branch blocks landing.
+    let holder = f.add("holder").await;
+    git(&holder.path, &["switch", "main"]);
+    fs::write(workspace.path.join("feature"), "held\n").unwrap();
+    commit(&workspace.path, "feature");
+    let error = f.manager.land_workspace("worker").await.unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("checked out in workspace holder"),
+        "{error:#}"
+    );
+    assert!(f.manager.land_workspace("holder").await.is_err());
+    assert_eq!(git(&f.repo, &["rev-parse", "main"]), expected);
 }

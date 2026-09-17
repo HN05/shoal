@@ -52,6 +52,9 @@ pub async fn authorize(
         Method::PullDefaultBranch { .. } => bail!(
             "workspace processes cannot pull; shoal merge refreshes its source branch from upstream first"
         ),
+        Method::LandWorkspace { .. } => bail!(
+            "workspace processes cannot land into the default branch; an unscoped shoal land does that"
+        ),
         _ => bail!(
             "workspace processes can only inspect their worktree, execute there, manage its resources, and merge into their own branch"
         ),

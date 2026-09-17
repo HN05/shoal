@@ -6,8 +6,8 @@ use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWrite
 
 use crate::{
     model::{
-        DiffBase, ExecutionPlan, Inspection, PortOverview, PortReservation, PortSuggestion,
-        PulledBranch, Repository, RepositoryRemoval, Workspace,
+        DiffBase, ExecutionPlan, Inspection, LandedBranch, PortOverview, PortReservation,
+        PortSuggestion, PulledBranch, Repository, RepositoryRemoval, Workspace,
     },
     ports::PortRequest,
     process_identity::Identity,
@@ -109,6 +109,10 @@ pub enum Method {
         options: ReconcileOptions,
     },
     PullDefaultBranch {
+        workspace: String,
+    },
+    /// Merge the workspace branch into the repository default branch locally.
+    LandWorkspace {
         workspace: String,
     },
     /// Fast-forward a local merge source from its upstream before merging.
@@ -225,6 +229,7 @@ pub enum Body {
     DiffBase(DiffBase),
     Hooks(Hooks),
     PulledBranch(PulledBranch),
+    LandedBranch(LandedBranch),
     Port(PortReservation),
     Ports(Vec<PortReservation>),
     PortSuggestion(PortSuggestion),

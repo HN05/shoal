@@ -138,3 +138,20 @@ pub struct PulledBranch {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub skipped: Option<String>,
 }
+
+/// A workspace branch merged into its repository's default branch.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct LandedBranch {
+    pub workspace_id: String,
+    pub repository_id: String,
+    pub branch: String,
+    pub default_branch: String,
+    pub previous_commit: String,
+    pub commit: String,
+    /// False when the default branch already contained the workspace branch.
+    pub updated: bool,
+    /// True when the default branch fast-forwarded instead of a merge commit.
+    pub fast_forward: bool,
+    /// How the default branch was refreshed from its upstream first.
+    pub default_refresh: PulledBranch,
+}

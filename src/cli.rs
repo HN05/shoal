@@ -80,6 +80,8 @@ pub enum Command {
         #[arg(long, conflicts_with = "remote")]
         local: bool,
     },
+    /// Merge this workspace's branch into the repository default branch locally, without pushing.
+    Land { workspace: Option<String> },
     /// Internal worker launched through the tracked execution wrapper.
     #[command(hide = true)]
     MergeInternal {

@@ -28,13 +28,42 @@ pub(super) async fn pull(ctx: &Context, workspace: Option<String>) -> Result<i32
         PulledBranch
     );
     ctx.show(&result, |result| {
-        if result.updated {
+        if let Some(skipped) = &result.skipped {
+            println!("{skipped}");
+        } else if result.updated {
             println!("Updated {} to {}", result.branch, result.commit);
         } else {
             println!(
                 "{} is already up to date ({})",
                 result.branch, result.commit
             );
+        }
+    })?;
+    Ok(0)
+}
+
+pub(super) async fn land(ctx: &Context, workspace: Option<String>) -> Result<i32> {
+    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    let result = request!(
+        &ctx.paths,
+        Method::LandWorkspace { workspace },
+        LandedBranch
+    );
+    ctx.show(&result, |result| {
+        let refresh = &result.default_refresh;
+        if refresh.updated {
+            println!(
+                "Updated {} from its upstream ({}..{})",
+                refresh.branch, refresh.previous_commit, refresh.commit
+            );
+        }
+        let (branch, default, commit) = (&result.branch, &result.default_branch, &result.commit);
+        if !result.updated {
+            println!("{default} already contains {branch} ({commit})");
+        } else if result.fast_forward {
+            println!("Fast-forwarded {default} to {branch} ({commit})");
+        } else {
+            println!("Merged {branch} into {default} ({commit})");
         }
     })?;
     Ok(0)

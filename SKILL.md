@@ -55,6 +55,8 @@ Other failures may return an error before a merge starts; inspect the error.
 A local source such as `main` is fast-forwarded from its upstream before the
 merge, so `shoal merge main` alone brings in current upstream work; there is no
 separate pull for agents. Pass `--local` to merge the local branch as it is.
+Agents cannot land either: when the repository has no remote, the human runs
+`shoal land` to merge your branch into the default branch.
 
 ## Ports
 

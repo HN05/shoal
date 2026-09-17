@@ -65,12 +65,13 @@ shoal merged                  # Manually confirm merge and remove
 
 Inside a workspace, omit its name. Use `--json` or `shoal <command> --help`.
 
-To bring changes into your current workspace:
+To move changes between your workspace and the default branch:
 
 ```sh
 shoal pull                    # Refresh the repository's default branch
 shoal merge main              # Merge it into your branch; use your repo's branch name
 shoal merge feature/api       # Merge another local or remote branch
+shoal land                    # Merge your branch into the default branch; no remote needed
 ```
 
 CLI agents run in the terminal through Shoal. The Codex shortcut disables Codex's
@@ -118,7 +119,7 @@ pools, setup and hooks, and configuration outside Git.
 `shoal rm` removes a workspace and its resources, prompting when needed about
 its branch and uncommitted work. `shoal stop` keeps the workspace.
 
-Automatic cleanup removes idle, clean, fully pushed workspaces after 10 minutes,
+Automatic cleanup removes idle, clean, pushed or landed workspaces after 10 minutes,
 and forgets workspaces whose directory you deleted yourself, keeping the branch.
 Disable it when using desktop agents whose activity Shoal cannot track. Set this
 in `~/.config/shoal/config.toml`, then restart the daemon:
@@ -128,9 +129,8 @@ in `~/.config/shoal/config.toml`, then restart the daemon:
 enabled = false
 ```
 
-For a workspace that needs recovery, start with `shoal reconcile <name>`.
-See [cleanup](docs/reference.md#automatic-cleanup) and
-[recovery](docs/reference.md#recovery) for details.
+For a workspace that needs recovery, start with `shoal reconcile <name>`; see
+[cleanup](docs/reference.md#automatic-cleanup) and [recovery](docs/reference.md#recovery) for details.
 
 ## Update
 

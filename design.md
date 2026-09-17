@@ -105,21 +105,24 @@ hook runs in the daemon inside the single removal path for manual, repository,
 and automatic removal, after checks pass and commands stop, bounded in time;
 failure retains the workspace. Both hook keys share the setup path rules.
 
-`diff` compares against the recorded base's fork point (merge-base fallback,
-fixed commits stay fixed) with native Git settings, so advancing the base is
-never shown as work. `pull` fast-forwards the repository default branch only.
-`merge` imports any local or remote branch into the workspace's own branch,
-preferring local sources, which it first fast-forwards from their upstream
-unless `--local`, they lack an upstream, or a managed workspace has them
-checked out; remote discovery must be unambiguous, and conflicts are left for
-ordinary Git. Fetches use private temporary refs, merges
+`diff` compares against the recorded base's fork point (merge-base fallback, fixed
+commits stay fixed) with native Git settings, so advancing the base is never shown
+as work. `pull` fast-forwards the repository default branch only; without remotes it
+reports nothing to pull. `merge` imports any local or remote branch into the
+workspace's own branch, preferring local sources, which it first fast-forwards from
+their upstream unless `--local`, they lack an upstream, or a managed workspace has
+them checked out; remote discovery must be unambiguous, and conflicts are left for
+ordinary Git. `land`, the local substitute for a pull request, merges the workspace
+branch into the default branch (refreshed from its upstream first) without pushing
+and aborts a merge that does not apply cleanly, leaving conflicts to a `merge` of
+the default branch into the workspace. Fetches use private temporary refs, merges
 run through the tracked wrapper, and own-branch checks are cooperative.
 
 ## Scope and user interfaces
 
 Commands launched through Shoal inherit a daemon-validated scope token that
 confines them to their own workspace: inspect, execute, merge, and resources.
-`pull`, creation, removal, reconciliation, other workspaces, repository
+`pull`, `land`, creation, removal, reconciliation, other workspaces, repository
 administration, and service control need an unscoped caller. PR registration and
 manual merge acknowledgement are own-workspace exceptions; nested executions keep scope.
 
@@ -134,13 +137,11 @@ its confirmation; explicit branch flags skip the choice only.
 
 Completion queries the installed binary per Tab and uses read-only daemon calls
 with a 500 ms timeout for live targets, honoring state directory and scope and
-never starting a daemon or picker. Targets sort before flags, including in
-fzf-tab.
+never starting a daemon or picker. Targets sort before flags, including in fzf-tab.
 
 Agent shortcuts use the execution wrapper: Codex CLI gets full access without
 approvals, Claude gets remote control named after the workspace and a persisted
-trust entry in its config (Claude offers no flag for this; its own error text
-names that entry). Codex's default mode is a global config value read at launch.
+trust entry in its config. Codex's default mode is a global config value read at launch.
 `add --issue` resolves issue numbers/URLs using the remote and existing gh/fj
 login, derives a portable name, and supplies issue context to CLI agents; forge
 lookup stays in the CLI with no Shoal credentials or forge configuration.
@@ -151,8 +152,7 @@ tracking or scope; users disable automatic cleanup when that activity cannot
 be tracked.
 
 The skill is installed at user scope for Codex and Claude, independent of the
-daemon and never from a scoped execution. Homebrew builds link to the packaged
-skill; other builds copy it. Skill availability registers nothing.
+daemon and never from a scoped execution; its availability registers nothing.
 
 ## Resource ownership
 
@@ -184,17 +184,18 @@ underlying resources.
 ## Removal and recovery
 
 Manual and automatic cleanup share one path: establish ownership, stop owned
-executions, run the pre-remove hook, remove owned simulators, remove the
-worktree, and release leases with the record. Failures retain what is needed
-to retry. Manual removal deletes a redundant branch (tree equal to the local
-default or its upstream) and otherwise requires an explicit keep or delete
-choice. The default branch is retained unless deletion is explicit. Automatic
-cleanup removes only clean, fully pushed, idle worktrees with
-no executions, directory users, leases, or permits, rechecked immediately
-before deletion, without fetching. `repo rm` deletes the checkout and every
-workspace through that path, refuses external worktrees and dangerous paths,
-persists progress, and blocks new workspaces until an interrupted removal is
-retried. PR cleanup is separately enabled by default: persisted watches use the
+executions, run the pre-remove hook, remove owned simulators, remove the worktree,
+and release leases with the record. Failures retain what is needed to retry.
+Manual removal deletes a redundant branch (tree equal to the local default or its
+upstream, or merged into the default) and otherwise requires an explicit keep or
+delete choice. The default branch is retained unless deletion is explicit.
+Automatic cleanup removes only clean, idle worktrees whose commits are all on a
+remote or the default branch, with no executions, directory users, leases, or
+permits, rechecked immediately before deletion, without fetching. `repo rm`
+deletes the checkout and every workspace through that path, refuses external
+worktrees and dangerous paths, persists progress, and blocks new workspaces until
+an interrupted removal is retried.
+PR cleanup is separately enabled by default: persisted watches use the
 user's gh/fj login and require a merged PR containing HEAD; manual acknowledgement
 binds to HEAD. Both stop tracked agents immediately through shared removal,
 rechecking clean files and HEAD after stopping. Failures retain work and leases;

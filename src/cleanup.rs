@@ -181,10 +181,10 @@ mod tests {
         let temp = tempfile::tempdir_in("/tmp").unwrap();
         let repository_dir = temp.path().join("repo");
         fs::create_dir(&repository_dir).unwrap();
-        let git_cmd = |args: &[&str]| {
+        let git_in = |dir: &Path, args: &[&str]| {
             let output = std::process::Command::new("git")
                 .arg("-C")
-                .arg(&repository_dir)
+                .arg(dir)
                 .args(args)
                 .env("GIT_CONFIG_GLOBAL", "/dev/null")
                 .env("GIT_CONFIG_NOSYSTEM", "1")
@@ -196,6 +196,7 @@ mod tests {
                 String::from_utf8_lossy(&output.stderr)
             );
         };
+        let git_cmd = |args: &[&str]| git_in(&repository_dir, args);
         git_cmd(&["init", "-b", "main"]);
         fs::write(repository_dir.join(".gitignore"), "ignored/\n").unwrap();
         git_cmd(&["add", "."]);
@@ -242,11 +243,26 @@ mod tests {
             resource: None,
             reason: None,
         };
+        fs::write(workspace.path.join("work"), "landed later\n").unwrap();
+        git_in(&workspace.path, &["add", "work"]);
+        git_in(
+            &workspace.path,
+            &[
+                "-c",
+                "user.name=Shoal Test",
+                "-c",
+                "user.email=shoal@example.invalid",
+                "commit",
+                "-m",
+                "work",
+            ],
+        );
         assert!(
             snapshot(&manager).await.is_none(),
             "unpushed work must be retained"
         );
-        git_cmd(&["update-ref", "refs/remotes/origin/main", "HEAD"]);
+        // Work on the local default branch is retained without any remote.
+        git_cmd(&["merge", "--ff-only", "idle"]);
         manager
             .acquire_resource(&workspace.id, lease("test-lock", None))
             .await
