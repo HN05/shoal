@@ -82,6 +82,8 @@ pub enum Command {
     },
     /// Merge this workspace's branch into the repository default branch locally, without pushing.
     Land { workspace: Option<String> },
+    #[command(hide = true)]
+    LandInternal { plan: String },
     /// Internal worker launched through the tracked execution wrapper.
     #[command(hide = true)]
     MergeInternal {

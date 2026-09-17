@@ -35,8 +35,13 @@ pub fn exit_code(status: ExitStatus) -> i32 {
 enum Mode {
     /// An arbitrary command chosen by the caller.
     Command,
+    Land {
+        json: bool,
+    },
     /// The repository's configured setup command; `json` keeps stdout clean.
-    Setup { json: bool },
+    Setup {
+        json: bool,
+    },
 }
 
 impl Mode {
@@ -48,6 +53,10 @@ impl Mode {
 pub async fn run(paths: &Paths, workspace: String, command: Vec<OsString>) -> Result<i32> {
     ensure!(!command.is_empty(), "a command is required after --");
     run_tracked(paths, workspace, command, Mode::Command).await
+}
+
+pub async fn land(paths: &Paths, workspace: String, json: bool) -> Result<i32> {
+    run_tracked(paths, workspace, vec![], Mode::Land { json }).await
 }
 
 pub async fn prepare(paths: &Paths, workspace: String, json: bool) -> Result<i32> {
@@ -65,18 +74,36 @@ async fn run_tracked(
     let method = match mode {
         Mode::Setup { .. } => Method::Prepare { workspace, wrapper },
         Mode::Command => Method::Execute { workspace, wrapper },
+        Mode::Land { .. } => Method::LandWorkspace { workspace, wrapper },
     };
-    let (mut stream, body) = timeout(Duration::from_secs(5), client::open(paths, method))
-        .await
-        .context("daemon did not start the execution in time")??;
+    let start_timeout = if matches!(mode, Mode::Land { .. }) {
+        120
+    } else {
+        5
+    };
+    let (mut stream, body) = timeout(
+        Duration::from_secs(start_timeout),
+        client::open(paths, method),
+    )
+    .await
+    .context("daemon did not start the execution in time")??;
     let plan = match body {
         Body::Execution(plan) => plan,
         Body::Error { message, .. } => bail!("{message}"),
         _ => bail!("unexpected execution response"),
     };
-    let command = match &plan.setup_cmd {
-        Some(path) => vec![path.as_os_str().to_owned()],
-        None => command,
+    let command = if let Some(land) = &plan.land {
+        let mut command = vec![std::env::current_exe()?.into_os_string()];
+        if matches!(mode, Mode::Land { json: true }) {
+            command.push("--json".into());
+        }
+        command.extend(["land-internal".into(), serde_json::to_string(land)?.into()]);
+        command
+    } else {
+        match &plan.setup_cmd {
+            Some(path) => vec![path.as_os_str().to_owned()],
+            None => command,
+        }
     };
     let result = supervise(&mut stream, paths, &plan, &command, mode).await;
     let code = result.as_ref().copied().unwrap_or(1);

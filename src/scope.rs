@@ -9,6 +9,7 @@ use anyhow::{Result, bail, ensure};
 pub struct Caller {
     pub execution_id: String,
     pub workspace_id: String,
+    pub landing: bool,
 }
 
 /// Resolve `token` and confine `method` to the caller's own workspace. Optional
@@ -27,6 +28,13 @@ pub async fn authorize(
         .ok_or_else(|| anyhow::anyhow!("expired or unknown workspace scope"))?;
     let owner = &caller.workspace_id;
     let target = match method {
+        Method::CheckLanding => {
+            ensure!(
+                caller.landing,
+                "only an authorized landing execution may run the land worker"
+            );
+            None
+        }
         Method::Status | Method::ListWorkspaces | Method::ListRepositories | Method::SimCatalog => {
             None
         }

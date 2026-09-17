@@ -79,6 +79,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             local,
         } => crate::merge::run(&ctx, workspace, branch, remote, local).await,
         Command::Land { workspace } => workspaces::land(&ctx, workspace).await,
+        Command::LandInternal { plan } => workspaces::land_worker(&ctx, plan).await,
         Command::MergeInternal {
             branch,
             remote,

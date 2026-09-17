@@ -44,11 +44,18 @@ pub(super) async fn pull(ctx: &Context, workspace: Option<String>) -> Result<i32
 
 pub(super) async fn land(ctx: &Context, workspace: Option<String>) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let result = request!(
-        &ctx.paths,
-        Method::LandWorkspace { workspace },
-        LandedBranch
+    execution::land(&ctx.paths, workspace, ctx.json).await
+}
+
+pub(super) async fn land_worker(ctx: &Context, plan: String) -> Result<i32> {
+    anyhow::ensure!(env::is_scoped(), "land worker requires a tracked execution");
+    client::call(&ctx.paths, Method::CheckLanding).await?;
+    let plan: crate::model::LandPlan = serde_json::from_str(&plan)?;
+    anyhow::ensure!(
+        std::env::var(env::WORKSPACE_ID)? == plan.workspace.id,
+        "land worker requires its authorized workspace"
     );
+    let result = crate::repo_git::finish_land(plan).await?;
     ctx.show(&result, |result| {
         let refresh = &result.default_refresh;
         if refresh.updated {

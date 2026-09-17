@@ -5957,6 +5957,9 @@ fn land_merges_into_main_without_a_remote_and_is_denied_to_scoped_processes() {
     let denied = fixture.run(&["exec", "worker", "--", binary, "--json", "land"]);
     assert!(!denied.status.success());
     assert!(String::from_utf8_lossy(&denied.stderr).contains("cannot land"));
+    let denied = fixture.run(&["exec", "worker", "--", binary, "land-internal", "{}"]);
+    assert!(!denied.status.success());
+    assert!(String::from_utf8_lossy(&denied.stderr).contains("only an authorized landing"));
     assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), before);
     let result = fixture.ok(&["land", "worker"]);
     assert_eq!(result["updated"], true);
@@ -5975,4 +5978,88 @@ fn land_merges_into_main_without_a_remote_and_is_denied_to_scoped_processes() {
     assert_eq!(pulled["updated"], false);
     assert!(pulled["skipped"].as_str().unwrap().contains("no remotes"));
     assert_eq!(fixture.ok(&["rm", "worker"])["branch_deleted"], true);
+}
+
+#[test]
+fn land_tracks_merge_drivers_and_stops_them_on_stop_or_daemon_loss() {
+    for daemon_loss in [false, true] {
+        let mut fixture = Fixture::new();
+        git(&fixture.repo, &["config", "user.name", "Test"]);
+        git(
+            &fixture.repo,
+            &["config", "user.email", "test@example.invalid"],
+        );
+        fs::write(fixture.repo.join(".gitattributes"), "tracked merge=slow\n").unwrap();
+        merge_commit(&fixture.repo, ".gitattributes", "tracked merge=slow\n");
+        let worker = fixture.add("worker");
+        let path = Path::new(worker["path"].as_str().unwrap());
+        merge_commit(path, "tracked", "worker\n");
+        merge_commit(&fixture.repo, "tracked", "main\n");
+        let before = git(&fixture.repo, &["rev-parse", "HEAD"]);
+        git(
+            &fixture.repo,
+            &[
+                "config",
+                "merge.slow.driver",
+                "echo $$ > driver.pid; exec sleep 60",
+            ],
+        );
+        let mut land = fixture
+            .command()
+            .args(["land", "worker"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while !fixture.repo.join("driver.pid").exists() {
+            assert!(
+                land.try_wait().unwrap().is_none(),
+                "land exited before merge driver"
+            );
+            assert!(Instant::now() < deadline, "merge driver did not start");
+            thread::sleep(Duration::from_millis(20));
+        }
+        let pid: i32 = fs::read_to_string(fixture.repo.join("driver.pid"))
+            .unwrap()
+            .trim()
+            .parse()
+            .unwrap();
+        let during = fixture.ok(&["inspect", "worker"]);
+        assert_eq!(during["executions"].as_array().unwrap().len(), 1);
+        assert!(during["executions"][0]["child"].is_object());
+        if daemon_loss {
+            fixture.daemon.kill().unwrap();
+            fixture.daemon.wait().unwrap();
+        } else {
+            fixture.ok(&["stop", "worker"]);
+        }
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            if let Some(status) = land.try_wait().unwrap() {
+                assert!(!status.success());
+                break;
+            }
+            assert!(Instant::now() < deadline, "landing wrapper did not stop");
+            thread::sleep(Duration::from_millis(20));
+        }
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            let output = Command::new("ps")
+                .args(["-p", &pid.to_string(), "-o", "stat="])
+                .output()
+                .unwrap();
+            let status = String::from_utf8_lossy(&output.stdout);
+            if status.trim().is_empty() || status.trim().starts_with('Z') {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "merge driver survived landing stop"
+            );
+            thread::sleep(Duration::from_millis(20));
+        }
+        assert_eq!(git(&fixture.repo, &["rev-parse", "HEAD"]), before);
+        assert!(path.exists());
+    }
 }

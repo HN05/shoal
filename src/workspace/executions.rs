@@ -23,6 +23,8 @@ use uuid::Uuid;
 pub enum ExecutionKind {
     /// A caller-chosen command in a ready workspace.
     Command,
+    /// A landing authorized by an unscoped caller; the daemon holds its Git gate.
+    Land,
     /// The repository's setup command; exclusive, and its exit decides whether
     /// the workspace becomes ready.
     Setup,
@@ -111,6 +113,7 @@ impl Manager {
             scope_token.clone(),
             Caller {
                 execution_id: id.clone(),
+                landing: kind == ExecutionKind::Land,
                 workspace_id: workspace.id.clone(),
             },
         )
@@ -122,6 +125,7 @@ impl Manager {
                 scope_token,
                 setup_cmd,
                 ports,
+                land: None,
             },
             receiver,
         ))

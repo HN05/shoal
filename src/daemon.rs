@@ -167,6 +167,17 @@ async fn serve(mut stream: UnixStream, server: Server) -> Result<()> {
         }
     };
     let body = match request.method {
+        Method::LandWorkspace { workspace, wrapper } => {
+            return execute(
+                stream,
+                request.id,
+                workspace,
+                wrapper,
+                server.manager,
+                ExecutionKind::Land,
+            )
+            .await;
+        }
         Method::Execute { workspace, wrapper } => {
             let kind = ExecutionKind::Command;
             return execute(stream, request.id, workspace, wrapper, server.manager, kind).await;
@@ -201,7 +212,11 @@ async fn serve(mut stream: UnixStream, server: Server) -> Result<()> {
 /// Request/response operations. Errors become `operation_failed` replies.
 async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -> Result<Body> {
     Ok(match method {
-        Method::Status | Method::Shutdown | Method::Execute { .. } | Method::Prepare { .. } => {
+        Method::Status
+        | Method::Shutdown
+        | Method::Execute { .. }
+        | Method::Prepare { .. }
+        | Method::LandWorkspace { .. } => {
             anyhow::bail!("unsupported operation")
         }
         Method::ListRepositories => {
@@ -279,8 +294,12 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::PullDefaultBranch { workspace } => {
             Body::PulledBranch(manager.pull_default_branch(&workspace).await?)
         }
-        Method::LandWorkspace { workspace } => {
-            Body::LandedBranch(manager.land_workspace(&workspace).await?)
+        Method::CheckLanding => {
+            ensure!(
+                caller.is_some_and(|caller| caller.landing),
+                "landing execution required"
+            );
+            Body::Ok
         }
         Method::RefreshMergeSource { workspace, branch } => {
             Body::PulledBranch(manager.refresh_merge_source(&workspace, &branch).await?)
@@ -367,7 +386,35 @@ async fn execute(
     manager: Arc<Manager>,
     kind: ExecutionKind,
 ) -> Result<()> {
-    let (plan, mut stop) = match manager
+    let landing = async {
+        if kind != ExecutionKind::Land {
+            return Ok(None);
+        }
+        let selected = manager.workspace(&workspace).await?;
+        let guard = manager
+            .git_gate(&selected.repository_id)
+            .await
+            .lock_owned()
+            .await;
+        let plan = manager.prepare_land(&workspace).await?;
+        anyhow::Ok(Some((guard, plan)))
+    }
+    .await;
+    let (_git_guard, land) = match landing {
+        Ok(Some((guard, plan))) => (Some(guard), Some(plan)),
+        Ok(None) => (None, None),
+        Err(error) => {
+            return protocol::write(
+                &mut stream,
+                &Response::new(
+                    request_id,
+                    Body::error("landing_failed", format!("{error:#}")),
+                ),
+            )
+            .await;
+        }
+    };
+    let (mut plan, mut stop) = match manager
         .begin_execution(&workspace, Some(wrapper), kind)
         .await
     {
@@ -377,6 +424,7 @@ async fn execute(
             return protocol::write(&mut stream, &Response::new(request_id, body)).await;
         }
     };
+    plan.land = land.map(Box::new);
     let execution_id = plan.id.clone();
     let (mut reader, mut writer) = stream.split();
     let result = async {

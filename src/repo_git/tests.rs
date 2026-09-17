@@ -325,6 +325,7 @@ async fn pull_updates_main_preserves_feature_and_enforces_scope() {
         .issue_scope(
             "token".into(),
             scope::Caller {
+                landing: false,
                 execution_id: "execution".into(),
                 workspace_id: workspace.id.clone(),
             },
@@ -971,6 +972,7 @@ async fn land_refuses_dirty_checkouts_other_branches_and_scoped_callers() {
         .issue_scope(
             "token".into(),
             scope::Caller {
+                landing: false,
                 execution_id: "execution".into(),
                 workspace_id: workspace.id.clone(),
             },
@@ -978,6 +980,9 @@ async fn land_refuses_dirty_checkouts_other_branches_and_scoped_callers() {
         .await;
     let mut denied = Method::LandWorkspace {
         workspace: workspace.id.clone(),
+        wrapper: crate::process_identity::capture(std::process::id())
+            .unwrap()
+            .unwrap(),
     };
     assert!(
         scope::authorize(&f.manager, Some("token"), &mut denied)
@@ -1040,4 +1045,13 @@ async fn land_refreshes_the_default_branch_and_needs_it_outside_workspaces() {
     );
     assert!(f.manager.land_workspace("holder").await.is_err());
     assert_eq!(git(&f.repo, &["rev-parse", "main"]), expected);
+}
+
+impl Manager {
+    async fn land_workspace(&self, selector: &str) -> anyhow::Result<crate::model::LandedBranch> {
+        let workspace = self.workspace(selector).await?;
+        let gate = self.git_gate(&workspace.repository_id).await;
+        let _guard = gate.lock().await;
+        super::finish_land(self.prepare_land(selector).await?).await
+    }
 }

@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use crate::{
     git::{self, run_isolated as git_run},
-    model::{LandedBranch, PulledBranch, Repository},
+    model::{LandPlan, LandedBranch, PulledBranch, Repository},
     workspace::Manager,
 };
 
@@ -56,17 +56,11 @@ impl Manager {
         self.refresh_branch(&repo, &branch, true).await
     }
 
-    /// Merge the workspace branch into the repository default branch without
-    /// pushing, for repositories with no remote or pull-request flow. The
-    /// default branch is refreshed from its upstream first when it has one.
-    /// A merge that does not apply cleanly is aborted: conflicts are resolved
-    /// by `shoal merge <default>` inside the workspace, after which landing
-    /// fast-forwards.
-    pub async fn land_workspace(&self, selector: &str) -> Result<LandedBranch> {
+    /// Validate and refresh a landing while the caller holds the repository Git
+    /// gate. The gate must stay held until the tracked execution completes.
+    pub async fn prepare_land(&self, selector: &str) -> Result<LandPlan> {
         let workspace = self.workspace(selector).await?;
         let repo = self.repository(&workspace.repository_id).await?;
-        let gate = self.git_gate(&repo.id).await;
-        let _guard = gate.lock().await;
         ensure!(
             workspace.path.is_dir(),
             "workspace directory is missing: {}",
@@ -121,85 +115,12 @@ impl Manager {
                 .await
                 .with_context(|| format!("could not refresh {default} before landing"))?
         };
-        let previous = default_refresh.commit.clone();
-        let landed = |commit: String, updated: bool, fast_forward: bool| LandedBranch {
-            workspace_id: workspace.id.clone(),
-            repository_id: repo.id.clone(),
-            branch: branch.to_owned(),
-            default_branch: default.clone(),
-            previous_commit: previous.clone(),
-            commit,
-            updated,
-            fast_forward,
+        Ok(LandPlan {
+            workspace,
+            repo,
+            source,
             default_refresh,
-        };
-        if is_ancestor(&repo.path, &source, &previous).await? {
-            return Ok(landed(previous.clone(), false, true));
-        }
-        let fast_forward = is_ancestor(&repo.path, &previous, &source).await?;
-        let checkout = git::worktrees(&repo.path)
-            .await?
-            .into_iter()
-            .find(|tree| tree.is_branch(&default))
-            .map(|tree| tree.path);
-        match checkout {
-            Some(checkout) => {
-                clean_branch(&checkout, &default).await?;
-                let mut command = git::isolated_command(&checkout);
-                command.args([
-                    "-c",
-                    "submodule.recurse=false",
-                    "merge",
-                    "--ff",
-                    "--no-squash",
-                    "--no-edit",
-                    "--no-stat",
-                    "--no-autostash",
-                    "--no-overwrite-ignore",
-                    "-m",
-                    &format!("Merge branch '{branch}'"),
-                    "--",
-                    &source,
-                ]);
-                let output = command
-                    .output()
-                    .await
-                    .context("merge into default branch")?;
-                if !output.status.success() {
-                    // Leave the checkout as it was; conflicts belong in the workspace.
-                    let _ = git_run(&checkout, &["merge", "--abort"]).await;
-                    bail!(
-                        "merging {branch} into {default} failed; run shoal merge {default} in the workspace, resolve conflicts there, and retry\n{}{}",
-                        String::from_utf8_lossy(&output.stdout).trim_end(),
-                        String::from_utf8_lossy(&output.stderr).trim_end()
-                    );
-                }
-            }
-            None => {
-                ensure!(
-                    fast_forward,
-                    "{default} is not checked out and {branch} does not fast-forward it; run shoal merge {default} in the workspace, then retry"
-                );
-                // Native fetch refuses a checked-out destination and a non-fast-forward.
-                git_run(
-                    &repo.path,
-                    &[
-                        "fetch",
-                        "--no-tags",
-                        "--no-recurse-submodules",
-                        "--no-write-fetch-head",
-                        ".",
-                        &format!("{source}:{default_ref}"),
-                    ],
-                )
-                .await?;
-            }
-        }
-        let commit = git_run(&repo.path, &["rev-parse", "--verify", &default_ref])
-            .await?
-            .trim()
-            .to_owned();
-        Ok(landed(commit, true, fast_forward))
+        })
     }
 
     /// Fast-forward a local merge source from its upstream so `shoal merge`
@@ -500,6 +421,113 @@ async fn clean_branch(path: &Path, branch: &str) -> Result<()> {
         "{branch} checkout has uncommitted or untracked changes; commit or clean them first"
     );
     Ok(())
+}
+
+/// Executed only by the landing worker, inside the tracked process group.
+pub async fn finish_land(plan: LandPlan) -> Result<LandedBranch> {
+    let LandPlan {
+        workspace,
+        repo,
+        source,
+        default_refresh,
+    } = plan;
+    let branch = workspace.branch.as_str();
+    let default = default_refresh.branch.clone();
+    let default_ref = format!("refs/heads/{default}");
+    clean_branch(&workspace.path, branch).await?;
+    ensure!(
+        git_run(&workspace.path, &["rev-parse", "HEAD"])
+            .await?
+            .trim()
+            == source,
+        "workspace branch changed before landing; retry"
+    );
+    ensure!(
+        git_run(&repo.path, &["rev-parse", &default_ref])
+            .await?
+            .trim()
+            == default_refresh.commit,
+        "default branch changed before landing; retry"
+    );
+    let previous = default_refresh.commit.clone();
+    let landed = |commit: String, updated: bool, fast_forward: bool| LandedBranch {
+        workspace_id: workspace.id.clone(),
+        repository_id: repo.id.clone(),
+        branch: branch.to_owned(),
+        default_branch: default.clone(),
+        previous_commit: previous.clone(),
+        commit,
+        updated,
+        fast_forward,
+        default_refresh,
+    };
+    if is_ancestor(&repo.path, &source, &previous).await? {
+        return Ok(landed(previous.clone(), false, true));
+    }
+    let fast_forward = is_ancestor(&repo.path, &previous, &source).await?;
+    let checkout = git::worktrees(&repo.path)
+        .await?
+        .into_iter()
+        .find(|tree| tree.is_branch(&default))
+        .map(|tree| tree.path);
+    match checkout {
+        Some(checkout) => {
+            clean_branch(&checkout, &default).await?;
+            let mut command = git::isolated_command(&checkout);
+            command.args([
+                "-c",
+                "submodule.recurse=false",
+                "merge",
+                "--ff",
+                "--no-squash",
+                "--no-edit",
+                "--no-stat",
+                "--no-autostash",
+                "--no-overwrite-ignore",
+                "-m",
+                &format!("Merge branch '{branch}'"),
+                "--",
+                &source,
+            ]);
+            let output = command
+                .output()
+                .await
+                .context("merge into default branch")?;
+            if !output.status.success() {
+                // Leave the checkout as it was; conflicts belong in the workspace.
+                let _ = git_run(&checkout, &["merge", "--abort"]).await;
+                bail!(
+                    "merging {branch} into {default} failed; run shoal merge {default} in the workspace, resolve conflicts there, and retry\n{}{}",
+                    String::from_utf8_lossy(&output.stdout).trim_end(),
+                    String::from_utf8_lossy(&output.stderr).trim_end()
+                );
+            }
+        }
+        None => {
+            ensure!(
+                fast_forward,
+                "{default} is not checked out and {branch} does not fast-forward it; run shoal merge {default} in the workspace, then retry"
+            );
+            // Native fetch refuses a checked-out destination and a non-fast-forward.
+            git_run(
+                &repo.path,
+                &[
+                    "fetch",
+                    "--no-tags",
+                    "--no-recurse-submodules",
+                    "--no-write-fetch-head",
+                    ".",
+                    &format!("{source}:{default_ref}"),
+                ],
+            )
+            .await?;
+        }
+    }
+    let commit = git_run(&repo.path, &["rev-parse", "--verify", &default_ref])
+        .await?
+        .trim()
+        .to_owned();
+    Ok(landed(commit, true, fast_forward))
 }
 
 #[cfg(test)]

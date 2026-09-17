@@ -114,8 +114,10 @@ them checked out; remote discovery must be unambiguous, and conflicts are left f
 ordinary Git. `land`, the local substitute for a pull request, merges the workspace
 branch into the default branch (refreshed from its upstream first) without pushing
 and aborts a merge that does not apply cleanly, leaving conflicts to a `merge` of
-the default branch into the workspace. Fetches use private temporary refs, merges
-run through the tracked wrapper, and own-branch checks are cooperative.
+the default branch into the workspace. Landing holds the repository Git gate for
+the tracked execution; the daemon validates and refreshes, and the CLI worker merges.
+Fetches use private temporary refs; merges use the tracked wrapper and cooperative
+own-branch checks.
 
 ## Scope and user interfaces
 

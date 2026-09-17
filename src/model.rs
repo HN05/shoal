@@ -92,6 +92,7 @@ pub struct ExecutionPlan {
     /// Absolute setup command path for `Method::Prepare`; `None` for commands.
     pub setup_cmd: Option<PathBuf>,
     pub ports: Vec<PortReservation>,
+    pub land: Option<Box<LandPlan>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -153,5 +154,14 @@ pub struct LandedBranch {
     /// True when the default branch fast-forwarded instead of a merge commit.
     pub fast_forward: bool,
     /// How the default branch was refreshed from its upstream first.
+    pub default_refresh: PulledBranch,
+}
+
+/// A daemon-authorized landing, held under the repository Git gate.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct LandPlan {
+    pub workspace: Workspace,
+    pub repo: Repository,
+    pub source: String,
     pub default_refresh: PulledBranch,
 }
