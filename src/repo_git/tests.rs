@@ -839,6 +839,24 @@ async fn existing_default_branch_survives_normal_workspace_removal() {
     );
     git(&f.repo, &["switch", "--detach"]);
     let opened = f.manager.open_branch(&f.repo_id, "main").await.unwrap();
+    let opening = git(&f.repo, &["rev-parse", "main"]);
+    assert!(opened.workspace.base_ref.is_none());
+    fs::write(
+        opened.workspace.path.join("new-work"),
+        "workspace changes\n",
+    )
+    .unwrap();
+    commit(&opened.workspace.path, "new-work");
+    let diff = f.manager.diff_base(&opened.workspace.id).await.unwrap();
+    assert_eq!(diff.commit, opening.trim());
+    assert_eq!(
+        git(
+            &opened.workspace.path,
+            &["diff", "--name-only", &diff.commit]
+        )
+        .trim(),
+        "new-work"
+    );
     let before = git(&f.repo, &["rev-parse", "main"]);
     let removed = f
         .manager

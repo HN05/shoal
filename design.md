@@ -88,7 +88,7 @@ remote heads are discovered live and become local tracking branches. Local
 selection preserves commits; remote selection fast-forwards matching tracking
 branches. Ready owned workspaces reopen without setup, hooks, or refresh; other
 checkouts block creation. Existing worktrees use the local default as their diff
-base, falling back to the initial commit. Main checkouts are never adopted.
+base, or the opening commit if unavailable or on that same branch. Never adopt main checkouts.
 
 Repository config may name `setup_cmd`, `post_setup_cmd`, and `pre_remove_cmd`:
 single executable paths resolved against the worktree, run directly without

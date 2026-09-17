@@ -260,12 +260,13 @@ impl Manager {
             Some(
                 match crate::default_branch::resolve(&repo.path, false).await {
                     Ok(name)
-                        if git::run_isolated(
-                            &repo.path,
-                            &["show-ref", "--verify", "--", &format!("refs/heads/{name}")],
-                        )
-                        .await
-                        .is_ok() =>
+                        if name != workspace.branch
+                            && git::run_isolated(
+                                &repo.path,
+                                &["show-ref", "--verify", "--", &format!("refs/heads/{name}")],
+                            )
+                            .await
+                            .is_ok() =>
                     {
                         format!("refs/heads/{name}")
                     }

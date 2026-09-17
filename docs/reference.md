@@ -168,7 +168,7 @@ it, even when the registered checkout is on another branch. A missing branch or
 upstream, failed fetch, divergence, or a dirty or managed default-branch
 checkout stops creation; an already-ahead branch is preserved. `--ref <git-ref>`
 starts elsewhere without refreshing, except the default branch. Existing-branch
-workspaces record the local default for diff, or their starting commit if unavailable.
+workspaces diff against the local default, or their opening commit if on it or unavailable.
 
 ### Repositories
 
