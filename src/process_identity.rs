@@ -277,10 +277,14 @@ pub async fn related(
         tokio::time::timeout(Duration::from_secs(10), crate::subprocess::output(command)).await??;
     let mut rows = Vec::new();
     for line in output.lines() {
-        let fields: Vec<u32> = line
+        // Negative UIDs (nobody) cannot parse and are never ours; see `scan`.
+        let Ok(fields) = line
             .split_whitespace()
             .map(str::parse)
-            .collect::<std::result::Result<_, _>>()?;
+            .collect::<std::result::Result<Vec<u32>, _>>()
+        else {
+            continue;
+        };
         ensure!(fields.len() == 4, "invalid process ancestry inventory");
         if fields[1] == unsafe { libc::geteuid() }
             && fields[0] > 1
