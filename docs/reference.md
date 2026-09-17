@@ -177,8 +177,9 @@ repository gets `~/shoal/<name>/`, named by `--name` or the source basename
 without `.git`, suffixed `-2`, `-3` on conflict with files or recorded paths;
 its workspaces are created inside it and a URL clone lives there as `main`. A
 local checkout already at `~/shoal/<name>/<anything>` keeps that directory.
-Set `root_dir = "~/Projects"` in the global config (absolute or `~/` path,
-daemon restart required) to change the parent for new registrations; existing
+Set `root_dir = "~/Projects"` (formerly `repositories_dir`) in the global
+config (absolute or `~/` path, daemon restart required) to change the parent
+for new registrations; existing
 ones keep their paths, as do workspaces created before this layout. `repo add
 <url> --path <dir>` clones one repository to an exact new directory (relative
 to the current directory; `~/` allowed). Re-registering a URL with its existing

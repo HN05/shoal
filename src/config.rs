@@ -8,6 +8,8 @@ use crate::paths::Paths;
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
     pub root_dir: Option<PathBuf>,
+    /// Former name of `root_dir`; still accepted so existing configs load.
+    pub repositories_dir: Option<PathBuf>,
     pub codex: Codex,
     pub auto_cleanup: AutoCleanup,
     pub ports: Ports,
@@ -94,6 +96,17 @@ mod tests {
             let config: Config = toml::from_str(&format!("root_dir = {value:?}")).unwrap();
             assert!(config.root_dir(&paths).is_err());
         }
+        let config: Config = toml::from_str("repositories_dir = \"~/old\"").unwrap();
+        assert_eq!(
+            config.root_dir(&paths).unwrap(),
+            PathBuf::from("/home/test/old")
+        );
+        let config: Config =
+            toml::from_str("repositories_dir = \"~/old\"\nroot_dir = \"~/new\"").unwrap();
+        assert_eq!(
+            config.root_dir(&paths).unwrap(),
+            PathBuf::from("/home/test/new")
+        );
     }
 }
 
@@ -117,7 +130,7 @@ impl Config {
     /// Parent of every repository directory: `<root>/<repo>/` holds the
     /// repository's URL clone as `main` and its workspaces as siblings.
     pub fn root_dir(&self, paths: &Paths) -> Result<PathBuf> {
-        let Some(path) = &self.root_dir else {
+        let Some(path) = self.root_dir.as_ref().or(self.repositories_dir.as_ref()) else {
             return Ok(paths.home.join("shoal"));
         };
         let path = match path.strip_prefix("~") {

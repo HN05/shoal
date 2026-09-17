@@ -495,6 +495,49 @@ fn local_repository_without_remotes_registers_in_place_and_creates_workspaces() 
 }
 
 #[test]
+fn placed_checkouts_adopt_their_directory_but_never_another_checkout() {
+    let fixture = Fixture::new();
+    let init = |path: &Path| {
+        fs::create_dir_all(path).unwrap();
+        git(path, &["init", "-b", "main"]);
+        fs::write(path.join("file"), "x").unwrap();
+        git(path, &["add", "."]);
+        git(
+            path,
+            &[
+                "-c",
+                "user.name=T",
+                "-c",
+                "user.email=t@example.invalid",
+                "commit",
+                "-m",
+                "i",
+            ],
+        );
+        fixture.ok(&["repo", "add", path.to_str().unwrap()])
+    };
+    let shoal = fixture.root.path().join("shoal");
+    // `~/shoal/placed/main` keeps `~/shoal/placed` for its workspaces.
+    let placed = init(&shoal.join("placed/main"));
+    assert_eq!(
+        placed["workspaces_dir"],
+        fixture.shoal_dir().join("placed").to_str().unwrap()
+    );
+    // A checkout directly under the root is not a repository directory...
+    let outer = init(&shoal.join("outer"));
+    assert_ne!(
+        outer["workspaces_dir"],
+        fixture.shoal_dir().to_str().unwrap()
+    );
+    // ...and a checkout nested in it must not put its workspaces inside `outer`.
+    let inner = init(&shoal.join("outer/inner"));
+    let inner_dir = Path::new(inner["workspaces_dir"].as_str().unwrap());
+    assert_ne!(inner_dir, fixture.shoal_dir().join("outer"));
+    assert!(inner_dir.starts_with(fixture.shoal_dir()));
+    assert!(!inner_dir.starts_with(fixture.shoal_dir().join("outer")));
+}
+
+#[test]
 fn clone_directories_use_repo_names_and_suffix_occupied_or_recorded_paths() {
     let fixture = Fixture::with_config(Some("root_dir = \"~/clones\"\n"));
     let directory = fixture.root.path().join("clones");

@@ -66,14 +66,16 @@ impl Manager {
         let (path, workspaces_dir) = if PathBuf::from(&source).exists() {
             let root_dir = git::run(Path::new(&source), &["rev-parse", "--show-toplevel"]).await?;
             let path = fs::canonicalize(root_dir.trim())?;
-            // A checkout already placed as `<root>/<x>/<checkout>` keeps that directory.
+            // A checkout already placed as `<root>/<x>/<checkout>` keeps that
+            // directory, unless `<x>` is itself a checkout or another repository's.
             let placed = path
                 .parent()
                 .filter(|parent| parent.parent() == fs::canonicalize(&root).ok().as_deref())
+                .filter(|parent| !parent.join(".git").exists())
                 .filter(|parent| {
-                    !repositories
-                        .iter()
-                        .any(|repo| repo.workspaces_dir.as_deref() == Some(parent))
+                    !repositories.iter().any(|repo| {
+                        repo.path == *parent || repo.workspaces_dir.as_deref() == Some(parent)
+                    })
                 })
                 .map(Path::to_path_buf);
             let workspaces_dir = match placed {
@@ -153,12 +155,14 @@ impl Manager {
     }
 
     /// The repository's directory under `root_dir`, reserved on first use for
-    /// registrations that predate it. Callers hold the repository's Git gate.
+    /// registrations that predate it. Callers hold the repository's Git gate,
+    /// which serializes this with repository removal; the registry gate is not
+    /// taken here because removal acquires the two in the opposite order, and
+    /// `reserve_directory` is atomic against concurrent registrations anyway.
     pub(crate) async fn workspaces_dir(&self, repo: &Repository) -> Result<PathBuf> {
         if let Some(directory) = &repo.workspaces_dir {
             return Ok(directory.clone());
         }
-        let _guard = self.registry_gate.lock().await;
         let repositories = self.repositories().await?;
         let current = repositories
             .iter()
