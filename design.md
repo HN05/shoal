@@ -116,6 +116,8 @@ branch into the default branch (refreshed from its upstream first) without pushi
 and aborts a merge that does not apply cleanly, leaving conflicts to a `merge` of
 the default branch into the workspace. Landing holds the repository Git gate for
 the tracked execution; the daemon validates and refreshes, and the CLI worker merges.
+After cancellation, the wrapper rolls back incomplete merges after stopping the
+process group, preserving completed merges and reporting unsafe recovery failures.
 Fetches use private temporary refs; merges use the tracked wrapper and cooperative
 own-branch checks.
 

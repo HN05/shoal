@@ -5981,8 +5981,8 @@ fn land_merges_into_main_without_a_remote_and_is_denied_to_scoped_processes() {
 }
 
 #[test]
-fn land_tracks_merge_drivers_and_stops_them_on_stop_or_daemon_loss() {
-    for daemon_loss in [false, true] {
+fn land_interruptions_stop_merge_drivers_and_restore_the_default_checkout() {
+    for interruption in ["stop", "daemon", "interrupt"] {
         let mut fixture = Fixture::new();
         git(&fixture.repo, &["config", "user.name", "Test"]);
         git(
@@ -5994,14 +5994,21 @@ fn land_tracks_merge_drivers_and_stops_them_on_stop_or_daemon_loss() {
         let worker = fixture.add("worker");
         let path = Path::new(worker["path"].as_str().unwrap());
         merge_commit(path, "tracked", "worker\n");
+        merge_commit(path, "a-added", "new file\n");
         merge_commit(&fixture.repo, "tracked", "main\n");
         let before = git(&fixture.repo, &["rev-parse", "HEAD"]);
+        fs::write(
+            fixture.repo.join(".git/info/exclude"),
+            ".merge_file_ABC123\n",
+        )
+        .unwrap();
+        fs::write(fixture.repo.join(".merge_file_ABC123"), "preexisting\n").unwrap();
         git(
             &fixture.repo,
             &[
                 "config",
                 "merge.slow.driver",
-                "echo $$ > driver.pid; exec sleep 60",
+                "echo $$ > .git/land-driver.pid; exec sleep 60",
             ],
         );
         let mut land = fixture
@@ -6012,7 +6019,7 @@ fn land_tracks_merge_drivers_and_stops_them_on_stop_or_daemon_loss() {
             .spawn()
             .unwrap();
         let deadline = Instant::now() + Duration::from_secs(10);
-        while !fixture.repo.join("driver.pid").exists() {
+        while !fixture.repo.join(".git/land-driver.pid").exists() {
             assert!(
                 land.try_wait().unwrap().is_none(),
                 "land exited before merge driver"
@@ -6020,7 +6027,7 @@ fn land_tracks_merge_drivers_and_stops_them_on_stop_or_daemon_loss() {
             assert!(Instant::now() < deadline, "merge driver did not start");
             thread::sleep(Duration::from_millis(20));
         }
-        let pid: i32 = fs::read_to_string(fixture.repo.join("driver.pid"))
+        let pid: i32 = fs::read_to_string(fixture.repo.join(".git/land-driver.pid"))
             .unwrap()
             .trim()
             .parse()
@@ -6028,9 +6035,11 @@ fn land_tracks_merge_drivers_and_stops_them_on_stop_or_daemon_loss() {
         let during = fixture.ok(&["inspect", "worker"]);
         assert_eq!(during["executions"].as_array().unwrap().len(), 1);
         assert!(during["executions"][0]["child"].is_object());
-        if daemon_loss {
+        if interruption == "daemon" {
             fixture.daemon.kill().unwrap();
             fixture.daemon.wait().unwrap();
+        } else if interruption == "interrupt" {
+            assert_eq!(unsafe { libc::kill(land.id() as i32, libc::SIGINT) }, 0);
         } else {
             fixture.ok(&["stop", "worker"]);
         }
@@ -6060,6 +6069,17 @@ fn land_tracks_merge_drivers_and_stops_them_on_stop_or_daemon_loss() {
             thread::sleep(Duration::from_millis(20));
         }
         assert_eq!(git(&fixture.repo, &["rev-parse", "HEAD"]), before);
+        assert_eq!(git(&fixture.repo, &["status", "--porcelain"]), "");
+        assert_eq!(
+            git(&fixture.repo, &["write-tree"]),
+            git(&fixture.repo, &["rev-parse", "HEAD^{tree}"])
+        );
+        assert!(!fixture.repo.join(".git/index.lock").exists());
+        assert!(!fixture.repo.join(".git/MERGE_HEAD").exists());
+        assert_eq!(
+            fs::read_to_string(fixture.repo.join(".merge_file_ABC123")).unwrap(),
+            "preexisting\n"
+        );
         assert!(path.exists());
     }
 }

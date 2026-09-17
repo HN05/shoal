@@ -105,7 +105,13 @@ async fn run_tracked(
             None => command,
         }
     };
-    let result = supervise(&mut stream, paths, &plan, &command, mode).await;
+    let mut result = supervise(&mut stream, paths, &plan, &command, mode).await;
+    if !matches!(result, Ok(0))
+        && let Some(land) = &plan.land
+        && let Err(error) = crate::repo_git::rollback_land(land).await
+    {
+        result = Err(error);
+    }
     let code = result.as_ref().copied().unwrap_or(1);
     // Report only after child/process-group cleanup. A lost connection never
     // grants the daemon permission to assume processes stopped.

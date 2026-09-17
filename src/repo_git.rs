@@ -115,10 +115,40 @@ impl Manager {
                 .await
                 .with_context(|| format!("could not refresh {default} before landing"))?
         };
+        let checkout = git::worktrees(&repo.path)
+            .await?
+            .into_iter()
+            .find(|tree| tree.is_branch(&default))
+            .map(|tree| tree.path);
+        if let Some(checkout) = &checkout {
+            clean_branch(checkout, &default).await?;
+            for marker in [
+                "MERGE_HEAD",
+                "CHERRY_PICK_HEAD",
+                "REVERT_HEAD",
+                "rebase-apply",
+                "rebase-merge",
+                "sequencer",
+                "index.lock",
+            ] {
+                let path = git_run(checkout, &["rev-parse", "--git-path", marker]).await?;
+                ensure!(
+                    !checkout.join(path.trim()).exists(),
+                    "{default} has an unfinished Git operation ({marker})"
+                );
+            }
+        }
+        let merge_temporaries = checkout
+            .as_deref()
+            .map(merge_temporaries)
+            .transpose()?
+            .unwrap_or_default();
         Ok(LandPlan {
             workspace,
             repo,
             source,
+            checkout,
+            merge_temporaries,
             default_refresh,
         })
     }
@@ -429,6 +459,8 @@ pub async fn finish_land(plan: LandPlan) -> Result<LandedBranch> {
         workspace,
         repo,
         source,
+        checkout,
+        merge_temporaries: _,
         default_refresh,
     } = plan;
     let branch = workspace.branch.as_str();
@@ -465,11 +497,6 @@ pub async fn finish_land(plan: LandPlan) -> Result<LandedBranch> {
         return Ok(landed(previous.clone(), false, true));
     }
     let fast_forward = is_ancestor(&repo.path, &previous, &source).await?;
-    let checkout = git::worktrees(&repo.path)
-        .await?
-        .into_iter()
-        .find(|tree| tree.is_branch(&default))
-        .map(|tree| tree.path);
     match checkout {
         Some(checkout) => {
             clean_branch(&checkout, &default).await?;
@@ -528,6 +555,59 @@ pub async fn finish_land(plan: LandPlan) -> Result<LandedBranch> {
         .trim()
         .to_owned();
     Ok(landed(commit, true, fast_forward))
+}
+
+/// The wrapper runs rollback only after stopping the merge process group. Keep
+/// a completed merge, and refuse to reset a checkout whose branch/HEAD changed.
+pub async fn rollback_land(plan: &LandPlan) -> Result<()> {
+    let Some(checkout) = &plan.checkout else {
+        return Ok(());
+    };
+    let branch = &plan.default_refresh.branch;
+    ensure!(
+        git_run(checkout, &["symbolic-ref", "--quiet", "HEAD"]).await?
+            == format!("refs/heads/{branch}\n"),
+        "landing checkout changed branches; recover it manually"
+    );
+    let head = git_run(checkout, &["rev-parse", "HEAD"]).await?;
+    if head.trim() != plan.default_refresh.commit {
+        return Ok(());
+    }
+    // --merge restores the index and merge state without discarding unrelated
+    // unstaged edits. Git refuses an index lock; never remove someone else's lock.
+    git_run(
+        checkout,
+        &["reset", "--merge", &plan.default_refresh.commit],
+    )
+    .await
+    .context("could not roll back interrupted landing; inspect the default checkout")?;
+    // Git's external merge drivers use these temporary inputs in the checkout.
+    // A signal can bypass Git's normal unlink; preserve any that predated us.
+    for path in merge_temporaries(checkout)? {
+        if !plan.merge_temporaries.contains(&path) {
+            std::fs::remove_file(&path).context("remove interrupted Git merge input")?;
+        }
+    }
+    Ok(())
+}
+
+fn merge_temporaries(checkout: &Path) -> Result<Vec<std::path::PathBuf>> {
+    let mut files = Vec::new();
+    for entry in std::fs::read_dir(checkout)? {
+        let entry = entry?;
+        let name = entry.file_name();
+        if name
+            .to_str()
+            .and_then(|name| name.strip_prefix(".merge_file_"))
+            .is_some_and(|suffix| {
+                suffix.len() == 6 && suffix.bytes().all(|b| b.is_ascii_alphanumeric())
+            })
+            && entry.file_type()?.is_file()
+        {
+            files.push(entry.path());
+        }
+    }
+    Ok(files)
 }
 
 #[cfg(test)]

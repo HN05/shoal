@@ -163,5 +163,7 @@ pub struct LandPlan {
     pub workspace: Workspace,
     pub repo: Repository,
     pub source: String,
+    pub checkout: Option<PathBuf>,
+    pub merge_temporaries: Vec<PathBuf>,
     pub default_refresh: PulledBranch,
 }
