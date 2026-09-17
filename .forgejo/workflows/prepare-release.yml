@@ -16,7 +16,7 @@ jobs:
   prepare:
     runs-on: docker
     container:
-      image: rust:1.98-bookworm
+      image: rust:1.98-trixie
     defaults:
       run:
         shell: bash
