@@ -227,6 +227,10 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::RemoveRepository { repository } => {
             Body::RepositoryRemoved(manager.remove_repository(&repository).await?)
         }
+        Method::ListBranches { repository } => Body::Branches(manager.branches(&repository).await?),
+        Method::OpenBranch { repository, branch } => {
+            Body::OpenedWorkspace(manager.open_branch(&repository, &branch).await?)
+        }
         Method::CreateWorkspace {
             repository,
             name,

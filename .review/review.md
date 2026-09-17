@@ -19,6 +19,8 @@ removal, check it against the rule those files state before judging it.
 - Allocation is atomic and persisted before the external mutation (simctl,
   Worktrunk). Leases survive restart and failed removal and are released only
   with successful removal. Active permits block automatic cleanup.
+- Existing branches use unsuffixed worktrees; reopen verified owned workspaces,
+  reject other checkouts, and never adopt the main checkout.
 - External tools are invoked with argument arrays, never shell strings.
   Terminal I/O stays in the execution wrapper; the daemon owns state.
 - Persistence: lifecycle enums keep their lowercase SQLite/JSON spelling and

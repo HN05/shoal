@@ -86,12 +86,13 @@ fn navigate(ctx: &Context, path: &std::path::Path) -> Result<()> {
 pub(super) async fn add(
     ctx: &Context,
     repository: Option<String>,
-    name: Option<String>,
+    names: (Option<String>, Option<String>),
     base: Option<String>,
     issue: Option<String>,
     agent: Option<Agent>,
     mut args: Vec<OsString>,
 ) -> Result<i32> {
+    let (name, mut branch) = names;
     // Validate launch configuration before creating a workspace.
     let codex_mode = match agent {
         Some(Agent::Codex) if issue.is_some() => Some(CodexMode::Cli),
@@ -114,22 +115,75 @@ pub(super) async fn add(
         }
         None => None,
     };
-    let name = match name.or_else(|| issue.as_ref().map(|issue| issue.branch_name())) {
-        Some(name) => name,
-        None => ui::input(ctx, "Branch name")?,
-    };
+    let mut name = name.or_else(|| issue.as_ref().map(|issue| issue.branch_name()));
+    if name.is_none() && branch.is_none() && base.is_none() && ctx.interactive() {
+        let mode = ui::pick(
+            ctx,
+            "Workspace> ",
+            vec![
+                ("new".into(), "Create a new branch".into()),
+                ("existing".into(), "Use an existing branch".into()),
+            ],
+        )?;
+        if mode == "existing" {
+            let branches = request!(
+                &ctx.paths,
+                Method::ListBranches {
+                    repository: repository.clone()
+                },
+                Branches
+            );
+            let workspaces = client::workspaces(&ctx.paths).await?;
+            let repos = client::repositories(&ctx.paths).await?;
+            let repo = crate::repository::select(&repos, &repository).await?;
+            let entries = branches
+                .into_iter()
+                .map(|b| {
+                    let label = match &b.remote {
+                        Some(remote) => format!("{remote}/{}  (remote)", b.name),
+                        None => format!("{}  (local)", b.name),
+                    };
+                    let label = match workspaces
+                        .iter()
+                        .find(|w| w.repository_id == repo.id && w.branch == b.name)
+                    {
+                        Some(w) => format!("{label}  [workspace: {}]", w.name),
+                        None => label,
+                    };
+                    (b.selector(), label)
+                })
+                .collect();
+            branch = Some(ui::pick(ctx, "Branch> ", entries)?);
+        }
+    }
     if let Some(issue) = issue.filter(|_| agent.is_some()) {
         args.insert(0, issue.prompt().into());
     }
-    let mut workspace = request!(
-        &ctx.paths,
-        Method::CreateWorkspace {
-            repository,
-            name,
-            base,
-        },
-        Workspace
-    );
+    let (mut workspace, reused) = if let Some(branch) = branch {
+        let opened = request!(
+            &ctx.paths,
+            Method::OpenBranch { repository, branch },
+            OpenedWorkspace
+        );
+        (opened.workspace, opened.reused)
+    } else {
+        let name = match name.take() {
+            Some(name) => name,
+            None => ui::input(ctx, "Branch name")?,
+        };
+        (
+            request!(
+                &ctx.paths,
+                Method::CreateWorkspace {
+                    repository,
+                    name,
+                    base
+                },
+                Workspace
+            ),
+            false,
+        )
+    };
     if workspace.state == WorkspaceState::Preparing {
         let Some(prepared) = prepare_workspace(ctx, &workspace).await? else {
             return Ok(1);
@@ -138,7 +192,8 @@ pub(super) async fn add(
     }
     ctx.emit(
         &format!(
-            "Created {} on branch {} at {}",
+            "{} {} on branch {} at {}",
+            if reused { "Opened" } else { "Created" },
             workspace.name,
             workspace.branch,
             workspace.path.display()
@@ -146,7 +201,9 @@ pub(super) async fn add(
         &workspace,
     )?;
     shell::navigate(&workspace.path, ctx.json)?;
-    run_post_setup(ctx, &workspace).await?;
+    if !reused {
+        run_post_setup(ctx, &workspace).await?;
+    }
     match agent {
         Some(Agent::Codex) => codex(ctx, codex_mode, Some(workspace.id), args).await,
         Some(Agent::Claude) => claude(ctx, Some(workspace.id), args).await,

@@ -152,11 +152,24 @@ impl Manager {
         self.repository(&repo.id).await?;
         self.ensure_repository_available(&repo.id).await?;
         let branch = self.available_branch(&repo, &name).await?;
+        self.create_branch_workspace(&repo, name, branch, base, None)
+            .await
+    }
+
+    // The caller holds the per-repository Git gate through materialization.
+    pub(crate) async fn create_branch_workspace(
+        &self,
+        repo: &crate::model::Repository,
+        name: String,
+        branch: String,
+        base: Option<String>,
+        existing: Option<crate::existing_branch::Branch>,
+    ) -> Result<Workspace> {
         let name = derive_workspace_name(&name);
         let workspace = Workspace {
             id: Uuid::new_v4().to_string(),
             repository_id: repo.id.clone(),
-            path: self.workspaces_dir(&repo).await?.join(&name),
+            path: self.workspaces_dir(repo).await?.join(&name),
             name,
             branch,
             state: WorkspaceState::Preparing,
@@ -172,7 +185,9 @@ impl Manager {
             workspace.path.display()
         );
         self.insert_workspace(workspace.clone()).await?;
-        let result = self.materialize_worktree(&repo, &workspace, base).await;
+        let result = self
+            .materialize_worktree(repo, &workspace, base, existing)
+            .await;
         match result {
             Ok(needs_setup) => {
                 let state = if needs_setup {
@@ -236,7 +251,40 @@ impl Manager {
         repo: &crate::model::Repository,
         workspace: &Workspace,
         base: Option<String>,
+        existing: Option<crate::existing_branch::Branch>,
     ) -> Result<bool> {
+        if let Some(branch) = &existing {
+            self.materialize_branch(repo, branch).await?;
+        }
+        let base = if existing.is_some() {
+            Some(
+                match crate::default_branch::resolve(&repo.path, false).await {
+                    Ok(name)
+                        if git::run_isolated(
+                            &repo.path,
+                            &["show-ref", "--verify", "--", &format!("refs/heads/{name}")],
+                        )
+                        .await
+                        .is_ok() =>
+                    {
+                        format!("refs/heads/{name}")
+                    }
+                    _ => git::run_isolated(
+                        &repo.path,
+                        &[
+                            "rev-parse",
+                            "--verify",
+                            &format!("refs/heads/{}", workspace.branch),
+                        ],
+                    )
+                    .await?
+                    .trim()
+                    .to_owned(),
+                },
+            )
+        } else {
+            base
+        };
         let default = crate::default_branch::resolve(&repo.path, base.is_none()).await;
         // An explicit ref remains an escape hatch when remote default-branch
         // discovery is unavailable. It does not implicitly refresh another ref.
@@ -250,7 +298,8 @@ impl Manager {
             .as_deref()
             .or(default_ref.as_deref())
             .context("workspace base is unknown")?;
-        let refresh = default.as_deref() == Some(base) || default_ref.as_deref() == Some(base);
+        let refresh = existing.is_none()
+            && (default.as_deref() == Some(base) || default_ref.as_deref() == Some(base));
         if refresh {
             self.refresh_branch(repo, default.as_deref().unwrap(), true)
                 .await
@@ -286,7 +335,7 @@ impl Manager {
             &self.paths.worktrunk_config(),
             &workspace.path,
             &workspace.branch,
-            &commit,
+            existing.is_none().then_some(commit.as_str()),
         )
         .await?;
         self.record_worktree_identity(workspace).await?;

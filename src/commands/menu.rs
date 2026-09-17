@@ -52,6 +52,7 @@ pub(super) async fn choose(ctx: &Context) -> Result<Command> {
         return Ok(Command::Add {
             repository: None,
             name: None,
+            branch: None,
             issue: None,
             base: None,
             agent: None,

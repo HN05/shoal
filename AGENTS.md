@@ -64,8 +64,8 @@ when behavior changes, distinguishing decisions from proposals.
   URL clones as `.checkout`, never moved; refuse roots inside state or checkouts.
 - Accept literal Git branch names and derive portable workspace names separately.
   Suffix conflicting branch components with `-2`, `-3`, etc.; keep derived workspace
-  names/directories unchanged and serialize allocation per repo. Reject normalized
-  workspace-name collisions without changing existing workspaces.
+  names/directories unchanged; serialize allocation per repo. Existing branches get
+  unsuffixed worktrees or reopen owned ones; reject other checkouts and name collisions.
 - `shoal diff` uses Git fork-point/merge-base against the recorded base branch;
   do not compare directly to today's main tip or a frozen commit after a rebase.
   Preserve native Git pager/external-diff configuration.

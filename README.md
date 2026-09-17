@@ -34,10 +34,10 @@ shoal add my-project --name fix-login
 shoal codex cli fix-login
 ```
 
-Or create the workspace and start an agent in one command:
+Use `shoal add my-project` to pick a new or existing branch, or pass it explicitly:
 
 ```sh
-shoal add my-project --name fix-api --agent codex -- "Fix the API timeout"
+shoal add my-project --branch origin/feature/api --agent codex
 shoal add my-project --issue 34 --agent codex  # Issue number or URL; uses gh/fj
 ```
 

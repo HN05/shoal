@@ -19,7 +19,7 @@ use crate::{
     simulators::{SimRequest, Simulator, SimulatorCatalog},
 };
 
-pub const VERSION: u32 = 18;
+pub const VERSION: u32 = 19;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -71,6 +71,13 @@ pub enum Method {
         repository: String,
     },
     // Workspaces.
+    ListBranches {
+        repository: String,
+    },
+    OpenBranch {
+        repository: String,
+        branch: String,
+    },
     CreateWorkspace {
         repository: String,
         name: String,
@@ -203,6 +210,8 @@ pub enum Body {
     RepositoryRemoved(RepositoryRemoval),
     Workspace(Workspace),
     Workspaces(Vec<Workspace>),
+    Branches(Vec<crate::existing_branch::Branch>),
+    OpenedWorkspace(crate::existing_branch::OpenedWorkspace),
     Inspection(Inspection),
     Reconciliation(Vec<Report>),
     Execution(ExecutionPlan),

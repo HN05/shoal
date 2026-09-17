@@ -1411,7 +1411,7 @@ fn invalid_branch_names_and_normalized_name_collisions_preserve_existing_work() 
 fn interactive_add_preserves_literal_branch_spelling() {
     let fixture = Fixture::new();
     let (output, transcript) = fixture.interactive(
-        &["add", fixture.repo.to_str().unwrap()],
+        &["add", fixture.repo.to_str().unwrap(), "--ref", "main"],
         "\u{2003}henrik/topic\u{2003}\n",
     );
     assert!(output.status.success(), "{transcript}");
@@ -5558,4 +5558,130 @@ fn issue_lookup_errors_never_create_a_workspace() {
         );
         assert_eq!(fixture.ok(&["list"]), serde_json::json!([]));
     }
+}
+
+#[test]
+fn add_existing_branch_runs_setup_once_and_denies_scoped_creation() {
+    let fixture = Fixture::new();
+    for hook in ["setup", "post"] {
+        let path = fixture.repo.join(hook);
+        fs::write(&path, format!("#!/bin/sh\necho {hook} >> runs\n")).unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    fs::write(
+        fixture.repo.join(".shoal.toml"),
+        "setup_cmd = './setup'\npost_setup_cmd = './post'\n",
+    )
+    .unwrap();
+    git(&fixture.repo, &["add", "."]);
+    git(
+        &fixture.repo,
+        &[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "-m",
+            "hooks",
+        ],
+    );
+    git(&fixture.repo, &["branch", "coworker"]);
+    let args = [
+        "add",
+        fixture.repo.to_str().unwrap(),
+        "--branch",
+        "coworker",
+    ];
+    let opened = fixture.ok(&args);
+    let path = Path::new(opened["path"].as_str().unwrap());
+    assert_eq!(
+        fs::read_to_string(path.join("runs")).unwrap(),
+        "setup\npost\n"
+    );
+    let reopened = fixture.ok(&args);
+    assert_eq!(opened["id"], reopened["id"]);
+    assert_eq!(
+        fs::read_to_string(path.join("runs")).unwrap(),
+        "setup\npost\n"
+    );
+    let output = fixture.run(&[
+        "exec",
+        "coworker",
+        "--",
+        env!("CARGO_BIN_EXE_shoal"),
+        "add",
+        fixture.repo.to_str().unwrap(),
+        "--branch",
+        "main",
+    ]);
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("workspace processes"),
+        "{output:?}"
+    );
+    for flag in ["--name", "--ref", "--issue"] {
+        assert!(
+            !fixture
+                .run(&[
+                    "add",
+                    fixture.repo.to_str().unwrap(),
+                    "--branch",
+                    "coworker",
+                    flag,
+                    "other"
+                ])
+                .status
+                .success()
+        );
+    }
+}
+
+#[test]
+fn interactive_add_picks_existing_branch_and_reopens_workspace() {
+    use std::os::fd::FromRawFd;
+    let fixture = Fixture::new();
+    git(&fixture.repo, &["branch", "coworker/topic"]);
+    let bin = fixture.root.path().join("bin");
+    fs::create_dir_all(&bin).unwrap();
+    let picker = bin.join("fzf");
+    fs::write(&picker, "#!/bin/sh\nawk -F '\\t' '$1 == \"existing\" || $1 == \"refs/heads/coworker/topic\" {print}'\n").unwrap();
+    fs::set_permissions(&picker, fs::Permissions::from_mode(0o755)).unwrap();
+    let directive = fixture.root.path().join("destination");
+    for _ in 0..2 {
+        let (mut master, mut slave) = (-1, -1);
+        assert_eq!(
+            unsafe {
+                libc::openpty(
+                    &mut master,
+                    &mut slave,
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                )
+            },
+            0
+        );
+        let _master = unsafe { fs::File::from_raw_fd(master) };
+        let slave = unsafe { fs::File::from_raw_fd(slave) };
+        let output = fixture
+            .command()
+            .env("SHOAL_SHELL_DIRECTIVE", &directive)
+            .args(["add", fixture.repo.to_str().unwrap()])
+            .stdin(slave.try_clone().unwrap())
+            .stderr(slave)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stdout)
+        );
+        let workspace = fixture.ok(&["inspect", "coworker-topic"]);
+        assert_eq!(
+            fs::read_to_string(&directive).unwrap().trim(),
+            workspace["workspace"]["path"].as_str().unwrap()
+        );
+    }
+    assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
 }

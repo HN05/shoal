@@ -43,6 +43,9 @@ pub enum Command {
         /// Git branch name; a portable workspace name is derived from it.
         #[arg(long)]
         name: Option<String>,
+        /// Use an existing local branch or remote/branch without creating a new branch.
+        #[arg(long, conflicts_with_all = ["name", "issue", "base"])]
+        branch: Option<String>,
         /// Derive a name and agent prompt from a forge issue number or URL.
         #[arg(long)]
         issue: Option<String>,

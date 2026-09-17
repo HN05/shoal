@@ -20,7 +20,7 @@ struct Progress {
 }
 
 impl Manager {
-    pub(super) async fn ensure_repository_available(&self, id: &str) -> Result<()> {
+    pub(crate) async fn ensure_repository_available(&self, id: &str) -> Result<()> {
         let id = id.to_owned();
         self.store
             .run(move |db| {

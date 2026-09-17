@@ -101,8 +101,8 @@ returns to your shell.
 
 Omitted targets open an fzf picker; `rm`, `exec`, `claude`, `codex`, `t3`,
 `diff`, `pull`, and `merge` first use the workspace containing the current
-directory. `shoal add` offers repositories in most-recently-used order and
-prompts for a branch name. Noninteractive calls and `--json` never prompt;
+directory. `shoal add` offers repositories in most-recently-used order, then
+a new-branch prompt or existing-branch picker. Noninteractive and JSON calls never prompt;
 management commands support JSON output, while executed commands keep their
 own stdin, stdout, stderr, and exit code.
 
@@ -138,26 +138,26 @@ already be running. Disable automatic cleanup when using an app whose activity
 Shoal cannot track.
 
 ### Branch and workspace names
+`--name` creates a literal Git branch; `--branch <branch|remote/branch>` uses an
+existing one (incompatible with `--name`, `--issue`, and `--ref`). The picker
+queries remotes for current branches. Local branches take precedence and remain
+unchanged; remote selections fetch and create tracking branches, or fast-forward
+a matching local tracking branch without discarding ahead commits. Ambiguous
+remotes or unrelated local branches fail. A ready Shoal workspace reopens without
+setup/hooks or refresh; other checkouts block creation, including checked-out `main`.
+Full `refs/heads/...` and `refs/remotes/...` selectors disambiguate names.
+The workspace name replaces non-ASCII-alphanumeric/`-_` characters with `-`, drops
+leading `-_`, truncates to 64 characters, and falls back to `workspace`. Globally
+colliding names fail. Commands use this name or ID; directories live in the repo root.
 
-`--name` and the interactive prompt accept literal Git branch names, validated
-by Git and kept as spelled. The workspace name and directory
-`<state-dir>/workspaces/<name>` are derived from it: characters other than
-ASCII letters, digits, hyphens, and underscores become `-`, leading hyphens and
-underscores are dropped, the result is truncated to 64 characters, and an empty
-result becomes `workspace`. `feature/123-update-profile` yields the workspace
-`feature-123-update-profile`. Workspace names are unique across repositories;
-a collision fails without touching the existing workspace. Commands and
-completions use the workspace name or ID.
-
-If the branch name is taken by a local branch, known remote branch, branch
-namespace, or retained Shoal record, the leaf gets `-2`, `-3`, etc.; when an
+For new branches, names taken by a local branch, known remote branch, branch
+namespace, or retained Shoal record get `-2`, `-3`, etc. on the leaf; when an
 ancestor blocks it, that component is suffixed (`feature` makes `feature/topic`
 into `feature-2/topic`). `HEAD`, Worktrunk's `@`, and full hex object IDs are
 reserved. Suffixes never change the derived workspace name.
 
 ### Base branch
-
-Creation branches from the repository's default branch: `origin/HEAD`, or the
+New branches start from the repository's default branch: `origin/HEAD`, or the
 sole remote's HEAD without `origin` (several remotes without `origin` are
 ambiguous). A missing symbolic remote HEAD is discovered with `ls-remote` and
 cached; update it with `git remote set-head origin --auto`. Without remotes, the
@@ -167,8 +167,8 @@ Before branching, Shoal fetches that local branch's upstream and fast-forwards
 it, even when the registered checkout is on another branch. A missing branch or
 upstream, failed fetch, divergence, or a dirty or managed default-branch
 checkout stops creation; an already-ahead branch is preserved. `--ref <git-ref>`
-starts elsewhere without refreshing anything, unless it names the default
-branch itself. Uncommitted files are not copied.
+starts elsewhere without refreshing, except the default branch. Existing-branch
+workspaces record the local default for diff, or their starting commit if unavailable.
 
 ### Repositories
 

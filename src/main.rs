@@ -11,6 +11,7 @@ mod diff;
 mod env;
 mod execution;
 mod execution_processes;
+mod existing_branch;
 mod git;
 mod hooks;
 mod merge;

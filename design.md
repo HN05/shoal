@@ -70,7 +70,7 @@ in-place checkout placed as `~/shoal/<name>/<x>` adopts that directory, and
 then canonical path, never fetches, and keeps a stable UUID separate from the
 display name. `repo rm` deletes the directory only once it is empty.
 
-A workspace branches from the repository default branch: `origin/HEAD`, the
+A new branch starts from the repository default branch: `origin/HEAD`, the
 sole remote's HEAD, or the checkout's current branch without remotes, never a
 guessed `main`. The selected local default branch is fast-forwarded from its
 upstream first, preserving an ahead branch and refusing divergence, dirty or
@@ -83,7 +83,12 @@ unique workspace name and directory from them; a normalization collision fails
 without touching existing work. Branch conflicts get numeric suffixes on the
 blocking component only, never changing the workspace name. Worktree Git
 metadata identity is recorded so moved or replaced directories are never
-adopted silently.
+adopted silently. Existing-branch selection creates a worktree without suffixing;
+remote heads are discovered live and become local tracking branches. Local
+selection preserves commits; remote selection fast-forwards matching tracking
+branches. Ready owned workspaces reopen without setup, hooks, or refresh; other
+checkouts block creation. Existing worktrees use the local default as their diff
+base, falling back to the initial commit. Main checkouts are never adopted.
 
 Repository config may name `setup_cmd`, `post_setup_cmd`, and `pre_remove_cmd`:
 single executable paths resolved against the worktree, run directly without

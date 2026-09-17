@@ -632,3 +632,182 @@ async fn creation_honors_explicit_history_and_preserves_ahead_main() {
         ahead
     );
 }
+
+#[tokio::test]
+async fn existing_branch_opens_without_suffix_and_reuses_owned_workspace() {
+    let f = Fixture::new().await;
+    git(&f.repo, &["branch", "coworker/topic"]);
+    let opened = f
+        .manager
+        .open_branch(&f.repo_id, "coworker/topic")
+        .await
+        .unwrap();
+    assert!(!opened.reused);
+    assert_eq!(opened.workspace.branch, "coworker/topic");
+    assert_eq!(opened.workspace.name, "coworker-topic");
+    assert_eq!(
+        opened.workspace.base_ref.as_deref(),
+        Some("refs/heads/main")
+    );
+    assert_eq!(
+        git(&opened.workspace.path, &["branch", "--show-current"]).trim(),
+        "coworker/topic"
+    );
+    let again = f
+        .manager
+        .open_branch(&f.repo_id, "refs/heads/coworker/topic")
+        .await
+        .unwrap();
+    assert!(again.reused);
+    assert_eq!(again.workspace.id, opened.workspace.id);
+    git(&opened.workspace.path, &["switch", "--detach"]);
+    assert!(
+        f.manager
+            .open_branch(&f.repo_id, "coworker/topic")
+            .await
+            .is_err()
+    );
+}
+
+#[tokio::test]
+async fn existing_branch_refuses_other_checkouts_and_name_collisions() {
+    let f = Fixture::new().await;
+    let error = f.manager.open_branch(&f.repo_id, "main").await.unwrap_err();
+    assert!(error.to_string().contains("already checked out"));
+    assert!(f.manager.list_workspaces().await.unwrap().is_empty());
+    git(&f.repo, &["branch", "topic/one"]);
+    f.add("topic-one").await;
+    assert!(
+        f.manager
+            .open_branch(&f.repo_id, "topic/one")
+            .await
+            .is_err()
+    );
+    assert_eq!(f.manager.list_workspaces().await.unwrap().len(), 1);
+    git(&f.repo, &["switch", "--detach"]);
+    let main = f.manager.open_branch(&f.repo_id, "main").await.unwrap();
+    assert_eq!(main.workspace.branch, "main");
+}
+
+#[tokio::test]
+async fn existing_remote_branch_discovers_fetches_and_tracks_new_heads() {
+    let f = Fixture::new().await;
+    let author = f.remote();
+    git(&author, &["switch", "-c", "coworker/topic"]);
+    fs::write(author.join("coworker"), "work\n").unwrap();
+    commit(&author, "coworker");
+    git(&author, &["push", "origin", "coworker/topic"]);
+    let branches = f.manager.branches(&f.repo_id).await.unwrap();
+    assert!(
+        branches
+            .iter()
+            .any(|b| b.selector() == "refs/remotes/origin/coworker/topic")
+    );
+    let opened = f
+        .manager
+        .open_branch(&f.repo_id, "origin/coworker/topic")
+        .await
+        .unwrap();
+    assert_eq!(opened.workspace.branch, "coworker/topic");
+    assert_eq!(
+        git(&opened.workspace.path, &["rev-parse", "HEAD"]),
+        git(&author, &["rev-parse", "HEAD"])
+    );
+    assert_eq!(
+        git(
+            &opened.workspace.path,
+            &["rev-parse", "--symbolic-full-name", "@{upstream}"]
+        )
+        .trim(),
+        "refs/remotes/origin/coworker/topic"
+    );
+    assert!(
+        f.manager
+            .open_branch(&f.repo_id, "origin/coworker/topic")
+            .await
+            .unwrap()
+            .reused
+    );
+}
+
+#[tokio::test]
+async fn existing_remote_branch_rejects_ambiguity_and_unrelated_local_branch() {
+    let f = Fixture::new().await;
+    let author = f.remote();
+    git(&author, &["switch", "-c", "topic"]);
+    git(&author, &["push", "origin", "topic"]);
+    let origin = f.root.path().join("origin.git");
+    git(
+        &f.repo,
+        &["remote", "add", "other", origin.to_str().unwrap()],
+    );
+    assert!(
+        f.manager
+            .open_branch(&f.repo_id, "topic")
+            .await
+            .unwrap_err()
+            .to_string()
+            .contains("ambiguous")
+    );
+    git(&f.repo, &["branch", "topic"]);
+    assert!(
+        f.manager
+            .open_branch(&f.repo_id, "origin/topic")
+            .await
+            .unwrap_err()
+            .to_string()
+            .contains("does not track")
+    );
+    assert!(f.manager.list_workspaces().await.unwrap().is_empty());
+    // Explicit local selection remains usable with unavailable remotes.
+    git(
+        &f.repo,
+        &[
+            "remote",
+            "set-url",
+            "origin",
+            "/nonexistent/shoal-test-remote",
+        ],
+    );
+    assert!(f.manager.open_branch(&f.repo_id, "topic").await.is_ok());
+}
+
+#[tokio::test]
+async fn existing_tracking_branch_fast_forwards_and_refuses_divergence() {
+    let f = Fixture::new().await;
+    let author = f.remote();
+    git(&author, &["switch", "-c", "topic"]);
+    git(&author, &["push", "origin", "topic"]);
+    git(&f.repo, &["fetch", "origin"]);
+    git(&f.repo, &["branch", "--track", "topic", "origin/topic"]);
+    fs::write(author.join("later"), "new work\n").unwrap();
+    commit(&author, "later");
+    git(&author, &["push", "origin", "topic"]);
+    let opened = f
+        .manager
+        .open_branch(&f.repo_id, "origin/topic")
+        .await
+        .unwrap();
+    assert_eq!(
+        git(&opened.workspace.path, &["rev-parse", "HEAD"]),
+        git(&author, &["rev-parse", "HEAD"])
+    );
+    git(&author, &["switch", "-c", "diverged"]);
+    git(&author, &["push", "origin", "diverged"]);
+    git(&f.repo, &["fetch", "origin"]);
+    git(&f.repo, &["switch", "--track", "origin/diverged"]);
+    fs::write(f.repo.join("local"), "local work\n").unwrap();
+    commit(&f.repo, "local");
+    let before = git(&f.repo, &["rev-parse", "HEAD"]);
+    git(&f.repo, &["switch", "main"]);
+    fs::write(author.join("remote"), "remote work\n").unwrap();
+    commit(&author, "remote");
+    git(&author, &["push", "origin", "diverged"]);
+    assert!(
+        f.manager
+            .open_branch(&f.repo_id, "origin/diverged")
+            .await
+            .is_err()
+    );
+    assert_eq!(git(&f.repo, &["rev-parse", "diverged"]), before);
+}

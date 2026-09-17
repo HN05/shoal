@@ -18,7 +18,7 @@ pub async fn create(
     worktrunk_config: &Path,
     workspace_dir: &Path,
     branch: &str,
-    base: &str,
+    base: Option<&str>,
 ) -> Result<()> {
     let literal = serde_json::to_string(
         workspace_dir
@@ -33,16 +33,29 @@ pub async fn create(
         .arg(format!("worktree-path = {literal}"))
         .arg("-C")
         .arg(repository_dir)
-        .args([
-            "switch",
-            "--create",
-            branch,
-            "--base",
-            base,
-            "--no-cd",
-            "--no-hooks",
-            "--format=json",
-        ]);
+        .arg("switch");
+    if let Some(base) = base {
+        command.args(["--create", "--base", base]);
+    } else {
+        // Worktrunk otherwise routes the default branch to the main checkout,
+        // ignoring worktree-path. Use a full ref for this invocation only:
+        // it still resolves, but cannot equal a literal branch name.
+        let count: usize = std::env::var("GIT_CONFIG_COUNT")
+            .unwrap_or_else(|_| "0".into())
+            .parse()
+            .context("invalid GIT_CONFIG_COUNT")?;
+        command
+            .env("GIT_CONFIG_COUNT", (count + 1).to_string())
+            .env(
+                format!("GIT_CONFIG_KEY_{count}"),
+                "worktrunk.default-branch",
+            )
+            .env(
+                format!("GIT_CONFIG_VALUE_{count}"),
+                format!("refs/heads/{branch}"),
+            );
+    }
+    command.args([branch, "--no-cd", "--no-hooks", "--format=json"]);
     let result: Value = serde_json::from_str(&subprocess::output(command).await?)
         .context("invalid Worktrunk creation result")?;
     ensure!(

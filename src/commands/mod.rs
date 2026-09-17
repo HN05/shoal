@@ -61,11 +61,12 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         Command::Add {
             repository,
             name,
+            branch,
             issue,
             base,
             agent,
             args,
-        } => workspaces::add(&ctx, repository, name, base, issue, agent, args).await,
+        } => workspaces::add(&ctx, repository, (name, branch), base, issue, agent, args).await,
         Command::Prepare { workspace } => workspaces::prepare(&ctx, workspace).await,
         Command::List => workspaces::list(&ctx).await,
         Command::Cd { workspace } => workspaces::cd(&ctx, workspace).await,
