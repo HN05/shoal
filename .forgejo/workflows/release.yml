@@ -33,10 +33,12 @@ jobs:
           REF: ${{ github.ref }}
           TOKEN: ${{ secrets.RELEASE_AUTOMATION_TOKEN }}
           TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_RELEASE_TOKEN }}
         run: |
           test "$REF" = refs/heads/main || { echo 'Select main to release'; exit 1; }
           test -n "$TOKEN" || { echo 'Configure RELEASE_AUTOMATION_TOKEN'; exit 1; }
           test -n "$TAP_TOKEN" || { echo 'Configure HOMEBREW_TAP_TOKEN'; exit 1; }
+          test -n "$GITHUB_TOKEN" || { echo 'Configure GITHUB_RELEASE_TOKEN'; exit 1; }
       - name: Check out main
         env:
           SERVER: ${{ github.server_url }}
@@ -142,3 +144,95 @@ jobs:
             # This is the disposable CI clone, containing only our failed commit.
             git -C tap reset --hard origin/main
           done
+
+  # One job for every target: builds share /ci-target, whose lock would
+  # serialize a matrix anyway. Push mirrors carry no releases, so the GitHub
+  # release below is created from these files once the tag has been mirrored.
+  binaries:
+    needs: publish
+    runs-on: docker
+    container:
+      image: git.henriknordvik.com/hn05/ci-shoal:1.98
+    defaults:
+      run:
+        shell: bash
+    env:
+      CARGO_TARGET_DIR: /ci-target
+      RELEASE_TAG: ${{ needs.publish.outputs.tag }}
+    steps:
+      - name: Check out release
+        env:
+          FORGEJO_SERVER: ${{ github.server_url }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -eu
+          python3 -c 'import os,re; assert re.fullmatch(r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", os.environ["RELEASE_TAG"]), "expected stable vX.Y.Z tag"'
+          git init source
+          git -C source remote add origin "${FORGEJO_SERVER%/}/$REPOSITORY.git"
+          git -C source fetch --depth 1 origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+          git -C source checkout --detach "refs/tags/$RELEASE_TAG"
+      - name: Cross-build release binaries (holding /ci-target)
+        run: |
+          set -euo pipefail
+          cd source
+          . .forgejo/scripts/lock-target-dir.sh
+          mkdir -p dist
+          for target in x86_64-unknown-linux-musl aarch64-unknown-linux-musl x86_64-apple-darwin aarch64-apple-darwin; do
+            cargo clean -p shoal --release --target "$target"
+            cargo zigbuild --locked --release --target "$target"
+            tar -C "$CARGO_TARGET_DIR/$target/release" -czf "dist/shoal-$RELEASE_TAG-$target.tar.gz" shoal
+          done
+          (cd dist && sha256sum shoal-*.tar.gz > SHA256SUMS && cat SHA256SUMS)
+      - name: Attach to the Forgejo release
+        env:
+          RELEASE_AUTOMATION_TOKEN: ${{ secrets.RELEASE_AUTOMATION_TOKEN }}
+          RELEASE_API_URL: ${{ github.api_url }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+        run: python3 source/scripts/publish-assets.py forgejo "$RELEASE_TAG" source/dist/*
+
+  github-release:
+    needs: [publish, binaries]
+    runs-on: docker
+    container:
+      image: git.henriknordvik.com/hn05/ci-shoal:1.98
+    defaults:
+      run:
+        shell: bash
+    env:
+      RELEASE_TAG: ${{ needs.publish.outputs.tag }}
+    steps:
+      - name: Check out release
+        env:
+          FORGEJO_SERVER: ${{ github.server_url }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -eu
+          python3 -c 'import os,re; assert re.fullmatch(r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", os.environ["RELEASE_TAG"]), "expected stable vX.Y.Z tag"'
+          git init source
+          git -C source remote add origin "${FORGEJO_SERVER%/}/$REPOSITORY.git"
+          git -C source fetch --depth 1 origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+          git -C source checkout --detach "refs/tags/$RELEASE_TAG"
+      - name: Download the attached binaries
+        env:
+          TOKEN: ${{ secrets.RELEASE_AUTOMATION_TOKEN }}
+          API: ${{ github.api_url }}/repos/${{ github.repository }}/releases/tags
+        run: |
+          set -euo pipefail
+          mkdir dist
+          cd dist
+          curl -sf -H "Authorization: token $TOKEN" "$API/$RELEASE_TAG" \
+            | jq -r '.assets[] | .name + " " + .browser_download_url' \
+            | while read -r name url; do
+                curl -sfL -H "Authorization: token $TOKEN" -o "$name" "$url"
+              done
+          # The checksums travel with the files, so a truncated download fails here.
+          sha256sum -c SHA256SUMS
+      - name: Create the GitHub release
+        env:
+          GITHUB_RELEASE_TOKEN: ${{ secrets.GITHUB_RELEASE_TOKEN }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          export GIT_TERMINAL_PROMPT=0
+          python3 source/scripts/publish-assets.py github "$RELEASE_TAG" dist/* \
+            --revision "$(git -C source rev-parse HEAD)"

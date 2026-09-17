@@ -3,14 +3,16 @@
 # tag, so a run can say which toolchain it used.
 #
 # Build with ./build.sh on the runner host, then bump ARG RUST below and the
-# `image:` tags in every workflow that uses this image. See AGENTS.md "CI".
+# `image:` tags in every workflow that uses this image. A change here that keeps
+# the Rust version still needs a rebuild with the same tag. See AGENTS.md "CI".
 
 ARG RUST=1.98
 FROM docker.io/library/rust:${RUST}-trixie
 
 # The daemon and workspace tests spawn these: git and Worktrunk for worktrees,
 # lsof for port checks, zsh and bash as user shells, python3 for the xcrun
-# fixture and the release scripts. curl and jq serve the label gate in ci.yml.
+# fixture and the release scripts. curl and jq serve the label gate in ci.yml
+# and the Zig download below; xz-utils unpacks it.
 RUN rustup component add rustfmt clippy \
  && apt-get update -qq \
  && apt-get install -y -qq --no-install-recommends \
@@ -21,6 +23,7 @@ RUN rustup component add rustfmt clippy \
       python3 \
       curl \
       jq \
+      xz-utils \
  && rm -rf /var/lib/apt/lists/*
 
 # Worktrunk is pinned because Shoal drives its CLI. --locked builds it against
@@ -31,6 +34,30 @@ RUN rustup component add rustfmt clippy \
 RUN cargo install --locked worktrunk --version 0.78.0 \
  && rm -rf "$CARGO_HOME/registry"
 
+# release.yml cross-builds the release binaries with cargo-zigbuild, which
+# links every target through Zig: static musl for Linux and, because Shoal
+# links only libSystem and no Apple frameworks, macOS without an Apple SDK.
+# The tarball is picked for this host's architecture from Zig's release index
+# and verified against the checksum published there.
+ARG ZIG=0.14.1
+RUN set -eu \
+ && arch="$(uname -m)" \
+ && curl -fsSL https://ziglang.org/download/index.json -o /tmp/zig-index.json \
+ && url="$(jq -er --arg v "$ZIG" --arg a "$arch-linux" '.[$v][$a].tarball' /tmp/zig-index.json)" \
+ && sum="$(jq -er --arg v "$ZIG" --arg a "$arch-linux" '.[$v][$a].shasum' /tmp/zig-index.json)" \
+ && curl -fsSL "$url" -o /tmp/zig.tar.xz \
+ && echo "$sum  /tmp/zig.tar.xz" | sha256sum -c - \
+ && mkdir -p /opt/zig \
+ && tar -xJf /tmp/zig.tar.xz -C /opt/zig --strip-components=1 \
+ && ln -s /opt/zig/zig /usr/local/bin/zig \
+ && rm -f /tmp/zig.tar.xz /tmp/zig-index.json
+RUN rustup target add \
+      x86_64-unknown-linux-musl aarch64-unknown-linux-musl \
+      x86_64-apple-darwin aarch64-apple-darwin \
+ && cargo install --locked cargo-zigbuild --version 0.23.4 \
+ && rm -rf "$CARGO_HOME/registry"
+
 # Sanity: the versions the jobs will run with, visible in `podman build` output.
 RUN rustc --version && cargo clippy --version && cargo fmt --version \
- && wt --version && git --version && lsof -v 2>&1 | head -1 && zsh --version && python3 --version && jq --version
+ && wt --version && git --version && lsof -v 2>&1 | head -1 && zsh --version && python3 --version && jq --version \
+ && zig version && cargo zigbuild --version

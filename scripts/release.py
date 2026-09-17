@@ -147,7 +147,8 @@ def publish(version, dry_run, merged_commit=None):
 
 def create_release(version):
     body = (f"Shoal {version}.\n\nInstall or upgrade through the "
-            "[HN05 Homebrew tap](https://github.com/HN05/homebrew-tap).")
+            "[HN05 Homebrew tap](https://github.com/HN05/homebrew-tap), or download a "
+            "prebuilt Linux or macOS binary below.")
     # CI calls repository endpoints directly; no user-profile/login API is needed.
     # Both paths reject an existing release instead of overwriting it.
     if os.environ.get("RELEASE_AUTOMATION_TOKEN"):

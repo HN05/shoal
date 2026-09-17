@@ -12,7 +12,8 @@ shoal setup
 shoal skill install
 ```
 
-Use `brew install --HEAD hn05/tap/shoal` to track `main` instead of releases.
+Use `brew install --HEAD hn05/tap/shoal` to track `main` instead of releases, or
+download a prebuilt macOS or Linux binary from a [release](https://github.com/HN05/shoal/releases).
 Homebrew installs the runtime dependencies. `shoal setup` starts the per-user
 daemon; `shoal skill install` installs instructions for Codex and Claude Code.
 
@@ -143,8 +144,7 @@ in existing terminals after upgrading.
 
 ## Development
 
-See [design.md](design.md) for product decisions and the
-[command reference](docs/reference.md) for detailed behavior.
+See [design.md](design.md) for decisions and the [command reference](docs/reference.md) for behavior.
 Create releases through **Actions → release**; see [release setup](docs/releases.md).
 Documentation is budgeted by `tests/docs.rs`; trim before extending.
 
