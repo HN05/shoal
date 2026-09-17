@@ -6,7 +6,7 @@ use crate::{
     state::WorkspaceState,
     worktrunk,
 };
-use anyhow::{Result, ensure};
+use anyhow::{Result, bail, ensure};
 
 /// Who is removing the workspace, which decides how strict the checks are.
 #[derive(Clone, Copy)]
@@ -152,8 +152,6 @@ impl Manager {
 
     /// Forget a workspace whose directory was deleted outside Shoal.
     pub async fn remove_deleted(&self, selector: &str) -> Result<RemovalResult> {
-        let workspace = self.workspace(selector).await?;
-        ensure!(!workspace.path.try_exists()?, "workspace directory exists");
         self.remove(selector, Removal::Deleted).await
     }
 
@@ -161,11 +159,14 @@ impl Manager {
         let workspace = self.workspace(selector).await?;
         self.reserve_lifecycle(&workspace.id, WorkspaceState::Removing)
             .await?;
+        // Checked only after the reservation, so a worktree restored meanwhile
+        // cannot be deleted by an unattended removal.
+        let present = workspace.path.try_exists()?;
         let result = async {
-            let outcome = if workspace.path.exists() {
-                self.remove_present_worktree(&workspace, removal).await?
-            } else {
-                self.remove_missing_worktree(&workspace, removal).await?
+            let outcome = match removal {
+                Removal::Deleted if present => bail!("workspace directory exists"),
+                _ if present => self.remove_present_worktree(&workspace, removal).await?,
+                _ => self.remove_missing_worktree(&workspace, removal).await?,
             };
             self.remove_simulators(&workspace.id).await?;
             let id = workspace.id.clone();
@@ -188,7 +189,7 @@ impl Manager {
             Err(error) => {
                 // A deleted directory can no longer be ready.
                 let state = match removal {
-                    Removal::Deleted => WorkspaceState::Failed,
+                    Removal::Deleted if !present => WorkspaceState::Failed,
                     _ => workspace.state,
                 };
                 self.set_state(&workspace.id, state, Some(format!("{error:#}")))
