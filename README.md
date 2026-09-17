@@ -139,7 +139,7 @@ in existing terminals after upgrading.
 
 See [design.md](design.md) for product decisions and the
 [command reference](docs/reference.md) for detailed behavior.
-Create releases through **Actions → Release**; see [release setup](docs/releases.md).
+Create releases through **Actions → release**; see [release setup](docs/releases.md).
 
 Requires Rust, Git, `lsof`, and Worktrunk (`wt`, tested with 0.77.0). Interactive menus
 require `fzf`. Install the runtime tools before running `shoal setup` so the

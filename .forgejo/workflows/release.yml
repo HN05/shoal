@@ -1,22 +1,78 @@
-name: Update Homebrew release
+name: release
 
 on:
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
-      tag:
-        description: Existing stable release tag to publish to Homebrew (vX.Y.Z)
+      version:
+        description: Version (blank chooses the next unused patch)
         type: string
-        required: true
+        required: false
 
 concurrency:
-  group: homebrew-release
+  group: shoal-release
   cancel-in-progress: false
 
 jobs:
+  publish:
+    outputs:
+      tag: ${{ steps.publish.outputs.tag }}
+    runs-on: docker
+    container:
+      image: rust:1.98-trixie
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check configuration
+        env:
+          REF: ${{ github.ref }}
+          TOKEN: ${{ secrets.RELEASE_AUTOMATION_TOKEN }}
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          test "$REF" = refs/heads/main || { echo 'Select main to release'; exit 1; }
+          test -n "$TOKEN" || { echo 'Configure RELEASE_AUTOMATION_TOKEN'; exit 1; }
+          test -n "$TAP_TOKEN" || { echo 'Configure HOMEBREW_TAP_TOKEN'; exit 1; }
+      - name: Install build tools
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends git lsof zsh python3 ca-certificates
+          rustup component add rustfmt clippy
+          cargo install --locked worktrunk --version 0.78.0
+      - name: Check out main
+        env:
+          SERVER: ${{ github.server_url }}
+          REPO: ${{ github.repository }}
+        run: |
+          git clone "$SERVER/$REPO.git" source
+          git -C source checkout --detach origin/main
+          git -C source config user.name 'Shoal release bot'
+          git -C source config user.email 'shoal-release@users.noreply.github.com'
+      - name: Create release
+        id: publish
+        env:
+          TOKEN: ${{ secrets.RELEASE_AUTOMATION_TOKEN }}
+          SERVER: ${{ github.server_url }}
+          REQUESTED_VERSION: ${{ inputs.version }}
+          RELEASE_AUTOMATION_TOKEN: ${{ secrets.RELEASE_AUTOMATION_TOKEN }}
+          RELEASE_API_URL: ${{ github.api_url }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          export GIT_CONFIG_COUNT=1
+          export GIT_CONFIG_KEY_0="http.${SERVER%/}/.extraheader"
+          export GIT_CONFIG_VALUE_0="Authorization: basic $(printf 'x-access-token:%s' "$TOKEN" | base64 | tr -d '\n')"
+          unset TOKEN
+          cd source
+          if [ -n "$REQUESTED_VERSION" ]; then
+            python3 scripts/release.py run "$REQUESTED_VERSION"
+          else
+            python3 scripts/release.py run
+          fi
+          tag=$(python3 -c 'import tomllib; print("v" + tomllib.load(open("Cargo.toml", "rb"))["package"]["version"])')
+          printf 'tag=%s\n' "$tag" >> "$GITHUB_OUTPUT"
+
   update-tap:
-    if: github.event_name == 'workflow_dispatch' || (!github.event.release.prerelease && !github.event.release.draft)
+    needs: publish
     runs-on: docker
     strategy:
       fail-fast: false
@@ -35,7 +91,7 @@ jobs:
           apt-get install -y --no-install-recommends git python3 ca-certificates
       - name: Check out release
         env:
-          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+          RELEASE_TAG: ${{ needs.publish.outputs.tag }}
           FORGEJO_SERVER: ${{ github.server_url }}
           REPOSITORY: ${{ github.repository }}
         run: |
@@ -47,7 +103,7 @@ jobs:
           git -C source checkout --detach "refs/tags/$RELEASE_TAG"
       - name: Update shared tap
         env:
-          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+          RELEASE_TAG: ${{ needs.publish.outputs.tag }}
           TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           TAP_REPOSITORY: ${{ matrix.tap }}
           SOURCE_KIND: ${{ matrix.source }}

@@ -113,7 +113,7 @@ def prepare(requested, dry_run, automated=False):
         body.write(f"Prepare Shoal {version}. Both Cargo versions are updated.\n\n"
                    "Validated formatting, Clippy, tests, and the release build.\n\n"
                    f"After merging, run `python3 scripts/release.py publish {version}`. "
-                   "Alternatively use Actions → Release for the fully automated process.\n")
+                   "Alternatively use Actions → release for the fully automated process.\n")
         body.flush()
         run("fj", "pr", "create", f"Release v{version}", "--base", "main",
             "--head", branch, "--body-file", body.name)
@@ -136,7 +136,7 @@ def publish(version, dry_run, merged_commit=None):
     if existing and git("rev-parse", f"refs/tags/{tag}^{{commit}}") != sha:
         raise ValueError("release tag already points elsewhere; it will not be moved")
     if dry_run:
-        print(f"Would publish {tag} at {sha}; Homebrew updates through Actions")
+        print(f"Would publish {tag} at {sha}")
         return
     validate()
     if not existing:
