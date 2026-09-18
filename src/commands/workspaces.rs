@@ -592,7 +592,7 @@ pub(super) async fn happy(
     }
     let stamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map(|elapsed| elapsed.as_secs())
+        .map(|elapsed| elapsed.as_millis())
         .unwrap_or_default();
     let state_dir = ctx.paths.workspace_state(&workspace.id);
     let stem = format!("happy-{}-{stamp}", agent.name());

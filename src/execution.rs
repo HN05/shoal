@@ -130,8 +130,13 @@ pub async fn launch_detached(
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::from(file))
-        .envs(env.iter().map(|(name, value)| (*name, value)))
         .env_remove(env::SHELL_DIRECTIVE);
+    // A launch from inside a seeded Happy session must not inherit its
+    // attachment; only `env` may name a session.
+    for name in crate::happy::client::RECONNECT_ENV {
+        wrapper.env_remove(name);
+    }
+    wrapper.envs(env.iter().map(|(name, value)| (*name, value)));
     // SAFETY: setsid only detaches the child from this terminal session and
     // runs before exec in the forked child, without allocating.
     unsafe {

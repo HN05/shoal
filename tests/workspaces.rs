@@ -6552,6 +6552,10 @@ fn happy_codex_prompts_are_delivered_through_a_seeded_session() {
         .args(["--json", "happy", "codex", "unseeded", "--prompt", "hello"])
         .env("HAPPY_RECORD", &record)
         .env("HAPPY_SERVER_URL", &server.url)
+        // Launched from inside another seeded session: its attachment must not leak.
+        .env("HAPPY_RECONNECT_SESSION_ID", "parent-session")
+        .env("HAPPY_RECONNECT_ENCRYPTION_KEY", &key)
+        .env("HAPPY_RECONNECT_ENCRYPTION_VARIANT", "legacy")
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
@@ -6563,6 +6567,9 @@ fn happy_codex_prompts_are_delivered_through_a_seeded_session() {
         stderr.contains("cannot deliver the prompt through Happy") && stderr.contains("401"),
         "{stderr}"
     );
+    wait_until("fake happy record", || record.exists());
+    let recorded = fs::read_to_string(&record).unwrap();
+    assert!(recorded.contains("reconnect=|||||\n"), "{recorded}");
     let pid = launch["pid"].as_u64().unwrap() as u32;
     fixture.ok(&["rm", "unseeded"]);
     wait_until("happy to exit", || !process_alive(pid));
