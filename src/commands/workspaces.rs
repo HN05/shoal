@@ -623,7 +623,15 @@ pub(super) async fn happy(
         prompt_file = Some(path);
     }
     let command = happy::command(agent, prompt.as_deref(), args);
-    let launch = match execution::launch_detached(&ctx.paths, &workspace, log, command, &env).await
+    let launch = match execution::launch_detached(
+        &ctx.paths,
+        &workspace,
+        log,
+        command,
+        &happy::client::RECONNECT_ENV,
+        &env,
+    )
+    .await
     {
         Ok(launch) => launch,
         Err(error) => {

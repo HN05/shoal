@@ -89,13 +89,15 @@ pub async fn run_detached_wrapper(
 
 /// Start `command` in `workspace` as a tracked execution that outlives this
 /// process: a new session running this binary's detached wrapper, with the
-/// command's output in `log` and `env` added to its environment. Returns once
-/// the daemon has recorded the launch.
+/// command's output in `log`, the inherited `clear` variables removed and
+/// `env` added to its environment. Returns once the daemon has recorded the
+/// launch.
 pub async fn launch_detached(
     paths: &Paths,
     workspace: &Workspace,
     log: PathBuf,
     command: Vec<OsString>,
+    clear: &[&str],
     env: &[(&str, String)],
 ) -> Result<DetachedLaunch> {
     ensure!(workspace.path.is_dir(), "workspace directory is missing");
@@ -131,9 +133,9 @@ pub async fn launch_detached(
         .stdout(Stdio::piped())
         .stderr(Stdio::from(file))
         .env_remove(env::SHELL_DIRECTIVE);
-    // A launch from inside a seeded Happy session must not inherit its
-    // attachment; only `env` may name a session.
-    for name in crate::happy::client::RECONNECT_ENV {
+    // A launch from inside another launcher's session must not inherit its
+    // attachment; the caller names what to drop and what to set.
+    for name in clear {
         wrapper.env_remove(name);
     }
     wrapper.envs(env.iter().map(|(name, value)| (*name, value)));
