@@ -71,6 +71,12 @@ class Handler(BaseHTTPRequestHandler):
                 }
                 STATE["sessions"][session["id"]] = session
                 self.reply(200, {"session": session})
+            elif method == "DELETE" and self.path.startswith("/v1/sessions/"):
+                session_id = self.path.rsplit("/", 1)[1]
+                if STATE["sessions"].pop(session_id, None) is None:
+                    self.reply(404, {"error": "Session not found"})
+                else:
+                    self.reply(200, {"ok": True})
             elif method == "GET" and self.path == "/v2/sessions/active":
                 active = [s for s in STATE["sessions"].values() if s["active"]]
                 self.reply(200, {"sessions": active})
@@ -92,6 +98,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         self.handle_request("POST")
+
+    def do_DELETE(self):
+        self.handle_request("DELETE")
 
 
 server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)

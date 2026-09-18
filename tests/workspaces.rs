@@ -202,6 +202,9 @@ fn cli(root: &Path) -> Command {
         .env_remove("SHOAL_SCOPE_TOKEN")
         .env_remove("SHOAL_EXECUTION_ID")
         .env_remove("XDG_CONFIG_HOME")
+        // Happy tests must never see the developer's login or server.
+        .env_remove("HAPPY_HOME_DIR")
+        .env_remove("HAPPY_SERVER_URL")
         .env("GIT_CONFIG_GLOBAL", "/dev/null")
         .env("GIT_CONFIG_NOSYSTEM", "1");
     command
@@ -6333,6 +6336,7 @@ fn happy_issue_prompts_reach_claude_and_are_saved_for_codex() {
             );
             assert_eq!(args[6..8], ["--model", "test"]);
             assert_eq!(launch["prompt_file"], Value::Null);
+            assert_eq!(launch["prompt_delivered"], true, "{launch}");
             assert!(!stderr.contains("initial prompt"), "{stderr}");
         } else {
             assert_eq!(
@@ -6573,4 +6577,38 @@ fn happy_codex_prompts_are_delivered_through_a_seeded_session() {
     let pid = launch["pid"].as_u64().unwrap() as u32;
     fixture.ok(&["rm", "unseeded"]);
     wait_until("happy to exit", || !process_alive(pid));
+
+    // A seeded session that no launch will ever attach to is deleted again.
+    fs::write(
+        happy_home.join("access.key"),
+        serde_json::json!({"token": "test-token", "secret": key}).to_string(),
+    )
+    .unwrap();
+    fs::remove_file(fixture.root.path().join("bin/happy")).unwrap();
+    fixture.add("orphan");
+    let output = fixture
+        .command()
+        .args(["--json", "happy", "codex", "orphan", "--prompt", "hello"])
+        .env("HAPPY_SERVER_URL", &server.url)
+        // Only the fixture directory and system tools: a real happy must not be found.
+        .env(
+            "PATH",
+            format!(
+                "{}:/usr/bin:/bin",
+                fixture.root.path().join("bin").display()
+            ),
+        )
+        .output()
+        .unwrap();
+    assert!(!output.status.success(), "{output:?}");
+    let state = server.state();
+    let methods: Vec<&str> = state["requests"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|r| r["path"].as_str().unwrap().starts_with("/v1/sessions"))
+        .map(|r| r["method"].as_str().unwrap())
+        .collect();
+    assert_eq!(methods.last(), Some(&"DELETE"), "{methods:?}");
+    assert_eq!(state["sessions"].as_object().unwrap().len(), 2, "{state}");
 }

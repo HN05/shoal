@@ -315,6 +315,18 @@ impl Seeded {
         Ok(())
     }
 
+    /// Delete a session nothing will attach to. Best effort: the launch error
+    /// being reported matters more than a cleanup failure.
+    pub async fn discard(self) {
+        let path = format!("/v1/sessions/{}", self.session.id);
+        if let Err(error) = self.server.request("DELETE", &path, None).await {
+            eprintln!(
+                "warning: could not delete the unused Happy session {}: {error:#}",
+                self.session.id
+            );
+        }
+    }
+
     async fn wait_until_active(&self, timeout: Duration) -> Result<()> {
         let deadline = Instant::now() + timeout;
         loop {

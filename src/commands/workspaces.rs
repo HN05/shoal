@@ -623,8 +623,19 @@ pub(super) async fn happy(
         prompt_file = Some(path);
     }
     let command = happy::command(agent, prompt.as_deref(), args);
-    let launch = execution::launch_detached(&ctx.paths, &workspace, log, command, &env).await?;
-    let mut prompt_delivered = false;
+    let launch = match execution::launch_detached(&ctx.paths, &workspace, log, command, &env).await
+    {
+        Ok(launch) => launch,
+        Err(error) => {
+            // Nothing will ever attach to the seeded session; do not leave it in the app.
+            if let Some(seeded) = seeded {
+                seeded.discard().await;
+            }
+            return Err(error);
+        }
+    };
+    // A prompt passed as an argument is delivered by the launch itself.
+    let mut prompt_delivered = prompt.is_some() && agent.accepts_prompt();
     if let (Some(seeded), Some(prompt)) = (&seeded, &prompt) {
         match seeded
             .deliver(prompt, std::time::Duration::from_secs(90))
