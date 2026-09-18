@@ -386,6 +386,20 @@ esac
         "default_agent = 'claude'\n"
     );
     assert_eq!(fs::read_to_string(&pid_path).unwrap(), original);
+    // `config reset` needs no confirmation: the edited file becomes the backup.
+    let output: Value =
+        serde_json::from_slice(&run(&["--json", "config", "reset"]).stdout).unwrap();
+    let backup = root.path().join(".config/shoal/config.toml.backup");
+    assert_eq!(output["backup"], backup.to_str().unwrap());
+    assert_eq!(
+        fs::read_to_string(&backup).unwrap(),
+        "default_agent = 'claude'\n"
+    );
+    assert!(
+        fs::read_to_string(&config)
+            .unwrap()
+            .contains("# default_agent = \"codex\"")
+    );
 
     // A changed executable path must update the definition without breaking an
     // existing execution's daemon connection.

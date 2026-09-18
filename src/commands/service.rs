@@ -5,7 +5,7 @@ use anyhow::{Context as _, Result, ensure};
 use serde_json::json;
 
 use crate::{
-    cli::DaemonCommand,
+    cli::{ConfigCommand, DaemonCommand},
     client,
     context::Context,
     daemon,
@@ -78,6 +78,21 @@ pub(super) async fn setup(
             shell::INIT_COMMAND
         );
     }
+    Ok(0)
+}
+
+pub(super) fn config(ctx: &Context, command: ConfigCommand) -> Result<i32> {
+    let ConfigCommand::Reset = command;
+    let (config, backup) = crate::config::Config::reset(&ctx.paths)?;
+    let message = match &backup {
+        Some(backup) => format!(
+            "Moved your config to {}\nWrote commented defaults to {}",
+            backup.display(),
+            config.display()
+        ),
+        None => format!("Wrote commented defaults to {}", config.display()),
+    };
+    ctx.emit(&message, json!({"config": config, "backup": backup}))?;
     Ok(0)
 }
 

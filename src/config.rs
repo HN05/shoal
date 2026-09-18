@@ -107,6 +107,15 @@ mod tests {
             Config::parse(&text, &paths).unwrap().default_agent,
             Some(crate::cli::Agent::Claude)
         );
+        // Reset keeps the edited file as a backup and restores the template.
+        let (same, backup) = Config::reset_at(expected.clone()).unwrap();
+        let backup = backup.unwrap();
+        assert!(same == expected && backup == home.path().join(".config/shoal/config.toml.backup"));
+        assert_eq!(fs::read_to_string(&backup).unwrap(), text);
+        assert_eq!(fs::read_to_string(&path).unwrap(), TEMPLATE);
+        fs::remove_file(&path).unwrap();
+        assert_eq!(Config::reset_at(expected.clone()).unwrap().1, None);
+        assert_eq!(fs::read_to_string(&backup).unwrap(), text);
     }
 
     #[test]
@@ -234,6 +243,28 @@ impl Config {
     /// Returns the path and whether this call created it.
     pub fn install(paths: &Paths) -> Result<(PathBuf, bool)> {
         Self::install_at(Self::path(paths))
+    }
+
+    /// Write a fresh template, first moving any existing file to
+    /// `config.toml.backup` (replacing an older backup). Returns the path and
+    /// the backup, if one was made.
+    pub fn reset(paths: &Paths) -> Result<(PathBuf, Option<PathBuf>)> {
+        Self::reset_at(Self::path(paths))
+    }
+
+    fn reset_at(path: PathBuf) -> Result<(PathBuf, Option<PathBuf>)> {
+        let backup = path.with_extension("toml.backup");
+        let moved = match fs::rename(&path, &backup) {
+            Ok(()) => true,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+            Err(error) => {
+                return Err(error)
+                    .with_context(|| format!("move {} to {}", path.display(), backup.display()));
+            }
+        };
+        let (path, created) = Self::install_at(path)?;
+        ensure!(created, "{} reappeared during reset", path.display());
+        Ok((path, moved.then_some(backup)))
     }
 
     fn install_at(path: PathBuf) -> Result<(PathBuf, bool)> {

@@ -231,6 +231,11 @@ pub enum Command {
         #[arg(last = true, required = true)]
         command: Vec<OsString>,
     },
+    /// Manage the global configuration file.
+    Config {
+        #[command(subcommand)]
+        command: ConfigCommand,
+    },
     /// Install and start the per-user daemon service.
     Setup {
         /// Preview the service definition without changing anything.
@@ -254,6 +259,7 @@ impl Command {
         matches!(
             self,
             Command::Setup { .. }
+                | Command::Config { .. }
                 | Command::Daemon {
                     command: DaemonCommand::Run { .. }
                         | DaemonCommand::Start
@@ -460,6 +466,12 @@ pub enum PortCommand {
 #[derive(Debug, Subcommand)]
 pub enum ShellCommand {
     Init,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ConfigCommand {
+    /// Replace the config with the commented template; the old file becomes config.toml.backup.
+    Reset,
 }
 
 #[derive(Debug, Subcommand)]

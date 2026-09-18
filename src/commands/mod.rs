@@ -150,6 +150,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             };
             recovery::run(&ctx, workspace, all, options).await
         }
+        Command::Config { command } => service::config(&ctx, command),
         Command::Setup {
             dry_run,
             executable,
