@@ -1817,6 +1817,7 @@ shoal pr --clear
 rm untracked
 shoal merged
 test "$PWD" = "$shoal_repo_dir"
+until ! shoal inspect acknowledged >/dev/null 2>&1; do sleep 0.1; done
 printf 'navigation-ok\n'
 "#;
     for shell in ["bash", "zsh"] {
