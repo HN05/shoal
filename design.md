@@ -187,11 +187,13 @@ are released explicitly or by successful removal. Resources are lazy, never
 claimed at creation.
 
 Global TOML is machine policy, seeded by `setup` with the stated defaults when
-absent and rewritten only by an explicit reset; repository TOML comes from the worktree
-(`.shoal.toml` or `.shoal/config.toml`, both together is an error) or from a
-local override stored in the database by repository ID, which replaces the
-whole worktree config and is deleted with the registration. Config is read per
-request, so changes need no restart and leave existing leases alone.
+absent and rewritten only by an explicit reset; the daemon reads it at startup,
+while the CLI reads agent settings per command. Repository TOML comes from the
+worktree (`.shoal.toml` or `.shoal/config.toml`, both together is an error) or
+from a local override stored in the database by repository ID, which replaces
+the whole worktree config and is deleted with the registration. Repository
+config is read per request, so changes need no restart and leave existing
+leases alone.
 Repository config cannot expand machine policy; global pools span
 repositories, repository pools span that repository's worktrees.
 

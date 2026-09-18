@@ -54,13 +54,14 @@ directory must match. `daemon status` exits 1 when offline.
 `shoal setup` preserves the invoked executable's symlink path and captures the
 current `PATH` for the service, so install `wt`, `git`, `lsof`, and any hook
 tools first. It also creates `~/.config/shoal/config.toml` (or
-`$XDG_CONFIG_HOME/shoal/config.toml`) from [configs/default.toml](../configs/default.toml),
-which states every default, never touching an existing file; `--dry-run` writes
-nothing. `shoal config reset` rewrites that file without asking, moving the
-current one to `config.toml.backup` (replacing an older backup). Setup preserves compatible daemons and commands until restart;
-incompatible daemons restart automatically. Stop foreground daemons manually. macOS diagnostics go
-to `daemon.log` in the state directory; Linux uses `journalctl --user -u
-shoal.service`. Native Linux service integration remains untested.
+`$XDG_CONFIG_HOME/shoal/config.toml`) from
+[configs/default.toml](../configs/default.toml), which states every default,
+never touching an existing file; `--dry-run` writes nothing. `shoal config
+reset` rewrites that file without asking, moving the current one to
+`config.toml.backup` (replacing an older backup). Setup preserves compatible
+daemons and commands until restart; incompatible daemons restart automatically.
+Stop foreground daemons manually. macOS diagnostics go to `daemon.log` in the
+state directory; Linux uses `journalctl --user -u shoal.service`. Native Linux service integration remains untested.
 
 ## Workspaces
 
