@@ -41,12 +41,14 @@ Use `shoal add my-project` to pick a new or existing branch, or pass it explicit
 ```sh
 shoal add my-project --branch origin/feature/api --agent codex
 shoal add my-project --issue 34 --agent codex  # Issue number or URL; uses gh/fj
+shoal issue https://github.com/owner/repo/issues/34  # Paste an issue: finds the repository, starts the default agent
 ```
 
 Use `--agent claude` for Claude Code, or `--agent happy-claude`/`happy-codex` for
 a detached [Happy](https://github.com/slopus/happy) session that appears in the
-Happy app. New workspaces branch from the repository's default branch. With
-shell integration, `shoal add` enters the workspace.
+Happy app. `shoal issue` takes the same `--agent`, or `default_agent = "codex"`
+from `~/.config/shoal/config.toml`. New workspaces branch from the repository's
+default branch. With shell integration, `shoal add` enters the workspace.
 
 ## Everyday commands
 

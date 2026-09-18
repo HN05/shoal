@@ -10,6 +10,8 @@ pub struct Config {
     pub root_dir: Option<PathBuf>,
     /// Former name of `root_dir`; still accepted so existing configs load.
     pub repositories_dir: Option<PathBuf>,
+    /// Agent `shoal issue` starts when `--agent` is omitted.
+    pub default_agent: Option<crate::cli::Agent>,
     pub codex: Codex,
     pub auto_cleanup: AutoCleanup,
     pub pr_cleanup: PrCleanup,
@@ -61,6 +63,28 @@ mod tests {
         ] {
             assert!(toml::from_str::<Config>(text).is_err());
         }
+    }
+
+    #[test]
+    fn default_agent_accepts_agent_spellings_only() {
+        use crate::{cli::Agent, happy::HappyAgent};
+
+        assert_eq!(toml::from_str::<Config>("").unwrap().default_agent, None);
+        for (text, agent) in [
+            ("default_agent = 'codex'", Agent::Codex),
+            ("default_agent = 'claude'", Agent::Claude),
+            (
+                "default_agent = 'happy-codex'",
+                Agent::Happy(HappyAgent::Codex),
+            ),
+        ] {
+            let config: Config = toml::from_str(text).unwrap();
+            assert_eq!(config.default_agent, Some(agent));
+        }
+        let error = toml::from_str::<Config>("default_agent = 'happy'")
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("happy-claude"), "{error}");
     }
 
     #[test]

@@ -147,7 +147,10 @@ approvals, Claude gets remote control named after the workspace and a persisted
 trust entry in its config. Codex's default mode is a global config value read at launch.
 `add --issue` resolves issue numbers/URLs using the remote and existing gh/fj
 login, derives a portable name, and supplies issue context to CLI agents; forge
-lookup stays in the CLI with no Shoal credentials or forge configuration.
+lookup stays in the CLI with no Shoal credentials or forge configuration. `issue
+<url>` is the same flow from a pasted link: the URL selects the registered
+repository by remote identity (never cloning), and the global `default_agent`
+stands in for `--agent`, so a paste yields a workspace with an agent working.
 `add --agent` launches only after creation, setup, and the post-setup hook
 succeed, or after an explicitly ignored setup failure, and retains the
 workspace whatever the agent does. Desktop handoffs (Codex app, T3) provide no

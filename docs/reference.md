@@ -67,6 +67,10 @@ Names default to `issue-<number>-<title-slug>`; `--name` overrides this. With
 `--agent`, the issue title, URL and details supply the initial prompt (forward
 agent options after `--`, not a second prompt). Codex uses CLI mode for issue
 prompts even when its default is `app`. Ordinary setup, hooks and collision rules apply.
+`shoal issue <url>` is the pasted form: it picks the registered repository whose
+origin matches the URL (unregistered or duplicated remotes fail) and starts
+`--agent`, else `default_agent` from the global config (`codex`, `claude`,
+`happy-claude`, `happy-codex`), else an interactive picker.
 
 ```sh
 shoal repo add /path/to/repo             # Or a Git clone URL; register once
@@ -75,6 +79,7 @@ shoal repo rename my-project new-name
 shoal repo list
 shoal add my-project --name fix-login
 shoal add my-project --name fix-api --agent codex -- "Fix the API timeout"
+shoal issue https://forge.example/team/repo/issues/34 -- --model fast
 shoal cd                                 # Fuzzy picker, even inside a workspace
 shoal cd fix-login                       # Enter through the shell function
 shoal cd -                               # Previous directory

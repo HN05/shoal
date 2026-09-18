@@ -67,6 +67,12 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             agent,
             args,
         } => workspaces::add(&ctx, repository, (name, branch), base, issue, agent, args).await,
+        Command::Issue {
+            url,
+            agent,
+            base,
+            args,
+        } => issues::run(&ctx, url, agent, base, args).await,
         Command::Prepare { workspace } => workspaces::prepare(&ctx, workspace).await,
         Command::List => workspaces::list(&ctx).await,
         Command::Cd { workspace } => workspaces::cd(&ctx, workspace).await,

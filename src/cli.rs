@@ -61,6 +61,19 @@ pub enum Command {
         #[arg(last = true, requires = "agent")]
         args: Vec<OsString>,
     },
+    /// Paste an issue URL: find its registered repository, create a workspace, and start an agent.
+    Issue {
+        url: String,
+        /// Agent to start; defaults to `default_agent` in global config.
+        #[arg(long, value_parser = AgentParser)]
+        agent: Option<Agent>,
+        /// Starting Git ref (defaults to the repository's default branch, refreshed from its upstream).
+        #[arg(long = "ref")]
+        base: Option<String>,
+        /// Arguments forwarded to the agent.
+        #[arg(last = true)]
+        args: Vec<OsString>,
+    },
     /// Run or retry the configured workspace setup command.
     Prepare { workspace: Option<String> },
     /// List managed workspaces.
@@ -248,7 +261,8 @@ pub enum CodexMode {
 
 /// What `add --agent` starts: a terminal agent, or a detached Happy session
 /// running one of Happy's agents (`happy-<agent>`, visible in the Happy app).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
+#[serde(try_from = "String")]
 pub enum Agent {
     Codex,
     Claude,
@@ -284,6 +298,20 @@ impl std::str::FromStr for Agent {
                 .map(Agent::Happy)
                 .ok_or(()),
         }
+    }
+}
+
+/// Config spelling: the same values `--agent` accepts.
+impl TryFrom<String> for Agent {
+    type Error = String;
+
+    fn try_from(value: String) -> Result<Self, String> {
+        value.parse().map_err(|()| {
+            format!(
+                "unknown agent {value:?}; expected one of {}",
+                Agent::possible_values().join(", ")
+            )
+        })
     }
 }
 

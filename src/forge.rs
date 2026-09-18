@@ -53,6 +53,15 @@ impl ForgeRepo {
         })
     }
 
+    /// The repository an issue URL belongs to.
+    pub fn from_issue_url(url: &str) -> Result<Self> {
+        let url = url.split(['?', '#']).next().unwrap().trim_end_matches('/');
+        let (repo, _) = url
+            .rsplit_once("/issues/")
+            .context("expected an issue URL ending in /issues/<number>")?;
+        Self::parse(repo)
+    }
+
     pub fn issue(&self, input: &str) -> Result<(u64, String)> {
         let (number, url) = if input.starts_with("https://") || input.starts_with("http://") {
             let input = input

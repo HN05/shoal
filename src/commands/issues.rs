@@ -1,11 +1,78 @@
 //! Forge issue lookup belongs to the CLI; the daemon only creates workspaces.
-use std::{process::Stdio, time::Duration};
+use std::{ffi::OsString, process::Stdio, time::Duration};
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context as _, Result, bail, ensure};
 use serde::Deserialize;
 use tokio::{process::Command, time::timeout};
 
-use crate::{forge::ForgeRepo, model::Repository, repository, validate::MAX_NAME_LEN};
+use crate::{
+    cli::Agent, client, config::Config, context::Context, forge::ForgeRepo, model::Repository,
+    repository, ui, validate::MAX_NAME_LEN,
+};
+
+/// `shoal issue <url>`: the URL names the repository, the issue names the
+/// workspace, and `--agent` or the configured default agent works on it.
+pub(super) async fn run(
+    ctx: &Context,
+    url: String,
+    agent: Option<Agent>,
+    base: Option<String>,
+    args: Vec<OsString>,
+) -> Result<i32> {
+    let repos = client::repositories(&ctx.paths).await?;
+    let repo = repository_for(&repos, &url).await?;
+    let agent = match agent.or(Config::load(&ctx.paths)?.default_agent) {
+        Some(agent) => agent,
+        None if ctx.interactive() => ui::pick(
+            ctx,
+            "Agent> ",
+            Agent::possible_values()
+                .into_iter()
+                .map(|value| (value.clone(), value))
+                .collect(),
+        )?
+        .parse()
+        .map_err(|()| anyhow::anyhow!("unknown agent"))?,
+        None => bail!("no agent selected; pass --agent or set default_agent in the global config"),
+    };
+    super::workspaces::add(
+        ctx,
+        Some(repo.id.clone()),
+        (None, None),
+        base,
+        Some(url),
+        Some(agent),
+        args,
+    )
+    .await
+}
+
+/// The registered repository whose origin the issue URL belongs to.
+async fn repository_for<'a>(repos: &'a [Repository], url: &str) -> Result<&'a Repository> {
+    let forge = ForgeRepo::from_issue_url(url)?;
+    let mut matches = Vec::new();
+    for repo in repos {
+        let Some(remote) = repository::remote_url(&repo.source).await? else {
+            continue;
+        };
+        if ForgeRepo::parse(&remote).is_ok_and(|remote| remote == forge) {
+            matches.push(repo);
+        }
+    }
+    match matches.as_slice() {
+        [repo] => Ok(repo),
+        [] => bail!(
+            "no registered repository has the remote {}/{}; run `shoal repo add <path-or-url>`",
+            forge.host,
+            forge.path
+        ),
+        _ => bail!(
+            "several registered repositories share the remote {}/{}; use `shoal add <repository> --issue <url>`",
+            forge.host,
+            forge.path
+        ),
+    }
+}
 
 pub(super) struct Issue {
     number: u64,
@@ -164,6 +231,40 @@ mod tests {
             assert!(repo.issue(input).is_err(), "{input}");
         }
         assert!(ForgeRepo::parse("/tmp/repo").is_err());
+    }
+
+    #[tokio::test]
+    async fn issue_urls_select_exactly_one_registered_repository() {
+        let repo = |id: &str, source: &str| Repository {
+            id: id.into(),
+            path: format!("/nonexistent/{id}").into(),
+            source: source.into(),
+            last_used: 0,
+            name: None,
+            workspaces_dir: None,
+        };
+        let repos = [
+            repo("a", "https://github.com/team/repo.git"),
+            repo("b", "git@forge.example:team/repo.git"),
+            repo("c", "ssh://git@forge.example:2222/team/repo"),
+        ];
+        let url = "https://github.com/team/repo/issues/7#issuecomment-1";
+        assert_eq!(repository_for(&repos, url).await.unwrap().id, "a");
+        let error = repository_for(&repos, "https://forge.example/team/repo/issues/7")
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("several"), "{error}");
+        let error = repository_for(&repos, "https://github.com/team/other/issues/7")
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("shoal repo add"), "{error}");
+        assert!(
+            repository_for(&repos, "https://github.com/team/repo/pull/7")
+                .await
+                .is_err()
+        );
     }
 
     #[test]

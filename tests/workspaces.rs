@@ -5506,6 +5506,101 @@ fn add_from_issue_uses_existing_forge_cli_and_passes_context_to_agents() {
 }
 
 #[test]
+fn issue_command_finds_the_repository_and_starts_the_default_agent() {
+    let fixture = Fixture::with_config(Some("default_agent = 'claude'\n"));
+    git(
+        &fixture.repo,
+        &["remote", "add", "origin", "git@github.com:team/project.git"],
+    );
+    let bin = fixture.root.path().join("issue-bin");
+    fs::create_dir(&bin).unwrap();
+    let gh = bin.join("gh");
+    fs::write(
+        &gh,
+        "#!/bin/sh\nprintf '%s\\0' \"$@\" > \"$ISSUE_ARGS\"\ncat \"$ISSUE_RESPONSE\"\n",
+    )
+    .unwrap();
+    fs::set_permissions(&gh, fs::Permissions::from_mode(0o700)).unwrap();
+    for tool in ["codex", "claude"] {
+        let script = bin.join(tool);
+        fs::write(
+            &script,
+            "#!/bin/sh\nprintf '%s\\0' \"$(basename \"$0\")\" \"$@\" > \"$AGENT_ARGS\"\n",
+        )
+        .unwrap();
+        fs::set_permissions(&script, fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    let response = fixture.root.path().join("issue-response");
+    let issue_args = fixture.root.path().join("issue-args");
+    let agent_args = fixture.root.path().join("agent-args");
+    let body = "Paste the URL and go.";
+    for (number, agent) in [(41, None), (42, Some("codex"))] {
+        fs::write(
+            &response,
+            serde_json::json!({"number": number, "title": "Paste an issue", "body": body})
+                .to_string(),
+        )
+        .unwrap();
+        let url = format!("https://github.com/team/project/issues/{number}");
+        let mut args = vec!["--json", "issue", &url, "--ref", "HEAD"];
+        if let Some(agent) = agent {
+            args.extend(["--agent", agent]);
+        }
+        args.extend(["--", "--model", "test-model"]);
+        let output = fixture
+            .command()
+            .args(&args)
+            .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+            .env("ISSUE_RESPONSE", &response)
+            .env("ISSUE_ARGS", &issue_args)
+            .env("AGENT_ARGS", &agent_args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let workspace: Value = serde_json::from_slice(&output.stdout).unwrap();
+        let name = format!("issue-{number}-paste-an-issue");
+        assert_eq!(workspace["name"], name);
+        assert_eq!(workspace["branch"], name);
+        assert!(fs::read_to_string(&issue_args).unwrap().contains(&format!(
+            "issue\0view\0{number}\0--repo\0github.com/team/project\0"
+        )));
+        let invocation = fs::read_to_string(&agent_args).unwrap();
+        let mut parts = invocation.split('\0');
+        assert_eq!(parts.next(), Some(agent.unwrap_or("claude")));
+        let prompt = parts.next().unwrap();
+        assert!(prompt.contains(&url) && prompt.contains(body), "{prompt}");
+        assert!(invocation.contains("\0--model\0test-model\0"));
+        assert_eq!(
+            fixture.ok(&["inspect", &name])["executions"],
+            serde_json::json!([])
+        );
+    }
+    // The default agent applies to pasted issues only.
+    fs::remove_file(&agent_args).unwrap();
+    let output = fixture
+        .command()
+        .args([
+            "--json",
+            "add",
+            fixture.repo.to_str().unwrap(),
+            "--ref",
+            "HEAD",
+            "--name",
+            "plain",
+        ])
+        .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+        .env("AGENT_ARGS", &agent_args)
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    assert!(!agent_args.exists());
+}
+
+#[test]
 fn issue_lookup_errors_never_create_a_workspace() {
     let fixture = Fixture::new();
     git(
@@ -5558,6 +5653,43 @@ fn issue_lookup_errors_never_create_a_workspace() {
             .output()
             .unwrap();
         assert!(!output.status.success());
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains(diagnostic),
+            "{output:?}"
+        );
+        assert_eq!(fixture.ok(&["list"]), serde_json::json!([]));
+    }
+    for (args, diagnostic) in [
+        (
+            vec!["issue", "https://github.com/team/project/issues/4"],
+            "no agent selected",
+        ),
+        (
+            vec![
+                "issue",
+                "https://github.com/team/other/issues/4",
+                "--agent",
+                "codex",
+            ],
+            "shoal repo add",
+        ),
+        (
+            vec![
+                "issue",
+                "https://github.com/team/project/pull/4",
+                "--agent",
+                "codex",
+            ],
+            "/issues/<number>",
+        ),
+    ] {
+        let output = fixture
+            .command()
+            .args(&args)
+            .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+            .output()
+            .unwrap();
+        assert!(!output.status.success(), "{args:?}");
         assert!(
             String::from_utf8_lossy(&output.stderr).contains(diagnostic),
             "{output:?}"
