@@ -85,9 +85,9 @@ pub fn fingerprint(root: &Path, head: &str, activity: u64) -> Result<u64> {
     Ok(hash.finish())
 }
 
-/// `idle` is the delay before idle removal; `None` disables it, leaving only
-/// deleted-directory cleanup.
-pub async fn sweep(manager: &Manager, timers: &mut Timers, idle: Option<Duration>) -> Result<()> {
+/// Each workspace's idle delay comes from its own layered config; a disabled
+/// one gets only deleted-directory cleanup.
+pub async fn sweep(manager: &Manager, timers: &mut Timers) -> Result<()> {
     manager.sweep_prs().await?;
     let workspaces = manager.list_workspaces().await?;
     timers
@@ -106,42 +106,53 @@ pub async fn sweep(manager: &Manager, timers: &mut Timers, idle: Option<Duration
             remove_deleted(manager, &workspace).await;
             continue;
         }
-        let Some(delay) = idle else { continue };
-        let snapshot = if workspace.state == WorkspaceState::Ready {
-            match manager.cleanup_snapshot(&workspace.id).await {
-                Ok(snapshot) => snapshot,
-                Err(error) => {
-                    eprintln!("auto cleanup skipped {}: {error:#}", workspace.name);
-                    None
-                }
-            }
-        } else {
-            None
+        let Some((delay, snapshot)) = observe(manager, &workspace).await else {
+            timers.idle.remove(&workspace.id);
+            continue;
         };
-        if timers.observe(&workspace.id, snapshot, Instant::now(), delay) {
-            if let Some(snapshot) = snapshot {
-                let (kind, message) = match manager.remove_idle(&workspace.id, snapshot).await {
-                    Ok(()) => {
-                        eprintln!("auto cleanup removed {}", workspace.name);
-                        (
-                            NotificationKind::WorkspaceRemoved,
-                            "removed by idle cleanup".to_owned(),
-                        )
-                    }
-                    Err(error) => {
-                        eprintln!("auto cleanup retained {}: {error:#}", workspace.name);
-                        (
-                            NotificationKind::CleanupFailed,
-                            format!("idle cleanup retained the workspace: {error:#}"),
-                        )
-                    }
-                };
-                manager.notify(Some(&workspace.name), kind, message).await;
-            }
+        if timers.observe(&workspace.id, Some(snapshot), Instant::now(), delay) {
+            let (kind, message) = match manager.remove_idle(&workspace.id, snapshot).await {
+                Ok(()) => {
+                    eprintln!("auto cleanup removed {}", workspace.name);
+                    (
+                        NotificationKind::WorkspaceRemoved,
+                        "removed by idle cleanup".to_owned(),
+                    )
+                }
+                Err(error) => {
+                    eprintln!("auto cleanup retained {}: {error:#}", workspace.name);
+                    (
+                        NotificationKind::CleanupFailed,
+                        format!("idle cleanup retained the workspace: {error:#}"),
+                    )
+                }
+            };
+            manager.notify(Some(&workspace.name), kind, message).await;
             timers.idle.remove(&workspace.id);
         }
     }
     Ok(())
+}
+
+/// The idle delay and snapshot of a ready, removable workspace; `None` when
+/// it is not, its idle cleanup is disabled, or its config cannot be read.
+async fn observe(manager: &Manager, workspace: &Workspace) -> Option<(Duration, u64)> {
+    if workspace.state != WorkspaceState::Ready {
+        return None;
+    }
+    let observed = async {
+        let settings = manager.workspace_settings(workspace).await?;
+        let Some(delay) = settings.auto_cleanup.delay() else {
+            return Ok(None);
+        };
+        let snapshot = manager.cleanup_snapshot(&workspace.id).await?;
+        Ok(snapshot.map(|snapshot| (delay, snapshot)))
+    }
+    .await;
+    observed.unwrap_or_else(|error: anyhow::Error| {
+        eprintln!("auto cleanup skipped {}: {error:#}", workspace.name);
+        None
+    })
 }
 
 /// A deleted worktree is forgotten unless it was moved or still has commands
@@ -174,10 +185,10 @@ async fn remove_deleted(manager: &Manager, workspace: &Workspace) {
     manager.notify(Some(&workspace.name), kind, message).await;
 }
 
-pub async fn run(manager: Arc<Manager>, idle: Option<Duration>) {
+pub async fn run(manager: Arc<Manager>) {
     let mut timers = Timers::default();
     loop {
-        if let Err(error) = sweep(&manager, &mut timers, idle).await {
+        if let Err(error) = sweep(&manager, &mut timers).await {
             eprintln!("auto cleanup: {error:#}");
         }
         tokio::select! {
@@ -376,9 +387,7 @@ mod tests {
                 since: Instant::now() - Duration::from_secs(600),
             },
         );
-        sweep(&manager, &mut timers, Some(Duration::from_secs(600)))
-            .await
-            .unwrap();
+        sweep(&manager, &mut timers).await.unwrap();
         assert!(!workspace.path.exists());
         assert!(manager.list_workspaces().await.unwrap().is_empty());
         assert!(manager.list_ports(None).await.unwrap().is_empty());

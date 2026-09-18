@@ -379,8 +379,9 @@ must name the recorded branch and contain HEAD.
 the worktree is dirty, the shell returns to `<root_dir>/<repo>` as after `rm`.
 Both stop tracked agents and remove immediately, retaining dirty/newer work and
 using normal resource cleanup/branch retention. `inspect` shows errors in `pr_cleanup`.
-`shoal pr --clear` cancels. Global `[pr_cleanup] enabled = false` disables this
-(default true), independently of idle cleanup; restart after changing it.
+`shoal pr --clear` cancels. `[pr_cleanup] enabled = false` disables this
+(default true), independently of idle cleanup, globally (restart after changing
+it) or in a repository config (applies at once; existing watches wait).
 
 ### Automatic cleanup
 
@@ -399,7 +400,8 @@ enabled = false # Default: true
 idle_minutes = 10
 ```
 
-Restart the daemon after changing this.
+Restart the daemon after changing this globally; the same table in a
+repository config applies to that repository's workspaces on the next sweep.
 
 ### Notifications
 

@@ -1,6 +1,7 @@
 //! Local repository configuration belongs to the registration, not its checkout.
 use super::Manager;
 use crate::{
+    config::Effective,
     model::Workspace,
     repo_config::{self, Hooks, LocalConfig, RepoConfig},
 };
@@ -78,6 +79,14 @@ impl Manager {
     pub(crate) async fn workspace_config(&self, workspace: &Workspace) -> Result<RepoConfig> {
         let file = repo_config::load(&workspace.path)?;
         self.layered_config(&workspace.repository_id, file).await
+    }
+
+    /// The workspace's settings after every layer: the saved config, the
+    /// worktree file and the global config.
+    pub(crate) async fn workspace_settings(&self, workspace: &Workspace) -> Result<Effective> {
+        Ok(self
+            .config
+            .effective(&self.workspace_config(workspace).await?))
     }
 
     /// The saved local config of `repository_id`, if any, over `file`.

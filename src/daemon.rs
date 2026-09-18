@@ -83,12 +83,7 @@ pub async fn run(paths: Paths, managed: bool) -> Result<()> {
     };
     eprintln!("shoal daemon listening on {}", paths.socket.display());
     let mut background = JoinSet::new();
-    let idle = manager
-        .config
-        .auto_cleanup
-        .enabled
-        .then(|| Duration::from_secs(manager.config.auto_cleanup.idle_minutes * 60));
-    background.spawn(crate::cleanup::run(manager.clone(), idle));
+    background.spawn(crate::cleanup::run(manager.clone()));
     background.spawn(expire_simulators(manager.clone()));
     let mut clients = JoinSet::new();
     loop {

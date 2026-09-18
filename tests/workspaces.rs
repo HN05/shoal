@@ -5958,6 +5958,47 @@ fn pr_cleanup_can_be_disabled_independently() {
 }
 
 #[test]
+fn repository_config_sets_pr_cleanup_over_the_global_default() {
+    let fixture = Fixture::with_config(Some("[pr_cleanup]\nenabled=false\n"));
+    fs::write(
+        fixture.repo.join(".shoal.toml"),
+        "[pr_cleanup]\nenabled=true\n",
+    )
+    .unwrap();
+    git(&fixture.repo, &["add", ".shoal.toml"]);
+    git(
+        &fixture.repo,
+        &[
+            "-c",
+            "user.name=Shoal Test",
+            "-c",
+            "user.email=shoal@example.invalid",
+            "commit",
+            "-q",
+            "-m",
+            "enable pr cleanup",
+        ],
+    );
+    fixture.add("merged");
+    fixture.ok(&["merged", "merged"]);
+    wait_removed(&fixture, "merged");
+    // The saved config is the top layer.
+    let saved = fixture.root.path().join("saved.toml");
+    fs::write(&saved, "[pr_cleanup]\nenabled=false\n").unwrap();
+    fixture.ok(&[
+        "repo",
+        "config",
+        fixture.repo.to_str().unwrap(),
+        "--file",
+        saved.to_str().unwrap(),
+    ]);
+    fixture.add("kept");
+    let output = fixture.run(&["merged", "kept"]);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("PR cleanup is disabled"));
+}
+
+#[test]
 fn pr_watch_checks_github_state_and_commit_and_survives_restart() {
     let mut fixture = Fixture::with_config(Some("[auto_cleanup]\nenabled=false\n"));
     let workspace = fixture.add("watch");

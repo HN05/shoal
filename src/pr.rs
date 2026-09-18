@@ -39,7 +39,12 @@ impl Manager {
         let _guard = self.pr_gate.lock().await;
         let workspace = self.workspace(selector).await?;
         ensure!(
-            clear || self.config.pr_cleanup.enabled,
+            clear
+                || self
+                    .workspace_settings(&workspace)
+                    .await?
+                    .pr_cleanup
+                    .enabled,
             "PR cleanup is disabled by [pr_cleanup] enabled = false"
         );
         let registration = if clear {
@@ -91,9 +96,6 @@ impl Manager {
     /// Watches survive restarts. A failed lookup never counts as a merge and a
     /// failed removal keeps its registration and ownership records for retry.
     pub async fn sweep_prs(&self) -> Result<()> {
-        if !self.config.pr_cleanup.enabled {
-            return Ok(());
-        }
         let _guard = self.pr_gate.lock().await;
         for workspace in self.list_workspaces().await? {
             if workspace.state != crate::state::WorkspaceState::Ready {
@@ -102,8 +104,18 @@ impl Manager {
             let Some(mut registration) = self.pr_registration(&workspace.id).await? else {
                 continue;
             };
+            // A repository that disabled PR cleanup keeps its watches waiting;
+            // unreadable config is recorded like a failed lookup.
+            let settings = self.workspace_settings(&workspace).await;
+            if settings
+                .as_ref()
+                .is_ok_and(|settings| !settings.pr_cleanup.enabled)
+            {
+                continue;
+            }
             // `Ok(true)` once the workspace is removed; `Ok(false)` while the PR is open.
             let result: Result<bool> = async {
+                settings?;
                 self.verify_worktree(&workspace).await?;
                 let head = current_head(&workspace).await?;
                 if let Some(url) = &registration.url {

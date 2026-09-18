@@ -1,8 +1,16 @@
 use anyhow::{Context, Result, ensure};
 use serde::Deserialize;
-use std::{fs, path::PathBuf};
+use std::{fs, path::PathBuf, time::Duration};
 
-use crate::paths::Paths;
+use crate::{paths::Paths, repo_config::RepoConfig};
+
+/// Settings a repository may set, after every layer: a repository value
+/// wins, an omitted one keeps the global value or the built-in default.
+#[derive(Debug)]
+pub struct Effective {
+    pub auto_cleanup: AutoCleanup,
+    pub pr_cleanup: PrCleanup,
+}
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -196,6 +204,34 @@ mod tests {
     }
 
     #[test]
+    fn repository_values_win_over_global_cleanup_policy() {
+        let global: Config =
+            toml::from_str("[auto_cleanup]\nenabled = false\nidle_minutes = 30\n").unwrap();
+        let repo = crate::repo_config::parse(
+            "[auto_cleanup]\nenabled = true\n[pr_cleanup]\nenabled = false\n",
+        )
+        .unwrap();
+        let effective = global.effective(&repo);
+        assert_eq!(
+            effective.auto_cleanup.delay(),
+            Some(Duration::from_secs(1800))
+        );
+        assert!(!effective.pr_cleanup.enabled);
+        let repo = crate::repo_config::parse("[auto_cleanup]\nidle_minutes = 5\n").unwrap();
+        let effective = global.effective(&repo);
+        assert_eq!(effective.auto_cleanup.delay(), None);
+        assert_eq!(effective.auto_cleanup.idle_minutes, 5);
+        assert!(effective.pr_cleanup.enabled);
+        assert_eq!(
+            Config::default()
+                .effective(&RepoConfig::default())
+                .auto_cleanup
+                .delay(),
+            Some(Duration::from_secs(600))
+        );
+    }
+
+    #[test]
     fn root_directory_defaults_and_validates_explicit_paths() {
         let paths = Paths {
             home: "/home/test".into(),
@@ -245,6 +281,22 @@ impl Default for AutoCleanup {
             idle_minutes: 10,
         }
     }
+}
+
+impl AutoCleanup {
+    /// The idle delay before removal; `None` when disabled.
+    pub fn delay(&self) -> Option<Duration> {
+        self.enabled
+            .then(|| Duration::from_secs(self.idle_minutes * 60))
+    }
+}
+
+pub fn validate_idle_minutes(minutes: u64) -> Result<()> {
+    ensure!(
+        minutes > 0 && minutes <= 525600,
+        "auto_cleanup.idle_minutes must be between 1 and 525600"
+    );
+    Ok(())
 }
 
 impl Config {
@@ -336,10 +388,7 @@ impl Config {
     fn parse(text: &str, paths: &Paths) -> Result<Self> {
         let config: Self = toml::from_str(text)?;
         config.root_dir(paths)?;
-        ensure!(
-            config.auto_cleanup.idle_minutes > 0 && config.auto_cleanup.idle_minutes <= 525600,
-            "auto_cleanup.idle_minutes must be between 1 and 525600"
-        );
+        validate_idle_minutes(config.auto_cleanup.idle_minutes)?;
         ensure!(
             config.ports.start > 0 && config.ports.start <= config.ports.end,
             "ports.start/end must specify a nonempty range between 1 and 65535"
@@ -347,6 +396,24 @@ impl Config {
         config.simulators.validate()?;
         crate::resources::definitions(&config.resources, &config.resource_pools)?;
         Ok(config)
+    }
+
+    pub fn effective(&self, repo: &RepoConfig) -> Effective {
+        Effective {
+            auto_cleanup: AutoCleanup {
+                enabled: repo
+                    .auto_cleanup
+                    .enabled
+                    .unwrap_or(self.auto_cleanup.enabled),
+                idle_minutes: repo
+                    .auto_cleanup
+                    .idle_minutes
+                    .unwrap_or(self.auto_cleanup.idle_minutes),
+            },
+            pr_cleanup: PrCleanup {
+                enabled: repo.pr_cleanup.enabled.unwrap_or(self.pr_cleanup.enabled),
+            },
+        }
     }
 }
 

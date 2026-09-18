@@ -130,7 +130,8 @@ its branch and uncommitted work. `shoal stop` keeps the workspace.
 Automatic cleanup removes idle, clean, pushed or landed workspaces after 10 minutes,
 and forgets workspaces whose directory you deleted yourself, keeping the branch.
 Disable it when using desktop agents whose activity Shoal cannot track. Set this
-in `~/.config/shoal/config.toml`, then restart the daemon:
+in a repository's `.shoal.toml`, or for every repository in
+`~/.config/shoal/config.toml` followed by a daemon restart:
 
 ```toml
 [auto_cleanup]

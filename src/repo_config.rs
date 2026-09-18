@@ -33,6 +33,8 @@ pub struct RepoConfig {
     pub resources: BTreeMap<String, crate::resources::ResourceConfig>,
     pub resource_pools: BTreeMap<String, crate::resources::PoolConfig>,
     pub simulators: SimulatorPreferences,
+    pub auto_cleanup: AutoCleanup,
+    pub pr_cleanup: PrCleanup,
 }
 
 #[derive(Debug, Default, Deserialize, Serialize)]
@@ -83,6 +85,9 @@ pub fn parse(text: &str) -> Result<RepoConfig> {
             );
         }
     }
+    if let Some(minutes) = config.auto_cleanup.idle_minutes {
+        crate::config::validate_idle_minutes(minutes)?;
+    }
     for (name, definition) in &config.ports.definitions {
         crate::validate::lowercase_name("port", name)
             .with_context(|| format!("invalid configured port name: {name}"))?;
@@ -117,6 +122,16 @@ impl RepoConfig {
             } else {
                 self.simulators
             },
+            auto_cleanup: AutoCleanup {
+                enabled: self.auto_cleanup.enabled.or(base.auto_cleanup.enabled),
+                idle_minutes: self
+                    .auto_cleanup
+                    .idle_minutes
+                    .or(base.auto_cleanup.idle_minutes),
+            },
+            pr_cleanup: PrCleanup {
+                enabled: self.pr_cleanup.enabled.or(base.pr_cleanup.enabled),
+            },
         }
     }
 
@@ -141,6 +156,21 @@ pub struct Hooks {
 #[serde(default, deny_unknown_fields)]
 pub struct SimulatorPreferences {
     pub preferred: Vec<String>,
+}
+
+/// Repository values for the global `[auto_cleanup]`; `None` keeps the layer below.
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct AutoCleanup {
+    pub enabled: Option<bool>,
+    pub idle_minutes: Option<u64>,
+}
+
+/// Repository value for the global `[pr_cleanup]`.
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct PrCleanup {
+    pub enabled: Option<bool>,
 }
 
 #[cfg(test)]
@@ -174,11 +204,13 @@ mod tests {
         let base = parse(
             "setup_cmd = 'base/setup'\npost_setup_cmd = 'base/attach'\n\
              [ports]\non_conflict = 'auto'\n[ports.web]\nport = 3000\n[ports.api]\nport = 4000\n\
-             [resources.lock]\ncapacity = 1\n[simulators]\npreferred = ['phone']\n",
+             [resources.lock]\ncapacity = 1\n[simulators]\npreferred = ['phone']\n\
+             [auto_cleanup]\nenabled = false\nidle_minutes = 30\n",
         )
         .unwrap();
         let local = parse(
-            "setup_cmd = 'local/setup'\n[ports.web]\nenv = 'LOCAL_PORT'\n[resources.signing]\ncapacity = 2\n",
+            "setup_cmd = 'local/setup'\n[ports.web]\nenv = 'LOCAL_PORT'\n\
+             [resources.signing]\ncapacity = 2\n[auto_cleanup]\nenabled = true\n",
         )
         .unwrap();
         let config = local.over(base);
@@ -196,6 +228,10 @@ mod tests {
         assert_eq!(config.ports.definitions["api"].port, Some(4000));
         assert_eq!(config.resources.len(), 2);
         assert_eq!(config.simulators.preferred, ["phone"]);
+        assert_eq!(config.auto_cleanup.enabled, Some(true));
+        assert_eq!(config.auto_cleanup.idle_minutes, Some(30));
+        assert_eq!(config.pr_cleanup.enabled, None);
+        assert!(parse("[auto_cleanup]\nidle_minutes = 0\n").is_err());
         assert!(
             parse("")
                 .unwrap()
