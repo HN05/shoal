@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Homebrew supplies its versioned prefix and stable opt prefix. Keep packaging
 # with the source so releases and main each build with their own install logic.
+# Workflow test: this comment is intentionally bogus and will be reverted.
 set -euo pipefail
 
 if [[ $# -lt 2 || $1 != /* || $2 != /* ]]; then
