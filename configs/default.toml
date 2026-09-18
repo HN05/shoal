@@ -2,9 +2,11 @@
 # The daemon reads this file when it starts, so changes take effect after
 # `shoal daemon restart`, except the agent settings (`default_agent` and
 # `codex.default_mode`), which the CLI reads on every command. Commented blocks
-# are examples, not defaults: uncomment a whole block and adapt it. Repository
-# settings (named ports, setup and hook commands, resource pools) live in each
-# repository's .shoal.toml.
+# are examples, not defaults: uncomment a whole block and adapt it. A repository's
+# .shoal.toml (or the config saved with `shoal repo config`) holds its named
+# ports, setup and hook commands and resource pools, and may set any value below
+# for that repository except root_dir, the simulator limits and profiles, and
+# the shared resources.
 
 # Parent of every repository's workspaces and URL clones.
 root_dir = "~/shoal"
