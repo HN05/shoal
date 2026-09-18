@@ -30,7 +30,8 @@ removal, check it against the rule those files state before judging it.
   ancestor releases and merged PRs excluding release preparation, and GitHub
   copies the Forgejo notes.
 - External tools are invoked with argument arrays, never shell strings.
-  Terminal I/O stays in the execution wrapper; the daemon owns state.
+  Terminal I/O stays in the execution wrapper; the daemon owns state. CLI
+  styles belong at presentation sites; machine output and stored values stay plain.
 - Persistence: lifecycle enums keep their lowercase SQLite/JSON spelling and
   reject unknown values. Schema and state-file changes need a compatibility
   story for existing daemons. Setup preserves compatible daemons and commands,

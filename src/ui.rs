@@ -13,6 +13,7 @@ use crate::{
     client,
     context::Context,
     model::{Repository, Workspace},
+    output::{Palette, Style},
     removal::{BranchChoice, RemovalCheck},
 };
 
@@ -201,6 +202,7 @@ pub fn pick_with_keys(
     command
         .args([
             "--no-sort",
+            "--ansi",
             "--delimiter=\t",
             "--with-nth=2..",
             "--prompt",
@@ -317,18 +319,18 @@ fn pick_workspace(ctx: &Context, workspaces: Vec<Workspace>) -> Result<String> {
         "Workspace> ",
         workspaces
             .into_iter()
-            .map(|w| (w.id.clone(), workspace_label(&w)))
+            .map(|w| (w.id.clone(), workspace_label(&w, Palette::stderr(ctx.json))))
             .collect(),
     )
 }
 
-pub fn workspace_label(workspace: &Workspace) -> String {
+pub fn workspace_label(workspace: &Workspace, palette: Palette) -> String {
     format!(
         "{}  {}  {}  {}",
-        workspace.name,
-        workspace.state,
+        palette.paint(Style::Heading, &workspace.name),
+        palette.workspace_state(workspace.state),
         workspace.branch,
-        workspace.path.display()
+        palette.paint(Style::Muted, workspace.path.display())
     )
 }
 

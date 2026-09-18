@@ -379,7 +379,10 @@ pub(super) async fn list(ctx: &Context) -> Result<i32> {
     let workspaces = client::workspaces(&ctx.paths).await?;
     ctx.show(&workspaces, |workspaces| {
         for workspace in workspaces {
-            println!("{}", ui::workspace_label(workspace));
+            println!(
+                "{}",
+                ui::workspace_label(workspace, crate::output::Palette::stdout(ctx.json))
+            );
         }
     })?;
     // A pointer for humans; agents cannot read notifications and JSON stays clean.

@@ -4,6 +4,7 @@ use anyhow::Result;
 use crate::{
     client::request,
     context::Context,
+    output::{Palette, Style},
     protocol::Method,
     recovery::{ReconcileOptions, Report},
     ui,
@@ -24,7 +25,7 @@ pub(super) async fn run(
     let unresolved = reports.iter().any(|r| !r.issues.is_empty());
     ctx.show(&reports, |reports| {
         for report in reports {
-            render(report);
+            render(report, Palette::stdout(ctx.json));
         }
         if reports.is_empty() {
             println!("No workspaces to reconcile");
@@ -33,16 +34,18 @@ pub(super) async fn run(
     Ok(if unresolved { super::EXIT_BUSY } else { 0 })
 }
 
-fn render(report: &Report) {
+fn render(report: &Report, palette: Palette) {
     println!(
         "{}: {} ({:?})",
-        report.workspace.name, report.workspace.state, report.directory
+        palette.paint(Style::Heading, &report.workspace.name),
+        palette.workspace_state(report.workspace.state),
+        report.directory
     );
     for execution in &report.executions {
         println!(
             "  execution {}: {}{}{}",
             execution.id,
-            execution.state,
+            palette.execution_state(execution.state),
             if execution.connected {
                 " (connected)"
             } else {
@@ -61,9 +64,9 @@ fn render(report: &Report) {
         }
     }
     for change in &report.changes {
-        println!("  repaired: {change}");
+        println!("  {} {change}", palette.paint(Style::Success, "repaired:"));
     }
     for issue in &report.issues {
-        println!("  unresolved: {issue}");
+        println!("  {} {issue}", palette.paint(Style::Warning, "unresolved:"));
     }
 }

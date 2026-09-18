@@ -19,6 +19,7 @@ mod hooks;
 mod merge;
 mod model;
 mod notifications;
+mod output;
 mod paths;
 mod ports;
 mod pr;
@@ -69,7 +70,10 @@ async fn run_cli() {
                     json!({"error": {"code": "command_failed", "message": format!("{error:#}")}})
                 );
             } else {
-                eprintln!("error: {error:#}");
+                eprintln!(
+                    "{} {error:#}",
+                    output::Palette::stderr(false).paint(output::Style::Error, "error:")
+                );
             }
             std::process::exit(1);
         }

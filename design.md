@@ -132,8 +132,10 @@ manual merge acknowledgement are own-workspace exceptions; nested executions kee
 
 The CLI takes explicit targets and `--json` for automation, and uses
 current-directory resolution and fzf interactively; noninteractive calls never
-open a picker. Rust chooses paths, including `<root_dir>/<repo>` after removal;
-the Bash/Zsh wrapper changes directory without evaluating repository code.
+open a picker. Human output uses a shared semantic palette at the CLI presentation
+layer; machine output and stored values stay unstyled. Rust chooses paths,
+including `<root_dir>/<repo>` after removal; the Bash/Zsh wrapper changes directory
+without evaluating repository code.
 Confirmations show the action and ask `[y/N]`, cancel on Enter, `n`, EOF or
 Ctrl-C (also after a tracked execution), and are bypassed only by
 explicit flags such as `--yes`. Removal's branch choice stays separate from

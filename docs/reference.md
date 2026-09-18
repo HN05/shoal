@@ -2,6 +2,10 @@
 
 Start with the [usage guide](../README.md).
 
+Human-readable output uses color when its destination is a terminal. Set a
+nonempty `NO_COLOR` or `TERM=dumb` to disable it. Redirected output and `--json`
+stay plain; stdout and stderr are detected independently.
+
 - [Installation and upgrades](#homebrew)
 - [Daemon](#daemon)
 - [Workspaces](#workspaces)
