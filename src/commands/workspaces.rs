@@ -791,6 +791,14 @@ pub(super) async fn pr(
     clear: bool,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    // An acknowledged worktree disappears shortly after the call returns, so
+    // leave it now; a watched PR keeps the shell where it is until it merges.
+    let escape = if url.is_none() && !clear {
+        let inspection = client::inspect(&ctx.paths, workspace.clone()).await?;
+        escape_destination(ctx, &inspection.workspace).await?
+    } else {
+        None
+    };
     let body = client::call(
         &ctx.paths,
         Method::SetPr {
@@ -804,6 +812,9 @@ pub(super) async fn pr(
         matches!(body, Body::Ok),
         "unexpected PR cleanup response: {body:?}"
     );
+    if let Some(destination) = escape {
+        shell::navigate(&destination, ctx.json)?;
+    }
     ctx.emit(
         if clear {
             "PR cleanup cancelled"

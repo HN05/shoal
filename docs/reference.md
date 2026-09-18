@@ -369,9 +369,10 @@ Git protects other checkouts. Shell integration returns to `<root_dir>/<repo>`.
 daemon's `gh`/`fj` and existing login. Shoal stores no forge credentials.
 Persistent watches poll every ~30 seconds and suppress idle cleanup. Merged PRs
 must name the recorded branch and contain HEAD.
-`shoal merged [workspace]` manually acknowledges HEAD without forge tools. Both
-stop tracked agents and remove immediately, retaining dirty/newer work and using
-normal resource cleanup/branch retention. `inspect` shows errors in `pr_cleanup`.
+`shoal merged [workspace]` manually acknowledges HEAD without forge tools and
+leaves the worktree as `rm` does. Both stop tracked agents and remove
+immediately, retaining dirty/newer work and using normal resource
+cleanup/branch retention. `inspect` shows errors in `pr_cleanup`.
 `shoal pr --clear` cancels. Global `[pr_cleanup] enabled = false` disables this
 (default true), independently of idle cleanup; restart after changing it.
 

@@ -1808,6 +1808,10 @@ if shoal cd -; then
   exit 1
 fi
 test "$PWD" = "$shoal_repo_dir"
+shoal add "$REPO" --name acknowledged
+test "${PWD##*/}" = acknowledged
+shoal merged
+test "$PWD" = "$shoal_repo_dir"
 printf 'navigation-ok\n'
 "#;
     for shell in ["bash", "zsh"] {
