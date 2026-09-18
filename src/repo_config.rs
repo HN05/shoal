@@ -41,6 +41,9 @@ pub struct RepoConfig {
 #[serde(default)]
 pub struct PortDefaults {
     pub on_conflict: Option<ConflictPolicy>,
+    /// Bounds of the automatic range; each falls back to the global `[ports]`.
+    pub start: Option<u16>,
+    pub end: Option<u16>,
     #[serde(flatten)]
     pub definitions: BTreeMap<String, PortDefinition>,
 }
@@ -88,6 +91,16 @@ pub fn parse(text: &str) -> Result<RepoConfig> {
     if let Some(minutes) = config.auto_cleanup.idle_minutes {
         crate::config::validate_idle_minutes(minutes)?;
     }
+    ensure!(
+        config.ports.start != Some(0),
+        "ports.start must be between 1 and 65535"
+    );
+    if let (Some(start), Some(end)) = (config.ports.start, config.ports.end) {
+        ensure!(
+            start <= end,
+            "ports.start/end must specify a nonempty range"
+        );
+    }
     for (name, definition) in &config.ports.definitions {
         crate::validate::lowercase_name("port", name)
             .with_context(|| format!("invalid configured port name: {name}"))?;
@@ -113,6 +126,8 @@ impl RepoConfig {
             pre_remove_cmd: self.pre_remove_cmd.or(base.pre_remove_cmd),
             ports: PortDefaults {
                 on_conflict: self.ports.on_conflict.or(base.ports.on_conflict),
+                start: self.ports.start.or(base.ports.start),
+                end: self.ports.end.or(base.ports.end),
                 definitions: base.ports.definitions,
             },
             resources: base.resources,
@@ -203,13 +218,14 @@ mod tests {
     fn layering_keeps_omitted_options_and_replaces_named_entries() {
         let base = parse(
             "setup_cmd = 'base/setup'\npost_setup_cmd = 'base/attach'\n\
-             [ports]\non_conflict = 'auto'\n[ports.web]\nport = 3000\n[ports.api]\nport = 4000\n\
+             [ports]\non_conflict = 'auto'\nstart = 3000\nend = 3100\n\
+             [ports.web]\nport = 3000\n[ports.api]\nport = 4000\n\
              [resources.lock]\ncapacity = 1\n[simulators]\npreferred = ['phone']\n\
              [auto_cleanup]\nenabled = false\nidle_minutes = 30\n",
         )
         .unwrap();
         let local = parse(
-            "setup_cmd = 'local/setup'\n[ports.web]\nenv = 'LOCAL_PORT'\n\
+            "setup_cmd = 'local/setup'\n[ports]\nend = 3050\n[ports.web]\nenv = 'LOCAL_PORT'\n\
              [resources.signing]\ncapacity = 2\n[auto_cleanup]\nenabled = true\n",
         )
         .unwrap();
@@ -220,6 +236,10 @@ mod tests {
             config.ports.on_conflict,
             Some(ConflictPolicy::Auto)
         ));
+        assert_eq!(
+            (config.ports.start, config.ports.end),
+            (Some(3000), Some(3050))
+        );
         assert_eq!(config.ports.definitions["web"].port, None);
         assert_eq!(
             config.ports.definitions["web"].env.as_deref(),

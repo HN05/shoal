@@ -1247,6 +1247,54 @@ fn diff_excludes_new_main_commits_before_and_after_rebase_and_uses_git_configura
 }
 
 #[test]
+fn repository_config_sets_the_automatic_port_range() {
+    let fixture = Fixture::new();
+    let workspace = fixture.add("ranged");
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    let [first, second] = [(); 2].map(|()| {
+        let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        listener.local_addr().unwrap().port()
+    });
+    fs::write(
+        path.join(".shoal.toml"),
+        format!("[ports]\nstart={first}\nend={first}\n"),
+    )
+    .unwrap();
+    assert_eq!(
+        fixture.ok(&["port", "reserve", "web", "ranged"])["port"],
+        first
+    );
+    assert!(
+        !fixture
+            .run(&["port", "reserve", "api", "ranged"])
+            .status
+            .success()
+    );
+    // The saved config is the top layer, bound by bound.
+    let saved = fixture.root.path().join("saved.toml");
+    let save = |text: &str| {
+        fs::write(&saved, text).unwrap();
+        fixture.ok(&[
+            "repo",
+            "config",
+            fixture.repo.to_str().unwrap(),
+            "--file",
+            saved.to_str().unwrap(),
+        ]);
+    };
+    save(&format!("[ports]\nstart={second}\nend={second}\n"));
+    assert_eq!(
+        fixture.ok(&["port", "reserve", "api", "ranged"])["port"],
+        second
+    );
+    // The layered range must stay nonempty: `end = 1` under the file's `start`.
+    save("[ports]\nend=1\n");
+    let output = fixture.run(&["port", "reserve", "db", "ranged"]);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("nonempty range"));
+}
+
+#[test]
 fn configured_port_range_exhaustion_and_release() {
     let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
     let number = listener.local_addr().unwrap().port();

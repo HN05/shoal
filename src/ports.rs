@@ -112,6 +112,7 @@ impl Manager {
     ) -> Result<ReserveOutcome> {
         let workspace = self.workspace(selector).await?;
         let config = self.workspace_config(&workspace).await?;
+        let range = self.config.effective(&config)?.ports;
         let definition = config
             .ports
             .definitions
@@ -134,7 +135,6 @@ impl Manager {
             validate_env_var(env_var, &default_env)?;
         }
         self.touch(&workspace.id).await;
-        let range = self.config.ports;
         let workspace_name = workspace.name.clone();
         let (outcome, conflict) = self
             .store

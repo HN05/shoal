@@ -10,6 +10,7 @@ use crate::{paths::Paths, repo_config::RepoConfig};
 pub struct Effective {
     pub auto_cleanup: AutoCleanup,
     pub pr_cleanup: PrCleanup,
+    pub ports: Ports,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -48,6 +49,16 @@ impl Default for Ports {
             start: 49152,
             end: 65535,
         }
+    }
+}
+
+impl Ports {
+    pub fn validate(&self) -> Result<()> {
+        ensure!(
+            self.start > 0 && self.start <= self.end,
+            "ports.start/end must specify a nonempty range between 1 and 65535"
+        );
+        Ok(())
     }
 }
 
@@ -211,24 +222,41 @@ mod tests {
             "[auto_cleanup]\nenabled = true\n[pr_cleanup]\nenabled = false\n",
         )
         .unwrap();
-        let effective = global.effective(&repo);
+        let effective = global.effective(&repo).unwrap();
         assert_eq!(
             effective.auto_cleanup.delay(),
             Some(Duration::from_secs(1800))
         );
         assert!(!effective.pr_cleanup.enabled);
         let repo = crate::repo_config::parse("[auto_cleanup]\nidle_minutes = 5\n").unwrap();
-        let effective = global.effective(&repo);
+        let effective = global.effective(&repo).unwrap();
         assert_eq!(effective.auto_cleanup.delay(), None);
         assert_eq!(effective.auto_cleanup.idle_minutes, 5);
         assert!(effective.pr_cleanup.enabled);
         assert_eq!(
             Config::default()
                 .effective(&RepoConfig::default())
+                .unwrap()
                 .auto_cleanup
                 .delay(),
             Some(Duration::from_secs(600))
         );
+    }
+
+    #[test]
+    fn port_range_layers_per_bound_and_must_stay_nonempty() {
+        let global: Config = toml::from_str("[ports]\nstart = 3000\nend = 3100\n").unwrap();
+        let repo =
+            crate::repo_config::parse("[ports]\nstart = 3050\n[ports.web]\nport = 8080\n").unwrap();
+        let ports = global.effective(&repo).unwrap().ports;
+        assert_eq!((ports.start, ports.end), (3050, 3100));
+        let ports = global.effective(&RepoConfig::default()).unwrap().ports;
+        assert_eq!((ports.start, ports.end), (3000, 3100));
+        let repo = crate::repo_config::parse("[ports]\nend = 2000\n").unwrap();
+        assert!(global.effective(&repo).is_err());
+        for text in ["[ports]\nstart = 0\n", "[ports]\nstart = 5\nend = 4\n"] {
+            assert!(crate::repo_config::parse(text).is_err(), "{text}");
+        }
     }
 
     #[test]
@@ -389,17 +417,21 @@ impl Config {
         let config: Self = toml::from_str(text)?;
         config.root_dir(paths)?;
         validate_idle_minutes(config.auto_cleanup.idle_minutes)?;
-        ensure!(
-            config.ports.start > 0 && config.ports.start <= config.ports.end,
-            "ports.start/end must specify a nonempty range between 1 and 65535"
-        );
+        config.ports.validate()?;
         config.simulators.validate()?;
         crate::resources::definitions(&config.resources, &config.resource_pools)?;
         Ok(config)
     }
 
-    pub fn effective(&self, repo: &RepoConfig) -> Effective {
-        Effective {
+    /// Fails when the layers combine into an invalid setting, such as a
+    /// repository `ports.start` above the global `ports.end`.
+    pub fn effective(&self, repo: &RepoConfig) -> Result<Effective> {
+        let ports = Ports {
+            start: repo.ports.start.unwrap_or(self.ports.start),
+            end: repo.ports.end.unwrap_or(self.ports.end),
+        };
+        ports.validate()?;
+        Ok(Effective {
             auto_cleanup: AutoCleanup {
                 enabled: repo
                     .auto_cleanup
@@ -413,7 +445,8 @@ impl Config {
             pr_cleanup: PrCleanup {
                 enabled: repo.pr_cleanup.enabled.unwrap_or(self.pr_cleanup.enabled),
             },
-        }
+            ports,
+        })
     }
 }
 

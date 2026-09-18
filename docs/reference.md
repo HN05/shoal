@@ -445,7 +445,7 @@ release first. Later `exec`, `claude`, `codex cli`, and `happy` commands receive
 `SHOAL_PORT_<NAME>` or the `--env` variable; running processes keep their
 environment, and nested executions drop the parent's port variables. Automatic
 allocation uses 49152–65535, configurable with `[ports]` `start`/`end` in the global
-config; `--port` may name any nonzero port. Shoal probes IPv4/IPv6 availability and
+or a repository config; `--port` may name any nonzero port. Shoal probes IPv4/IPv6 availability and
 prevents duplicates within the daemon, but reservations are cooperative and
 unrelated processes can still bind. UDP is not supported.
 
@@ -454,6 +454,8 @@ Repository defaults, in `.shoal.toml` or the imported config:
 ```toml
 [ports]
 on_conflict = "suggest" # or "auto"
+start = 3000            # Automatic range for this repository
+end = 3999
 
 [ports.web]
 port = 3000
