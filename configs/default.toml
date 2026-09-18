@@ -1,8 +1,10 @@
 # Shoal machine configuration. Values shown are the defaults; edit them in place.
-# Settings are read per command; restart the daemon (`shoal daemon restart`) after
-# changing cleanup or port ranges. Commented blocks are examples, not defaults:
-# uncomment a whole block and adapt it. Repository settings (named ports, setup
-# and hook commands, resource pools) live in each repository's .shoal.toml.
+# The daemon reads this file when it starts, so changes take effect after
+# `shoal daemon restart`, except the agent settings (`default_agent` and
+# `codex.default_mode`), which the CLI reads on every command. Commented blocks
+# are examples, not defaults: uncomment a whole block and adapt it. Repository
+# settings (named ports, setup and hook commands, resource pools) live in each
+# repository's .shoal.toml.
 
 # Parent of every repository's workspaces and URL clones.
 root_dir = "~/shoal"

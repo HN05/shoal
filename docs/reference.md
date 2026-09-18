@@ -514,8 +514,9 @@ PR watches and merge acknowledgements are own-workspace scope exceptions.
 Commands launched through `exec`, `claude`, `codex cli`, and `happy` carry a scope
 token that confines them to their own worktree: inspect, execute, `merge`, `diff`,
 and resources. They cannot `pull`, `land`, reach other worktrees, remove workspaces,
-read notifications, administer repositories, or control the daemon; nested commands keep the scope. Scope is cooperative and does not
-restrict direct filesystem or Git operations.
+read notifications, or administer Shoal itself (repositories, the daemon service,
+the machine configuration); nested commands keep the scope. Scope is cooperative
+and does not restrict direct filesystem or Git operations.
 
 ## Simulators (macOS)
 
