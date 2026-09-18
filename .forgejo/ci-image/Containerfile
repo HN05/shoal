@@ -60,4 +60,4 @@ RUN rustup target add \
 # Sanity: the versions the jobs will run with, visible in `podman build` output.
 RUN rustc --version && cargo clippy --version && cargo fmt --version \
  && wt --version && git --version && lsof -v 2>&1 | head -1 && zsh --version && python3 --version && jq --version \
- && zig version && cargo zigbuild --version
+ && zig version && cargo-zigbuild --version
