@@ -30,18 +30,8 @@ pub struct Timers {
 
 impl Timers {
     /// Record the latest snapshot; returns true once it has stayed the same
-    /// for `delay`. `None` means the workspace is not removable and resets it.
-    pub fn observe(
-        &mut self,
-        id: &str,
-        snapshot: Option<u64>,
-        now: Instant,
-        delay: Duration,
-    ) -> bool {
-        let Some(snapshot) = snapshot else {
-            self.idle.remove(id);
-            return false;
-        };
+    /// for `delay`.
+    pub fn observe(&mut self, id: &str, snapshot: u64, now: Instant, delay: Duration) -> bool {
         let entry = self.idle.entry(id.into()).or_insert(Idle {
             snapshot,
             since: now,
@@ -110,7 +100,7 @@ pub async fn sweep(manager: &Manager, timers: &mut Timers) -> Result<()> {
             timers.idle.remove(&workspace.id);
             continue;
         };
-        if timers.observe(&workspace.id, Some(snapshot), Instant::now(), delay) {
+        if timers.observe(&workspace.id, snapshot, Instant::now(), delay) {
             let (kind, message) = match manager.remove_idle(&workspace.id, snapshot).await {
                 Ok(()) => {
                     eprintln!("auto cleanup removed {}", workspace.name);
@@ -207,11 +197,11 @@ mod tests {
         let mut timers = Timers::default();
         let now = Instant::now();
         let delay = Duration::from_secs(600);
-        assert!(!timers.observe("w", Some(1), now, delay));
-        assert!(!timers.observe("w", Some(2), now + delay, delay));
-        assert!(!timers.observe("w", None, now + delay * 2, delay));
-        assert!(!timers.observe("w", Some(2), now + delay * 3, delay));
-        assert!(timers.observe("w", Some(2), now + delay * 4, delay));
+        assert!(!timers.observe("w", 1, now, delay));
+        assert!(!timers.observe("w", 2, now + delay, delay));
+        timers.idle.remove("w");
+        assert!(!timers.observe("w", 2, now + delay * 3, delay));
+        assert!(timers.observe("w", 2, now + delay * 4, delay));
     }
 
     #[tokio::test]
@@ -379,14 +369,23 @@ mod tests {
             "ignored file updates must reset the timer"
         );
         let final_snapshot = snapshot(&manager).await.unwrap();
+        // The repository's own idle delay applies before the global default.
+        manager
+            .set_repository_config(&repo.id, Some("[auto_cleanup]\nidle_minutes = 60\n".into()))
+            .await
+            .unwrap();
+        let idle_for = |seconds| Idle {
+            snapshot: final_snapshot,
+            since: Instant::now() - Duration::from_secs(seconds),
+        };
         let mut timers = Timers::default();
-        timers.idle.insert(
-            workspace.id.clone(),
-            Idle {
-                snapshot: final_snapshot,
-                since: Instant::now() - Duration::from_secs(600),
-            },
+        timers.idle.insert(workspace.id.clone(), idle_for(600));
+        sweep(&manager, &mut timers).await.unwrap();
+        assert!(
+            workspace.path.exists(),
+            "the repository's hour outlasts the global ten minutes"
         );
+        timers.idle.insert(workspace.id.clone(), idle_for(3600));
         sweep(&manager, &mut timers).await.unwrap();
         assert!(!workspace.path.exists());
         assert!(manager.list_workspaces().await.unwrap().is_empty());
