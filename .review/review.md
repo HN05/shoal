@@ -41,6 +41,14 @@ removal, check it against the rule those files state before judging it.
   exceptions. Never ask for a comment on clear code, a reworded correct one,
   or a longer document.
 
+## Delivery
+
+When commit history is available, check that each commit has one coherent
+purpose and keeps its tests and documentation together. Flag avoidable bundles
+of independent changes and suggest concrete boundaries. The size guidance in
+AGENTS.md is a prompt to inspect, not a line-count gate; tightly coupled
+changes are a valid reason for a larger commit.
+
 ## Do not bother with
 
 - Formatting and import order (rustfmt and clippy run in CI).

@@ -110,6 +110,33 @@ carry `area/`, `type/` and `complexity/` labels; `.forgejo/scripts/labels.sh`
 creates the scheme. Push the branch and let CI verify instead of running the
 full suite locally first.
 
+## Committing
+
+- Keep commits small enough to review on their own. An issue is a PR-sized unit,
+  not a commit-sized one: before editing a change that spans several concerns,
+  decide the commit boundaries, then commit each coherent step as it is completed
+  instead of collecting the whole implementation into one final commit.
+- Separate preparatory refactors, daemon behavior, CLI behavior and unrelated
+  cleanups where each stands on its own; keep tests, generated files and
+  documentation with the change that requires them. Every commit builds and passes
+  its tests; do not split tightly coupled changes just to shrink a diff.
+- Aim for roughly 200 changed lines of handwritten code per commit. Above 300,
+  inspect the staged diff for another coherent split; generated files, lockfiles
+  and mechanical moves do not count, and the body says why an indivisible larger
+  change stays together.
+- Stage by file or hunk and read `git diff --cached` before every commit; a
+  summary that has to describe separate outcomes means two commits. Before
+  opening the PR, inspect the branch against its base and split any accumulated
+  feature-sized commit that has independent parts.
+- Messages: an imperative subject under 72 characters without a type prefix (the
+  release workflow's `chore:` excepted), a blank line, then a body saying why when
+  the diff does not make it obvious. `Closes #n` goes in the PR description.
+- Deliver completed work as a PR on a topic branch: commit, push, open or update the
+  PR with its `area/`, `type/` and `complexity/` labels, then watch CI and the
+  review bot. Review findings are claims to verify against the code and its
+  callers before fixing them or rejecting them with evidence in the thread; merge
+  only when the user says so.
+
 ## Subagent approval
 
 Do not spawn subagents, delegate work, or launch additional agent sessions without
