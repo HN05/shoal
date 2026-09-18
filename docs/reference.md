@@ -234,8 +234,9 @@ The file uses the `.shoal.toml` format and is validated and copied into Shoal's
 database; reimport it after edits. Repository options resolve per option, for
 every workspace of that repository: a value in the saved config wins, one it
 omits comes from the worktree's `.shoal.toml` or `.shoal/config.toml` (both
-together is an error), and `[ports.<name>]`, `[resources.<name>]` and
-`[resource_pools.<name>]` tables layer by name. Changes apply on the next
+together is an error), and a named `[ports.<name>]`, `[resources.<name>]` or
+`[resource_pools.<name>]` table replaces the one below it as a unit, so a
+saved `[ports.web]` supplies every field of `web`. Changes apply on the next
 request without a restart. The saved config survives restarts, renames, and
 workspace removal; `repo rm` deletes it. `--json` returns `repository_id` and
 `toml`. Scoped workspace commands cannot administer it.
@@ -463,7 +464,8 @@ env = "PORT"
 reason = "Frontend dev server"
 ```
 
-`shoal port reserve web` allocates on request; CLI flags override. A conflict
+`on_conflict`, `start` and `end` are keys of the table itself, so no port can
+take those names. `shoal port reserve web` allocates on request; CLI flags override. A conflict
 suggests a free port: fzf offers to accept it, `--json` returns `reserved:
 false` with exit 2, and `--port <suggested>` or `--on-conflict auto` accepts.
 

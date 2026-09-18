@@ -191,7 +191,8 @@ absent and rewritten only by an explicit reset; the daemon reads it at startup,
 while the CLI reads agent settings per command. Repository TOML comes from the
 worktree (`.shoal.toml` or `.shoal/config.toml`, both together is an error) with
 a local override stored in the database by repository ID layered over it per
-option, named entries by name, and deleted with the registration. Every option
+option, a named table replacing the one below it whole, and deleted with the
+registration. Every option
 that does not describe the machine may be set at either level and resolves per
 option: saved config, worktree file, global config, then the built-in default;
 before a workspace exists, the registered checkout's file stands in for the

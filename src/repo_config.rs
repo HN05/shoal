@@ -119,7 +119,8 @@ pub fn parse(text: &str) -> Result<RepoConfig> {
 
 impl RepoConfig {
     /// This config layered over `base`: an option set here wins, an omitted
-    /// one falls through, and named ports, resources and pools layer by name.
+    /// one falls through, and a named port, resource or pool replaces the
+    /// one below it whole.
     pub fn over(self, mut base: Self) -> Self {
         base.ports.definitions.extend(self.ports.definitions);
         base.resources.extend(self.resources);
