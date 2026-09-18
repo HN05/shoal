@@ -29,15 +29,17 @@ A Happy session outside any managed workspace (a console session on the user's
 machine) can hand work to a new session that appears in the Happy app:
 
 ```sh
-shoal --json add my-project --issue 34 --agent happy-claude
-shoal --json happy codex fix-login -- --yolo
+shoal --json add my-project --issue 34 --agent happy-codex
+shoal --json happy codex fix-login --prompt "Fix the login bug" -- --yolo
 ```
 
 Shoal returns once the launch is recorded (`execution_id`, `pid`, `log`); the
-session runs detached and `shoal stop` or `shoal rm` ends it. `happy codex` takes
-no initial prompt: an `--issue` prompt lands in `prompt_file`; ask the user to
-send it from the app. Sessions launched through Shoal are scoped and cannot create
-workspaces or start sessions in other workspaces; the human or console session does.
+session runs detached and `shoal stop` or `shoal rm` ends it. Issue and `--prompt`
+text reaches the agent as its first message (Codex through Happy's server, which
+needs this machine's Happy login). Check `prompt_delivered`; when false, the text
+is in `prompt_file` and the user must send it from the app. Sessions launched
+through Shoal are scoped and cannot create workspaces or start sessions in other
+workspaces; the human or console session does.
 
 ## PR completion
 

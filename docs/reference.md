@@ -143,12 +143,20 @@ workspace) but runs through the tracked wrapper in a background `shoal` process:
 it gets the scope token and port variables, counts as activity for idle cleanup,
 and `stop`, `rm`, PR cleanup, and reconciliation treat it like any other command.
 Shoal returns once the daemon records the launch, printing the execution, PID,
-and log (`--json` adds `prompt_file` and `happy_daemon_recorded`). Without
-`~/.happy/daemon.state.json` (`$HAPPY_HOME_DIR` overrides `~/.happy`) Shoal warns
-that the session will not appear in the app until `happy daemon start` runs, and
-launches anyway. Happy forwards an `--issue` prompt to Claude; `happy codex`
-accepts no initial prompt, so Shoal saves it beside the log and warns, for you
-to send from the app.
+and log (`--json` adds `prompt_file`, `prompt_delivered`, `happy_session_id` and
+`happy_daemon_recorded`). Without `~/.happy/daemon.state.json` (`$HAPPY_HOME_DIR`
+overrides `~/.happy`) Shoal warns that the session will not appear in the app
+until `happy daemon start` runs, and launches anyway.
+
+An `--issue` prompt, or `shoal happy … --prompt <text>`, reaches Claude as an
+argument. `happy codex` takes none, so Shoal delivers it the way the app does:
+with the login in `~/.happy/access.key` it creates the session on Happy's server
+(`$HAPPY_SERVER_URL`, the settings file, or Happy's default), encrypted as
+happy-cli would encrypt it, starts `happy codex` attached to that session through
+Happy's own `HAPPY_RECONNECT_*` variables, waits up to 90 seconds for the session
+to report alive, and posts the prompt (`curl`, token on stdin). The prompt is also
+saved beside the log; when Happy is not logged in or delivery fails, Shoal warns
+and leaves it there for you to send from the app.
 
 ### Branch and workspace names
 `--name` creates a literal Git branch; `--branch <branch|remote/branch>` uses an

@@ -158,7 +158,11 @@ sessions in them. Shoal launches `happy <agent>` with the daemon's own flags so
 the session registers with Happy and appears in the app, detached from the
 terminal but inside the tracked wrapper (a background `shoal` process holding the
 execution), so it stays stoppable and visible to cleanup. Happy's Codex mode takes
-no initial prompt, so issue prompts are saved for the user instead. A Happy-side
+no prompt argument, so Shoal delivers prompts the way the app does: it creates the
+session on Happy's server with the machine's own Happy login, encrypted as
+happy-cli would, attaches the CLI through Happy's reconnection variables, and posts
+the first message once the session is alive, keeping a copy on disk when that
+fails. Shoal reads Happy's credentials only for this and stores none. A Happy-side
 pre-spawn hook asking Shoal for a workspace was considered and not adopted.
 
 The skill is installed at user scope for Codex and Claude, independent of the
