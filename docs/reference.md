@@ -399,7 +399,7 @@ Restart the daemon after changing this.
 ```sh
 shoal notifications            # New since last shown, oldest first; then marked read
 shoal notifications --all      # Recent ones including read (--limit, default 50)
-shoal notifications --follow   # Keep printing as the daemon records them
+shoal notifications --follow   # Keep printing, and raise terminal notifications
 ```
 
 The daemon records what happens while you are not looking: a resource or
@@ -408,7 +408,10 @@ pool), a preferred port in use, an agent started with `claude`, `codex cli`, or
 `happy` exiting (with its code, or a note to reconcile when it left processes
 behind), and workspaces it removed or retained on its own through PR, merge, or
 idle cleanup. Each line shows the local time, the workspace, and the message;
-`--json` returns records with `kind`, `created_at`, and `read`. Repeated
+`--json` returns records with `kind`, `created_at`, and `read`. On a terminal,
+`--follow` also sends each entry as an OSC 9 terminal notification, which iTerm2,
+Ghostty, WezTerm, and Kitty show as a desktop notification (tmux needs
+`allow-passthrough`); other terminals ignore it. Repeated
 identical conflicts and cleanup failures collapse into one entry until read;
 every agent exit is listed. `shoal list` and `daemon status` mention pending
 ones. Plain `exec` commands and manual `rm` are your own and record nothing.
