@@ -1810,6 +1810,11 @@ fi
 test "$PWD" = "$shoal_repo_dir"
 shoal add "$REPO" --name acknowledged
 test "${PWD##*/}" = acknowledged
+printf 'retained' > untracked
+shoal merged
+test "${PWD##*/}" = acknowledged
+shoal pr --clear
+rm untracked
 shoal merged
 test "$PWD" = "$shoal_repo_dir"
 printf 'navigation-ok\n'

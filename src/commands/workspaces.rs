@@ -792,10 +792,22 @@ pub(super) async fn pr(
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     // An acknowledged worktree disappears shortly after the call returns, so
-    // leave it now; a watched PR keeps the shell where it is until it merges.
-    let escape = if url.is_none() && !clear {
-        let inspection = client::inspect(&ctx.paths, workspace.clone()).await?;
-        escape_destination(ctx, &inspection.workspace).await?
+    // leave it now, unless the sweep will retain it as dirty. A watched PR
+    // keeps the shell where it is until it merges.
+    let escape = if url.is_none() && !clear && !env::is_scoped() {
+        let check = request!(
+            &ctx.paths,
+            Method::CheckRemoval {
+                workspace: workspace.clone(),
+                caller_pid: std::process::id(),
+            },
+            RemovalCheck
+        );
+        if check.dirty {
+            None
+        } else {
+            escape_destination(ctx, &check.workspace).await?
+        }
     } else {
         None
     };
