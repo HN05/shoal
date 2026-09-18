@@ -7,6 +7,7 @@ use crate::{
     cli::RepoCommand,
     client::{self, request},
     context::Context,
+    output::{Palette, Style},
     protocol::Method,
     ui,
 };
@@ -34,9 +35,17 @@ pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
             let config = request!(&ctx.paths, method, RepositoryConfig);
             ctx.show(&config, |config| {
                 if clear {
-                    println!("Cleared local repository config");
+                    println!(
+                        "{}",
+                        Palette::stdout(ctx.json)
+                            .paint(Style::Success, "Cleared local repository config")
+                    );
                 } else if updating {
-                    println!("Saved local repository config");
+                    println!(
+                        "{}",
+                        Palette::stdout(ctx.json)
+                            .paint(Style::Success, "Saved local repository config")
+                    );
                 } else if let Some(text) = &config.toml {
                     print!("{text}");
                 } else {
@@ -55,7 +64,10 @@ pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
                 Repository
             );
             ctx.emit(
-                &format!("Registered {}", ui::repository_label(&repo)),
+                &format!(
+                    "Registered {}",
+                    ui::repository_label(&repo, Palette::stdout(ctx.json))
+                ),
                 &repo,
             )?;
         }
@@ -63,7 +75,7 @@ pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
             let repos = client::repositories(&ctx.paths).await?;
             ctx.show(&repos, |repos| {
                 for repo in repos {
-                    println!("{}", ui::repository_label(repo));
+                    println!("{}", ui::repository_label(repo, Palette::stdout(ctx.json)));
                 }
             })?;
         }
@@ -74,7 +86,13 @@ pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
                 Method::RenameRepository { repository, name },
                 Repository
             );
-            ctx.emit(&format!("Renamed {}", ui::repository_label(&repo)), &repo)?;
+            ctx.emit(
+                &format!(
+                    "Renamed {}",
+                    ui::repository_label(&repo, Palette::stdout(ctx.json))
+                ),
+                &repo,
+            )?;
         }
         RepoCommand::Rm { repository, yes } => {
             if !yes {

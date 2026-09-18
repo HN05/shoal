@@ -79,7 +79,11 @@ fn confirm_with_io(
     input: &mut impl io::BufRead,
     output: &mut impl Write,
 ) -> Result<bool> {
-    writeln!(output, "{action}")?;
+    writeln!(
+        output,
+        "{}",
+        Palette::stderr(false).paint(Style::Warning, action)
+    )?;
     loop {
         write!(output, "Are you sure? [y/N] ")?;
         output.flush()?;
@@ -123,7 +127,10 @@ fn setup_failure_with_io(
 
 pub fn input(ctx: &Context, prompt: &str) -> Result<String> {
     require_interactive(ctx)?;
-    eprint!("{prompt}: ");
+    eprint!(
+        "{} ",
+        Palette::stderr(ctx.json).paint(Style::Heading, format_args!("{prompt}:"))
+    );
     io::stderr().flush()?;
     let _cancel = InterruptCancels::install();
     let mut value = String::new();
@@ -143,7 +150,10 @@ pub fn choose_removal(ctx: &Context, check: &RemovalCheck) -> Result<BranchChoic
     eprintln!("Workspace: {}", check.workspace.name);
     eprintln!("Branch:    {}", check.branch.as_deref().unwrap_or("none"));
     for warning in warnings {
-        eprintln!("  - {warning}");
+        eprintln!(
+            "  - {}",
+            Palette::stderr(ctx.json).paint(Style::Warning, warning)
+        );
     }
     let choice = pick(
         ctx,
@@ -334,8 +344,12 @@ pub fn workspace_label(workspace: &Workspace, palette: Palette) -> String {
     )
 }
 
-pub fn repository_label(repo: &Repository) -> String {
-    format!("{}  {}", crate::repository::name(repo), repo.source)
+pub fn repository_label(repo: &Repository, palette: Palette) -> String {
+    format!(
+        "{}  {}",
+        palette.paint(Style::Heading, crate::repository::name(repo)),
+        palette.paint(Style::Muted, &repo.source)
+    )
 }
 
 /// Picker entries that stay unambiguous when repositories share a name.

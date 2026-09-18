@@ -12,6 +12,7 @@ use crate::{
     happy::{self, HappyAgent},
     hooks::{self, Hook},
     model::Workspace,
+    output::{Palette, Style},
     protocol::{Body, ConfigTarget, Method},
     recovery::ReconcileOptions,
     removal::{BranchChoice, RemovalCheck, RemovalResult},
@@ -251,7 +252,7 @@ pub(super) async fn add(
         &format!(
             "{} {} on branch {} at {}",
             if reused { "Opened" } else { "Created" },
-            workspace.name,
+            Palette::stdout(ctx.json).paint(Style::Heading, &workspace.name),
             workspace.branch,
             workspace.path.display()
         ),
@@ -276,7 +277,11 @@ pub(super) async fn prepare(ctx: &Context, workspace: Option<String>) -> Result<
         return Ok(1);
     };
     run_post_setup(ctx, &workspace).await?;
-    ctx.emit(&format!("Prepared {}", workspace.name), &workspace)?;
+    ctx.emit_styled(
+        Style::Success,
+        &format!("Prepared {}", workspace.name),
+        &workspace,
+    )?;
     Ok(0)
 }
 
@@ -310,7 +315,10 @@ async fn prepare_workspace(ctx: &Context, workspace: &Workspace) -> Result<Optio
             ctx.interactive(),
             "setup failed for {name}: {error}; workspace retained. Retry with `shoal prepare {name}`, ignore with `shoal reconcile {name} --repair`, or delete with `shoal rm {name} --yes --delete-branch`"
         );
-        eprintln!("Setup failed for {name}: {error}");
+        eprintln!(
+            "{} for {name}: {error}",
+            Palette::stderr(ctx.json).paint(Style::Error, "Setup failed")
+        );
         match ui::setup_failure_choice()? {
             ui::SetupFailureChoice::Delete => {
                 delete_failed_workspace(ctx, workspace).await?;
@@ -381,7 +389,7 @@ pub(super) async fn list(ctx: &Context) -> Result<i32> {
         for workspace in workspaces {
             println!(
                 "{}",
-                ui::workspace_label(workspace, crate::output::Palette::stdout(ctx.json))
+                ui::workspace_label(workspace, Palette::stdout(ctx.json))
             );
         }
     })?;
@@ -419,7 +427,11 @@ pub(super) async fn inspect(ctx: &Context, workspace: Option<String>) -> Result<
 pub(super) async fn stop(ctx: &Context, workspace: Option<String>) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::Picker).await?;
     client::call(&ctx.paths, Method::StopWorkspace { workspace }).await?;
-    ctx.emit("Workspace processes stopped", json!({"stopped": true}))?;
+    ctx.emit_styled(
+        Style::Success,
+        "Workspace processes stopped",
+        json!({"stopped": true}),
+    )?;
     Ok(0)
 }
 
@@ -475,7 +487,7 @@ pub(super) async fn remove(
     let Body::RemovalResult(result) = result? else {
         bail!("unexpected removal response");
     };
-    ctx.emit(&removal_message(&result), &result)?;
+    ctx.emit_styled(Style::Success, &removal_message(&result), &result)?;
     Ok(0)
 }
 
