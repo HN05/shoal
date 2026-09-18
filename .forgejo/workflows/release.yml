@@ -182,11 +182,18 @@ jobs:
           # gzip timestamp), so a rerun attaches the same bytes it would have.
           epoch=$(git log -1 --format=%ct)
           for target in x86_64-unknown-linux-musl aarch64-unknown-linux-musl x86_64-apple-darwin aarch64-apple-darwin; do
+            case "$target" in
+              x86_64-unknown-linux-musl) platform=linux-x86_64 ;;
+              aarch64-unknown-linux-musl) platform=linux-arm64 ;;
+              x86_64-apple-darwin) platform=macos-x86_64 ;;
+              aarch64-apple-darwin) platform=macos-arm64 ;;
+              *) echo "Unknown release target: $target" >&2; exit 1 ;;
+            esac
             cargo clean -p shoal --release --target "$target"
             cargo zigbuild --locked --release --target "$target"
             tar --sort=name --mtime="@$epoch" --owner=0 --group=0 --numeric-owner \
               -C "$CARGO_TARGET_DIR/$target/release" -cf - shoal \
-              | gzip -n -9 > "dist/shoal-$RELEASE_TAG-$target.tar.gz"
+              | gzip -n -9 > "dist/shoal-$RELEASE_TAG-$platform.tar.gz"
           done
           (cd dist && sha256sum shoal-*.tar.gz > SHA256SUMS && cat SHA256SUMS)
       - name: Attach to the Forgejo release
