@@ -1,14 +1,29 @@
 //! Happy (`happy-coder`) session launches. Happy's daemon starts app-visible
 //! sessions as `happy <agent> --happy-starting-mode remote --started-by
 //! daemon`; Shoal runs the same command detached in a workspace so the session
-//! appears in the Happy app and stays a tracked execution.
-use std::{ffi::OsString, path::PathBuf};
+//! appears in the Happy app and stays a tracked execution. `client` seeds a
+//! session on Happy's server so agents without a prompt argument still get one.
+pub mod client;
+mod crypto;
+
+use std::{
+    ffi::OsString,
+    path::{Path, PathBuf},
+};
 
 use clap::ValueEnum;
 
-/// The overrides Happy's daemon uses for sessions requested from the app.
-pub const DAEMON_HOME_ENV: &str = "HAPPY_HOME_DIR";
+/// Happy's home directory override and the daemon state file inside it.
+pub const HOME_ENV: &str = "HAPPY_HOME_DIR";
 pub const DAEMON_STATE_FILE: &str = "daemon.state.json";
+
+/// Where Happy keeps its state: `$HAPPY_HOME_DIR` or `~/.happy`.
+pub fn home(user_home: &Path) -> PathBuf {
+    std::env::var_os(HOME_ENV)
+        .map(PathBuf::from)
+        .filter(|dir| dir.is_absolute())
+        .unwrap_or_else(|| user_home.join(".happy"))
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum, serde::Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -51,13 +66,9 @@ pub fn command(agent: HappyAgent, prompt: Option<&str>, args: Vec<OsString>) -> 
     command
 }
 
-/// Where Happy's daemon records itself: `$HAPPY_HOME_DIR` or `~/.happy`.
-pub fn daemon_state_path(home: &std::path::Path) -> PathBuf {
-    std::env::var_os(DAEMON_HOME_ENV)
-        .map(PathBuf::from)
-        .filter(|dir| dir.is_absolute())
-        .unwrap_or_else(|| home.join(".happy"))
-        .join(DAEMON_STATE_FILE)
+/// Where Happy's daemon records itself.
+pub fn daemon_state_path(user_home: &Path) -> PathBuf {
+    home(user_home).join(DAEMON_STATE_FILE)
 }
 
 #[cfg(test)]
@@ -116,7 +127,7 @@ mod tests {
     fn daemon_state_lives_in_the_happy_home() {
         let home = std::path::Path::new("/home/user");
         // The variable is process-wide; only the default is asserted here.
-        if std::env::var_os(DAEMON_HOME_ENV).is_none() {
+        if std::env::var_os(HOME_ENV).is_none() {
             assert_eq!(
                 daemon_state_path(home),
                 PathBuf::from("/home/user/.happy/daemon.state.json")

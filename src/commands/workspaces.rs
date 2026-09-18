@@ -588,28 +588,57 @@ pub(super) async fn happy(
     let state_dir = ctx.paths.workspace_state(&workspace.id);
     let stem = format!("happy-{}-{stamp}", agent.name());
     let log = state_dir.join(format!("{stem}.log"));
-    // Happy's Codex mode has no way to receive an initial prompt, so the
-    // issue prompt is kept for the user to send from the app.
-    let prompt_file = match &prompt {
-        Some(prompt) if !agent.accepts_prompt() => {
-            let path = state_dir.join(format!("{stem}.prompt.md"));
-            std::fs::create_dir_all(&state_dir)
-                .with_context(|| format!("create {}", state_dir.display()))?;
-            std::fs::write(&path, prompt).with_context(|| format!("write {}", path.display()))?;
-            eprintln!(
-                "warning: happy {} cannot take an initial prompt; send the issue prompt saved at {} to the session yourself",
-                agent.name(),
+    // Happy's Codex mode has no prompt argument: the prompt is kept in a file
+    // and, when this machine is logged in to Happy, delivered through Happy's
+    // server to a session Shoal creates for the agent to attach to.
+    let mut prompt_file = None;
+    let mut seeded = None;
+    let mut env = Vec::new();
+    if let Some(prompt) = &prompt
+        && !agent.accepts_prompt()
+    {
+        let path = state_dir.join(format!("{stem}.prompt.md"));
+        std::fs::create_dir_all(&state_dir)
+            .with_context(|| format!("create {}", state_dir.display()))?;
+        std::fs::write(&path, prompt).with_context(|| format!("write {}", path.display()))?;
+        match happy::client::seed(&ctx.paths, &workspace, agent).await {
+            Ok(session) => {
+                env = session.session.env();
+                seeded = Some(session);
+            }
+            Err(error) => eprintln!(
+                "warning: cannot deliver the prompt through Happy ({error:#}); send the prompt saved at {} to the session yourself",
                 path.display()
-            );
-            Some(path)
+            ),
         }
-        _ => None,
-    };
+        prompt_file = Some(path);
+    }
     let command = happy::command(agent, prompt.as_deref(), args);
-    let launch = execution::launch_detached(&ctx.paths, &workspace, log, command).await?;
+    let launch = execution::launch_detached(&ctx.paths, &workspace, log, command, &env).await?;
+    let mut prompt_delivered = false;
+    if let (Some(seeded), Some(prompt)) = (&seeded, &prompt) {
+        match seeded
+            .deliver(prompt, std::time::Duration::from_secs(90))
+            .await
+        {
+            Ok(()) => prompt_delivered = true,
+            Err(error) => eprintln!(
+                "warning: prompt not delivered ({error:#}); send the prompt saved at {} to the session yourself",
+                prompt_file
+                    .as_deref()
+                    .map(std::path::Path::display)
+                    .unwrap()
+            ),
+        }
+    }
+    let delivery = match (&prompt_file, prompt_delivered) {
+        (Some(_), true) => "\nPrompt delivered to the session",
+        (Some(_), false) => "\nPrompt saved for you to send from the app",
+        (None, _) => "",
+    };
     ctx.emit(
         &format!(
-            "Started Happy {} session in {} (execution {}, pid {})\nOutput: {}",
+            "Started Happy {} session in {} (execution {}, pid {})\nOutput: {}{delivery}",
             agent.name(),
             workspace.name,
             launch.execution_id,
@@ -623,6 +652,8 @@ pub(super) async fn happy(
             "pid": launch.pid,
             "log": launch.log,
             "prompt_file": prompt_file,
+            "prompt_delivered": prompt_delivered,
+            "happy_session_id": seeded.as_ref().map(|seeded| seeded.session.id.clone()),
             "happy_daemon_recorded": daemon_recorded,
         }),
     )?;

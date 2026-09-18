@@ -89,12 +89,14 @@ pub async fn run_detached_wrapper(
 
 /// Start `command` in `workspace` as a tracked execution that outlives this
 /// process: a new session running this binary's detached wrapper, with the
-/// command's output in `log`. Returns once the daemon has recorded the launch.
+/// command's output in `log` and `env` added to its environment. Returns once
+/// the daemon has recorded the launch.
 pub async fn launch_detached(
     paths: &Paths,
     workspace: &Workspace,
     log: PathBuf,
     command: Vec<OsString>,
+    env: &[(&str, String)],
 ) -> Result<DetachedLaunch> {
     ensure!(workspace.path.is_dir(), "workspace directory is missing");
     if let Some(parent) = log.parent() {
@@ -128,6 +130,7 @@ pub async fn launch_detached(
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::from(file))
+        .envs(env.iter().map(|(name, value)| (*name, value)))
         .env_remove(env::SHELL_DIRECTIVE);
     // SAFETY: setsid only detaches the child from this terminal session and
     // runs before exec in the forked child, without allocating.

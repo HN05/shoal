@@ -190,6 +190,9 @@ pub enum Command {
         #[arg(value_enum)]
         agent: HappyAgent,
         workspace: Option<String>,
+        /// First message for the session; delivered through Happy's server when the agent takes no prompt argument.
+        #[arg(long)]
+        prompt: Option<String>,
         #[arg(last = true)]
         args: Vec<OsString>,
     },

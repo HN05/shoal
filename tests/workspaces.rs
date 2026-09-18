@@ -6097,11 +6097,17 @@ fn install_fake_happy(fixture: &Fixture) -> PathBuf {
   printf 'cwd=%s\n' "$PWD"
   printf 'args='; printf '%s\0' "$@"; printf '\n'
   printf 'scope=%s\nexecution=%s\nworkspace=%s\nport=%s\n' "$SHOAL_SCOPE_TOKEN" "$SHOAL_EXECUTION_ID" "$SHOAL_WORKSPACE" "$SHOAL_PORT_WEB"
+  printf 'reconnect=%s|%s|%s|%s|%s|%s\n' "$HAPPY_RECONNECT_SESSION_ID" "$HAPPY_RECONNECT_ENCRYPTION_KEY" "$HAPPY_RECONNECT_ENCRYPTION_VARIANT" "$HAPPY_RECONNECT_SEQ" "$HAPPY_RECONNECT_METADATA_VERSION" "$HAPPY_RECONNECT_AGENT_STATE_VERSION"
   if read -r _line; then printf 'stdin=data\n'; else printf 'stdin=eof\n'; fi
   test -t 1 && printf 'stdout=tty\n' || printf 'stdout=notty\n'
 } > "$HAPPY_RECORD"
 echo "hello from happy"
 echo "happy stderr" >&2
+# A real session connects to Happy's server and heartbeats; tell the fake server.
+if [ -n "$HAPPY_RECONNECT_SESSION_ID" ] && [ -n "$HAPPY_SERVER_URL" ]; then
+  sleep 1
+  curl -s -X POST "$HAPPY_SERVER_URL/test/activate/$HAPPY_RECONNECT_SESSION_ID" > /dev/null
+fi
 sleep 300
 "#,
     )
@@ -6331,18 +6337,223 @@ fn happy_issue_prompts_reach_claude_and_are_saved_for_codex() {
                     "test"
                 ]
             );
+            // Not logged in to Happy: the prompt is saved and the user is told.
             let prompt_file = PathBuf::from(launch["prompt_file"].as_str().unwrap());
             let prompt = fs::read_to_string(&prompt_file).unwrap();
             assert!(prompt.contains(title) && prompt.contains(body), "{prompt}");
+            assert_eq!(launch["prompt_delivered"], false);
+            assert_eq!(launch["happy_session_id"], Value::Null);
             assert!(
-                stderr.contains("cannot take an initial prompt")
+                stderr.contains("cannot deliver the prompt through Happy")
+                    && stderr.contains("access.key")
                     && stderr.contains(prompt_file.to_str().unwrap()),
                 "{stderr}"
             );
+            assert!(recorded.contains("reconnect=|||||\n"), "{recorded}");
         }
         let pid = launch["pid"].as_u64().unwrap() as u32;
         fixture.ok(&["rm", &name, "--yes", "--delete-branch"]);
         wait_until("happy to exit", || !process_alive(pid));
         fs::remove_file(&record).unwrap();
     }
+}
+
+/// A local stand-in for Happy's server; killed when dropped.
+struct FakeHappyServer {
+    child: Child,
+    url: String,
+    record: PathBuf,
+}
+
+impl FakeHappyServer {
+    fn start(fixture: &Fixture) -> Self {
+        use std::io::BufRead;
+        let script = fixture.root.path().join("happy_server.py");
+        fs::write(&script, include_str!("fixtures/happy_server.py")).unwrap();
+        let record = fixture.root.path().join("happy-server.json");
+        let mut child = Command::new("python3")
+            .arg(&script)
+            .arg(&record)
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let mut port = String::new();
+        std::io::BufReader::new(child.stdout.take().unwrap())
+            .read_line(&mut port)
+            .unwrap();
+        Self {
+            child,
+            url: format!("http://127.0.0.1:{}", port.trim()),
+            record,
+        }
+    }
+
+    fn state(&self) -> Value {
+        serde_json::from_str(&fs::read_to_string(&self.record).unwrap()).unwrap()
+    }
+}
+
+impl Drop for FakeHappyServer {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+#[test]
+fn happy_codex_prompts_are_delivered_through_a_seeded_session() {
+    use base64::Engine;
+    let base64 = base64::engine::general_purpose::STANDARD;
+    let fixture = Fixture::new();
+    let record = install_fake_happy(&fixture);
+    let server = FakeHappyServer::start(&fixture);
+    let happy_home = fixture.root.path().join(".happy");
+    fs::create_dir_all(&happy_home).unwrap();
+    fs::write(
+        happy_home.join("settings.json"),
+        r#"{"machineId": "machine-1"}"#,
+    )
+    .unwrap();
+    fs::write(happy_home.join("daemon.state.json"), "{}").unwrap();
+    let key = base64.encode([7u8; 32]);
+    let prompt = "Fix the login bug; keep the API stable.";
+    let plaintext = serde_json::json!({
+        "role": "user",
+        "content": {"type": "text", "text": prompt},
+        "meta": {"sentFrom": "shoal"},
+    })
+    .to_string()
+    .len();
+    for (variant, credentials) in [
+        (
+            "dataKey",
+            serde_json::json!({"token": "test-token", "encryption": {"publicKey": key, "machineKey": key}}),
+        ),
+        (
+            "legacy",
+            serde_json::json!({"token": "test-token", "secret": key}),
+        ),
+    ] {
+        fs::write(happy_home.join("access.key"), credentials.to_string()).unwrap();
+        let name = format!("seeded-{}", variant.to_lowercase());
+        fixture.add(&name);
+        let output = fixture
+            .command()
+            .args([
+                "--json", "happy", "codex", &name, "--prompt", prompt, "--", "--yolo",
+            ])
+            .env("HAPPY_RECORD", &record)
+            .env("HAPPY_SERVER_URL", &server.url)
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+        let launch: Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert_eq!(launch["prompt_delivered"], true, "{launch}");
+        let session_id = launch["happy_session_id"].as_str().unwrap().to_owned();
+        assert!(session_id.starts_with("session-"));
+        assert_eq!(
+            fs::read_to_string(launch["prompt_file"].as_str().unwrap()).unwrap(),
+            prompt
+        );
+        assert!(
+            !String::from_utf8_lossy(&output.stderr).contains("warning"),
+            "{output:?}"
+        );
+
+        // The CLI was launched attached to the seeded session.
+        wait_until("fake happy record", || record.exists());
+        let recorded = fs::read_to_string(&record).unwrap();
+        let reconnect = recorded
+            .lines()
+            .find_map(|line| line.strip_prefix("reconnect="))
+            .unwrap();
+        let fields: Vec<&str> = reconnect.split('|').collect();
+        assert_eq!(fields[0], session_id);
+        assert_eq!(base64.decode(fields[1]).unwrap().len(), 32);
+        assert_eq!(fields[2..], [variant, "0", "1", "1"]);
+        if variant == "legacy" {
+            assert_eq!(fields[1], key, "legacy sessions use the account secret");
+        }
+        assert!(recorded.contains(
+            "args=codex\0--happy-starting-mode\0remote\0--started-by\0daemon\0--yolo\0\n"
+        ));
+
+        // The server saw a session created the way happy-cli creates them,
+        // a wait for it to come alive, and one encrypted user message.
+        let state = server.state();
+        let requests = state["requests"].as_array().unwrap();
+        let created = requests
+            .iter()
+            .rev()
+            .find(|r| r["path"] == "/v1/sessions" && r["body"]["tag"].is_string())
+            .unwrap();
+        assert_eq!(created["authorization"], "Bearer test-token");
+        assert!(created["client"].as_str().unwrap().starts_with("shoal/"));
+        let metadata = base64
+            .decode(created["body"]["metadata"].as_str().unwrap())
+            .unwrap();
+        let sealed = &created["body"]["dataEncryptionKey"];
+        if variant == "dataKey" {
+            assert_eq!(metadata[0], 0);
+            assert_eq!(
+                base64.decode(sealed.as_str().unwrap()).unwrap().len(),
+                1 + 32 + 24 + 32 + 16
+            );
+        } else {
+            assert!(metadata.len() > 24 + 16);
+            assert_eq!(*sealed, Value::Null);
+        }
+        assert!(requests.iter().any(|r| r["path"] == "/v2/sessions/active"));
+        let messages = state["messages"][&session_id].as_array().unwrap();
+        assert_eq!(messages.len(), 1);
+        assert!(!messages[0]["localId"].as_str().unwrap().is_empty());
+        let content = base64
+            .decode(messages[0]["content"].as_str().unwrap())
+            .unwrap();
+        let expected = if variant == "dataKey" {
+            1 + 12 + plaintext + 16
+        } else {
+            24 + plaintext + 16
+        };
+        assert_eq!(content.len(), expected);
+        assert_eq!(
+            requests
+                .iter()
+                .filter(|r| r["path"] == "/v1/sessions" && r["method"] == "POST")
+                .count(),
+            if variant == "dataKey" { 1 } else { 2 }
+        );
+
+        let pid = launch["pid"].as_u64().unwrap() as u32;
+        fixture.ok(&["rm", &name]);
+        wait_until("happy to exit", || !process_alive(pid));
+        fs::remove_file(&record).unwrap();
+    }
+
+    // Without a prompt nothing is seeded; a wrong token fails delivery softly.
+    fs::write(
+        happy_home.join("access.key"),
+        r#"{"token": "wrong", "secret": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}"#,
+    )
+    .unwrap();
+    fixture.add("unseeded");
+    let output = fixture
+        .command()
+        .args(["--json", "happy", "codex", "unseeded", "--prompt", "hello"])
+        .env("HAPPY_RECORD", &record)
+        .env("HAPPY_SERVER_URL", &server.url)
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let launch: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(launch["prompt_delivered"], false);
+    assert_eq!(launch["happy_session_id"], Value::Null);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("cannot deliver the prompt through Happy") && stderr.contains("401"),
+        "{stderr}"
+    );
+    let pid = launch["pid"].as_u64().unwrap() as u32;
+    fixture.ok(&["rm", "unseeded"]);
+    wait_until("happy to exit", || !process_alive(pid));
 }

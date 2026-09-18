@@ -110,8 +110,9 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         Command::Happy {
             agent,
             workspace,
+            prompt,
             args,
-        } => workspaces::happy(&ctx, agent, workspace, None, args).await,
+        } => workspaces::happy(&ctx, agent, workspace, prompt, args).await,
         Command::DetachedInternal {
             workspace,
             log,

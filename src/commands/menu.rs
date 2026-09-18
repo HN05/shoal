@@ -116,6 +116,7 @@ fn execute_command(ctx: &Context, workspace: Option<String>) -> Result<Command> 
             )
             .map_err(|error| anyhow::anyhow!(error))?,
             workspace,
+            prompt: None,
             args: vec![],
         },
         "t3" => Command::T3 {
