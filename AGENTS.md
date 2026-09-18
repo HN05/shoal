@@ -72,14 +72,17 @@ when behavior changes, distinguishing decisions from proposals.
 
 ## Documentation
 
-Keep documentation short and current. `tests/docs.rs` gives every Markdown file a
-line budget and rejects new Markdown files. Trim first; you may raise a budget, but
-only for a good reason stated in the commit, such as a new command that the existing
-lines cannot describe. Say each thing once, where a reader looks for it: usage in
-README.md, behavior in docs/reference.md, decisions in design.md, contributor rules
-here. Edit the sentence that describes the changed behavior instead of appending a
-paragraph, and cut text that restates code, tests, history, or another section. No
-milestone reports, test inventories, or investigation notes.
+Keep documentation short and current. Say each thing once, where a reader looks for
+it: usage in README.md, behavior in docs/reference.md, decisions in design.md,
+contributor rules here; a new document needs a subject none of those covers. Edit
+the sentence that describes the changed behavior instead of appending a paragraph,
+and cut text that restates code, tests, history, or another section. State a rule
+as its condition, never as the list of things that satisfy it: the condition
+survives a rename, while a list or a count goes stale silently, and an overstated
+rule is narrowed, not annotated with its exceptions. Name something only when a
+reader cannot find it from the rule. No milestone reports, inventories of files,
+tests or flags, or investigation notes. Length is judged by these rules, not by a
+line count.
 
 ## Validation
 
@@ -92,7 +95,7 @@ persistent OS services or modify real user workspaces as a side effect of tests.
 `.forgejo/workflows/ci.yml` runs on pull requests and pushes to `main`. Its
 `rust` job (the required check) runs `cargo fmt --check`, clippy, `cargo test`
 and the Python release-script tests; a PR whose only `area/` label is
-`area/docs` runs just the documentation guard. Jobs use the image built from
+`area/docs` skips them. Jobs use the image built from
 `.forgejo/ci-image/Containerfile` (`git.henriknordvik.com/hn05/ci-shoal:<rust
 version>`), so a run installs nothing: new CI tooling goes into the
 Containerfile, and only the owner rebuilds it with `.forgejo/ci-image/build.sh`

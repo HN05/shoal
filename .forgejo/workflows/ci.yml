@@ -1,9 +1,9 @@
 # PR and main checks on the shared Linux Docker runner; the rust job is intended
 # as the required check on the `main` protection rule.
 #
-# A PR whose only `area/` label is `area/docs` runs only the documentation
-# guard (`cargo test --test docs`): the gate job reads the labels and the rust
-# job narrows itself, which still reports a status for the required check.
+# A PR whose only `area/` label is `area/docs` runs no checks: the gate job
+# reads the labels and the rust job's check steps skip themselves without
+# touching /ci-target, which still reports a status for the required check.
 # Pushes to main and dispatches always run everything.
 #
 # No JavaScript actions (actions/checkout, actions/cache): the runner would have
@@ -41,7 +41,7 @@ env:
 
 jobs:
   gate:
-    name: gate (docs-only PRs run only the docs guard)
+    name: gate (docs-only PRs skip the checks)
     runs-on: docker
     container:
       # Same local image as the rust job; it carries curl and jq.
@@ -70,7 +70,7 @@ jobs:
           areas=$(printf '%s\n' "$labels" | grep '^area/' || true)
           echo "area labels: ${areas:-none}"
           if [ "$areas" = "area/docs" ]; then
-            echo "docs-only PR: only the documentation guard runs"
+            echo "docs-only PR: skipping the checks"
             echo "docs_only=true" >> "$GITHUB_OUTPUT"
           else
             echo "docs_only=false" >> "$GITHUB_OUTPUT"
@@ -123,12 +123,9 @@ jobs:
 
       # One step, because the lock lasts as long as the step's shell.
       - name: cargo clippy and cargo test (holding /ci-target)
+        if: env.DOCS_ONLY != 'true'
         run: |
           . .forgejo/scripts/lock-target-dir.sh
           cargo clean -p shoal
-          if [ "$DOCS_ONLY" = true ]; then
-            cargo test --locked --test docs
-            exit 0
-          fi
           cargo clippy --locked --all-targets -- -D warnings
           cargo test --locked

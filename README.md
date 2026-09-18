@@ -152,7 +152,7 @@ links update automatically; reload `source <(shoal shell init)` in open terminal
 ## Development
 
 See [design.md](design.md) for decisions and the [command reference](docs/reference.md) for behavior.
-Create releases through **Actions → release** ([setup](docs/releases.md)). `tests/docs.rs` budgets the docs; trim before extending.
+Create releases through **Actions → release** ([setup](docs/releases.md)).
 
 Requires Rust, Git, `lsof`, and Worktrunk (`wt`, tested with 0.77.0). Interactive menus
 require `fzf`. Install the runtime tools before running `shoal setup` so the

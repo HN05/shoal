@@ -33,12 +33,13 @@ removal, check it against the rule those files state before judging it.
   deferring service changes until restart; incompatible daemons restart.
 - Tests run in temporary state directories and repositories, use the isolated
   xcrun fixture, and never install services or touch personal simulators.
-- Documentation: `tests/docs.rs` budgets every Markdown file. Usage lives in
-  README.md, behavior in docs/reference.md, decisions in design.md,
-  contributor rules in AGENTS.md. Budget increases need a reason in the commit.
-  Flag behavior changes without the matching
-  sentence edit, and text that restates code or history. Never ask for a
-  comment on clear code or a reworded correct one.
+- Documentation: usage lives in README.md, behavior in docs/reference.md,
+  decisions in design.md, contributor rules in AGENTS.md. Flag behavior
+  changes without the matching sentence edit, text that restates code or
+  history, and sentences that list or count what a rule covers instead of
+  stating the rule; an overstated rule is narrowed, not annotated with its
+  exceptions. Never ask for a comment on clear code, a reworded correct one,
+  or a longer document.
 
 ## Do not bother with
 
