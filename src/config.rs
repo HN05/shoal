@@ -284,62 +284,8 @@ impl Config {
     }
 }
 
-/// Written by `shoal setup` when no config exists. Settings are commented out
-/// at their defaults, examples are marked as such, so the file changes nothing
-/// until edited.
-const TEMPLATE: &str = r##"## Shoal machine configuration. Settings are read per command; restart the
-## daemon (`shoal daemon restart`) after changing cleanup or port ranges.
-## Settings are commented out at their defaults: uncomment a line to change it.
-## Blocks marked as examples are not defaults; uncomment a whole block and adapt it.
-## Repository settings (named ports, setup and hook commands, resource pools)
-## live in each repository's .shoal.toml.
-
-## Parent of every repository's workspaces and URL clones.
-# root_dir = "~/shoal"
-
-## Agent `shoal issue <url>` starts when --agent is omitted:
-## codex, claude, happy-claude, or happy-codex.
-# default_agent = "codex"
-
-# [codex]
-## `shoal codex` without cli/app: "cli" or "app".
-# default_mode = "cli"
-
-# [auto_cleanup]
-## Remove idle, clean, pushed or landed workspaces automatically.
-# enabled = true
-# idle_minutes = 10
-
-# [pr_cleanup]
-## Remove workspaces whose watched PR has merged.
-# enabled = true
-
-# [ports]
-## Range for automatic TCP port reservations.
-# start = 49152
-# end = 65535
-
-# [simulators]
-## Xcode simulator leases (macOS).
-# max_booted = 2
-# max_devices = 4
-# idle_seconds = 120
-# allow_any = false
-## Example profile; `default` must name a profile defined below it.
-# default = "phone"
-# [simulators.profiles.phone]
-# device = "iPhone 17"
-# runtime = "iOS 26"
-
-## Example permits shared across repositories; see the command reference.
-# [resources.signing]
-# capacity = 1
-# reason = "Signing service"
-# [resource_pools.devices]
-# capacity = 2
-# [resource_pools.devices.resources.alpha]
-# capacity = 1
-"##;
+/// Written by `shoal setup` when no config exists; the file explains itself.
+const TEMPLATE: &str = include_str!("../docs/config.toml");
 
 #[derive(Debug, Deserialize)]
 #[serde(default, deny_unknown_fields)]
