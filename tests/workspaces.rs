@@ -6819,7 +6819,23 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
         .unwrap();
     assert!(!scoped.status.success());
 
+    // A limited listing shows the oldest new entries and says how many remain.
+    let first = fixture
+        .command()
+        .args(["--json", "notifications", "--limit", "1"])
+        .output()
+        .unwrap();
+    assert_eq!(
+        String::from_utf8_lossy(&first.stderr),
+        "2 more new notifications; run shoal notifications again\n"
+    );
+    let first: Value = serde_json::from_slice(&first.stdout).unwrap();
+    assert_eq!(first[0]["kind"], "resource_busy", "{first}");
     let shown = fixture.ok(&["notifications"]);
+    assert_eq!(shown.as_array().unwrap().len(), 2, "{shown}");
+    let mut shown = shown.as_array().unwrap().clone();
+    shown.insert(0, first[0].clone());
+    let shown = Value::Array(shown);
     let summary: Vec<(&str, &str, &str)> = shown
         .as_array()
         .unwrap()

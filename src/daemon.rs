@@ -340,8 +340,8 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::ListNotifications { unread_only, limit } => {
             Body::Notifications(manager.notifications(unread_only, limit).await?)
         }
-        Method::MarkNotificationsRead { through } => {
-            manager.mark_notifications_read(through).await?;
+        Method::MarkNotificationsRead { ids } => {
+            manager.mark_notifications_read(ids).await?;
             Body::Ok
         }
         Method::ReservePort {
@@ -429,7 +429,7 @@ async fn watch_notifications(
             delivered = notification.id;
             let response = Response::new(request_id, Body::Notification(notification));
             protocol::write(&mut writer, &response).await?;
-            manager.mark_notifications_read(delivered).await?;
+            manager.mark_notifications_read(vec![delivered]).await?;
         }
         let mut closed = [0u8; 1];
         tokio::select! {

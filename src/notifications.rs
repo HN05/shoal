@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{state::states, workspace::Manager};
 
-/// Read notifications kept after pruning.
+/// Rows kept before older read notifications are pruned; unread ones stay.
 const RETAINED: usize = 500;
 
 states!(NotificationKind {
@@ -110,15 +110,24 @@ impl Manager {
         }
     }
 
-    /// Oldest first. `unread_only` skips notifications already shown.
+    /// Oldest first. `unread_only` gives the oldest unread notifications, so a
+    /// backlog is shown in order across calls; otherwise the newest `limit`.
     pub async fn notifications(&self, unread_only: bool, limit: u32) -> Result<Vec<Notification>> {
         self.store
             .run(move |db| {
+                if unread_only {
+                    return Ok(db
+                        .prepare(&format!(
+                            "SELECT {COLUMNS} FROM notifications WHERE read=0 ORDER BY id LIMIT ?1"
+                        ))?
+                        .query_map([limit], row)?
+                        .collect::<rusqlite::Result<Vec<_>>>()?);
+                }
                 let mut newest = db
                     .prepare(&format!(
-                        "SELECT {COLUMNS} FROM notifications WHERE read=0 OR NOT ?1 ORDER BY id DESC LIMIT ?2"
+                        "SELECT {COLUMNS} FROM notifications ORDER BY id DESC LIMIT ?1"
                     ))?
-                    .query_map(params![unread_only, limit], row)?
+                    .query_map([limit], row)?
                     .collect::<rusqlite::Result<Vec<_>>>()?;
                 newest.reverse();
                 Ok(newest)
@@ -153,14 +162,15 @@ impl Manager {
             .await
     }
 
-    /// Mark every notification up to and including `through` as shown.
-    pub async fn mark_notifications_read(&self, through: i64) -> Result<()> {
+    /// Mark exactly these notifications as shown.
+    pub async fn mark_notifications_read(&self, ids: Vec<i64>) -> Result<()> {
         self.store
             .run(move |db| {
-                db.execute(
-                    "UPDATE notifications SET read=1 WHERE read=0 AND id<=?1",
-                    [through],
-                )?;
+                let tx = db.transaction()?;
+                for id in ids {
+                    tx.execute("UPDATE notifications SET read=1 WHERE id=?1", [id])?;
+                }
+                tx.commit()?;
                 Ok(())
             })
             .await
@@ -216,8 +226,16 @@ mod tests {
             ]
         );
         assert_eq!(manager.unread_notifications().await.unwrap(), 4);
+        // A limited unread listing is the oldest part of the backlog.
+        assert_eq!(
+            manager.notifications(true, 2).await.unwrap()[1].id,
+            unread[1].id
+        );
         let last = unread.last().unwrap().id;
-        manager.mark_notifications_read(last).await.unwrap();
+        manager
+            .mark_notifications_read(unread.iter().map(|n| n.id).collect())
+            .await
+            .unwrap();
         assert!(manager.notifications(true, 50).await.unwrap().is_empty());
         assert_eq!(manager.notifications(false, 50).await.unwrap().len(), 4);
         assert_eq!(manager.notifications(false, 1).await.unwrap()[0].id, last);

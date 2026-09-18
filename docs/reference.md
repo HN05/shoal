@@ -397,7 +397,7 @@ Restart the daemon after changing this.
 ### Notifications
 
 ```sh
-shoal notifications            # New since last shown, oldest first; then marked read
+shoal notifications            # Oldest new ones first, then marked read; says how many remain
 shoal notifications --all      # Recent ones including read (--limit, default 50)
 shoal notifications --follow   # Keep printing, and raise terminal notifications
 ```
@@ -415,7 +415,8 @@ Ghostty, WezTerm, and Kitty show as a desktop notification (tmux needs
 identical conflicts and cleanup failures collapse into one entry until read;
 every agent exit is listed. `shoal list` and `daemon status` mention pending
 ones. Plain `exec` commands and manual `rm` are your own and record nothing.
-Scoped commands cannot read notifications. The newest 500 read entries are kept.
+Scoped commands cannot read notifications. Read entries older than the newest
+500 are dropped; unread ones stay.
 
 ### Port reservations
 

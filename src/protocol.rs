@@ -150,7 +150,7 @@ pub enum Method {
         limit: u32,
     },
     MarkNotificationsRead {
-        through: i64,
+        ids: Vec<i64>,
     },
     /// Long-lived: unread notifications, then new ones as they are recorded,
     /// each as a [`Body::Notification`] response and marked read on delivery.

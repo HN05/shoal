@@ -29,9 +29,24 @@ pub(super) async fn run(ctx: &Context, all: bool, follow: bool, limit: u32) -> R
             println!("No {}notifications", if all { "" } else { "new " });
         }
     })?;
-    // Shown once: what this listing printed does not come back as new.
-    if let Some(through) = notifications.iter().map(|n| n.id).max() {
-        client::call(&ctx.paths, Method::MarkNotificationsRead { through }).await?;
+    // Shown once: exactly what this listing printed does not come back as new.
+    if !notifications.is_empty() {
+        let ids = notifications.iter().map(|n| n.id).collect();
+        client::call(&ctx.paths, Method::MarkNotificationsRead { ids }).await?;
+    }
+    if !all
+        && let Some(status) = client::status(&ctx.paths).await?
+        && status.unread_notifications > 0
+    {
+        eprintln!(
+            "{} more new notification{}; run shoal notifications again",
+            status.unread_notifications,
+            if status.unread_notifications == 1 {
+                ""
+            } else {
+                "s"
+            }
+        );
     }
     Ok(0)
 }
