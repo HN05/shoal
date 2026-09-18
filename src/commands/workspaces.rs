@@ -7,13 +7,12 @@ use serde_json::json;
 use crate::{
     cli::{Agent, CodexMode},
     client::{self, request},
-    config::Config,
     context::Context,
     env, execution, git,
     happy::{self, HappyAgent},
     hooks::{self, Hook},
     model::Workspace,
-    protocol::{Body, Method},
+    protocol::{Body, ConfigTarget, Method},
     recovery::ReconcileOptions,
     removal::{BranchChoice, RemovalCheck, RemovalResult},
     shell,
@@ -131,12 +130,6 @@ pub(super) async fn add(
     mut args: Vec<OsString>,
 ) -> Result<i32> {
     let (name, mut branch) = names;
-    // Validate launch configuration before creating a workspace.
-    let codex_mode = match agent {
-        Some(Agent::Codex) if issue.is_some() => Some(CodexMode::Cli),
-        Some(Agent::Codex) => Some(Config::load(&ctx.paths)?.codex.default_mode),
-        _ => None,
-    };
     let repository = match repository {
         Some(repo) => ui::repository_selector(repo)?,
         None => ui::pick(
@@ -144,6 +137,17 @@ pub(super) async fn add(
             "Repository> ",
             ui::repository_choices(client::repositories(&ctx.paths).await?).await?,
         )?,
+    };
+    // Validate launch configuration before creating a workspace.
+    let codex_mode = match agent {
+        Some(Agent::Codex) if issue.is_some() => Some(CodexMode::Cli),
+        Some(Agent::Codex) => Some(
+            client::settings(&ctx.paths, ConfigTarget::Repository(repository.clone()))
+                .await?
+                .codex
+                .default_mode,
+        ),
+        _ => None,
     };
     let issue = match issue {
         Some(input) => {
@@ -570,14 +574,19 @@ pub(super) async fn codex(
     workspace: Option<String>,
     args: Vec<OsString>,
 ) -> Result<i32> {
+    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let mode = match mode {
         Some(mode) => mode,
-        None => Config::load(&ctx.paths)?.codex.default_mode,
+        None => {
+            client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.clone()))
+                .await?
+                .codex
+                .default_mode
+        }
     };
     if mode == CodexMode::App {
-        return open_app(ctx, workspace, "codex", args).await;
+        return open_app(ctx, Some(workspace), "codex", args).await;
     }
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let command = std::iter::once("codex".into())
         .chain(args)
         .chain([

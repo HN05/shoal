@@ -76,6 +76,16 @@ macro_rules! request {
 }
 pub(crate) use request;
 
+/// The settings that apply to `target` after every layer. The global config
+/// is read now, so launch defaults follow it without a daemon restart.
+pub async fn settings(
+    paths: &Paths,
+    target: crate::protocol::ConfigTarget,
+) -> Result<crate::config::Effective> {
+    let layer = request!(paths, Method::LayeredConfig { target }, LayeredConfig);
+    crate::config::Config::load(paths)?.effective(&layer)
+}
+
 pub async fn inspect(paths: &Paths, workspace: String) -> Result<Inspection> {
     Ok(request!(
         paths,

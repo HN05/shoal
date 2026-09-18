@@ -14,13 +14,13 @@ use crate::{
     process_identity::Identity,
     recovery::{ReconcileOptions, Report},
     removal::{BranchChoice, RemovalCheck, RemovalResult},
-    repo_config::{Hooks, LocalConfig},
+    repo_config::{Hooks, LocalConfig, RepoConfig},
     resources::{Overview, ResourceLease, ResourceRequest},
     sim_audit::AuditEntry,
     simulators::{SimRequest, Simulator, SimulatorCatalog},
 };
 
-pub const VERSION: u32 = 22;
+pub const VERSION: u32 = 23;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -131,6 +131,11 @@ pub enum Method {
     WorkspaceHooks {
         workspace: String,
     },
+    /// The repository layer of the target's config, for the CLI to resolve
+    /// against the global config it reads at launch.
+    LayeredConfig {
+        target: ConfigTarget,
+    },
     /// Long-lived: the connection stays open for the execution's lifetime.
     /// `agent` names a Shoal agent shortcut whose exit the user is told about.
     Execute {
@@ -225,6 +230,15 @@ impl Response {
     }
 }
 
+/// Whose repository config: a workspace's worktree file under the saved
+/// config, or the registered checkout's before a workspace exists.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConfigTarget {
+    Workspace(String),
+    Repository(String),
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data", rename_all = "snake_case")]
 pub enum Body {
@@ -246,6 +260,7 @@ pub enum Body {
     RemovalResult(RemovalResult),
     DiffBase(DiffBase),
     Hooks(Hooks),
+    LayeredConfig(RepoConfig),
     PulledBranch(PulledBranch),
     Notifications(Vec<Notification>),
     Notification(Notification),

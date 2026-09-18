@@ -6,8 +6,8 @@ use serde::Deserialize;
 use tokio::{process::Command, time::timeout};
 
 use crate::{
-    cli::Agent, client, config::Config, context::Context, forge::ForgeRepo, model::Repository,
-    repository, ui, validate::MAX_NAME_LEN,
+    cli::Agent, client, context::Context, forge::ForgeRepo, model::Repository,
+    protocol::ConfigTarget, repository, ui, validate::MAX_NAME_LEN,
 };
 
 /// `shoal issue <url>`: the URL names the repository, the issue names the
@@ -21,7 +21,8 @@ pub(super) async fn run(
 ) -> Result<i32> {
     let repos = client::repositories(&ctx.paths).await?;
     let repo = repository_for(&repos, &url).await?;
-    let agent = match agent.or(Config::load(&ctx.paths)?.default_agent) {
+    let settings = client::settings(&ctx.paths, ConfigTarget::Repository(repo.id.clone())).await?;
+    let agent = match agent.or(settings.default_agent) {
         Some(agent) => agent,
         None if ctx.interactive() => ui::pick(
             ctx,
@@ -33,7 +34,9 @@ pub(super) async fn run(
         )?
         .parse()
         .map_err(|()| anyhow::anyhow!("unknown agent"))?,
-        None => bail!("no agent selected; pass --agent or set default_agent in the global config"),
+        None => bail!(
+            "no agent selected; pass --agent or set default_agent in the repository or global config"
+        ),
     };
     super::workspaces::add(
         ctx,

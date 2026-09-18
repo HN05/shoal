@@ -332,6 +332,9 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::WorkspaceHooks { workspace } => {
             Body::Hooks(manager.workspace_hooks(&workspace).await?)
         }
+        Method::LayeredConfig { target } => {
+            Body::LayeredConfig(manager.layered_config_for(target).await?)
+        }
         Method::ListNotifications { unread_only, limit } => {
             Body::Notifications(manager.notifications(unread_only, limit).await?)
         }

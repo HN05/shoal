@@ -49,7 +49,7 @@ impl Default for ResourceConfig {
     }
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct PoolConfig {
     pub capacity: Option<u32>,

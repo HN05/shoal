@@ -13,12 +13,16 @@ when behavior changes, distinguishing decisions from proposals.
 - Invoke external tools with argument arrays. Use Worktrunk for worktree
   operations and preserve Shoal's ownership records and cleanup policy.
 - Repository TOML lives at `.shoal.toml` or `.shoal/config.toml`; reject both
-  together when no local override exists. `setup_cmd` is tracked and gates
+  together. `setup_cmd` is tracked and gates
   readiness; `post_setup_cmd` (CLI, after ready) and `pre_remove_cmd` (daemon,
   inside the shared removal path) are untracked user processes with the
   workspace identity and no scope token. Optional local repository config lives
   in daemon state, layers per option over the worktree config, and is deleted
-  with its registration. Named ports are lazy, with CLI overrides and explicit conflicts.
+  with its registration. Every option that does not describe the machine may
+  also be set per repository and resolves saved config, worktree file, global
+  config, then default; the CLI reads the global file at launch and asks the
+  daemon for the repository layer. Named ports are lazy, with CLI overrides and
+  explicit conflicts.
 - Workspace commands inherit a scope token. Enforce own-worktree resource access
   in the daemon and deny `shoal pull`, `shoal land` and lifecycle/repository/service
   administration; own-workspace PR watches/merge acknowledgements are allowed.
@@ -33,14 +37,14 @@ when behavior changes, distinguishing decisions from proposals.
   upstream or checked out in a managed workspace; `--local` skips the refresh.
   Keep merges in the tracked execution wrapper; fetch remote-only sources
   without updating other branches or relying on FETCH_HEAD.
-- Global TOML configuration supports `[auto_cleanup]` with `enabled` (default
-  true) and `idle_minutes` (default 10). Automatic removal is only for idle,
+- `[auto_cleanup]` has `enabled` (default true) and `idle_minutes` (default
+  10), resolved per workspace on each sweep. Automatic removal is only for idle,
   clean worktrees with all commits pushed or on the local default branch, or deleted worktrees. Keep one removal path for manual and automatic
   cleanup, retaining the default branch unless explicitly deleted. PR cleanup is
   on by default: stop tracked agents, verify clean merged HEAD, use that path.
 - TCP port reservations are cooperative and owned by the worktree. Keep them
   across command exits and failed removal; successful removal releases them with
-  the workspace record. Global `[ports]` config sets the automatic range.
+  the workspace record. `[ports]` `start`/`end` set the automatic range.
 - Simulator leases are exclusive and worktree-owned. Persist claims before
   simctl mutations; retain claims after failure/restart. Only mutate recorded
   Shoal devices and preserve state on normal handoff. Clean devices require an

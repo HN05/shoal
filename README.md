@@ -48,7 +48,7 @@ shoal issue https://github.com/owner/repo/issues/34  # Paste an issue: finds the
 Use `--agent claude` for Claude Code, or `--agent happy-claude`/`happy-codex` for
 a detached [Happy](https://github.com/slopus/happy) session that appears in the
 Happy app. `shoal issue` takes the same `--agent`, or `default_agent = "codex"`
-from `~/.config/shoal/config.toml`. New workspaces branch from the repository's
+from the repository or global config. New workspaces branch from the repository's
 default branch. With shell integration, `shoal add` enters the workspace.
 
 ## Everyday commands

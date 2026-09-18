@@ -144,12 +144,12 @@ never starting a daemon or picker. Targets sort before flags, including in fzf-t
 
 Agent shortcuts use the execution wrapper: Codex CLI gets full access without
 approvals, Claude gets remote control named after the workspace and a persisted
-trust entry in its config. Codex's default mode is a global config value read at launch.
+trust entry in its config. Codex's default mode is a config value read at launch.
 `add --issue` resolves issue numbers/URLs using the remote and existing gh/fj
 login, derives a portable name, and supplies issue context to CLI agents; forge
 lookup stays in the CLI with no Shoal credentials or forge configuration. `issue
 <url>` is the same flow from a pasted link: the URL selects the registered
-repository by remote identity (never cloning), and the global `default_agent`
+repository by remote identity (never cloning), and the configured `default_agent`
 stands in for `--agent`, so a paste yields a workspace with an agent working.
 `add --agent` launches only after creation, setup, and the post-setup hook
 succeed, or after an explicitly ignored setup failure, and retains the
@@ -191,11 +191,15 @@ absent and rewritten only by an explicit reset; the daemon reads it at startup,
 while the CLI reads agent settings per command. Repository TOML comes from the
 worktree (`.shoal.toml` or `.shoal/config.toml`, both together is an error) with
 a local override stored in the database by repository ID layered over it per
-option, named entries by name, and deleted with the registration. Repository
-config is read per request, so changes need no restart and leave existing
-leases alone.
-Repository config cannot expand machine policy; global pools span
-repositories, repository pools span that repository's worktrees.
+option, named entries by name, and deleted with the registration. Every option
+that does not describe the machine may be set at either level and resolves per
+option: saved config, worktree file, global config, then the built-in default;
+before a workspace exists, the registered checkout's file stands in for the
+worktree's. Repository config is read per request, so changes need no restart
+and leave existing leases alone. Repository config cannot expand machine
+policy: `root_dir`, simulator limits and profiles, and global resource
+definitions stay global; global pools span repositories, repository pools span
+that repository's worktrees.
 
 Ports are cooperative TCP reservations: probe, record, export to later
 executions, never hold a socket. Simulator leases are exclusive over

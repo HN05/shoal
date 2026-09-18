@@ -8,6 +8,8 @@ use crate::{paths::Paths, repo_config::RepoConfig};
 /// wins, an omitted one keeps the global value or the built-in default.
 #[derive(Debug)]
 pub struct Effective {
+    pub default_agent: Option<crate::cli::Agent>,
+    pub codex: Codex,
     pub auto_cleanup: AutoCleanup,
     pub pr_cleanup: PrCleanup,
     pub ports: Ports,
@@ -244,6 +246,24 @@ mod tests {
     }
 
     #[test]
+    fn agent_defaults_come_from_the_repository_before_the_global_config() {
+        use crate::cli::{Agent, CodexMode};
+
+        let global: Config =
+            toml::from_str("default_agent = 'claude'\n[codex]\ndefault_mode = 'app'\n").unwrap();
+        let repo = crate::repo_config::parse("default_agent = 'codex'\n").unwrap();
+        let effective = global.effective(&repo).unwrap();
+        assert_eq!(effective.default_agent, Some(Agent::Codex));
+        assert_eq!(effective.codex.default_mode, CodexMode::App);
+        let repo = crate::repo_config::parse("[codex]\ndefault_mode = 'cli'\n").unwrap();
+        let effective = global.effective(&repo).unwrap();
+        assert_eq!(effective.default_agent, Some(Agent::Claude));
+        assert_eq!(effective.codex.default_mode, CodexMode::Cli);
+        let effective = Config::default().effective(&repo).unwrap();
+        assert_eq!(effective.default_agent, None);
+    }
+
+    #[test]
     fn port_range_layers_per_bound_and_must_stay_nonempty() {
         let global: Config = toml::from_str("[ports]\nstart = 3000\nend = 3100\n").unwrap();
         let repo =
@@ -432,6 +452,10 @@ impl Config {
         };
         ports.validate()?;
         Ok(Effective {
+            default_agent: repo.default_agent.or(self.default_agent),
+            codex: Codex {
+                default_mode: repo.codex.default_mode.unwrap_or(self.codex.default_mode),
+            },
             auto_cleanup: AutoCleanup {
                 enabled: repo
                     .auto_cleanup

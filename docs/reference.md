@@ -75,7 +75,7 @@ agent options after `--`, not a second prompt). Codex uses CLI mode for issue
 prompts even when its default is `app`. Ordinary setup, hooks and collision rules apply.
 `shoal issue <url>` is the pasted form: it picks the registered repository whose
 origin matches the URL (unregistered or duplicated remotes fail) and starts
-`--agent`, else `default_agent` from the global config (`codex`, `claude`,
+`--agent`, else `default_agent` from the repository or global config (`codex`, `claude`,
 `happy-claude`, `happy-codex`), else an interactive picker.
 
 ```sh
@@ -130,9 +130,9 @@ without its workspace trust dialog. `shoal codex cli` appends `--sandbox
 danger-full-access --ask-for-approval=never`. Use `shoal exec ... -- claude` or
 `-- codex` for a custom invocation.
 
-`shoal codex` without `cli`/`app` uses `codex.default_mode` from
-`~/.config/shoal/config.toml` (or `$XDG_CONFIG_HOME/shoal/config.toml`),
-read at launch without a daemon restart:
+`shoal codex` without `cli`/`app` uses `codex.default_mode` from the workspace's
+repository config or `~/.config/shoal/config.toml` (or
+`$XDG_CONFIG_HOME/shoal/config.toml`), read at launch without a daemon restart:
 
 ```toml
 [codex]

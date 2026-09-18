@@ -1,7 +1,10 @@
 //! Cooperative caller scope. The daemon validates every scoped request,
 //! including direct protocol clients; this is not a security boundary against
 //! the OS user.
-use crate::{protocol::Method, workspace::Manager};
+use crate::{
+    protocol::{ConfigTarget, Method},
+    workspace::Manager,
+};
 use anyhow::{Result, bail, ensure};
 
 /// The execution a scope token belongs to.
@@ -50,7 +53,10 @@ pub async fn authorize(
         | Method::Execute { workspace, .. }
         | Method::ReservePort { workspace, .. }
         | Method::ReleasePort { workspace, .. }
-        | Method::PortOverview { workspace } => Some(workspace),
+        | Method::PortOverview { workspace }
+        | Method::LayeredConfig {
+            target: ConfigTarget::Workspace(workspace),
+        } => Some(workspace),
         Method::ResourceList { workspace }
         | Method::ListPorts { workspace }
         | Method::SimList { workspace }

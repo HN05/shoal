@@ -270,7 +270,9 @@ impl Command {
     }
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, ValueEnum, serde::Deserialize)]
+#[derive(
+    Debug, Default, Clone, Copy, PartialEq, Eq, ValueEnum, serde::Deserialize, serde::Serialize,
+)]
 #[serde(rename_all = "lowercase")]
 pub enum CodexMode {
     #[default]
@@ -280,8 +282,8 @@ pub enum CodexMode {
 
 /// What `add --agent` starts: a terminal agent, or a detached Happy session
 /// running one of Happy's agents (`happy-<agent>`, visible in the Happy app).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
-#[serde(try_from = "String")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[serde(try_from = "String", into = "String")]
 pub enum Agent {
     Codex,
     Claude,
@@ -331,6 +333,16 @@ impl TryFrom<String> for Agent {
                 Agent::possible_values().join(", ")
             )
         })
+    }
+}
+
+impl From<Agent> for String {
+    fn from(agent: Agent) -> Self {
+        match agent {
+            Agent::Codex => "codex".into(),
+            Agent::Claude => "claude".into(),
+            Agent::Happy(agent) => format!("{HAPPY_PREFIX}{}", agent.name()),
+        }
     }
 }
 

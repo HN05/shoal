@@ -1693,6 +1693,24 @@ fn codex_default_mode_is_read_at_launch_and_explicit_modes_override_it() {
             );
         }
     }
+    // The worktree's own config wins over the global default, also at launch.
+    fs::write(config_dir.join("config.toml"), "").unwrap();
+    fs::write(
+        Path::new(path).join(".shoal.toml"),
+        "[codex]\ndefault_mode = 'app'\n",
+    )
+    .unwrap();
+    let output = fixture
+        .command()
+        .current_dir(path)
+        .args(["codex", "--", "repo-default"])
+        .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+        .output()
+        .unwrap();
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        format!("\napp\n{path}\nrepo-default\n")
+    );
 }
 
 #[test]
@@ -5600,7 +5618,33 @@ fn issue_command_finds_the_repository_and_starts_the_default_agent() {
     let issue_args = fixture.root.path().join("issue-args");
     let agent_args = fixture.root.path().join("agent-args");
     let body = "Paste the URL and go.";
-    for (number, agent) in [(41, None), (42, Some("codex"))] {
+    for (number, agent, expected) in [
+        (41, None, "claude"),
+        (42, Some("codex"), "codex"),
+        (43, None, "codex"),
+    ] {
+        if number == 43 {
+            // The repository's checked-in default wins over the global one.
+            fs::write(
+                fixture.repo.join(".shoal.toml"),
+                "default_agent = 'codex'\n",
+            )
+            .unwrap();
+            git(&fixture.repo, &["add", ".shoal.toml"]);
+            git(
+                &fixture.repo,
+                &[
+                    "-c",
+                    "user.name=Shoal Test",
+                    "-c",
+                    "user.email=shoal@example.invalid",
+                    "commit",
+                    "-q",
+                    "-m",
+                    "default agent",
+                ],
+            );
+        }
         fs::write(
             &response,
             serde_json::json!({"number": number, "title": "Paste an issue", "body": body})
@@ -5636,7 +5680,7 @@ fn issue_command_finds_the_repository_and_starts_the_default_agent() {
         )));
         let invocation = fs::read_to_string(&agent_args).unwrap();
         let mut parts = invocation.split('\0');
-        assert_eq!(parts.next(), Some(agent.unwrap_or("claude")));
+        assert_eq!(parts.next(), Some(expected));
         let prompt = parts.next().unwrap();
         assert!(prompt.contains(&url) && prompt.contains(body), "{prompt}");
         assert!(invocation.contains("\0--model\0test-model\0"));

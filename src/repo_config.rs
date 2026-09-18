@@ -1,3 +1,4 @@
+use crate::cli::{Agent, CodexMode};
 use anyhow::{Context, Result, ensure};
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
@@ -21,9 +22,12 @@ pub enum ConflictPolicy {
     Suggest,
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct RepoConfig {
+    /// Agent `shoal issue` starts when `--agent` is omitted.
+    pub default_agent: Option<Agent>,
+    pub codex: Codex,
     pub setup_cmd: Option<String>,
     /// Runs untracked after the workspace is ready, e.g. to open a tmux session.
     pub post_setup_cmd: Option<String>,
@@ -121,6 +125,10 @@ impl RepoConfig {
         base.resources.extend(self.resources);
         base.resource_pools.extend(self.resource_pools);
         Self {
+            default_agent: self.default_agent.or(base.default_agent),
+            codex: Codex {
+                default_mode: self.codex.default_mode.or(base.codex.default_mode),
+            },
             setup_cmd: self.setup_cmd.or(base.setup_cmd),
             post_setup_cmd: self.post_setup_cmd.or(base.post_setup_cmd),
             pre_remove_cmd: self.pre_remove_cmd.or(base.pre_remove_cmd),
@@ -167,14 +175,21 @@ pub struct Hooks {
     pub pre_remove_cmd: Option<PathBuf>,
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct SimulatorPreferences {
     pub preferred: Vec<String>,
 }
 
-/// Repository values for the global `[auto_cleanup]`; `None` keeps the layer below.
-#[derive(Debug, Default, Deserialize)]
+/// Repository value for the global `[codex]`; `None` keeps the layer below.
+#[derive(Debug, Default, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Codex {
+    pub default_mode: Option<CodexMode>,
+}
+
+/// Repository values for the global `[auto_cleanup]`.
+#[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct AutoCleanup {
     pub enabled: Option<bool>,
@@ -182,7 +197,7 @@ pub struct AutoCleanup {
 }
 
 /// Repository value for the global `[pr_cleanup]`.
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct PrCleanup {
     pub enabled: Option<bool>,
@@ -217,7 +232,7 @@ mod tests {
     #[test]
     fn layering_keeps_omitted_options_and_replaces_named_entries() {
         let base = parse(
-            "setup_cmd = 'base/setup'\npost_setup_cmd = 'base/attach'\n\
+            "default_agent = 'claude'\nsetup_cmd = 'base/setup'\npost_setup_cmd = 'base/attach'\n\
              [ports]\non_conflict = 'auto'\nstart = 3000\nend = 3100\n\
              [ports.web]\nport = 3000\n[ports.api]\nport = 4000\n\
              [resources.lock]\ncapacity = 1\n[simulators]\npreferred = ['phone']\n\
@@ -225,11 +240,14 @@ mod tests {
         )
         .unwrap();
         let local = parse(
-            "setup_cmd = 'local/setup'\n[ports]\nend = 3050\n[ports.web]\nenv = 'LOCAL_PORT'\n\
+            "setup_cmd = 'local/setup'\n[codex]\ndefault_mode = 'app'\n\
+             [ports]\nend = 3050\n[ports.web]\nenv = 'LOCAL_PORT'\n\
              [resources.signing]\ncapacity = 2\n[auto_cleanup]\nenabled = true\n",
         )
         .unwrap();
         let config = local.over(base);
+        assert_eq!(config.default_agent, Some(Agent::Claude));
+        assert_eq!(config.codex.default_mode, Some(CodexMode::App));
         assert_eq!(config.setup_cmd.as_deref(), Some("local/setup"));
         assert_eq!(config.post_setup_cmd.as_deref(), Some("base/attach"));
         assert!(matches!(
@@ -252,6 +270,25 @@ mod tests {
         assert_eq!(config.auto_cleanup.idle_minutes, Some(30));
         assert_eq!(config.pr_cleanup.enabled, None);
         assert!(parse("[auto_cleanup]\nidle_minutes = 0\n").is_err());
+        assert!(parse("default_agent = 'happy'\n").is_err());
+        assert!(parse("[codex]\ndefault_mode = 'desktop'\n").is_err());
+    }
+
+    #[test]
+    fn config_serializes_in_its_own_spelling() {
+        let config = parse(
+            "default_agent = 'happy-codex'\n[codex]\ndefault_mode = 'app'\n[ports.web]\nport = 1\n",
+        )
+        .unwrap();
+        let json = serde_json::to_value(&config).unwrap();
+        assert_eq!(json["default_agent"], "happy-codex");
+        assert_eq!(json["codex"]["default_mode"], "app");
+        let back: RepoConfig = serde_json::from_value(json).unwrap();
+        assert_eq!(
+            back.default_agent,
+            Some(Agent::Happy(crate::happy::HappyAgent::Codex))
+        );
+        assert_eq!(back.ports.definitions["web"].port, Some(1));
         assert!(
             parse("")
                 .unwrap()

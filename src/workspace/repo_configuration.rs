@@ -3,6 +3,7 @@ use super::Manager;
 use crate::{
     config::Effective,
     model::Workspace,
+    protocol::ConfigTarget,
     repo_config::{self, Hooks, LocalConfig, RepoConfig},
 };
 use anyhow::{Context, Result};
@@ -79,6 +80,22 @@ impl Manager {
     pub(crate) async fn workspace_config(&self, workspace: &Workspace) -> Result<RepoConfig> {
         let file = repo_config::load(&workspace.path)?;
         self.layered_config(&workspace.repository_id, file).await
+    }
+
+    /// The repository layer for `target`; a repository's file is the one in
+    /// its registered checkout.
+    pub async fn layered_config_for(&self, target: ConfigTarget) -> Result<RepoConfig> {
+        match target {
+            ConfigTarget::Workspace(selector) => {
+                let workspace = self.workspace(&selector).await?;
+                self.workspace_config(&workspace).await
+            }
+            ConfigTarget::Repository(selector) => {
+                let repo = self.repository(&selector).await?;
+                let file = repo_config::load(&repo.path)?;
+                self.layered_config(&repo.id, file).await
+            }
+        }
     }
 
     /// The workspace's settings after every layer: the saved config, the
