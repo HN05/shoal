@@ -6175,6 +6175,8 @@ fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
             fixture.ok(&["port", "reserve", "web", &name, "--reason", "server"]);
             fs::create_dir_all(state_file.parent().unwrap()).unwrap();
             fs::write(&state_file, "{}").unwrap();
+            let claude_config = fixture.root.path().join(".claude.json");
+            fs::write(&claude_config, "{}").unwrap();
             let output = fixture
                 .command()
                 .args(["--json", "happy", "claude", &name, "--", "--model", "test"])
@@ -6186,6 +6188,14 @@ fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
             let launch: Value = serde_json::from_slice(&output.stdout).unwrap();
             assert_eq!(launch["workspace"]["id"], workspace["id"]);
             assert_eq!(launch["happy_daemon_recorded"], true);
+            // Detached Claude launches skip the trust dialog like `shoal claude`.
+            let config: Value =
+                serde_json::from_str(&fs::read_to_string(&claude_config).unwrap()).unwrap();
+            let key = fs::canonicalize(workspace["path"].as_str().unwrap()).unwrap();
+            assert_eq!(
+                config["projects"][key.to_str().unwrap()]["hasTrustDialogAccepted"],
+                true
+            );
             launch
         };
         assert_eq!(launch["agent"], agent);

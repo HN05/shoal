@@ -519,20 +519,26 @@ pub(super) async fn claude(
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let inspection = client::inspect(&ctx.paths, workspace).await?;
-    let trusted = env::claude_config_dir().and_then(|dir| {
-        let config = dir
-            .unwrap_or_else(|| ctx.paths.home.clone())
-            .join(".claude.json");
-        trust_claude_workspace(&config, &inspection.workspace.path)
-    });
-    if let Err(error) = trusted {
-        eprintln!("warning: could not mark the workspace as trusted for Claude Code: {error:#}");
-    }
+    trust_claude(ctx, &inspection.workspace.path);
     let command = std::iter::once("claude".into())
         .chain(args)
         .chain(["--remote-control".into(), inspection.workspace.name.into()])
         .collect();
     execution::run(&ctx.paths, inspection.workspace.id, command).await
+}
+
+/// Mark the workspace trusted in Claude Code's config so a launch, attached or
+/// detached, never stops at the trust dialog. Failure only warns.
+fn trust_claude(ctx: &Context, workspace: &std::path::Path) {
+    let trusted = env::claude_config_dir().and_then(|dir| {
+        let config = dir
+            .unwrap_or_else(|| ctx.paths.home.clone())
+            .join(".claude.json");
+        trust_claude_workspace(&config, workspace)
+    });
+    if let Err(error) = trusted {
+        eprintln!("warning: could not mark the workspace as trusted for Claude Code: {error:#}");
+    }
 }
 
 pub(super) async fn codex(
@@ -573,6 +579,9 @@ pub(super) async fn happy(
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let workspace = client::inspect(&ctx.paths, workspace).await?.workspace;
+    if agent == HappyAgent::Claude {
+        trust_claude(ctx, &workspace.path);
+    }
     let daemon_state = happy::daemon_state_path(&ctx.paths.home);
     let daemon_recorded = daemon_state.is_file();
     if !daemon_recorded {
