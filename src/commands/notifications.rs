@@ -9,6 +9,7 @@ use crate::{
     client::{self, request},
     context::Context,
     notifications::Notification,
+    output::{Palette, Style},
     protocol::{self, Body, Method, Response},
 };
 
@@ -23,7 +24,7 @@ pub(super) async fn run(ctx: &Context, all: bool, follow: bool, limit: u32) -> R
     let notifications = request!(&ctx.paths, method, Notifications);
     ctx.show(&notifications, |notifications| {
         for notification in notifications {
-            println!("{}", render(notification));
+            println!("{}", render(notification, Palette::stdout(ctx.json)));
         }
         if notifications.is_empty() {
             println!("No {}notifications", if all { "" } else { "new " });
@@ -69,7 +70,7 @@ async fn follow_stream(ctx: &Context) -> Result<i32> {
         match response.body {
             Body::Notification(notification) => {
                 ctx.show(&notification, |notification| {
-                    println!("{}", render(notification));
+                    println!("{}", render(notification, Palette::stdout(ctx.json)));
                 })?;
                 if raise {
                     let mut stdout = std::io::stdout().lock();
@@ -97,11 +98,14 @@ fn terminal_notification(notification: &Notification) -> String {
     format!("\x1b]9;{text}\x07")
 }
 
-fn render(notification: &Notification) -> String {
+fn render(notification: &Notification, palette: Palette) -> String {
     format!(
         "{}  {}  {}",
-        local_time(notification.created_at),
-        notification.workspace.as_deref().unwrap_or("-"),
+        palette.paint(Style::Muted, local_time(notification.created_at)),
+        palette.paint(
+            Style::Heading,
+            notification.workspace.as_deref().unwrap_or("-")
+        ),
         notification.message
     )
 }

@@ -7,6 +7,7 @@ use crate::{
     client::{self, request},
     context::{Context, optional},
     model::{PortOverview, PortReservation},
+    output::{Palette, Style},
     ports::PortRequest,
     protocol::{Body, Method},
     ui::{self, Fallback},
@@ -48,7 +49,7 @@ pub(super) async fn run(ctx: &Context, command: PortCommand) -> Result<i32> {
                         .find(|w| w.id == port.workspace_id)
                         .map(|w| w.name.as_str())
                         .unwrap_or(&port.workspace_id);
-                    println!("{owner}/{}", describe(port));
+                    println!("{owner}/{}", describe(port, Palette::stdout(ctx.json)));
                 }
             })?;
             Ok(0)
@@ -57,7 +58,11 @@ pub(super) async fn run(ctx: &Context, command: PortCommand) -> Result<i32> {
             let workspace =
                 ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
             client::call(&ctx.paths, Method::ReleasePort { workspace, name }).await?;
-            ctx.emit("Port reservation released", json!({"released": true}))?;
+            ctx.emit_styled(
+                Style::Success,
+                "Port reservation released",
+                json!({"released": true}),
+            )?;
             Ok(0)
         }
     }
@@ -79,14 +84,18 @@ async fn reserve(
         };
         match client::call(&ctx.paths, method).await? {
             Body::Port(reservation) => {
-                ctx.emit(&describe(&reservation), &reservation)?;
+                ctx.emit(
+                    &describe(&reservation, Palette::stdout(ctx.json)),
+                    &reservation,
+                )?;
                 return Ok(0);
             }
             Body::PortSuggestion(proposal) => {
                 if !ctx.interactive() {
                     let mut value = serde_json::to_value(&proposal)?;
                     value["reserved"] = json!(false);
-                    ctx.emit(
+                    ctx.emit_styled(
+                        Style::Warning,
                         &format!(
                             "{}: port {} unavailable; suggested {}. Accept with --port {}",
                             proposal.name,
@@ -99,8 +108,11 @@ async fn reserve(
                     return Ok(super::EXIT_BUSY);
                 }
                 println!(
-                    "{}: port {} unavailable; suggested {}",
-                    proposal.name, proposal.requested_port, proposal.suggested_port
+                    "{}: port {} {}; suggested {}",
+                    proposal.name,
+                    proposal.requested_port,
+                    Palette::stdout(ctx.json).paint(Style::Warning, "unavailable"),
+                    proposal.suggested_port
                 );
                 let accepted = ui::confirm(
                     ctx,
@@ -122,10 +134,10 @@ async fn reserve(
     }
 }
 
-fn describe(port: &PortReservation) -> String {
+fn describe(port: &PortReservation, palette: Palette) -> String {
     format!(
         "{}={} ({}){}",
-        port.name,
+        palette.paint(Style::Heading, &port.name),
         port.port,
         port.env_var,
         optional(port.reason.as_deref(), |r| format!("  {r}"))
@@ -135,13 +147,15 @@ fn describe(port: &PortReservation) -> String {
 pub(super) async fn overview(ctx: &Context, workspace: Option<String>) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let overview = request!(&ctx.paths, Method::PortOverview { workspace }, PortOverview);
-    ctx.show(&overview, render_overview)?;
+    ctx.show(&overview, |overview| {
+        render_overview(overview, Palette::stdout(ctx.json))
+    })?;
     Ok(0)
 }
 
-fn render_overview(overview: &PortOverview) {
+fn render_overview(overview: &PortOverview, palette: Palette) {
     for port in &overview.reserved {
-        println!("{}", describe(port));
+        println!("{}", describe(port, palette));
     }
     for (name, definition) in &overview.configured {
         if overview.reserved.iter().any(|p| &p.name == name) {

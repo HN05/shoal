@@ -4,7 +4,10 @@ use std::io::{self, IsTerminal};
 use anyhow::Result;
 use serde::Serialize;
 
-use crate::paths::Paths;
+use crate::{
+    output::{Palette, Style},
+    paths::Paths,
+};
 
 pub struct Context {
     pub paths: Paths,
@@ -35,6 +38,11 @@ impl Context {
             println!("{message}");
         }
         Ok(())
+    }
+
+    /// Style a human-facing outcome without changing its machine-readable value.
+    pub fn emit_styled(&self, style: Style, message: &str, value: impl Serialize) -> Result<()> {
+        self.emit(&Palette::stdout(self.json).paint(style, message), value)
     }
 
     /// Print `value` as JSON with `--json`; otherwise render it with `text`.

@@ -7,6 +7,7 @@ use crate::{
     cli::SimCommand,
     client::{self, request},
     context::{Context, optional},
+    output::{Palette, Style},
     protocol::{Body, Method},
     sim_audit::AuditEntry,
     simulators::{SimRequest, Simulator},
@@ -34,7 +35,7 @@ pub(super) async fn run(ctx: &Context, command: SimCommand) -> Result<i32> {
                         "{}  {}  {}  {}  {}",
                         sim.udid.as_deref().unwrap_or("pending"),
                         sim.lease_name.as_deref().unwrap_or("idle"),
-                        sim.state,
+                        Palette::stdout(ctx.json).simulator_state(sim.state),
                         sim.device,
                         sim.runtime
                     );
@@ -80,11 +81,12 @@ pub(super) async fn run(ctx: &Context, command: SimCommand) -> Result<i32> {
             .await?;
             match outcome {
                 Ok(sim) => {
-                    ctx.emit(&describe(&sim), &sim)?;
+                    ctx.emit_styled(Style::Success, &describe(&sim), &sim)?;
                     Ok(0)
                 }
                 Err(message) => {
-                    ctx.emit(
+                    ctx.emit_styled(
+                        Style::Warning,
                         &message,
                         json!({"acquired": false, "code": "simulator_busy", "message": message}),
                     )?;
@@ -122,7 +124,11 @@ pub(super) async fn run(ctx: &Context, command: SimCommand) -> Result<i32> {
             let workspace =
                 ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
             client::call(&ctx.paths, Method::SimRelease { workspace, name }).await?;
-            ctx.emit("Simulator released", json!({"released": true}))?;
+            ctx.emit_styled(
+                Style::Success,
+                "Simulator released",
+                json!({"released": true}),
+            )?;
             Ok(0)
         }
     }

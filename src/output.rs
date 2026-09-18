@@ -6,7 +6,10 @@ use std::{
     io::{self, IsTerminal},
 };
 
-use crate::state::{ExecutionState, WorkspaceState};
+use crate::{
+    simulators::SimulatorState,
+    state::{ExecutionState, WorkspaceState},
+};
 
 #[derive(Clone, Copy)]
 pub enum Style {
@@ -78,6 +81,18 @@ impl Palette {
             | WorkspaceState::Reconciling => Style::Warning,
         };
         self.paint(style, state)
+    }
+
+    pub fn simulator_state(self, state: SimulatorState) -> String {
+        self.paint(
+            match state {
+                SimulatorState::Leased => Style::Success,
+                SimulatorState::Idle => Style::Muted,
+                SimulatorState::Creating | SimulatorState::Booting => Style::Warning,
+                SimulatorState::Failed => Style::Error,
+            },
+            state,
+        )
     }
 
     pub fn execution_state(self, state: ExecutionState) -> String {

@@ -9,6 +9,7 @@ use crate::{
     client,
     context::Context,
     daemon,
+    output::Style,
     paths::Paths,
     protocol::Method,
     service::{self, Platform},
@@ -59,7 +60,8 @@ pub(super) async fn setup(
     let (config, config_created) = crate::config::Config::install(&ctx.paths)?;
     service::setup(&ctx.paths, &executable, preserve_running).await?;
     client::wait(&ctx.paths, true).await?;
-    ctx.emit(
+    ctx.emit_styled(
+        Style::Success,
         "Daemon service installed and running",
         json!({
             "running": true,
@@ -116,7 +118,12 @@ pub(super) async fn run(ctx: Context, command: DaemonCommand) -> Result<i32> {
                     )
                 })
                 .unwrap_or_else(|| "Daemon is not running".into());
-            ctx.emit(
+            ctx.emit_styled(
+                if running {
+                    Style::Success
+                } else {
+                    Style::Warning
+                },
                 &message,
                 json!({"running": running, "daemon": status, "socket": ctx.paths.socket}),
             )?;
@@ -125,11 +132,11 @@ pub(super) async fn run(ctx: Context, command: DaemonCommand) -> Result<i32> {
         DaemonCommand::Start => {
             service::start(&ctx.paths).await?;
             client::wait(&ctx.paths, true).await?;
-            ctx.emit("Daemon started", json!({"running": true}))?;
+            ctx.emit_styled(Style::Success, "Daemon started", json!({"running": true}))?;
         }
         DaemonCommand::Stop => {
             stop(&ctx.paths).await?;
-            ctx.emit("Daemon stopped", json!({"running": false}))?;
+            ctx.emit_styled(Style::Success, "Daemon stopped", json!({"running": false}))?;
         }
         DaemonCommand::Restart => {
             // Service administration must still work after a protocol upgrade.
@@ -142,7 +149,7 @@ pub(super) async fn run(ctx: Context, command: DaemonCommand) -> Result<i32> {
             stop(&ctx.paths).await?;
             service::start(&ctx.paths).await?;
             client::wait(&ctx.paths, true).await?;
-            ctx.emit("Daemon restarted", json!({"running": true}))?;
+            ctx.emit_styled(Style::Success, "Daemon restarted", json!({"running": true}))?;
         }
     }
     Ok(0)

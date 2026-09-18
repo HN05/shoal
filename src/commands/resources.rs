@@ -7,6 +7,7 @@ use crate::{
     cli::ResourceCommand,
     client::{self, request},
     context::{Context, optional},
+    output::{Palette, Style},
     protocol::{Body, Method},
     resources::{Overview, ResourceKind, ResourceLease, ResourceRequest},
     ui::{self, Fallback},
@@ -46,11 +47,12 @@ pub(super) async fn run(ctx: &Context, command: ResourceCommand) -> Result<i32> 
             .await?;
             match outcome {
                 Ok(lease) => {
-                    ctx.emit(&describe(&lease), &lease)?;
+                    ctx.emit(&describe(&lease, Palette::stdout(ctx.json)), &lease)?;
                     Ok(0)
                 }
                 Err(message) => {
-                    ctx.emit(
+                    ctx.emit_styled(
+                        Style::Warning,
                         &message,
                         json!({
                             "acquired": false,
@@ -77,7 +79,11 @@ pub(super) async fn run(ctx: &Context, command: ResourceCommand) -> Result<i32> 
                 name,
             };
             client::call(&ctx.paths, method).await?;
-            ctx.emit("Resource released", json!({"released": true}))?;
+            ctx.emit_styled(
+                Style::Success,
+                "Resource released",
+                json!({"released": true}),
+            )?;
             Ok(0)
         }
         ResourceCommand::List { workspace, all } => {
@@ -89,7 +95,11 @@ pub(super) async fn run(ctx: &Context, command: ResourceCommand) -> Result<i32> 
             );
             ctx.show(&leases, |leases| {
                 for lease in leases {
-                    println!("{}  {}", lease.workspace_id, describe_short(lease));
+                    println!(
+                        "{}  {}",
+                        lease.workspace_id,
+                        describe_short(lease, Palette::stdout(ctx.json))
+                    );
                 }
                 if leases.is_empty() {
                     println!("No resource leases");
@@ -100,17 +110,21 @@ pub(super) async fn run(ctx: &Context, command: ResourceCommand) -> Result<i32> 
     }
 }
 
-fn describe(lease: &ResourceLease) -> String {
+fn describe(lease: &ResourceLease, palette: Palette) -> String {
     format!(
         "{}/{} -> {} [{}] ({})",
-        lease.pool, lease.name, lease.resource, lease.mode, lease.id
+        palette.paint(Style::Heading, &lease.pool),
+        lease.name,
+        lease.resource,
+        lease.mode,
+        lease.id
     )
 }
 
-fn describe_short(lease: &ResourceLease) -> String {
+fn describe_short(lease: &ResourceLease, palette: Palette) -> String {
     format!(
         "{}/{} -> {} [{}]{}",
-        lease.pool,
+        palette.paint(Style::Heading, &lease.pool),
         lease.name,
         lease.resource,
         lease.mode,
@@ -125,23 +139,28 @@ pub(super) async fn overview(ctx: &Context, workspace: Option<String>) -> Result
         Method::ResourceOverview { workspace },
         ResourceOverview
     );
-    ctx.show(&overview, render_overview)?;
+    ctx.show(&overview, |overview| {
+        render_overview(overview, Palette::stdout(ctx.json))
+    })?;
     Ok(0)
 }
 
-fn render_overview(overview: &Overview) {
+fn render_overview(overview: &Overview, palette: Palette) {
     for pool in &overview.pools {
         println!(
             "{} ({}) {}/{} in use, {} available{}",
-            pool.name,
+            palette.paint(Style::Heading, &pool.name),
             pool.scope,
             pool.used,
             pool.capacity,
             pool.available,
             if pool.configuration_matches {
-                ""
+                String::new()
             } else {
-                " [configuration changed; drain leases first]"
+                palette.paint(
+                    Style::Warning,
+                    " [configuration changed; drain leases first]",
+                )
             }
         );
         for resource in &pool.resources {
@@ -163,7 +182,7 @@ fn render_overview(overview: &Overview) {
         }
     }
     for lease in &overview.leases {
-        println!("  lease {}", describe_short(lease));
+        println!("  lease {}", describe_short(lease, palette));
     }
     if overview.pools.is_empty() && overview.leases.is_empty() {
         println!("No configured resources or leases");
