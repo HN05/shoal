@@ -56,6 +56,7 @@ pub(super) async fn setup(
         }
         Err(error) => return Err(error),
     };
+    let (config, config_created) = crate::config::Config::install(&ctx.paths)?;
     service::setup(&ctx.paths, &executable, preserve_running).await?;
     client::wait(&ctx.paths, true).await?;
     ctx.emit(
@@ -63,10 +64,15 @@ pub(super) async fn setup(
         json!({
             "running": true,
             "service_file": service::file(&ctx.paths, platform),
+            "config": config,
+            "config_created": config_created,
             "shell_init": shell::INIT_COMMAND,
         }),
     )?;
     if !ctx.json {
+        if config_created {
+            println!("Wrote commented defaults to {}", config.display());
+        }
         println!(
             "\nAdd this line to ~/.zshrc or ~/.bashrc for directory navigation and tab completion:\n\n{}",
             shell::INIT_COMMAND

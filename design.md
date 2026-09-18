@@ -186,7 +186,8 @@ and failed removal, are allocated atomically with idempotent lease names, and
 are released explicitly or by successful removal. Resources are lazy, never
 claimed at creation.
 
-Global TOML is machine policy; repository TOML comes from the worktree
+Global TOML is machine policy, seeded by `setup` as an inert commented
+template when absent and never rewritten; repository TOML comes from the worktree
 (`.shoal.toml` or `.shoal/config.toml`, both together is an error) or from a
 local override stored in the database by repository ID, which replaces the
 whole worktree config and is deleted with the registration. Config is read per

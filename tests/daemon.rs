@@ -213,6 +213,7 @@ fn setup_preview_does_not_install_a_service() {
             .contains("--managed")
     );
     assert!(!Path::new(definition["path"].as_str().unwrap()).exists());
+    assert!(!root.path().join(".config").exists());
     assert!(!root.path().join("state").exists());
 }
 
@@ -366,9 +367,24 @@ esac
         );
         output
     };
-    run(&["setup"]);
+    let output: Value = serde_json::from_slice(&run(&["--json", "setup"]).stdout).unwrap();
     let original = fs::read_to_string(&pid_path).unwrap();
-    run(&["setup"]);
+    // A missing global config is seeded once with commented defaults, then left alone.
+    let config = root.path().join(".config/shoal/config.toml");
+    assert_eq!(output["config"], config.to_str().unwrap());
+    assert_eq!(output["config_created"], true);
+    assert!(
+        fs::read_to_string(&config)
+            .unwrap()
+            .contains("# default_agent = \"codex\"")
+    );
+    fs::write(&config, "default_agent = 'claude'\n").unwrap();
+    let output: Value = serde_json::from_slice(&run(&["--json", "setup"]).stdout).unwrap();
+    assert_eq!(output["config_created"], false);
+    assert_eq!(
+        fs::read_to_string(&config).unwrap(),
+        "default_agent = 'claude'\n"
+    );
     assert_eq!(fs::read_to_string(&pid_path).unwrap(), original);
 
     // A changed executable path must update the definition without breaking an

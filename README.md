@@ -16,7 +16,8 @@ download a prebuilt macOS or Linux binary from a [release](https://github.com/HN
 the macOS binaries are unsigned, so clear the download quarantine first with
 `xattr -d com.apple.quarantine shoal`.
 Homebrew installs the runtime dependencies. `shoal setup` starts the per-user
-daemon; `shoal skill install` installs instructions for Codex and Claude Code.
+daemon and writes `~/.config/shoal/config.toml` with commented defaults if it is
+missing; `shoal skill install` installs instructions for Codex and Claude Code.
 
 For directory navigation and tab completion, add this to your `.zshrc` or
 `.bashrc`, then run it in your current shell:

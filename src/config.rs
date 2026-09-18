@@ -66,6 +66,50 @@ mod tests {
     }
 
     #[test]
+    fn template_is_inert_and_every_commented_setting_is_valid() {
+        let paths = Paths {
+            home: "/home/test".into(),
+            state: "/separate/state".into(),
+            socket: "/separate/state/daemon.sock".into(),
+        };
+        let inert = Config::parse(TEMPLATE, &paths).unwrap();
+        assert!(inert.default_agent.is_none() && inert.simulators.profiles.is_empty());
+        let enabled: String = TEMPLATE
+            .lines()
+            .filter(|line| !line.starts_with("##"))
+            .map(|line| format!("{}\n", line.strip_prefix("# ").unwrap_or(line)))
+            .collect();
+        let config = Config::parse(&enabled, &paths).unwrap();
+        assert_eq!(config.default_agent, Some(crate::cli::Agent::Codex));
+        assert_eq!(config.auto_cleanup.idle_minutes, 10);
+        assert_eq!(config.ports.start, 49152);
+        assert!(config.simulators.profiles.contains_key("phone"));
+        assert!(config.resource_pools.contains_key("devices"));
+    }
+
+    #[test]
+    fn install_writes_the_template_once_and_keeps_edits() {
+        let home = tempfile::tempdir().unwrap();
+        let paths = Paths {
+            home: home.path().to_owned(),
+            state: home.path().join("state"),
+            socket: home.path().join("state/daemon.sock"),
+        };
+        let expected = home.path().join(".config/shoal/config.toml");
+        let (path, created) = Config::install_at(expected.clone()).unwrap();
+        assert!(created && path == expected);
+        assert_eq!(fs::read_to_string(&path).unwrap(), TEMPLATE);
+        fs::write(&path, "default_agent = 'claude'\n").unwrap();
+        let (same, created) = Config::install_at(expected.clone()).unwrap();
+        assert!(!created && same == expected);
+        let text = fs::read_to_string(&path).unwrap();
+        assert_eq!(
+            Config::parse(&text, &paths).unwrap().default_agent,
+            Some(crate::cli::Agent::Claude)
+        );
+    }
+
+    #[test]
     fn default_agent_accepts_agent_spellings_only() {
         use crate::{cli::Agent, happy::HappyAgent};
 
@@ -177,12 +221,42 @@ impl Config {
         Ok(path)
     }
 
-    pub fn load(paths: &Paths) -> Result<Self> {
-        let base = std::env::var_os("XDG_CONFIG_HOME")
+    /// `$XDG_CONFIG_HOME/shoal/config.toml`, or `~/.config/shoal/config.toml`.
+    pub fn path(paths: &Paths) -> PathBuf {
+        std::env::var_os("XDG_CONFIG_HOME")
             .map(PathBuf::from)
             .filter(|p| p.is_absolute())
-            .unwrap_or_else(|| paths.home.join(".config"));
-        let path = base.join("shoal/config.toml");
+            .unwrap_or_else(|| paths.home.join(".config"))
+            .join("shoal/config.toml")
+    }
+
+    /// Write the commented template unless a config file already exists.
+    /// Returns the path and whether this call created it.
+    pub fn install(paths: &Paths) -> Result<(PathBuf, bool)> {
+        Self::install_at(Self::path(paths))
+    }
+
+    fn install_at(path: PathBuf) -> Result<(PathBuf, bool)> {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
+        }
+        match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+        {
+            Ok(mut file) => {
+                std::io::Write::write_all(&mut file, TEMPLATE.as_bytes())
+                    .with_context(|| format!("write {}", path.display()))?;
+                Ok((path, true))
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => Ok((path, false)),
+            Err(error) => Err(error).with_context(|| format!("create {}", path.display())),
+        }
+    }
+
+    pub fn load(paths: &Paths) -> Result<Self> {
+        let path = Self::path(paths);
         let text = match fs::read_to_string(&path) {
             Ok(text) => text,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
@@ -190,8 +264,11 @@ impl Config {
             }
             Err(error) => return Err(error).with_context(|| format!("read {}", path.display())),
         };
-        let config: Self =
-            toml::from_str(&text).with_context(|| format!("parse {}", path.display()))?;
+        Self::parse(&text, paths).with_context(|| format!("parse {}", path.display()))
+    }
+
+    fn parse(text: &str, paths: &Paths) -> Result<Self> {
+        let config: Self = toml::from_str(text)?;
         config.root_dir(paths)?;
         ensure!(
             config.auto_cleanup.idle_minutes > 0 && config.auto_cleanup.idle_minutes <= 525600,
@@ -206,6 +283,59 @@ impl Config {
         Ok(config)
     }
 }
+
+/// Written by `shoal setup` when no config exists. Every setting is commented
+/// out at its default so the file changes nothing until edited.
+const TEMPLATE: &str = r##"## Shoal machine configuration. Settings are read per command; restart the
+## daemon (`shoal daemon restart`) after changing cleanup or port ranges.
+## Uncomment a line to change it. Repository settings (named ports, setup and
+## hook commands, resource pools) live in each repository's .shoal.toml.
+
+## Parent of every repository's workspaces and URL clones.
+# root_dir = "~/shoal"
+
+## Agent `shoal issue <url>` starts when --agent is omitted:
+## codex, claude, happy-claude, or happy-codex.
+# default_agent = "codex"
+
+# [codex]
+## `shoal codex` without cli/app: "cli" or "app".
+# default_mode = "cli"
+
+# [auto_cleanup]
+## Remove idle, clean, pushed or landed workspaces automatically.
+# enabled = true
+# idle_minutes = 10
+
+# [pr_cleanup]
+## Remove workspaces whose watched PR has merged.
+# enabled = true
+
+# [ports]
+## Range for automatic TCP port reservations.
+# start = 49152
+# end = 65535
+
+# [simulators]
+## Xcode simulator leases (macOS).
+# max_booted = 2
+# max_devices = 4
+# idle_seconds = 120
+# allow_any = false
+# default = "phone"
+# [simulators.profiles.phone]
+# device = "iPhone 17"
+# runtime = "iOS 26"
+
+## Cooperative permits shared across repositories; see the command reference.
+# [resources.signing]
+# capacity = 1
+# reason = "Signing service"
+# [resource_pools.devices]
+# capacity = 2
+# [resource_pools.devices.resources.alpha]
+# capacity = 1
+"##;
 
 #[derive(Debug, Deserialize)]
 #[serde(default, deny_unknown_fields)]
