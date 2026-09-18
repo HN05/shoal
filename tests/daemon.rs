@@ -369,7 +369,7 @@ esac
     };
     let output: Value = serde_json::from_slice(&run(&["--json", "setup"]).stdout).unwrap();
     let original = fs::read_to_string(&pid_path).unwrap();
-    // A missing global config is seeded once with commented defaults, then left alone.
+    // A missing global config is seeded once with the defaults, then left alone.
     let config = root.path().join(".config/shoal/config.toml");
     assert_eq!(output["config"], config.to_str().unwrap());
     assert_eq!(output["config_created"], true);

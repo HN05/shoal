@@ -71,7 +71,7 @@ pub(super) async fn setup(
     )?;
     if !ctx.json {
         if config_created {
-            println!("Wrote commented defaults to {}", config.display());
+            println!("Wrote the defaults to {}", config.display());
         }
         println!(
             "\nAdd this line to ~/.zshrc or ~/.bashrc for directory navigation and tab completion:\n\n{}",
@@ -86,11 +86,11 @@ pub(super) fn config(ctx: &Context, command: ConfigCommand) -> Result<i32> {
     let (config, backup) = crate::config::Config::reset(&ctx.paths)?;
     let message = match &backup {
         Some(backup) => format!(
-            "Moved your config to {}\nWrote commented defaults to {}",
+            "Moved your config to {}\nWrote the defaults to {}",
             backup.display(),
             config.display()
         ),
-        None => format!("Wrote commented defaults to {}", config.display()),
+        None => format!("Wrote the defaults to {}", config.display()),
     };
     ctx.emit(&message, json!({"config": config, "backup": backup}))?;
     Ok(0)

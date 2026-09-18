@@ -470,7 +470,7 @@ pub enum ShellCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum ConfigCommand {
-    /// Replace the config with the commented template; the old file becomes config.toml.backup.
+    /// Rewrite the config with the defaults; the old file becomes config.toml.backup.
     Reset,
 }
 

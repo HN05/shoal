@@ -66,23 +66,58 @@ mod tests {
     }
 
     #[test]
-    fn template_is_inert_and_every_commented_setting_is_valid() {
+    fn template_states_the_defaults_and_its_examples_are_valid() {
         let paths = Paths {
             home: "/home/test".into(),
             state: "/separate/state".into(),
             socket: "/separate/state/daemon.sock".into(),
         };
-        let inert = Config::parse(TEMPLATE, &paths).unwrap();
-        assert!(inert.default_agent.is_none() && inert.simulators.profiles.is_empty());
+        let written = Config::parse(TEMPLATE, &paths).unwrap();
+        let defaults = Config::default();
+        assert_eq!(
+            written.root_dir(&paths).unwrap(),
+            defaults.root_dir(&paths).unwrap()
+        );
+        assert_eq!(written.default_agent, None);
+        assert_eq!(written.codex.default_mode, defaults.codex.default_mode);
+        assert_eq!(written.auto_cleanup.enabled, defaults.auto_cleanup.enabled);
+        assert_eq!(
+            written.auto_cleanup.idle_minutes,
+            defaults.auto_cleanup.idle_minutes
+        );
+        assert_eq!(written.pr_cleanup.enabled, defaults.pr_cleanup.enabled);
+        assert_eq!(
+            (written.ports.start, written.ports.end),
+            (defaults.ports.start, defaults.ports.end)
+        );
+        assert_eq!(
+            (
+                written.simulators.max_booted,
+                written.simulators.max_devices,
+                written.simulators.idle_seconds,
+                written.simulators.allow_any
+            ),
+            (
+                defaults.simulators.max_booted,
+                defaults.simulators.max_devices,
+                defaults.simulators.idle_seconds,
+                defaults.simulators.allow_any
+            )
+        );
+        assert!(written.simulators.default.is_none() && written.simulators.profiles.is_empty());
+        assert!(written.resources.is_empty() && written.resource_pools.is_empty());
+        // Every commented example, uncommented, is a valid setting.
         let enabled: String = TEMPLATE
             .lines()
-            .filter(|line| !line.starts_with("##"))
-            .map(|line| format!("{}\n", line.strip_prefix("# ").unwrap_or(line)))
+            .map(|line| match line.strip_prefix("# ") {
+                Some(setting) if setting.starts_with('[') || setting.contains(" = ") => {
+                    format!("{setting}\n")
+                }
+                _ => format!("{line}\n"),
+            })
             .collect();
         let config = Config::parse(&enabled, &paths).unwrap();
         assert_eq!(config.default_agent, Some(crate::cli::Agent::Codex));
-        assert_eq!(config.auto_cleanup.idle_minutes, 10);
-        assert_eq!(config.ports.start, 49152);
         assert!(config.simulators.profiles.contains_key("phone"));
         assert!(config.resource_pools.contains_key("devices"));
     }
@@ -315,8 +350,8 @@ impl Config {
     }
 }
 
-/// Written by `shoal setup` when no config exists; the file explains itself.
-const TEMPLATE: &str = include_str!("../docs/config.toml");
+/// Written by `shoal setup` when no config exists: the defaults, stated.
+const TEMPLATE: &str = include_str!("../configs/default.toml");
 
 #[derive(Debug, Deserialize)]
 #[serde(default, deny_unknown_fields)]
