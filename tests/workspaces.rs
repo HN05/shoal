@@ -6083,3 +6083,266 @@ fn land_interruptions_stop_merge_drivers_and_restore_the_default_checkout() {
         assert!(path.exists());
     }
 }
+
+/// A stand-in for Happy's CLI that records how it was started, writes a line
+/// of output, and then waits to be stopped.
+fn install_fake_happy(fixture: &Fixture) -> PathBuf {
+    let bin = fixture.root.path().join("bin");
+    fs::create_dir_all(&bin).unwrap();
+    let script = bin.join("happy");
+    fs::write(
+        &script,
+        r#"#!/bin/sh
+{
+  printf 'cwd=%s\n' "$PWD"
+  printf 'args='; printf '%s\0' "$@"; printf '\n'
+  printf 'scope=%s\nexecution=%s\nworkspace=%s\nport=%s\n' "$SHOAL_SCOPE_TOKEN" "$SHOAL_EXECUTION_ID" "$SHOAL_WORKSPACE" "$SHOAL_PORT_WEB"
+  if read -r _line; then printf 'stdin=data\n'; else printf 'stdin=eof\n'; fi
+  test -t 1 && printf 'stdout=tty\n' || printf 'stdout=notty\n'
+} > "$HAPPY_RECORD"
+echo "hello from happy"
+echo "happy stderr" >&2
+sleep 300
+"#,
+    )
+    .unwrap();
+    fs::set_permissions(&script, fs::Permissions::from_mode(0o700)).unwrap();
+    fixture.root.path().join("happy-record")
+}
+
+fn process_alive(pid: u32) -> bool {
+    unsafe { libc::kill(pid as i32, 0) == 0 }
+}
+
+fn wait_until(what: &str, mut done: impl FnMut() -> bool) {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !done() {
+        assert!(Instant::now() < deadline, "timed out waiting for {what}");
+        thread::sleep(Duration::from_millis(20));
+    }
+}
+
+#[test]
+fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
+    let fixture = Fixture::new();
+    let record = install_fake_happy(&fixture);
+    let state_file = fixture.root.path().join(".happy/daemon.state.json");
+    for (operation, agent) in [("stop", "codex"), ("rm", "claude")] {
+        let name = format!("happy-{agent}");
+        let launch = if agent == "codex" {
+            // No Happy daemon state: warn, but launch anyway.
+            let output = fixture
+                .command()
+                .args([
+                    "--json",
+                    "add",
+                    fixture.repo.to_str().unwrap(),
+                    "--name",
+                    &name,
+                    "--agent",
+                    "happy-codex",
+                    "--",
+                    "--yolo",
+                ])
+                .env("HAPPY_RECORD", &record)
+                .output()
+                .unwrap();
+            assert!(output.status.success(), "{output:?}");
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert!(
+                stderr.contains("daemon.state.json") && stderr.contains("happy daemon start"),
+                "{stderr}"
+            );
+            let mut lines = output
+                .stdout
+                .split(|b| *b == b'\n')
+                .filter(|l| !l.is_empty());
+            let workspace: Value = serde_json::from_slice(lines.next().unwrap()).unwrap();
+            assert_eq!(workspace["name"], name);
+            let launch: Value = serde_json::from_slice(lines.next().unwrap()).unwrap();
+            assert!(lines.next().is_none());
+            assert_eq!(launch["happy_daemon_recorded"], false);
+            assert_eq!(launch["prompt_file"], Value::Null);
+            launch
+        } else {
+            let workspace = fixture.add(&name);
+            fixture.ok(&["port", "reserve", "web", &name, "--reason", "server"]);
+            fs::create_dir_all(state_file.parent().unwrap()).unwrap();
+            fs::write(&state_file, "{}").unwrap();
+            let output = fixture
+                .command()
+                .args(["--json", "happy", "claude", &name, "--", "--model", "test"])
+                .env("HAPPY_RECORD", &record)
+                .output()
+                .unwrap();
+            assert!(output.status.success(), "{output:?}");
+            assert_eq!(output.stderr, b"", "{output:?}");
+            let launch: Value = serde_json::from_slice(&output.stdout).unwrap();
+            assert_eq!(launch["workspace"]["id"], workspace["id"]);
+            assert_eq!(launch["happy_daemon_recorded"], true);
+            launch
+        };
+        assert_eq!(launch["agent"], agent);
+        let pid = launch["pid"].as_u64().unwrap() as u32;
+        let execution_id = launch["execution_id"].as_str().unwrap();
+        let log = PathBuf::from(launch["log"].as_str().unwrap());
+        assert!(log.starts_with(fixture.root.path().join("state/workspaces")));
+        let inspection = fixture.ok(&["inspect", &name]);
+        let executions = inspection["executions"].as_array().unwrap();
+        assert_eq!(executions.len(), 1, "{inspection}");
+        assert_eq!(executions[0]["id"], execution_id);
+        assert_eq!(executions[0]["group_id"], pid);
+        assert_eq!(executions[0]["state"], "running");
+        wait_until("fake happy record", || record.exists());
+        let recorded = fs::read_to_string(&record).unwrap();
+        let path = fs::canonicalize(inspection["workspace"]["path"].as_str().unwrap()).unwrap();
+        assert!(
+            recorded.contains(&format!("cwd={}\n", path.display())),
+            "{recorded}"
+        );
+        let expected_args = if agent == "codex" {
+            "args=codex\0--happy-starting-mode\0remote\0--started-by\0daemon\0--yolo\0\n"
+        } else {
+            "args=claude\0--happy-starting-mode\0remote\0--started-by\0daemon\0--model\0test\0\n"
+        };
+        assert!(recorded.contains(expected_args), "{recorded}");
+        assert!(recorded.contains(&format!("execution={execution_id}\n")));
+        assert!(recorded.contains(&format!("workspace={name}\n")));
+        assert!(!recorded.contains("scope=\n"), "{recorded}");
+        assert!(recorded.contains("stdin=eof\nstdout=notty\n"), "{recorded}");
+        if agent == "claude" {
+            let port = fixture.ok(&["port", "list", &name])[0]["port"]
+                .as_u64()
+                .unwrap();
+            assert!(recorded.contains(&format!("port={port}\n")), "{recorded}");
+        }
+        wait_until("happy output in the log", || {
+            fs::read_to_string(&log).is_ok_and(|text| text.contains("hello from happy"))
+        });
+        let text = fs::read_to_string(&log).unwrap();
+        assert!(text.starts_with("shoal: starting happy "), "{text}");
+        assert!(text.contains("happy stderr"), "{text}");
+        assert!(process_alive(pid));
+
+        fixture.ok(&[operation, &name]);
+        wait_until("happy to exit", || !process_alive(pid));
+        if operation == "stop" {
+            assert_eq!(
+                fixture.ok(&["inspect", &name])["executions"],
+                serde_json::json!([])
+            );
+            assert!(log.exists());
+            fixture.ok(&["rm", &name]);
+        }
+        assert!(
+            !log.parent().unwrap().exists(),
+            "workspace run data removed"
+        );
+        fs::remove_file(&record).unwrap();
+    }
+}
+
+#[test]
+fn happy_issue_prompts_reach_claude_and_are_saved_for_codex() {
+    let fixture = Fixture::new();
+    let record = install_fake_happy(&fixture);
+    let gh = fixture.root.path().join("bin/gh");
+    let title = "Fix API timeout";
+    let body = "Keep the connection alive.";
+    fs::write(
+        &gh,
+        format!(
+            "#!/bin/sh\nprintf '%s' '{}'\n",
+            serde_json::json!({"number": 34, "title": title, "body": body})
+        ),
+    )
+    .unwrap();
+    fs::set_permissions(&gh, fs::Permissions::from_mode(0o700)).unwrap();
+    git(
+        &fixture.repo,
+        &["remote", "add", "origin", "git@github.com:team/project.git"],
+    );
+    for agent in ["happy-claude", "happy-codex"] {
+        let output = fixture
+            .command()
+            .args([
+                "--json",
+                "add",
+                fixture.repo.to_str().unwrap(),
+                "--ref",
+                "HEAD",
+                "--issue",
+                "34",
+                "--agent",
+                agent,
+                "--",
+                "--model",
+                "test",
+            ])
+            .env("HAPPY_RECORD", &record)
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+        let launch: Value =
+            serde_json::from_slice(output.stdout.split(|b| *b == b'\n').nth(1).unwrap()).unwrap();
+        let name = launch["workspace"]["name"].as_str().unwrap().to_owned();
+        assert_eq!(name, "issue-34-fix-api-timeout");
+        wait_until("fake happy record", || record.exists());
+        let recorded = fs::read_to_string(&record).unwrap();
+        // The prompt spans lines; the record ends the NUL-separated list before `scope=`.
+        let args: Vec<&str> = recorded
+            .split_once("args=")
+            .unwrap()
+            .1
+            .split_once("\nscope=")
+            .unwrap()
+            .0
+            .split('\0')
+            .collect();
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if agent == "happy-claude" {
+            assert_eq!(
+                args[..5],
+                [
+                    "claude",
+                    "--happy-starting-mode",
+                    "remote",
+                    "--started-by",
+                    "daemon"
+                ]
+            );
+            assert!(
+                args[5].contains(title) && args[5].contains(body),
+                "{args:?}"
+            );
+            assert_eq!(args[6..8], ["--model", "test"]);
+            assert_eq!(launch["prompt_file"], Value::Null);
+            assert!(!stderr.contains("initial prompt"), "{stderr}");
+        } else {
+            assert_eq!(
+                args[..7],
+                [
+                    "codex",
+                    "--happy-starting-mode",
+                    "remote",
+                    "--started-by",
+                    "daemon",
+                    "--model",
+                    "test"
+                ]
+            );
+            let prompt_file = PathBuf::from(launch["prompt_file"].as_str().unwrap());
+            let prompt = fs::read_to_string(&prompt_file).unwrap();
+            assert!(prompt.contains(title) && prompt.contains(body), "{prompt}");
+            assert!(
+                stderr.contains("cannot take an initial prompt")
+                    && stderr.contains(prompt_file.to_str().unwrap()),
+                "{stderr}"
+            );
+        }
+        let pid = launch["pid"].as_u64().unwrap() as u32;
+        fixture.ok(&["rm", &name, "--yes", "--delete-branch"]);
+        wait_until("happy to exit", || !process_alive(pid));
+        fs::remove_file(&record).unwrap();
+    }
+}

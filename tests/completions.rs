@@ -98,6 +98,8 @@ fn dynamic_completion_covers_nested_commands_flags_and_paths_without_daemon() {
         (vec!["shoal", "codex", "a"], "app"),
         (vec!["shoal", "add", "--agent", "co"], "codex"),
         (vec!["shoal", "add", "--agent", "cl"], "claude"),
+        (vec!["shoal", "add", "--agent", "happy-cl"], "happy-claude"),
+        (vec!["shoal", "happy", "co"], "codex"),
         (vec!["shoal", "skill", "install", "co"], "codex"),
     ] {
         for shell in ["bash", "zsh"] {
