@@ -52,28 +52,35 @@ class PublishAssetsTests(unittest.TestCase):
             publish.plan([Path("shoal.tar.gz")], [])
 
     def test_github_creates_release_after_mirror_and_uploads(self):
-        env = {"RELEASE_REPOSITORY": "HN05/shoal", "RELEASE_TOKEN_GITHUB": "gh-token"}
+        env = {"RELEASE_REPOSITORY": "HN05/shoal", "RELEASE_TOKEN_GITHUB": "gh-token",
+               "RELEASE_API_URL": "https://forge/api/v1", "RELEASE_AUTOMATION_TOKEN": "forge-token"}
         created = dict(RELEASE, assets=[])
         missing = HTTPError("url", 404, "missing", {}, io.BytesIO())
         self.addCleanup(missing.close)
         with tempfile.TemporaryDirectory() as root, patch.dict(publish.os.environ, env), \
                 patch.object(publish, "mirrored") as mirrored, \
-                patch.object(publish, "request", side_effect=[missing, created, None, None]) as request:
+                patch.object(publish, "request", side_effect=[missing, {"body": "## Changes\n- Fix workspace cleanup"},
+                                                                    created, None, None]) as request:
             publish.github("v0.2.0", self.files(root, "shoal.tar.gz", "SHA256SUMS"), SHA)
             mirrored.assert_called_once_with("HN05/shoal", "v0.2.0", SHA)
-            create = request.call_args_list[1]
+            source = request.call_args_list[1]
+            self.assertEqual(source.args, ("https://forge/api/v1/repos/HN05/shoal/releases/tags/v0.2.0",
+                                           "forge-token", "token"))
+            create = request.call_args_list[2]
             self.assertEqual(create.args[0], "https://api.github.com/repos/HN05/shoal/releases")
             self.assertEqual(create.args[2], "Bearer")
             self.assertEqual(create.args[3]["tag_name"], "v0.2.0")
             self.assertFalse(create.args[3]["draft"])
-            upload = request.call_args_list[2]
+            self.assertEqual(create.args[3]["body"], "## Changes\n- Fix workspace cleanup")
+            upload = request.call_args_list[3]
             self.assertEqual(upload.args[0],
                              "https://uploads.github.com/repos/HN05/shoal/releases/9/assets?name=shoal.tar.gz")
             self.assertEqual(upload.args[3], b"binary shoal.tar.gz")
-            self.assertTrue(request.call_args_list[3].args[0].endswith("name=SHA256SUMS"))
+            self.assertTrue(request.call_args_list[4].args[0].endswith("name=SHA256SUMS"))
 
     def test_github_replaces_partial_uploads_reuses_complete_releases_and_rejects_drafts(self):
-        env = {"RELEASE_REPOSITORY": "HN05/shoal", "RELEASE_TOKEN_GITHUB": "gh-token"}
+        env = {"RELEASE_REPOSITORY": "HN05/shoal", "RELEASE_TOKEN_GITHUB": "gh-token",
+               "RELEASE_API_URL": "https://forge/api/v1", "RELEASE_AUTOMATION_TOKEN": "forge-token"}
         with tempfile.TemporaryDirectory() as root, patch.dict(publish.os.environ, env), \
                 patch.object(publish, "mirrored"), \
                 patch.object(publish, "request", side_effect=[RELEASE, None, None, None]) as request:

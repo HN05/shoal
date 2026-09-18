@@ -110,12 +110,12 @@ def github(tag, files, revision):
     except HTTPError as error:
         if error.code != 404:
             raise
+        source = request(os.environ["RELEASE_API_URL"].rstrip("/")
+                         + f"/repos/{repository}/releases/tags/{tag}",
+                         os.environ["RELEASE_AUTOMATION_TOKEN"], "token")
         release = request(base, token, "Bearer", {
             "tag_name": tag, "name": f"Shoal {version(tag)}", "draft": False, "prerelease": False,
-            "body": f"Shoal {version(tag)}.\n\nInstall or upgrade through the "
-                    "[HN05 Homebrew tap](https://github.com/HN05/homebrew-tap), or download a "
-                    "binary below. Development happens on "
-                    f"[git.henriknordvik.com](https://git.henriknordvik.com/{repository}).",
+            "body": source["body"],
         })
         print(f"created GitHub release {tag}")
     if release.get("draft") or release["tag_name"] != tag:

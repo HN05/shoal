@@ -11,6 +11,7 @@ import time
 import tomllib
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
+import release_notes
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -70,10 +71,13 @@ def validate():
 
 
 def api(path, data=None):
-    base = os.environ["RELEASE_API_URL"].rstrip("/")
-    token = os.environ["RELEASE_AUTOMATION_TOKEN"]
+    base = os.environ.get("RELEASE_API_URL", "https://git.henriknordvik.com/api/v1").rstrip("/")
+    token = os.environ.get("RELEASE_AUTOMATION_TOKEN")
+    headers = {"Content-Type": "application/json"}
+    if token:
+        headers["Authorization"] = f"token {token}"
     request = Request(base + path, data=json.dumps(data).encode() if data is not None else None,
-                      headers={"Authorization": f"token {token}", "Content-Type": "application/json"})
+                      headers=headers)
     with urlopen(request, timeout=60) as response:
         body = response.read()
         return json.loads(body) if body else None
@@ -146,13 +150,14 @@ def publish(version, dry_run, merged_commit=None):
 
 
 def create_release(version):
-    body = (f"Shoal {version}.\n\nInstall or upgrade through the "
-            "[HN05 Homebrew tap](https://github.com/HN05/homebrew-tap), or download a "
-            "prebuilt Linux or macOS binary below.")
+    repository = os.environ.get("RELEASE_REPOSITORY", "HN05/shoal")
+    server = os.environ.get("RELEASE_API_URL", "https://git.henriknordvik.com/api/v1")
+    url = server.rstrip("/").removesuffix("/api/v1") + "/" + repository
+    body = release_notes.generate(f"v{version}", git,
+                                  lambda path: api(f"/repos/{repository}{path}"), url)
     # CI calls repository endpoints directly; no user-profile/login API is needed.
     # Both paths reject an existing release instead of overwriting it.
     if os.environ.get("RELEASE_AUTOMATION_TOKEN"):
-        repository = os.environ["RELEASE_REPOSITORY"]
         api(f"/repos/{repository}/releases", {
             "name": f"Shoal {version}", "tag_name": f"v{version}",
             "body": body, "draft": False, "prerelease": False,

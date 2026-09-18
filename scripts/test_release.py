@@ -67,7 +67,8 @@ class ReleaseTests(unittest.TestCase):
     def test_ci_publishes_with_repository_api_without_cli_login(self):
         with patch.dict(release.os.environ, {"RELEASE_AUTOMATION_TOKEN": "test-token",
                                              "RELEASE_REPOSITORY": "HN05/shoal"}), \
-                patch.object(release, "api") as api, patch.object(release, "run") as run:
+                patch.object(release, "api") as api, patch.object(release, "run") as run, \
+                patch.object(release.release_notes, "generate", return_value="Changelog") as notes:
             release.create_release("0.2.0")
             run.assert_not_called()
             endpoint, payload = api.call_args.args
@@ -75,6 +76,10 @@ class ReleaseTests(unittest.TestCase):
             self.assertEqual(payload["tag_name"], "v0.2.0")
             self.assertFalse(payload["draft"])
             self.assertFalse(payload["prerelease"])
+            self.assertEqual(payload["body"], "Changelog")
+            self.assertEqual(notes.call_args.args[0], "v0.2.0")
+            notes.call_args.args[2]("/releases?limit=50&page=1")
+            self.assertEqual(api.call_args.args, ("/repos/HN05/shoal/releases?limit=50&page=1",))
 
 
 class ReleaseIntegrationTests(unittest.TestCase):
@@ -107,7 +112,8 @@ class ReleaseIntegrationTests(unittest.TestCase):
 
             with patch.object(release, "ROOT", checkout), patch.object(release, "run", run), \
                     patch.dict(release.os.environ, {"RELEASE_AUTOMATION_TOKEN": ""}), \
-                    patch.object(release, "validate") as validate:
+                    patch.object(release, "validate") as validate, \
+                    patch.object(release, "api", return_value=[]):
                 release.prepare(None, False)
                 self.assertEqual(command("git", "branch", "--show-current", cwd=checkout), "release/v0.1.1")
                 self.assertTrue(any(args[1:3] == ("pr", "create") for args in forge_calls))

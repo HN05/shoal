@@ -26,6 +26,8 @@ removal, check it against the rule those files state before judging it.
   reject other checkouts, never adopt the main checkout, and keep the default
   branch on removal unless deletion was explicit. Idle cleanup accepts commits
   retained on the local default branch as well as remote-tracking branches.
+- Releases are pinned to the merged version commit; changelogs use published
+  ancestor releases and merged PRs, and GitHub copies the Forgejo notes.
 - External tools are invoked with argument arrays, never shell strings.
   Terminal I/O stays in the execution wrapper; the daemon owns state.
 - Persistence: lifecycle enums keep their lowercase SQLite/JSON spelling and

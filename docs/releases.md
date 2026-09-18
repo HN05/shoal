@@ -5,7 +5,9 @@ In Forgejo, open **Actions → release → Run workflow**, select `main`, and en
 
 The workflow updates both Cargo versions, runs checks and a release build,
 creates and merges a version PR, validates the merged commit, and publishes its
-immutable tag and Forgejo release. Dependent jobs then work from that exact tag:
+immutable tag and Forgejo release. Notes list merged PRs since the nearest earlier
+published ancestor release, link referenced issues, and are copied to GitHub.
+Dependent jobs then work from that exact tag:
 both Homebrew taps are updated, `shoal-vX.Y.Z-<target>.tar.gz` is cross-built
 for Linux (static musl) and macOS on x86_64 and aarch64 and attached to the
 Forgejo release with a `SHA256SUMS` file, and the same release with the same

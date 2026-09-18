@@ -48,8 +48,9 @@ release channel (immutable tags, selected explicitly) and a `main` channel.
 Build and packaging logic lives in Shoal's `scripts/install-homebrew.sh`; the
 tap declares sources and dependencies. One Forgejo Actions workflow releases: it
 bumps versions, validates, creates and merges a version PR under normal branch
-protection, tags the exact merged commit, publishes the release, and from that
-tag updates both taps (Forgejo- and GitHub-sourced via a push mirror), attaches
+protection, tags the exact merged commit, publishes merged-PR notes since the
+nearest earlier published ancestor release with referenced issue links, and from
+that tag updates both taps (Forgejo- and GitHub-sourced via a push mirror), attaches
 cross-built Linux and macOS binaries, and recreates the release on GitHub, which
 mirrors do not carry. It never tags a later commit, downgrades, or force merges;
 tap updates retry against the tap's latest main without force pushes.
