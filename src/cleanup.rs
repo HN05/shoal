@@ -11,7 +11,9 @@ use std::{
 };
 use tokio::time::{Instant, sleep};
 
-use crate::{model::Workspace, state::WorkspaceState, workspace::Manager};
+use crate::{
+    model::Workspace, notifications::NotificationKind, state::WorkspaceState, workspace::Manager,
+};
 
 const SWEEP_INTERVAL: Duration = Duration::from_secs(30);
 
@@ -118,10 +120,23 @@ pub async fn sweep(manager: &Manager, timers: &mut Timers, idle: Option<Duration
         };
         if timers.observe(&workspace.id, snapshot, Instant::now(), delay) {
             if let Some(snapshot) = snapshot {
-                match manager.remove_idle(&workspace.id, snapshot).await {
-                    Ok(()) => eprintln!("auto cleanup removed {}", workspace.name),
-                    Err(error) => eprintln!("auto cleanup retained {}: {error:#}", workspace.name),
-                }
+                let (kind, message) = match manager.remove_idle(&workspace.id, snapshot).await {
+                    Ok(()) => {
+                        eprintln!("auto cleanup removed {}", workspace.name);
+                        (
+                            NotificationKind::WorkspaceRemoved,
+                            "removed by idle cleanup".to_owned(),
+                        )
+                    }
+                    Err(error) => {
+                        eprintln!("auto cleanup retained {}: {error:#}", workspace.name);
+                        (
+                            NotificationKind::CleanupFailed,
+                            format!("idle cleanup retained the workspace: {error:#}"),
+                        )
+                    }
+                };
+                manager.notify(Some(&workspace.name), kind, message).await;
             }
             timers.idle.remove(&workspace.id);
         }
@@ -140,10 +155,23 @@ async fn remove_deleted(manager: &Manager, workspace: &Workspace) {
             return;
         }
     }
-    match manager.remove_deleted(&workspace.id).await {
-        Ok(_) => eprintln!("forgot deleted worktree {}", workspace.name),
-        Err(error) => eprintln!("deleted worktree {} retained: {error:#}", workspace.name),
-    }
+    let (kind, message) = match manager.remove_deleted(&workspace.id).await {
+        Ok(_) => {
+            eprintln!("forgot deleted worktree {}", workspace.name);
+            (
+                NotificationKind::WorkspaceRemoved,
+                "forgotten after its directory was deleted; branch retained".to_owned(),
+            )
+        }
+        Err(error) => {
+            eprintln!("deleted worktree {} retained: {error:#}", workspace.name);
+            (
+                NotificationKind::CleanupFailed,
+                format!("deleted worktree retained: {error:#}"),
+            )
+        }
+    };
+    manager.notify(Some(&workspace.name), kind, message).await;
 }
 
 pub async fn run(manager: Arc<Manager>, idle: Option<Duration>) {

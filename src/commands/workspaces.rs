@@ -84,6 +84,7 @@ pub(super) async fn diff(ctx: &Context, workspace: Option<String>) -> Result<i32
         &ctx.paths,
         base.workspace_id,
         vec!["git".into(), "diff".into(), base.commit.into(), "--".into()],
+        None,
     )
     .await
 }
@@ -377,6 +378,22 @@ pub(super) async fn list(ctx: &Context) -> Result<i32> {
             println!("{}", ui::workspace_label(workspace));
         }
     })?;
+    // A pointer for humans; agents cannot read notifications and JSON stays clean.
+    if !ctx.json
+        && !env::is_scoped()
+        && let Ok(Some(status)) = client::status(&ctx.paths).await
+        && status.unread_notifications > 0
+    {
+        eprintln!(
+            "{} new notification{}; run shoal notifications",
+            status.unread_notifications,
+            if status.unread_notifications == 1 {
+                ""
+            } else {
+                "s"
+            }
+        );
+    }
     Ok(0)
 }
 
@@ -509,7 +526,7 @@ pub(super) async fn exec(
     command: Vec<OsString>,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    execution::run(&ctx.paths, workspace, command).await
+    execution::run(&ctx.paths, workspace, command, None).await
 }
 
 pub(super) async fn claude(
@@ -524,7 +541,13 @@ pub(super) async fn claude(
         .chain(args)
         .chain(["--remote-control".into(), inspection.workspace.name.into()])
         .collect();
-    execution::run(&ctx.paths, inspection.workspace.id, command).await
+    execution::run(
+        &ctx.paths,
+        inspection.workspace.id,
+        command,
+        Some("claude".into()),
+    )
+    .await
 }
 
 /// Mark the workspace trusted in Claude Code's config so a launch, attached or
@@ -563,7 +586,7 @@ pub(super) async fn codex(
             "--ask-for-approval=never".into(),
         ])
         .collect();
-    execution::run(&ctx.paths, workspace, command).await
+    execution::run(&ctx.paths, workspace, command, Some("codex".into())).await
 }
 
 /// Start a Happy session the way Happy's own daemon does, so it registers with
@@ -630,6 +653,7 @@ pub(super) async fn happy(
         command,
         &happy::client::RECONNECT_ENV,
         &env,
+        Some(&format!("happy {}", agent.name())),
     )
     .await
     {

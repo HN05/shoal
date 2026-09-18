@@ -2,6 +2,7 @@
 //! daemon modules own lifecycle and allocation policy.
 mod issues;
 mod menu;
+mod notifications;
 mod ports;
 mod recovery;
 mod repositories;
@@ -98,6 +99,9 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         } => workspaces::pr(&ctx, workspace, url, clear).await,
         Command::Merged { workspace } => workspaces::pr(&ctx, workspace, None, false).await,
         Command::Inspect { workspace } => workspaces::inspect(&ctx, workspace).await,
+        Command::Notifications { all, follow, limit } => {
+            notifications::run(&ctx, all, follow, limit).await
+        }
         Command::Stop { workspace } => workspaces::stop(&ctx, workspace).await,
         Command::Rm {
             workspace,
@@ -122,8 +126,11 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         Command::DetachedInternal {
             workspace,
             log,
+            agent,
             command,
-        } => crate::execution::run_detached_wrapper(&ctx.paths, workspace, log, command).await,
+        } => {
+            crate::execution::run_detached_wrapper(&ctx.paths, workspace, log, command, agent).await
+        }
         Command::Port { command } => ports::run(&ctx, command).await,
         Command::Ports { workspace } => ports::overview(&ctx, workspace).await,
         Command::Resource { command } => resources::run(&ctx, command).await,

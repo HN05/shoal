@@ -168,6 +168,14 @@ the first message once the session is alive, keeping a copy on disk when that
 fails. Shoal reads Happy's credentials only for this and stores none. A Happy-side
 pre-spawn hook asking Shoal for a workspace was considered and not adopted.
 
+Notifications stay in the terminal: the daemon records what a user would
+otherwise miss (busy resources and who holds them, port conflicts, exits of
+shortcut-launched agents, workspaces it removed or retained on its own) and the
+CLI shows them once, on request or as a followed stream; `list` and `daemon
+status` only count them. Recording never fails the operation it describes,
+repeated polled conflicts collapse until read, and scoped processes cannot read
+them. Desktop or push delivery was considered and not adopted.
+
 The skill is installed at user scope for Codex and Claude, independent of the
 daemon and never from a scoped execution; its availability registers nothing.
 

@@ -18,6 +18,7 @@ mod happy;
 mod hooks;
 mod merge;
 mod model;
+mod notifications;
 mod paths;
 mod ports;
 mod pr;

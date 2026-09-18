@@ -3,7 +3,10 @@ use anyhow::{Context, Result, ensure};
 use rusqlite::OptionalExtension;
 use serde::{Deserialize, Serialize};
 
-use crate::{forge::ForgeRepo, git, model::Workspace, repository, store, workspace::Manager};
+use crate::{
+    forge::ForgeRepo, git, model::Workspace, notifications::NotificationKind, repository, store,
+    workspace::Manager,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Registration {
@@ -99,20 +102,45 @@ impl Manager {
             let Some(mut registration) = self.pr_registration(&workspace.id).await? else {
                 continue;
             };
-            let result: Result<()> = async {
+            // `Ok(true)` once the workspace is removed; `Ok(false)` while the PR is open.
+            let result: Result<bool> = async {
                 self.verify_worktree(&workspace).await?;
                 let head = current_head(&workspace).await?;
                 if let Some(url) = &registration.url {
                     let (forge, number) = self.pr_forge(&workspace, url).await?;
-                    let Some(commits) = forge.merged_commits(&workspace.path, number, &workspace.branch).await? else { return Ok(()); };
+                    let Some(commits) = forge.merged_commits(&workspace.path, number, &workspace.branch).await? else { return Ok(false); };
                     ensure!(commits.contains(&head), "merged PR does not contain the current workspace commit; retaining workspace");
                 } else {
                     ensure!(registration.head.as_deref() == Some(&head), "HEAD changed after the merge acknowledgement; retaining workspace");
                 }
                 self.remove_merged(&workspace.id, &head).await?;
                 eprintln!("PR cleanup removed {}", workspace.name);
-                Ok(())
+                Ok(true)
             }.await;
+            match &result {
+                Ok(true) => {
+                    let cause = if registration.url.is_some() {
+                        "removed after its pull request merged"
+                    } else {
+                        "removed after the merge acknowledgement"
+                    };
+                    self.notify(
+                        Some(&workspace.name),
+                        NotificationKind::WorkspaceRemoved,
+                        cause,
+                    )
+                    .await;
+                }
+                Ok(false) => {}
+                Err(error) => {
+                    self.notify(
+                        Some(&workspace.name),
+                        NotificationKind::CleanupFailed,
+                        format!("PR cleanup retained the workspace: {error:#}"),
+                    )
+                    .await;
+                }
+            }
             registration.error = result.err().map(|error| format!("{error:#}"));
             let id = workspace.id;
             self.store

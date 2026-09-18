@@ -62,6 +62,7 @@ shoal codex app fix-login      # Open in the Codex desktop app
 shoal happy claude fix-login   # Detached Happy session, visible in the Happy app
 shoal diff fix-login           # Changes since the branch's fork point
 shoal inspect fix-login       # Workspace details
+shoal notifications           # Conflicts, finished agents, and removals you missed
 shoal stop fix-login          # Stop managed commands; keep the workspace
 shoal rm fix-login            # Remove the workspace
 shoal pr https://github.com/owner/repo/pull/42  # Remove when merged

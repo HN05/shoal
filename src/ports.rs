@@ -10,6 +10,7 @@ use std::{
 use crate::{
     env,
     model::{PortOverview, PortReservation, PortSuggestion},
+    notifications::NotificationKind,
     repo_config::ConflictPolicy,
     store, validate,
     workspace::Manager,
@@ -133,7 +134,9 @@ impl Manager {
         }
         self.touch(&workspace.id).await;
         let range = self.config.ports;
-        self.store
+        let workspace_name = workspace.name.clone();
+        let (outcome, conflict) = self
+            .store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
                 store::require_ready(&tx, &workspace.id)?;
@@ -156,7 +159,7 @@ impl Manager {
                         reservation.reason = Some(reason);
                     }
                     tx.commit()?;
-                    return Ok(ReserveOutcome::Reserved(reservation));
+                    return Ok((ReserveOutcome::Reserved(reservation), None));
                 }
                 let env_var = env_var.unwrap_or(default_env);
                 ensure!(
@@ -186,33 +189,53 @@ impl Manager {
                         };
                         if let Some(requested_port) = preferred {
                             if matches!(policy, ConflictPolicy::Suggest) {
-                                return Ok(ReserveOutcome::Suggested(PortSuggestion {
-                                    workspace_id: workspace.id,
-                                    name,
-                                    requested_port,
-                                    suggested_port: port,
-                                    env_var,
-                                    reason,
-                                }));
+                                let conflict =
+                                    format!("port {name}: {requested_port} is in use; suggested {port}");
+                                return Ok((
+                                    ReserveOutcome::Suggested(PortSuggestion {
+                                        workspace_id: workspace.id,
+                                        name,
+                                        requested_port,
+                                        suggested_port: port,
+                                        env_var,
+                                        reason,
+                                    }),
+                                    Some(conflict),
+                                ));
                             }
                         }
                         port
                     }
                 };
+                let conflict = preferred.filter(|requested| *requested != port).map(|requested| {
+                    format!("port {name}: {requested} is in use; reserved {port} instead")
+                });
                 tx.execute(
                     "INSERT INTO ports (workspace_id,name,port,env_var,reason) VALUES (?1,?2,?3,?4,?5)",
                     params![workspace.id, name, port, env_var, reason],
                 )?;
                 tx.commit()?;
-                Ok(ReserveOutcome::Reserved(PortReservation {
-                    workspace_id: workspace.id,
-                    name,
-                    port,
-                    env_var,
-                    reason,
-                }))
+                Ok((
+                    ReserveOutcome::Reserved(PortReservation {
+                        workspace_id: workspace.id,
+                        name,
+                        port,
+                        env_var,
+                        reason,
+                    }),
+                    conflict,
+                ))
             })
-            .await
+            .await?;
+        if let Some(conflict) = conflict {
+            self.notify(
+                Some(&workspace_name),
+                NotificationKind::PortConflict,
+                conflict,
+            )
+            .await;
+        }
+        Ok(outcome)
     }
 
     pub async fn port_overview(&self, selector: &str) -> Result<PortOverview> {

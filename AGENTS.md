@@ -23,6 +23,10 @@ when behavior changes, distinguishing decisions from proposals.
   in the daemon and deny `shoal pull`, `shoal land` and lifecycle/repository/service
   administration; own-workspace PR watches/merge acknowledgements are allowed.
   Scope is cooperative, not a boundary against hostile same-user processes.
+- Notifications are daemon records the CLI shows: record them where the daemon
+  decides (busy resources, port conflicts, agent-shortcut exits, its own
+  removals), never fail the operation for one, collapse repeated polled events
+  until read, and deny them to scoped callers.
 - Agents may merge any local or remote branch into their own recorded workspace
   branch with `shoal merge`. A local source is first fast-forwarded from its
   upstream by the daemon under the `pull` rules, except sources without an

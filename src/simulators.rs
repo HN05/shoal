@@ -285,9 +285,18 @@ impl Manager {
         } else {
             None
         };
+        let workspace_name = workspace.name.clone();
         let result = self
             .allocate_simulator(workspace, request, &mut audit)
             .await;
+        if let Ok(Acquisition::Busy(message)) = &result {
+            self.notify(
+                Some(&workspace_name),
+                crate::notifications::NotificationKind::ResourceBusy,
+                format!("simulator: {message}"),
+            )
+            .await;
+        }
         if let Some(mut audit) = audit {
             audit.updated_at = now();
             match &result {

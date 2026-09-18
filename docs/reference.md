@@ -7,6 +7,7 @@ Start with the [usage guide](../README.md).
 - [Workspaces](#workspaces)
 - [Setup and hooks](#workspace-setup-and-hooks)
 - [Removal and cleanup](#remove-a-workspace)
+- [Notifications](#notifications)
 - [Ports](#port-reservations)
 - [Shell integration](#shell-navigation)
 - [Recovery](#recovery)
@@ -392,6 +393,27 @@ idle_minutes = 10
 ```
 
 Restart the daemon after changing this.
+
+### Notifications
+
+```sh
+shoal notifications            # New since last shown, oldest first; then marked read
+shoal notifications --all      # Recent ones including read (--limit, default 50)
+shoal notifications --follow   # Keep printing as the daemon records them
+```
+
+The daemon records what happens while you are not looking: a resource or
+simulator request that found no capacity (naming the workspaces holding the
+pool), a preferred port in use, an agent started with `claude`, `codex cli`, or
+`happy` exiting (with its code, or a note to reconcile when it left processes
+behind), and workspaces it removed or retained on its own through PR, merge, or
+idle cleanup. Each line shows the local time, the workspace, and the message;
+`--json` returns records with `kind`, `created_at`, and `read`. Repeated
+identical conflicts and cleanup failures collapse into one entry until read;
+every agent exit is listed. `shoal list` and `daemon status` mention pending
+ones. Plain `exec` commands and manual `rm` are your own and record nothing.
+Scoped commands cannot read notifications. The newest 500 read entries are kept.
+
 ### Port reservations
 
 ```sh
@@ -483,7 +505,7 @@ PR watches and merge acknowledgements are own-workspace scope exceptions.
 Commands launched through `exec`, `claude`, `codex cli`, and `happy` carry a scope
 token that confines them to their own worktree: inspect, execute, `merge`, `diff`,
 and resources. They cannot `pull`, `land`, reach other worktrees, remove workspaces,
-administer repositories, or control the daemon; nested commands keep the scope. Scope is cooperative and does not
+read notifications, administer repositories, or control the daemon; nested commands keep the scope. Scope is cooperative and does not
 restrict direct filesystem or Git operations.
 
 ## Simulators (macOS)

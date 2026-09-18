@@ -69,9 +69,15 @@ impl Mode {
     }
 }
 
-pub async fn run(paths: &Paths, workspace: String, command: Vec<OsString>) -> Result<i32> {
+/// `agent` names a Shoal agent shortcut; the daemon tells the user when it exits.
+pub async fn run(
+    paths: &Paths,
+    workspace: String,
+    command: Vec<OsString>,
+    agent: Option<String>,
+) -> Result<i32> {
     ensure!(!command.is_empty(), "a command is required after --");
-    run_tracked(paths, workspace, command, Mode::Command).await
+    run_tracked(paths, workspace, command, Mode::Command, agent).await
 }
 
 /// The background half of a detached launch: an ordinary tracked wrapper whose
@@ -82,16 +88,17 @@ pub async fn run_detached_wrapper(
     workspace: String,
     log: PathBuf,
     command: Vec<OsString>,
+    agent: Option<String>,
 ) -> Result<i32> {
     ensure!(!command.is_empty(), "a command is required after --");
-    run_tracked(paths, workspace, command, Mode::Detached { log }).await
+    run_tracked(paths, workspace, command, Mode::Detached { log }, agent).await
 }
 
 /// Start `command` in `workspace` as a tracked execution that outlives this
 /// process: a new session running this binary's detached wrapper, with the
 /// command's output in `log`, the inherited `clear` variables removed and
-/// `env` added to its environment. Returns once the daemon has recorded the
-/// launch.
+/// `env` added to its environment, and `agent` naming the shortcut for the
+/// exit notification. Returns once the daemon has recorded the launch.
 pub async fn launch_detached(
     paths: &Paths,
     workspace: &Workspace,
@@ -99,6 +106,7 @@ pub async fn launch_detached(
     command: Vec<OsString>,
     clear: &[&str],
     env: &[(&str, String)],
+    agent: Option<&str>,
 ) -> Result<DetachedLaunch> {
     ensure!(workspace.path.is_dir(), "workspace directory is missing");
     if let Some(parent) = log.parent() {
@@ -126,7 +134,11 @@ pub async fn launch_detached(
         .arg("detached-internal")
         .arg(&workspace.id)
         .arg("--log")
-        .arg(&log)
+        .arg(&log);
+    if let Some(agent) = agent {
+        wrapper.arg("--agent").arg(agent);
+    }
+    wrapper
         .arg("--")
         .args(&command)
         .stdin(Stdio::null())
@@ -183,11 +195,11 @@ fn log_tail(log: &Path) -> String {
 }
 
 pub async fn land(paths: &Paths, workspace: String, json: bool) -> Result<i32> {
-    run_tracked(paths, workspace, vec![], Mode::Land { json }).await
+    run_tracked(paths, workspace, vec![], Mode::Land { json }, None).await
 }
 
 pub async fn prepare(paths: &Paths, workspace: String, json: bool) -> Result<i32> {
-    run_tracked(paths, workspace, vec![], Mode::Setup { json }).await
+    run_tracked(paths, workspace, vec![], Mode::Setup { json }, None).await
 }
 
 async fn run_tracked(
@@ -195,12 +207,17 @@ async fn run_tracked(
     workspace: String,
     command: Vec<OsString>,
     mode: Mode,
+    agent: Option<String>,
 ) -> Result<i32> {
     let wrapper = process_identity::capture(std::process::id())?
         .context("cannot identify execution wrapper")?;
     let method = match mode {
         Mode::Setup { .. } => Method::Prepare { workspace, wrapper },
-        Mode::Command | Mode::Detached { .. } => Method::Execute { workspace, wrapper },
+        Mode::Command | Mode::Detached { .. } => Method::Execute {
+            workspace,
+            wrapper,
+            agent,
+        },
         Mode::Land { .. } => Method::LandWorkspace { workspace, wrapper },
     };
     let start_timeout = if matches!(mode, Mode::Land { .. }) {

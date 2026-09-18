@@ -83,7 +83,17 @@ pub(super) async fn run(ctx: Context, command: DaemonCommand) -> Result<i32> {
             let running = status.is_some();
             let message = status
                 .as_ref()
-                .map(|s| format!("Daemon running (PID {}, version {})", s.pid, s.version))
+                .map(|s| {
+                    format!(
+                        "Daemon running (PID {}, version {}{})",
+                        s.pid,
+                        s.version,
+                        match s.unread_notifications {
+                            0 => String::new(),
+                            n => format!(", {n} new notifications"),
+                        }
+                    )
+                })
                 .unwrap_or_else(|| "Daemon is not running".into());
             ctx.emit(
                 &message,

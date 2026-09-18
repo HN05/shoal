@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use uuid::Uuid;
 
-use crate::{state::states, store, validate, workspace::Manager};
+use crate::{notifications::NotificationKind, state::states, store, validate, workspace::Manager};
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -206,6 +206,26 @@ fn row_lease(row: &rusqlite::Row<'_>) -> rusqlite::Result<ResourceLease> {
     })
 }
 
+/// `; held by a, b` naming the workspaces with leases in the pool, for the
+/// busy message and the notification the user sees.
+fn holders(db: &Connection, active: &[&ResourceLease]) -> Result<String> {
+    let ids: BTreeSet<&str> = active.iter().map(|l| l.workspace_id.as_str()).collect();
+    let mut names = Vec::with_capacity(ids.len());
+    for id in ids {
+        let name: Option<String> = db
+            .query_row("SELECT name FROM workspaces WHERE id=?1", [id], |row| {
+                row.get(0)
+            })
+            .optional()?;
+        names.push(name.unwrap_or_else(|| id.to_owned()));
+    }
+    Ok(if names.is_empty() {
+        String::new()
+    } else {
+        format!("; held by {}", names.join(", "))
+    })
+}
+
 pub fn leases(db: &Connection, owner: Option<&str>) -> Result<Vec<ResourceLease>> {
     Ok(db
         .prepare(
@@ -378,7 +398,9 @@ impl Manager {
         let (scope, definition) = definitions
             .remove(&request.pool)
             .ok_or_else(|| anyhow::anyhow!("unknown resource or pool: {}", request.pool))?;
-        self.store
+        let workspace_name = workspace.name.clone();
+        let acquisition = self
+            .store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
                 store::require_ready(&tx, &workspace.id)?;
@@ -416,9 +438,10 @@ impl Manager {
                     select_member(&definition, &request, &active, pool_available)?
                 else {
                     return Ok(Acquisition::Busy(format!(
-                        "no compatible capacity for {} in pool {}",
+                        "no compatible capacity for {} in pool {}{}",
                         request.resource.as_deref().unwrap_or("any resource"),
-                        request.pool
+                        request.pool,
+                        holders(&tx, &active)?
                     )));
                 };
                 let lease = ResourceLease {
@@ -452,7 +475,16 @@ impl Manager {
                 tx.commit()?;
                 Ok(Acquisition::Acquired(lease))
             })
-            .await
+            .await?;
+        if let Acquisition::Busy(message) = &acquisition {
+            self.notify(
+                Some(&workspace_name),
+                NotificationKind::ResourceBusy,
+                message.clone(),
+            )
+            .await;
+        }
+        Ok(acquisition)
     }
 
     pub async fn list_resources(&self, selector: Option<&str>) -> Result<Vec<ResourceLease>> {

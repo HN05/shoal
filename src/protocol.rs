@@ -9,6 +9,7 @@ use crate::{
         DiffBase, ExecutionPlan, Inspection, PortOverview, PortReservation, PortSuggestion,
         PulledBranch, Repository, RepositoryRemoval, Workspace,
     },
+    notifications::Notification,
     ports::PortRequest,
     process_identity::Identity,
     recovery::{ReconcileOptions, Report},
@@ -19,7 +20,7 @@ use crate::{
     simulators::{SimRequest, Simulator, SimulatorCatalog},
 };
 
-pub const VERSION: u32 = 21;
+pub const VERSION: u32 = 22;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -131,15 +132,29 @@ pub enum Method {
         workspace: String,
     },
     /// Long-lived: the connection stays open for the execution's lifetime.
+    /// `agent` names a Shoal agent shortcut whose exit the user is told about.
     Execute {
         workspace: String,
         wrapper: Identity,
+        #[serde(default)]
+        agent: Option<String>,
     },
     /// Like [`Method::Execute`], running the configured setup command.
     Prepare {
         workspace: String,
         wrapper: Identity,
     },
+    // Notifications.
+    ListNotifications {
+        unread_only: bool,
+        limit: u32,
+    },
+    MarkNotificationsRead {
+        through: i64,
+    },
+    /// Long-lived: unread notifications, then new ones as they are recorded,
+    /// each as a [`Body::Notification`] response and marked read on delivery.
+    WatchNotifications,
     // Ports.
     ReservePort {
         workspace: String,
@@ -232,6 +247,8 @@ pub enum Body {
     DiffBase(DiffBase),
     Hooks(Hooks),
     PulledBranch(PulledBranch),
+    Notifications(Vec<Notification>),
+    Notification(Notification),
     Port(PortReservation),
     Ports(Vec<PortReservation>),
     PortSuggestion(PortSuggestion),
@@ -262,6 +279,7 @@ pub struct Status {
     pub version: String,
     pub uptime_secs: u64,
     pub managed: bool,
+    pub unread_notifications: u64,
 }
 
 /// Wrapper → daemon messages after an [`Method::Execute`] response.

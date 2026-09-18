@@ -18,6 +18,7 @@ use tokio::{
 };
 
 use crate::{
+    notifications::NotificationKind,
     paths::Paths,
     ports::ReserveOutcome,
     process_identity::Identity,
@@ -175,22 +176,49 @@ async fn serve(mut stream: UnixStream, server: Server) -> Result<()> {
                 wrapper,
                 server.manager,
                 ExecutionKind::Land,
+                None,
             )
             .await;
         }
-        Method::Execute { workspace, wrapper } => {
+        Method::Execute {
+            workspace,
+            wrapper,
+            agent,
+        } => {
             let kind = ExecutionKind::Command;
-            return execute(stream, request.id, workspace, wrapper, server.manager, kind).await;
+            return execute(
+                stream,
+                request.id,
+                workspace,
+                wrapper,
+                server.manager,
+                kind,
+                agent,
+            )
+            .await;
         }
         Method::Prepare { workspace, wrapper } => {
             let kind = ExecutionKind::Setup;
-            return execute(stream, request.id, workspace, wrapper, server.manager, kind).await;
+            return execute(
+                stream,
+                request.id,
+                workspace,
+                wrapper,
+                server.manager,
+                kind,
+                None,
+            )
+            .await;
+        }
+        Method::WatchNotifications => {
+            return watch_notifications(stream, request.id, server.manager).await;
         }
         Method::Status => Body::Status(Status {
             pid: std::process::id(),
             version: env!("CARGO_PKG_VERSION").into(),
             uptime_secs: server.started.elapsed().as_secs(),
             managed: server.managed,
+            unread_notifications: server.manager.unread_notifications().await?,
         }),
         Method::Shutdown if server.managed => Body::error(
             "managed_service",
@@ -216,7 +244,8 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         | Method::Shutdown
         | Method::Execute { .. }
         | Method::Prepare { .. }
-        | Method::LandWorkspace { .. } => {
+        | Method::LandWorkspace { .. }
+        | Method::WatchNotifications => {
             anyhow::bail!("unsupported operation")
         }
         Method::ListRepositories => {
@@ -308,6 +337,13 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::WorkspaceHooks { workspace } => {
             Body::Hooks(manager.workspace_hooks(&workspace).await?)
         }
+        Method::ListNotifications { unread_only, limit } => {
+            Body::Notifications(manager.notifications(unread_only, limit).await?)
+        }
+        Method::MarkNotificationsRead { through } => {
+            manager.mark_notifications_read(through).await?;
+            Body::Ok
+        }
         Method::ReservePort {
             workspace,
             name,
@@ -376,8 +412,37 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
     })
 }
 
+/// Long-lived notification stream: the unread backlog, then each new
+/// notification as it is recorded, until the client hangs up.
+async fn watch_notifications(
+    mut stream: UnixStream,
+    request_id: u64,
+    manager: Arc<Manager>,
+) -> Result<()> {
+    let mut changed = manager.notifications_changed.subscribe();
+    protocol::write(&mut stream, &Response::new(request_id, Body::Ok)).await?;
+    let (mut reader, mut writer) = stream.split();
+    let mut delivered = 0;
+    loop {
+        let batch = manager.notifications_after(delivered, 100).await?;
+        for notification in batch {
+            delivered = notification.id;
+            let response = Response::new(request_id, Body::Notification(notification));
+            protocol::write(&mut writer, &response).await?;
+            manager.mark_notifications_read(delivered).await?;
+        }
+        let mut closed = [0u8; 1];
+        tokio::select! {
+            recorded = changed.changed() => recorded?,
+            // The client never writes; a read completes only when it hangs up.
+            _ = tokio::io::AsyncReadExt::read(&mut reader, &mut closed) => return Ok(()),
+        }
+    }
+}
+
 /// Long-lived execution connection: register the wrapper's child, relay stop
-/// requests, and record completion when the wrapper reports it.
+/// requests, and record completion when the wrapper reports it. `agent` names
+/// a shortcut-launched agent whose exit becomes a notification.
 async fn execute(
     mut stream: UnixStream,
     request_id: u64,
@@ -385,6 +450,7 @@ async fn execute(
     wrapper: Identity,
     manager: Arc<Manager>,
     kind: ExecutionKind,
+    agent: Option<String>,
 ) -> Result<()> {
     let landing = async {
         if kind != ExecutionKind::Land {
@@ -426,6 +492,7 @@ async fn execute(
     };
     plan.land = land.map(Box::new);
     let execution_id = plan.id.clone();
+    let workspace_name = plan.workspace.name.clone();
     let (mut reader, mut writer) = stream.split();
     let result = async {
         protocol::write(
@@ -463,6 +530,22 @@ async fn execute(
     let complete = manager
         .finish_execution(execution_id, kind, result.as_ref().ok().copied())
         .await?;
+    if let Some(agent) = agent {
+        let message = match &result {
+            Ok(code) if complete => format!("{agent} exited with code {code}"),
+            Ok(code) => format!(
+                "{agent} exited with code {code}, leaving processes behind; run shoal reconcile"
+            ),
+            Err(_) => format!("{agent} disconnected without reporting; run shoal reconcile"),
+        };
+        manager
+            .notify(
+                Some(&workspace_name),
+                NotificationKind::AgentExited,
+                message,
+            )
+            .await;
+    }
     if result.is_ok() {
         protocol::write(&mut writer, &Control::Finished { complete }).await?;
     }

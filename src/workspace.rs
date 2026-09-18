@@ -42,6 +42,8 @@ pub struct Manager {
     connections: Mutex<HashMap<String, watch::Sender<bool>>>,
     /// Per-workspace activity counters folded into cleanup fingerprints.
     activity: Mutex<HashMap<String, u64>>,
+    /// The newest recorded notification ID; wakes `shoal notifications --follow`.
+    pub(crate) notifications_changed: watch::Sender<i64>,
 }
 
 impl Manager {
@@ -61,6 +63,7 @@ impl Manager {
             scopes: Mutex::new(HashMap::new()),
             connections: Mutex::new(HashMap::new()),
             activity: Mutex::new(HashMap::new()),
+            notifications_changed: watch::channel(0).0,
         }))
     }
 

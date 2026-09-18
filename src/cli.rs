@@ -141,6 +141,17 @@ pub enum Command {
     Ports { workspace: Option<String> },
     /// Inspect a workspace and its executions.
     Inspect { workspace: Option<String> },
+    /// Show what happened while you were away: conflicts, finished agents, removed workspaces.
+    Notifications {
+        /// Include notifications already shown.
+        #[arg(long, conflicts_with = "follow")]
+        all: bool,
+        /// Keep printing new notifications as the daemon records them.
+        #[arg(long)]
+        follow: bool,
+        #[arg(long, default_value_t = 50, value_parser = clap::value_parser!(u32).range(1..=200))]
+        limit: u32,
+    },
     /// Inspect interrupted executions/worktrees; optionally repair verified state.
     Reconcile {
         workspace: Option<String>,
@@ -215,6 +226,8 @@ pub enum Command {
         workspace: String,
         #[arg(long)]
         log: PathBuf,
+        #[arg(long)]
+        agent: Option<String>,
         #[arg(last = true, required = true)]
         command: Vec<OsString>,
     },

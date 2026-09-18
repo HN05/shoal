@@ -36,7 +36,7 @@ pub async fn run(
     if local {
         command.push("--local".into());
     }
-    execution::run(&ctx.paths, workspace, command).await
+    execution::run(&ctx.paths, workspace, command, None).await
 }
 
 pub async fn worker(
