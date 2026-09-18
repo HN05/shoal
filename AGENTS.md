@@ -17,8 +17,8 @@ when behavior changes, distinguishing decisions from proposals.
   readiness; `post_setup_cmd` (CLI, after ready) and `pre_remove_cmd` (daemon,
   inside the shared removal path) are untracked user processes with the
   workspace identity and no scope token. Optional local repository config lives
-  in daemon state, replaces the entire worktree config, and is deleted with its
-  registration. Named ports are lazy, with CLI overrides and explicit conflicts.
+  in daemon state, layers per option over the worktree config, and is deleted
+  with its registration. Named ports are lazy, with CLI overrides and explicit conflicts.
 - Workspace commands inherit a scope token. Enforce own-worktree resource access
   in the daemon and deny `shoal pull`, `shoal land` and lifecycle/repository/service
   administration; own-workspace PR watches/merge acknowledgements are allowed.

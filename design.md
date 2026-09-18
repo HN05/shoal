@@ -189,9 +189,9 @@ claimed at creation.
 Global TOML is machine policy, seeded by `setup` with the stated defaults when
 absent and rewritten only by an explicit reset; the daemon reads it at startup,
 while the CLI reads agent settings per command. Repository TOML comes from the
-worktree (`.shoal.toml` or `.shoal/config.toml`, both together is an error) or
-from a local override stored in the database by repository ID, which replaces
-the whole worktree config and is deleted with the registration. Repository
+worktree (`.shoal.toml` or `.shoal/config.toml`, both together is an error) with
+a local override stored in the database by repository ID layered over it per
+option, named entries by name, and deleted with the registration. Repository
 config is read per request, so changes need no restart and leave existing
 leases alone.
 Repository config cannot expand machine policy; global pools span

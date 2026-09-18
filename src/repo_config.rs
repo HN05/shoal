@@ -38,7 +38,7 @@ pub struct RepoConfig {
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(default)]
 pub struct PortDefaults {
-    pub on_conflict: ConflictPolicy,
+    pub on_conflict: Option<ConflictPolicy>,
     #[serde(flatten)]
     pub definitions: BTreeMap<String, PortDefinition>,
 }
@@ -96,6 +96,30 @@ pub fn parse(text: &str) -> Result<RepoConfig> {
 }
 
 impl RepoConfig {
+    /// This config layered over `base`: an option set here wins, an omitted
+    /// one falls through, and named ports, resources and pools layer by name.
+    pub fn over(self, mut base: Self) -> Self {
+        base.ports.definitions.extend(self.ports.definitions);
+        base.resources.extend(self.resources);
+        base.resource_pools.extend(self.resource_pools);
+        Self {
+            setup_cmd: self.setup_cmd.or(base.setup_cmd),
+            post_setup_cmd: self.post_setup_cmd.or(base.post_setup_cmd),
+            pre_remove_cmd: self.pre_remove_cmd.or(base.pre_remove_cmd),
+            ports: PortDefaults {
+                on_conflict: self.ports.on_conflict.or(base.ports.on_conflict),
+                definitions: base.ports.definitions,
+            },
+            resources: base.resources,
+            resource_pools: base.resource_pools,
+            simulators: if self.simulators.preferred.is_empty() {
+                base.simulators
+            } else {
+                self.simulators
+            },
+        }
+    }
+
     /// Hook executables resolved against the worktree, like `setup_cmd`.
     pub fn hooks(&self, worktree: &Path) -> Hooks {
         let resolve = |command: &Option<String>| command.as_ref().map(|c| worktree.join(c));
@@ -143,6 +167,43 @@ mod tests {
         ] {
             assert!(parse(text).is_err(), "{text}");
         }
+    }
+
+    #[test]
+    fn layering_keeps_omitted_options_and_replaces_named_entries() {
+        let base = parse(
+            "setup_cmd = 'base/setup'\npost_setup_cmd = 'base/attach'\n\
+             [ports]\non_conflict = 'auto'\n[ports.web]\nport = 3000\n[ports.api]\nport = 4000\n\
+             [resources.lock]\ncapacity = 1\n[simulators]\npreferred = ['phone']\n",
+        )
+        .unwrap();
+        let local = parse(
+            "setup_cmd = 'local/setup'\n[ports.web]\nenv = 'LOCAL_PORT'\n[resources.signing]\ncapacity = 2\n",
+        )
+        .unwrap();
+        let config = local.over(base);
+        assert_eq!(config.setup_cmd.as_deref(), Some("local/setup"));
+        assert_eq!(config.post_setup_cmd.as_deref(), Some("base/attach"));
+        assert!(matches!(
+            config.ports.on_conflict,
+            Some(ConflictPolicy::Auto)
+        ));
+        assert_eq!(config.ports.definitions["web"].port, None);
+        assert_eq!(
+            config.ports.definitions["web"].env.as_deref(),
+            Some("LOCAL_PORT")
+        );
+        assert_eq!(config.ports.definitions["api"].port, Some(4000));
+        assert_eq!(config.resources.len(), 2);
+        assert_eq!(config.simulators.preferred, ["phone"]);
+        assert!(
+            parse("")
+                .unwrap()
+                .over(parse("").unwrap())
+                .ports
+                .on_conflict
+                .is_none()
+        );
     }
 
     #[test]

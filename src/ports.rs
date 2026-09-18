@@ -124,7 +124,8 @@ impl Manager {
         let policy = request
             .on_conflict
             .or(definition.on_conflict)
-            .unwrap_or(config.ports.on_conflict);
+            .or(config.ports.on_conflict)
+            .unwrap_or_default();
         validate::lowercase_name("port", &name)?;
         ensure!(preferred != Some(0), "port zero cannot be reserved");
         validate::reason("port", reason.as_deref())?;
@@ -246,7 +247,7 @@ impl Manager {
             workspace,
             reserved,
             configured: config.ports.definitions,
-            on_conflict: config.ports.on_conflict,
+            on_conflict: config.ports.on_conflict.unwrap_or_default(),
         })
     }
 

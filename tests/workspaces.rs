@@ -2854,13 +2854,25 @@ fn local_repository_config_is_copied_shared_persistent_and_reversible() {
     .unwrap();
     fs::create_dir(path.join(".shoal")).unwrap();
     fs::write(path.join(".shoal/config.toml"), "invalid TOML").unwrap();
-    assert_eq!(
-        fixture.ok(&["ports", "first"])["configured"]
-            .as_object()
-            .unwrap()
-            .len(),
-        1
-    );
+    // The worktree file is a layer of its own; its errors show through the saved config.
+    assert!(!fixture.run(&["ports", "first"]).status.success());
+    fs::remove_file(path.join(".shoal/config.toml")).unwrap();
+    let configured = fixture.ok(&["ports", "first"])["configured"].clone();
+    assert_eq!(configured.as_object().unwrap().len(), 2);
+    assert_eq!(configured["web"]["env"], "LOCAL_PORT");
+    assert_eq!(configured["checked_in"]["env"], "CHECKED_IN");
+    // Layered names must agree: the saved `lock` resource meets a `lock` pool.
+    fs::write(
+        path.join(".shoal.toml"),
+        "[resource_pools.lock.resources.a]\ncapacity=1\n",
+    )
+    .unwrap();
+    assert!(!fixture.run(&["ports", "first"]).status.success());
+    fs::write(
+        path.join(".shoal.toml"),
+        "[ports.checked_in]\nenv='CHECKED_IN'\n",
+    )
+    .unwrap();
     // Invalid replacements must leave the saved config intact.
     for invalid in [
         "invalid TOML",
@@ -2877,17 +2889,13 @@ fn local_repository_config_is_copied_shared_persistent_and_reversible() {
         );
         assert_eq!(fixture.ok(&["repo", "config", id]), saved);
     }
+    // An empty saved config sets nothing, so every option falls through.
     fs::write(&input, "").unwrap();
     fixture.ok(&["repo", "config", id, "--file", input.to_str().unwrap()]);
-    assert!(
-        fixture.ok(&["ports", "first"])["configured"]
-            .as_object()
-            .unwrap()
-            .is_empty()
-    );
+    let configured = fixture.ok(&["ports", "first"])["configured"].clone();
+    assert_eq!(configured.as_object().unwrap().len(), 1);
+    assert_eq!(configured["checked_in"]["env"], "CHECKED_IN");
     assert!(fixture.ok(&["repo", "config", id, "--clear"])["toml"].is_null());
-    assert!(!fixture.run(&["ports", "first"]).status.success());
-    fs::remove_file(path.join(".shoal/config.toml")).unwrap();
     assert_eq!(
         fixture.ok(&["ports", "first"])["configured"]["checked_in"]["env"],
         "CHECKED_IN"

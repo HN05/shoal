@@ -231,11 +231,12 @@ shoal repo config my-project --clear  # Return to worktree config
 ```
 
 The file uses the `.shoal.toml` format and is validated and copied into Shoal's
-database; reimport it after edits. It replaces the entire worktree config for
-every workspace of that repository (no merging; an empty file selects all
-defaults) and applies on the next request without a restart. Without a saved
-config, Shoal reads `.shoal.toml` or `.shoal/config.toml` from each worktree
-and rejects both together. The saved config survives restarts, renames, and
+database; reimport it after edits. Repository options resolve per option, for
+every workspace of that repository: a value in the saved config wins, one it
+omits comes from the worktree's `.shoal.toml` or `.shoal/config.toml` (both
+together is an error), and `[ports.<name>]`, `[resources.<name>]` and
+`[resource_pools.<name>]` tables layer by name. Changes apply on the next
+request without a restart. The saved config survives restarts, renames, and
 workspace removal; `repo rm` deletes it. `--json` returns `repository_id` and
 `toml`. Scoped workspace commands cannot administer it.
 

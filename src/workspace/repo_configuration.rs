@@ -73,15 +73,24 @@ impl Manager {
             .hooks(&workspace.path))
     }
 
-    /// The effective repository config: the locally saved override, or the
-    /// worktree's own `.shoal.toml`.
+    /// The workspace's repository config: the saved local config layered per
+    /// option over the worktree's own `.shoal.toml`.
     pub(crate) async fn workspace_config(&self, workspace: &Workspace) -> Result<RepoConfig> {
-        match self
-            .local_repository_config(&workspace.repository_id)
-            .await?
-        {
-            Some(text) => repo_config::parse(&text).context("parse local repository config"),
-            None => repo_config::load(&workspace.path),
-        }
+        let file = repo_config::load(&workspace.path)?;
+        self.layered_config(&workspace.repository_id, file).await
+    }
+
+    /// The saved local config of `repository_id`, if any, over `file`.
+    async fn layered_config(&self, repository_id: &str, file: RepoConfig) -> Result<RepoConfig> {
+        let Some(text) = self.local_repository_config(repository_id).await? else {
+            return Ok(file);
+        };
+        let config = repo_config::parse(&text)
+            .context("parse local repository config")?
+            .over(file);
+        // Each layer is valid alone; the layered names must agree too.
+        crate::resources::definitions(&config.resources, &config.resource_pools)
+            .context("layered repository config")?;
+        Ok(config)
     }
 }
