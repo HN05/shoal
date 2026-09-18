@@ -23,6 +23,22 @@ your working directory to a returned workspace `path`. In an ordinary checkout,
 use ordinary Git for merges. Shoal's resources require a managed workspace;
 do not select another agent's workspace or create one just to obtain a lease.
 
+## Happy sessions from a console agent
+
+A Happy session outside any managed workspace (a console session on the user's
+machine) can hand work to a new session that appears in the Happy app:
+
+```sh
+shoal --json add my-project --issue 34 --agent happy-claude
+shoal --json happy codex fix-login -- --yolo
+```
+
+Shoal returns once the launch is recorded (`execution_id`, `pid`, `log`); the
+session runs detached and `shoal stop` or `shoal rm` ends it. `happy codex` takes
+no initial prompt: an `--issue` prompt lands in `prompt_file`; ask the user to
+send it from the app. Sessions launched through Shoal are scoped and cannot create
+workspaces or start sessions in other workspaces; the human or console session does.
+
 ## PR completion
 
 After opening a PR, run `shoal pr <url>`. Shoal checks with `gh`/`fj` and, when

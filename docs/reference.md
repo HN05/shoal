@@ -83,6 +83,7 @@ shoal claude fix-login -- --help
 shoal codex                              # Current workspace or picker; default mode
 shoal codex cli fix-login -- --help
 shoal codex app fix-login                # Codex desktop app
+shoal happy codex fix-login              # Detached Happy session for the Happy app
 shoal t3 fix-login                       # Running T3 Code desktop app
 shoal inspect fix-login
 shoal stop fix-login                     # Stop commands; keep the worktree
@@ -91,20 +92,20 @@ shoal rm fix-login                       # Remove; choose what to keep if work d
 
 Bare `shoal` opens an fzf list of workspaces (`shoal --help`, or bare `shoal`
 without a terminal, prints help). Enter enters the selection; Ctrl-D deletes, Ctrl-E
-runs Claude/Codex CLI, opens Codex/T3 apps, or runs a shell command, Ctrl-A adds,
+runs Claude/Codex CLI, starts a Happy session, opens Codex/T3 apps, or runs a shell command, Ctrl-A adds,
 Ctrl-O inspects, Ctrl-S stops, Ctrl-F shows the diff. Each action returns to your
 shell.
 
-Omitted targets open an fzf picker; `rm`, `exec`, `claude`, `codex`, `t3`,
-`diff`, `pull`, `merge`, and `land` first use the workspace containing the current
-directory. `shoal add` offers repositories in most-recently-used order, then
+Omitted targets open an fzf picker; `rm`, `exec`, `claude`, `codex`, `happy`,
+`t3`, `diff`, `pull`, `merge`, and `land` first use the workspace containing the
+current directory. `shoal add` offers repositories in most-recently-used order, then
 a new-branch prompt or existing-branch picker. Noninteractive and JSON calls never prompt;
 management commands support JSON output, while executed commands keep their
 own stdin, stdout, stderr, and exit code.
 
 ### Agents
 
-`add --agent codex|claude` starts the agent after worktree creation, setup, and
+`add --agent codex|claude|happy-<agent>` starts the agent after worktree creation, setup, and
 the post-setup hook succeed; arguments after `--` go to the agent. CLI agents
 run in your terminal through the tracked execution wrapper and return the
 agent's exit code; the workspace is retained even when launch fails. With shell
@@ -131,6 +132,23 @@ App launches run `codex app <path>` or `t3 app <path>` with any `--` arguments
 and preserve the launcher's output and exit code. They add no agent flags and
 provide no execution tracking, scope token, or port variables (so automatic
 cleanup cannot see their activity); T3's app must already be running.
+
+`shoal happy claude|codex [workspace]` and `add --agent happy-claude|happy-codex`
+start a [Happy](https://github.com/slopus/happy) session as Happy's own daemon
+would (`happy <agent> --happy-starting-mode remote --started-by daemon`, then
+your `--` arguments), so it registers with that daemon and appears in the Happy
+app. The session is detached from your terminal (stdin from `/dev/null`, output
+appended to `<state>/workspaces/<id>/happy-<agent>-<time>.log`, deleted with the
+workspace) but runs through the tracked wrapper in a background `shoal` process:
+it gets the scope token and port variables, counts as activity for idle cleanup,
+and `stop`, `rm`, PR cleanup, and reconciliation treat it like any other command.
+Shoal returns once the daemon records the launch, printing the execution, PID,
+and log (`--json` adds `prompt_file` and `happy_daemon_recorded`). Without
+`~/.happy/daemon.state.json` (`$HAPPY_HOME_DIR` overrides `~/.happy`) Shoal warns
+that the session will not appear in the app until `happy daemon start` runs, and
+launches anyway. Happy forwards an `--issue` prompt to Claude; `happy codex`
+accepts no initial prompt, so Shoal saves it beside the log and warns, for you
+to send from the app.
 
 ### Branch and workspace names
 `--name` creates a literal Git branch; `--branch <branch|remote/branch>` uses an
@@ -375,7 +393,7 @@ shoal exec fix-login -- sh -c 'my-server --port "$API_PORT"'
 Named TCP reservations belong to the worktree, persist across command exits, `stop`,
 and restarts, and are released by successful removal. Repeating a name returns the
 same port (`--reason` may update it); changing the number or variable requires
-release first. Later `exec`, `claude`, and `codex cli` commands receive
+release first. Later `exec`, `claude`, `codex cli`, and `happy` commands receive
 `SHOAL_PORT_<NAME>` or the `--env` variable; running processes keep their
 environment, and nested executions drop the parent's port variables. Automatic
 allocation uses 49152–65535, configurable with `[ports]` `start`/`end` in the global
@@ -449,8 +467,8 @@ stopped, use `--repair --acknowledge-stopped`; visible live processes still bloc
 ### Scoped workspace commands
 
 PR watches and merge acknowledgements are own-workspace scope exceptions.
-Commands launched through `exec`, `claude`, and `codex cli` carry a scope token
-that confines them to their own worktree: inspect, execute, `merge`, `diff`,
+Commands launched through `exec`, `claude`, `codex cli`, and `happy` carry a scope
+token that confines them to their own worktree: inspect, execute, `merge`, `diff`,
 and resources. They cannot `pull`, `land`, reach other worktrees, remove workspaces,
 administer repositories, or control the daemon; nested commands keep the scope. Scope is cooperative and does not
 restrict direct filesystem or Git operations.

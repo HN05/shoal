@@ -16,8 +16,8 @@ direct resource access; filesystem restrictions are future work.
 Caller-specific integration stays outside the core: Superlogical owns terminals;
 Macraft owns VM/container provisioning. Shoal does not provision tools, manage
 browsers, schedule agent tasks, or store conversations. Agent shortcuts
-(`claude`, `codex`, `t3`) are thin launchers around the generic `exec` path;
-Agent-specific flags and setup are to become configurable defaults.
+(`claude`, `codex`, `happy`, `t3`) are thin launchers around the generic `exec`
+path; Agent-specific flags and setup are to become configurable defaults.
 
 ## Architecture
 
@@ -152,7 +152,14 @@ lookup stays in the CLI with no Shoal credentials or forge configuration.
 succeed, or after an explicitly ignored setup failure, and retains the
 workspace whatever the agent does. Desktop handoffs (Codex app, T3) provide no
 tracking or scope; users disable automatic cleanup when that activity cannot
-be tracked.
+be tracked. Happy sessions are the phone-driven flow: a console session that
+Happy's daemon started in a non-workspace directory creates workspaces and starts
+sessions in them. Shoal launches `happy <agent>` with the daemon's own flags so
+the session registers with Happy and appears in the app, detached from the
+terminal but inside the tracked wrapper (a background `shoal` process holding the
+execution), so it stays stoppable and visible to cleanup. Happy's Codex mode takes
+no initial prompt, so issue prompts are saved for the user instead. A Happy-side
+pre-spawn hook asking Shoal for a workspace was considered and not adopted.
 
 The skill is installed at user scope for Codex and Claude, independent of the
 daemon and never from a scoped execution; its availability registers nothing.

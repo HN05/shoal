@@ -43,8 +43,10 @@ shoal add my-project --branch origin/feature/api --agent codex
 shoal add my-project --issue 34 --agent codex  # Issue number or URL; uses gh/fj
 ```
 
-Use `--agent claude` for Claude Code. New workspaces branch from the repository's
-default branch. With shell integration, `shoal add` enters the workspace.
+Use `--agent claude` for Claude Code, or `--agent happy-claude`/`happy-codex` for
+a detached [Happy](https://github.com/slopus/happy) session that appears in the
+Happy app. New workspaces branch from the repository's default branch. With
+shell integration, `shoal add` enters the workspace.
 
 ## Everyday commands
 
@@ -55,6 +57,7 @@ shoal cd fix-login             # Enter a workspace; omit the name for a picker
 shoal exec fix-login -- cargo test
 shoal claude fix-login         # Run Claude Code
 shoal codex app fix-login      # Open in the Codex desktop app
+shoal happy claude fix-login   # Detached Happy session, visible in the Happy app
 shoal diff fix-login           # Changes since the branch's fork point
 shoal inspect fix-login       # Workspace details
 shoal stop fix-login          # Stop managed commands; keep the workspace
@@ -74,9 +77,10 @@ shoal merge feature/api       # Merge another local or remote branch
 shoal land                    # Merge your branch into the default branch; no remote needed
 ```
 
-CLI agents run in the terminal through Shoal. The Codex shortcut disables Codex's
-sandbox and approval prompts; use `shoal exec fix-login -- codex` for a custom
-invocation. Shoal's resource scope is cooperative, not a filesystem sandbox.
+CLI agents run in the terminal through Shoal; Happy sessions run detached, log
+to a file Shoal names, and stop with `shoal stop`. The Codex shortcut disables
+Codex's sandbox and approval prompts; use `shoal exec fix-login -- codex` for a
+custom invocation. Shoal's resource scope is cooperative, not a filesystem sandbox.
 
 ## Share resources
 
