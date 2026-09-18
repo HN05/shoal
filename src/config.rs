@@ -284,12 +284,15 @@ impl Config {
     }
 }
 
-/// Written by `shoal setup` when no config exists. Every setting is commented
-/// out at its default so the file changes nothing until edited.
+/// Written by `shoal setup` when no config exists. Settings are commented out
+/// at their defaults, examples are marked as such, so the file changes nothing
+/// until edited.
 const TEMPLATE: &str = r##"## Shoal machine configuration. Settings are read per command; restart the
 ## daemon (`shoal daemon restart`) after changing cleanup or port ranges.
-## Uncomment a line to change it. Repository settings (named ports, setup and
-## hook commands, resource pools) live in each repository's .shoal.toml.
+## Settings are commented out at their defaults: uncomment a line to change it.
+## Blocks marked as examples are not defaults; uncomment a whole block and adapt it.
+## Repository settings (named ports, setup and hook commands, resource pools)
+## live in each repository's .shoal.toml.
 
 ## Parent of every repository's workspaces and URL clones.
 # root_dir = "~/shoal"
@@ -322,12 +325,13 @@ const TEMPLATE: &str = r##"## Shoal machine configuration. Settings are read per
 # max_devices = 4
 # idle_seconds = 120
 # allow_any = false
+## Example profile; `default` must name a profile defined below it.
 # default = "phone"
 # [simulators.profiles.phone]
 # device = "iPhone 17"
 # runtime = "iOS 26"
 
-## Cooperative permits shared across repositories; see the command reference.
+## Example permits shared across repositories; see the command reference.
 # [resources.signing]
 # capacity = 1
 # reason = "Signing service"
