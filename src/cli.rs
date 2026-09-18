@@ -2,6 +2,8 @@ use std::{ffi::OsString, path::PathBuf};
 
 use clap::{Parser, Subcommand, ValueEnum};
 
+use crate::happy::HappyAgent;
+
 #[derive(Debug, Parser)]
 #[command(version, about)]
 pub struct Cli {
@@ -52,8 +54,8 @@ pub enum Command {
         /// Starting Git ref (defaults to the repository's default branch, refreshed from its upstream).
         #[arg(long = "ref")]
         base: Option<String>,
-        /// Start an agent after worktree creation succeeds.
-        #[arg(long, value_enum)]
+        /// Start an agent after worktree creation succeeds: codex, claude, or happy-<agent>.
+        #[arg(long, value_parser = AgentParser)]
         agent: Option<Agent>,
         /// Arguments forwarded to the agent.
         #[arg(last = true, requires = "agent")]
@@ -183,6 +185,23 @@ pub enum Command {
         #[arg(last = true)]
         args: Vec<OsString>,
     },
+    /// Start a detached Happy session (Claude Code or Codex) that appears in the Happy app.
+    Happy {
+        #[arg(value_enum)]
+        agent: HappyAgent,
+        workspace: Option<String>,
+        #[arg(last = true)]
+        args: Vec<OsString>,
+    },
+    /// Internal detached execution wrapper; reports the launch on stdout, then keeps tracking it.
+    #[command(hide = true)]
+    DetachedInternal {
+        workspace: String,
+        #[arg(long)]
+        log: PathBuf,
+        #[arg(last = true, required = true)]
+        command: Vec<OsString>,
+    },
     /// Install and start the per-user daemon service.
     Setup {
         /// Preview the service definition without changing anything.
@@ -224,10 +243,92 @@ pub enum CodexMode {
     App,
 }
 
-#[derive(Debug, Clone, Copy, ValueEnum)]
+/// What `add --agent` starts: a terminal agent, or a detached Happy session
+/// running one of Happy's agents (`happy-<agent>`, visible in the Happy app).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Agent {
     Codex,
     Claude,
+    Happy(HappyAgent),
+}
+
+impl Agent {
+    /// Every spelling `--agent` accepts, in help and completion order.
+    pub fn possible_values() -> Vec<String> {
+        let mut values = vec!["codex".to_owned(), "claude".to_owned()];
+        values.extend(
+            HappyAgent::value_variants()
+                .iter()
+                .filter_map(|agent| agent.to_possible_value())
+                .map(|value| format!("{}{}", HAPPY_PREFIX, value.get_name())),
+        );
+        values
+    }
+}
+
+const HAPPY_PREFIX: &str = "happy-";
+
+impl std::str::FromStr for Agent {
+    type Err = ();
+
+    fn from_str(value: &str) -> Result<Self, ()> {
+        match value {
+            "codex" => Ok(Agent::Codex),
+            "claude" => Ok(Agent::Claude),
+            _ => value
+                .strip_prefix(HAPPY_PREFIX)
+                .and_then(|agent| HappyAgent::from_str(agent, false).ok())
+                .map(Agent::Happy)
+                .ok_or(()),
+        }
+    }
+}
+
+/// clap parser for [`Agent`] that also advertises its values for completion.
+#[derive(Clone)]
+pub struct AgentParser;
+
+impl clap::builder::TypedValueParser for AgentParser {
+    type Value = Agent;
+
+    fn parse_ref(
+        &self,
+        cmd: &clap::Command,
+        arg: Option<&clap::Arg>,
+        value: &std::ffi::OsStr,
+    ) -> Result<Agent, clap::Error> {
+        let value = value
+            .to_str()
+            .ok_or_else(|| clap::Error::new(clap::error::ErrorKind::InvalidUtf8).with_cmd(cmd))?;
+        value.parse().map_err(|()| {
+            let mut error = clap::Error::new(clap::error::ErrorKind::InvalidValue).with_cmd(cmd);
+            if let Some(arg) = arg {
+                error.insert(
+                    clap::error::ContextKind::InvalidArg,
+                    clap::error::ContextValue::String(arg.to_string()),
+                );
+            }
+            error.insert(
+                clap::error::ContextKind::InvalidValue,
+                clap::error::ContextValue::String(value.to_owned()),
+            );
+            error.insert(
+                clap::error::ContextKind::ValidValue,
+                clap::error::ContextValue::Strings(Agent::possible_values()),
+            );
+            error
+        })
+    }
+
+    fn possible_values(
+        &self,
+    ) -> Option<Box<dyn Iterator<Item = clap::builder::PossibleValue> + '_>> {
+        Some(Box::new(
+            Agent::possible_values()
+                .into_iter()
+                .map(clap::builder::PossibleValue::new),
+        ))
+    }
 }
 
 #[derive(Debug, Subcommand)]

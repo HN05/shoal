@@ -1,15 +1,20 @@
 //! Tracked execution wrapper. The CLI process launches the command inside the
 //! workspace, hands it the terminal, forwards daemon stop requests, and reports
-//! completion. The daemon never touches terminal I/O.
+//! completion. The daemon never touches terminal I/O. A detached launch runs
+//! the same wrapper in a background `shoal` process with a log file instead
+//! of the terminal, so the invoking CLI returns once the launch is recorded.
 use anyhow::{Context, Result, bail, ensure};
+use serde::{Deserialize, Serialize};
 use std::{
     ffi::OsString,
-    io::IsTerminal,
+    io::{IsTerminal, Write},
     os::unix::process::ExitStatusExt,
+    path::{Path, PathBuf},
     process::{ExitStatus, Stdio},
     time::Duration,
 };
 use tokio::{
+    io::{AsyncBufReadExt, BufReader},
     net::UnixStream,
     process::{Child, Command},
     signal::unix::{SignalKind, signal},
@@ -18,11 +23,20 @@ use tokio::{
 
 use crate::{
     client, env,
-    model::ExecutionPlan,
+    model::{ExecutionPlan, Workspace},
     paths::Paths,
     process_identity,
     protocol::{self, Body, Control, ExecutionEvent, Method},
 };
+
+/// What a detached wrapper reports on stdout once the daemon has recorded the
+/// command's process group; the CLI that spawned it returns after reading it.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DetachedLaunch {
+    pub execution_id: String,
+    pub pid: u32,
+    pub log: PathBuf,
+}
 
 /// Exit status as a shell would report it: the code, or 128 + signal.
 pub fn exit_code(status: ExitStatus) -> i32 {
@@ -31,10 +45,15 @@ pub fn exit_code(status: ExitStatus) -> i32 {
         .unwrap_or_else(|| 128 + status.signal().unwrap_or(1))
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 enum Mode {
     /// An arbitrary command chosen by the caller.
     Command,
+    /// A caller-chosen command without a terminal: no stdin, output appended
+    /// to `log`, and the launch reported on stdout for the spawning CLI.
+    Detached {
+        log: PathBuf,
+    },
     Land {
         json: bool,
     },
@@ -45,7 +64,7 @@ enum Mode {
 }
 
 impl Mode {
-    fn is_setup(self) -> bool {
+    fn is_setup(&self) -> bool {
         matches!(self, Mode::Setup { .. })
     }
 }
@@ -53,6 +72,104 @@ impl Mode {
 pub async fn run(paths: &Paths, workspace: String, command: Vec<OsString>) -> Result<i32> {
     ensure!(!command.is_empty(), "a command is required after --");
     run_tracked(paths, workspace, command, Mode::Command).await
+}
+
+/// The background half of a detached launch: an ordinary tracked wrapper whose
+/// child reads `/dev/null` and writes `log`. It stays alive as the execution's
+/// wrapper, so stop requests, removal, and recovery see a connected command.
+pub async fn run_detached_wrapper(
+    paths: &Paths,
+    workspace: String,
+    log: PathBuf,
+    command: Vec<OsString>,
+) -> Result<i32> {
+    ensure!(!command.is_empty(), "a command is required after --");
+    run_tracked(paths, workspace, command, Mode::Detached { log }).await
+}
+
+/// Start `command` in `workspace` as a tracked execution that outlives this
+/// process: a new session running this binary's detached wrapper, with the
+/// command's output in `log`. Returns once the daemon has recorded the launch.
+pub async fn launch_detached(
+    paths: &Paths,
+    workspace: &Workspace,
+    log: PathBuf,
+    command: Vec<OsString>,
+) -> Result<DetachedLaunch> {
+    ensure!(workspace.path.is_dir(), "workspace directory is missing");
+    if let Some(parent) = log.parent() {
+        std::fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
+    }
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log)
+        .with_context(|| format!("open {}", log.display()))?;
+    writeln!(
+        file,
+        "shoal: starting {} in {}",
+        command
+            .iter()
+            .map(|arg| arg.to_string_lossy())
+            .collect::<Vec<_>>()
+            .join(" "),
+        workspace.path.display()
+    )?;
+    let mut wrapper = Command::new(std::env::current_exe()?);
+    wrapper
+        .arg("--state-dir")
+        .arg(&paths.state)
+        .arg("detached-internal")
+        .arg(&workspace.id)
+        .arg("--log")
+        .arg(&log)
+        .arg("--")
+        .args(&command)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::from(file))
+        .env_remove(env::SHELL_DIRECTIVE);
+    // SAFETY: setsid only detaches the child from this terminal session and
+    // runs before exec in the forked child, without allocating.
+    unsafe {
+        wrapper.pre_exec(|| {
+            if libc::setsid() == -1 {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+    let mut child = wrapper
+        .spawn()
+        .context("launch detached execution wrapper")?;
+    let stdout = child.stdout.take().context("wrapper stdout unavailable")?;
+    let report = timeout(
+        Duration::from_secs(60),
+        BufReader::new(stdout).lines().next_line(),
+    )
+    .await
+    .context("detached launch was not recorded in time")??;
+    match report {
+        Some(line) => serde_json::from_str(&line).context("unexpected detached launch report"),
+        None => {
+            let status = match timeout(Duration::from_secs(5), child.wait()).await {
+                Ok(Ok(status)) => format!("wrapper exited with {status}"),
+                _ => "wrapper still running".into(),
+            };
+            bail!(
+                "detached launch failed ({status}); see {}\n{}",
+                log.display(),
+                log_tail(&log)
+            )
+        }
+    }
+}
+
+/// The last lines of a log, for an error message.
+fn log_tail(log: &Path) -> String {
+    let text = std::fs::read_to_string(log).unwrap_or_default();
+    let lines: Vec<_> = text.lines().rev().take(10).collect();
+    lines.into_iter().rev().collect::<Vec<_>>().join("\n")
 }
 
 pub async fn land(paths: &Paths, workspace: String, json: bool) -> Result<i32> {
@@ -73,7 +190,7 @@ async fn run_tracked(
         .context("cannot identify execution wrapper")?;
     let method = match mode {
         Mode::Setup { .. } => Method::Prepare { workspace, wrapper },
-        Mode::Command => Method::Execute { workspace, wrapper },
+        Mode::Command | Mode::Detached { .. } => Method::Execute { workspace, wrapper },
         Mode::Land { .. } => Method::LandWorkspace { workspace, wrapper },
     };
     let start_timeout = if matches!(mode, Mode::Land { .. }) {
@@ -105,7 +222,7 @@ async fn run_tracked(
             None => command,
         }
     };
-    let mut result = supervise(&mut stream, paths, &plan, &command, mode).await;
+    let mut result = supervise(&mut stream, paths, &plan, &command, &mode).await;
     if !matches!(result, Ok(0))
         && let Some(land) = &plan.land
         && let Err(error) = crate::repo_git::rollback_land(land).await
@@ -115,7 +232,7 @@ async fn run_tracked(
     let code = result.as_ref().copied().unwrap_or(1);
     // Report only after child/process-group cleanup. A lost connection never
     // grants the daemon permission to assume processes stopped.
-    let report = report_completion(&mut stream, code, mode).await;
+    let report = report_completion(&mut stream, code, &mode).await;
     if mode.is_setup() {
         report?;
     } else if let Err(error) = report {
@@ -131,7 +248,7 @@ async fn supervise(
     paths: &Paths,
     plan: &ExecutionPlan,
     command: &[OsString],
-    mode: Mode,
+    mode: &Mode,
 ) -> Result<i32> {
     let mut terminate = signal(SignalKind::terminate())?;
     let mut interrupt = signal(SignalKind::interrupt())?;
@@ -152,6 +269,13 @@ async fn supervise(
         matches!(acknowledged, Control::Started),
         "daemon did not acknowledge process registration"
     );
+    if let Mode::Detached { log } = mode {
+        report_launch(&DetachedLaunch {
+            execution_id: plan.id.clone(),
+            pid: group.pid(),
+            log: log.clone(),
+        })?;
+    }
     let _terminal = Terminal::give_to(group.0)?;
     // The child may have been stopped by SIGTTIN/SIGTTOU before it became the
     // foreground group.
@@ -174,29 +298,53 @@ async fn supervise(
     Ok(exit_code(status))
 }
 
-fn spawn(paths: &Paths, plan: &ExecutionPlan, command: &[OsString], mode: Mode) -> Result<Child> {
+fn spawn(paths: &Paths, plan: &ExecutionPlan, command: &[OsString], mode: &Mode) -> Result<Child> {
     let mut process = Command::new(&command[0]);
     process
         .args(&command[1..])
         .current_dir(&plan.workspace.path);
     configure_environment(&mut process, paths, plan);
     let quiet = matches!(mode, Mode::Setup { json: true });
+    let (stdin, stdout, stderr) = match mode {
+        Mode::Detached { log } => {
+            let file = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(log)
+                .with_context(|| format!("open {}", log.display()))?;
+            let copy = file.try_clone()?;
+            (Stdio::null(), Stdio::from(file), Stdio::from(copy))
+        }
+        _ if quiet => (
+            Stdio::null(),
+            Stdio::from(std::io::stderr()),
+            Stdio::inherit(),
+        ),
+        _ => (Stdio::inherit(), Stdio::inherit(), Stdio::inherit()),
+    };
     process
-        .stdin(if quiet {
-            Stdio::null()
-        } else {
-            Stdio::inherit()
-        })
-        .stdout(if quiet {
-            Stdio::from(std::io::stderr())
-        } else {
-            Stdio::inherit()
-        })
-        .stderr(Stdio::inherit())
+        .stdin(stdin)
+        .stdout(stdout)
+        .stderr(stderr)
         .process_group(0)
         .kill_on_drop(true)
         .spawn()
         .context("launch workspace command")
+}
+
+/// Tell the spawning CLI that the launch is recorded, then point stdout at the
+/// log (the wrapper's stderr) so nothing else ever writes to the closed pipe.
+fn report_launch(launch: &DetachedLaunch) -> Result<()> {
+    let mut stdout = std::io::stdout().lock();
+    serde_json::to_writer(&mut stdout, launch)?;
+    stdout.write_all(b"\n")?;
+    stdout.flush()?;
+    // SAFETY: duplicating one open descriptor onto another in this process.
+    ensure!(
+        unsafe { libc::dup2(libc::STDERR_FILENO, libc::STDOUT_FILENO) } != -1,
+        "redirect wrapper output to the log"
+    );
+    Ok(())
 }
 
 /// Export the execution's identity and port reservations, dropping stale port
@@ -228,7 +376,7 @@ fn configure_environment(process: &mut Command, paths: &Paths, plan: &ExecutionP
         .env_remove(env::SHELL_DIRECTIVE);
 }
 
-async fn report_completion(stream: &mut UnixStream, code: i32, mode: Mode) -> Result<()> {
+async fn report_completion(stream: &mut UnixStream, code: i32, mode: &Mode) -> Result<()> {
     let exchange = async {
         protocol::write(stream, &ExecutionEvent::Finished { exit_code: code }).await?;
         loop {

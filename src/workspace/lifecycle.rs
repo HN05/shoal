@@ -201,6 +201,8 @@ impl Manager {
         match result {
             Ok(outcome) => {
                 self.forget_workspace(&workspace.id).await;
+                // Session logs are run data owned by the record just deleted.
+                let _ = std::fs::remove_dir_all(self.paths.workspace_state(&workspace.id));
                 Ok(outcome)
             }
             Err(error) => {

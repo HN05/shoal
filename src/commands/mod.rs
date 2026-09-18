@@ -107,6 +107,16 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             args,
         } => workspaces::codex(&ctx, mode, workspace, args).await,
         Command::T3 { workspace, args } => workspaces::open_app(&ctx, workspace, "t3", args).await,
+        Command::Happy {
+            agent,
+            workspace,
+            args,
+        } => workspaces::happy(&ctx, agent, workspace, None, args).await,
+        Command::DetachedInternal {
+            workspace,
+            log,
+            command,
+        } => crate::execution::run_detached_wrapper(&ctx.paths, workspace, log, command).await,
         Command::Port { command } => ports::run(&ctx, command).await,
         Command::Ports { workspace } => ports::overview(&ctx, workspace).await,
         Command::Resource { command } => resources::run(&ctx, command).await,

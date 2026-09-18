@@ -60,4 +60,10 @@ impl Paths {
     pub fn worktrunk_config(&self) -> PathBuf {
         self.state.join("worktrunk.toml")
     }
+
+    /// Run data Shoal keeps for one workspace, such as detached session logs;
+    /// deleted with the workspace record.
+    pub fn workspace_state(&self, workspace_id: &str) -> PathBuf {
+        self.state.join("workspaces").join(workspace_id)
+    }
 }

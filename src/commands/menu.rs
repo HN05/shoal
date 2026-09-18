@@ -78,10 +78,12 @@ pub(super) async fn choose(ctx: &Context) -> Result<Command> {
 }
 
 fn execute_command(ctx: &Context, workspace: Option<String>) -> Result<Command> {
-    const CHOICES: [&str; 5] = [
+    const CHOICES: [&str; 7] = [
         "claude",
         "codex cli",
         "codex app",
+        "happy claude",
+        "happy codex",
         "t3",
         "custom shell command",
     ];
@@ -104,6 +106,15 @@ fn execute_command(ctx: &Context, workspace: Option<String>) -> Result<Command> 
             } else {
                 CodexMode::App
             }),
+            workspace,
+            args: vec![],
+        },
+        "happy claude" | "happy codex" => Command::Happy {
+            agent: <crate::happy::HappyAgent as clap::ValueEnum>::from_str(
+                choice.trim_start_matches("happy "),
+                false,
+            )
+            .map_err(|error| anyhow::anyhow!(error))?,
             workspace,
             args: vec![],
         },

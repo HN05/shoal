@@ -10,6 +10,7 @@ use crate::{
     config::Config,
     context::Context,
     env, execution, git,
+    happy::{self, HappyAgent},
     hooks::{self, Hook},
     model::Workspace,
     protocol::{Body, Method},
@@ -192,8 +193,15 @@ pub(super) async fn add(
             branch = Some(ui::pick(ctx, "Branch> ", entries)?);
         }
     }
-    if let Some(issue) = issue.filter(|_| agent.is_some()) {
-        args.insert(0, issue.prompt().into());
+    // Terminal agents take the issue prompt as their first argument; Happy
+    // sessions decide per agent whether one can be delivered.
+    let prompt = issue
+        .filter(|_| agent.is_some())
+        .map(|issue| issue.prompt());
+    if let Some(prompt) = &prompt
+        && !matches!(agent, Some(Agent::Happy(_)))
+    {
+        args.insert(0, prompt.into());
     }
     let (mut workspace, reused) = if let Some(branch) = branch {
         let opened = request!(
@@ -251,6 +259,7 @@ pub(super) async fn add(
     match agent {
         Some(Agent::Codex) => codex(ctx, codex_mode, Some(workspace.id), args).await,
         Some(Agent::Claude) => claude(ctx, Some(workspace.id), args).await,
+        Some(Agent::Happy(agent)) => happy(ctx, agent, Some(workspace.id), prompt, args).await,
         None => Ok(0),
     }
 }
@@ -549,6 +558,75 @@ pub(super) async fn codex(
         ])
         .collect();
     execution::run(&ctx.paths, workspace, command).await
+}
+
+/// Start a Happy session the way Happy's own daemon does, so it registers with
+/// that daemon and appears in the app, but detached from this terminal and
+/// tracked like any other workspace command. The CLI returns once the launch
+/// is recorded; the session's output goes to a log under Shoal's state.
+pub(super) async fn happy(
+    ctx: &Context,
+    agent: HappyAgent,
+    workspace: Option<String>,
+    prompt: Option<String>,
+    args: Vec<OsString>,
+) -> Result<i32> {
+    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    let workspace = client::inspect(&ctx.paths, workspace).await?.workspace;
+    let daemon_state = happy::daemon_state_path(&ctx.paths.home);
+    let daemon_recorded = daemon_state.is_file();
+    if !daemon_recorded {
+        eprintln!(
+            "warning: Happy daemon state not found at {}; the session will not appear in the Happy app until `happy daemon start` runs",
+            daemon_state.display()
+        );
+    }
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_secs())
+        .unwrap_or_default();
+    let state_dir = ctx.paths.workspace_state(&workspace.id);
+    let stem = format!("happy-{}-{stamp}", agent.name());
+    let log = state_dir.join(format!("{stem}.log"));
+    // Happy's Codex mode has no way to receive an initial prompt, so the
+    // issue prompt is kept for the user to send from the app.
+    let prompt_file = match &prompt {
+        Some(prompt) if !agent.accepts_prompt() => {
+            let path = state_dir.join(format!("{stem}.prompt.md"));
+            std::fs::create_dir_all(&state_dir)
+                .with_context(|| format!("create {}", state_dir.display()))?;
+            std::fs::write(&path, prompt).with_context(|| format!("write {}", path.display()))?;
+            eprintln!(
+                "warning: happy {} cannot take an initial prompt; send the issue prompt saved at {} to the session yourself",
+                agent.name(),
+                path.display()
+            );
+            Some(path)
+        }
+        _ => None,
+    };
+    let command = happy::command(agent, prompt.as_deref(), args);
+    let launch = execution::launch_detached(&ctx.paths, &workspace, log, command).await?;
+    ctx.emit(
+        &format!(
+            "Started Happy {} session in {} (execution {}, pid {})\nOutput: {}",
+            agent.name(),
+            workspace.name,
+            launch.execution_id,
+            launch.pid,
+            launch.log.display()
+        ),
+        json!({
+            "workspace": workspace,
+            "agent": agent,
+            "execution_id": launch.execution_id,
+            "pid": launch.pid,
+            "log": launch.log,
+            "prompt_file": prompt_file,
+            "happy_daemon_recorded": daemon_recorded,
+        }),
+    )?;
+    Ok(0)
 }
 
 /// Desktop launchers hand the directory to another process. Their short-lived
