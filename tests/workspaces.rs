@@ -1774,6 +1774,85 @@ fn agent_shortcuts_forward_arguments_without_starting_real_agents() {
 }
 
 #[test]
+fn agent_templates_resolve_per_launch_and_reach_native_instruction_options() {
+    let fixture = Fixture::new();
+    let workspace = fixture.add("instructions");
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    let config_dir = fixture.root.path().join(".config/shoal");
+    fs::create_dir_all(&config_dir).unwrap();
+    fs::write(
+        config_dir.join("agent-template.md"),
+        "global {workspace} {branch}",
+    )
+    .unwrap();
+    let bin = fixture.root.path().join("template-bin");
+    fs::create_dir(&bin).unwrap();
+    for agent in ["codex", "claude"] {
+        let stub = bin.join(agent);
+        fs::write(&stub, "#!/bin/sh\nprintf '%s\\0' \"$@\"\n").unwrap();
+        fs::set_permissions(stub, fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    for (index, expected) in [
+        "global instructions instructions".to_owned(),
+        format!("repo {}", path.display()),
+        "saved \"quotes\"\n$(false) {unknown}".to_owned(),
+        String::new(),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        if index == 1 {
+            fs::write(path.join("agent-template.md"), "repo {path}").unwrap();
+        }
+        if index >= 2 {
+            let local = fixture.root.path().join("local.toml");
+            fs::write(
+                &local,
+                format!("agent_template = {}", toml::Value::String(expected.clone())),
+            )
+            .unwrap();
+            fixture.ok(&[
+                "repo",
+                "config",
+                fixture.repo.to_str().unwrap(),
+                "--file",
+                local.to_str().unwrap(),
+            ]);
+        }
+        for agent in ["codex", "claude"] {
+            let mut command = fixture.command();
+            command.arg(agent);
+            if agent == "codex" {
+                command.arg("cli");
+            }
+            let output = command
+                .args(["instructions", "--", "user prompt"])
+                .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+                .output()
+                .unwrap();
+            assert!(output.status.success(), "{output:?}");
+            let stdout = String::from_utf8(output.stdout).unwrap();
+            let args: Vec<_> = stdout.split('\0').collect();
+            if expected.is_empty() {
+                assert_eq!(args[0], "user prompt");
+            } else {
+                if agent == "claude" {
+                    assert_eq!(args[..2], ["--append-system-prompt", &expected]);
+                } else {
+                    assert_eq!(args[0], "-c");
+                    let setting: toml::Value = toml::from_str(args[1]).unwrap();
+                    assert_eq!(
+                        setting["developer_instructions"].as_str(),
+                        Some(expected.as_str())
+                    );
+                }
+                assert_eq!(args[2], "user prompt");
+            }
+        }
+    }
+}
+
+#[test]
 fn stop_and_manual_removal_terminate_connected_executions() {
     let fixture = Fixture::new();
     for operation in ["stop", "rm"] {
@@ -6644,6 +6723,14 @@ fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
 #[test]
 fn happy_issue_prompts_reach_claude_and_are_saved_for_codex() {
     let fixture = Fixture::new();
+    let config_dir = fixture.root.path().join(".config/shoal");
+    fs::create_dir_all(&config_dir).unwrap();
+    fs::write(config_dir.join("agent-template.md"), "General {workspace}").unwrap();
+    fs::write(
+        config_dir.join("issue-template.md"),
+        "Issue {title}: {body}",
+    )
+    .unwrap();
     let record = install_fake_happy(&fixture);
     let gh = fixture.root.path().join("bin/gh");
     let title = "Fix API timeout";
@@ -6714,7 +6801,11 @@ fn happy_issue_prompts_reach_claude_and_are_saved_for_codex() {
                 args[5].contains(title) && args[5].contains(body),
                 "{args:?}"
             );
-            assert_eq!(args[6..8], ["--model", "test"]);
+            assert_eq!(
+                args[6..8],
+                ["--append-system-prompt", "General issue-34-fix-api-timeout"]
+            );
+            assert_eq!(args[8..10], ["--model", "test"]);
             assert_eq!(launch["prompt_file"], Value::Null);
             assert_eq!(launch["prompt_delivered"], true, "{launch}");
             assert!(!stderr.contains("initial prompt"), "{stderr}");
@@ -6734,7 +6825,10 @@ fn happy_issue_prompts_reach_claude_and_are_saved_for_codex() {
             // Not logged in to Happy: the prompt is saved and the user is told.
             let prompt_file = PathBuf::from(launch["prompt_file"].as_str().unwrap());
             let prompt = fs::read_to_string(&prompt_file).unwrap();
-            assert!(prompt.contains(title) && prompt.contains(body), "{prompt}");
+            assert_eq!(
+                prompt,
+                format!("General issue-34-fix-api-timeout\n\nIssue {title}: {body}")
+            );
             assert_eq!(launch["prompt_delivered"], false);
             assert_eq!(launch["happy_session_id"], Value::Null);
             assert!(

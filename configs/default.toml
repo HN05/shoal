@@ -1,7 +1,7 @@
 # Shoal machine configuration. Values shown are the defaults; edit them in place.
 # The daemon reads this file when it starts, so changes take effect after
-# `shoal daemon restart`, except the agent settings (`default_agent` and
-# `codex.default_mode`), which the CLI reads on every command. Commented blocks
+# `shoal daemon restart`, except agent settings, which the CLI reads on every
+# command. Commented blocks
 # are examples, not defaults: uncomment a whole block and adapt it. A repository's
 # .shoal.toml (or the config saved with `shoal repo config`) holds its named
 # ports, setup and hook commands and resource pools, and may set any value below
@@ -14,6 +14,11 @@ root_dir = "~/shoal"
 # Agent `shoal issue <url>` starts when --agent is omitted (no default):
 # codex, claude, happy-claude, or happy-codex.
 # default_agent = "codex"
+
+# Prompt templates normally live beside this file as issue-template.md and
+# agent-template.md. Inline text takes precedence over the corresponding file.
+# issue_template = "Work on issue #{number}: {title}\n{url}\n\n{body}"
+# agent_template = "Follow repository instructions in {workspace} at {path}."
 
 [codex]
 # `shoal codex` without cli/app: "cli" or "app".

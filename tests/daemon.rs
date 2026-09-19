@@ -384,9 +384,19 @@ esac
         include_str!("../issue-template.md")
     );
     fs::write(&template, "custom issue template").unwrap();
+    let agent_template = config.with_file_name("agent-template.md");
+    assert_eq!(
+        fs::read_to_string(&agent_template).unwrap(),
+        include_str!("../agent-template.md")
+    );
+    fs::write(&agent_template, "custom agent template").unwrap();
     fs::write(&config, "default_agent = 'claude'\n").unwrap();
     let output: Value = serde_json::from_slice(&run(&["--json", "setup"]).stdout).unwrap();
     assert_eq!(output["config_created"], false);
+    assert_eq!(
+        fs::read_to_string(agent_template).unwrap(),
+        "custom agent template"
+    );
     assert_eq!(
         fs::read_to_string(&template).unwrap(),
         "custom issue template"

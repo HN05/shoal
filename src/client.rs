@@ -91,6 +91,13 @@ pub async fn settings(
             crate::templates::ISSUE_FILE,
         )?;
     }
+    if settings.agent_template.is_none() {
+        let config = crate::config::Config::path(paths);
+        settings.agent_template = crate::templates::read(
+            config.parent().context("config has no directory")?,
+            crate::templates::AGENT_FILE,
+        )?;
+    }
     Ok(settings)
 }
 

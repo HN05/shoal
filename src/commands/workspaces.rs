@@ -18,6 +18,7 @@ use crate::{
     removal::{BranchChoice, RemovalCheck, RemovalResult},
     shell,
     state::WorkspaceState,
+    templates,
     ui::{self, Fallback},
 };
 
@@ -555,8 +556,19 @@ pub(super) async fn claude(
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let inspection = client::inspect(&ctx.paths, workspace).await?;
+    let settings = client::settings(
+        &ctx.paths,
+        ConfigTarget::Workspace(inspection.workspace.id.clone()),
+    )
+    .await?;
+    let instructions =
+        templates::instructions(settings.agent_template.as_deref(), &inspection.workspace);
     trust_claude(ctx, &inspection.workspace.path);
     let command = std::iter::once("claude".into())
+        .chain(templates::instruction_args(
+            HappyAgent::Claude,
+            instructions,
+        ))
         .chain(args)
         .chain(["--remote-control".into(), inspection.workspace.name.into()])
         .collect();
@@ -590,19 +602,19 @@ pub(super) async fn codex(
     args: Vec<OsString>,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let mode = match mode {
-        Some(mode) => mode,
-        None => {
-            client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.clone()))
-                .await?
-                .codex
-                .default_mode
-        }
-    };
-    if mode == CodexMode::App {
+    // Explicit desktop handoffs do not consume prompt templates.
+    if mode == Some(CodexMode::App) {
         return open_app(ctx, Some(workspace), "codex", args).await;
     }
+    let settings = client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.clone())).await?;
+    if mode.unwrap_or(settings.codex.default_mode) == CodexMode::App {
+        return open_app(ctx, Some(workspace), "codex", args).await;
+    }
+    let inspection = client::inspect(&ctx.paths, workspace.clone()).await?;
+    let instructions =
+        templates::instructions(settings.agent_template.as_deref(), &inspection.workspace);
     let command = std::iter::once("codex".into())
+        .chain(templates::instruction_args(HappyAgent::Codex, instructions))
         .chain(args)
         .chain([
             "--sandbox".into(),
@@ -622,10 +634,24 @@ pub(super) async fn happy(
     agent: HappyAgent,
     workspace: Option<String>,
     prompt: Option<String>,
-    args: Vec<OsString>,
+    mut args: Vec<OsString>,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let workspace = client::inspect(&ctx.paths, workspace).await?.workspace;
+    let settings =
+        client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
+    let instructions = templates::instructions(settings.agent_template.as_deref(), &workspace);
+    let prompt = if agent == HappyAgent::Codex && !instructions.is_empty() {
+        Some(match prompt {
+            Some(prompt) if !prompt.is_empty() => format!("{instructions}\n\n{prompt}"),
+            _ => instructions,
+        })
+    } else {
+        let mut configured = templates::instruction_args(HappyAgent::Claude, instructions);
+        configured.append(&mut args);
+        args = configured;
+        prompt
+    };
     if agent == HappyAgent::Claude {
         trust_claude(ctx, &workspace.path);
     }

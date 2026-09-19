@@ -16,8 +16,8 @@ download a prebuilt macOS or Linux binary from a [release](https://github.com/HN
 the macOS binaries are unsigned, so clear the download quarantine first with
 `xattr -d com.apple.quarantine shoal`.
 Homebrew installs the runtime dependencies. `shoal setup` starts the per-user
-daemon and writes missing defaults (`config.toml` and `issue-template.md`) in
-`~/.config/shoal/`; `shoal skill install` installs instructions for Codex and Claude Code.
+daemon and writes missing config and prompt template defaults in `~/.config/shoal/`;
+`shoal skill install` installs instructions for Codex and Claude Code.
 
 For directory navigation and tab completion, add this to your `.zshrc` or
 `.bashrc`, then run it in your current shell:
@@ -48,7 +48,10 @@ shoal issue https://github.com/owner/repo/issues/34  # Paste an issue: finds the
 Use `--agent claude` for Claude Code, or `--agent happy-claude`/`happy-codex` for
 a detached [Happy](https://github.com/slopus/happy) session that appears in the
 Happy app. `shoal issue` takes the same `--agent`, or `default_agent = "codex"`
-from the repository or global config. New workspaces branch from the repository's
+from the repository or global config. Edit `~/.config/shoal/issue-template.md`
+to customize issue prompts and `agent-template.md` for general instructions;
+put those files in a repository root to override them for that project.
+New workspaces branch from the repository's
 default branch. With shell integration, `shoal add` enters the workspace.
 
 ## Everyday commands

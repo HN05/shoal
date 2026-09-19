@@ -7,6 +7,8 @@ use crate::{config::Config, paths::Paths};
 
 pub const ISSUE_FILE: &str = "issue-template.md";
 pub const ISSUE_DEFAULT: &str = include_str!("../issue-template.md");
+pub const AGENT_FILE: &str = "agent-template.md";
+pub const AGENT_DEFAULT: &str = include_str!("../agent-template.md");
 
 pub fn read(directory: &Path, name: &str) -> Result<Option<String>> {
     let path = directory.join(name);
@@ -24,7 +26,7 @@ pub fn install(paths: &Paths) -> Result<()> {
 
 fn install_at(directory: &Path) -> Result<()> {
     fs::create_dir_all(directory)?;
-    for (name, contents) in [(ISSUE_FILE, ISSUE_DEFAULT)] {
+    for (name, contents) in [(ISSUE_FILE, ISSUE_DEFAULT), (AGENT_FILE, AGENT_DEFAULT)] {
         let path = directory.join(name);
         match fs::OpenOptions::new()
             .write(true)
@@ -57,6 +59,39 @@ pub fn render(template: &str, fields: &[(&str, &str)]) -> String {
     output
 }
 
+pub fn instructions(template: Option<&str>, workspace: &crate::model::Workspace) -> String {
+    render(
+        template.unwrap_or_default(),
+        &[
+            ("{workspace}", &workspace.name),
+            ("{branch}", &workspace.branch),
+            ("{path}", &workspace.path.to_string_lossy()),
+        ],
+    )
+}
+
+pub fn instruction_args(
+    agent: crate::happy::HappyAgent,
+    instructions: String,
+) -> Vec<std::ffi::OsString> {
+    if instructions.is_empty() {
+        return Vec::new();
+    }
+    match agent {
+        crate::happy::HappyAgent::Claude => {
+            vec!["--append-system-prompt".into(), instructions.into()]
+        }
+        crate::happy::HappyAgent::Codex => vec![
+            "-c".into(),
+            format!(
+                "developer_instructions={}",
+                toml::Value::String(instructions)
+            )
+            .into(),
+        ],
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -79,7 +114,22 @@ mod tests {
         let path = directory.path().join(ISSUE_FILE);
         assert_eq!(fs::read_to_string(&path).unwrap(), ISSUE_DEFAULT);
         fs::write(&path, "custom").unwrap();
+        let agent = directory.path().join(AGENT_FILE);
+        assert_eq!(fs::read_to_string(&agent).unwrap(), AGENT_DEFAULT);
+        fs::remove_file(&agent).unwrap();
         install_at(directory.path()).unwrap();
         assert_eq!(fs::read_to_string(path).unwrap(), "custom");
+        assert_eq!(fs::read_to_string(&agent).unwrap(), AGENT_DEFAULT);
+        fs::write(&agent, "custom agent").unwrap();
+        install_at(directory.path()).unwrap();
+        assert_eq!(fs::read_to_string(agent).unwrap(), "custom agent");
+    }
+
+    #[test]
+    fn codex_instructions_are_a_literal_toml_string() {
+        let text = "quotes: \"'''\\\nUnicode: 日本語 $(false)";
+        let args = instruction_args(crate::happy::HappyAgent::Codex, text.into());
+        let value: toml::Value = toml::from_str(args[1].to_str().unwrap()).unwrap();
+        assert_eq!(value["developer_instructions"].as_str(), Some(text));
     }
 }

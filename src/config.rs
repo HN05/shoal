@@ -9,6 +9,7 @@ use crate::{paths::Paths, repo_config::RepoConfig};
 #[derive(Debug)]
 pub struct Effective {
     pub issue_template: Option<String>,
+    pub agent_template: Option<String>,
     pub default_agent: Option<crate::cli::Agent>,
     pub codex: Codex,
     pub auto_cleanup: AutoCleanup,
@@ -20,6 +21,7 @@ pub struct Effective {
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
     pub issue_template: Option<String>,
+    pub agent_template: Option<String>,
     pub root_dir: Option<PathBuf>,
     /// Former name of `root_dir`; still accepted so existing configs load.
     pub repositories_dir: Option<PathBuf>,
@@ -491,6 +493,10 @@ impl Config {
                 .issue_template
                 .clone()
                 .or_else(|| self.issue_template.clone()),
+            agent_template: repo
+                .agent_template
+                .clone()
+                .or_else(|| self.agent_template.clone()),
             default_agent: repo.default_agent.or(self.default_agent),
             codex: Codex {
                 default_mode: repo.codex.default_mode.unwrap_or(self.codex.default_mode),

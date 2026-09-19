@@ -60,7 +60,8 @@ current `PATH` for the service, so install `wt`, `git`, `lsof`, and any hook
 tools first. It also creates `~/.config/shoal/config.toml` (or
 `$XDG_CONFIG_HOME/shoal/config.toml`) from
 [configs/default.toml](../configs/default.toml), which states every default,
-and installs [issue-template.md](../issue-template.md) beside it,
+and installs the root [issue-template.md](../issue-template.md) and
+[agent-template.md](../agent-template.md) beside it,
 never touching an existing file; `--dry-run` writes nothing. `shoal config
 install <name>` replaces the entire global file with a packaged template;
 `shoal config reset` installs `default`. Both move the current file to
@@ -181,11 +182,20 @@ and leaves it there for you to send from the app.
 
 ### Prompt templates
 
-`issue_template` in the saved repository TOML wins over the worktree's TOML
-value or root `issue-template.md`, then the global TOML value or that file
-beside `config.toml`. Omitted values fall through; empty values override.
-Without an issue template, Shoal uses its bundled default. Unknown placeholders
-stay literal. Templates are read at launch without a daemon restart.
+`issue_template` and `agent_template` in the saved repository TOML win over
+the worktree's TOML values or root `issue-template.md` and `agent-template.md`,
+then the global TOML values or corresponding files beside `config.toml`.
+Omitted values fall through; empty values override. Without an issue template,
+Shoal uses its bundled default; without an agent template, it adds no general
+instructions. Unknown placeholders stay literal. Templates are read at launch
+without a daemon restart.
+
+The agent template supplies general instructions, with `{workspace}`, `{branch}`
+and `{path}` from the target worktree. Claude receives `--append-system-prompt`,
+Codex CLI receives a `developer_instructions` config override, and Happy Codex
+receives the instructions before its first prompt through Happy's delivery path
+(or as the first message when no prompt was supplied). Desktop handoffs do not
+consume templates. User prompt arguments are preserved.
 
 ### Branch and workspace names
 `--name` creates a literal Git branch; `--branch <branch|remote/branch>` uses an

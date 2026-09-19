@@ -26,6 +26,7 @@ pub enum ConflictPolicy {
 #[serde(default, deny_unknown_fields)]
 pub struct RepoConfig {
     pub issue_template: Option<String>,
+    pub agent_template: Option<String>,
     /// Agent `shoal issue` starts when `--agent` is omitted.
     pub default_agent: Option<Agent>,
     pub codex: Codex,
@@ -84,6 +85,10 @@ pub fn load(workspace_dir: &Path) -> Result<RepoConfig> {
         config.issue_template =
             crate::templates::read(workspace_dir, crate::templates::ISSUE_FILE)?;
     }
+    if config.agent_template.is_none() {
+        config.agent_template =
+            crate::templates::read(workspace_dir, crate::templates::AGENT_FILE)?;
+    }
     Ok(config)
 }
 
@@ -136,6 +141,7 @@ impl RepoConfig {
         base.resource_pools.extend(self.resource_pools);
         Self {
             issue_template: self.issue_template.or(base.issue_template),
+            agent_template: self.agent_template.or(base.agent_template),
             default_agent: self.default_agent.or(base.default_agent),
             codex: Codex {
                 default_mode: self.codex.default_mode.or(base.codex.default_mode),
