@@ -105,6 +105,9 @@ shoal resource release signing
 Use the returned port or simulator UDID. Reservations and leases belong to the
 workspace and survive command exit; release them when finished.
 
+Install a packaged global config with `shoal config install <name>`;
+`shoal config install --help` lists the available names.
+
 Put project defaults in `.shoal.toml` or `.shoal/config.toml`. For example:
 
 ```toml

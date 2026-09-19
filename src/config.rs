@@ -169,13 +169,18 @@ mod tests {
             Some(crate::cli::Agent::Claude)
         );
         // Reset keeps the edited file as a backup and restores the template.
-        let (same, backup) = Config::reset_at(expected.clone()).unwrap();
+        let (same, backup) = Config::replace_at(expected.clone(), default_template()).unwrap();
         let backup = backup.unwrap();
         assert!(same == expected && backup == home.path().join(".config/shoal/config.toml.backup"));
         assert_eq!(fs::read_to_string(&backup).unwrap(), text);
         assert_eq!(fs::read_to_string(&path).unwrap(), TEMPLATE);
         fs::remove_file(&path).unwrap();
-        assert_eq!(Config::reset_at(expected.clone()).unwrap().1, None);
+        assert_eq!(
+            Config::replace_at(expected.clone(), default_template())
+                .unwrap()
+                .1,
+            None
+        );
         assert_eq!(fs::read_to_string(&backup).unwrap(), text);
     }
 
@@ -389,10 +394,32 @@ impl Config {
     /// `config.toml.backup` (replacing an older backup). Returns the path and
     /// the backup, if one was made.
     pub fn reset(paths: &Paths) -> Result<(PathBuf, Option<PathBuf>)> {
-        Self::reset_at(Self::path(paths))
+        Self::install_named(paths, "default")
     }
 
-    fn reset_at(path: PathBuf) -> Result<(PathBuf, Option<PathBuf>)> {
+    pub fn install_named(paths: &Paths, name: &str) -> Result<(PathBuf, Option<PathBuf>)> {
+        let text = PACKAGED
+            .iter()
+            .find(|(candidate, _)| *candidate == name)
+            .map(|(_, text)| *text)
+            .with_context(|| format!("unknown packaged config: {name}"))?;
+        Self::parse(text, paths).with_context(|| format!("validate packaged config {name}"))?;
+        Self::replace_at(Self::path(paths), text)
+    }
+
+    fn replace_at(path: PathBuf, text: &str) -> Result<(PathBuf, Option<PathBuf>)> {
+        let parent = path.parent().context("config path has no parent")?;
+        fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
+        // Prepare the complete replacement before moving the user's current file.
+        let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
+        std::io::Write::write_all(&mut temporary, text.as_bytes())?;
+        if let Ok(metadata) = fs::symlink_metadata(&path) {
+            ensure!(
+                !metadata.is_dir(),
+                "config is a directory: {}",
+                path.display()
+            );
+        }
         let backup = path.with_extension("toml.backup");
         let moved = match fs::rename(&path, &backup) {
             Ok(()) => true,
@@ -402,8 +429,9 @@ impl Config {
                     .with_context(|| format!("move {} to {}", path.display(), backup.display()));
             }
         };
-        let (path, created) = Self::install_at(path)?;
-        ensure!(created, "{} reappeared during reset", path.display());
+        temporary
+            .persist_noclobber(&path)
+            .with_context(|| format!("install config at {}", path.display()))?;
         Ok((path, moved.then_some(backup)))
     }
 

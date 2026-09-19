@@ -482,6 +482,13 @@ pub enum ShellCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum ConfigCommand {
+    /// Install a packaged global config, keeping the old file as config.toml.backup.
+    Install {
+        #[arg(value_parser = clap::builder::PossibleValuesParser::new(
+            crate::config::PACKAGED.iter().map(|(name, _)| *name)
+        ))]
+        name: String,
+    },
     /// Rewrite the config with the defaults; the old file becomes config.toml.backup.
     Reset,
 }

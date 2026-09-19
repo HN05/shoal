@@ -84,17 +84,28 @@ pub(super) async fn setup(
 }
 
 pub(super) fn config(ctx: &Context, command: ConfigCommand) -> Result<i32> {
-    let ConfigCommand::Reset = command;
-    let (config, backup) = crate::config::Config::reset(&ctx.paths)?;
+    let (name, (config, backup)) = match command {
+        ConfigCommand::Reset => (
+            "default".to_owned(),
+            crate::config::Config::reset(&ctx.paths)?,
+        ),
+        ConfigCommand::Install { name } => {
+            let installed = crate::config::Config::install_named(&ctx.paths, &name)?;
+            (name, installed)
+        }
+    };
     let message = match &backup {
         Some(backup) => format!(
-            "Moved your config to {}\nWrote the defaults to {}",
+            "Moved your config to {}\nInstalled config {name} at {}",
             backup.display(),
             config.display()
         ),
-        None => format!("Wrote the defaults to {}", config.display()),
+        None => format!("Installed config {name} at {}", config.display()),
     };
-    ctx.emit(&message, json!({"config": config, "backup": backup}))?;
+    ctx.emit(
+        &message,
+        json!({"name": name, "config": config, "backup": backup}),
+    )?;
     Ok(0)
 }
 
