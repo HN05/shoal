@@ -21,7 +21,7 @@ use serde_json::json;
 use tokio::time::{Instant, sleep};
 
 use crate::{
-    cli::{Cli, Command, PrCommand, ShellCommand},
+    cli::{Cli, CodexMode, Command, PrCommand, ShellCommand},
     context::Context,
     env,
     paths::Paths,
@@ -175,10 +175,20 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         Command::Exec { workspace, command } => workspaces::exec(&ctx, workspace, command).await,
         Command::Claude { workspace, args } => workspaces::claude(&ctx, workspace, args).await,
         Command::Codex {
-            mode,
             workspace,
+            cli,
+            app,
             args,
-        } => workspaces::codex(&ctx, mode, workspace, args).await,
+        } => {
+            let mode = if cli {
+                Some(CodexMode::Cli)
+            } else if app {
+                Some(CodexMode::App)
+            } else {
+                None
+            };
+            workspaces::codex(&ctx, mode, workspace, args).await
+        }
         Command::T3 { workspace, args } => workspaces::open_app(&ctx, workspace, "t3", args).await,
         Command::Happy {
             agent,

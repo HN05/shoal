@@ -218,10 +218,13 @@ pub enum Command {
     },
     /// Run the Codex CLI or open a workspace in the Codex app.
     Codex {
-        /// Launch mode (defaults to codex.default_mode in global config, or cli).
-        #[arg(value_enum)]
-        mode: Option<CodexMode>,
         workspace: Option<String>,
+        /// Run the Codex CLI, overriding codex.default_mode.
+        #[arg(long, conflicts_with = "app")]
+        cli: bool,
+        /// Open the workspace in the Codex app, overriding codex.default_mode.
+        #[arg(long, conflicts_with = "cli")]
+        app: bool,
         #[arg(last = true)]
         args: Vec<OsString>,
     },
@@ -622,6 +625,31 @@ pub enum ResourceCommand {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn codex_mode_flags_do_not_reserve_workspace_names() {
+        for (args, expected_workspace, expected_cli, expected_app) in [
+            (["shoal", "codex", "cli", "--app"], "cli", false, true),
+            (["shoal", "codex", "--cli", "app"], "app", true, false),
+        ] {
+            let parsed = Cli::try_parse_from(args).unwrap();
+            let Some(Command::Codex {
+                workspace,
+                cli,
+                app,
+                ..
+            }) = parsed.command
+            else {
+                panic!("wrong command")
+            };
+            assert_eq!(workspace.as_deref(), Some(expected_workspace));
+            assert_eq!(cli, expected_cli);
+            assert_eq!(app, expected_app);
+        }
+
+        assert!(Cli::try_parse_from(["shoal", "codex", "--cli", "--app"]).is_err());
+        assert!(Cli::try_parse_from(["shoal", "codex", "cli", "workspace"]).is_err());
+    }
 
     #[test]
     fn pr_workspace_names_can_match_action_names() {

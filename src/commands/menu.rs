@@ -3,7 +3,7 @@
 use anyhow::{Result, bail, ensure};
 
 use crate::{
-    cli::{CodexMode, Command},
+    cli::Command,
     client,
     context::Context,
     env,
@@ -102,12 +102,9 @@ fn execute_command(ctx: &Context, workspace: Option<String>) -> Result<Command> 
             args: vec![],
         },
         "codex cli" | "codex app" => Command::Codex {
-            mode: Some(if choice == "codex cli" {
-                CodexMode::Cli
-            } else {
-                CodexMode::App
-            }),
             workspace,
+            cli: choice == "codex cli",
+            app: choice == "codex app",
             args: vec![],
         },
         "happy claude" | "happy codex" => Command::Happy {

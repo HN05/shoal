@@ -34,7 +34,7 @@ repository's workspaces (and its clone, for URLs) live under `~/shoal/<name>/`:
 ```sh
 shoal repo add /path/to/project --name my-project
 shoal add my-project --name fix-login
-shoal codex cli fix-login
+shoal codex fix-login --cli
 ```
 
 Use `shoal add my-project` to pick a new or existing branch, or pass it explicitly:
@@ -65,7 +65,7 @@ shoal cd fix-login             # Enter a workspace; omit the name for a picker
 shoal exec fix-login -- cargo test
 shoal check fix-login          # With [commands] check = ["cargo", "test"] in config
 shoal claude fix-login         # Run Claude Code
-shoal codex app fix-login      # Open in the Codex desktop app
+shoal codex fix-login --app    # Open in the Codex desktop app
 shoal happy claude fix-login   # Detached Happy session, visible in the Happy app
 shoal diff fix-login           # Changes since the branch's fork point
 shoal inspect fix-login       # Detailed workspace and execution records

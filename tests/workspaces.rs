@@ -1830,7 +1830,7 @@ fn codex_default_mode_is_read_at_launch_and_explicit_modes_override_it() {
     for config in ["", "[codex]\ndefault_mode = 'app'"] {
         // Change the default while the daemon remains running.
         fs::write(config_dir.join("config.toml"), config).unwrap();
-        for mode in [None, Some("cli"), Some("app")] {
+        for mode in [None, Some("--cli"), Some("--app")] {
             let mut command = fixture.command();
             command.current_dir(path).arg("codex");
             if let Some(mode) = mode {
@@ -1847,7 +1847,7 @@ fn codex_default_mode_is_read_at_launch_and_explicit_modes_override_it() {
                 "{}",
                 String::from_utf8_lossy(&output.stderr)
             );
-            let app = mode == Some("app") || (mode.is_none() && !config.is_empty());
+            let app = mode == Some("--app") || (mode.is_none() && !config.is_empty());
             let expected = if app {
                 format!("\napp\n{path}\nliteral spaces; $(false)\n")
             } else {
@@ -4597,7 +4597,7 @@ fn desktop_shortcuts_open_workspaces_without_cli_flags_or_execution_records() {
             let mut command = fixture.command();
             command.arg(program);
             if program == "codex" {
-                command.arg("app");
+                command.arg("--app");
             }
             if explicit {
                 command.arg("desktop");
@@ -4629,7 +4629,7 @@ fn desktop_shortcuts_open_workspaces_without_cli_flags_or_execution_records() {
         }
     }
     fixture.add("other");
-    for args in [vec!["codex", "app", "other"], vec!["t3", "other"]] {
+    for args in [vec!["codex", "other", "--app"], vec!["t3", "other"]] {
         let output = fixture
             .command()
             .args(["exec", "desktop", "--", env!("CARGO_BIN_EXE_shoal")])
@@ -5812,7 +5812,7 @@ fn codex_launches_trust_the_workspace_in_the_selected_user_config() {
     .unwrap();
     fs::set_permissions(bin.join("codex"), fs::Permissions::from_mode(0o755)).unwrap();
     let config = home.join(".codex/config.toml");
-    for mode in [None, Some("cli"), Some("app")] {
+    for mode in [None, Some("--cli"), Some("--app")] {
         for overridden in [false, true] {
             let config_dir = home.join("custom-codex");
             let target = if overridden {
@@ -5848,7 +5848,7 @@ fn codex_launches_trust_the_workspace_in_the_selected_user_config() {
 
     // Malformed settings remain untouched and only produce a warning.
     fs::write(&config, "projects = []\n").unwrap();
-    let output = fixture.run(&["codex", "cli", "trusted"]);
+    let output = fixture.run(&["codex", "trusted", "--cli"]);
     assert!(output.status.success(), "{output:?}");
     assert!(String::from_utf8_lossy(&output.stderr).contains("could not mark"));
     assert_eq!(fs::read_to_string(config).unwrap(), "projects = []\n");

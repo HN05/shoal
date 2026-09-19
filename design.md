@@ -175,7 +175,8 @@ approvals, Claude gets remote control named after the workspace. Both trust the
 workspace in their user config before launch, creating the file if needed; Happy
 launches and Codex app handoffs do so too. General agent templates become native
 CLI instructions or a first-message prefix for Happy Codex; desktop handoffs carry no instructions.
-Codex's default mode is a config value read at launch.
+Codex's default mode is a config value read at launch; `--cli` and `--app`
+override it.
 `add --issue` resolves issue numbers/URLs using the remote and existing gh/fj
 login, derives a portable name, and renders issue context from a plain-text
 template for CLI agents; forge lookup stays in the CLI with no Shoal credentials

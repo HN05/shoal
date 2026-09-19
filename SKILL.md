@@ -13,7 +13,7 @@ outside a scoped execution; an optional `codex` or `claude` selects one.
 
 ## Workspace context
 
-Inside `shoal exec`, `shoal claude`, or `shoal codex cli`, commands inherit scope
+Inside `shoal exec`, `shoal claude`, or `shoal codex --cli`, commands inherit scope
 and resolve to your own workspace. Agents launched independently in a managed
 worktree can use the same commands: Shoal resolves the workspace from the current
 directory, but the session itself has no execution scope or lifecycle tracking.

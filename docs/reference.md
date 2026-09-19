@@ -104,8 +104,8 @@ shoal cd -                               # Previous directory
 shoal exec fix-login -- cargo test
 shoal claude fix-login -- --help
 shoal codex                              # Current workspace or picker; default mode
-shoal codex cli fix-login -- --help
-shoal codex app fix-login                # Codex desktop app
+shoal codex fix-login --cli -- --help
+shoal codex fix-login --app              # Codex desktop app
 shoal happy codex fix-login              # Detached Happy session for the Happy app
 shoal t3 fix-login                       # Running T3 Code desktop app
 shoal status fix-login                   # Activity, changes, and held resources
@@ -197,7 +197,7 @@ agent's exit code; the workspace is retained even when launch fails. With shell
 integration, your shell enters the new workspace after the agent exits.
 `--json` emits the workspace record first, then the agent's unmodified output.
 
-`shoal codex` without `cli`/`app` uses `codex.default_mode` from the workspace's
+`shoal codex` without `--cli`/`--app` uses `codex.default_mode` from the workspace's
 repository config or `~/.config/shoal/config.toml` (or
 `$XDG_CONFIG_HOME/shoal/config.toml`), read at launch without a daemon restart:
 
@@ -515,7 +515,7 @@ shoal notifications --follow   # Keep printing, and raise terminal notifications
 
 The daemon records what happens while you are not looking: a resource or
 simulator request that found no capacity (naming the workspaces holding the
-pool), a preferred port in use, an agent started with `claude`, `codex cli`, or
+pool), a preferred port in use, an agent started with `claude`, `codex --cli`, or
 `happy` exiting (with its code, or a note to reconcile when it left processes
 behind), and workspaces it removed or retained on its own through PR, merge, or
 idle cleanup. Each line shows the local time, the workspace, and the message;
@@ -543,7 +543,7 @@ shoal exec fix-login -- sh -c 'my-server --port "$API_PORT"'
 Named TCP reservations belong to the worktree, persist across command exits, `stop`,
 and restarts, and are released by successful removal. Repeating a name returns the
 same port (`--reason` may update it); changing the number or variable requires
-release first. Later `exec`, `claude`, `codex cli`, and `happy` commands receive
+release first. Later `exec`, `claude`, `codex --cli`, and `happy` commands receive
 `SHOAL_PORT_<NAME>` or the `--env` variable; running processes keep their
 environment, and nested executions drop the parent's port variables. Automatic
 allocation uses 49152–65535, configurable with `[ports]` `start`/`end` in the global
@@ -621,7 +621,7 @@ stopped, use `--repair --acknowledge-stopped`; visible live processes still bloc
 ### Scoped workspace commands
 
 PR watches and merge acknowledgements are own-workspace scope exceptions.
-Commands launched through `exec`, `claude`, `codex cli`, and `happy` carry a scope
+Commands launched through `exec`, `claude`, `codex --cli`, and `happy` carry a scope
 token that confines them to their own worktree: `status`, inspect, execute, `merge`,
 `diff`, `setup`, and resources. They cannot `land`, reach other worktrees, remove workspaces,
 read notifications, or administer Shoal itself (repositories, the daemon service,

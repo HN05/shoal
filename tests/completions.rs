@@ -16,7 +16,7 @@ fn generate(home: &Path, args: &[&str]) -> Vec<u8> {
 }
 
 #[test]
-fn bash_completes_commands_flags_and_codex_modes_without_a_daemon() {
+fn bash_completes_commands_and_flags_without_a_daemon() {
     let home = tempfile::tempdir().unwrap();
     let script = home.path().join("completions.bash");
     fs::write(&script, generate(home.path(), &["completions", "bash"])).unwrap();
@@ -25,9 +25,9 @@ source "$1"
 COMP_TYPE=9
 COMP_WORDS=(shoal co); COMP_CWORD=1; COMP_LINE='shoal co'; COMP_POINT=${#COMP_LINE}
 _clap_complete_shoal "${COMP_WORDS[0]}" "${COMP_WORDS[COMP_CWORD]}" "${COMP_WORDS[COMP_CWORD-1]}"; printf '%s\n' "${COMPREPLY[@]}"
-COMP_WORDS=(shoal codex c); COMP_CWORD=2; COMP_LINE='shoal codex c'; COMP_POINT=${#COMP_LINE}
+COMP_WORDS=(shoal codex --c); COMP_CWORD=2; COMP_LINE='shoal codex --c'; COMP_POINT=${#COMP_LINE}
 _clap_complete_shoal "${COMP_WORDS[0]}" "${COMP_WORDS[COMP_CWORD]}" "${COMP_WORDS[COMP_CWORD-1]}"; printf '%s\n' "${COMPREPLY[@]}"
-COMP_WORDS=(shoal codex a); COMP_CWORD=2; COMP_LINE='shoal codex a'; COMP_POINT=${#COMP_LINE}
+COMP_WORDS=(shoal codex --a); COMP_CWORD=2; COMP_LINE='shoal codex --a'; COMP_POINT=${#COMP_LINE}
 _clap_complete_shoal "${COMP_WORDS[0]}" "${COMP_WORDS[COMP_CWORD]}" "${COMP_WORDS[COMP_CWORD-1]}"; printf '%s\n' "${COMPREPLY[@]}"
 COMP_WORDS=(shoal reconcile --re); COMP_CWORD=2; COMP_LINE='shoal reconcile --re'; COMP_POINT=${#COMP_LINE}
 _clap_complete_shoal "${COMP_WORDS[0]}" "${COMP_WORDS[COMP_CWORD]}" "${COMP_WORDS[COMP_CWORD-1]}"; printf '%s\n' "${COMPREPLY[@]}"
@@ -39,7 +39,7 @@ _clap_complete_shoal "${COMP_WORDS[0]}" "${COMP_WORDS[COMP_CWORD]}" "${COMP_WORD
         String::from_utf8_lossy(&output.stderr)
     );
     let output = String::from_utf8(output.stdout).unwrap();
-    for expected in ["codex", "completions", "cli", "app", "--repair"] {
+    for expected in ["codex", "completions", "--cli", "--app", "--repair"] {
         assert!(
             output.lines().any(|line| line == expected),
             "missing {expected}: {output}"
@@ -106,7 +106,7 @@ fn dynamic_completion_covers_nested_commands_flags_and_paths_without_daemon() {
         (vec!["shoal", "resource", "a"], "acquire"),
         (vec!["shoal", "sim", "a"], "acquire"),
         (vec!["shoal", "daemon", "re"], "restart"),
-        (vec!["shoal", "codex", "a"], "app"),
+        (vec!["shoal", "codex", "--a"], "--app"),
         (vec!["shoal", "add", "--agent", "co"], "codex"),
         (vec!["shoal", "add", "--agent", "cl"], "claude"),
         (vec!["shoal", "add", "--agent", "happy-cl"], "happy-claude"),

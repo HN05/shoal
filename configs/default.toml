@@ -38,7 +38,7 @@ codex = ["codex", "{args}", "--sandbox", "danger-full-access", "--ask-for-approv
 # review = ["tuicr", "-r", "{diff_base}..HEAD"]
 
 [codex]
-# `shoal codex` without cli/app: "cli" or "app".
+# `shoal codex` without --cli/--app: "cli" or "app".
 default_mode = "cli"
 
 [auto_cleanup]
