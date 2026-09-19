@@ -51,11 +51,10 @@ pub enum Command {
         /// Registered repository; may be omitted when --issue is a URL.
         repository: Option<String>,
         /// Git branch name; a portable workspace name is derived from it.
-        #[arg(long)]
-        name: Option<String>,
-        /// Use an existing local branch or remote/branch without creating a new branch.
-        #[arg(long, conflicts_with_all = ["name", "issue", "base"])]
         branch: Option<String>,
+        /// Use an existing local branch or remote/branch without creating a new branch.
+        #[arg(long, conflicts_with_all = ["branch", "issue", "base"])]
+        existing: Option<String>,
         /// Derive a name and agent prompt from a forge issue number or URL.
         #[arg(long)]
         issue: Option<String>,
@@ -647,6 +646,34 @@ mod tests {
 
         assert!(Cli::try_parse_from(["shoal", "codex", "--cli", "--app"]).is_err());
         assert!(Cli::try_parse_from(["shoal", "codex", "cli", "workspace"]).is_err());
+    }
+
+    #[test]
+    fn add_uses_a_positional_new_branch_and_existing_branch_flag() {
+        let new = Cli::try_parse_from(["shoal", "add", "repo", "feature/topic"]).unwrap();
+        assert!(matches!(
+            new.command,
+            Some(Command::Add {
+                repository,
+                branch,
+                existing: None,
+                ..
+            }) if repository.as_deref() == Some("repo")
+                && branch.as_deref() == Some("feature/topic")
+        ));
+
+        let existing =
+            Cli::try_parse_from(["shoal", "add", "repo", "--existing", "origin/topic"]).unwrap();
+        assert!(matches!(
+            existing.command,
+            Some(Command::Add {
+                repository,
+                branch: None,
+                existing,
+                ..
+            }) if repository.as_deref() == Some("repo")
+                && existing.as_deref() == Some("origin/topic")
+        ));
     }
 
     #[test]

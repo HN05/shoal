@@ -81,7 +81,8 @@ its existing login (`gh auth login` or `fj auth login`); no Shoal forge config o
 tokens are needed. The repository may be omitted for a URL, which selects the
 single registered repository with the same remote; unregistered or duplicated
 remotes fail. Explicit repositories must match the URL. Lookup failures create nothing.
-Names default to `issue-<number>-<title-slug>`; `--name` overrides this. With
+Names default to `issue-<number>-<title-slug>`; the optional branch argument
+overrides this. With
 `--agent`, `issue-template.md` supplies the initial prompt, substituting
 `{number}`, `{title}`, `{url}` and `{body}` once as literal text (forward agent
 options after `--`, not a second prompt). Codex uses CLI mode for issue
@@ -95,8 +96,8 @@ shoal repo add /path/to/repo             # Or a Git clone URL; register once
 shoal repo add /path/to/repo --name my-project
 shoal repo rename my-project new-name
 shoal repo list
-shoal add my-project --name fix-login
-shoal add my-project --name fix-api --agent codex -- "Fix the API timeout"
+shoal add my-project fix-login
+shoal add my-project fix-api --agent codex -- "Fix the API timeout"
 shoal issue https://forge.example/team/repo/issues/34 -- --model fast
 shoal cd                                 # Fuzzy picker, even inside a workspace
 shoal cd fix-login                       # Enter through the shell function
@@ -254,8 +255,9 @@ receives the instructions before its first prompt through Happy's delivery path
 consume templates. User prompt arguments are preserved.
 
 ### Branch and workspace names
-`--name` creates a literal Git branch; `--branch <branch|remote/branch>` uses an
-existing one (incompatible with `--name`, `--issue`, and `--ref`). The picker
+`shoal add <repository> [branch]` creates a literal Git branch;
+`--existing <branch|remote/branch>` uses an existing one (incompatible with the
+branch argument, `--issue`, and `--ref`). The picker
 queries remotes for current branches. Local branches take precedence and remain
 unchanged; remote selections fetch and create tracking branches, or fast-forward
 a matching local tracking branch without discarding ahead commits. Ambiguous

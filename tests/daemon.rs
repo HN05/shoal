@@ -449,7 +449,7 @@ esac
         );
     }
     run(&["repo", "add", repo.to_str().unwrap()]);
-    run(&["add", repo.to_str().unwrap(), "--name", "keep-running"]);
+    run(&["add", repo.to_str().unwrap(), "keep-running"]);
     let marker = root.path().join("started");
     let finish = root.path().join("finish");
     let mut execution = command(root.path())

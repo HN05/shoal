@@ -33,14 +33,14 @@ repository's workspaces (and its clone, for URLs) live under `~/shoal/<name>/`:
 
 ```sh
 shoal repo add /path/to/project --name my-project
-shoal add my-project --name fix-login
+shoal add my-project fix-login
 shoal codex fix-login --cli
 ```
 
 Use `shoal add my-project` to pick a new or existing branch, or pass it explicitly:
 
 ```sh
-shoal add my-project --branch origin/feature/api --agent codex
+shoal add my-project --existing origin/feature/api --agent codex
 shoal add my-project --issue 34 --agent codex  # Issue number or URL; uses gh/fj
 shoal add --issue https://github.com/owner/repo/issues/34  # URL finds the repository
 shoal issue https://github.com/owner/repo/issues/34  # Paste an issue: finds the repository, starts the default agent
@@ -130,7 +130,7 @@ capacity = 1
 ```
 
 Select a named Git identity with `git_profile = "work"` in that file, or use
-`shoal add my-project --name feature --git-profile work`. Define the profile
+`shoal add my-project feature --git-profile work`. Define the profile
 in global config; see [Git profiles](docs/reference.md#git-profiles).
 
 The same file can name a `setup_cmd` that prepares each new worktree, a

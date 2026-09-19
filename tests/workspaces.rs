@@ -112,7 +112,7 @@ impl Fixture {
         serde_json::from_slice(&output.stdout).unwrap()
     }
     fn add(&self, name: &str) -> Value {
-        self.ok(&["add", self.repo.to_str().unwrap(), "--name", name])
+        self.ok(&["add", self.repo.to_str().unwrap(), name])
     }
 
     /// `~/shoal`, the default parent of every repository directory.
@@ -282,7 +282,7 @@ fn url_registration_clones_once_and_supports_workspaces() {
     assert_eq!(directory.parent().unwrap(), fixture.shoal_dir());
     assert!(!fixture.root.path().join("state/repositories").exists());
     assert_eq!(fixture.ok(&["repo", "add", &url]), repo);
-    let workspace = fixture.ok(&["add", &url, "--name", "cloned"]);
+    let workspace = fixture.ok(&["add", &url, "cloned"]);
     assert_eq!(
         Path::new(workspace["path"].as_str().unwrap())
             .parent()
@@ -292,7 +292,7 @@ fn url_registration_clones_once_and_supports_workspaces() {
     fixture.ok(&["rm", "cloned"]);
     assert!(clone.is_dir());
     // No workspace name can collide with the clone's directory.
-    let main = fixture.ok(&["add", &url, "--name", "main"]);
+    let main = fixture.ok(&["add", &url, "main"]);
     assert_eq!(main["path"], directory.join("main").to_str().unwrap());
     assert_eq!(main["branch"], "main-2");
 }
@@ -325,7 +325,7 @@ fn displayed_repository_name_resolves_old_uuid_clones_and_rejects_ambiguity() {
         if parent == "one" {
             let listing = fixture.run(&["repo", "list"]);
             assert!(String::from_utf8_lossy(&listing.stdout).contains("saldoir-server  file://"));
-            fixture.ok(&["add", "saldoir-server", "--name", "feature"]);
+            fixture.ok(&["add", "saldoir-server", "feature"]);
         }
     }
     let ambiguous = fixture.run(&["repo", "rm", "saldoir-server", "--yes"]);
@@ -615,7 +615,7 @@ fn local_repository_without_remotes_registers_in_place_and_creates_workspaces() 
     ]);
     assert_eq!(repo["path"], fixture.repo.to_str().unwrap());
     assert_eq!(fixture.ok(&["repo", "list"]).as_array().unwrap().len(), 1);
-    let workspace = fixture.ok(&["add", "local", "--name", "offline"]);
+    let workspace = fixture.ok(&["add", "local", "offline"]);
     assert_eq!(
         git(
             Path::new(workspace["path"].as_str().unwrap()),
@@ -839,7 +839,7 @@ fn configured_root_directory_affects_new_repositories_and_preserves_existing_pat
     .unwrap();
     fixture.restart();
     assert_eq!(fixture.ok(&["repo", "add", &url]), repo);
-    let retained = fixture.ok(&["add", &url, "--name", "retained"]);
+    let retained = fixture.ok(&["add", &url, "retained"]);
     assert_eq!(
         Path::new(retained["path"].as_str().unwrap())
             .parent()
@@ -908,7 +908,7 @@ fn repository_clone_path_overrides_default_and_resolves_in_callers_directory() {
     assert!(String::from_utf8_lossy(&output.stderr).contains("cannot relocate"));
     assert!(!mismatch.exists());
     assert_eq!(fixture.ok(&["repo", "add", &url]), repo);
-    fixture.ok(&["add", &url, "--name", "custom-clone"]);
+    fixture.ok(&["add", &url, "custom-clone"]);
 }
 
 #[test]
@@ -976,7 +976,7 @@ fn registration_reuses_repositories_by_origin_across_paths_and_url_forms() {
     assert_eq!(fixture.ok(&["repo", "add", url]), original);
     assert_eq!(fixture.ok(&["repo", "list"]).as_array().unwrap().len(), 1);
     // This remote tests identity matching only; explicitly use local history.
-    fixture.ok(&["add", ssh_url, "--name", "alias", "--ref", "HEAD"]);
+    fixture.ok(&["add", ssh_url, "alias", "--ref", "HEAD"]);
     fixture.ok(&["rm", "alias"]);
 }
 
@@ -1034,7 +1034,6 @@ fn dirty_workspace_is_retained_and_failed_creation_can_be_removed() {
             .run(&[
                 "add",
                 fixture.repo.to_str().unwrap(),
-                "--name",
                 "broken",
                 "--ref",
                 "does-not-exist"
@@ -1144,7 +1143,6 @@ fn branch_removal_compares_contents_to_main_or_upstream_and_honors_explicit_choi
     let divergent = fixture.ok(&[
         "add",
         fixture.repo.to_str().unwrap(),
-        "--name",
         "divergent",
         "--ref",
         "HEAD",
@@ -1173,7 +1171,7 @@ fn repositories_can_be_named_when_added_and_renamed_without_duplication() {
     ]);
     assert_eq!(named["id"], original);
     assert_eq!(named["name"], "project");
-    fixture.ok(&["add", "project", "--name", "named"]);
+    fixture.ok(&["add", "project", "named"]);
     let renamed = fixture.ok(&["repo", "rename", "project", "renamed"]);
     assert_eq!(renamed["id"], original);
     assert_eq!(renamed["name"], "renamed");
@@ -1499,12 +1497,12 @@ fn concurrent_adds_cannot_claim_the_same_name() {
     ] {
         let first = fixture
             .command()
-            .args(["add", fixture.repo.to_str().unwrap(), "--name", first_name])
+            .args(["add", fixture.repo.to_str().unwrap(), first_name])
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
             .unwrap();
-        let second = fixture.run(&["add", fixture.repo.to_str().unwrap(), "--name", second_name]);
+        let second = fixture.run(&["add", fixture.repo.to_str().unwrap(), second_name]);
         let first = first.wait_with_output().unwrap();
         assert_ne!(first.status.success(), second.status.success());
         assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
@@ -1601,7 +1599,7 @@ fn invalid_branch_names_and_normalized_name_collisions_preserve_existing_work() 
     ] {
         assert!(
             !fixture
-                .run(&["add", fixture.repo.to_str().unwrap(), "--name", branch])
+                .run(&["add", fixture.repo.to_str().unwrap(), branch])
                 .status
                 .success(),
             "{branch}"
@@ -1611,7 +1609,7 @@ fn invalid_branch_names_and_normalized_name_collisions_preserve_existing_work() 
     git(&fixture.repo, &["branch", "-d", "previous"]);
     let existing = fixture.add("feature/topic");
     for branch in ["feature-topic", "feature.topic"] {
-        let output = fixture.run(&["add", fixture.repo.to_str().unwrap(), "--name", branch]);
+        let output = fixture.run(&["add", fixture.repo.to_str().unwrap(), branch]);
         assert!(!output.status.success());
         assert!(String::from_utf8_lossy(&output.stderr).contains("feature-topic"));
     }
@@ -1711,7 +1709,6 @@ exit 7
             .args([
                 "add",
                 fixture.repo.to_str().unwrap(),
-                "--name",
                 name,
                 "--agent",
                 agent,
@@ -1763,7 +1760,6 @@ exit 7
         .args([
             "add",
             fixture.repo.to_str().unwrap(),
-            "--name",
             "bad-base",
             "--ref",
             "missing-ref",
@@ -1786,7 +1782,6 @@ exit 7
         .args([
             "add",
             fixture.repo.to_str().unwrap(),
-            "--name",
             "missing-agent",
             "--agent",
             "codex",
@@ -2090,7 +2085,7 @@ fn shell_function_navigates_after_add_and_away_after_rm() {
 set -e
 . "$INTEGRATION"
 cd "$REPO"
-shoal add "$REPO" --name navigate
+shoal add "$REPO" navigate
 test "${PWD##*/}" = navigate
 shoal_repo_dir="$(dirname "$PWD")"
 shoal cd -
@@ -2120,7 +2115,7 @@ if shoal cd -; then
   exit 1
 fi
 test "$PWD" = "$shoal_repo_dir"
-shoal add "$REPO" --name acknowledged
+shoal add "$REPO" acknowledged
 test "${PWD##*/}" = acknowledged
 printf 'retained' > untracked
 shoal pr merged
@@ -3491,7 +3486,7 @@ fn resource_scopes_separate_repos_share_global_capacity_and_limit_agents() {
     git(&other, &["init", "-b", "main"]);
     commit_resource_config(&other, "[resources.local]\ncapacity=1\n");
     fixture.ok(&["repo", "add", other.to_str().unwrap()]);
-    let second = fixture.ok(&["add", other.to_str().unwrap(), "--name", "second"]);
+    let second = fixture.ok(&["add", other.to_str().unwrap(), "second"]);
     let local_first = fixture.ok(&["resource", "acquire", "local", "first"]);
     let local_second = fixture.ok(&["resource", "acquire", "local", "second"]);
     assert_ne!(local_first["scope"], local_second["scope"]);
@@ -4035,7 +4030,6 @@ fn cd_always_picks_even_inside_a_workspace_and_cancel_does_not_navigate() {
         .args([
             "add",
             fixture.repo.to_str().unwrap(),
-            "--name",
             "missing",
             "--ref",
             "not-a-ref",
@@ -5189,7 +5183,7 @@ fn repository_removal_retries_partial_file_deletion_after_restart_but_rejects_re
     let identity = format!("{}:{}", metadata.dev(), metadata.ino());
     let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
     db.execute("INSERT INTO repository_removals(repository_id,directory_id,deleting_files) VALUES (?1,?2,1)", rusqlite::params![id, identity]).unwrap();
-    let refused = fixture.run(&["add", id, "--name", "too-late"]);
+    let refused = fixture.run(&["add", id, "too-late"]);
     assert!(!refused.status.success());
     assert!(String::from_utf8_lossy(&refused.stderr).contains("removal is incomplete"));
     fs::remove_dir_all(fixture.repo.join(".git")).unwrap();
@@ -5245,7 +5239,7 @@ fn repository_removal_serializes_with_workspace_creation() {
     let id = repo["id"].as_str().unwrap().to_owned();
     let add = fixture
         .command()
-        .args(["add", &id, "--name", "racing"])
+        .args(["add", &id, "racing"])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -5291,12 +5285,7 @@ fn repository_removal_preserves_resources_on_failure_and_retries_after_restart()
     let blocked = fixture.run(&["repo", "config", id, "--clear"]);
     assert!(!blocked.status.success());
     assert!(String::from_utf8_lossy(&blocked.stderr).contains("removal is incomplete"));
-    assert!(
-        !fixture
-            .run(&["add", id, "--name", "blocked"])
-            .status
-            .success()
-    );
+    assert!(!fixture.run(&["add", id, "blocked"]).status.success());
     fs::remove_file(fixture.root.path().join("sim-fail")).unwrap();
     fixture.ok(&["repo", "rm", id, "--yes"]);
     assert!(!fixture.repo.exists());
@@ -5358,7 +5347,6 @@ printf '%s' "$SHOAL_WORKSPACE" > setup-workspace
             "--json",
             "add",
             fixture.repo.to_str().unwrap(),
-            "--name",
             "prepared",
             "--agent",
             "codex",
@@ -5424,7 +5412,6 @@ fn setup_cmd_local_override_absolute_path_failure_and_retry() {
         "--json",
         "add",
         fixture.repo.to_str().unwrap(),
-        "--name",
         "failed-setup",
         "--agent",
         "claude",
@@ -5489,7 +5476,6 @@ fn setup_failure_prompt_ignores_or_deletes_only_new_workspace() {
         &[
             "add",
             fixture.repo.to_str().unwrap(),
-            "--name",
             "ignored",
             "--agent",
             "codex",
@@ -5509,7 +5495,7 @@ fn setup_failure_prompt_ignores_or_deletes_only_new_workspace() {
         .to_owned();
     assert!(Path::new(&ignored_path).join("agent-started").exists());
     let (deleted, transcript) = fixture.interactive(
-        &["add", fixture.repo.to_str().unwrap(), "--name", "deleted"],
+        &["add", fixture.repo.to_str().unwrap(), "deleted"],
         "d\ny\n",
     );
     assert!(!deleted.status.success(), "{transcript}");
@@ -5528,10 +5514,8 @@ fn setup_failure_prompt_ignores_or_deletes_only_new_workspace() {
         fixture.ok(&["inspect", "existing"])["workspace"]["state"],
         "ready"
     );
-    let (canceled, transcript) = fixture.interactive(
-        &["add", fixture.repo.to_str().unwrap(), "--name", "canceled"],
-        "\n",
-    );
+    let (canceled, transcript) =
+        fixture.interactive(&["add", fixture.repo.to_str().unwrap(), "canceled"], "\n");
     assert!(!canceled.status.success(), "{transcript}");
     assert_eq!(
         fixture.ok(&["inspect", "canceled"])["workspace"]["state"],
@@ -5559,7 +5543,6 @@ fn setup_interruption_preserves_work_and_blocks_concurrent_execution() {
             "--json",
             "add",
             fixture.repo.to_str().unwrap(),
-            "--name",
             "interrupted",
         ])
         .stdout(Stdio::null())
@@ -5655,13 +5638,7 @@ test ! -f fail-removal || { echo 'session still busy' >&2; exit 3; }
     );
     let output = fixture
         .command()
-        .args([
-            "--json",
-            "add",
-            fixture.repo.to_str().unwrap(),
-            "--name",
-            "hooked",
-        ])
+        .args(["--json", "add", fixture.repo.to_str().unwrap(), "hooked"])
         .env("SHOAL_SHELL_DIRECTIVE", home.join("directive"))
         .output()
         .unwrap();
@@ -5695,7 +5672,6 @@ test ! -f fail-removal || { echo 'session still busy' >&2; exit 3; }
         .args([
             "add",
             fixture.repo.to_str().unwrap(),
-            "--name",
             "hook-fails",
             "--agent",
             "codex",
@@ -5963,19 +5939,18 @@ fn add_from_issue_uses_existing_forge_cli_and_passes_context_to_agents() {
             serde_json::json!([])
         );
     }
-    // An explicit name still loads the issue, with no agent required.
+    // An explicit branch name still loads the issue, with no agent required.
     let output = fixture
         .command()
         .args([
             "--json",
             "add",
             fixture.repo.to_str().unwrap(),
+            "custom-issue-name",
             "--ref",
             "HEAD",
             "--issue",
             "37",
-            "--name",
-            "custom-issue-name",
         ])
         .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
         .env("ISSUE_RESPONSE", &response)
@@ -6069,10 +6044,9 @@ printf '%s' '{"number":44,"title":"Literal {body}","body":"$(false)"}'
                 "--json",
                 "add",
                 fixture.repo.to_str().unwrap(),
+                &format!("template-{index}"),
                 "--ref",
                 "HEAD",
-                "--name",
-                &format!("template-{index}"),
                 "--issue",
                 "44",
                 "--agent",
@@ -6218,10 +6192,9 @@ fn issue_command_finds_the_repository_and_starts_the_default_agent() {
             "--json",
             "add",
             fixture.repo.to_str().unwrap(),
+            "plain",
             "--ref",
             "HEAD",
-            "--name",
-            "plain",
         ])
         .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
         .env("AGENT_ARGS", &agent_args)
@@ -6368,7 +6341,7 @@ fn add_existing_branch_runs_setup_once_and_denies_scoped_creation() {
     let args = [
         "add",
         fixture.repo.to_str().unwrap(),
-        "--branch",
+        "--existing",
         "coworker",
     ];
     let opened = fixture.ok(&args);
@@ -6390,7 +6363,7 @@ fn add_existing_branch_runs_setup_once_and_denies_scoped_creation() {
         env!("CARGO_BIN_EXE_shoal"),
         "add",
         fixture.repo.to_str().unwrap(),
-        "--branch",
+        "--existing",
         "main",
     ]);
     assert!(!output.status.success());
@@ -6398,13 +6371,25 @@ fn add_existing_branch_runs_setup_once_and_denies_scoped_creation() {
         String::from_utf8_lossy(&output.stderr).contains("workspace processes"),
         "{output:?}"
     );
-    for flag in ["--name", "--ref", "--issue"] {
+    assert!(
+        !fixture
+            .run(&[
+                "add",
+                fixture.repo.to_str().unwrap(),
+                "other",
+                "--existing",
+                "coworker",
+            ])
+            .status
+            .success()
+    );
+    for flag in ["--ref", "--issue"] {
         assert!(
             !fixture
                 .run(&[
                     "add",
                     fixture.repo.to_str().unwrap(),
-                    "--branch",
+                    "--existing",
                     "coworker",
                     flag,
                     "other"
@@ -6937,7 +6922,6 @@ fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
                     "--json",
                     "add",
                     fixture.repo.to_str().unwrap(),
-                    "--name",
                     &name,
                     "--agent",
                     "happy-codex",
@@ -7681,7 +7665,7 @@ fn git_profiles_layer_and_isolate_worktree_settings_before_setup() {
     let existing = fixture.ok(&[
         "add",
         fixture.repo.to_str().unwrap(),
-        "--branch",
+        "--existing",
         "existing",
     ]);
     let existing_path = Path::new(existing["path"].as_str().unwrap());
@@ -7702,7 +7686,7 @@ fn git_profiles_layer_and_isolate_worktree_settings_before_setup() {
     fixture.ok(&[
         "add",
         fixture.repo.to_str().unwrap(),
-        "--branch",
+        "--existing",
         "existing",
     ]);
     assert_eq!(
@@ -7735,7 +7719,7 @@ fn git_profiles_leave_unselected_repositories_alone_and_retain_failed_workspaces
         "false"
     );
     commit_resource_config(&fixture.repo, "git_profile = 'missing'\n");
-    let output = fixture.run(&["add", fixture.repo.to_str().unwrap(), "--name", "unknown"]);
+    let output = fixture.run(&["add", fixture.repo.to_str().unwrap(), "unknown"]);
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("git profile missing is not defined"));
     let failed = fixture.ok(&["inspect", "unknown"]);
@@ -7751,15 +7735,13 @@ fn git_profile_flag_overrides_config_for_new_and_existing_branches() {
     ));
     commit_resource_config(&fixture.repo, "git_profile = 'missing'\n");
     git(&fixture.repo, &["branch", "existing-profile"]);
-    for (flag, name) in [("--name", "new-profile"), ("--branch", "existing-profile")] {
-        let workspace = fixture.ok(&[
-            "add",
-            fixture.repo.to_str().unwrap(),
-            flag,
-            name,
-            "--git-profile",
-            "manual",
-        ]);
+    for (existing, name) in [(false, "new-profile"), (true, "existing-profile")] {
+        let mut args = vec!["add", fixture.repo.to_str().unwrap()];
+        if existing {
+            args.push("--existing");
+        }
+        args.extend([name, "--git-profile", "manual"]);
+        let workspace = fixture.ok(&args);
         let path = Path::new(workspace["path"].as_str().unwrap());
         assert_eq!(
             git(path, &["config", "user.email"]).trim(),
@@ -7768,7 +7750,7 @@ fn git_profile_flag_overrides_config_for_new_and_existing_branches() {
         let output = fixture.run(&[
             "add",
             fixture.repo.to_str().unwrap(),
-            "--branch",
+            "--existing",
             name,
             "--git-profile",
             "manual",
@@ -7784,7 +7766,6 @@ fn git_profile_flag_overrides_config_for_new_and_existing_branches() {
     let output = fixture.run(&[
         "add",
         fixture.repo.to_str().unwrap(),
-        "--name",
         "bad-profile",
         "--git-profile",
         "unknown",
@@ -7800,7 +7781,7 @@ fn configured_commands_preserve_arguments_scope_and_exit_status() {
     let fixture = Fixture::with_config(Some(
         "[commands]\ncheck = ['sh', '-c', 'cat; printf \"%s\\n\" \"$SHOAL_WORKSPACE\" \"$@\"; test -n \"$SHOAL_SCOPE_TOKEN\" || exit 99; exit 7', 'check', 'literal $HOME']\n",
     ));
-    let workspace = fixture.ok(&["add", fixture.repo.to_str().unwrap(), "--name", "custom"]);
+    let workspace = fixture.ok(&["add", fixture.repo.to_str().unwrap(), "custom"]);
     let path = workspace["path"].as_str().unwrap();
     let mut child = fixture
         .command()
@@ -7848,12 +7829,7 @@ fn configured_commands_preserve_arguments_scope_and_exit_status() {
 #[test]
 fn cli_agent_command_defaults_can_be_replaced_at_launch() {
     let fixture = Fixture::new();
-    let workspace = fixture.ok(&[
-        "add",
-        fixture.repo.to_str().unwrap(),
-        "--name",
-        "configured-agent",
-    ]);
+    let workspace = fixture.ok(&["add", fixture.repo.to_str().unwrap(), "configured-agent"]);
     let path = Path::new(workspace["path"].as_str().unwrap());
     fs::write(path.join(".shoal.toml"),
         "[commands]\nclaude = ['printf', '%s\\n', '{workspace}', '{args}', '{branch}', '{path}']\ncodex = ['printf', '%s\\n', '{args}', 'custom default']\n"

@@ -101,8 +101,8 @@ fn navigate(ctx: &Context, path: &std::path::Path) -> Result<()> {
 }
 
 pub(super) struct Creation {
-    pub name: Option<String>,
     pub branch: Option<String>,
+    pub existing: Option<String>,
     pub base: Option<String>,
     pub git_profile: Option<String>,
 }
@@ -121,8 +121,8 @@ pub(super) async fn add(
     mut args: Vec<OsString>,
 ) -> Result<i32> {
     let Creation {
-        name,
-        mut branch,
+        branch,
+        mut existing,
         base,
         git_profile,
     } = creation;
@@ -187,8 +187,8 @@ pub(super) async fn add(
         }
         None => None,
     };
-    let mut name = name.or_else(|| issue.as_ref().map(|issue| issue.branch_name()));
-    if name.is_none() && branch.is_none() && base.is_none() && ctx.interactive() {
+    let mut branch = branch.or_else(|| issue.as_ref().map(|issue| issue.branch_name()));
+    if branch.is_none() && existing.is_none() && base.is_none() && ctx.interactive() {
         let mode = ui::pick(
             ctx,
             "Workspace> ",
@@ -225,10 +225,10 @@ pub(super) async fn add(
                     (b.selector(), label)
                 })
                 .collect();
-            branch = Some(ui::pick(ctx, "Branch> ", entries)?);
+            existing = Some(ui::pick(ctx, "Branch> ", entries)?);
         }
     }
-    let (mut workspace, reused) = if let Some(branch) = branch {
+    let (mut workspace, reused) = if let Some(branch) = existing {
         let opened = request!(
             &ctx.paths,
             Method::OpenBranch {
@@ -240,7 +240,7 @@ pub(super) async fn add(
         );
         (opened.workspace, opened.reused)
     } else {
-        let name = match name.take() {
+        let name = match branch.take() {
             Some(name) => name,
             // The daemon rejects bad syntax too; checking here lets a typo be
             // corrected instead of ending the command.

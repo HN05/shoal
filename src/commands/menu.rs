@@ -51,8 +51,8 @@ pub(super) async fn choose(ctx: &Context) -> Result<Command> {
     if picked.key == "ctrl-a" || (picked.key.is_empty() && picked.id == ADD_ENTRY) {
         return Ok(Command::Add {
             repository: None,
-            name: None,
             branch: None,
+            existing: None,
             issue: None,
             base: None,
             git_profile: None,

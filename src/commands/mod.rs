@@ -86,8 +86,8 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         Command::Repo { command } => repositories::run(&ctx, command).await,
         Command::Add {
             repository,
-            name,
             branch,
+            existing,
             issue,
             base,
             git_profile,
@@ -98,8 +98,8 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
                 &ctx,
                 repository,
                 workspaces::Creation {
-                    name,
                     branch,
+                    existing,
                     base,
                     git_profile,
                 },
@@ -119,8 +119,8 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
                 &ctx,
                 None,
                 workspaces::Creation {
-                    name: None,
                     branch: None,
+                    existing: None,
                     base,
                     git_profile: None,
                 },
