@@ -681,8 +681,9 @@ pub(super) async fn happy(
         args = configured;
         prompt
     };
-    if agent == HappyAgent::Claude {
-        trust_claude(ctx, &workspace.path);
+    match agent {
+        HappyAgent::Claude => trust_claude(ctx, &workspace.path),
+        HappyAgent::Codex => trust_codex(ctx, &workspace.path),
     }
     let daemon_state = happy::daemon_state_path(&ctx.paths.home);
     let daemon_recorded = daemon_state.is_file();

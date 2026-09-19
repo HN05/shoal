@@ -134,8 +134,8 @@ agent's exit code; the workspace is retained even when launch fails. With shell
 integration, your shell enters the new workspace after the agent exits.
 `--json` emits the workspace record first, then the agent's unmodified output.
 
-`shoal claude` and `shoal codex` trust the workspace directory before launch,
-creating the agent's user config if needed and preserving other settings.
+Claude and Codex shortcuts, including Happy, trust the workspace directory before
+launch, creating the agent's user config if needed and preserving other settings.
 Claude uses `~/.claude.json` (or `$CLAUDE_CONFIG_DIR/.claude.json`); Codex CLI
 and app use `~/.codex/config.toml` (or `$CODEX_HOME/config.toml`). A trust update
 failure warns and still launches the agent. `shoal claude` appends

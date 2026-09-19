@@ -6691,6 +6691,15 @@ fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
             assert!(lines.next().is_none());
             assert_eq!(launch["happy_daemon_recorded"], false);
             assert_eq!(launch["prompt_file"], Value::Null);
+            let config: toml::Value = toml::from_str(
+                &fs::read_to_string(fixture.root.path().join(".codex/config.toml")).unwrap(),
+            )
+            .unwrap();
+            let key = fs::canonicalize(workspace["path"].as_str().unwrap()).unwrap();
+            assert_eq!(
+                config["projects"][key.to_str().unwrap()]["trust_level"].as_str(),
+                Some("trusted")
+            );
             launch
         } else {
             let workspace = fixture.add(&name);
