@@ -63,7 +63,8 @@ shoal list                    # List workspaces
 shoal status fix-login        # Workspace activity, changes, and resources
 shoal cd fix-login             # Enter a workspace; omit the name for a picker
 shoal exec fix-login -- cargo test
-shoal check fix-login          # With [commands] check = ["cargo", "test"] in config
+shoal run check fix-login      # With [commands] check = ["cargo", "test"] in config
+shoal run                     # List configured commands, arguments, and source layers
 shoal claude fix-login         # Run Claude Code
 shoal codex fix-login --app    # Open in the Codex desktop app
 shoal happy claude fix-login   # Detached Happy session, visible in the Happy app

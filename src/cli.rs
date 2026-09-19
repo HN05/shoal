@@ -8,7 +8,7 @@ use crate::happy::HappyAgent;
 #[command(
     version,
     about,
-    after_help = "Configured shortcuts: shoal <name> [workspace] -- [args] (define names in [commands])."
+    after_help = "Configured commands: shoal run <name> [workspace] -- [args], or the shorthand shoal <name> [workspace] -- [args]. Run `shoal run` to list them."
 )]
 pub struct Cli {
     /// Override Shoal's state directory (also isolates the daemon).
@@ -23,6 +23,13 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    /// List or run commands defined in [commands].
+    Run {
+        name: Option<String>,
+        workspace: Option<String>,
+        #[arg(last = true, requires = "name")]
+        args: Vec<OsString>,
+    },
     /// Run a command defined in [commands].
     #[command(external_subcommand)]
     Custom(Vec<OsString>),

@@ -31,6 +31,7 @@ struct Typed {
 /// Live values an argument can be completed with.
 #[derive(Clone, Copy)]
 enum Target {
+    Commands,
     Repositories,
     Workspaces,
     Pools,
@@ -109,6 +110,7 @@ fn decorate(command: Command, parent: &str, typed: Arc<Typed>) -> Command {
     command
         .mut_args(|arg| {
             let target = match (arg.get_id().as_str(), parent, name.as_str()) {
+                ("name", _, "run") => Some(Target::Commands),
                 ("repository", _, _) => Some(Target::Repositories),
                 ("workspace", _, _) => Some(Target::Workspaces),
                 ("pool", "resource", _) => Some(Target::Pools),
@@ -142,9 +144,10 @@ impl Typed {
         let Ok(paths) = Paths::new(state) else {
             return vec![];
         };
-        let mut commands = Config::load(&paths)
-            .map(|config| config.commands)
-            .unwrap_or_default();
+        let mut commands = crate::named_commands::defaults();
+        if let Ok(config) = Config::load(&paths) {
+            commands.extend(config.commands);
+        }
         if let Ok(runtime) = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
@@ -184,6 +187,14 @@ impl Typed {
         let Some(current) = current.to_str() else {
             return vec![];
         };
+        if matches!(target, Target::Commands) {
+            return self
+                .command_names()
+                .into_iter()
+                .filter(|name| name.starts_with(current))
+                .map(CompletionCandidate::new)
+                .collect();
+        }
         let Ok(runtime) = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
@@ -274,7 +285,7 @@ impl Typed {
                     names.extend(simulators.into_iter().filter_map(|s| s.lease_name));
                 }
             }
-            Target::Repositories | Target::Workspaces => unreachable!(),
+            Target::Commands | Target::Repositories | Target::Workspaces => unreachable!(),
         }
         Ok(names.into_iter().map(CompletionCandidate::new).collect())
     }

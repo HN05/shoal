@@ -163,9 +163,10 @@ never starting a daemon or picker. Targets sort before flags, including in fzf-t
 Named `[commands]` are executable/argument arrays resolved per name from saved
 repository config, worktree config, then global config and built-in defaults at
 launch. They run through the tracked wrapper with workspace scope, terminal I/O,
-and literal extra arguments. Built-in commands without configurable argument
-arrays reserve their names. Repository-only commands require a current or
-explicit workspace, so unknown names never open a picker. Workspace fields expand once within individual
+and literal extra arguments. `run` lists the resolved arrays with their layers and
+provides an explicit spelling for names that collide with built-ins; built-ins win
+the bare shorthand. Repository-only commands require a current or explicit
+workspace, so unknown names never open a picker. Workspace fields expand once within individual
 arguments; a standalone `{args}` places the caller's literal arguments.
 `{diff_base}` lazily uses `diff`'s daemon lookup. Review tools use these commands;
 the tools own review storage, exports, and forge authentication, with explicit

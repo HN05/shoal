@@ -3,6 +3,7 @@ use super::Manager;
 use crate::{
     config::Effective,
     model::Workspace,
+    named_commands::CommandLayers,
     protocol::ConfigTarget,
     repo_config::{self, Hooks, LocalConfig, RepoConfig},
 };
@@ -10,6 +11,25 @@ use anyhow::{Context, Result};
 use rusqlite::{OptionalExtension, params};
 
 impl Manager {
+    pub async fn command_layers(&self, selector: &str) -> Result<CommandLayers> {
+        let workspace = self.workspace(selector).await?;
+        let worktree_file = repo_config::load(&workspace.path)?.commands;
+        let saved_repository_config = self
+            .local_repository_config(&workspace.repository_id)
+            .await?
+            .map(|text| {
+                repo_config::parse(&text)
+                    .context("parse local repository config")
+                    .map(|config| config.commands)
+            })
+            .transpose()?
+            .unwrap_or_default();
+        Ok(CommandLayers {
+            worktree_file,
+            saved_repository_config,
+        })
+    }
+
     pub async fn repository_config(&self, selector: &str) -> Result<LocalConfig> {
         let repo = self.repository(selector).await?;
         Ok(LocalConfig {

@@ -141,13 +141,17 @@ Define workspace shortcuts in global or repository TOML:
 check = ["cargo", "test"]
 ```
 
-Run `shoal check [workspace] -- <extra arguments>`; omit the workspace to use
-the current one, or the picker for a globally configured command. Repository-only
-commands need a current or explicit workspace. Put Shoal's global flags before
-the command name.
+Run `shoal run check [workspace] -- <extra arguments>`; the shorter `shoal check`
+form is equivalent when the name does not collide with a built-in command. Omit
+the workspace to use the current one, or the picker for a globally configured
+command. Repository-only commands need a current or explicit workspace. Put
+Shoal's global flags before `run` or the shorthand command name. Bare `shoal run`
+lists each effective command's argument array and source layer; outside a managed
+workspace it lists only global commands and built-in defaults.
 Each name resolves from saved repository config, worktree config, then global
 config and built-in defaults; a higher layer replaces the whole argument array.
-Built-in commands without configurable argument arrays reserve their names.
+Built-in commands win the short spelling, while `shoal run <name>` can run a
+configured command with the same name.
 The executable is resolved through PATH (or use a path),
 with the workspace as working directory. Arguments are passed literally without
 shell expansion. Execution preserves terminal I/O, scope, reserved-port variables,

@@ -7827,6 +7827,62 @@ fn configured_commands_preserve_arguments_scope_and_exit_status() {
 }
 
 #[test]
+fn run_lists_command_layers_and_executes_names_that_collide_with_built_ins() {
+    let fixture = Fixture::with_config(Some(
+        "[commands]\nglobal = ['printf', '%s', 'global command']\nshadowed = ['global']\nlist = ['printf', '%s', 'configured list']\nclaude = ['global-claude']\n",
+    ));
+    let workspace = fixture.add("run-command");
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    fs::write(
+        path.join(".shoal.toml"),
+        "[commands]\nshadowed = ['worktree']\nworktree = ['worktree-only']\n",
+    )
+    .unwrap();
+    let saved = fixture.root.path().join("run-commands.toml");
+    fs::write(
+        &saved,
+        "[commands]\nshadowed = ['saved']\nsaved = ['saved-only']\n",
+    )
+    .unwrap();
+    fixture.ok(&[
+        "repo",
+        "config",
+        fixture.repo.to_str().unwrap(),
+        "--file",
+        saved.to_str().unwrap(),
+    ]);
+
+    let output = fixture.run(&["run", "list", "run-command"]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"configured list");
+    assert!(fixture.ok(&["list"]).is_array());
+
+    let output = fixture
+        .command()
+        .current_dir(path)
+        .args(["--json", "run"])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let listed: Vec<Value> = serde_json::from_slice(&output.stdout).unwrap();
+    let command = |name: &str| listed.iter().find(|entry| entry["name"] == name).unwrap();
+    assert_eq!(command("codex")["layer"], "built_in_default");
+    assert_eq!(command("claude")["layer"], "global_config");
+    assert_eq!(command("worktree")["layer"], "worktree_file");
+    assert_eq!(command("saved")["layer"], "saved_repository_config");
+    assert_eq!(command("shadowed")["argv"], serde_json::json!(["saved"]));
+    assert_eq!(command("shadowed")["layer"], "saved_repository_config");
+}
+
+#[test]
 fn cli_agent_command_defaults_can_be_replaced_at_launch() {
     let fixture = Fixture::new();
     let workspace = fixture.ok(&["add", fixture.repo.to_str().unwrap(), "configured-agent"]);

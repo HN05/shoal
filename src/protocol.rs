@@ -9,6 +9,7 @@ use crate::{
         DiffBase, ExecutionPlan, Inspection, PortOverview, PortReservation, PortSuggestion,
         PulledBranch, Repository, RepositoryRemoval, Workspace, WorkspaceStatus,
     },
+    named_commands::CommandLayers,
     notifications::Notification,
     ports::PortRequest,
     process_identity::Identity,
@@ -20,7 +21,7 @@ use crate::{
     simulators::{SimRequest, Simulator, SimulatorCatalog},
 };
 
-pub const VERSION: u32 = 29;
+pub const VERSION: u32 = 30;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -137,6 +138,10 @@ pub enum Method {
     /// against the global config it reads at launch.
     LayeredConfig {
         target: ConfigTarget,
+    },
+    /// The separate repository command maps needed to report provenance.
+    CommandLayers {
+        workspace: String,
     },
     /// Long-lived: the connection stays open for the execution's lifetime.
     /// `agent` names a Shoal agent shortcut whose exit the user is told about.
@@ -261,6 +266,7 @@ pub enum Body {
     DiffBase(DiffBase),
     Hooks(Hooks),
     LayeredConfig(RepoConfig),
+    CommandLayers(CommandLayers),
     PulledBranch(PulledBranch),
     Notifications(Vec<Notification>),
     Notification(Notification),

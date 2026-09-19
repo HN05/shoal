@@ -5,7 +5,8 @@ use std::{
 };
 
 use anyhow::{Context as _, Result, ensure};
-use clap::{CommandFactory, Parser};
+use clap::Parser;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     client::{self, request},
@@ -19,6 +20,39 @@ use crate::{
 };
 
 pub type Commands = BTreeMap<String, Vec<String>>;
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+pub struct CommandLayers {
+    pub worktree_file: Commands,
+    pub saved_repository_config: Commands,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+pub struct CommandDefinition {
+    pub name: String,
+    pub argv: Vec<String>,
+    pub layer: CommandLayer,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CommandLayer {
+    BuiltInDefault,
+    GlobalConfig,
+    WorktreeFile,
+    SavedRepositoryConfig,
+}
+
+impl std::fmt::Display for CommandLayer {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::BuiltInDefault => "built-in default",
+            Self::GlobalConfig => "global config",
+            Self::WorktreeFile => "worktree file",
+            Self::SavedRepositoryConfig => "saved repository config",
+        })
+    }
+}
 
 pub fn defaults() -> Commands {
     [
@@ -43,17 +77,8 @@ pub fn defaults() -> Commands {
 }
 
 pub fn validate(commands: &Commands) -> Result<()> {
-    let cli = crate::cli::Cli::command();
     for (name, argv) in commands {
         crate::validate::lowercase_name("command", name)?;
-        ensure!(
-            (matches!(name.as_str(), "claude" | "codex")
-                || !cli
-                    .get_subcommands()
-                    .any(|command| command.get_name() == name))
-                && name != "help",
-            "command {name:?} conflicts with a built-in Shoal command"
-        );
         ensure!(
             argv.first()
                 .is_some_and(|program| !program.trim().is_empty())
@@ -66,6 +91,70 @@ pub fn validate(commands: &Commands) -> Result<()> {
         );
     }
     Ok(())
+}
+
+pub async fn list(ctx: &Context) -> Result<i32> {
+    let global = Config::load(&ctx.paths)?;
+    let mut definitions: BTreeMap<String, (Vec<String>, CommandLayer)> = defaults()
+        .into_iter()
+        .map(|(name, argv)| (name, (argv, CommandLayer::BuiltInDefault)))
+        .collect();
+    definitions.extend(
+        global
+            .commands
+            .into_iter()
+            .map(|(name, argv)| (name, (argv, CommandLayer::GlobalConfig))),
+    );
+
+    if client::status(&ctx.paths).await?.is_some() {
+        let workspaces = client::workspaces(&ctx.paths).await?;
+        let current = std::env::current_dir().ok();
+        let workspace = current
+            .as_deref()
+            .and_then(|cwd| Workspace::innermost(&workspaces, cwd))
+            .or_else(|| {
+                crate::env::is_scoped()
+                    .then(|| workspaces.first())
+                    .flatten()
+            });
+        if let Some(workspace) = workspace {
+            let layers = request!(
+                &ctx.paths,
+                Method::CommandLayers {
+                    workspace: workspace.id.clone()
+                },
+                CommandLayers
+            );
+            definitions.extend(
+                layers
+                    .worktree_file
+                    .into_iter()
+                    .map(|(name, argv)| (name, (argv, CommandLayer::WorktreeFile))),
+            );
+            definitions.extend(
+                layers
+                    .saved_repository_config
+                    .into_iter()
+                    .map(|(name, argv)| (name, (argv, CommandLayer::SavedRepositoryConfig))),
+            );
+        }
+    }
+
+    let definitions: Vec<_> = definitions
+        .into_iter()
+        .map(|(name, (argv, layer))| CommandDefinition { name, argv, layer })
+        .collect();
+    ctx.show(&definitions, |definitions| {
+        for command in definitions {
+            println!(
+                "{} = {} ({})",
+                command.name,
+                serde_json::to_string(&command.argv).expect("serialize command argv"),
+                command.layer
+            );
+        }
+    })?;
+    Ok(0)
 }
 
 #[derive(Parser)]
@@ -209,12 +298,18 @@ mod tests {
             "[commands]\nreview = ['']",
             "[commands]\nreview = ['   ']",
             "[commands]\nreview = ['tool', \"\\u0000\"]",
-            "[commands]\nrm = ['tool']",
-            "[commands]\nhelp = ['tool']",
             "[commands]\n'bad name' = ['tool']",
             "[commands]\nreview = 'shell command'",
         ] {
             assert!(repo_config::parse(config).is_err(), "{config}");
+        }
+    }
+
+    #[test]
+    fn built_in_names_are_valid_for_explicit_run() {
+        for name in ["run", "list", "help"] {
+            let config = format!("[commands]\n{name} = ['tool']\n");
+            assert!(repo_config::parse(&config).is_ok(), "{config}");
         }
     }
 }

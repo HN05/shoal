@@ -57,6 +57,7 @@ pub async fn authorize(
         | Method::ReservePort { workspace, .. }
         | Method::ReleasePort { workspace, .. }
         | Method::PortOverview { workspace }
+        | Method::CommandLayers { workspace }
         | Method::LayeredConfig {
             target: ConfigTarget::Workspace(workspace),
         } => Some(workspace),
