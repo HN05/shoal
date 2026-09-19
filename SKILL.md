@@ -31,9 +31,7 @@ A Happy session outside any managed workspace (a console session on the user's
 machine) can hand work to a new session that appears in the Happy app:
 
 ```sh
-shoal --json add my-project --issue 34 --agent happy-codex
-shoal --json add my-project fix-login --agent happy-codex
-shoal --json add my-project --existing origin/fix-login --agent happy-codex
+shoal --json add my-project fix-login --issue 34 --agent happy-codex
 shoal --json happy codex fix-login --prompt "Fix the login bug" -- --yolo
 ```
 

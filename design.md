@@ -78,10 +78,9 @@ failed fetches. `--ref` starts elsewhere without refreshing, except when it name
 the default branch. Creation, default-branch refresh, setup, repository removal, and
 recovery share a per-repository Git gate.
 
-Creation takes the new Git branch as the optional argument after the repository;
-`--existing` selects an existing local or remote branch. Literal branch names
-derive a portable, globally unique workspace name and directory; a normalization
-collision fails without
+New-branch creation accepts literal Git branch names and derives a portable,
+globally unique workspace name and directory from them; a normalization collision
+fails without
 touching existing work. Branch conflicts get numeric suffixes on the blocking
 component only, never changing the workspace name. Worktree Git metadata identity is
 recorded so moved or replaced directories are never adopted silently.
