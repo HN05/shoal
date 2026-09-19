@@ -100,7 +100,7 @@ fn dynamic_completion_covers_nested_commands_flags_and_paths_without_daemon() {
         (vec!["shoal", "repo", "c"], "config"),
         (vec!["shoal", "repo", "config", "--f"], "--file"),
         (vec!["shoal", "repo", "rm", "--y"], "--yes"),
-        (vec!["shoal", "port", "r"], "reserve"),
+        (vec!["shoal", "port", "a"], "acquire"),
         (vec!["shoal", "resource", "a"], "acquire"),
         (vec!["shoal", "sim", "a"], "acquire"),
         (vec!["shoal", "daemon", "re"], "restart"),

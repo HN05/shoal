@@ -249,6 +249,11 @@ writer, default to write, and require release to change mode. Definition drift
 blocks new claims but never revokes permits. Shoal does not manage the
 underlying resources.
 
+Port, simulator, and generic resource commands share the same shape: the bare
+noun (or `list`) combines relevant configuration or capacity with leases;
+`acquire` and `release` change ownership. Simulator machine inventory remains
+under `sim catalog`.
+
 ## Removal and recovery
 
 Manual and automatic cleanup share one path: establish ownership, stop owned

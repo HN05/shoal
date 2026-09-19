@@ -149,11 +149,21 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         } => {
             crate::execution::run_detached_wrapper(&ctx.paths, workspace, log, command, agent).await
         }
-        Command::Port { command } => ports::run(&ctx, command).await,
-        Command::Ports { workspace } => ports::overview(&ctx, workspace).await,
-        Command::Resource { command } => resources::run(&ctx, command).await,
-        Command::Resources { workspace } => resources::overview(&ctx, workspace).await,
-        Command::Sim { command } => simulators::run(&ctx, command).await,
+        Command::Port {
+            command,
+            workspace,
+            all,
+        } => ports::run(&ctx, command, workspace, all).await,
+        Command::Resource {
+            command,
+            workspace,
+            all,
+        } => resources::run(&ctx, command, workspace, all).await,
+        Command::Sim {
+            command,
+            workspace,
+            all,
+        } => simulators::run(&ctx, command, workspace, all).await,
         Command::Reconcile {
             workspace,
             all,

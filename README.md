@@ -101,8 +101,8 @@ custom invocation. Shoal's resource scope is cooperative, not a filesystem sandb
 From a managed workspace:
 
 ```sh
-shoal port reserve web --reason "Development server"
-shoal ports
+shoal port acquire web --reason "Development server"
+shoal port
 shoal port release web
 
 shoal sim acquire --wait 60   # macOS; requires configured simulator profiles

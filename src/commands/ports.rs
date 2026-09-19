@@ -13,16 +13,21 @@ use crate::{
     ui::{self, Fallback},
 };
 
-pub(super) async fn run(ctx: &Context, command: PortCommand) -> Result<i32> {
+pub(super) async fn run(
+    ctx: &Context,
+    command: Option<PortCommand>,
+    workspace: Option<String>,
+    all: bool,
+) -> Result<i32> {
     match command {
-        PortCommand::Reserve {
+        Some(PortCommand::Acquire {
             name,
             workspace,
             port,
             env,
             reason,
             on_conflict,
-        } => {
+        }) => {
             let workspace =
                 ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
             let request = PortRequest {
@@ -33,29 +38,8 @@ pub(super) async fn run(ctx: &Context, command: PortCommand) -> Result<i32> {
             };
             reserve(ctx, workspace, name, request).await
         }
-        PortCommand::List { workspace, all } => {
-            let workspace = ui::select_workspace_filter(ctx, workspace, all).await?;
-            let ports = request!(&ctx.paths, Method::ListPorts { workspace }, Ports);
-            // Owners are shown by name; JSON output keeps the IDs.
-            let workspaces = if ctx.json {
-                vec![]
-            } else {
-                client::workspaces(&ctx.paths).await?
-            };
-            ctx.show(&ports, |ports| {
-                let palette = Palette::stdout(ctx.json);
-                for port in ports {
-                    let owner = workspaces
-                        .iter()
-                        .find(|w| w.id == port.workspace_id)
-                        .map(|w| w.name.as_str())
-                        .unwrap_or(&port.workspace_id);
-                    println!("{owner}/{}", describe(port, palette));
-                }
-            })?;
-            Ok(0)
-        }
-        PortCommand::Release { name, workspace } => {
+        Some(PortCommand::List { workspace, all }) => overview(ctx, workspace, all).await,
+        Some(PortCommand::Release { name, workspace }) => {
             let workspace =
                 ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
             client::call(&ctx.paths, Method::ReleasePort { workspace, name }).await?;
@@ -66,6 +50,7 @@ pub(super) async fn run(ctx: &Context, command: PortCommand) -> Result<i32> {
             )?;
             Ok(0)
         }
+        None => overview(ctx, workspace, all).await,
     }
 }
 
@@ -117,7 +102,7 @@ async fn reserve(
                 );
                 let accepted = ui::confirm(
                     ctx,
-                    &format!("Reserve suggested port {}?", proposal.suggested_port),
+                    &format!("Acquire suggested port {}?", proposal.suggested_port),
                     &format!("--port {}", proposal.suggested_port),
                 )?;
                 if !accepted {
@@ -145,12 +130,35 @@ fn describe(port: &PortReservation, palette: Palette) -> String {
     )
 }
 
-pub(super) async fn overview(ctx: &Context, workspace: Option<String>) -> Result<i32> {
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let overview = request!(&ctx.paths, Method::PortOverview { workspace }, PortOverview);
-    ctx.show(&overview, |overview| {
-        render_overview(overview, Palette::stdout(ctx.json))
-    })?;
+async fn overview(ctx: &Context, workspace: Option<String>, all: bool) -> Result<i32> {
+    if all {
+        let mut overviews = Vec::new();
+        for workspace in client::workspaces(&ctx.paths).await? {
+            overviews.push(request!(
+                &ctx.paths,
+                Method::PortOverview {
+                    workspace: workspace.id
+                },
+                PortOverview
+            ));
+        }
+        ctx.show(&overviews, |overviews| {
+            let palette = Palette::stdout(ctx.json);
+            for overview in overviews {
+                println!(
+                    "{}",
+                    palette.paint(Style::Heading, &overview.workspace.name)
+                );
+                render_overview(overview, palette);
+            }
+        })?;
+    } else {
+        let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+        let overview = request!(&ctx.paths, Method::PortOverview { workspace }, PortOverview);
+        ctx.show(&overview, |overview| {
+            render_overview(overview, Palette::stdout(ctx.json))
+        })?;
+    }
     Ok(0)
 }
 

@@ -10,13 +10,18 @@ use crate::{
     output::{Palette, Style},
     protocol::{Body, Method},
     sim_audit::AuditEntry,
-    simulators::{SimRequest, Simulator},
+    simulators::{SimRequest, Simulator, SimulatorOverview},
     ui::{self, Fallback},
 };
 
-pub(super) async fn run(ctx: &Context, command: SimCommand) -> Result<i32> {
+pub(super) async fn run(
+    ctx: &Context,
+    command: Option<SimCommand>,
+    workspace: Option<String>,
+    all: bool,
+) -> Result<i32> {
     match command {
-        SimCommand::Catalog => {
+        Some(SimCommand::Catalog) => {
             let catalog = request!(&ctx.paths, Method::SimCatalog, SimCatalog);
             ctx.show(&catalog, |catalog| {
                 println!(
@@ -26,28 +31,8 @@ pub(super) async fn run(ctx: &Context, command: SimCommand) -> Result<i32> {
             })?;
             Ok(0)
         }
-        SimCommand::List { workspace, all } => {
-            let workspace = ui::select_workspace_filter(ctx, workspace, all).await?;
-            let sims = request!(&ctx.paths, Method::SimList { workspace }, Simulators);
-            ctx.show(&sims, |sims| {
-                let palette = Palette::stdout(ctx.json);
-                for sim in sims {
-                    println!(
-                        "{}  {}  {}  {}  {}",
-                        sim.udid.as_deref().unwrap_or("pending"),
-                        sim.lease_name.as_deref().unwrap_or("idle"),
-                        palette.simulator_state(sim.state),
-                        sim.device,
-                        sim.runtime
-                    );
-                }
-                if sims.is_empty() {
-                    println!("No managed simulators");
-                }
-            })?;
-            Ok(0)
-        }
-        SimCommand::Acquire {
+        Some(SimCommand::List { workspace, all }) => overview(ctx, workspace, all).await,
+        Some(SimCommand::Acquire {
             workspace,
             name,
             profile,
@@ -56,7 +41,7 @@ pub(super) async fn run(ctx: &Context, command: SimCommand) -> Result<i32> {
             reason,
             clean,
             wait,
-        } => {
+        }) => {
             let workspace =
                 ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
             let request = SimRequest {
@@ -95,12 +80,12 @@ pub(super) async fn run(ctx: &Context, command: SimCommand) -> Result<i32> {
                 }
             }
         }
-        SimCommand::History {
+        Some(SimCommand::History {
             workspace,
             all,
             limit,
             before,
-        } => {
+        }) => {
             let workspace = ui::select_workspace_filter(ctx, workspace, all).await?;
             let entries = request!(
                 &ctx.paths,
@@ -121,7 +106,7 @@ pub(super) async fn run(ctx: &Context, command: SimCommand) -> Result<i32> {
             })?;
             Ok(0)
         }
-        SimCommand::Release { name, workspace } => {
+        Some(SimCommand::Release { name, workspace }) => {
             let workspace =
                 ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
             client::call(&ctx.paths, Method::SimRelease { workspace, name }).await?;
@@ -132,6 +117,52 @@ pub(super) async fn run(ctx: &Context, command: SimCommand) -> Result<i32> {
             )?;
             Ok(0)
         }
+        None => overview(ctx, workspace, all).await,
+    }
+}
+
+async fn overview(ctx: &Context, workspace: Option<String>, all: bool) -> Result<i32> {
+    let workspace = ui::select_workspace_filter(ctx, workspace, all).await?;
+    let overview = request!(&ctx.paths, Method::SimOverview { workspace }, SimOverview);
+    ctx.show(&overview, |overview| {
+        render_overview(overview, Palette::stdout(ctx.json))
+    })?;
+    Ok(0)
+}
+
+fn render_overview(overview: &SimulatorOverview, palette: Palette) {
+    println!(
+        "Capacity: {} booted, {} devices",
+        overview.policy.max_booted, overview.policy.max_devices
+    );
+    for (name, profile) in &overview.policy.profiles {
+        let preferred = if overview.preferred.contains(name) {
+            " (preferred)"
+        } else if overview.policy.default.as_deref() == Some(name) {
+            " (default)"
+        } else {
+            ""
+        };
+        println!(
+            "{}: {} / {}{}",
+            palette.paint(Style::Heading, name),
+            profile.device,
+            profile.runtime,
+            preferred
+        );
+    }
+    for sim in &overview.simulators {
+        println!(
+            "{}  {}  {}  {}  {}",
+            sim.udid.as_deref().unwrap_or("pending"),
+            sim.lease_name.as_deref().unwrap_or("idle"),
+            palette.simulator_state(sim.state),
+            sim.device,
+            sim.runtime
+        );
+    }
+    if overview.policy.profiles.is_empty() && overview.simulators.is_empty() {
+        println!("No configured profiles or managed simulators");
     }
 }
 

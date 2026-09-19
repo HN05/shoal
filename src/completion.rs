@@ -114,7 +114,7 @@ fn decorate(command: Command, parent: &str, typed: Arc<Typed>) -> Command {
                 ("pool", "resource", _) => Some(Target::Pools),
                 ("resource", "resource", _) => Some(Target::Members),
                 ("name", "resource", "release") => Some(Target::ResourceNames),
-                ("name", "port", "reserve") => Some(Target::Ports),
+                ("name", "port", "acquire") => Some(Target::Ports),
                 ("name", "port", "release") => Some(Target::ReservedPorts),
                 ("name", "sim", "release") => Some(Target::SimNames),
                 _ => None,

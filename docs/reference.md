@@ -542,11 +542,11 @@ Scoped commands cannot read notifications. Read entries older than the newest
 ### Port reservations
 
 ```sh
-shoal port reserve web fix-login --reason "Frontend dev server"
-shoal port reserve api --port 3001 --env API_PORT --reason "HTTP API"
-shoal port list fix-login              # --all for every workspace
+shoal port acquire web fix-login --reason "Frontend dev server"
+shoal port acquire api --port 3001 --env API_PORT --reason "HTTP API"
+shoal port fix-login                   # Configured names and current leases
+shoal port --all                       # Every workspace
 shoal port release web fix-login
-shoal ports                            # Configured and reserved ports here
 shoal exec fix-login -- sh -c 'my-server --port "$API_PORT"'
 ```
 
@@ -576,7 +576,7 @@ reason = "Frontend dev server"
 ```
 
 `on_conflict`, `start` and `end` are keys of the table itself, so no port can
-take those names. `shoal port reserve web` allocates on request; CLI flags override. A conflict
+take those names. `shoal port acquire web` allocates on request; CLI flags override. A conflict
 suggests a free port: fzf offers to accept it, `--json` returns `reserved:
 false` with exit 2, and `--port <suggested>` or `--on-conflict auto` accepts.
 
@@ -664,7 +664,7 @@ requests with a `--reason`.
 ```sh
 shoal sim acquire                   # Current worktree, configured preference
 shoal sim acquire --profile phone --name tests --wait 60
-shoal sim list                      # --all for every managed device
+shoal sim                           # Profiles, capacity, and managed devices; --all for all
 shoal sim release tests             # Or the default lease
 ```
 
@@ -718,11 +718,11 @@ members. Names are lowercase letters, digits, `_`, or `-`, starting with a
 letter, at most 64 characters; capacities are 1–65535.
 
 ```sh
-shoal resources                              # Capacities and own leases
+shoal resource                               # Capacities and own leases
 shoal resource acquire devices               # Any available member
 shoal resource acquire devices --resource beta --name tests --reason "Integration tests"
 shoal resource acquire signing --wait 60
-shoal resource list                          # --all for every workspace
+shoal resource --all                         # Every workspace
 shoal resource release devices --name tests
 ```
 
@@ -744,7 +744,7 @@ Set `kind = "rwlock"` on a standalone resource or pool member and acquire with
 use `permit`). Readers coexist and share one pool slot, freed by the last
 release; a writer excludes everyone. Capacity must be 1. Repeating a lease
 name returns its mode; changing mode requires release first, and there is no
-writer priority. `shoal resources` shows reader and writer counts with
+writer priority. `shoal resource` shows reader and writer counts with
 separate read/write availability.
 
 ## Agent skill outside project repositories

@@ -132,25 +132,39 @@ pub enum Command {
     },
     /// Confirm this commit was merged; stop tracked commands and remove the workspace.
     Merged { workspace: Option<String> },
-    /// Reserve, list, and release named TCP ports owned by a worktree.
+    /// List, acquire, and release named TCP ports owned by a worktree.
+    #[command(args_conflicts_with_subcommands = true)]
     Port {
         #[command(subcommand)]
-        command: PortCommand,
+        command: Option<PortCommand>,
+        /// Show the effective configuration and reservations for this workspace.
+        workspace: Option<String>,
+        /// Show every managed workspace.
+        #[arg(long, conflicts_with = "workspace")]
+        all: bool,
     },
     /// Acquire, list, and release cooperative resource permits.
+    #[command(args_conflicts_with_subcommands = true)]
     Resource {
         #[command(subcommand)]
-        command: ResourceCommand,
+        command: Option<ResourceCommand>,
+        /// Show effective capacity and leases for this workspace.
+        workspace: Option<String>,
+        /// Show every managed workspace.
+        #[arg(long, conflicts_with = "workspace")]
+        all: bool,
     },
-    /// Show configured pools, resource capacities, and current leases.
-    Resources { workspace: Option<String> },
     /// Share Shoal-managed Xcode simulators between worktrees.
+    #[command(args_conflicts_with_subcommands = true)]
     Sim {
         #[command(subcommand)]
-        command: SimCommand,
+        command: Option<SimCommand>,
+        /// Show configured profiles, capacity, and devices for this workspace.
+        workspace: Option<String>,
+        /// Show every managed device.
+        #[arg(long, conflicts_with = "workspace")]
+        all: bool,
     },
-    /// Show configured and reserved ports for the current or named worktree.
-    Ports { workspace: Option<String> },
     /// Inspect a workspace and its executions.
     Inspect { workspace: Option<String> },
     /// Show what happened while you were away: conflicts, finished agents, removed workspaces.
@@ -460,8 +474,8 @@ pub enum RepoCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum PortCommand {
-    /// Reserve a port, or return the existing reservation with this name.
-    Reserve {
+    /// Acquire a port, or return the existing reservation with this name.
+    Acquire {
         name: String,
         workspace: Option<String>,
         #[arg(long)]
@@ -476,6 +490,7 @@ pub enum PortCommand {
         #[arg(long, value_enum)]
         on_conflict: Option<crate::repo_config::ConflictPolicy>,
     },
+    /// Show configured ports and current reservations.
     List {
         workspace: Option<String>,
         #[arg(long, conflicts_with = "workspace")]
@@ -522,7 +537,8 @@ pub enum DaemonCommand {
 pub enum SimCommand {
     /// Show available device types, installed runtimes, and machine profiles.
     Catalog,
-    /// Show this worktree's simulators, or all managed instances.
+    /// Show configured profiles, capacity, and managed instances.
+    /// Show configured pools, capacity, and current leases.
     List {
         workspace: Option<String>,
         #[arg(long, conflicts_with = "workspace")]

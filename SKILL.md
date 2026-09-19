@@ -79,8 +79,8 @@ Agents cannot land either: when the repository has no remote, the human runs
 ## Ports
 
 ```sh
-shoal --json ports
-shoal --json port reserve web
+shoal --json port
+shoal --json port acquire web
 shoal port release web
 ```
 
@@ -96,7 +96,7 @@ environment: pass the number to the server explicitly.
 ## Resource pools
 
 ```sh
-shoal --json resources
+shoal --json resource
 shoal --json resource acquire devices --wait 60
 shoal resource release devices
 ```
@@ -114,7 +114,7 @@ Release before changing mode; there are no atomic upgrades or writer priority.
 ## Simulators
 
 ```sh
-shoal --json sim list
+shoal --json sim
 shoal --json sim acquire --wait 60
 shoal sim release
 ```

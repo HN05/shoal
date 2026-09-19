@@ -9,13 +9,18 @@ use crate::{
     context::{Context, optional},
     output::{Palette, Style},
     protocol::{Body, Method},
-    resources::{Overview, ResourceKind, ResourceLease, ResourceRequest},
+    resources::{Overview, ResourceKind, ResourceLease, ResourceRequest, WorkspaceOverview},
     ui::{self, Fallback},
 };
 
-pub(super) async fn run(ctx: &Context, command: ResourceCommand) -> Result<i32> {
+pub(super) async fn run(
+    ctx: &Context,
+    command: Option<ResourceCommand>,
+    workspace: Option<String>,
+    all: bool,
+) -> Result<i32> {
     match command {
-        ResourceCommand::Acquire {
+        Some(ResourceCommand::Acquire {
             mode,
             pool,
             workspace,
@@ -23,7 +28,7 @@ pub(super) async fn run(ctx: &Context, command: ResourceCommand) -> Result<i32> 
             name,
             reason,
             wait,
-        } => {
+        }) => {
             let workspace =
                 ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
             let request = ResourceRequest {
@@ -66,11 +71,11 @@ pub(super) async fn run(ctx: &Context, command: ResourceCommand) -> Result<i32> 
                 }
             }
         }
-        ResourceCommand::Release {
+        Some(ResourceCommand::Release {
             pool,
             workspace,
             name,
-        } => {
+        }) => {
             let workspace =
                 ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
             let method = Method::ResourceRelease {
@@ -86,24 +91,8 @@ pub(super) async fn run(ctx: &Context, command: ResourceCommand) -> Result<i32> 
             )?;
             Ok(0)
         }
-        ResourceCommand::List { workspace, all } => {
-            let workspace = ui::select_workspace_filter(ctx, workspace, all).await?;
-            let leases = request!(
-                &ctx.paths,
-                Method::ResourceList { workspace },
-                ResourceLeases
-            );
-            ctx.show(&leases, |leases| {
-                let palette = Palette::stdout(ctx.json);
-                for lease in leases {
-                    println!("{}  {}", lease.workspace_id, describe_short(lease, palette));
-                }
-                if leases.is_empty() {
-                    println!("No resource leases");
-                }
-            })?;
-            Ok(0)
-        }
+        Some(ResourceCommand::List { workspace, all }) => overview(ctx, workspace, all).await,
+        None => overview(ctx, workspace, all).await,
     }
 }
 
@@ -129,16 +118,43 @@ fn describe_short(lease: &ResourceLease, palette: Palette) -> String {
     )
 }
 
-pub(super) async fn overview(ctx: &Context, workspace: Option<String>) -> Result<i32> {
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let overview = request!(
-        &ctx.paths,
-        Method::ResourceOverview { workspace },
-        ResourceOverview
-    );
-    ctx.show(&overview, |overview| {
-        render_overview(overview, Palette::stdout(ctx.json))
-    })?;
+async fn overview(ctx: &Context, workspace: Option<String>, all: bool) -> Result<i32> {
+    if all {
+        let mut overviews = Vec::new();
+        for workspace in client::workspaces(&ctx.paths).await? {
+            let overview = request!(
+                &ctx.paths,
+                Method::ResourceOverview {
+                    workspace: workspace.id.clone()
+                },
+                ResourceOverview
+            );
+            overviews.push(WorkspaceOverview {
+                workspace,
+                overview,
+            });
+        }
+        ctx.show(&overviews, |overviews| {
+            let palette = Palette::stdout(ctx.json);
+            for overview in overviews {
+                println!(
+                    "{}",
+                    palette.paint(Style::Heading, &overview.workspace.name)
+                );
+                render_overview(&overview.overview, palette);
+            }
+        })?;
+    } else {
+        let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+        let overview = request!(
+            &ctx.paths,
+            Method::ResourceOverview { workspace },
+            ResourceOverview
+        );
+        ctx.show(&overview, |overview| {
+            render_overview(overview, Palette::stdout(ctx.json))
+        })?;
+    }
     Ok(0)
 }
 

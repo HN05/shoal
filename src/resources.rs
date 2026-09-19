@@ -192,6 +192,13 @@ pub struct Overview {
     pub leases: Vec<ResourceLease>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct WorkspaceOverview {
+    pub workspace: crate::model::Workspace,
+    #[serde(flatten)]
+    pub overview: Overview,
+}
+
 fn row_lease(row: &rusqlite::Row<'_>) -> rusqlite::Result<ResourceLease> {
     Ok(ResourceLease {
         id: row.get(0)?,

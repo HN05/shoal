@@ -357,7 +357,7 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
     fixture.ok(&["repo", "rename", fixture.repo.to_str().unwrap(), "project"]);
     let first = fixture.add("first");
     fixture.add("second");
-    fixture.ok(&["port", "reserve", "web", "first"]);
+    fixture.ok(&["port", "acquire", "web", "first"]);
     fixture.ok(&["resource", "acquire", "devices", "first", "--name", "tests"]);
     let complete = |args: &[&str], cwd: &Path| {
         let state = fixture.root.path().join("state");
@@ -1188,7 +1188,7 @@ fn ports_are_named_idempotent_exported_and_released_with_the_workspace() {
     fixture.add("second");
     let web = fixture.ok(&[
         "port",
-        "reserve",
+        "acquire",
         "web",
         "first",
         "--reason",
@@ -1196,15 +1196,15 @@ fn ports_are_named_idempotent_exported_and_released_with_the_workspace() {
     ]);
     assert_eq!(web["env_var"], "SHOAL_PORT_WEB");
     assert_eq!(web["reason"], "Frontend dev server");
-    assert_eq!(fixture.ok(&["port", "reserve", "web", "first"]), web);
+    assert_eq!(fixture.ok(&["port", "acquire", "web", "first"]), web);
     let port = web["port"].to_string();
     assert!(
         !fixture
-            .run(&["port", "reserve", "web", "second", "--port", &port])
+            .run(&["port", "acquire", "web", "second", "--port", &port])
             .status
             .success()
     );
-    let api = fixture.ok(&["port", "reserve", "api", "first", "--env", "API_PORT"]);
+    let api = fixture.ok(&["port", "acquire", "api", "first", "--env", "API_PORT"]);
     let output = fixture.run(&[
         "exec",
         "first",
@@ -1246,8 +1246,7 @@ fn ports_are_named_idempotent_exported_and_released_with_the_workspace() {
     fs::write(path.join("dirty"), "keep").unwrap();
     assert!(!fixture.run(&["rm", "first"]).status.success());
     assert_eq!(
-        fixture
-            .ok(&["port", "list", "first"])
+        fixture.ok(&["port", "first"])["reserved"]
             .as_array()
             .unwrap()
             .len(),
@@ -1255,13 +1254,13 @@ fn ports_are_named_idempotent_exported_and_released_with_the_workspace() {
     );
     fixture.ok(&["rm", "first", "--yes", "--keep-branch"]);
     assert_eq!(
-        fixture.ok(&["port", "list", "--all"]),
+        fixture.ok(&["port", "--all"])[0]["reserved"],
         serde_json::json!([])
     );
-    fixture.ok(&["port", "reserve", "web", "second", "--port", &port]);
+    fixture.ok(&["port", "acquire", "web", "second", "--port", &port]);
     fixture.ok(&["port", "release", "web", "second"]);
     assert_eq!(
-        fixture.ok(&["port", "list", "second"]),
+        fixture.ok(&["port", "second"])["reserved"],
         serde_json::json!([])
     );
     fixture.ok(&["rm", "second"]);
@@ -1275,7 +1274,7 @@ fn ports_avoid_listeners_and_concurrent_allocations_are_unique_and_persistent() 
     let occupied = listener.local_addr().unwrap().port().to_string();
     assert!(
         !fixture
-            .run(&["port", "reserve", "occupied", "ports", "--port", &occupied])
+            .run(&["port", "acquire", "occupied", "ports", "--port", &occupied])
             .status
             .success()
     );
@@ -1284,7 +1283,7 @@ fn ports_avoid_listeners_and_concurrent_allocations_are_unique_and_persistent() 
         children.push(
             fixture
                 .command()
-                .args(["--json", "port", "reserve", &format!("server{i}"), "ports"])
+                .args(["--json", "port", "acquire", &format!("server{i}"), "ports"])
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
                 .spawn()
@@ -1302,7 +1301,7 @@ fn ports_avoid_listeners_and_concurrent_allocations_are_unique_and_persistent() 
         let reservation: Value = serde_json::from_slice(&output.stdout).unwrap();
         assert!(numbers.insert(reservation["port"].as_u64().unwrap()));
     }
-    let before = fixture.ok(&["port", "list", "ports"]);
+    let before = fixture.ok(&["port", "ports"]);
     assert!(fixture.run(&["daemon", "stop"]).status.success());
     fixture.daemon.wait().unwrap();
     fixture.daemon = fixture
@@ -1313,7 +1312,7 @@ fn ports_avoid_listeners_and_concurrent_allocations_are_unique_and_persistent() 
         .spawn()
         .unwrap();
     fixture.wait_ready();
-    assert_eq!(fixture.ok(&["port", "list", "ports"]), before);
+    assert_eq!(fixture.ok(&["port", "ports"]), before);
     fixture.ok(&["rm", "ports"]);
 }
 
@@ -1429,12 +1428,12 @@ fn repository_config_sets_the_automatic_port_range() {
     )
     .unwrap();
     assert_eq!(
-        fixture.ok(&["port", "reserve", "web", "ranged"])["port"],
+        fixture.ok(&["port", "acquire", "web", "ranged"])["port"],
         first
     );
     assert!(
         !fixture
-            .run(&["port", "reserve", "api", "ranged"])
+            .run(&["port", "acquire", "api", "ranged"])
             .status
             .success()
     );
@@ -1452,12 +1451,12 @@ fn repository_config_sets_the_automatic_port_range() {
     };
     save(&format!("[ports]\nstart={second}\nend={second}\n"));
     assert_eq!(
-        fixture.ok(&["port", "reserve", "api", "ranged"])["port"],
+        fixture.ok(&["port", "acquire", "api", "ranged"])["port"],
         second
     );
     // The layered range must stay nonempty: `end = 1` under the file's `start`.
     save("[ports]\nend=1\n");
-    let output = fixture.run(&["port", "reserve", "db", "ranged"]);
+    let output = fixture.run(&["port", "acquire", "db", "ranged"]);
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("nonempty range"));
 }
@@ -1470,22 +1469,22 @@ fn configured_port_range_exhaustion_and_release() {
     fixture.add("limited");
     assert!(
         !fixture
-            .run(&["port", "reserve", "web", "limited"])
+            .run(&["port", "acquire", "web", "limited"])
             .status
             .success()
     );
     drop(listener);
-    let lease = fixture.ok(&["port", "reserve", "web", "limited"]);
+    let lease = fixture.ok(&["port", "acquire", "web", "limited"]);
     assert_eq!(lease["port"], number);
     assert!(
         !fixture
-            .run(&["port", "reserve", "api", "limited"])
+            .run(&["port", "acquire", "api", "limited"])
             .status
             .success()
     );
     fixture.ok(&["port", "release", "web", "limited"]);
     assert_eq!(
-        fixture.ok(&["port", "reserve", "api", "limited"])["port"],
+        fixture.ok(&["port", "acquire", "api", "limited"])["port"],
         number
     );
     fixture.ok(&["rm", "limited"]);
@@ -2193,24 +2192,35 @@ fn configured_ports_are_lazy_and_conflicts_require_acceptance() {
     let overview = fixture
         .command()
         .current_dir(path)
-        .args(["--json", "ports"])
+        .args(["--json", "port"])
         .output()
         .unwrap();
     assert!(overview.status.success());
     let overview: Value = serde_json::from_slice(&overview.stdout).unwrap();
     assert_eq!(overview["configured"]["web"]["port"], preferred);
     assert_eq!(overview["reserved"], serde_json::json!([]));
-    let proposal = fixture.run(&["--json", "port", "reserve", "web", "configured"]);
+    assert_eq!(fixture.ok(&["port", "list", "configured"]), overview);
+    for old in [
+        vec!["ports", "configured"],
+        vec!["resources", "configured"],
+        vec!["port", "reserve", "web", "configured"],
+    ] {
+        assert!(
+            !fixture.run(&old).status.success(),
+            "old command still works: {old:?}"
+        );
+    }
+    let proposal = fixture.run(&["--json", "port", "acquire", "web", "configured"]);
     assert_eq!(proposal.status.code(), Some(2));
     let proposal: Value = serde_json::from_slice(&proposal.stdout).unwrap();
     assert_eq!(proposal["reserved"], false);
     assert_eq!(
-        fixture.ok(&["port", "list", "configured"]),
+        fixture.ok(&["port", "configured"])["reserved"],
         serde_json::json!([])
     );
     let accepted = fixture.ok(&[
         "port",
-        "reserve",
+        "acquire",
         "web",
         "configured",
         "--port",
@@ -2218,13 +2228,13 @@ fn configured_ports_are_lazy_and_conflicts_require_acceptance() {
     ]);
     assert_eq!(accepted["env_var"], "PORT");
     assert_eq!(
-        fixture.ok(&["port", "reserve", "web", "configured"]),
+        fixture.ok(&["port", "acquire", "web", "configured"]),
         accepted
     );
     fixture.ok(&["port", "release", "web", "configured"]);
     let automatic = fixture.ok(&[
         "port",
-        "reserve",
+        "acquire",
         "web",
         "configured",
         "--on-conflict",
@@ -2232,14 +2242,14 @@ fn configured_ports_are_lazy_and_conflicts_require_acceptance() {
     ]);
     assert_ne!(automatic["port"], preferred);
     assert_eq!(
-        fixture.ok(&["port", "reserve", "web", "configured"]),
+        fixture.ok(&["port", "acquire", "web", "configured"]),
         automatic
     );
     fs::create_dir(path.join(".shoal")).unwrap();
     fs::rename(path.join(".shoal.toml"), path.join(".shoal/config.toml")).unwrap();
-    fixture.ok(&["ports", "configured"]);
+    fixture.ok(&["port", "configured"]);
     fs::write(path.join(".shoal.toml"), "").unwrap();
-    assert!(!fixture.run(&["ports", "configured"]).status.success());
+    assert!(!fixture.run(&["port", "configured"]).status.success());
 }
 
 #[test]
@@ -2261,9 +2271,9 @@ fn execution_scope_limits_management_and_expires() {
     let list: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(list.as_array().unwrap().len(), 1);
     assert_eq!(list[0]["name"], "worker");
-    assert!(scoped(&["port", "reserve", "web"]).status.success());
+    assert!(scoped(&["port", "acquire", "web"]).status.success());
     assert!(
-        scoped(&["exec", "worker", "--", binary, "ports"])
+        scoped(&["exec", "worker", "--", binary, "port"])
             .status
             .success()
     );
@@ -2273,7 +2283,7 @@ fn execution_scope_limits_management_and_expires() {
         vec!["inspect", "other"],
         vec!["merged", "other"],
         vec!["pr", "--clear", "--workspace", "other"],
-        vec!["port", "reserve", "web", "other"],
+        vec!["port", "acquire", "web", "other"],
         vec!["repo", "rename", fixture.repo.to_str().unwrap(), "changed"],
         vec!["repo", "config", fixture.repo.to_str().unwrap()],
         vec!["repo", "config", fixture.repo.to_str().unwrap(), "--clear"],
@@ -2328,6 +2338,12 @@ fn simulator_exclusivity_wait_reuse_scope_and_removal() {
     let fixture = Fixture::with_tools(Some(SIM_CONFIG), true);
     fixture.add("first");
     fixture.add("second");
+    let overview = fixture.ok(&["sim", "first"]);
+    assert_eq!(overview["policy"]["max_booted"], 1);
+    assert_eq!(overview["policy"]["max_devices"], 2);
+    assert!(overview["policy"]["profiles"]["phone"].is_object());
+    assert_eq!(overview["simulators"], serde_json::json!([]));
+    assert_eq!(fixture.ok(&["sim", "list", "first"]), overview);
     let first = fixture.ok(&["sim", "acquire", "first"]);
     assert_eq!(first["state"], "leased");
     assert_eq!(fixture.ok(&["status", "first"])["simulators"][0], first);
@@ -2378,24 +2394,25 @@ fn simulator_exclusivity_wait_reuse_scope_and_removal() {
         env!("CARGO_BIN_EXE_shoal"),
         "--json",
         "sim",
-        "list",
         "--all",
     ]);
     assert_eq!(
-        serde_json::from_slice::<Value>(&listed.stdout).unwrap(),
+        serde_json::from_slice::<Value>(&listed.stdout).unwrap()["simulators"],
         serde_json::json!([])
     );
     fixture.ok(&["rm", "first"]);
     assert_eq!(
-        fixture
-            .ok(&["sim", "list", "--all"])
+        fixture.ok(&["sim", "--all"])["simulators"]
             .as_array()
             .unwrap()
             .len(),
         1
     );
     fixture.ok(&["rm", "second"]);
-    assert_eq!(fixture.ok(&["sim", "list", "--all"]), serde_json::json!([]));
+    assert_eq!(
+        fixture.ok(&["sim", "--all"])["simulators"],
+        serde_json::json!([])
+    );
     assert_eq!(
         fs::read_to_string(fixture.root.path().join("sim-devices.json")).unwrap(),
         "[]"
@@ -2410,7 +2427,10 @@ fn simulator_failures_retain_claims_and_restart_never_reassigns_them() {
     fixture.add("second");
     fs::write(fixture.root.path().join("sim-fail"), "bootstatus").unwrap();
     assert!(!fixture.run(&["sim", "acquire", "first"]).status.success());
-    assert_eq!(fixture.ok(&["sim", "list", "first"])[0]["state"], "failed");
+    assert_eq!(
+        fixture.ok(&["sim", "first"])["simulators"][0]["state"],
+        "failed"
+    );
     fs::remove_file(fixture.root.path().join("sim-fail")).unwrap();
     fixture.ok(&["sim", "release", "default", "first"]);
     let lease = fixture.ok(&["sim", "acquire", "first"]);
@@ -2432,12 +2452,15 @@ fn simulator_failures_retain_claims_and_restart_never_reassigns_them() {
     fs::write(fixture.root.path().join("sim-fail"), "delete").unwrap();
     assert!(!fixture.run(&["rm", "first"]).status.success());
     assert_eq!(
-        fixture.ok(&["sim", "list", "first"])[0]["udid"],
+        fixture.ok(&["sim", "first"])["simulators"][0]["udid"],
         lease["udid"]
     );
     fs::remove_file(fixture.root.path().join("sim-fail")).unwrap();
     fixture.ok(&["rm", "first"]);
-    assert_eq!(fixture.ok(&["sim", "list", "--all"]), serde_json::json!([]));
+    assert_eq!(
+        fixture.ok(&["sim", "--all"])["simulators"],
+        serde_json::json!([])
+    );
 }
 
 #[test]
@@ -2535,8 +2558,7 @@ fn simulator_any_policy_pool_limit_and_interrupted_creation_cleanup() {
     ]);
     assert_ne!(watch["udid"], phone["udid"]);
     assert_eq!(
-        fixture
-            .ok(&["sim", "list", "--all"])
+        fixture.ok(&["sim", "--all"])["simulators"]
             .as_array()
             .unwrap()
             .len(),
@@ -2545,9 +2567,9 @@ fn simulator_any_policy_pool_limit_and_interrupted_creation_cleanup() {
     fixture.ok(&["sim", "release", "default", "worker"]);
     fs::write(fixture.root.path().join("sim-lost-create-response"), "1").unwrap();
     assert!(!fixture.run(&["sim", "acquire", "worker"]).status.success());
-    let record = fixture.ok(&["sim", "list", "worker"]);
-    assert_eq!(record[0]["state"], "failed");
-    assert!(record[0]["udid"].is_null());
+    let record = fixture.ok(&["sim", "worker"]);
+    assert_eq!(record["simulators"][0]["state"], "failed");
+    assert!(record["simulators"][0]["udid"].is_null());
     fixture.ok(&["sim", "release", "default", "worker"]);
     assert_eq!(
         fs::read_to_string(fixture.root.path().join("sim-devices.json")).unwrap(),
@@ -2585,9 +2607,9 @@ fn simulators_allocate_concurrently_and_idle_expiry_keeps_active_leases() {
     fixture.ok(&["sim", "release", "default", "first"]);
     let deadline = Instant::now() + Duration::from_secs(20);
     loop {
-        let sims = fixture.ok(&["sim", "list", "--all"]);
-        if sims.as_array().unwrap().len() == 1 {
-            assert_eq!(sims[0]["udid"], second["udid"]);
+        let sims = fixture.ok(&["sim", "--all"]);
+        if sims["simulators"].as_array().unwrap().len() == 1 {
+            assert_eq!(sims["simulators"][0]["udid"], second["udid"]);
             break;
         }
         assert!(Instant::now() < deadline, "idle simulator was not deleted");
@@ -2913,9 +2935,13 @@ fn resources_enforce_pool_and_member_capacity_and_named_permits() {
     fixture.add("first");
     fixture.add("second");
     fixture.add("third");
-    assert_eq!(
-        fixture.ok(&["resource", "list", "--all"]),
-        serde_json::json!([])
+    assert!(
+        fixture
+            .ok(&["resource", "--all"])
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|overview| overview["leases"] == serde_json::json!([]))
     );
     let first = fixture.ok(&["resource", "acquire", "devices", "first"]);
     assert_eq!(first["resource"], "alpha");
@@ -2969,7 +2995,7 @@ fn resources_enforce_pool_and_member_capacity_and_named_permits() {
         "--resource",
         "beta",
     ]);
-    let overview = fixture.ok(&["resources", "third"]);
+    let overview = fixture.ok(&["resource", "third"]);
     let pool = overview["pools"]
         .as_array()
         .unwrap()
@@ -3018,14 +3044,13 @@ fn resources_enforce_pool_and_member_capacity_and_named_permits() {
     fixture.ok(&["rm", "first"]);
     fixture.ok(&["resource", "acquire", "signing", "second"]);
     fixture.ok(&["rm", "third"]);
-    let device_leases = fixture.ok(&["resource", "list", "--all"]);
-    assert!(
-        device_leases
-            .as_array()
-            .unwrap()
-            .iter()
-            .all(|l| l["pool"] != "devices")
-    );
+    let overviews = fixture.ok(&["resource", "--all"]);
+    let mut device_leases = overviews
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|overview| overview["leases"].as_array().unwrap());
+    assert!(device_leases.all(|l| l["pool"] != "devices"));
 }
 
 #[test]
@@ -3066,8 +3091,8 @@ fn resource_claims_are_atomic_persistent_and_wait_for_release() {
         }
     }
     assert_eq!(successes.len(), 3);
-    let leases = fixture.ok(&["resource", "list", "--all"]);
-    assert_eq!(leases.as_array().unwrap().len(), 3);
+    let leases = fixture.ok(&["resource", "--all"]);
+    assert_eq!(leases[0]["leases"].as_array().unwrap().len(), 3);
     fixture.daemon.kill().unwrap();
     fixture.daemon.wait().unwrap();
     fixture.daemon = fixture
@@ -3078,7 +3103,7 @@ fn resource_claims_are_atomic_persistent_and_wait_for_release() {
         .spawn()
         .unwrap();
     fixture.wait_ready();
-    assert_eq!(fixture.ok(&["resource", "list", "--all"]), leases);
+    assert_eq!(fixture.ok(&["resource", "--all"]), leases);
     let mut waiter = fixture
         .command()
         .args([
@@ -3106,17 +3131,20 @@ fn resource_claims_are_atomic_persistent_and_wait_for_release() {
     .unwrap();
     assert!(!fixture.run(&["rm", "worker"]).status.success());
     assert_eq!(
-        fixture
-            .ok(&["resource", "list", "--all"])
+        fixture.ok(&["resource", "--all"])[0]["leases"]
             .as_array()
             .unwrap()
             .len(),
         3
     );
     fixture.ok(&["rm", "worker", "--yes", "--keep-branch"]);
-    assert_eq!(
-        fixture.ok(&["resource", "list", "--all"]),
-        serde_json::json!([])
+    assert!(
+        fixture
+            .ok(&["resource", "--all"])
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|overview| overview["leases"] == serde_json::json!([]))
     );
 }
 
@@ -3146,11 +3174,11 @@ fn local_repository_config_is_copied_shared_persistent_and_reversible() {
     }
     for name in ["first", "second"] {
         assert_eq!(
-            fixture.ok(&["ports", name])["configured"]["web"]["env"],
+            fixture.ok(&["port", name])["configured"]["web"]["env"],
             "LOCAL_PORT"
         );
     }
-    let port = fixture.ok(&["port", "reserve", "web", "first"]);
+    let port = fixture.ok(&["port", "acquire", "web", "first"]);
     assert_eq!(port["env_var"], "LOCAL_PORT");
     fixture.ok(&["resource", "acquire", "lock", "first"]);
     assert_eq!(
@@ -3173,9 +3201,9 @@ fn local_repository_config_is_copied_shared_persistent_and_reversible() {
     fs::create_dir(path.join(".shoal")).unwrap();
     fs::write(path.join(".shoal/config.toml"), "invalid TOML").unwrap();
     // The worktree file is a layer of its own; its errors show through the saved config.
-    assert!(!fixture.run(&["ports", "first"]).status.success());
+    assert!(!fixture.run(&["port", "first"]).status.success());
     fs::remove_file(path.join(".shoal/config.toml")).unwrap();
-    let configured = fixture.ok(&["ports", "first"])["configured"].clone();
+    let configured = fixture.ok(&["port", "first"])["configured"].clone();
     assert_eq!(configured.as_object().unwrap().len(), 2);
     assert_eq!(configured["web"]["env"], "LOCAL_PORT");
     assert_eq!(configured["checked_in"]["env"], "CHECKED_IN");
@@ -3185,7 +3213,7 @@ fn local_repository_config_is_copied_shared_persistent_and_reversible() {
         "[resource_pools.lock.resources.a]\ncapacity=1\n",
     )
     .unwrap();
-    assert!(!fixture.run(&["ports", "first"]).status.success());
+    assert!(!fixture.run(&["port", "first"]).status.success());
     fs::write(
         path.join(".shoal.toml"),
         "[ports.checked_in]\nenv='CHECKED_IN'\n",
@@ -3210,15 +3238,15 @@ fn local_repository_config_is_copied_shared_persistent_and_reversible() {
     // An empty saved config sets nothing, so every option falls through.
     fs::write(&input, "").unwrap();
     fixture.ok(&["repo", "config", id, "--file", input.to_str().unwrap()]);
-    let configured = fixture.ok(&["ports", "first"])["configured"].clone();
+    let configured = fixture.ok(&["port", "first"])["configured"].clone();
     assert_eq!(configured.as_object().unwrap().len(), 1);
     assert_eq!(configured["checked_in"]["env"], "CHECKED_IN");
     assert!(fixture.ok(&["repo", "config", id, "--clear"])["toml"].is_null());
     assert_eq!(
-        fixture.ok(&["ports", "first"])["configured"]["checked_in"]["env"],
+        fixture.ok(&["port", "first"])["configured"]["checked_in"]["env"],
         "CHECKED_IN"
     );
-    assert_eq!(fixture.ok(&["port", "list", "first"])[0], port);
+    assert_eq!(fixture.ok(&["port", "first"])["reserved"][0], port);
     fixture.ok(&["repo", "config", id, "--clear"]);
 }
 
@@ -3327,7 +3355,7 @@ fn repo_resources_share_across_branches_and_refuse_conflicting_definitions() {
     let conflict = fixture.run(&["resource", "acquire", "signing", "second"]);
     assert!(!conflict.status.success());
     assert!(String::from_utf8_lossy(&conflict.stderr).contains("definition changed"));
-    let overview = fixture.ok(&["resources", "second"]);
+    let overview = fixture.ok(&["resource", "second"]);
     let signing = overview["pools"]
         .as_array()
         .unwrap()
@@ -3344,7 +3372,7 @@ fn repo_resources_share_across_branches_and_refuse_conflicting_definitions() {
     let output = fixture
         .command()
         .current_dir(second_path)
-        .args(["--json", "resources"])
+        .args(["--json", "resource"])
         .output()
         .unwrap();
     assert!(output.status.success());
@@ -3393,14 +3421,13 @@ fn resource_scopes_separate_repos_share_global_capacity_and_limit_agents() {
             .status
             .success()
     );
-    assert!(!scoped(&["resources", "second"]).status.success());
+    assert!(!scoped(&["resource", "second"]).status.success());
     let listed: Value =
-        serde_json::from_slice(&scoped(&["--json", "resource", "list", "--all"]).stdout).unwrap();
-    assert_eq!(listed.as_array().unwrap().len(), 2);
+        serde_json::from_slice(&scoped(&["--json", "resource", "--all"]).stdout).unwrap();
+    let leases = listed[0]["leases"].as_array().unwrap();
+    assert_eq!(leases.len(), 2);
     assert!(
-        listed
-            .as_array()
-            .unwrap()
+        leases
             .iter()
             .all(|l| l["workspace_id"] == local_first["workspace_id"])
     );
@@ -3588,7 +3615,7 @@ fn rwlock_readers_share_one_slot_and_writers_exclude_everyone() {
             String::from_utf8_lossy(&output.stderr)
         );
     }
-    let overview = fixture.ok(&["resources", "first"]);
+    let overview = fixture.ok(&["resource", "first"]);
     let pool = &overview["pools"][0];
     assert_eq!(pool["used"], 1);
     assert_eq!(pool["available"], 0);
@@ -3640,7 +3667,7 @@ fn rwlock_readers_share_one_slot_and_writers_exclude_everyone() {
             Some(2)
         );
     }
-    let status = fixture.ok(&["resources", "second"]);
+    let status = fixture.ok(&["resource", "second"]);
     assert_eq!(status["pools"][0]["resources"][0]["writers"], 1);
     assert_eq!(status["pools"][0]["resources"][0]["read_available"], false);
     fixture.ok(&["rm", "first"]);
@@ -3710,7 +3737,7 @@ fn rwlock_mixed_pools_apply_capacity_to_occupied_members_and_filter_modes() {
         "resource", "acquire", "mixed", "owner", "--mode", "write", "--name", "writer",
     ]);
     assert_eq!(writer["resource"], "b");
-    let overview = fixture.ok(&["resources", "owner"]);
+    let overview = fixture.ok(&["resource", "owner"]);
     assert_eq!(overview["pools"][0]["used"], 2);
     assert_eq!(overview["pools"][0]["resources"][0]["read_available"], true);
     assert_eq!(
@@ -3815,7 +3842,7 @@ fn rwlock_modes_survive_restart_wait_and_failed_removal() {
     let path = Path::new(workspace["path"].as_str().unwrap());
     fs::write(path.join("unfinished"), "retain").unwrap();
     assert!(!fixture.run(&["rm", "reader"]).status.success());
-    assert_eq!(fixture.ok(&["resource", "list", "reader"])[0], lease);
+    assert_eq!(fixture.ok(&["resource", "reader"])["leases"][0], lease);
     fixture.ok(&["resource", "release", "cache", "reader"]);
     let output = waiter.wait_with_output().unwrap();
     assert!(
@@ -3859,7 +3886,7 @@ fn rwlock_scope_and_kind_drift_preserve_active_leases() {
             .success()
     );
     assert_eq!(
-        fixture.ok(&["resources", "second"])["pools"][0]["configuration_matches"],
+        fixture.ok(&["resource", "second"])["pools"][0]["configuration_matches"],
         false
     );
     // Release still works when its own definition is removed entirely.
@@ -4042,7 +4069,7 @@ fn reconcile_repairs_interrupted_state_and_preserves_work_and_leases() {
     let workspace = fixture.add("interrupted");
     let path = Path::new(workspace["path"].as_str().unwrap());
     fs::write(path.join("uncommitted"), "preserve me").unwrap();
-    let port = fixture.ok(&["port", "reserve", "web", "interrupted"]);
+    let port = fixture.ok(&["port", "acquire", "web", "interrupted"]);
     let resource = fixture.ok(&["resource", "acquire", "lock", "interrupted"]);
     let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
     db.execute(
@@ -4068,9 +4095,9 @@ fn reconcile_repairs_interrupted_state_and_preserves_work_and_leases() {
         fs::read_to_string(path.join("uncommitted")).unwrap(),
         "preserve me"
     );
-    assert_eq!(fixture.ok(&["port", "list", "interrupted"])[0], port);
+    assert_eq!(fixture.ok(&["port", "interrupted"])["reserved"][0], port);
     assert_eq!(
-        fixture.ok(&["resource", "list", "interrupted"])[0],
+        fixture.ok(&["resource", "interrupted"])["leases"][0],
         resource
     );
     assert!(
@@ -4164,7 +4191,7 @@ fn deleted_worktrees_are_forgotten_with_their_resources_but_moved_ones_are_kept(
     let mut paths = Vec::new();
     for name in ["directory-only", "git-removed", "moved"] {
         let workspace = fixture.add(name);
-        fixture.ok(&["port", "reserve", "web", name]);
+        fixture.ok(&["port", "acquire", "web", name]);
         fixture.ok(&["resource", "acquire", "lock", name]);
         paths.push(PathBuf::from(workspace["path"].as_str().unwrap()));
     }
@@ -4306,7 +4333,7 @@ fn reconcile_stops_identity_verified_orphans_after_wrapper_death() {
 fn reconcile_recovers_daemon_crash_and_requires_acknowledgement_for_legacy_records() {
     let mut fixture = Fixture::new();
     let workspace = fixture.add("crash");
-    let port = fixture.ok(&["port", "reserve", "web", "crash"]);
+    let port = fixture.ok(&["port", "acquire", "web", "crash"]);
     let mut wrapper = fixture
         .command()
         .args(["exec", "crash", "--", "sleep", "30"])
@@ -4320,7 +4347,7 @@ fn reconcile_recovers_daemon_crash_and_requires_acknowledgement_for_legacy_recor
     let report = recovery_report(&fixture, &["reconcile", "crash"]);
     assert_eq!(report[0]["executions"][0]["state"], "unknown");
     fixture.ok(&["reconcile", "crash", "--repair", "--acknowledge-stopped"]);
-    assert_eq!(fixture.ok(&["port", "list", "crash"])[0], port);
+    assert_eq!(fixture.ok(&["port", "crash"])["reserved"][0], port);
     let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
     db.execute(
         "INSERT INTO executions(id,workspace_id,state) VALUES ('legacy',?1,'unknown')",
@@ -4422,7 +4449,7 @@ fn reconcile_all_reports_each_workspace_independently() {
 fn reconcile_preserves_connected_commands_until_stop_is_explicit() {
     let fixture = Fixture::new();
     fixture.add("connected");
-    let port = fixture.ok(&["port", "reserve", "web", "connected"]);
+    let port = fixture.ok(&["port", "acquire", "web", "connected"]);
     let mut wrapper = fixture
         .command()
         .args(["exec", "connected", "--", "sleep", "30"])
@@ -4441,7 +4468,7 @@ fn reconcile_preserves_connected_commands_until_stop_is_explicit() {
         fixture.ok(&["inspect", "connected"])["executions"],
         serde_json::json!([])
     );
-    assert_eq!(fixture.ok(&["port", "list", "connected"])[0], port);
+    assert_eq!(fixture.ok(&["port", "connected"])["reserved"][0], port);
 }
 
 #[test]
@@ -4912,7 +4939,7 @@ fn repository_removal_deletes_local_checkout_workspaces_and_leases_and_stops_com
     fs::write(first_path.join("dirty"), "uncommitted work").unwrap();
     fs::write(first_path.join(".shoal.toml"), "[resources.local-lock]\n").unwrap();
     fs::write(fixture.repo.join("untracked"), "repo changes").unwrap();
-    fixture.ok(&["port", "reserve", "web", "first"]);
+    fixture.ok(&["port", "acquire", "web", "first"]);
     fixture.ok(&["resource", "acquire", "local-lock", "first"]);
     fixture.ok(&["resource", "acquire", "global-lock", "second"]);
     let declined = fixture.run(&["repo", "rm", "doomed"]);
@@ -5191,7 +5218,7 @@ fn repository_removal_preserves_resources_on_failure_and_retries_after_restart()
     fs::write(&input, "[ports.web]\n").unwrap();
     let saved = fixture.ok(&["repo", "config", id, "--file", input.to_str().unwrap()]);
     let workspace = fixture.add("worker");
-    let port = fixture.ok(&["port", "reserve", "web", "worker"]);
+    let port = fixture.ok(&["port", "acquire", "web", "worker"]);
     let resource = fixture.ok(&["resource", "acquire", "lock", "worker"]);
     fixture.ok(&[
         "sim",
@@ -5205,8 +5232,8 @@ fn repository_removal_preserves_resources_on_failure_and_retries_after_restart()
     assert!(!fixture.run(&["repo", "rm", id, "--yes"]).status.success());
     assert!(fixture.repo.exists());
     assert!(Path::new(workspace["path"].as_str().unwrap()).exists());
-    assert_eq!(fixture.ok(&["port", "list", "worker"])[0], port);
-    assert_eq!(fixture.ok(&["resource", "list", "worker"])[0], resource);
+    assert_eq!(fixture.ok(&["port", "worker"])["reserved"][0], port);
+    assert_eq!(fixture.ok(&["resource", "worker"])["leases"][0], resource);
     fixture.restart();
     assert_eq!(fixture.ok(&["repo", "config", id]), saved);
     let blocked = fixture.run(&["repo", "config", id, "--clear"]);
@@ -5229,8 +5256,7 @@ fn repository_removal_preserves_resources_on_failure_and_retries_after_restart()
         0
     );
     assert!(
-        fixture
-            .ok(&["sim", "list", "--all"])
+        fixture.ok(&["sim", "--all"])["simulators"]
             .as_array()
             .unwrap()
             .is_empty()
@@ -6391,7 +6417,7 @@ fn wait_pr_error(fixture: &Fixture, name: &str, message: &str) {
 fn merged_stops_agent_and_releases_resources_without_idle_delay() {
     let fixture = Fixture::with_config(Some("[auto_cleanup]\nenabled=false\n[resources.device]\n"));
     let workspace = fixture.add("merged");
-    fixture.ok(&["port", "reserve", "web", "merged"]);
+    fixture.ok(&["port", "acquire", "web", "merged"]);
     fixture.ok(&["resource", "acquire", "device", "merged"]);
     let mut wrapper = fixture
         .command()
@@ -6884,7 +6910,7 @@ fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
             launch
         } else {
             let workspace = fixture.add(&name);
-            fixture.ok(&["port", "reserve", "web", &name, "--reason", "server"]);
+            fixture.ok(&["port", "acquire", "web", &name, "--reason", "server"]);
             fs::create_dir_all(state_file.parent().unwrap()).unwrap();
             fs::write(&state_file, "{}").unwrap();
             let claude_config = fixture.root.path().join(".claude.json");
@@ -6939,7 +6965,7 @@ fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
         assert!(!recorded.contains("scope=\n"), "{recorded}");
         assert!(recorded.contains("stdin=eof\nstdout=notty\n"), "{recorded}");
         if agent == "claude" {
-            let port = fixture.ok(&["port", "list", &name])[0]["port"]
+            let port = fixture.ok(&["port", &name])["reserved"][0]["port"]
                 .as_u64()
                 .unwrap();
             assert!(recorded.contains(&format!("port={port}\n")), "{recorded}");
@@ -7357,12 +7383,12 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
             "{busy:?}"
         );
     }
-    let taken = fixture.ok(&["port", "reserve", "web", "holder"])["port"]
+    let taken = fixture.ok(&["port", "acquire", "web", "holder"])["port"]
         .as_u64()
         .unwrap();
     let moved = fixture.ok(&[
         "port",
-        "reserve",
+        "acquire",
         "web",
         "waiter",
         "--port",
