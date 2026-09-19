@@ -70,17 +70,28 @@ def validate():
     run("cargo", "build", "--locked", "--release")
 
 
-def api(path, data=None):
+def api(path, data=None, authenticated=True):
     base = os.environ.get("RELEASE_API_URL", "https://git.henriknordvik.com/api/v1").rstrip("/")
     token = os.environ.get("RELEASE_AUTOMATION_TOKEN")
     headers = {"Content-Type": "application/json"}
-    if token:
+    if token and authenticated:
         headers["Authorization"] = f"token {token}"
     request = Request(base + path, data=json.dumps(data).encode() if data is not None else None,
                       headers=headers)
     with urlopen(request, timeout=60) as response:
         body = response.read()
         return json.loads(body) if body else None
+
+
+def http_error_message(error):
+    body = error.read().decode(errors="replace").strip()
+    error.close()
+    try:
+        message = json.loads(body).get("message", body)
+    except (AttributeError, json.JSONDecodeError):
+        message = body
+    detail = f": {message}" if message else ""
+    return f"HTTP {error.code} {error.reason}{detail}"
 
 
 def prepare(requested, dry_run, automated=False):
@@ -153,10 +164,22 @@ def create_release(version):
     repository = os.environ.get("RELEASE_REPOSITORY", "HN05/shoal")
     server = os.environ.get("RELEASE_API_URL", "https://git.henriknordvik.com/api/v1")
     url = server.rstrip("/").removesuffix("/api/v1") + "/" + repository
-    body = release_notes.generate(f"v{version}", git,
-                                  lambda path: api(f"/repos/{repository}{path}"), url)
+    tag = f"v{version}"
+    try:
+        existing = api(f"/repos/{repository}/releases/tags/{tag}", authenticated=False)
+    except HTTPError as error:
+        if error.code != 404:
+            raise
+        error.close()
+    else:
+        if existing.get("tag_name") != tag:
+            raise ValueError("existing release does not match the requested tag")
+        print(f"Forgejo release {tag} already exists")
+        return
+    body = release_notes.generate(
+        tag, git,
+        lambda path: api(f"/repos/{repository}{path}", authenticated=False), url)
     # CI calls repository endpoints directly; no user-profile/login API is needed.
-    # Both paths reject an existing release instead of overwriting it.
     if os.environ.get("RELEASE_AUTOMATION_TOKEN"):
         api(f"/repos/{repository}/releases", {
             "name": f"Shoal {version}", "tag_name": f"v{version}",
@@ -200,7 +223,26 @@ def publish_merged(pr, repository, number):
     publish(version, False, merged_commit=sha)
 
 
+def resume(version):
+    if git("status", "--porcelain"):
+        raise ValueError("resume requires a clean checkout")
+    tag = f"v{version}"
+    run("git", "fetch", "origin", "+refs/heads/main:refs/remotes/origin/main", "--tags")
+    if not git("tag", "--list", tag):
+        raise ValueError("the current version can only resume from its existing release tag")
+    sha = git("rev-parse", f"refs/tags/{tag}^{{commit}}")
+    git("merge-base", "--is-ancestor", sha, "origin/main")
+    if versions(git("show", f"{sha}:Cargo.toml"), git("show", f"{sha}:Cargo.lock")) != version:
+        raise ValueError("release tag does not contain the requested version")
+    run("git", "checkout", "--detach", sha)
+    publish(version, False, merged_commit=sha)
+
+
 def release_all(requested):
+    current = versions((ROOT / "Cargo.toml").read_text(), (ROOT / "Cargo.lock").read_text())
+    if requested and parts(requested) == parts(current):
+        resume(requested)
+        return
     repository = os.environ["RELEASE_REPOSITORY"]
     pr = prepare(requested, False, automated=True)
     number = pr["number"]
@@ -239,7 +281,9 @@ def main():
             release_all(args.version)
         else:
             (prepare if args.command == "prepare" else publish)(args.version, args.dry_run)
-    except (ValueError, subprocess.CalledProcessError, HTTPError) as error:
+    except HTTPError as error:
+        parser.exit(1, f"Release failed: {http_error_message(error)}\n")
+    except (ValueError, subprocess.CalledProcessError) as error:
         parser.exit(1, f"Release failed: {error}\n")
 
 

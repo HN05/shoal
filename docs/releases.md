@@ -2,6 +2,8 @@
 
 In Forgejo, open **Actions → release → Run workflow**, select `main`, and enter
 `MAJOR.MINOR.PATCH` or leave it blank for the next unused patch version.
+Entering the already-tagged version on `main` resumes an interrupted publication
+from that immutable tag without creating another version commit.
 
 The workflow updates both Cargo versions, runs checks and a release build,
 creates and merges a version PR, validates the merged commit, and publishes its
@@ -22,7 +24,7 @@ token. There is no separate Homebrew or GitHub workflow to run.
   push branches/tags, create and merge PRs, and publish releases in Shoal. Its
   identity must be allowed to merge into protected `main`. Grant `write:repository`
   and restrict repository access to `HN05/shoal`. No `read:user` scope is needed;
-  the workflow uses Git and repository API endpoints only.
+  release-note reads use the public API without the token.
 - `HOMEBREW_TAP_TOKEN`: Actions secret with write access to both Forgejo taps.
 - `RELEASE_TOKEN_GITHUB`: fine-grained GitHub token for `HN05/shoal` with
   read and write access to Contents; it creates the GitHub release and assets.

@@ -56,7 +56,8 @@ preparation since the nearest earlier published ancestor release with issue link
 that tag updates both taps (Forgejo- and GitHub-sourced via a push mirror), attaches
 cross-built Linux and macOS binaries, and recreates the release on GitHub, which
 mirrors do not carry. It never tags a later commit, downgrades, or force merges;
-tap updates retry against the tap's latest main without force pushes.
+explicitly selecting the current tagged version resumes from that tag, and tap
+updates retry against the tap's latest main without force pushes.
 
 ## Workspaces and Git
 
