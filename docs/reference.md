@@ -588,7 +588,8 @@ and moves you out of a removed one. `shoal cd` always opens fzf, `shoal cd
 <name>` goes directly, and `shoal cd -` returns to the shell's previous
 directory (`OLDPWD`, per shell), refusing a deleted destination. Scoped agents
 cannot navigate outside their worktree. Without the function, Shoal prints the
-destination; `--json` returns the path and never changes directory.
+destination and, in an interactive terminal, explains how to load the integration;
+`--json` returns the path and never changes directory.
 
 ### Tab completion
 

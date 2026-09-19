@@ -2160,6 +2160,43 @@ printf 'navigation-ok\n'
 }
 
 #[test]
+fn interactive_navigation_reports_missing_shell_integration() {
+    let fixture = Fixture::new();
+    let workspace = fixture.add("existing");
+
+    let (cd, cd_stderr) = fixture.interactive(&["cd", "existing"], "");
+    assert!(cd.status.success());
+    assert_eq!(
+        String::from_utf8(cd.stdout).unwrap(),
+        format!("{}\n", workspace["path"].as_str().unwrap())
+    );
+    assert!(cd_stderr.contains("shell integration is not loaded"));
+    assert!(cd_stderr.contains("source <(shoal shell init)"));
+
+    let (add, add_stderr) =
+        fixture.interactive(&["add", fixture.repo.to_str().unwrap(), "created"], "");
+    assert!(add.status.success());
+    assert!(
+        String::from_utf8(add.stdout)
+            .unwrap()
+            .contains("Created created")
+    );
+    assert!(add_stderr.contains("shell integration is not loaded"));
+    assert!(add_stderr.contains("source <(shoal shell init)"));
+
+    let piped = fixture.run(&["cd", "existing"]);
+    assert!(piped.status.success());
+    assert!(piped.stderr.is_empty());
+    assert_eq!(
+        String::from_utf8(piped.stdout).unwrap(),
+        format!("{}\n", workspace["path"].as_str().unwrap())
+    );
+
+    let json = fixture.ok(&["cd", "existing"]);
+    assert_eq!(json["path"], workspace["path"]);
+}
+
+#[test]
 fn configured_ports_are_lazy_and_conflicts_require_acceptance() {
     let fixture = Fixture::new();
     let occupied = std::net::TcpListener::bind("127.0.0.1:0").unwrap();

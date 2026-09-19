@@ -1,6 +1,11 @@
 use anyhow::{Context, Result, ensure};
 use std::path::{Path, PathBuf};
 
+use crate::{
+    context::Context as CliContext,
+    output::{Palette, Style},
+};
+
 pub const INIT_COMMAND: &str = "source <(shoal shell init)";
 
 /// Directory changes use a private data file, never shell code evaluated from
@@ -66,6 +71,11 @@ pub fn navigate(path: &Path, json: bool) -> Result<()> {
             "shell navigation does not support newlines in paths"
         );
         std::fs::write(destination, format!("{path}\n")).context("write shell directory change")?;
+    } else if CliContext::is_interactive(json) {
+        eprintln!(
+            "{} shell integration is not loaded; run `{INIT_COMMAND}` to enable directory changes",
+            Palette::stderr(json).paint(Style::Warning, "warning:")
+        );
     }
     Ok(())
 }
