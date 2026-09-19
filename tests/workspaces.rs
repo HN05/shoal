@@ -7402,3 +7402,54 @@ fn git_profiles_leave_unselected_repositories_alone_and_retain_failed_workspaces
     assert!(Path::new(failed["workspace"]["path"].as_str().unwrap()).is_dir());
     fixture.ok(&["rm", "unknown", "--yes"]);
 }
+
+#[test]
+fn git_profile_flag_overrides_config_for_new_and_existing_branches() {
+    let fixture = Fixture::with_config(Some(
+        "[git.profiles.manual]\nuser.email = 'manual@example.invalid'\n",
+    ));
+    commit_resource_config(&fixture.repo, "git_profile = 'missing'\n");
+    git(&fixture.repo, &["branch", "existing-profile"]);
+    for (flag, name) in [("--name", "new-profile"), ("--branch", "existing-profile")] {
+        let workspace = fixture.ok(&[
+            "add",
+            fixture.repo.to_str().unwrap(),
+            flag,
+            name,
+            "--git-profile",
+            "manual",
+        ]);
+        let path = Path::new(workspace["path"].as_str().unwrap());
+        assert_eq!(
+            git(path, &["config", "user.email"]).trim(),
+            "manual@example.invalid"
+        );
+        let output = fixture.run(&[
+            "add",
+            fixture.repo.to_str().unwrap(),
+            "--branch",
+            name,
+            "--git-profile",
+            "manual",
+        ]);
+        assert!(!output.status.success());
+        assert!(String::from_utf8_lossy(&output.stderr).contains("applies only to new worktrees"));
+        assert_eq!(
+            git(path, &["config", "user.email"]).trim(),
+            "manual@example.invalid"
+        );
+    }
+    let before = fixture.ok(&["list"]);
+    let output = fixture.run(&[
+        "add",
+        fixture.repo.to_str().unwrap(),
+        "--name",
+        "bad-profile",
+        "--git-profile",
+        "unknown",
+    ]);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("git profile unknown is not defined"));
+    assert_eq!(fixture.ok(&["list"]), before);
+    assert!(git(&fixture.repo, &["branch", "--list", "bad-profile"]).is_empty());
+}

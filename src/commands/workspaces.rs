@@ -122,16 +122,27 @@ fn navigate(ctx: &Context, path: &std::path::Path) -> Result<()> {
     shell::navigate(path, ctx.json)
 }
 
+pub(super) struct Creation {
+    pub name: Option<String>,
+    pub branch: Option<String>,
+    pub base: Option<String>,
+    pub git_profile: Option<String>,
+}
+
 pub(super) async fn add(
     ctx: &Context,
     repository: Option<String>,
-    names: (Option<String>, Option<String>),
-    base: Option<String>,
+    creation: Creation,
     issue: Option<String>,
     agent: Option<Agent>,
     mut args: Vec<OsString>,
 ) -> Result<i32> {
-    let (name, mut branch) = names;
+    let Creation {
+        name,
+        mut branch,
+        base,
+        git_profile,
+    } = creation;
     let repository = match repository {
         Some(repo) => ui::repository_selector(repo)?,
         None => ui::pick(
@@ -203,7 +214,11 @@ pub(super) async fn add(
     let (mut workspace, reused) = if let Some(branch) = branch {
         let opened = request!(
             &ctx.paths,
-            Method::OpenBranch { repository, branch },
+            Method::OpenBranch {
+                repository,
+                branch,
+                git_profile
+            },
             OpenedWorkspace
         );
         (opened.workspace, opened.reused)
@@ -226,7 +241,8 @@ pub(super) async fn add(
                 Method::CreateWorkspace {
                     repository,
                     name,
-                    base
+                    base,
+                    git_profile
                 },
                 Workspace
             ),

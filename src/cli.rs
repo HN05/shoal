@@ -54,6 +54,9 @@ pub enum Command {
         /// Starting Git ref (defaults to the repository's default branch, refreshed from its upstream).
         #[arg(long = "ref")]
         base: Option<String>,
+        /// Apply a named Git profile to the new worktree, overriding repository defaults.
+        #[arg(long)]
+        git_profile: Option<String>,
         /// Start an agent after worktree creation succeeds: codex, claude, or happy-<agent>.
         #[arg(long, value_parser = AgentParser)]
         agent: Option<Agent>,

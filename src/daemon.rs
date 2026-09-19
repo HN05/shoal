@@ -267,14 +267,25 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             Body::RepositoryRemoved(manager.remove_repository(&repository).await?)
         }
         Method::ListBranches { repository } => Body::Branches(manager.branches(&repository).await?),
-        Method::OpenBranch { repository, branch } => {
-            Body::OpenedWorkspace(manager.open_branch(&repository, &branch).await?)
-        }
+        Method::OpenBranch {
+            repository,
+            branch,
+            git_profile,
+        } => Body::OpenedWorkspace(
+            manager
+                .open_branch(&repository, &branch, git_profile.as_deref())
+                .await?,
+        ),
         Method::CreateWorkspace {
             repository,
             name,
             base,
-        } => Body::Workspace(manager.create_workspace(&repository, name, base).await?),
+            git_profile,
+        } => Body::Workspace(
+            manager
+                .create_workspace(&repository, name, base, git_profile.as_deref())
+                .await?,
+        ),
         Method::ListWorkspaces => {
             let mut workspaces = manager.list_workspaces().await?;
             if let Some(caller) = caller {

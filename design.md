@@ -90,10 +90,12 @@ Existing worktrees use the local default as their diff base, or the opening comm
 if unavailable or on that same branch. Never adopt main checkouts.
 
 Named Git profiles live in global config; repository or global `git_profile`
-selects one for newly created worktrees. Apply it before setup using Git's
+selects one for newly created worktrees, overridden by `add --git-profile`.
+Apply it before setup using Git's
 per-worktree config, preserving other worktrees' settings. Enable the shared
 `worktreeConfig` extension only when the existing repository layout supports it;
-profiles cannot change layout or extensions. Reopening keeps existing settings.
+profiles cannot change layout or extensions. Reopening keeps existing settings
+and rejects an explicit profile flag.
 
 Repository config may name `setup_cmd`, `post_setup_cmd`, and `pre_remove_cmd`:
 single executable paths resolved against the worktree, run directly without shell

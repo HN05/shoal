@@ -60,7 +60,12 @@ impl Manager {
         Ok(branches)
     }
 
-    pub async fn open_branch(&self, repository: &str, selector: &str) -> Result<OpenedWorkspace> {
+    pub async fn open_branch(
+        &self,
+        repository: &str,
+        selector: &str,
+        git_profile: Option<&str>,
+    ) -> Result<OpenedWorkspace> {
         let repo = self.repository(repository).await?;
         let gate = self.git_gate(&repo.id).await;
         let _guard = gate.lock().await;
@@ -144,6 +149,11 @@ impl Manager {
                 workspace.name,
                 workspace.state
             );
+            ensure!(
+                git_profile.is_none(),
+                "--git-profile applies only to new worktrees; workspace {} already exists",
+                workspace.name
+            );
             self.verify_worktree(&workspace).await?;
             let actual = git::run_isolated(&workspace.path, &["symbolic-ref", "HEAD"]).await?;
             ensure!(
@@ -167,7 +177,13 @@ impl Manager {
             );
         }
         let workspace = self
-            .create_branch_workspace(&repo, name.clone(), name.clone(), None, Some(branch))
+            .create_branch_workspace(
+                &repo,
+                name.clone(),
+                name.clone(),
+                crate::workspace::WorkspaceSource::Existing(branch),
+                git_profile,
+            )
             .await?;
         Ok(OpenedWorkspace {
             workspace,

@@ -263,14 +263,16 @@ commit.gpgsign = true
 ```
 
 Set `git_profile = "work"` at the top level of repository or global config.
-Selection follows saved repository config, the new worktree's config file,
+Override it for one creation with `shoal add <repo> --git-profile work`.
+Selection follows the flag, saved repository config, the new worktree's config file,
 then global config. With no selection, Git settings stay unchanged. Profile
 values may be strings, booleans or integers; omitted keys retain Git's normal
-inheritance. Unknown profiles fail creation and leave a failed workspace for
-inspection or removal.
+inheritance. An unknown flag value is rejected before creation; an unknown
+configured profile leaves a failed workspace for inspection or removal.
 
 Settings go into Git's per-worktree config before setup runs; reopening or
-preparing a workspace does not reapply them. Shoal enables the shared
+preparing a workspace does not reapply them, and an explicit profile flag on
+reopen is rejected. Shoal enables the shared
 `extensions.worktreeConfig` setting when necessary, refusing repositories with
 shared `core.worktree` or `core.bare = true` until those settings are migrated
 to the main checkout's `config.worktree`. Profiles cannot set repository layout

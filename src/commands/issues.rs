@@ -41,8 +41,12 @@ pub(super) async fn run(
     super::workspaces::add(
         ctx,
         Some(repo.id.clone()),
-        (None, None),
-        base,
+        super::workspaces::Creation {
+            name: None,
+            branch: None,
+            base,
+            git_profile: None,
+        },
         Some(url),
         Some(agent),
         args,

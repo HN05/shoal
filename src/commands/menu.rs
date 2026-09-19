@@ -55,6 +55,7 @@ pub(super) async fn choose(ctx: &Context) -> Result<Command> {
             branch: None,
             issue: None,
             base: None,
+            git_profile: None,
             agent: None,
             args: vec![],
         });

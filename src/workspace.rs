@@ -24,6 +24,11 @@ use std::{collections::HashMap, fs, sync::Arc};
 use tokio::sync::{Mutex, watch};
 use uuid::Uuid;
 
+pub(crate) enum WorkspaceSource {
+    New(Option<String>),
+    Existing(crate::existing_branch::Branch),
+}
+
 pub struct Manager {
     pub store: Store,
     pub(crate) pr_gate: Mutex<()>,
@@ -143,6 +148,7 @@ impl Manager {
         repository: &str,
         name: String,
         base: Option<String>,
+        git_profile: Option<&str>,
     ) -> Result<Workspace> {
         let repo = self.repository(repository).await?;
         git::check_branch_name(Some(&repo.path), &name).await?;
@@ -152,7 +158,7 @@ impl Manager {
         self.repository(&repo.id).await?;
         self.ensure_repository_available(&repo.id).await?;
         let branch = self.available_branch(&repo, &name).await?;
-        self.create_branch_workspace(&repo, name, branch, base, None)
+        self.create_branch_workspace(&repo, name, branch, WorkspaceSource::New(base), git_profile)
             .await
     }
 
@@ -162,9 +168,16 @@ impl Manager {
         repo: &crate::model::Repository,
         name: String,
         branch: String,
-        base: Option<String>,
-        existing: Option<crate::existing_branch::Branch>,
+        source: WorkspaceSource,
+        git_profile: Option<&str>,
     ) -> Result<Workspace> {
+        if let Some(name) = git_profile {
+            self.config.git.profile(name)?;
+        }
+        let (base, existing) = match source {
+            WorkspaceSource::New(base) => (base, None),
+            WorkspaceSource::Existing(branch) => (None, Some(branch)),
+        };
         let name = derive_workspace_name(&name);
         let workspace = Workspace {
             id: Uuid::new_v4().to_string(),
@@ -186,7 +199,7 @@ impl Manager {
         );
         self.insert_workspace(workspace.clone()).await?;
         let result = self
-            .materialize_worktree(repo, &workspace, base, existing)
+            .materialize_worktree(repo, &workspace, base, existing, git_profile)
             .await;
         match result {
             Ok(needs_setup) => {
@@ -252,6 +265,7 @@ impl Manager {
         workspace: &Workspace,
         base: Option<String>,
         existing: Option<crate::existing_branch::Branch>,
+        git_profile: Option<&str>,
     ) -> Result<bool> {
         if let Some(branch) = &existing {
             self.materialize_branch(repo, branch).await?;
@@ -341,10 +355,9 @@ impl Manager {
         .await?;
         self.record_worktree_identity(workspace).await?;
         let config = self.workspace_config(workspace).await?;
-        if let Some(name) = config
-            .git_profile
-            .as_ref()
-            .or(self.config.git_profile.as_ref())
+        if let Some(name) = git_profile
+            .or(config.git_profile.as_deref())
+            .or(self.config.git_profile.as_deref())
         {
             crate::git_profile::apply(&workspace.path, self.config.git.profile(name)?)
                 .await

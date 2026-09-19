@@ -20,7 +20,7 @@ use crate::{
     simulators::{SimRequest, Simulator, SimulatorCatalog},
 };
 
-pub const VERSION: u32 = 25;
+pub const VERSION: u32 = 26;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -78,11 +78,13 @@ pub enum Method {
     OpenBranch {
         repository: String,
         branch: String,
+        git_profile: Option<String>,
     },
     CreateWorkspace {
         repository: String,
         name: String,
         base: Option<String>,
+        git_profile: Option<String>,
     },
     ListWorkspaces,
     SetPr {

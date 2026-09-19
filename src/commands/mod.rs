@@ -65,9 +65,25 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             branch,
             issue,
             base,
+            git_profile,
             agent,
             args,
-        } => workspaces::add(&ctx, repository, (name, branch), base, issue, agent, args).await,
+        } => {
+            workspaces::add(
+                &ctx,
+                repository,
+                workspaces::Creation {
+                    name,
+                    branch,
+                    base,
+                    git_profile,
+                },
+                issue,
+                agent,
+                args,
+            )
+            .await
+        }
         Command::Issue {
             url,
             agent,
