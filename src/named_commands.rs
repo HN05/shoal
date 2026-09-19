@@ -5,7 +5,7 @@ use std::{
 };
 
 use anyhow::{Context as _, Result, ensure};
-use clap::Parser;
+use clap::{CommandFactory, Parser};
 
 use crate::{
     client::{self, request},
@@ -43,7 +43,7 @@ pub fn defaults() -> Commands {
 }
 
 pub fn validate(commands: &Commands) -> Result<()> {
-    let cli = crate::cli::command();
+    let cli = crate::cli::Cli::command();
     for (name, argv) in commands {
         crate::validate::lowercase_name("command", name)?;
         ensure!(

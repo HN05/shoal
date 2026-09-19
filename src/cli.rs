@@ -37,73 +37,132 @@ const HELP_SECTIONS: &[(&str, &[&str])] = &[
 ];
 
 /// Build the CLI with its top-level commands grouped for help output.
-pub fn command() -> clap::Command {
+pub fn help_command() -> clap::Command {
     let command = <Cli as clap::CommandFactory>::command();
     let mut help_command = command.clone();
-    let help = help_command.render_help().to_string();
-    command.override_help(group_help_sections(&help))
+    let help = help_command.render_help();
+    let plain_help = help.to_string();
+    let styled_help = help.ansi().to_string();
+    group_help_sections(&plain_help, &styled_help, HELP_SECTIONS)
+        .map(|help| command.clone().override_help(help))
+        .unwrap_or(command)
 }
 
 pub fn parse() -> Cli {
-    let mut matches = command().get_matches();
+    let mut matches = help_command().get_matches();
     <Cli as clap::FromArgMatches>::from_arg_matches_mut(&mut matches)
         .unwrap_or_else(|error| error.exit())
 }
 
-fn group_help_sections(help: &str) -> String {
-    let commands_start = help
-        .find("Commands:\n")
-        .expect("clap help should contain commands");
-    let commands_end = help[commands_start..]
+fn group_help_sections(
+    plain_help: &str,
+    styled_help: &str,
+    sections: &[(&str, &[&str])],
+) -> Option<String> {
+    let plain_commands_start = plain_help.find("Commands:\n")? + "Commands:\n".len();
+    let plain_commands_end = plain_help[plain_commands_start..]
         .find("\n\nOptions:\n")
-        .map(|offset| commands_start + offset)
-        .expect("clap help should contain options after commands");
-    let command_lines = &help[commands_start + "Commands:\n".len()..commands_end];
+        .map(|offset| plain_commands_start + offset)?;
+
+    let styled_heading_name = styled_help.find("Commands:")?;
+    let styled_heading_start = styled_help[..styled_heading_name]
+        .rfind('\n')
+        .map_or(0, |index| index + 1);
+    let styled_heading_end = styled_help[styled_heading_name..].find('\n')? + styled_heading_name;
+    let styled_options_name =
+        styled_help[styled_heading_end..].find("Options:")? + styled_heading_end;
+    let styled_options_start = styled_help[..styled_options_name].rfind('\n')? + 1;
+
+    let plain_lines: Vec<_> = plain_help[plain_commands_start..plain_commands_end]
+        .lines()
+        .collect();
+    let styled_lines: Vec<_> = styled_help[styled_heading_end + 1..styled_options_start]
+        .trim_end_matches('\n')
+        .lines()
+        .collect();
+    if plain_lines.len() != styled_lines.len() {
+        return None;
+    }
 
     let mut entries: Vec<(&str, String)> = Vec::new();
-    for line in command_lines.lines() {
-        let starts_entry = line.starts_with("  ") && !line[2..].starts_with(' ');
+    for (plain_line, styled_line) in plain_lines.into_iter().zip(styled_lines) {
+        let starts_entry = plain_line.starts_with("  ") && !plain_line[2..].starts_with(' ');
         if starts_entry {
-            let name = line.split_whitespace().next().unwrap_or_default();
-            entries.push((name, line.to_owned()));
+            let name = plain_line.split_whitespace().next()?;
+            entries.push((name, styled_line.to_owned()));
         } else if let Some((_, entry)) = entries.last_mut() {
             entry.push('\n');
-            entry.push_str(line);
+            entry.push_str(styled_line);
         }
     }
 
+    let heading_prefix = &styled_help[styled_heading_start..styled_heading_name];
+    let heading_suffix = &styled_help[styled_heading_name + "Commands".len()..styled_heading_end];
     let mut grouped = String::new();
-    for (section, commands) in HELP_SECTIONS {
+    let mut used = vec![false; entries.len()];
+    for (section, commands) in sections {
         if !grouped.is_empty() {
             grouped.push_str("\n\n");
         }
+        grouped.push_str(heading_prefix);
         grouped.push_str(section);
-        grouped.push_str(":\n");
+        grouped.push_str(heading_suffix);
         for name in *commands {
-            let (_, entry) = entries
-                .iter()
-                .find(|(candidate, _)| candidate == name)
-                .unwrap_or_else(|| panic!("top-level help command {name:?} should exist"));
-            grouped.push_str(entry);
             grouped.push('\n');
+            let (entry_index, (_, entry)) = entries
+                .iter()
+                .enumerate()
+                .find(|(_, (candidate, _))| candidate == name)?;
+            if used[entry_index] {
+                return None;
+            }
+            used[entry_index] = true;
+            grouped.push_str(entry);
         }
-        grouped.pop();
     }
 
-    assert_eq!(
-        entries.len(),
-        HELP_SECTIONS
-            .iter()
-            .map(|(_, commands)| commands.len())
-            .sum::<usize>(),
-        "every visible top-level command should have a help section"
-    );
+    if used.iter().any(|used| !used) {
+        return None;
+    }
 
-    format!(
-        "{}{grouped}{}",
-        &help[..commands_start],
-        &help[commands_end..]
-    )
+    Some(format!(
+        "{}{grouped}\n\n{}",
+        &styled_help[..styled_heading_start],
+        &styled_help[styled_options_start..]
+    ))
+}
+
+#[cfg(test)]
+mod help_tests {
+    use super::*;
+
+    fn rendered_help() -> (String, String) {
+        let mut command = <Cli as clap::CommandFactory>::command();
+        let help = command.render_help();
+        (help.to_string(), help.ansi().to_string())
+    }
+
+    #[test]
+    fn groups_every_visible_top_level_command() {
+        let (plain, styled) = rendered_help();
+        let grouped = group_help_sections(&plain, &styled, HELP_SECTIONS).unwrap();
+
+        let mut previous = 0;
+        for (heading, _) in HELP_SECTIONS {
+            let position = grouped.find(&format!("{heading}:")).unwrap();
+            assert!(position >= previous);
+            previous = position;
+        }
+        assert!(!grouped.contains("Commands:"));
+        assert!(grouped.contains("\x1b["));
+    }
+
+    #[test]
+    fn rejects_incomplete_sections_without_panicking() {
+        let (plain, styled) = rendered_help();
+
+        assert!(group_help_sections(&plain, &styled, &HELP_SECTIONS[..5]).is_none());
+    }
 }
 
 #[derive(Debug, Parser)]

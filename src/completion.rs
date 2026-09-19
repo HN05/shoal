@@ -7,7 +7,7 @@ use std::{
 };
 
 use anyhow::{Context as _, Result};
-use clap::Command;
+use clap::{Command, CommandFactory};
 use clap_complete::engine::{ArgValueCompleter, CompletionCandidate};
 
 use crate::{
@@ -42,7 +42,7 @@ enum Target {
 }
 
 pub fn command() -> Command {
-    let mut command = crate::cli::command();
+    let mut command = crate::cli::Cli::command();
     let words: Vec<_> = std::env::args_os()
         .skip_while(|s| s != "--")
         .skip(1)
