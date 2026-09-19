@@ -142,7 +142,9 @@ Commands launched through Shoal inherit a daemon-validated scope token that
 confines them to their own workspace: status, inspect, execute, setup, merge, and resources.
 `land`, creation, removal, reconciliation, other workspaces, repository
 administration, and service control need an unscoped caller. PR registration and
-manual merge acknowledgement are own-workspace exceptions; nested executions keep scope.
+manual merge acknowledgement are own-workspace exceptions. Effective configuration
+may be read for the caller's own workspace; changing it needs an unscoped caller.
+Nested executions keep scope.
 
 The CLI takes explicit targets and `--json` for automation, and resolves omitted
 targets from the current directory. Interactive commands may use fzf;

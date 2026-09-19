@@ -9,10 +9,10 @@ use crate::{
     cli::CodexMode,
     client::request,
     config::{self, Config},
-    named_commands::{self, CommandLayer as Layer},
+    named_commands,
     paths::Paths,
     protocol::{ConfigTarget, Method},
-    repo_config::{self, ConfigLayers, RepoConfig},
+    repo_config::{self, ConfigLayer as Layer, ConfigLayers, RepoConfig},
 };
 
 #[derive(Debug, Serialize)]
