@@ -4,6 +4,7 @@ mod client;
 mod commands;
 mod completion;
 mod config;
+mod config_report;
 mod context;
 mod daemon;
 mod default_branch;

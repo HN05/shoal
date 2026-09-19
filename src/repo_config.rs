@@ -16,7 +16,7 @@ pub struct LocalConfig {
 
 /// The repository-owned configuration layers before they are resolved. Keeping
 /// them separate lets callers explain where an effective value came from.
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Debug, Default, Clone, Deserialize, Serialize)]
 pub struct ConfigLayers {
     pub worktree_file: RepoConfig,
     pub saved_repository_config: RepoConfig,
@@ -36,7 +36,7 @@ pub enum ConflictPolicy {
     Suggest,
 }
 
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Debug, Default, Clone, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct RepoConfig {
     pub commands: crate::named_commands::Commands,
@@ -59,7 +59,7 @@ pub struct RepoConfig {
     pub pr_cleanup: PrCleanup,
 }
 
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Debug, Default, Clone, Deserialize, Serialize)]
 #[serde(default)]
 pub struct PortDefaults {
     pub on_conflict: Option<ConflictPolicy>,
@@ -215,21 +215,21 @@ pub struct Hooks {
     pub pre_remove_cmd: Option<PathBuf>,
 }
 
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Debug, Default, Clone, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct SimulatorPreferences {
     pub preferred: Vec<String>,
 }
 
 /// Repository value for the global `[codex]`; `None` keeps the layer below.
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Debug, Default, Clone, Copy, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Codex {
     pub default_mode: Option<CodexMode>,
 }
 
 /// Repository values for the global `[auto_cleanup]`.
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Debug, Default, Clone, Copy, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct AutoCleanup {
     pub enabled: Option<bool>,
@@ -237,7 +237,7 @@ pub struct AutoCleanup {
 }
 
 /// Repository value for the global `[pr_cleanup]`.
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Debug, Default, Clone, Copy, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct PrCleanup {
     pub enabled: Option<bool>,

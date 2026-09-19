@@ -1,5 +1,6 @@
 //! CLI dispatch. Domain handlers own requests, prompts, and rendering;
 //! daemon modules own lifecycle and allocation policy.
+mod configuration;
 mod issues;
 mod menu;
 mod notifications;
@@ -253,7 +254,12 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             };
             recovery::run(&ctx, workspace, all, options).await
         }
-        Command::Config { command } => service::config(&ctx, command),
+        Command::Config { command } => match command {
+            crate::cli::ConfigCommand::Show { workspace } => {
+                configuration::show(&ctx, workspace).await
+            }
+            command => service::config(&ctx, command),
+        },
         Command::Install {
             dry_run,
             executable,
