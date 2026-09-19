@@ -125,14 +125,7 @@ a new-branch prompt or existing-branch picker. Noninteractive and JSON calls nev
 management commands support JSON output, while executed commands keep their
 own stdin, stdout, stderr, and exit code.
 
-### Agents
-
-`add --agent codex|claude|happy-<agent>` starts the agent after worktree creation, setup, and
-the post-setup hook succeed; arguments after `--` go to the agent. CLI agents
-run in your terminal through the tracked execution wrapper and return the
-agent's exit code; the workspace is retained even when launch fails. With shell
-integration, your shell enters the new workspace after the agent exits.
-`--json` emits the workspace record first, then the agent's unmodified output.
+### Configured commands
 
 Define workspace shortcuts in global or repository TOML:
 
@@ -184,13 +177,19 @@ review-worktree = ["tuicr", "-w"]
 
 `shoal review [workspace]` reviews committed changes since the workspace's base;
 `shoal review-worktree [workspace]` reviews uncommitted changes. The committed
-range excludes working-tree changes that `shoal diff` includes. Export Markdown
-from tuicr's clipboard, or run `shoal review [workspace] -- --stdout` and pass the
-export to your agent. For saved JSON comments, use `shoal exec [workspace] --
-tuicr review comments --session <slug>`, using tuicr's `tuicr-session:` stderr
-marker. Shoal owns execution, while tuicr owns review sessions and export;
-forge submission and authentication remain with tuicr, whose Gitea adapter uses
-`tea` and does not promise Forgejo support.
+range excludes working-tree changes that `shoal diff` includes. Export feedback
+from tuicr and hand it to your agent explicitly; see
+[tuicr's export documentation](https://github.com/agavra/tuicr/blob/main/docs/CLI.md#output-for-scripts-and-agents).
+Shoal tracks execution; the review tool owns sessions, exports, and forge access.
+
+### Agents
+
+`add --agent codex|claude|happy-<agent>` starts the agent after worktree creation, setup, and
+the post-setup hook succeed; arguments after `--` go to the agent. CLI agents
+run in your terminal through the tracked execution wrapper and return the
+agent's exit code; the workspace is retained even when launch fails. With shell
+integration, your shell enters the new workspace after the agent exits.
+`--json` emits the workspace record first, then the agent's unmodified output.
 
 `shoal codex` without `cli`/`app` uses `codex.default_mode` from the workspace's
 repository config or `~/.config/shoal/config.toml` (or
