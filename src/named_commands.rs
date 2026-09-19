@@ -8,11 +8,12 @@ use anyhow::{Context as _, Result, ensure};
 use clap::{CommandFactory, Parser};
 
 use crate::{
-    client,
+    client::{self, request},
     context::Context,
     execution,
     model::Workspace,
-    protocol::ConfigTarget,
+    paths::Paths,
+    protocol::{ConfigTarget, Method},
     ui::{self, Fallback},
 };
 
@@ -98,11 +99,19 @@ pub async fn run(
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let settings = client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.clone())).await?;
     let inspection = client::inspect(&ctx.paths, workspace.clone()).await?;
-    let command = expand(&settings.commands, name, &inspection.workspace, args)?;
+    let command = expand(
+        &ctx.paths,
+        &settings.commands,
+        name,
+        &inspection.workspace,
+        args,
+    )
+    .await?;
     execution::run(&ctx.paths, workspace, command, None).await
 }
 
-pub fn expand(
+pub async fn expand(
+    paths: &Paths,
     commands: &Commands,
     name: &str,
     workspace: &Workspace,
@@ -111,11 +120,28 @@ pub fn expand(
     let argv = commands.get(name).with_context(|| {
         format!("unknown command {name:?}; define it in [commands] in Shoal config")
     })?;
-    let fields = [
+    let base = if argv.iter().any(|arg| arg.contains("{diff_base}")) {
+        Some(
+            request!(
+                paths,
+                Method::DiffBase {
+                    workspace: workspace.id.clone()
+                },
+                DiffBase
+            )
+            .commit,
+        )
+    } else {
+        None
+    };
+    let mut fields = vec![
         ("{workspace}", OsStr::new(&workspace.name)),
         ("{branch}", OsStr::new(&workspace.branch)),
         ("{path}", workspace.path.as_os_str()),
     ];
+    if let Some(base) = &base {
+        fields.push(("{diff_base}", OsStr::new(base)));
+    }
     let mut command = Vec::new();
     let mut args = Some(args);
     for arg in argv {

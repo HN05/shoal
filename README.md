@@ -85,6 +85,11 @@ shoal merge feature/api       # Merge another local or remote branch
 shoal land                    # Merge your branch into the default branch; no remote needed
 ```
 
+For local code review, configure `[commands] review = ["tuicr", "-r",
+"{diff_base}..HEAD"]` and run `shoal review fix-login`. See the
+[command and review configuration](docs/reference.md#workspaces) for uncommitted
+review and exporting feedback to an agent.
+
 CLI agents run in the terminal through Shoal; Happy sessions run detached, log
 to a file Shoal names, and stop with `shoal stop`. The Codex shortcut disables
 Codex's sandbox and approval prompts; use `shoal exec fix-login -- codex` for a

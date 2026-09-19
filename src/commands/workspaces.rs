@@ -584,8 +584,14 @@ pub(super) async fn claude(
         .into_iter()
         .chain(args)
         .collect();
-    let command =
-        crate::named_commands::expand(&settings.commands, "claude", &inspection.workspace, args)?;
+    let command = crate::named_commands::expand(
+        &ctx.paths,
+        &settings.commands,
+        "claude",
+        &inspection.workspace,
+        args,
+    )
+    .await?;
     execution::run(
         &ctx.paths,
         inspection.workspace.id,
@@ -644,8 +650,14 @@ pub(super) async fn codex(
         .into_iter()
         .chain(args)
         .collect();
-    let command =
-        crate::named_commands::expand(&settings.commands, "codex", &inspection.workspace, args)?;
+    let command = crate::named_commands::expand(
+        &ctx.paths,
+        &settings.commands,
+        "codex",
+        &inspection.workspace,
+        args,
+    )
+    .await?;
     execution::run(&ctx.paths, workspace, command, Some("codex".into())).await
 }
 

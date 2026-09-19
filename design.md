@@ -162,6 +162,9 @@ launch. They run through the tracked wrapper with workspace scope, terminal I/O,
 and literal extra arguments. Built-in commands without configurable argument
 arrays reserve their names. Workspace fields expand once within individual
 arguments; a standalone `{args}` places the caller's literal arguments.
+`{diff_base}` lazily uses `diff`'s daemon lookup. Review tools use these commands;
+the tools own review storage, exports, and forge authentication, with explicit
+feedback handoff to agents.
 
 Agent shortcuts use the execution wrapper: by default Codex CLI gets full access without
 approvals, Claude gets remote control named after the workspace. Both trust the

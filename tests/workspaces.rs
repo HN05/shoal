@@ -1175,7 +1175,9 @@ fn ports_avoid_listeners_and_concurrent_allocations_are_unique_and_persistent() 
 
 #[test]
 fn diff_excludes_new_main_commits_before_and_after_rebase_and_uses_git_configuration() {
-    let fixture = Fixture::new();
+    let fixture = Fixture::with_config(Some(
+        "[commands]\nreview = ['printf', '%s\\n', '{diff_base}..HEAD']\nplain = ['printf', '%s', '{args}']\n",
+    ));
     let workspace = fixture.add("changes");
     let path = Path::new(workspace["path"].as_str().unwrap());
     let commit = |path: &Path| {
@@ -1214,6 +1216,17 @@ fn diff_excludes_new_main_commits_before_and_after_rebase_and_uses_git_configura
             git(path, &["add", "staged"]);
             fs::write(path.join("tracked"), "unstaged workspace content\n").unwrap();
         }
+        let base = git(path, &["merge-base", "main", "HEAD"]);
+        let review = fixture.run(&["review", "changes", "--", "{diff_base}"]);
+        assert!(
+            review.status.success(),
+            "{}",
+            String::from_utf8_lossy(&review.stderr)
+        );
+        assert_eq!(
+            String::from_utf8(review.stdout).unwrap(),
+            format!("{}..HEAD\n{{diff_base}}\n", base.trim())
+        );
         let output = fixture
             .command()
             .current_dir(path)
@@ -1245,6 +1258,15 @@ fn diff_excludes_new_main_commits_before_and_after_rebase_and_uses_git_configura
     let output = fixture.run(&["diff", "changes"]);
     assert!(output.status.success());
     assert!(String::from_utf8_lossy(&output.stdout).contains("configured-diff"));
+    // A missing base blocks review, but is irrelevant to commands without the placeholder.
+    git(&fixture.repo, &["branch", "-m", "renamed-main"]);
+    assert!(!fixture.run(&["review", "changes"]).status.success());
+    assert_eq!(
+        fixture
+            .run(&["plain", "changes", "--", "{diff_base}"])
+            .stdout,
+        b"{diff_base}"
+    );
     fixture.ok(&["rm", "changes", "--yes", "--delete-branch"]);
 }
 

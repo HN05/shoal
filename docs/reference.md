@@ -151,7 +151,9 @@ with the workspace as working directory. Arguments are passed literally without
 shell expansion. Execution preserves terminal I/O, scope, reserved-port variables,
 and exit status just like `exec`.
 
-`{workspace}`, `{branch}`, and `{path}` expand once inside configured arguments.
+`{workspace}`, `{branch}`, `{path}`, and `{diff_base}` expand once inside
+configured arguments. `{diff_base}` resolves lazily through the same daemon
+fork-point/merge-base lookup as `shoal diff`; failure prevents launch.
 A standalone `{args}` inserts the forwarded arguments there; otherwise they are
 appended. Forwarded arguments are never expanded. The CLI agent defaults are:
 
@@ -168,6 +170,25 @@ launch, creating the agent's user config if needed and preserving other settings
 Claude uses `~/.claude.json` (or `$CLAUDE_CONFIG_DIR/.claude.json`); Codex CLI
 and app use `~/.codex/config.toml` (or `$CODEX_HOME/config.toml`). A trust update
 failure warns and still launches the agent.
+
+For local review with [tuicr](https://github.com/agavra/tuicr), install it on PATH
+and configure:
+
+```toml
+[commands]
+review = ["tuicr", "-r", "{diff_base}..HEAD"]
+review-worktree = ["tuicr", "-w"]
+```
+
+`shoal review [workspace]` reviews committed changes since the workspace's base;
+`shoal review-worktree [workspace]` reviews uncommitted changes. The committed
+range excludes working-tree changes that `shoal diff` includes. Export Markdown
+from tuicr's clipboard, or run `shoal review [workspace] -- --stdout` and pass the
+export to your agent. For saved JSON comments, use `shoal exec [workspace] --
+tuicr review comments --session <slug>`, using tuicr's `tuicr-session:` stderr
+marker. Shoal owns execution, while tuicr owns review sessions and export;
+forge submission and authentication remain with tuicr, whose Gitea adapter uses
+`tea` and does not promise Forgejo support.
 
 `shoal codex` without `cli`/`app` uses `codex.default_mode` from the workspace's
 repository config or `~/.config/shoal/config.toml` (or

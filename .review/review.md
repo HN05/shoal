@@ -39,6 +39,7 @@ removal, check it against the rule those files state before judging it.
 - Named commands follow repository/global precedence per name and use the
   tracked execution wrapper with workspace scope. CLI agent argument defaults
   are replaceable; substitutions expand once and forwarded arguments stay literal.
+  `{diff_base}` resolves lazily through the shared daemon diff-base lookup.
 - External tools are invoked with argument arrays, never shell strings.
   Terminal I/O stays in the execution wrapper; the daemon owns state. CLI
   styles belong at presentation sites; machine output and stored values stay plain.

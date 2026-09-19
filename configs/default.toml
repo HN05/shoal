@@ -34,6 +34,8 @@ root_dir = "~/shoal"
 claude = ["claude", "{args}", "--remote-control", "{workspace}"]
 codex = ["codex", "{args}", "--sandbox", "danger-full-access", "--ask-for-approval=never"]
 # check = ["cargo", "test"]
+# Local committed-change review, with tuicr installed on PATH:
+# review = ["tuicr", "-r", "{diff_base}..HEAD"]
 
 [codex]
 # `shoal codex` without cli/app: "cli" or "app".
