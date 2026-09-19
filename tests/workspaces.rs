@@ -202,6 +202,7 @@ fn cli(root: &Path) -> Command {
         .env_remove("SHOAL_SCOPE_TOKEN")
         .env_remove("SHOAL_EXECUTION_ID")
         .env_remove("XDG_CONFIG_HOME")
+        .env_remove("CLAUDE_CONFIG_DIR")
         // Happy tests must never see the developer's login or server.
         .env_remove("HAPPY_HOME_DIR")
         .env_remove("HAPPY_SERVER_URL")
@@ -5492,9 +5493,10 @@ fn claude_launch_marks_the_workspace_trusted_in_claude_config() {
     fs::set_permissions(bin.join("claude"), fs::Permissions::from_mode(0o755)).unwrap();
     let config = home.join(".claude.json");
 
-    // Without a Claude config, launch proceeds and creates nothing.
+    // First launch creates a trusted entry even before Claude has a config.
     assert!(fixture.run(&["claude", "trusted"]).status.success());
-    assert!(!config.exists());
+    let root: Value = serde_json::from_str(&fs::read_to_string(&config).unwrap()).unwrap();
+    assert_eq!(root["projects"][key]["hasTrustDialogAccepted"], true);
 
     fs::write(&config, r#"{"numStartups": 1, "projects": {}}"#).unwrap();
     assert!(fixture.run(&["claude", "trusted"]).status.success());
@@ -5504,8 +5506,6 @@ fn claude_launch_marks_the_workspace_trusted_in_claude_config() {
 
     // An absolute CLAUDE_CONFIG_DIR selects that directory's config instead.
     let config_dir = home.join("claude-config");
-    fs::create_dir(&config_dir).unwrap();
-    fs::write(config_dir.join(".claude.json"), r#"{"projects": {}}"#).unwrap();
     fs::write(&config, r#"{"projects": {}}"#).unwrap();
     let output = fixture
         .command()

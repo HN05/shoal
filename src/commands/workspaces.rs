@@ -808,7 +808,7 @@ pub(super) async fn open_app(
 
 /// Record the workspace as trusted in Claude Code's `.claude.json` so
 /// `claude` starts without its workspace trust dialog. Returns whether the
-/// file changed; a missing file is left for Claude Code to create.
+/// file changed, creating it when needed.
 fn trust_claude_workspace(config: &std::path::Path, workspace: &std::path::Path) -> Result<bool> {
     use serde_json::Value;
     let workspace = std::fs::canonicalize(workspace).unwrap_or_else(|_| workspace.to_owned());
@@ -818,7 +818,7 @@ fn trust_claude_workspace(config: &std::path::Path, workspace: &std::path::Path)
         .to_owned();
     let text = match std::fs::read_to_string(config) {
         Ok(text) => text,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => "{}".into(),
         Err(error) => return Err(error).with_context(|| format!("read {}", config.display())),
     };
     let mut root: Value =
@@ -839,11 +839,14 @@ fn trust_claude_workspace(config: &std::path::Path, workspace: &std::path::Path)
     }
     project.insert("hasTrustDialogAccepted".into(), Value::Bool(true));
     let directory = config.parent().context("Claude config has no parent")?;
+    std::fs::create_dir_all(directory)?;
     let mut temporary = tempfile::NamedTempFile::new_in(directory)?;
     serde_json::to_writer_pretty(&mut temporary, &root)?;
-    temporary
-        .as_file()
-        .set_permissions(std::fs::metadata(config)?.permissions())?;
+    if let Ok(metadata) = std::fs::metadata(config) {
+        temporary
+            .as_file()
+            .set_permissions(metadata.permissions())?;
+    }
     temporary
         .persist(config)
         .with_context(|| format!("replace {}", config.display()))?;
@@ -913,11 +916,16 @@ mod tests {
     #[test]
     fn claude_trust_adds_the_project_once_and_preserves_other_settings() {
         let dir = tempfile::tempdir().unwrap();
-        let config = dir.path().join(".claude.json");
+        let config = dir.path().join("config/.claude.json");
         let workspace = dir.path().join("ws");
         fs::create_dir(&workspace).unwrap();
-        assert!(!trust_claude_workspace(&config, &workspace).unwrap());
-        assert!(!config.exists());
+        assert!(trust_claude_workspace(&config, &workspace).unwrap());
+        let root: Value = serde_json::from_str(&fs::read_to_string(&config).unwrap()).unwrap();
+        let key = fs::canonicalize(&workspace).unwrap();
+        assert_eq!(
+            root["projects"][key.to_str().unwrap()]["hasTrustDialogAccepted"],
+            true
+        );
         fs::write(
             &config,
             r#"{"numStartups": 3, "projects": {"/other": {"allowedTools": ["Bash"], "hasTrustDialogAccepted": false}}}"#,

@@ -136,7 +136,7 @@ integration, your shell enters the new workspace after the agent exits.
 
 `shoal claude` appends `--remote-control <workspace-name>`. It also marks the
 workspace directory as trusted in Claude Code's `~/.claude.json` (or
-`$CLAUDE_CONFIG_DIR/.claude.json`) when that file exists, so Claude starts
+`$CLAUDE_CONFIG_DIR/.claude.json`), creating the file if needed, so Claude starts
 without its workspace trust dialog. `shoal codex cli` appends `--sandbox
 danger-full-access --ask-for-approval=never`. Use `shoal exec ... -- claude` or
 `-- codex` for a custom invocation.
