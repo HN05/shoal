@@ -2457,6 +2457,16 @@ fn execution_scope_limits_management_and_expires() {
     let list: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(list.as_array().unwrap().len(), 1);
     assert_eq!(list[0]["name"], "worker");
+    let output = scoped(&["--json", "config", "show"]);
+    assert!(output.status.success(), "{output:?}");
+    let config: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(
+        config
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|entry| { entry["key"] == "setup_cmd" && entry["value"] == "setup.sh" })
+    );
     assert!(scoped(&["port", "acquire", "web"]).status.success());
     let sibling_started = worker_path.join("sibling-started");
     let mut sibling = fixture
@@ -2513,6 +2523,7 @@ fn execution_scope_limits_management_and_expires() {
         vec!["inspect", "other"],
         vec!["pr", "merged", "other"],
         vec!["pr", "clear", "other"],
+        vec!["config", "show", "other"],
         vec!["port", "acquire", "web", "other"],
         vec!["repo", "rename", fixture.repo.to_str().unwrap(), "changed"],
         vec!["repo", "config", fixture.repo.to_str().unwrap()],

@@ -144,11 +144,11 @@ confines them to their own workspace: status, inspect, execute, setup, merge, an
 administration, and service control need an unscoped caller. PR registration and
 manual merge acknowledgement are own-workspace exceptions; nested executions keep scope.
 
-The CLI takes explicit targets and `--json` for automation; `config show` reports
-effective repository values with their winning layers, using a registered checkout
-before a workspace exists. Other commands use
-current-directory resolution and fzf interactively; noninteractive calls never
-open a picker. `status` combines lifecycle, fork-point changes, active work and
+The CLI takes explicit targets and `--json` for automation, and resolves omitted
+targets from the current directory. Interactive commands may use fzf;
+noninteractive calls and `config show` never open a picker. `config show` reports
+effective repository values with their winning layers and uses a registered checkout
+before a workspace exists. `status` combines lifecycle, fork-point changes, active work and
 leases in one workspace view. Human output uses a shared semantic palette at the CLI presentation
 layer; machine output and stored values stay unstyled. Rust chooses paths,
 including `<root_dir>/<repo>` after removal; the Bash/Zsh wrapper changes directory
