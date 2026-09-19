@@ -23,6 +23,7 @@ socket2 = "0.6"
 tempfile = "3"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "signal", "sync", "time", "process"] }
 toml = "1.1.6"
+toml_edit = "0.25"
 uuid = { version = "1.26.1", features = ["v4", "serde"] }
 
 [dev-dependencies]

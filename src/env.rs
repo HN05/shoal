@@ -27,6 +27,17 @@ pub const PREVIOUS_DIR: &str = "SHOAL_PREVIOUS_DIR";
 pub const COMPLETE: &str = "SHOAL_COMPLETE";
 /// Claude Code's configuration directory override (its `.claude.json` and skills).
 pub const CLAUDE_CONFIG_DIR: &str = "CLAUDE_CONFIG_DIR";
+/// Codex's user configuration and state directory override.
+pub const CODEX_HOME: &str = "CODEX_HOME";
+
+pub fn codex_home() -> Result<Option<PathBuf>> {
+    let Some(dir) = std::env::var_os(CODEX_HOME) else {
+        return Ok(None);
+    };
+    let dir = PathBuf::from(dir);
+    ensure!(dir.is_absolute(), "{CODEX_HOME} must be an absolute path");
+    Ok(Some(dir))
+}
 
 /// The configured Claude Code directory, if any; a relative override is an error.
 pub fn claude_config_dir() -> Result<Option<PathBuf>> {

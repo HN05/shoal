@@ -134,12 +134,14 @@ agent's exit code; the workspace is retained even when launch fails. With shell
 integration, your shell enters the new workspace after the agent exits.
 `--json` emits the workspace record first, then the agent's unmodified output.
 
-`shoal claude` appends `--remote-control <workspace-name>`. It also marks the
-workspace directory as trusted in Claude Code's `~/.claude.json` (or
-`$CLAUDE_CONFIG_DIR/.claude.json`), creating the file if needed, so Claude starts
-without its workspace trust dialog. `shoal codex cli` appends `--sandbox
-danger-full-access --ask-for-approval=never`. Use `shoal exec ... -- claude` or
-`-- codex` for a custom invocation.
+`shoal claude` and `shoal codex` trust the workspace directory before launch,
+creating the agent's user config if needed and preserving other settings.
+Claude uses `~/.claude.json` (or `$CLAUDE_CONFIG_DIR/.claude.json`); Codex CLI
+and app use `~/.codex/config.toml` (or `$CODEX_HOME/config.toml`). A trust update
+failure warns and still launches the agent. `shoal claude` appends
+`--remote-control <workspace-name>`; `shoal codex cli` appends
+`--sandbox danger-full-access --ask-for-approval=never`. Use
+`shoal exec ... -- claude` or `-- codex` for a custom invocation.
 
 `shoal codex` without `cli`/`app` uses `codex.default_mode` from the workspace's
 repository config or `~/.config/shoal/config.toml` (or

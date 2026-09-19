@@ -156,8 +156,9 @@ with a 500 ms timeout for live targets, honoring state directory and scope and
 never starting a daemon or picker. Targets sort before flags, including in fzf-tab.
 
 Agent shortcuts use the execution wrapper: Codex CLI gets full access without
-approvals, Claude gets remote control named after the workspace and a persisted
-trust entry in its config, creating the file if needed. General agent templates become native CLI instructions
+approvals, Claude gets remote control named after the workspace. Both trust the
+workspace in their user config before launch, creating the file if needed; Codex
+app handoffs do so too. General agent templates become native CLI instructions
 or a first-message prefix for Happy Codex; desktop handoffs carry no instructions.
 Codex's default mode is a config value read at launch.
 `add --issue` resolves issue numbers/URLs using the remote and existing gh/fj

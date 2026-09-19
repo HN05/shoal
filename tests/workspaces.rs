@@ -203,6 +203,7 @@ fn cli(root: &Path) -> Command {
         .env_remove("SHOAL_EXECUTION_ID")
         .env_remove("XDG_CONFIG_HOME")
         .env_remove("CLAUDE_CONFIG_DIR")
+        .env_remove("CODEX_HOME")
         // Happy tests must never see the developer's login or server.
         .env_remove("HAPPY_HOME_DIR")
         .env_remove("HAPPY_SERVER_URL")
@@ -5530,6 +5531,65 @@ fn claude_launch_marks_the_workspace_trusted_in_claude_config() {
         .unwrap();
     assert!(output.status.success(), "{output:?}");
     assert!(String::from_utf8_lossy(&output.stderr).contains("must be an absolute path"));
+}
+
+#[test]
+fn codex_launches_trust_the_workspace_in_the_selected_user_config() {
+    let fixture = Fixture::new();
+    let home = fixture.root.path();
+    let workspace = fixture.add("trusted");
+    let path = fs::canonicalize(workspace["path"].as_str().unwrap()).unwrap();
+    let key = path.to_str().unwrap();
+    let bin = home.join("bin");
+    fs::create_dir_all(&bin).unwrap();
+    // Inspect the config from the child so trust must precede the launch.
+    fs::write(
+        bin.join("codex"),
+        "#!/bin/sh\ncat \"${CODEX_HOME:-$HOME/.codex}/config.toml\"\n",
+    )
+    .unwrap();
+    fs::set_permissions(bin.join("codex"), fs::Permissions::from_mode(0o755)).unwrap();
+    let config = home.join(".codex/config.toml");
+    for mode in [None, Some("cli"), Some("app")] {
+        for overridden in [false, true] {
+            let config_dir = home.join("custom-codex");
+            let target = if overridden {
+                config_dir.join("config.toml")
+            } else {
+                config.clone()
+            };
+            let mut command = fixture.command();
+            command.arg("codex");
+            if let Some(mode) = mode {
+                command.args([mode, "trusted"]);
+            } else {
+                command.current_dir(&path);
+            }
+            if overridden {
+                command.env("CODEX_HOME", &config_dir);
+            }
+            let output = command.output().unwrap();
+            assert!(output.status.success(), "{output:?}");
+            let root: toml::Value =
+                toml::from_str(std::str::from_utf8(&output.stdout).unwrap()).unwrap();
+            assert_eq!(
+                root["projects"][key]["trust_level"].as_str(),
+                Some("trusted")
+            );
+            assert_eq!(fs::read(&target).unwrap(), output.stdout);
+            if overridden {
+                assert!(!config.exists());
+            }
+            fs::remove_file(target).unwrap();
+        }
+    }
+
+    // Malformed settings remain untouched and only produce a warning.
+    fs::write(&config, "projects = []\n").unwrap();
+    let output = fixture.run(&["codex", "cli", "trusted"]);
+    assert!(output.status.success(), "{output:?}");
+    assert!(String::from_utf8_lossy(&output.stderr).contains("could not mark"));
+    assert_eq!(fs::read_to_string(config).unwrap(), "projects = []\n");
 }
 
 #[test]
