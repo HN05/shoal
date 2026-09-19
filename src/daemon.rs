@@ -350,7 +350,7 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             Body::Hooks(manager.workspace_hooks(&workspace).await?)
         }
         Method::LayeredConfig { target } => {
-            Body::LayeredConfig(manager.layered_config_for(target).await?)
+            Body::LayeredConfig(manager.config_layers_for(target).await?)
         }
         Method::CommandLayers { workspace } => {
             Body::CommandLayers(manager.command_layers(&workspace).await?)

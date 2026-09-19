@@ -15,13 +15,13 @@ use crate::{
     process_identity::Identity,
     recovery::{ReconcileOptions, Report},
     removal::{BranchChoice, RemovalCheck, RemovalResult},
-    repo_config::{Hooks, LocalConfig, RepoConfig},
+    repo_config::{ConfigLayers, Hooks, LocalConfig},
     resources::{Overview, ResourceLease, ResourceRequest},
     sim_audit::AuditEntry,
     simulators::{SimRequest, Simulator, SimulatorCatalog},
 };
 
-pub const VERSION: u32 = 30;
+pub const VERSION: u32 = 31;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -265,7 +265,7 @@ pub enum Body {
     RemovalResult(RemovalResult),
     DiffBase(DiffBase),
     Hooks(Hooks),
-    LayeredConfig(RepoConfig),
+    LayeredConfig(ConfigLayers),
     CommandLayers(CommandLayers),
     PulledBranch(PulledBranch),
     Notifications(Vec<Notification>),
