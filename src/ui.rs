@@ -269,6 +269,8 @@ pub fn pick_with_keys(
 pub enum Fallback {
     /// Use the worktree containing the current directory, else open the picker.
     CurrentDirectory,
+    /// Use only the current workspace; never open a picker.
+    CurrentDirectoryOnly,
     /// Always open the picker.
     Picker,
 }
@@ -290,12 +292,16 @@ pub async fn select_workspace(
             .map(|w| w.id.clone())
             .context("scoped workspace is unavailable");
     }
-    if matches!(fallback, Fallback::CurrentDirectory) {
+    if !matches!(fallback, Fallback::Picker) {
         let cwd = std::fs::canonicalize(std::env::current_dir()?)?;
         if let Some(workspace) = Workspace::innermost(&workspaces, &cwd) {
             return Ok(workspace.id.clone());
         }
     }
+    ensure!(
+        !matches!(fallback, Fallback::CurrentDirectoryOnly),
+        "no current workspace; pass an explicit workspace"
+    );
     pick_workspace(ctx, workspaces)
 }
 

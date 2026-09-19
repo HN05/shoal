@@ -9,6 +9,7 @@ use clap::{CommandFactory, Parser};
 
 use crate::{
     client::{self, request},
+    config::Config,
     context::Context,
     execution,
     model::Workspace,
@@ -96,7 +97,16 @@ pub async fn run(
     workspace: Option<String>,
     args: Vec<OsString>,
 ) -> Result<i32> {
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    let global = Config::load(&ctx.paths)?;
+    let known_globally = global.commands.contains_key(name) || defaults().contains_key(name);
+    let fallback = if known_globally {
+        Fallback::CurrentDirectory
+    } else {
+        Fallback::CurrentDirectoryOnly
+    };
+    let workspace = ui::select_workspace(ctx, workspace, fallback).await.with_context(|| {
+        format!("command {name:?} needs a workspace; repository-only commands require a current or explicit workspace")
+    })?;
     let settings = client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.clone())).await?;
     let inspection = client::inspect(&ctx.paths, workspace.clone()).await?;
     let command = expand(

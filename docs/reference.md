@@ -142,7 +142,9 @@ check = ["cargo", "test"]
 ```
 
 Run `shoal check [workspace] -- <extra arguments>`; omit the workspace to use
-the current one or the picker. Put Shoal's global flags before the command name.
+the current one, or the picker for a globally configured command. Repository-only
+commands need a current or explicit workspace. Put Shoal's global flags before
+the command name.
 Each name resolves from saved repository config, worktree config, then global
 config and built-in defaults; a higher layer replaces the whole argument array.
 Built-in commands without configurable argument arrays reserve their names.

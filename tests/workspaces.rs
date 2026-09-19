@@ -7636,3 +7636,48 @@ fn cli_agent_command_defaults_can_be_replaced_at_launch() {
     assert!(output.status.success());
     assert_eq!(output.stdout, b"--model\nexample\ncustom default\n");
 }
+
+#[test]
+fn unknown_commands_never_open_the_workspace_picker() {
+    let fixture = Fixture::new();
+    let workspace = fixture.add("command-target");
+    // Noninteractive selection used to fail at the picker instead of name resolution.
+    let output = fixture
+        .command()
+        .current_dir(fixture.root.path())
+        .args(["lsit"])
+        .output()
+        .unwrap();
+    let error = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success());
+    assert!(
+        error.contains("lsit") && error.contains("no current workspace"),
+        "{error}"
+    );
+    assert!(!error.contains("non-interactive"), "{error}");
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    fs::write(
+        path.join(".shoal.toml"),
+        "[commands]\nlocal-check = ['printf', '%s', 'repository command']\n",
+    )
+    .unwrap();
+    let output = fixture
+        .command()
+        .current_dir(path)
+        .arg("local-check")
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    assert_eq!(output.stdout, b"repository command");
+    assert_eq!(
+        fixture.run(&["local-check", "command-target"]).stdout,
+        b"repository command"
+    );
+    let output = fixture
+        .command()
+        .current_dir(path)
+        .arg("lsit")
+        .output()
+        .unwrap();
+    assert!(String::from_utf8_lossy(&output.stderr).contains("unknown command"));
+}
