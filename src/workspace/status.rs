@@ -26,8 +26,10 @@ impl Manager {
             executions,
             ports,
             resources,
-            simulators,
+            mut simulators,
         } = inspection;
+        simulators
+            .retain(|simulator| simulator.workspace_id.as_deref() == Some(workspace.id.as_str()));
         Ok(WorkspaceStatus {
             workspace,
             setup_finished,
