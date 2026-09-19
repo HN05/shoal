@@ -5,6 +5,7 @@ mod ownership;
 mod registry;
 mod repo_configuration;
 mod repo_removal;
+mod status;
 
 pub use executions::ExecutionKind;
 

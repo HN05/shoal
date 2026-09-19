@@ -296,6 +296,9 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::InspectWorkspace { workspace } => {
             Body::Inspection(manager.inspect_workspace(&workspace).await?)
         }
+        Method::WorkspaceStatus { workspace } => {
+            Body::WorkspaceStatus(manager.workspace_status(&workspace).await?)
+        }
         Method::SetPr {
             workspace,
             url,

@@ -83,6 +83,26 @@ pub struct Inspection {
     pub simulators: Vec<Simulator>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DiffSummary {
+    pub files_changed: u64,
+    pub insertions: u64,
+    pub deletions: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct WorkspaceStatus {
+    pub workspace: Workspace,
+    pub setup_finished: bool,
+    pub diff: DiffSummary,
+    pub executions: Vec<Execution>,
+    pub ports: Vec<PortReservation>,
+    pub resources: Vec<ResourceLease>,
+    pub simulators: Vec<Simulator>,
+    pub pr_cleanup: Option<crate::pr::Registration>,
+    pub unread_notifications: u64,
+}
+
 /// Everything the execution wrapper needs to launch a tracked command.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ExecutionPlan {

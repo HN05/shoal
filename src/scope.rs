@@ -48,6 +48,7 @@ pub async fn authorize(
         | Method::SimAcquire { workspace, .. }
         | Method::SimRelease { workspace, .. }
         | Method::InspectWorkspace { workspace }
+        | Method::WorkspaceStatus { workspace }
         | Method::DiffBase { workspace }
         | Method::RefreshMergeSource { workspace, .. }
         | Method::Execute { workspace, .. }

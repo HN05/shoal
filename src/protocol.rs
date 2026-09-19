@@ -7,7 +7,7 @@ use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWrite
 use crate::{
     model::{
         DiffBase, ExecutionPlan, Inspection, PortOverview, PortReservation, PortSuggestion,
-        PulledBranch, Repository, RepositoryRemoval, Workspace,
+        PulledBranch, Repository, RepositoryRemoval, Workspace, WorkspaceStatus,
     },
     notifications::Notification,
     ports::PortRequest,
@@ -20,7 +20,7 @@ use crate::{
     simulators::{SimRequest, Simulator, SimulatorCatalog},
 };
 
-pub const VERSION: u32 = 27;
+pub const VERSION: u32 = 28;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -93,6 +93,9 @@ pub enum Method {
         clear: bool,
     },
     InspectWorkspace {
+        workspace: String,
+    },
+    WorkspaceStatus {
         workspace: String,
     },
     StopWorkspace {
@@ -256,6 +259,7 @@ pub enum Body {
     Branches(Vec<crate::existing_branch::Branch>),
     OpenedWorkspace(crate::existing_branch::OpenedWorkspace),
     Inspection(Inspection),
+    WorkspaceStatus(WorkspaceStatus),
     Reconciliation(Vec<Report>),
     Execution(ExecutionPlan),
     RemovalCheck(RemovalCheck),
