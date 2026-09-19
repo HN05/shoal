@@ -6197,29 +6197,42 @@ fn issue_command_finds_the_repository_and_starts_the_default_agent() {
             serde_json::json!([])
         );
     }
-    // `add` uses the same URL-to-repository path without applying the default agent.
+    // `add` accepts numbers and URLs without applying either configured default agent.
     fs::remove_file(&agent_args).unwrap();
-    let url = "https://github.com/team/project/issues/44";
-    fs::write(
-        &response,
-        serde_json::json!({"number": 44, "title": "Create from URL", "body": body}).to_string(),
-    )
-    .unwrap();
-    let output = fixture
-        .command()
-        .args(["--json", "add", "--issue", url, "--ref", "HEAD"])
-        .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
-        .env("ISSUE_RESPONSE", &response)
-        .env("ISSUE_ARGS", &issue_args)
-        .env("AGENT_ARGS", &agent_args)
-        .output()
+    for (number, repository, input) in [
+        (44, None, "https://github.com/team/project/issues/44"),
+        (68, Some(fixture.repo.to_str().unwrap()), "68"),
+    ] {
+        fs::write(
+            &response,
+            serde_json::json!({"number": number, "title": "Create workspace", "body": body})
+                .to_string(),
+        )
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
-    assert_eq!(
-        serde_json::from_slice::<Value>(&output.stdout).unwrap()["name"],
-        "issue-44-create-from-url"
-    );
-    assert!(!agent_args.exists());
+        let mut command = fixture.command();
+        command.args(["--json", "add"]);
+        if let Some(repository) = repository {
+            command.arg(repository);
+        }
+        let output = command
+            .args(["--issue", input, "--ref", "HEAD"])
+            .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+            .env("ISSUE_RESPONSE", &response)
+            .env("ISSUE_ARGS", &issue_args)
+            .env("AGENT_ARGS", &agent_args)
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+        let workspace: Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert_eq!(
+            workspace["name"],
+            format!("issue-{number}-create-workspace")
+        );
+        let inspection = fixture.ok(&["inspect", workspace["name"].as_str().unwrap()]);
+        assert_eq!(inspection["workspace"]["state"], "ready");
+        assert_eq!(inspection["executions"], serde_json::json!([]));
+        assert!(!agent_args.exists());
+    }
 
     // The default agent applies to the issue command, not ordinary additions.
     let output = fixture

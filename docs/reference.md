@@ -82,8 +82,9 @@ tokens are needed. The repository may be omitted for a URL, which selects the
 single registered repository with the same remote; unregistered or duplicated
 remotes fail. Explicit repositories must match the URL. Lookup failures create nothing.
 Names default to `issue-<number>-<title-slug>`; the optional branch argument
-overrides this. With
-`--agent`, `issue-template.md` supplies the initial prompt, substituting
+overrides this. `add` starts an agent only with `--agent`, regardless of
+`default_agent`. When starting an agent, `issue-template.md` supplies the initial
+prompt, substituting
 `{number}`, `{title}`, `{url}` and `{body}` once as literal text (forward agent
 options after `--`, not a second prompt). Codex uses CLI mode for issue
 prompts even when its default is `app`. Ordinary setup, hooks and collision rules apply.
