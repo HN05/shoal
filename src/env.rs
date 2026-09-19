@@ -1,7 +1,7 @@
 //! Environment variables Shoal reads or exports. Every `SHOAL_*` name lives
 //! here so wrapper, daemon, and process scanning agree on the contract.
 use anyhow::{Result, ensure};
-use std::path::PathBuf;
+use std::{ffi::OsString, path::PathBuf};
 
 /// Overrides the state directory; also isolates the daemon socket.
 pub const STATE_DIR: &str = "SHOAL_STATE_DIR";
@@ -62,6 +62,28 @@ pub fn is_port_export(name: &str) -> bool {
     !name.is_empty()
         && !PROTECTED.contains(&name)
         && (!name.starts_with("SHOAL_") || name.starts_with(PORT_PREFIX))
+}
+
+/// Port variables inherited from an enclosing execution.
+pub fn inherited_port_exports() -> Vec<OsString> {
+    let mut exports: Vec<_> = std::env::vars_os()
+        .filter_map(|(name, _)| {
+            name.to_str()
+                .is_some_and(|name| name.starts_with(PORT_PREFIX))
+                .then_some(name)
+        })
+        .collect();
+    if let Ok(names) = std::env::var(RESERVED_PORT_ENV) {
+        exports.extend(
+            names
+                .split(':')
+                .filter(|name| is_port_export(name))
+                .map(OsString::from),
+        );
+    }
+    exports.sort();
+    exports.dedup();
+    exports
 }
 
 pub fn scope_token() -> Option<String> {

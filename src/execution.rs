@@ -377,18 +377,8 @@ fn report_launch(launch: &DetachedLaunch) -> Result<()> {
 /// Export the execution's identity and port reservations, dropping stale port
 /// variables inherited from an enclosing execution.
 fn configure_environment(process: &mut Command, paths: &Paths, plan: &ExecutionPlan) {
-    for (name, _) in std::env::vars_os() {
-        if name
-            .to_str()
-            .is_some_and(|name| name.starts_with(env::PORT_PREFIX))
-        {
-            process.env_remove(name);
-        }
-    }
-    if let Ok(names) = std::env::var(env::RESERVED_PORT_ENV) {
-        for name in names.split(':').filter(|name| env::is_port_export(name)) {
-            process.env_remove(name);
-        }
+    for name in env::inherited_port_exports() {
+        process.env_remove(name);
     }
     let exported: Vec<_> = plan.ports.iter().map(|p| p.env_var.as_str()).collect();
     process
@@ -460,22 +450,40 @@ async fn stop(child: &mut Child, group: &ProcessGroup, signal: i32) -> Result<Ex
 }
 
 /// Foreground terminal ownership lent to the command; restored when dropped.
-struct Terminal {
+pub(crate) struct Terminal {
     previous_group: i32,
     previous_handler: libc::sighandler_t,
 }
 
 impl Terminal {
-    fn give_to(group: i32) -> Result<Option<Self>> {
+    pub(crate) fn stdin_is_background() -> bool {
+        std::io::stdin().is_terminal()
+            && unsafe { libc::tcgetpgrp(libc::STDIN_FILENO) != libc::getpgrp() }
+    }
+
+    pub(crate) fn give_to(group: i32) -> Result<Option<Self>> {
+        Self::give_to_inner(group, true)
+    }
+
+    /// Lend the terminal only when Shoal currently owns it. Hooks launched by
+    /// a background Shoal command still run, but cannot read from its terminal.
+    pub(crate) fn give_to_if_foreground(group: i32) -> Result<Option<Self>> {
+        Self::give_to_inner(group, false)
+    }
+
+    fn give_to_inner(group: i32, require_foreground: bool) -> Result<Option<Self>> {
         if !std::io::stdin().is_terminal() {
             return Ok(None);
         }
         // SAFETY: tcgetpgrp/getpgrp inspect the calling process and stdin.
         let previous_group = unsafe { libc::tcgetpgrp(libc::STDIN_FILENO) };
-        ensure!(
-            previous_group == unsafe { libc::getpgrp() },
-            "shoal exec must be a foreground terminal job"
-        );
+        if previous_group != unsafe { libc::getpgrp() } {
+            ensure!(
+                !require_foreground,
+                "cannot hand the terminal to a command unless shoal is a foreground terminal job"
+            );
+            return Ok(None);
+        }
         // Ignore SIGTTOU only in the wrapper, after spawning the child, so it can
         // restore the terminal once its process group is in the background.
         let previous_handler = unsafe { libc::signal(libc::SIGTTOU, libc::SIG_IGN) };

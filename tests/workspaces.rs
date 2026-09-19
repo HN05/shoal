@@ -2272,7 +2272,17 @@ fn execution_scope_limits_management_and_expires() {
     let setup = fixture.repo.join("setup.sh");
     fs::write(&setup, "#!/bin/sh\nprintf setup >> setup-runs\n").unwrap();
     fs::set_permissions(&setup, fs::Permissions::from_mode(0o755)).unwrap();
-    commit_resource_config(&fixture.repo, "setup_cmd = 'setup.sh'\n");
+    let post_setup = fixture.repo.join("post-setup.sh");
+    fs::write(
+        &post_setup,
+        "#!/bin/sh\ntest -z \"$SHOAL_SCOPE_TOKEN\" || exit 81\ntest -z \"$SHOAL_EXECUTION_ID\" || exit 82\ntest -z \"$SHOAL_RESERVED_PORT_ENV\" || exit 83\ntest -z \"$SHOAL_PORT_WEB\" || exit 84\nprintf hook >> hook-runs\nsleep 30 < /dev/null > /dev/null 2>&1 &\n",
+    )
+    .unwrap();
+    fs::set_permissions(&post_setup, fs::Permissions::from_mode(0o755)).unwrap();
+    commit_resource_config(
+        &fixture.repo,
+        "setup_cmd = 'setup.sh'\npost_setup_cmd = 'post-setup.sh'\n",
+    );
     let worker = fixture.add("worker");
     let worker_path = Path::new(worker["path"].as_str().unwrap());
     fixture.add("other");
@@ -2290,6 +2300,7 @@ fn execution_scope_limits_management_and_expires() {
     let list: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(list.as_array().unwrap().len(), 1);
     assert_eq!(list[0]["name"], "worker");
+    assert!(scoped(&["port", "acquire", "web"]).status.success());
     let sibling_started = worker_path.join("sibling-started");
     let mut sibling = fixture
         .command()
@@ -2322,10 +2333,18 @@ fn execution_scope_limits_management_and_expires() {
         fs::read_to_string(worker_path.join("setup-runs")).unwrap(),
         "setupsetup"
     );
+    assert_eq!(
+        fs::read_to_string(worker_path.join("hook-runs")).unwrap(),
+        "hookhook"
+    );
+    assert_eq!(
+        fixture.ok(&["inspect", "worker"])["executions"],
+        serde_json::json!([]),
+        "hook survivors must not belong to the invoking execution"
+    );
     let output = scoped(&["install", "--dry-run"]);
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("cannot administer Shoal"));
-    assert!(scoped(&["port", "acquire", "web"]).status.success());
     assert!(
         scoped(&["exec", "worker", "--", binary, "port"])
             .status

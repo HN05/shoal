@@ -38,6 +38,9 @@ impl Hook {
 
 fn command(hook: Hook, workspace: &Workspace, executable: &Path, paths: &Paths) -> Command {
     let mut command = Command::new(executable);
+    for name in env::inherited_port_exports() {
+        command.env_remove(name);
+    }
     command
         .current_dir(&workspace.path)
         .env(env::HOOK, hook.name())
@@ -45,7 +48,11 @@ fn command(hook: Hook, workspace: &Workspace, executable: &Path, paths: &Paths) 
         .env(env::RUN_ID, &workspace.id)
         .env(env::WORKSPACE_NAME, &workspace.name)
         .env(env::STATE_DIR, &paths.state)
+        .env_remove(env::SCOPE_TOKEN)
+        .env_remove(env::EXECUTION_ID)
+        .env_remove(env::RESERVED_PORT_ENV)
         .env_remove(env::SHELL_DIRECTIVE)
+        .process_group(0)
         .kill_on_drop(true);
     command
 }
@@ -59,8 +66,9 @@ pub async fn run_interactive(
     paths: &Paths,
     quiet: bool,
 ) -> Result<()> {
-    let status = command(hook, workspace, executable, paths)
-        .stdin(if quiet {
+    let background_terminal = crate::execution::Terminal::stdin_is_background();
+    let mut child = command(hook, workspace, executable, paths)
+        .stdin(if quiet || background_terminal {
             Stdio::null()
         } else {
             Stdio::inherit()
@@ -70,9 +78,18 @@ pub async fn run_interactive(
         } else {
             Stdio::inherit()
         })
-        .status()
-        .await
+        .spawn()
         .with_context(|| format!("launch {} {}", hook.key(), executable.display()))?;
+    let group = child.id().context("hook process ID unavailable")? as i32;
+    let _terminal = crate::execution::Terminal::give_to_if_foreground(group)?;
+    // The hook may have stopped on terminal I/O before becoming foreground.
+    unsafe {
+        libc::kill(-group, libc::SIGCONT);
+    }
+    let status = child
+        .wait()
+        .await
+        .with_context(|| format!("wait for {} {}", hook.key(), executable.display()))?;
     ensure!(
         status.success(),
         "{} exited with {}; the workspace is kept",
