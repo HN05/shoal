@@ -102,10 +102,15 @@ impl Issue {
         name
     }
 
-    pub fn prompt(&self) -> String {
-        format!(
-            "Work on issue #{}: {}\n{}\n\nIssue details:\n{}",
-            self.number, self.title, self.url, self.details
+    pub fn prompt(&self, template: Option<&str>) -> String {
+        crate::templates::render(
+            template.unwrap_or(crate::templates::ISSUE_DEFAULT),
+            &[
+                ("{number}", &self.number.to_string()),
+                ("{title}", &self.title),
+                ("{url}", &self.url),
+                ("{body}", &self.details),
+            ],
         )
     }
 }
@@ -293,6 +298,6 @@ mod tests {
         assert_eq!(issue.branch_name().len(), MAX_NAME_LEN);
         issue.title = "日本語".into();
         assert_eq!(issue.branch_name(), "issue-34");
-        assert!(issue.prompt().contains("url\n\nIssue details:\nbody"));
+        assert!(issue.prompt(None).contains("url\n\nIssue details:\nbody"));
     }
 }

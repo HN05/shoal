@@ -5590,6 +5590,103 @@ fn add_from_issue_uses_existing_forge_cli_and_passes_context_to_agents() {
 }
 
 #[test]
+fn issue_templates_resolve_saved_config_then_worktree_then_global() {
+    let fixture = Fixture::new();
+    let config_dir = fixture.root.path().join(".config/shoal");
+    fs::create_dir_all(&config_dir).unwrap();
+    fs::write(
+        config_dir.join("issue-template.md"),
+        "global {number}: {title} {body}",
+    )
+    .unwrap();
+    let bin = fixture.root.path().join("template-bin");
+    fs::create_dir(&bin).unwrap();
+    for (tool, script) in [
+        (
+            "gh",
+            r#"#!/bin/sh
+printf '%s' '{"number":44,"title":"Literal {body}","body":"$(false)"}'
+"#,
+        ),
+        ("claude", "#!/bin/sh\nprintf '%s' \"$1\"\n"),
+    ] {
+        let path = bin.join(tool);
+        fs::write(&path, script).unwrap();
+        fs::set_permissions(path, fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    git(
+        &fixture.repo,
+        &["remote", "add", "origin", "git@github.com:team/project.git"],
+    );
+    for (index, expected) in [
+        "global 44: Literal {body} $(false)",
+        "repo Literal {body}",
+        "saved $(false)",
+        "",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        if index == 1 {
+            fs::write(fixture.repo.join("issue-template.md"), "repo {title}").unwrap();
+            git(&fixture.repo, &["add", "issue-template.md"]);
+            git(
+                &fixture.repo,
+                &[
+                    "-c",
+                    "user.name=Test",
+                    "-c",
+                    "user.email=test@example.invalid",
+                    "commit",
+                    "-m",
+                    "Add template",
+                ],
+            );
+        }
+        if index >= 2 {
+            let local = fixture.root.path().join("local.toml");
+            fs::write(
+                &local,
+                if index == 2 {
+                    "issue_template = 'saved {body}'"
+                } else {
+                    "issue_template = ''"
+                },
+            )
+            .unwrap();
+            fixture.ok(&[
+                "repo",
+                "config",
+                fixture.repo.to_str().unwrap(),
+                "--file",
+                local.to_str().unwrap(),
+            ]);
+        }
+        let output = fixture
+            .command()
+            .args([
+                "--json",
+                "add",
+                fixture.repo.to_str().unwrap(),
+                "--ref",
+                "HEAD",
+                "--name",
+                &format!("template-{index}"),
+                "--issue",
+                "44",
+                "--agent",
+                "claude",
+            ])
+            .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        assert_eq!(stdout.split_once('\n').unwrap().1, expected);
+    }
+}
+
+#[test]
 fn issue_command_finds_the_repository_and_starts_the_default_agent() {
     let fixture = Fixture::with_config(Some("default_agent = 'claude'\n"));
     git(

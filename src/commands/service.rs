@@ -58,6 +58,7 @@ pub(super) async fn setup(
         Err(error) => return Err(error),
     };
     let (config, config_created) = crate::config::Config::install(&ctx.paths)?;
+    crate::templates::install(&ctx.paths)?;
     service::setup(&ctx.paths, &executable, preserve_running).await?;
     client::wait(&ctx.paths, true).await?;
     ctx.emit_styled(

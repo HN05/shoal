@@ -60,6 +60,7 @@ current `PATH` for the service, so install `wt`, `git`, `lsof`, and any hook
 tools first. It also creates `~/.config/shoal/config.toml` (or
 `$XDG_CONFIG_HOME/shoal/config.toml`) from
 [configs/default.toml](../configs/default.toml), which states every default,
+and installs [issue-template.md](../issue-template.md) beside it,
 never touching an existing file; `--dry-run` writes nothing. `shoal config
 install <name>` replaces the entire global file with a packaged template;
 `shoal config reset` installs `default`. Both move the current file to
@@ -78,8 +79,9 @@ for github.com or `fj` for Forgejo remotes. Install the appropriate CLI and use
 its existing login (`gh auth login` or `fj auth login`); no Shoal forge config or
 tokens are needed. URLs must match the repository. Lookup failures create nothing.
 Names default to `issue-<number>-<title-slug>`; `--name` overrides this. With
-`--agent`, the issue title, URL and details supply the initial prompt (forward
-agent options after `--`, not a second prompt). Codex uses CLI mode for issue
+`--agent`, `issue-template.md` supplies the initial prompt, substituting
+`{number}`, `{title}`, `{url}` and `{body}` once as literal text (forward agent
+options after `--`, not a second prompt). Codex uses CLI mode for issue
 prompts even when its default is `app`. Ordinary setup, hooks and collision rules apply.
 `shoal issue <url>` is the pasted form: it picks the registered repository whose
 origin matches the URL (unregistered or duplicated remotes fail) and starts
@@ -176,6 +178,14 @@ Happy's own `HAPPY_RECONNECT_*` variables, waits up to 90 seconds for the sessio
 to report alive, and posts the prompt (`curl`, token on stdin). The prompt is also
 saved beside the log; when Happy is not logged in or delivery fails, Shoal warns
 and leaves it there for you to send from the app.
+
+### Prompt templates
+
+`issue_template` in the saved repository TOML wins over the worktree's TOML
+value or root `issue-template.md`, then the global TOML value or that file
+beside `config.toml`. Omitted values fall through; empty values override.
+Without an issue template, Shoal uses its bundled default. Unknown placeholders
+stay literal. Templates are read at launch without a daemon restart.
 
 ### Branch and workspace names
 `--name` creates a literal Git branch; `--branch <branch|remote/branch>` uses an

@@ -199,16 +199,6 @@ pub(super) async fn add(
             branch = Some(ui::pick(ctx, "Branch> ", entries)?);
         }
     }
-    // Terminal agents take the issue prompt as their first argument; Happy
-    // sessions decide per agent whether one can be delivered.
-    let prompt = issue
-        .filter(|_| agent.is_some())
-        .map(|issue| issue.prompt());
-    if let Some(prompt) = &prompt
-        && !matches!(agent, Some(Agent::Happy(_)))
-    {
-        args.insert(0, prompt.into());
-    }
     let (mut workspace, reused) = if let Some(branch) = branch {
         let opened = request!(
             &ctx.paths,
@@ -261,6 +251,18 @@ pub(super) async fn add(
     shell::navigate(&workspace.path, ctx.json)?;
     if !reused {
         run_post_setup(ctx, &workspace).await?;
+    }
+    let prompt = if let Some(issue) = issue.filter(|_| agent.is_some()) {
+        let settings =
+            client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
+        Some(issue.prompt(settings.issue_template.as_deref()))
+    } else {
+        None
+    };
+    if let Some(prompt) = &prompt
+        && !matches!(agent, Some(Agent::Happy(_)))
+    {
+        args.insert(0, prompt.into());
     }
     match agent {
         Some(Agent::Codex) => codex(ctx, codex_mode, Some(workspace.id), args).await,

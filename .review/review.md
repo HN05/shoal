@@ -29,6 +29,9 @@ removal, check it against the rule those files state before judging it.
 - Releases are pinned to the merged version commit; changelogs use published
   ancestor releases and merged PRs excluding release preparation, and GitHub
   copies the Forgejo notes.
+- Prompt templates follow config precedence: saved repository values, worktree,
+  global config. Setup preserves existing template files; substitutions never
+  evaluate or recursively expand inserted text.
 - External tools are invoked with argument arrays, never shell strings.
   Terminal I/O stays in the execution wrapper; the daemon owns state. CLI
   styles belong at presentation sites; machine output and stored values stay plain.

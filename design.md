@@ -151,7 +151,8 @@ Agent shortcuts use the execution wrapper: Codex CLI gets full access without
 approvals, Claude gets remote control named after the workspace and a persisted
 trust entry in its config. Codex's default mode is a config value read at launch.
 `add --issue` resolves issue numbers/URLs using the remote and existing gh/fj
-login, derives a portable name, and supplies issue context to CLI agents; forge
+login, derives a portable name, and renders issue context from a plain-text
+template for CLI agents; forge
 lookup stays in the CLI with no Shoal credentials or forge configuration. `issue
 <url>` is the same flow from a pasted link: the URL selects the registered
 repository by remote identity (never cloning), and the configured `default_agent`
@@ -200,8 +201,12 @@ a local override stored in the database by repository ID layered over it per
 option, a named table replacing the one below it whole, and deleted with the
 registration. Every option
 that does not describe the machine may be set at either level and resolves per
-option: saved config, worktree file, global config, then the built-in default;
-before a workspace exists, the registered checkout's file stands in for the
+option: saved config, worktree file, global config, then the built-in default.
+Prompt templates follow the same precedence, with repository-root Markdown files
+and global files beside `config.toml` below inline TOML values at each level.
+Setup installs missing templates from the bundled repository-root defaults;
+rendering substitutes known fields once without evaluating their contents.
+Before a workspace exists, the registered checkout's file stands in for the
 worktree's. Repository config is read per request, so changes need no restart
 and leave existing leases alone. Repository config cannot expand machine
 policy: `root_dir`, simulator limits and profiles, and global resource

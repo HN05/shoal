@@ -83,7 +83,15 @@ pub async fn settings(
     target: crate::protocol::ConfigTarget,
 ) -> Result<crate::config::Effective> {
     let layer = request!(paths, Method::LayeredConfig { target }, LayeredConfig);
-    crate::config::Config::load(paths)?.effective(&layer)
+    let mut settings = crate::config::Config::load(paths)?.effective(&layer)?;
+    if settings.issue_template.is_none() {
+        let config = crate::config::Config::path(paths);
+        settings.issue_template = crate::templates::read(
+            config.parent().context("config has no directory")?,
+            crate::templates::ISSUE_FILE,
+        )?;
+    }
+    Ok(settings)
 }
 
 pub async fn inspect(paths: &Paths, workspace: String) -> Result<Inspection> {

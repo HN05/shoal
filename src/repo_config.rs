@@ -25,6 +25,7 @@ pub enum ConflictPolicy {
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct RepoConfig {
+    pub issue_template: Option<String>,
     /// Agent `shoal issue` starts when `--agent` is omitted.
     pub default_agent: Option<Agent>,
     pub codex: Codex,
@@ -71,11 +72,19 @@ pub fn load(workspace_dir: &Path) -> Result<RepoConfig> {
         found.len() <= 1,
         "both .shoal.toml and .shoal/config.toml exist; keep only one repository config"
     );
-    let Some(path) = found.first() else {
-        return Ok(RepoConfig::default());
+    let mut config = match found.first() {
+        Some(path) => {
+            let text =
+                fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
+            parse(&text).with_context(|| format!("parse {}", path.display()))?
+        }
+        None => RepoConfig::default(),
     };
-    let text = fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
-    parse(&text).with_context(|| format!("parse {}", path.display()))
+    if config.issue_template.is_none() {
+        config.issue_template =
+            crate::templates::read(workspace_dir, crate::templates::ISSUE_FILE)?;
+    }
+    Ok(config)
 }
 
 pub fn parse(text: &str) -> Result<RepoConfig> {
@@ -126,6 +135,7 @@ impl RepoConfig {
         base.resources.extend(self.resources);
         base.resource_pools.extend(self.resource_pools);
         Self {
+            issue_template: self.issue_template.or(base.issue_template),
             default_agent: self.default_agent.or(base.default_agent),
             codex: Codex {
                 default_mode: self.codex.default_mode.or(base.codex.default_mode),

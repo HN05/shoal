@@ -41,6 +41,7 @@ mod simulators;
 mod state;
 mod store;
 mod subprocess;
+mod templates;
 mod ui;
 mod validate;
 mod workspace;
