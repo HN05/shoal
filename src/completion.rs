@@ -2,7 +2,7 @@
 use std::{
     ffi::{OsStr, OsString},
     path::PathBuf,
-    sync::Arc,
+    sync::{Arc, OnceLock},
     time::Duration,
 };
 
@@ -26,6 +26,7 @@ struct Typed {
     workspace: Option<String>,
     pool: Option<String>,
     custom: Option<String>,
+    command_names: OnceLock<Vec<String>>,
 }
 
 /// Live values an argument can be completed with.
@@ -137,6 +138,12 @@ fn decorate(command: Command, parent: &str, typed: Arc<Typed>) -> Command {
 
 impl Typed {
     fn command_names(&self) -> Vec<String> {
+        self.command_names
+            .get_or_init(|| self.load_command_names())
+            .clone()
+    }
+
+    fn load_command_names(&self) -> Vec<String> {
         let state = self
             .state
             .clone()

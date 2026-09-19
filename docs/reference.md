@@ -150,8 +150,6 @@ lists each effective command's argument array and source layer; outside a manage
 workspace it lists only global commands and built-in defaults.
 Each name resolves from saved repository config, worktree config, then global
 config and built-in defaults; a higher layer replaces the whole argument array.
-Built-in commands win the short spelling, while `shoal run <name>` can run a
-configured command with the same name.
 The executable is resolved through PATH (or use a path),
 with the workspace as working directory. Arguments are passed literally without
 shell expansion. Execution preserves terminal I/O, scope, reserved-port variables,
