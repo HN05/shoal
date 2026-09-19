@@ -1,4 +1,4 @@
-//! Git invocations shared by workspace creation, removal, pulls, and merges.
+//! Git invocations shared by workspace creation, removal, branch refreshes, and merges.
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, ensure};

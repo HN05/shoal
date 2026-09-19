@@ -24,7 +24,7 @@ when behavior changes, distinguishing decisions from proposals.
   daemon for the repository layer. Named ports are lazy, with CLI overrides and
   explicit conflicts.
 - Workspace commands inherit a scope token. Enforce own-worktree resource access
-  in the daemon and deny `shoal pull`, `shoal land` and lifecycle/repository/service
+  in the daemon and deny `shoal land` and lifecycle/repository/service
   administration; own-workspace PR watches/merge acknowledgements are allowed.
   Scope is cooperative, not a boundary against hostile same-user processes.
 - Notifications are daemon records the CLI shows: record them where the daemon
@@ -33,8 +33,9 @@ when behavior changes, distinguishing decisions from proposals.
   until read, and deny them to scoped callers.
 - Agents may merge any local or remote branch into their own recorded workspace
   branch with `shoal merge`. A local source is first fast-forwarded from its
-  upstream by the daemon under the `pull` rules, except sources without an
-  upstream or checked out in a managed workspace; `--local` skips the refresh.
+  upstream by the daemon, preserving an ahead branch and refusing a dirty or
+  diverged checkout or failed fetch, except sources without an upstream or checked
+  out in a managed workspace; `--local` skips the refresh.
   Keep merges in the tracked execution wrapper; fetch remote-only sources
   without updating other branches or relying on FETCH_HEAD.
 - `[auto_cleanup]` has `enabled` (default true) and `idle_minutes` (default

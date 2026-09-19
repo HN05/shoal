@@ -39,7 +39,7 @@ impl Manager {
 
     pub async fn remove_repository(&self, selector: &str) -> Result<RepositoryRemoval> {
         // Registration cannot adopt or allocate a path during removal. The Git
-        // gate also serializes with workspace creation, pull and reconciliation.
+        // gate also serializes with workspace creation, branch refresh, and reconciliation.
         let _registry = self.registry_gate.lock().await;
         let repo = self.repository(selector).await?;
         let gate = self.git_gate(&repo.id).await;

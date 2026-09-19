@@ -120,7 +120,6 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         Command::Status { workspace } => workspaces::status(&ctx, workspace).await,
         Command::Cd { workspace } => workspaces::cd(&ctx, workspace).await,
         Command::Diff { workspace } => workspaces::diff(&ctx, workspace).await,
-        Command::Pull { workspace } => workspaces::pull(&ctx, workspace).await,
         Command::Merge {
             branch,
             workspace,

@@ -118,13 +118,13 @@ failure retains the workspace. Both hook keys share the setup path rules.
 
 `diff` compares against the recorded base's fork point (merge-base fallback, fixed
 commits stay fixed) with native Git settings, so advancing the base is never shown
-as work. `pull` fast-forwards the repository default branch only; without remotes it
-reports nothing to pull. `merge` imports any local or remote branch into the
-workspace's own branch, preferring local sources, which it first fast-forwards from
-their upstream unless `--local`, they lack an upstream, or a managed workspace has
-them checked out; remote discovery must be unambiguous, and conflicts are left for
-ordinary Git. `land`, the local substitute for a pull request, merges the workspace
-branch into the default branch (refreshed from its upstream first) without pushing
+as work. `merge` imports any local or remote branch into the workspace's own branch,
+preferring local sources, which it first fast-forwards from their upstream while
+preserving ahead branches and refusing dirty or diverged checkouts and failed fetches,
+unless `--local`, they lack an upstream, or a managed workspace has them checked out;
+remote discovery must be unambiguous, and conflicts are left for ordinary Git. `land`,
+the local substitute for a pull request, merges the workspace branch into the default
+branch, first refreshing its upstream under the same safety rules, without pushing
 and aborts a merge that does not apply cleanly, leaving conflicts to a `merge` of
 the default branch into the workspace. Landing holds the repository Git gate for
 the tracked execution; the daemon validates and refreshes, and the CLI worker merges.
@@ -137,7 +137,7 @@ own-branch checks.
 
 Commands launched through Shoal inherit a daemon-validated scope token that
 confines them to their own workspace: status, inspect, execute, merge, and resources.
-`pull`, `land`, creation, removal, reconciliation, other workspaces, repository
+`land`, creation, removal, reconciliation, other workspaces, repository
 administration, and service control need an unscoped caller. PR registration and
 manual merge acknowledgement are own-workspace exceptions; nested executions keep scope.
 

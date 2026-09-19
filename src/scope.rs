@@ -63,9 +63,6 @@ pub async fn authorize(
         | Method::SimHistory { workspace, .. } => {
             Some(workspace.get_or_insert_with(|| owner.clone()))
         }
-        Method::PullDefaultBranch { .. } => bail!(
-            "workspace processes cannot pull; shoal merge refreshes its source branch from upstream first"
-        ),
         Method::LandWorkspace { .. } => bail!(
             "workspace processes cannot land into the default branch; an unscoped shoal land does that"
         ),

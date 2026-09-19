@@ -120,7 +120,7 @@ Ctrl-O inspects, Ctrl-S stops, Ctrl-F shows the diff. Each action returns to you
 shell.
 
 Omitted targets open an fzf picker; `rm`, `exec`, `claude`, `codex`, `happy`,
-`t3`, `status`, `diff`, `pull`, `merge`, and `land` first use the workspace containing the
+`t3`, `status`, `diff`, `merge`, and `land` first use the workspace containing the
 current directory. `shoal add` offers repositories in most-recently-used order, then
 a new-branch prompt or existing-branch picker. Noninteractive and JSON calls never prompt;
 management commands support JSON output, while executed commands keep their
@@ -369,20 +369,6 @@ that would include another registered repository or its own state. If cleanup
 fails, completed steps stay done, remaining records are retained, and new
 workspace creation is blocked until the same command is retried.
 
-### Pull the default branch
-
-```sh
-shoal pull                 # Current workspace (or fzf); agents resolve to their own
-shoal --json pull          # Branch, previous/current commits, and whether it changed
-```
-
-Fast-forwards the repository's default branch from its configured upstream
-(which may differ from the default remote), never the feature branch. A
-repository without remotes has nothing to pull and reports that. A checked-out
-default branch must be clean; divergence or a default branch checked out in a
-managed workspace is an error. Hooks and recursive submodule updates are
-disabled. Scoped agents cannot pull; `shoal merge` refreshes its source for them.
-
 ### Merge into your workspace branch
 
 ```sh
@@ -394,10 +380,11 @@ shoal merge origin/feature/api fix-login   # Qualified source, named destination
 ```
 
 The destination must be the workspace's recorded branch. Local branches take
-precedence and are first fast-forwarded from their upstream under the `pull`
-rules above (a dirty checkout or divergence is an error; `--local` skips this).
-A local branch without an upstream, or checked out in a managed workspace, is
-merged as it is. Otherwise Shoal queries configured remotes and fetches the branch.
+precedence. Unless `--local`, a local branch with an upstream is fetched and
+fast-forwarded first; a dirty checkout, divergence, or failed fetch blocks the
+merge, while an ahead branch is preserved. A local branch without an upstream,
+or checked out in a managed workspace, is merged as it is. Otherwise Shoal
+queries configured remotes and fetches the branch.
 Several matches or an unreachable remote require `--remote`. Qualified remote
 sources and full `refs/…` names always fetch fresh data. Git fast-forwards or
 creates a merge commit; conflicts stay in the worktree for `git commit` or `git
@@ -408,10 +395,11 @@ output. Nothing is stashed, reset, or pushed.
 
 `shoal land [workspace]` merges the workspace's recorded branch into the
 repository default branch for repositories without a remote or pull-request
-flow; nothing is pushed. The default branch is refreshed under the `pull` rules
-when it has an upstream; both checkouts must be clean, the default outside
-managed workspaces and the workspace on its branch. Git fast-forwards or creates
-a merge commit in the default checkout. A merge that does not apply cleanly is
+flow; nothing is pushed. When the default branch has an upstream, Shoal fetches
+and fast-forwards it first, preserving an ahead branch and refusing divergence,
+a dirty checkout, a failed fetch, or a managed workspace checkout. The workspace
+must be clean and on its recorded branch. Git fast-forwards or creates a merge
+commit in the default checkout. A merge that does not apply cleanly is
 aborted: run `shoal merge <default>` in the workspace, resolve there, and land
 again. Scoped agents cannot land. Landed commits count as pushed for `rm` and
 automatic cleanup.
@@ -633,7 +621,7 @@ stopped, use `--repair --acknowledge-stopped`; visible live processes still bloc
 PR watches and merge acknowledgements are own-workspace scope exceptions.
 Commands launched through `exec`, `claude`, `codex cli`, and `happy` carry a scope
 token that confines them to their own worktree: `status`, inspect, execute, `merge`, `diff`,
-and resources. They cannot `pull`, `land`, reach other worktrees, remove workspaces,
+and resources. They cannot `land`, reach other worktrees, remove workspaces,
 read notifications, or administer Shoal itself (repositories, the daemon service,
 the machine configuration); nested commands keep the scope. Scope is cooperative
 and does not restrict direct filesystem or Git operations.

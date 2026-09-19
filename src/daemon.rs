@@ -329,9 +329,6 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
                 .reconcile_workspaces(workspace.as_deref(), options)
                 .await?,
         ),
-        Method::PullDefaultBranch { workspace } => {
-            Body::PulledBranch(manager.pull_default_branch(&workspace).await?)
-        }
         Method::CheckLanding => {
             ensure!(
                 caller.is_some_and(|caller| caller.landing),

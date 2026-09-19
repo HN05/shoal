@@ -3456,7 +3456,7 @@ fn resource_scopes_separate_repos_share_global_capacity_and_limit_agents() {
 }
 
 // Local bare origin plus a separate author checkout: no network or personal repos.
-fn pull_remote(fixture: &Fixture) -> PathBuf {
+fn upstream_remote(fixture: &Fixture) -> PathBuf {
     let branch = git(&fixture.repo, &["branch", "--show-current"]);
     let branch = branch.trim_end_matches('\n');
     let remote = fixture.root.path().join("origin.git");
@@ -3506,25 +3506,22 @@ fn pull_remote(fixture: &Fixture) -> PathBuf {
 }
 
 #[test]
-fn add_and_pull_use_develop_as_the_repository_default() {
+fn add_uses_develop_as_the_repository_default() {
     let fixture = Fixture::new();
     git(&fixture.repo, &["branch", "-m", "develop"]);
-    let author = pull_remote(&fixture);
+    let author = upstream_remote(&fixture);
     let expected = git(&author, &["rev-parse", "HEAD"]);
     let workspace = fixture.add("henrik/8374-set-league-season-player-profile");
     assert_eq!(workspace["base_ref"], "refs/heads/develop");
     assert_eq!(workspace["base_commit"], expected.trim());
     let name = workspace["name"].as_str().unwrap();
-    let result = fixture.ok(&["pull", name]);
-    assert_eq!(result["branch"], "develop");
-    assert_eq!(result["updated"], false);
     assert_eq!(fixture.ok(&["rm", name])["branch_deleted"], true);
 }
 
 #[test]
 fn add_refreshes_main_before_creating_the_worktree() {
     let fixture = Fixture::new();
-    let author = pull_remote(&fixture);
+    let author = upstream_remote(&fixture);
     let expected = git(&author, &["rev-parse", "HEAD"]);
     let workspace = fixture.add("fresh");
     let path = Path::new(workspace["path"].as_str().unwrap());
@@ -3535,47 +3532,6 @@ fn add_refreshes_main_before_creating_the_worktree() {
     assert_eq!(
         fs::read_to_string(path.join("upstream")).unwrap(),
         "from remote\n"
-    );
-    assert_eq!(
-        fs::read_to_string(fixture.repo.join("upstream")).unwrap(),
-        "from remote\n"
-    );
-}
-
-#[test]
-fn pull_updates_only_main_and_is_denied_to_scoped_processes() {
-    let fixture = Fixture::new();
-    let workspace = fixture.add("worker");
-    let before = git(&fixture.repo, &["rev-parse", "main"]);
-    let author = pull_remote(&fixture);
-    let expected = git(&author, &["rev-parse", "HEAD"]);
-    let binary = env!("CARGO_BIN_EXE_shoal");
-    let output = fixture.run(&["exec", "worker", "--", binary, "--json", "pull"]);
-    assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("shoal merge refreshes"));
-    assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), before);
-    let output = fixture.run(&["--json", "pull", "worker"]);
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    let result: Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(result["updated"], true);
-    assert_eq!(result["previous_commit"], before.trim());
-    assert_eq!(result["commit"], expected.trim());
-    assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), expected);
-    assert_eq!(
-        git(
-            Path::new(workspace["path"].as_str().unwrap()),
-            &["rev-parse", "HEAD"]
-        ),
-        before
-    );
-    assert_eq!(fixture.ok(&["pull", "worker"])["updated"], false);
-    assert_eq!(
-        git(&fixture.repo, &["for-each-ref", "refs/shoal/pull/"]),
-        ""
     );
     assert_eq!(
         fs::read_to_string(fixture.repo.join("upstream")).unwrap(),
@@ -4666,10 +4622,10 @@ fn merge_refreshes_local_source_from_upstream_unless_local_or_owned_by_a_workspa
     let worker = fixture.add("worker");
     let path = Path::new(worker["path"].as_str().unwrap());
     let stale = git(&fixture.repo, &["rev-parse", "main"]);
-    let author = pull_remote(&fixture);
+    let author = upstream_remote(&fixture);
     let upstream = git(&author, &["rev-parse", "HEAD"]);
     let binary = env!("CARGO_BIN_EXE_shoal");
-    // A scoped agent merging main gets the upstream state without shoal pull.
+    // A scoped agent merging main refreshes and uses the upstream state.
     let output = fixture.run(&["exec", "worker", "--", binary, "--json", "merge", "main"]);
     assert!(
         output.status.success(),
@@ -4729,7 +4685,7 @@ fn merge_fetches_remote_only_branch_and_refreshes_qualified_sources() {
     let fixture = Fixture::new();
     let worker = fixture.add("worker");
     let path = Path::new(worker["path"].as_str().unwrap());
-    let author = pull_remote(&fixture);
+    let author = upstream_remote(&fixture);
     git(&fixture.repo, &["remote", "rename", "origin", "source"]);
     git(&author, &["switch", "-c", "feature/remote-only"]);
     merge_commit(&author, "remote-only", "first\n");
@@ -4818,7 +4774,7 @@ fn merge_fetches_remote_only_branch_and_refreshes_qualified_sources() {
 fn merge_remote_ambiguity_local_precedence_and_explicit_remote() {
     let fixture = Fixture::new();
     fixture.add("worker");
-    let author = pull_remote(&fixture);
+    let author = upstream_remote(&fixture);
     git(&author, &["switch", "-c", "topic"]);
     git(&author, &["push", "origin", "topic"]);
     let remote = fixture.root.path().join("origin.git");
@@ -6697,10 +6653,7 @@ fn land_merges_into_main_without_a_remote_and_is_denied_to_scoped_processes() {
         "from the workspace\n"
     );
     assert_eq!(fixture.ok(&["land", "worker"])["updated"], false);
-    // Pulling without remotes is a no-op, and landed work needs no branch choice.
-    let pulled = fixture.ok(&["pull", "worker"]);
-    assert_eq!(pulled["updated"], false);
-    assert!(pulled["skipped"].as_str().unwrap().contains("no remotes"));
+    // Landed work needs no branch choice.
     assert_eq!(fixture.ok(&["rm", "worker"])["branch_deleted"], true);
 }
 

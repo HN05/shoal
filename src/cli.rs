@@ -94,8 +94,6 @@ pub enum Command {
     Cd { workspace: Option<String> },
     /// Show your changes since the fork point using native Git diff configuration.
     Diff { workspace: Option<String> },
-    /// Fast-forward this workspace's repository default branch from its upstream.
-    Pull { workspace: Option<String> },
     /// Merge a local or remote branch into this workspace's own branch.
     Merge {
         branch: String,

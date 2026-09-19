@@ -5,7 +5,7 @@ use anyhow::{Context, Result, ensure};
 
 use crate::git;
 
-/// Read cached remote HEAD. Creation/pull may discover and cache a missing one;
+/// Read cached remote HEAD. Branch refresh may discover and cache a missing one;
 /// cleanup only reads local metadata and never contacts a remote.
 pub async fn resolve(repo: &Path, discover: bool) -> Result<String> {
     let remotes = git::run(repo, &["remote"]).await?;

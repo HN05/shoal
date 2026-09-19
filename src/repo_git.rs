@@ -47,15 +47,6 @@ impl Manager {
         Ok(allocate_branch(name, &taken))
     }
 
-    pub async fn pull_default_branch(&self, selector: &str) -> Result<PulledBranch> {
-        let workspace = self.workspace(selector).await?;
-        let repo = self.repository(&workspace.repository_id).await?;
-        let gate = self.git_gate(&repo.id).await;
-        let _guard = gate.lock().await;
-        let branch = crate::default_branch::resolve(&repo.path, true).await?;
-        self.refresh_branch(&repo, &branch, true).await
-    }
-
     /// Validate and refresh a landing while the caller holds the repository Git
     /// gate. The gate must stay held until the tracked execution completes.
     pub async fn prepare_land(&self, selector: &str) -> Result<LandPlan> {
@@ -236,7 +227,7 @@ impl Manager {
                 commit: previous_commit.clone(),
                 previous_commit,
                 skipped: Some(format!(
-                    "{branch} has no upstream and the repository has no remotes; nothing to pull"
+                    "{branch} has no upstream and the repository has no remotes; nothing to refresh"
                 )),
             });
         }
@@ -304,7 +295,7 @@ impl Manager {
             .await
             .with_context(|| {
                 format!(
-                    "{branch} and its upstream have diverged; resolve this manually before pulling"
+                    "{branch} and its upstream have diverged; resolve this manually before refreshing"
                 )
             })?;
             if let Some(checkout) = &checkout {
@@ -344,7 +335,7 @@ impl Manager {
         .await;
         let cleanup = git_run(&repo.path, &["update-ref", "-d", &fetched]).await;
         let commit = result?;
-        cleanup.context("could not remove temporary pull ref")?;
+        cleanup.context("could not remove temporary fetch ref")?;
         Ok(PulledBranch {
             branch: branch.into(),
             repository_id: repo.id.clone(),

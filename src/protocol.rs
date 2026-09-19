@@ -20,7 +20,7 @@ use crate::{
     simulators::{SimRequest, Simulator, SimulatorCatalog},
 };
 
-pub const VERSION: u32 = 28;
+pub const VERSION: u32 = 29;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -113,9 +113,6 @@ pub enum Method {
     Reconcile {
         workspace: Option<String>,
         options: ReconcileOptions,
-    },
-    PullDefaultBranch {
-        workspace: String,
     },
     /// Merge the workspace branch into the repository default branch locally.
     LandWorkspace {

@@ -80,7 +80,6 @@ Inside a workspace, omit its name. Use `--json` or `shoal <command> --help`.
 To move changes between your workspace and the default branch:
 
 ```sh
-shoal pull                    # Refresh the repository's default branch
 shoal merge main              # Merge it into your branch; use your repo's branch name
 shoal merge feature/api       # Merge another local or remote branch
 shoal land                    # Merge your branch into the default branch; no remote needed

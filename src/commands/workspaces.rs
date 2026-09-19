@@ -22,28 +22,6 @@ use crate::{
     ui::{self, Fallback},
 };
 
-pub(super) async fn pull(ctx: &Context, workspace: Option<String>) -> Result<i32> {
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let result = request!(
-        &ctx.paths,
-        Method::PullDefaultBranch { workspace },
-        PulledBranch
-    );
-    ctx.show(&result, |result| {
-        if let Some(skipped) = &result.skipped {
-            println!("{skipped}");
-        } else if result.updated {
-            println!("Updated {} to {}", result.branch, result.commit);
-        } else {
-            println!(
-                "{} is already up to date ({})",
-                result.branch, result.commit
-            );
-        }
-    })?;
-    Ok(0)
-}
-
 pub(super) async fn land(ctx: &Context, workspace: Option<String>) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     execution::land(&ctx.paths, workspace, ctx.json).await
