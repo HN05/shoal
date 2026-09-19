@@ -185,7 +185,7 @@ impl Manager {
                     let code = exit_code.unwrap_or(1);
                     let error = (!(complete && code == 0)).then(|| {
                         format!(
-                            "setup failed (exit {code}, processes stopped: {complete}); retry with shoal prepare"
+                            "setup failed (exit {code}, processes stopped: {complete}); retry with shoal setup"
                         )
                     });
                     let state = if error.is_none() {

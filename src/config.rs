@@ -532,7 +532,7 @@ impl Config {
     }
 }
 
-/// Written by `shoal setup` when no config exists: the defaults, stated.
+/// Written by `shoal install` when no config exists: the defaults, stated.
 #[cfg(test)]
 const TEMPLATE: &str = include_str!("../configs/default.toml");
 

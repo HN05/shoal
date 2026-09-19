@@ -16,7 +16,7 @@ use crate::{
     shell,
 };
 
-pub(super) async fn setup(
+pub(super) async fn install(
     ctx: &Context,
     dry_run: bool,
     executable: Option<PathBuf>,
@@ -42,16 +42,16 @@ pub(super) async fn setup(
         Err(error) if error.is::<client::ProtocolMismatch>() => {
             // Use the service manager without speaking the incompatible protocol.
             // stop checks the installed state directory and waits for the socket
-            // to become unreachable before setup can replace the definition.
+            // to become unreachable before install can replace the definition.
             ensure!(
                 service::file(&ctx.paths, platform).is_file(),
-                "daemon protocol mismatch and no installed service; stop the foreground daemon, then rerun `shoal setup`"
+                "daemon protocol mismatch and no installed service; stop the foreground daemon, then rerun `shoal install`"
             );
             if !ctx.json {
                 eprintln!("Updating daemon service after a protocol change...");
             }
             stop(&ctx.paths).await.context(
-                "could not stop the incompatible daemon service; stop any foreground daemon before rerunning `shoal setup`",
+                "could not stop the incompatible daemon service; stop any foreground daemon before rerunning `shoal install`",
             )?;
             false
         }

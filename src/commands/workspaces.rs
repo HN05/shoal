@@ -267,7 +267,7 @@ pub(super) async fn add(
     }
 }
 
-pub(super) async fn prepare(ctx: &Context, workspace: Option<String>) -> Result<i32> {
+pub(super) async fn setup(ctx: &Context, workspace: Option<String>) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let inspection = client::inspect(&ctx.paths, workspace).await?;
     let Some(workspace) = prepare_workspace(ctx, &inspection.workspace).await? else {
@@ -276,7 +276,7 @@ pub(super) async fn prepare(ctx: &Context, workspace: Option<String>) -> Result<
     run_post_setup(ctx, &workspace).await?;
     ctx.emit_styled(
         Style::Success,
-        &format!("Prepared {}", workspace.name),
+        &format!("Set up {}", workspace.name),
         &workspace,
     )?;
     Ok(0)
@@ -310,7 +310,7 @@ async fn prepare_workspace(ctx: &Context, workspace: &Workspace) -> Result<Optio
         let name = &workspace.name;
         ensure!(
             ctx.interactive(),
-            "setup failed for {name}: {error}; workspace retained. Retry with `shoal prepare {name}`, ignore with `shoal reconcile {name} --repair`, or delete with `shoal rm {name} --yes --delete-branch`"
+            "setup failed for {name}: {error}; workspace retained. Retry with `shoal setup {name}`, ignore with `shoal reconcile {name} --repair`, or delete with `shoal rm {name} --yes --delete-branch`"
         );
         eprintln!(
             "{} for {name}: {error}",

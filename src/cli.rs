@@ -85,7 +85,7 @@ pub enum Command {
         args: Vec<OsString>,
     },
     /// Run or retry the configured workspace setup command.
-    Prepare { workspace: Option<String> },
+    Setup { workspace: Option<String> },
     /// List managed workspaces.
     List,
     /// Summarize what the current or named workspace is doing.
@@ -258,7 +258,7 @@ pub enum Command {
         command: ConfigCommand,
     },
     /// Install and start the per-user daemon service.
-    Setup {
+    Install {
         /// Preview the service definition without changing anything.
         #[arg(long)]
         dry_run: bool,
@@ -287,7 +287,7 @@ impl Command {
     pub fn is_administrative(&self) -> bool {
         matches!(
             self,
-            Command::Setup { .. }
+            Command::Install { .. }
                 | Command::Config { .. }
                 | Command::Daemon {
                     command: DaemonCommand::Run { .. }

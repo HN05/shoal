@@ -28,7 +28,7 @@ from source with Worktrunk, Git, fzf and lsof dependencies.
 brew tap hn05/tap
 brew install hn05/tap/shoal            # Or: brew install --HEAD hn05/tap/shoal
 shoal skill install
-shoal setup
+shoal install
 ```
 
 Upgrade with `brew update && brew upgrade hn05/tap/shoal` (`--fetch-HEAD` for
@@ -42,8 +42,8 @@ skill copied by an older install needs one `shoal skill install` to migrate.
 
 ```sh
 cargo install --path .
-shoal setup --dry-run       # Preview the OS service definition
-shoal setup                 # Register and start the per-user service
+shoal install --dry-run     # Preview the OS service definition
+shoal install               # Register and start the per-user service
 shoal daemon status|stop|start|restart
 ```
 
@@ -55,7 +55,7 @@ it with the same `--state-dir` (or `SHOAL_STATE_DIR`). State defaults to
 user. Service commands target the one registered per-user service, whose state
 directory must match. `daemon status` exits 1 when offline.
 
-`shoal setup` preserves the invoked executable's symlink path and captures the
+`shoal install` preserves the invoked executable's symlink path and captures the
 current `PATH` for the service, so install `wt`, `git`, `lsof`, and any hook
 tools first. It also creates `~/.config/shoal/config.toml` (or
 `$XDG_CONFIG_HOME/shoal/config.toml`) from
@@ -442,7 +442,7 @@ inspection (default). JSON/noninteractive mode returns nonzero, keeps the
 workspace, and sends setup output to stderr. Then choose explicitly:
 
 ```sh
-shoal prepare fix-login                    # Rerun setup and the post-setup hook
+shoal setup fix-login                      # Rerun setup and the post-setup hook
 shoal reconcile fix-login --repair          # Ignore the failure after ownership checks
 shoal rm fix-login --yes --delete-branch    # Delete this workspace and branch
 ```
@@ -451,7 +451,7 @@ Hooks are untracked: they run as your own processes with `SHOAL_HOOK` (`post_set
 or `pre_remove`), `SHOAL_WORKSPACE`, `SHOAL_WORKSPACE_ID`, and `SHOAL_STATE_DIR`,
 without a scope token or port variables, so whatever they leave running (a tmux
 server, say) is not a Shoal execution. `post_setup_cmd` runs from the CLI with your
-terminal after `add` or `prepare` has a ready workspace and before any `--agent`; a
+terminal after `add` or `setup` has a ready workspace and before any `--agent`; a
 nonzero exit keeps the workspace, skips the agent, and fails the command.
 `pre_remove_cmd` runs inside the daemon for `rm`, `repo rm`, and automatic cleanup,
 after the removal checks pass and managed commands stop, without a terminal and with

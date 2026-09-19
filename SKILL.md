@@ -22,6 +22,8 @@ When unsure whether your checkout is managed, use `shoal --json list` and match
 your working directory to a returned workspace `path`. In an ordinary checkout,
 use ordinary Git for merges. Shoal's resources require a managed workspace;
 do not select another agent's workspace or create one just to obtain a lease.
+If workspace setup failed, `shoal --json setup` reruns the configured setup
+command and post-setup hook for the current workspace.
 
 ## Happy sessions from a console agent
 

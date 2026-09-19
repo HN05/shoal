@@ -115,7 +115,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             base,
             args,
         } => issues::run(&ctx, url, agent, base, args).await,
-        Command::Prepare { workspace } => workspaces::prepare(&ctx, workspace).await,
+        Command::Setup { workspace } => workspaces::setup(&ctx, workspace).await,
         Command::List => workspaces::list(&ctx).await,
         Command::Status { workspace } => workspaces::status(&ctx, workspace).await,
         Command::Cd { workspace } => workspaces::cd(&ctx, workspace).await,
@@ -209,10 +209,10 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             recovery::run(&ctx, workspace, all, options).await
         }
         Command::Config { command } => service::config(&ctx, command),
-        Command::Setup {
+        Command::Install {
             dry_run,
             executable,
-        } => service::setup(&ctx, dry_run, executable).await,
+        } => service::install(&ctx, dry_run, executable).await,
         Command::Daemon { command } => service::run(ctx, command).await,
     }
 }

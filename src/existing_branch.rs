@@ -145,7 +145,7 @@ impl Manager {
         {
             ensure!(
                 workspace.state == WorkspaceState::Ready,
-                "workspace {} is {}; inspect or prepare it before reopening",
+                "workspace {} is {}; inspect or set it up before reopening",
                 workspace.name,
                 workspace.state
             );

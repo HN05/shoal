@@ -194,10 +194,10 @@ fn refuses_to_replace_a_regular_file_at_socket_path() {
 }
 
 #[test]
-fn setup_preview_does_not_install_a_service() {
+fn install_preview_does_not_install_a_service() {
     let root = tempfile::tempdir_in("/tmp").unwrap();
     let output = command(root.path())
-        .args(["--json", "setup", "--dry-run"])
+        .args(["--json", "install", "--dry-run"])
         .output()
         .unwrap();
     assert!(
@@ -273,15 +273,15 @@ impl Drop for IncompatibleDaemon {
 }
 
 #[test]
-fn setup_refuses_an_incompatible_daemon_without_an_installed_service() {
+fn install_refuses_an_incompatible_daemon_without_an_installed_service() {
     let root = tempfile::tempdir_in("/tmp").unwrap();
     let _daemon = IncompatibleDaemon::listen(root.path(), false);
-    let output = command(root.path()).arg("setup").output().unwrap();
+    let output = command(root.path()).arg("install").output().unwrap();
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("stop the foreground daemon"));
     assert!(
         command(root.path())
-            .args(["setup", "--dry-run"])
+            .args(["install", "--dry-run"])
             .output()
             .unwrap()
             .status
@@ -290,16 +290,16 @@ fn setup_refuses_an_incompatible_daemon_without_an_installed_service() {
 }
 
 #[test]
-fn setup_preserves_a_compatible_foreground_daemon() {
+fn install_preserves_a_compatible_foreground_daemon() {
     let daemon = Daemon::start();
-    let output = daemon.run(&["setup"]);
+    let output = daemon.run(&["install"]);
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("foreground daemon"));
     assert!(daemon.run(&["daemon", "status"]).status.success());
 }
 
 #[test]
-fn setup_is_repeatable_and_service_controls_work_with_an_isolated_manager() {
+fn install_is_repeatable_and_service_controls_work_with_an_isolated_manager() {
     let root = tempfile::tempdir_in("/tmp").unwrap();
     let bin = root.path().join("bin");
     fs::create_dir(&bin).unwrap();
@@ -367,7 +367,7 @@ esac
         );
         output
     };
-    let output: Value = serde_json::from_slice(&run(&["--json", "setup"]).stdout).unwrap();
+    let output: Value = serde_json::from_slice(&run(&["--json", "install"]).stdout).unwrap();
     let original = fs::read_to_string(&pid_path).unwrap();
     // A missing global config is seeded once with the defaults, then left alone.
     let config = root.path().join(".config/shoal/config.toml");
@@ -391,7 +391,7 @@ esac
     );
     fs::write(&agent_template, "custom agent template").unwrap();
     fs::write(&config, "default_agent = 'claude'\n").unwrap();
-    let output: Value = serde_json::from_slice(&run(&["--json", "setup"]).stdout).unwrap();
+    let output: Value = serde_json::from_slice(&run(&["--json", "install"]).stdout).unwrap();
     assert_eq!(output["config_created"], false);
     assert_eq!(
         fs::read_to_string(agent_template).unwrap(),
@@ -472,17 +472,17 @@ esac
     while !marker.exists() {
         assert!(
             execution.try_wait().unwrap().is_none(),
-            "execution exited before setup"
+            "execution exited before install"
         );
         assert!(Instant::now() < deadline, "execution did not start");
         thread::sleep(Duration::from_millis(20));
     }
     let replacement = bin.join("updated-shoal");
     std::os::unix::fs::symlink(env!("CARGO_BIN_EXE_shoal"), &replacement).unwrap();
-    run(&["setup", "--executable", replacement.to_str().unwrap()]);
+    run(&["install", "--executable", replacement.to_str().unwrap()]);
     assert_eq!(fs::read_to_string(&pid_path).unwrap(), original);
     let preview: Value =
-        serde_json::from_slice(&run(&["--json", "setup", "--dry-run"]).stdout).unwrap();
+        serde_json::from_slice(&run(&["--json", "install", "--dry-run"]).stdout).unwrap();
     assert!(
         fs::read_to_string(preview["path"].as_str().unwrap())
             .unwrap()
@@ -504,14 +504,14 @@ esac
     }
 
     // Replace only the wire response. Stopping the real managed daemon removes
-    // its socket, allowing setup to install and start the current binary.
+    // its socket, allowing install to register and start the current binary.
     let socket = root.path().join("state/daemon.sock");
     let hidden_socket = root.path().join("state/managed.sock");
     fs::rename(&socket, &hidden_socket).unwrap();
     {
         let _daemon = IncompatibleDaemon::listen(root.path(), true);
         let output = command(root.path())
-            .arg("setup")
+            .arg("install")
             .env("PATH", &bin)
             .output()
             .unwrap();
@@ -522,11 +522,11 @@ esac
     fs::remove_file(&socket).unwrap();
     {
         let _daemon = IncompatibleDaemon::listen(root.path(), false);
-        run(&["--json", "setup"]);
+        run(&["--json", "install"]);
     }
     assert_ne!(fs::read_to_string(&pid_path).unwrap(), original);
     let upgraded = fs::read_to_string(&pid_path).unwrap();
-    run(&["setup"]);
+    run(&["install"]);
     assert_eq!(fs::read_to_string(&pid_path).unwrap(), upgraded);
     run(&["daemon", "restart"]);
     assert_ne!(fs::read_to_string(&pid_path).unwrap(), original);

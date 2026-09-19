@@ -34,7 +34,7 @@ execution stopped or that its resources are free.
 
 Use short transactions for atomic claims; typed lifecycle states retain lowercase
 persisted/wire spellings and reject unknown values. Slow operations stay outside
-transactions; failures and migrations preserve ownership. Setup preserves compatible daemons and
+transactions; failures and migrations preserve ownership. `install` preserves compatible daemons and
 commands, deferring service changes until restart; incompatible daemons are
 verified stopped before replacing their service.
 
@@ -105,7 +105,7 @@ the tracked wrapper with workspace scope; the daemon owns readiness and executio
 records, and `add` keeps the workspace preparing until setup exits cleanly with no
 survivors. Failures preserve files, branches, and leases; interactive callers choose
 delete, ignore (which repairs verified state first), or keep, while JSON callers get
-a nonzero exit. `prepare` reruns setup explicitly; nothing retries automatically.
+a nonzero exit. `setup` reruns setup explicitly; nothing retries automatically.
 
 Hooks are deliberately untracked user processes with the workspace identity
 but no scope token, because their purpose is to start or stop things that
@@ -218,7 +218,7 @@ and failed removal, are allocated atomically with idempotent lease names, and
 are released explicitly or by successful removal. Resources are lazy, never
 claimed at creation.
 
-Global TOML is machine policy, seeded by `setup` with the stated defaults when
+Global TOML is machine policy, seeded by `install` with the stated defaults when
 absent and replaced only by an explicit reset or named template installation,
 with the previous file kept as a backup; the daemon reads it at startup,
 while the CLI reads agent settings per command. Repository TOML comes from the
@@ -230,7 +230,7 @@ that does not describe the machine may be set at either level and resolves per
 option: saved config, worktree file, global config, then the built-in default.
 Prompt templates follow the same precedence, with repository-root Markdown files
 and global files beside `config.toml` below inline TOML values at each level.
-Setup installs missing templates from the bundled repository-root defaults;
+`install` adds missing templates from the bundled repository-root defaults;
 rendering substitutes known fields once without evaluating their contents.
 Before a workspace exists, the registered checkout's file stands in for the
 worktree's. Repository config is read per request, so changes need no restart

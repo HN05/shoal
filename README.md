@@ -7,7 +7,7 @@ switch between tasks, and clean up when finished.
 
 ```sh
 brew install hn05/tap/shoal
-shoal setup
+shoal install
 shoal skill install
 ```
 
@@ -15,7 +15,7 @@ Use `brew install --HEAD hn05/tap/shoal` to track `main` instead of releases, or
 download a prebuilt macOS or Linux binary from a [release](https://github.com/HN05/shoal/releases);
 the macOS binaries are unsigned, so clear the download quarantine first with
 `xattr -d com.apple.quarantine shoal`.
-Homebrew installs the runtime dependencies. `shoal setup` starts the per-user
+Homebrew installs the runtime dependencies. `shoal install` starts the per-user
 daemon and writes missing config and prompt template defaults in `~/.config/shoal/`;
 `shoal skill install` installs instructions for Codex and Claude Code.
 
@@ -174,7 +174,7 @@ See [design.md](design.md) for decisions and the [command reference](docs/refere
 Create releases through **Actions → release** ([setup](docs/releases.md)).
 
 Requires Rust, Git, `lsof`, and Worktrunk (`wt`, tested with 0.77.0). Interactive menus
-require `fzf`. Install the runtime tools before running `shoal setup` so the
+require `fzf`. Install the runtime tools before running `shoal install` so the
 daemon captures a PATH that includes them. Integration tests also use Bash, Zsh, and Python 3.
 
 ```sh

@@ -2285,6 +2285,16 @@ fn execution_scope_limits_management_and_expires() {
     let list: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(list.as_array().unwrap().len(), 1);
     assert_eq!(list[0]["name"], "worker");
+    let output = scoped(&["setup", "worker"]);
+    assert!(!output.status.success());
+    assert!(
+        !String::from_utf8_lossy(&output.stderr).contains("cannot administer Shoal"),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let output = scoped(&["install", "--dry-run"]);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("cannot administer Shoal"));
     assert!(scoped(&["port", "acquire", "web"]).status.success());
     assert!(
         scoped(&["exec", "worker", "--", binary, "port"])
@@ -2302,7 +2312,6 @@ fn execution_scope_limits_management_and_expires() {
         vec!["repo", "config", fixture.repo.to_str().unwrap()],
         vec!["repo", "config", fixture.repo.to_str().unwrap(), "--clear"],
         vec!["daemon", "stop"],
-        vec!["setup", "--dry-run"],
     ] {
         let output = scoped(&args);
         assert!(
@@ -5368,8 +5377,11 @@ fn setup_cmd_local_override_absolute_path_failure_and_retry() {
             .status
             .success()
     );
+    let output = fixture.run(&["prepare", "failed-setup"]);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("unknown command \"prepare\""));
     fs::write(&script, "#!/bin/sh\nprintf complete > setup-result\n").unwrap();
-    assert_eq!(fixture.ok(&["prepare", "failed-setup"])["state"], "ready");
+    assert_eq!(fixture.ok(&["setup", "failed-setup"])["state"], "ready");
     assert_eq!(
         fixture.ok(&["status", "failed-setup"])["setup_finished"],
         true
@@ -5502,7 +5514,7 @@ fn setup_interruption_preserves_work_and_blocks_concurrent_execution() {
     );
     assert!(
         !fixture
-            .run(&["--json", "prepare", "interrupted"])
+            .run(&["--json", "setup", "interrupted"])
             .status
             .success()
     );
@@ -5624,7 +5636,7 @@ test ! -f fail-removal || { echo 'session still busy' >&2; exit 3; }
     assert_eq!(failed["workspace"]["state"], "ready");
     let failed_path = Path::new(failed["workspace"]["path"].as_str().unwrap());
     assert!(!failed_path.join("agent-started").exists());
-    assert_eq!(fixture.ok(&["prepare", "hook-fails"])["state"], "ready");
+    assert_eq!(fixture.ok(&["setup", "hook-fails"])["state"], "ready");
     assert!(
         fs::read_to_string(home.join("post-setup-ran"))
             .unwrap()
