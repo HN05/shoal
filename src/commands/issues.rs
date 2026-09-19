@@ -1,61 +1,17 @@
 //! Forge issue lookup belongs to the CLI; the daemon only creates workspaces.
-use std::{ffi::OsString, process::Stdio, time::Duration};
+use std::{process::Stdio, time::Duration};
 
 use anyhow::{Context as _, Result, bail, ensure};
 use serde::Deserialize;
 use tokio::{process::Command, time::timeout};
 
-use crate::{
-    cli::Agent, client, context::Context, forge::ForgeRepo, model::Repository,
-    protocol::ConfigTarget, repository, ui, validate::MAX_NAME_LEN,
-};
-
-/// `shoal issue <url>`: the URL names the repository, the issue names the
-/// workspace, and `--agent` or the configured default agent works on it.
-pub(super) async fn run(
-    ctx: &Context,
-    url: String,
-    agent: Option<Agent>,
-    base: Option<String>,
-    args: Vec<OsString>,
-) -> Result<i32> {
-    let repos = client::repositories(&ctx.paths).await?;
-    let repo = repository_for(&repos, &url).await?;
-    let settings = client::settings(&ctx.paths, ConfigTarget::Repository(repo.id.clone())).await?;
-    let agent = match agent.or(settings.default_agent) {
-        Some(agent) => agent,
-        None if ctx.interactive() => ui::pick(
-            ctx,
-            "Agent> ",
-            Agent::possible_values()
-                .into_iter()
-                .map(|value| (value.clone(), value))
-                .collect(),
-        )?
-        .parse()
-        .map_err(|()| anyhow::anyhow!("unknown agent"))?,
-        None => bail!(
-            "no agent selected; pass --agent or set default_agent in the repository or global config"
-        ),
-    };
-    super::workspaces::add(
-        ctx,
-        Some(repo.id.clone()),
-        super::workspaces::Creation {
-            name: None,
-            branch: None,
-            base,
-            git_profile: None,
-        },
-        Some(url),
-        Some(agent),
-        args,
-    )
-    .await
-}
+use crate::{forge::ForgeRepo, model::Repository, repository, validate::MAX_NAME_LEN};
 
 /// The registered repository whose origin the issue URL belongs to.
-async fn repository_for<'a>(repos: &'a [Repository], url: &str) -> Result<&'a Repository> {
+pub(super) async fn repository_for<'a>(
+    repos: &'a [Repository],
+    url: &str,
+) -> Result<&'a Repository> {
     let forge = ForgeRepo::from_issue_url(url)?;
     let mut matches = Vec::new();
     for repo in repos {

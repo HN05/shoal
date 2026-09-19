@@ -48,6 +48,7 @@ pub enum Command {
     },
     /// Create a named worktree from a registered repository.
     Add {
+        /// Registered repository; may be omitted when --issue is a URL.
         repository: Option<String>,
         /// Git branch name; a portable workspace name is derived from it.
         #[arg(long)]

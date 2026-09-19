@@ -6187,8 +6187,31 @@ fn issue_command_finds_the_repository_and_starts_the_default_agent() {
             serde_json::json!([])
         );
     }
-    // The default agent applies to pasted issues only.
+    // `add` uses the same URL-to-repository path without applying the default agent.
     fs::remove_file(&agent_args).unwrap();
+    let url = "https://github.com/team/project/issues/44";
+    fs::write(
+        &response,
+        serde_json::json!({"number": 44, "title": "Create from URL", "body": body}).to_string(),
+    )
+    .unwrap();
+    let output = fixture
+        .command()
+        .args(["--json", "add", "--issue", url, "--ref", "HEAD"])
+        .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+        .env("ISSUE_RESPONSE", &response)
+        .env("ISSUE_ARGS", &issue_args)
+        .env("AGENT_ARGS", &agent_args)
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(
+        serde_json::from_slice::<Value>(&output.stdout).unwrap()["name"],
+        "issue-44-create-from-url"
+    );
+    assert!(!agent_args.exists());
+
+    // The default agent applies to pasted issues only, not ordinary additions.
     let output = fixture
         .command()
         .args([
@@ -6268,6 +6291,11 @@ fn issue_lookup_errors_never_create_a_workspace() {
         assert_eq!(fixture.ok(&["list"]), serde_json::json!([]));
     }
     for (args, diagnostic) in [
+        (
+            vec!["add", "--issue", "https://github.com/team/other/issues/4"],
+            "shoal repo add",
+        ),
+        (vec!["add", "--issue", "4"], "missing argument"),
         (
             vec!["issue", "https://github.com/team/project/issues/4"],
             "no agent selected",

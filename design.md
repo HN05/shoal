@@ -178,11 +178,11 @@ CLI instructions or a first-message prefix for Happy Codex; desktop handoffs car
 Codex's default mode is a config value read at launch.
 `add --issue` resolves issue numbers/URLs using the remote and existing gh/fj
 login, derives a portable name, and renders issue context from a plain-text
-template for CLI agents; forge
-lookup stays in the CLI with no Shoal credentials or forge configuration. `issue
-<url>` is the same flow from a pasted link: the URL selects the registered
-repository by remote identity (never cloning), and the configured `default_agent`
-stands in for `--agent`, so a paste yields a workspace with an agent working.
+template for CLI agents; forge lookup stays in the CLI with no Shoal credentials
+or forge configuration. An issue URL may select the single registered repository
+by remote identity when `add` omits it, never cloning. `issue <url>` invokes that
+same path with the configured `default_agent` standing in for `--agent`, so a
+paste yields a workspace with an agent working.
 `add --agent` launches only after creation, setup, and the post-setup hook
 succeed, or after an explicitly ignored setup failure, and retains the
 workspace whatever the agent does. Desktop handoffs (Codex app, T3) provide no

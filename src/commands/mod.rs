@@ -104,7 +104,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
                     git_profile,
                 },
                 issue,
-                agent,
+                workspaces::AgentLaunch::Explicit(agent),
                 args,
             )
             .await
@@ -114,7 +114,22 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             agent,
             base,
             args,
-        } => issues::run(&ctx, url, agent, base, args).await,
+        } => {
+            workspaces::add(
+                &ctx,
+                None,
+                workspaces::Creation {
+                    name: None,
+                    branch: None,
+                    base,
+                    git_profile: None,
+                },
+                Some(url),
+                workspaces::AgentLaunch::IssueDefault(agent),
+                args,
+            )
+            .await
+        }
         Command::Setup { workspace } => workspaces::setup(&ctx, workspace).await,
         Command::List => workspaces::list(&ctx).await,
         Command::Status { workspace } => workspaces::status(&ctx, workspace).await,

@@ -75,17 +75,18 @@ state directory; Linux uses `journalctl --user -u shoal.service`. Native Linux s
 
 ## Workspaces
 
-`add --issue <number-or-url>` reads the registered repository's issue using `gh`
+`add [<repository>] --issue <number-or-url>` reads the registered repository's issue using `gh`
 for github.com or `fj` for Forgejo remotes. Install the appropriate CLI and use
 its existing login (`gh auth login` or `fj auth login`); no Shoal forge config or
-tokens are needed. URLs must match the repository. Lookup failures create nothing.
+tokens are needed. The repository may be omitted for a URL, which selects the
+single registered repository with the same remote; unregistered or duplicated
+remotes fail. Explicit repositories must match the URL. Lookup failures create nothing.
 Names default to `issue-<number>-<title-slug>`; `--name` overrides this. With
 `--agent`, `issue-template.md` supplies the initial prompt, substituting
 `{number}`, `{title}`, `{url}` and `{body}` once as literal text (forward agent
 options after `--`, not a second prompt). Codex uses CLI mode for issue
 prompts even when its default is `app`. Ordinary setup, hooks and collision rules apply.
-`shoal issue <url>` is the pasted form: it picks the registered repository whose
-origin matches the URL (unregistered or duplicated remotes fail) and starts
+`shoal issue <url>` is the pasted form of the same path and starts
 `--agent`, else `default_agent` from the repository or global config (`codex`, `claude`,
 `happy-claude`, `happy-codex`), else an interactive picker.
 

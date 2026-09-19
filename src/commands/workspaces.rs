@@ -107,12 +107,17 @@ pub(super) struct Creation {
     pub git_profile: Option<String>,
 }
 
+pub(super) enum AgentLaunch {
+    Explicit(Option<Agent>),
+    IssueDefault(Option<Agent>),
+}
+
 pub(super) async fn add(
     ctx: &Context,
     repository: Option<String>,
     creation: Creation,
     issue: Option<String>,
-    agent: Option<Agent>,
+    agent: AgentLaunch,
     mut args: Vec<OsString>,
 ) -> Result<i32> {
     let Creation {
@@ -123,11 +128,40 @@ pub(super) async fn add(
     } = creation;
     let repository = match repository {
         Some(repo) => ui::repository_selector(repo)?,
-        None => ui::pick(
-            ctx,
-            "Repository> ",
-            ui::repository_choices(client::repositories(&ctx.paths).await?).await?,
-        )?,
+        None => {
+            let repos = client::repositories(&ctx.paths).await?;
+            match issue.as_deref() {
+                Some(url) if url.starts_with("https://") || url.starts_with("http://") => {
+                    super::issues::repository_for(&repos, url).await?.id.clone()
+                }
+                _ => ui::pick(ctx, "Repository> ", ui::repository_choices(repos).await?)?,
+            }
+        }
+    };
+    let agent = match agent {
+        AgentLaunch::Explicit(agent) => agent,
+        AgentLaunch::IssueDefault(agent) => {
+            let settings =
+                client::settings(&ctx.paths, ConfigTarget::Repository(repository.clone())).await?;
+            match agent.or(settings.default_agent) {
+                Some(agent) => Some(agent),
+                None if ctx.interactive() => Some(
+                    ui::pick(
+                        ctx,
+                        "Agent> ",
+                        Agent::possible_values()
+                            .into_iter()
+                            .map(|value| (value.clone(), value))
+                            .collect(),
+                    )?
+                    .parse()
+                    .map_err(|()| anyhow::anyhow!("unknown agent"))?,
+                ),
+                None => bail!(
+                    "no agent selected; pass --agent or set default_agent in the repository or global config"
+                ),
+            }
+        }
     };
     // Validate launch configuration before creating a workspace.
     let codex_mode = match agent {
