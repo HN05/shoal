@@ -89,6 +89,12 @@ workspaces reopen without setup, hooks, or refresh; other checkouts block creati
 Existing worktrees use the local default as their diff base, or the opening commit
 if unavailable or on that same branch. Never adopt main checkouts.
 
+Named Git profiles live in global config; repository or global `git_profile`
+selects one for newly created worktrees. Apply it before setup using Git's
+per-worktree config, preserving other worktrees' settings. Enable the shared
+`worktreeConfig` extension only when the existing repository layout supports it;
+profiles cannot change layout or extensions. Reopening keeps existing settings.
+
 Repository config may name `setup_cmd`, `post_setup_cmd`, and `pre_remove_cmd`:
 single executable paths resolved against the worktree, run directly without shell
 parsing or PATH lookup, with the worktree as working directory. Setup runs through
@@ -211,7 +217,7 @@ rendering substitutes known fields once without evaluating their contents.
 Before a workspace exists, the registered checkout's file stands in for the
 worktree's. Repository config is read per request, so changes need no restart
 and leave existing leases alone. Repository config cannot expand machine
-policy: `root_dir`, simulator limits and profiles, and global resource
+policy: `root_dir`, simulator limits and profiles, Git profile definitions, and global resource
 definitions stay global; global pools span repositories, repository pools span
 that repository's worktrees.
 

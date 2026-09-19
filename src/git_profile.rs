@@ -1,11 +1,11 @@
 //! Named Git identities, written into a worktree's own Git config so the
 //! shared repository config and the other worktrees keep theirs.
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, path::Path};
 
 use anyhow::{Context, Result, bail, ensure};
 use serde::Deserialize;
 
-use crate::validate;
+use crate::{git, validate};
 
 /// Global `[git]`: the profiles a repository config or `add --git-profile`
 /// may select by name.
@@ -123,6 +123,46 @@ fn config_key(path: &[String]) -> Result<String> {
     Ok(key)
 }
 
+/// Write `profile` into the worktree's own config. The first profile in a
+/// repository enables Git's `worktreeConfig` extension in the shared config;
+/// a shared `core.worktree` or `core.bare = true` would then break the main
+/// checkout unless migrated to its config.worktree, so those are refused.
+pub async fn apply(worktree: &Path, profile: &Profile) -> Result<()> {
+    let settings = profile.settings()?;
+    let shared = |key: &'static str, kind: &'static str| async move {
+        git::run_isolated(
+            worktree,
+            &[
+                "config",
+                "--local",
+                &format!("--type={kind}"),
+                "--default",
+                if kind == "bool" { "false" } else { "" },
+                "--get",
+                key,
+            ],
+        )
+        .await
+        .map(|value| value.trim().to_owned())
+    };
+    if shared("extensions.worktreeConfig", "bool").await? != "true" {
+        ensure!(
+            shared("core.worktree", "path").await?.is_empty()
+                && shared("core.bare", "bool").await? != "true",
+            "the repository's shared Git config sets core.worktree or core.bare; move them to the main worktree's config.worktree before using git profiles"
+        );
+        git::run_isolated(
+            worktree,
+            &["config", "--local", "extensions.worktreeConfig", "true"],
+        )
+        .await?;
+    }
+    for (key, value) in &settings {
+        git::run_isolated(worktree, &["config", "--worktree", key, value]).await?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -163,6 +203,48 @@ mod tests {
             "user.email = \"a\\u0000b\"",
         ] {
             assert!(profile(text).is_err(), "{text}");
+        }
+    }
+
+    #[tokio::test]
+    async fn incompatible_shared_layout_is_not_changed() {
+        let root = tempfile::tempdir().unwrap();
+        git::run(root.path(), &["init", "-b", "main"])
+            .await
+            .unwrap();
+        let profile: Profile = toml::from_str("user.email = 'work@example.invalid'").unwrap();
+        for (key, value) in [("core.bare", "true"), ("core.worktree", "/elsewhere")] {
+            git::run(root.path(), &["config", "--local", key, value])
+                .await
+                .unwrap();
+            assert!(
+                apply(root.path(), &profile)
+                    .await
+                    .unwrap_err()
+                    .to_string()
+                    .contains("shared Git config")
+            );
+            assert_eq!(
+                git::run(
+                    root.path(),
+                    &[
+                        "config",
+                        "--local",
+                        "--default",
+                        "false",
+                        "--get",
+                        "extensions.worktreeConfig"
+                    ]
+                )
+                .await
+                .unwrap()
+                .trim(),
+                "false"
+            );
+            assert!(!root.path().join(".git/config.worktree").exists());
+            git::run(root.path(), &["config", "--local", "--unset", key])
+                .await
+                .unwrap();
         }
     }
 

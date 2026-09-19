@@ -32,6 +32,8 @@ removal, check it against the rule those files state before judging it.
 - Prompt templates follow config precedence: saved repository values, worktree,
   global config. Setup preserves existing template files; substitutions never
   evaluate or recursively expand inserted text.
+- Git profiles apply only to newly created worktrees, before setup, using
+  per-worktree config; other worktrees keep their settings.
 - External tools are invoked with argument arrays, never shell strings.
   Terminal I/O stays in the execution wrapper; the daemon owns state. CLI
   styles belong at presentation sites; machine output and stored values stay plain.

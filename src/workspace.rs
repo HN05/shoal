@@ -340,7 +340,17 @@ impl Manager {
         )
         .await?;
         self.record_worktree_identity(workspace).await?;
-        Ok(self.workspace_config(workspace).await?.setup_cmd.is_some())
+        let config = self.workspace_config(workspace).await?;
+        if let Some(name) = config
+            .git_profile
+            .as_ref()
+            .or(self.config.git_profile.as_ref())
+        {
+            crate::git_profile::apply(&workspace.path, self.config.git.profile(name)?)
+                .await
+                .with_context(|| format!("apply git profile {name}"))?;
+        }
+        Ok(config.setup_cmd.is_some())
     }
 
     pub(crate) async fn set_state(

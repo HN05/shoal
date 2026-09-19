@@ -250,6 +250,32 @@ lose trailing slashes so worktrees get a remote forge CLIs recognize. Names from
 `--name` or `repo rename` are unique and work as selectors alongside IDs, paths,
 and source URLs; inferred names work when unambiguous.
 
+### Git profiles
+
+Define named Git settings in the global config, then restart the daemon:
+
+```toml
+[git.profiles.work]
+user.name = "Your Name"
+user.email = "you@company.example"
+user.signingKey = "your-key"
+commit.gpgsign = true
+```
+
+Set `git_profile = "work"` at the top level of repository or global config.
+Selection follows saved repository config, the new worktree's config file,
+then global config. With no selection, Git settings stay unchanged. Profile
+values may be strings, booleans or integers; omitted keys retain Git's normal
+inheritance. Unknown profiles fail creation and leave a failed workspace for
+inspection or removal.
+
+Settings go into Git's per-worktree config before setup runs; reopening or
+preparing a workspace does not reapply them. Shoal enables the shared
+`extensions.worktreeConfig` setting when necessary, refusing repositories with
+shared `core.worktree` or `core.bare = true` until those settings are migrated
+to the main checkout's `config.worktree`. Profiles cannot set repository layout
+or extensions. Other worktrees retain their settings.
+
 ### Store repository config outside Git
 
 ```sh

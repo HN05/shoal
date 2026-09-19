@@ -7276,3 +7276,129 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
         0
     );
 }
+
+#[test]
+fn git_profiles_layer_and_isolate_worktree_settings_before_setup() {
+    let fixture = Fixture::with_config(Some(
+        "git_profile = 'personal'\n[git.profiles.personal]\nuser.email = 'personal@example.invalid'\n\
+         [git.profiles.work]\nuser.name = 'Work Name'\nuser.email = 'work@example.invalid'\ncommit.gpgsign = false\n",
+    ));
+    git(
+        &fixture.repo,
+        &["config", "user.email", "main@example.invalid"],
+    );
+    let personal = fixture.add("personal");
+    let personal_path = Path::new(personal["path"].as_str().unwrap());
+    assert_eq!(
+        git(personal_path, &["config", "user.email"]).trim(),
+        "personal@example.invalid"
+    );
+    fs::write(
+        fixture.repo.join("setup.sh"),
+        "#!/bin/sh\ngit config user.email > setup-email\n",
+    )
+    .unwrap();
+    fs::set_permissions(
+        fixture.repo.join("setup.sh"),
+        fs::Permissions::from_mode(0o755),
+    )
+    .unwrap();
+    commit_resource_config(
+        &fixture.repo,
+        "git_profile = 'work'\nsetup_cmd = 'setup.sh'\n",
+    );
+    let work = fixture.add("work");
+    let work_path = Path::new(work["path"].as_str().unwrap());
+    assert_eq!(
+        fs::read_to_string(work_path.join("setup-email"))
+            .unwrap()
+            .trim(),
+        "work@example.invalid"
+    );
+    assert_eq!(
+        git(work_path, &["config", "--worktree", "commit.gpgsign"]).trim(),
+        "false"
+    );
+    assert_eq!(
+        git(&fixture.repo, &["config", "user.email"]).trim(),
+        "main@example.invalid"
+    );
+    assert_eq!(
+        git(personal_path, &["config", "user.email"]).trim(),
+        "personal@example.invalid"
+    );
+    let saved = fixture.root.path().join("local.toml");
+    fs::write(&saved, "git_profile = 'personal'\n").unwrap();
+    fixture.ok(&[
+        "repo",
+        "config",
+        fixture.repo.to_str().unwrap(),
+        "--file",
+        saved.to_str().unwrap(),
+    ]);
+    git(&fixture.repo, &["branch", "existing"]);
+    let existing = fixture.ok(&[
+        "add",
+        fixture.repo.to_str().unwrap(),
+        "--branch",
+        "existing",
+    ]);
+    let existing_path = Path::new(existing["path"].as_str().unwrap());
+    assert_eq!(
+        git(existing_path, &["config", "user.email"]).trim(),
+        "personal@example.invalid"
+    );
+    // Reopening neither reapplies a changed profile nor runs setup again.
+    git(
+        existing_path,
+        &[
+            "config",
+            "--worktree",
+            "user.email",
+            "edited@example.invalid",
+        ],
+    );
+    fixture.ok(&[
+        "add",
+        fixture.repo.to_str().unwrap(),
+        "--branch",
+        "existing",
+    ]);
+    assert_eq!(
+        git(existing_path, &["config", "user.email"]).trim(),
+        "edited@example.invalid"
+    );
+}
+
+#[test]
+fn git_profiles_leave_unselected_repositories_alone_and_retain_failed_workspaces() {
+    let fixture = Fixture::new();
+    let plain = fixture.add("plain");
+    assert!(
+        !Path::new(plain["git_dir"].as_str().unwrap())
+            .join("config.worktree")
+            .exists()
+    );
+    assert_eq!(
+        git(
+            &fixture.repo,
+            &[
+                "config",
+                "--default",
+                "false",
+                "--get",
+                "extensions.worktreeConfig"
+            ]
+        )
+        .trim(),
+        "false"
+    );
+    commit_resource_config(&fixture.repo, "git_profile = 'missing'\n");
+    let output = fixture.run(&["add", fixture.repo.to_str().unwrap(), "--name", "unknown"]);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("git profile missing is not defined"));
+    let failed = fixture.ok(&["inspect", "unknown"]);
+    assert_eq!(failed["workspace"]["state"], "failed");
+    assert!(Path::new(failed["workspace"]["path"].as_str().unwrap()).is_dir());
+    fixture.ok(&["rm", "unknown", "--yes"]);
+}
