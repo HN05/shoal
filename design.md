@@ -124,10 +124,12 @@ preserving ahead branches and refusing dirty or diverged checkouts and failed fe
 unless `--local`, they lack an upstream, or a managed workspace has them checked out;
 remote discovery must be unambiguous, and conflicts are left for ordinary Git. `land`,
 the local substitute for a pull request, merges the workspace branch into the default
-branch, first refreshing its upstream under the same safety rules, without pushing
-and aborts a merge that does not apply cleanly, leaving conflicts to a `merge` of
-the default branch into the workspace. Landing holds the repository Git gate for
-the tracked execution; the daemon validates and refreshes, and the CLI worker merges.
+branch, first refreshing a configured upstream while preserving an ahead branch and
+refusing divergence or fetch failure, without pushing. The default branch cannot be
+held by a managed workspace, and any checkout of it must be clean. Land aborts a merge
+that does not apply cleanly, leaving conflicts to a `merge` of the default branch into
+the workspace. Landing holds the repository Git gate for the tracked execution; the
+daemon validates and refreshes, and the CLI worker merges.
 After cancellation, the wrapper rolls back incomplete merges after stopping the
 process group, preserving completed merges and reporting unsafe recovery failures.
 Fetches use private temporary refs; merges use the tracked wrapper and cooperative

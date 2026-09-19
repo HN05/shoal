@@ -119,7 +119,7 @@ pub enum Command {
         local: bool,
     },
     /// Watch, acknowledge, or clear PR cleanup for a workspace.
-    #[command(arg_required_else_help = true)]
+    #[command(arg_required_else_help = true, args_conflicts_with_subcommands = true)]
     Pr {
         /// GitHub or Forgejo PR URL to watch.
         url: Option<String>,
@@ -616,4 +616,57 @@ pub enum ResourceCommand {
         #[arg(long, conflicts_with = "workspace")]
         all: bool,
     },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pr_workspace_names_can_match_action_names() {
+        for workspace_name in ["merged", "clear"] {
+            let cli = Cli::try_parse_from([
+                "shoal",
+                "pr",
+                "https://example.test/owner/repo/pulls/1",
+                workspace_name,
+            ])
+            .unwrap();
+            let Some(Command::Pr {
+                url,
+                workspace,
+                command,
+            }) = cli.command
+            else {
+                panic!("wrong command")
+            };
+            assert_eq!(
+                url.as_deref(),
+                Some("https://example.test/owner/repo/pulls/1")
+            );
+            assert_eq!(workspace.as_deref(), Some(workspace_name));
+            assert!(command.is_none());
+        }
+    }
+
+    #[test]
+    fn pr_actions_remain_subcommands() {
+        let merged = Cli::try_parse_from(["shoal", "pr", "merged", "workspace"]).unwrap();
+        assert!(matches!(
+            merged.command,
+            Some(Command::Pr {
+                command: Some(PrCommand::Merged { workspace }),
+                ..
+            }) if workspace.as_deref() == Some("workspace")
+        ));
+
+        let clear = Cli::try_parse_from(["shoal", "pr", "clear", "workspace"]).unwrap();
+        assert!(matches!(
+            clear.command,
+            Some(Command::Pr {
+                command: Some(PrCommand::Clear { workspace }),
+                ..
+            }) if workspace.as_deref() == Some("workspace")
+        ));
+    }
 }

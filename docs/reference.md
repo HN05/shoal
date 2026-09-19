@@ -396,10 +396,11 @@ output. Nothing is stashed, reset, or pushed.
 `shoal land [workspace]` merges the workspace's recorded branch into the
 repository default branch for repositories without a remote or pull-request
 flow; nothing is pushed. When the default branch has an upstream, Shoal fetches
-and fast-forwards it first, preserving an ahead branch and refusing divergence,
-a dirty checkout, a failed fetch, or a managed workspace checkout. The workspace
-must be clean and on its recorded branch. Git fast-forwards or creates a merge
-commit in the default checkout. A merge that does not apply cleanly is
+and fast-forwards it first, preserving an ahead branch and refusing divergence or
+a failed fetch. The default branch cannot be held by a managed workspace, and any
+other checkout of it must be clean. The workspace must be clean and on its recorded
+branch. Git fast-forwards or creates a merge commit in the default checkout. A
+merge that does not apply cleanly is
 aborted: run `shoal merge <default>` in the workspace, resolve there, and land
 again. Scoped agents cannot land. Landed commits count as pushed for `rm` and
 automatic cleanup.

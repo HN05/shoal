@@ -45,9 +45,9 @@ workspaces; the human or console session does.
 
 After opening a PR, run `shoal pr <url>`. Shoal checks with `gh`/`fj` and, when
 merged, stops tracked agents and removes the clean workspace. Without those
-tools/login, confirm the merge yourself and call `shoal merged` as your last
+tools/login, confirm the merge yourself and call `shoal pr merged` as your last
 command. Never acknowledge unmerged work. `[pr_cleanup] enabled = false` disables
-this; `shoal pr --clear` cancels a watch. Dirty or newer work is retained.
+this; `shoal pr clear` cancels a watch. Dirty or newer work is retained.
 
 ## Merge branches into your own branch
 
@@ -71,8 +71,8 @@ switch branches, stash edits, or reset your work. Conflicts return nonzero with
 finish with `git add` and `git commit`, or cancel with `git merge --abort`.
 Other failures may return an error before a merge starts; inspect the error.
 A local source such as `main` is fast-forwarded from its upstream before the
-merge, so `shoal merge main` alone brings in current upstream work; there is no
-separate pull for agents. Pass `--local` to merge the local branch as it is.
+merge, so `shoal merge main` alone brings in current upstream work. Pass
+`--local` to merge the local branch as it is.
 Agents cannot land either: when the repository has no remote, the human runs
 `shoal land` to merge your branch into the default branch.
 
