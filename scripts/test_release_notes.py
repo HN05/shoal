@@ -49,7 +49,10 @@ class ReleaseNotesTests(unittest.TestCase):
                     pull(3, later)],
                 "/pulls?state=closed&limit=50&page=2": [
                     pull(4, target, body="Refs #12"), pull(5, target, merged=False),
-                    pull(6, target, base={"ref": "other"}), pull(7, unrelated)],
+                    pull(6, target, base={"ref": "other"}), pull(7, unrelated),
+                    pull(8, target, head={"ref": "release/v0.2.0"}),
+                    pull(9, target, head={"ref": "refs/pull/9/head", "label": "release/v0.2.0"}),
+                    pull(10, target, head={"ref": "release/notes"})],
                 "/pulls?state=closed&limit=50&page=3": [],
                 "/issues/12": {"title": "Cleanup bug"},
                 "/issues/13": {"pull_request": {}},
@@ -72,8 +75,9 @@ class ReleaseNotesTests(unittest.TestCase):
                           " — Issues: [#12](https://forge.test/owner/repo/issues/12), "
                           "[#14](https://forge.test/owner/repo/issues/14)", notes)
             self.assertIn("- PR 4", notes)
-            for number in (1, 3, 5, 6, 7):
-                self.assertNotIn(f"- PR {number}", notes)
+            self.assertIn("- PR 10", notes)
+            for number in (1, 3, 5, 6, 7, 8, 9):
+                self.assertNotIn(f"- PR {number} (", notes)
             self.assertEqual(sum(call.args == ("/issues/12",) for call in api.call_args_list), 1)
             self.assertIn("/compare/v0.1.0...v0.2.0", notes)
             responses["/releases?limit=50&page=1"][1]["draft"] = False

@@ -5,6 +5,14 @@ from urllib.error import HTTPError
 STABLE_TAG = re.compile(r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
 
 
+def is_release_pr(pr):
+    head = pr.get("head", {})
+    branch = head.get("ref", "")
+    if branch == f"refs/pull/{pr['number']}/head":
+        branch = head.get("label", "")
+    return branch.startswith("release/") and STABLE_TAG.fullmatch(branch[8:]) is not None
+
+
 def generate(tag, git, get, url):
     def pages(path):
         page = 1
@@ -38,7 +46,8 @@ def generate(tag, git, get, url):
     commits = set(git("rev-list", f"{previous}..{target}").splitlines()) if previous else history
     pulls = sorted((pr for pr in pages("/pulls?state=closed")
                     if pr.get("merged") and pr["base"]["ref"] == "main"
-                    and pr.get("merge_commit_sha") in commits), key=lambda pr: pr["number"])
+                    and pr.get("merge_commit_sha") in commits and not is_release_pr(pr)),
+                   key=lambda pr: pr["number"])
     lines = [f"Shoal {tag[1:]}.", "", "Install or upgrade through the "
              "[HN05 Homebrew tap](https://github.com/HN05/homebrew-tap), or download a "
              "prebuilt Linux or macOS binary below.", "",
