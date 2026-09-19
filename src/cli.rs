@@ -303,9 +303,7 @@ impl Command {
     }
 }
 
-#[derive(
-    Debug, Default, Clone, Copy, PartialEq, Eq, ValueEnum, serde::Deserialize, serde::Serialize,
-)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum CodexMode {
     #[default]
