@@ -22,6 +22,26 @@ pub struct ConfigLayers {
     pub saved_repository_config: RepoConfig,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ConfigLayer {
+    BuiltInDefault,
+    GlobalConfig,
+    WorktreeFile,
+    SavedRepositoryConfig,
+}
+
+impl std::fmt::Display for ConfigLayer {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::BuiltInDefault => "built-in default",
+            Self::GlobalConfig => "global config",
+            Self::WorktreeFile => "worktree file",
+            Self::SavedRepositoryConfig => "saved repository config",
+        })
+    }
+}
+
 impl ConfigLayers {
     pub fn resolve(self) -> RepoConfig {
         self.saved_repository_config.over(self.worktree_file)

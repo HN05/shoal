@@ -16,6 +16,7 @@ use crate::{
     model::Workspace,
     paths::Paths,
     protocol::{ConfigTarget, Method},
+    repo_config::ConfigLayer,
     ui::{self, Fallback},
 };
 
@@ -31,7 +32,7 @@ pub struct CommandLayers {
 pub struct CommandDefinition {
     pub name: String,
     pub argv: Vec<String>,
-    pub layer: CommandLayer,
+    pub layer: ConfigLayer,
     pub bare_name: BareName,
 }
 
@@ -40,26 +41,6 @@ pub struct CommandDefinition {
 pub enum BareName {
     Shorthand,
     BuiltIn,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum CommandLayer {
-    BuiltInDefault,
-    GlobalConfig,
-    WorktreeFile,
-    SavedRepositoryConfig,
-}
-
-impl std::fmt::Display for CommandLayer {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter.write_str(match self {
-            Self::BuiltInDefault => "built-in default",
-            Self::GlobalConfig => "global config",
-            Self::WorktreeFile => "worktree file",
-            Self::SavedRepositoryConfig => "saved repository config",
-        })
-    }
 }
 
 pub fn defaults() -> Commands {
@@ -103,15 +84,15 @@ pub fn validate(commands: &Commands) -> Result<()> {
 
 pub async fn list(ctx: &Context) -> Result<i32> {
     let global = Config::load(&ctx.paths)?;
-    let mut definitions: BTreeMap<String, (Vec<String>, CommandLayer)> = defaults()
+    let mut definitions: BTreeMap<String, (Vec<String>, ConfigLayer)> = defaults()
         .into_iter()
-        .map(|(name, argv)| (name, (argv, CommandLayer::BuiltInDefault)))
+        .map(|(name, argv)| (name, (argv, ConfigLayer::BuiltInDefault)))
         .collect();
     definitions.extend(
         global
             .commands
             .into_iter()
-            .map(|(name, argv)| (name, (argv, CommandLayer::GlobalConfig))),
+            .map(|(name, argv)| (name, (argv, ConfigLayer::GlobalConfig))),
     );
 
     if client::status(&ctx.paths).await?.is_some() {
@@ -137,13 +118,13 @@ pub async fn list(ctx: &Context) -> Result<i32> {
                 layers
                     .worktree_file
                     .into_iter()
-                    .map(|(name, argv)| (name, (argv, CommandLayer::WorktreeFile))),
+                    .map(|(name, argv)| (name, (argv, ConfigLayer::WorktreeFile))),
             );
             definitions.extend(
                 layers
                     .saved_repository_config
                     .into_iter()
-                    .map(|(name, argv)| (name, (argv, CommandLayer::SavedRepositoryConfig))),
+                    .map(|(name, argv)| (name, (argv, ConfigLayer::SavedRepositoryConfig))),
             );
         }
     }

@@ -641,10 +641,11 @@ stopped, use `--repair --acknowledge-stopped`; visible live processes still bloc
 PR watches and merge acknowledgements are own-workspace scope exceptions.
 Commands launched through `exec`, `claude`, `codex --cli`, and `happy` carry a scope
 token that confines them to their own worktree: `status`, inspect, execute, `merge`,
-`diff`, `setup`, and resources. They cannot `land`, reach other worktrees, remove workspaces,
-read notifications, or administer Shoal itself (repositories, the daemon service,
-the machine configuration); nested commands keep the scope. Scope is cooperative
-and does not restrict direct filesystem or Git operations.
+`diff`, `setup`, and resources. They may read effective configuration for their own
+workspace, but cannot change configuration. They cannot `land`, reach other worktrees,
+remove workspaces, read notifications, or administer repositories or the daemon
+service; nested commands keep the scope. Scope is cooperative and does not restrict
+direct filesystem or Git operations.
 
 ## Simulators (macOS)
 
