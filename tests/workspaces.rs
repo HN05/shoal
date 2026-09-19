@@ -7572,3 +7572,41 @@ fn configured_commands_preserve_arguments_scope_and_exit_status() {
     ]);
     assert_eq!(fixture.run(&["check", "custom"]).stdout, b"saved");
 }
+
+#[test]
+fn cli_agent_command_defaults_can_be_replaced_at_launch() {
+    let fixture = Fixture::new();
+    let workspace = fixture.ok(&[
+        "add",
+        fixture.repo.to_str().unwrap(),
+        "--name",
+        "configured-agent",
+    ]);
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    fs::write(path.join(".shoal.toml"),
+        "[commands]\nclaude = ['printf', '%s\\n', '{workspace}', '{args}', '{branch}', '{path}']\ncodex = ['printf', '%s\\n', '{args}', 'custom default']\n"
+    ).unwrap();
+    let output = fixture.run(&["claude", "configured-agent", "--", "{path}", "two words"]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        format!(
+            "configured-agent\n{{path}}\ntwo words\nconfigured-agent\n{}\n",
+            path.display()
+        )
+    );
+    let output = fixture.run(&[
+        "codex",
+        "cli",
+        "configured-agent",
+        "--",
+        "--model",
+        "example",
+    ]);
+    assert!(output.status.success());
+    assert_eq!(output.stdout, b"--model\nexample\ncustom default\n");
+}

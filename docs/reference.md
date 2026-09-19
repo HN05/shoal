@@ -144,20 +144,30 @@ check = ["cargo", "test"]
 Run `shoal check [workspace] -- <extra arguments>`; omit the workspace to use
 the current one or the picker. Put Shoal's global flags before the command name.
 Each name resolves from saved repository config, worktree config, then global
-config; a higher layer replaces the whole argument array. Names cannot shadow
-built-in Shoal commands. The executable is resolved through PATH (or use a path),
+config and built-in defaults; a higher layer replaces the whole argument array.
+Built-in commands without configurable argument arrays reserve their names.
+The executable is resolved through PATH (or use a path),
 with the workspace as working directory. Arguments are passed literally without
 shell expansion. Execution preserves terminal I/O, scope, reserved-port variables,
 and exit status just like `exec`.
 
+`{workspace}`, `{branch}`, and `{path}` expand once inside configured arguments.
+A standalone `{args}` inserts the forwarded arguments there; otherwise they are
+appended. Forwarded arguments are never expanded. The CLI agent defaults are:
+
+```toml
+[commands]
+claude = ["claude", "{args}", "--remote-control", "{workspace}"]
+codex = ["codex", "{args}", "--sandbox", "danger-full-access", "--ask-for-approval=never"]
+```
+
+Override their `[commands]` entries to change the executable or flags; prompt
+templates, trust setup, and agent exit notifications still apply.
 Claude and Codex shortcuts, including Happy, trust the workspace directory before
 launch, creating the agent's user config if needed and preserving other settings.
 Claude uses `~/.claude.json` (or `$CLAUDE_CONFIG_DIR/.claude.json`); Codex CLI
 and app use `~/.codex/config.toml` (or `$CODEX_HOME/config.toml`). A trust update
-failure warns and still launches the agent. `shoal claude` appends
-`--remote-control <workspace-name>`; `shoal codex cli` appends
-`--sandbox danger-full-access --ask-for-approval=never`. Use
-`shoal exec ... -- claude` or `-- codex` for a custom invocation.
+failure warns and still launches the agent.
 
 `shoal codex` without `cli`/`app` uses `codex.default_mode` from the workspace's
 repository config or `~/.config/shoal/config.toml` (or

@@ -580,14 +580,12 @@ pub(super) async fn claude(
     let instructions =
         templates::instructions(settings.agent_template.as_deref(), &inspection.workspace);
     trust_claude(ctx, &inspection.workspace.path);
-    let command = std::iter::once("claude".into())
-        .chain(templates::instruction_args(
-            HappyAgent::Claude,
-            instructions,
-        ))
+    let args = templates::instruction_args(HappyAgent::Claude, instructions)
+        .into_iter()
         .chain(args)
-        .chain(["--remote-control".into(), inspection.workspace.name.into()])
         .collect();
+    let command =
+        crate::named_commands::expand(&settings.commands, "claude", &inspection.workspace, args)?;
     execution::run(
         &ctx.paths,
         inspection.workspace.id,
@@ -642,15 +640,12 @@ pub(super) async fn codex(
     trust_codex(ctx, &inspection.workspace.path);
     let instructions =
         templates::instructions(settings.agent_template.as_deref(), &inspection.workspace);
-    let command = std::iter::once("codex".into())
-        .chain(templates::instruction_args(HappyAgent::Codex, instructions))
+    let args = templates::instruction_args(HappyAgent::Codex, instructions)
+        .into_iter()
         .chain(args)
-        .chain([
-            "--sandbox".into(),
-            "danger-full-access".into(),
-            "--ask-for-approval=never".into(),
-        ])
         .collect();
+    let command =
+        crate::named_commands::expand(&settings.commands, "codex", &inspection.workspace, args)?;
     execution::run(&ctx.paths, workspace, command, Some("codex".into())).await
 }
 

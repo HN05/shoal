@@ -17,7 +17,8 @@ Caller-specific integration stays outside the core: Superlogical owns terminals;
 Macraft owns VM/container provisioning. Shoal does not provision tools, manage
 browsers, schedule agent tasks, or store conversations. Agent shortcuts
 (`claude`, `codex`, `happy`, `t3`) are thin launchers around the generic `exec`
-path; Agent-specific flags and setup are to become configurable defaults.
+path; CLI launcher argument arrays are configurable defaults; session and desktop
+adapters retain their tool-specific setup.
 
 ## Architecture
 
@@ -156,11 +157,13 @@ with a 500 ms timeout for live targets, honoring state directory and scope and
 never starting a daemon or picker. Targets sort before flags, including in fzf-tab.
 
 Named `[commands]` are executable/argument arrays resolved per name from saved
-repository config, worktree config, then global config at launch. They run through
-the tracked wrapper with workspace scope, terminal I/O, and literal extra arguments;
-built-in command names are reserved.
+repository config, worktree config, then global config and built-in defaults at
+launch. They run through the tracked wrapper with workspace scope, terminal I/O,
+and literal extra arguments. Built-in commands without configurable argument
+arrays reserve their names. Workspace fields expand once within individual
+arguments; a standalone `{args}` places the caller's literal arguments.
 
-Agent shortcuts use the execution wrapper: Codex CLI gets full access without
+Agent shortcuts use the execution wrapper: by default Codex CLI gets full access without
 approvals, Claude gets remote control named after the workspace. Both trust the
 workspace in their user config before launch, creating the file if needed; Happy
 launches and Codex app handoffs do so too. General agent templates become native
@@ -276,8 +279,6 @@ commands Shoal cannot verify stopped.
 Implementation order: CLI/daemon, workspaces, ports, simulators, lifecycle
 polish, then filesystem restrictions. Open items:
 
-- **Agent launchers:** move agent-specific flags and setup into configurable
-  defaults so `claude`, `codex`, and `t3` stop being special cases.
 - **External sessions:** a generic attach/hold contract before promising
   tracking or cleanup for GUI agents.
 - **Storage policy:** ownership and retention for run data outside the

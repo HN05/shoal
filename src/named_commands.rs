@@ -1,5 +1,8 @@
 //! Configured shortcuts use the same workspace selection and wrapper as `exec`.
-use std::{collections::BTreeMap, ffi::OsString};
+use std::{
+    collections::BTreeMap,
+    ffi::{OsStr, OsString},
+};
 
 use anyhow::{Context as _, Result, ensure};
 use clap::{CommandFactory, Parser};
@@ -8,19 +11,44 @@ use crate::{
     client,
     context::Context,
     execution,
+    model::Workspace,
     protocol::ConfigTarget,
     ui::{self, Fallback},
 };
 
 pub type Commands = BTreeMap<String, Vec<String>>;
 
+pub fn defaults() -> Commands {
+    [
+        (
+            "claude",
+            vec!["claude", "{args}", "--remote-control", "{workspace}"],
+        ),
+        (
+            "codex",
+            vec![
+                "codex",
+                "{args}",
+                "--sandbox",
+                "danger-full-access",
+                "--ask-for-approval=never",
+            ],
+        ),
+    ]
+    .into_iter()
+    .map(|(name, argv)| (name.into(), argv.into_iter().map(String::from).collect()))
+    .collect()
+}
+
 pub fn validate(commands: &Commands) -> Result<()> {
     let cli = crate::cli::Cli::command();
     for (name, argv) in commands {
         crate::validate::lowercase_name("command", name)?;
         ensure!(
-            !cli.get_subcommands()
-                .any(|command| command.get_name() == name)
+            (matches!(name.as_str(), "claude" | "codex")
+                || !cli
+                    .get_subcommands()
+                    .any(|command| command.get_name() == name))
                 && name != "help",
             "command {name:?} conflicts with a built-in Shoal command"
         );
@@ -29,6 +57,10 @@ pub fn validate(commands: &Commands) -> Result<()> {
                 .is_some_and(|program| !program.trim().is_empty())
                 && argv.iter().all(|arg| !arg.contains('\0')),
             "command {name:?} needs a nonempty executable and arguments without NUL bytes"
+        );
+        ensure!(
+            argv[0] != "{args}" && argv.iter().filter(|arg| *arg == "{args}").count() <= 1,
+            "command {name:?} may contain {{args}} once, after its executable"
         );
     }
     Ok(())
@@ -65,11 +97,55 @@ pub async fn run(
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let settings = client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.clone())).await?;
-    let argv = settings.commands.get(name).with_context(|| {
+    let inspection = client::inspect(&ctx.paths, workspace.clone()).await?;
+    let command = expand(&settings.commands, name, &inspection.workspace, args)?;
+    execution::run(&ctx.paths, workspace, command, None).await
+}
+
+pub fn expand(
+    commands: &Commands,
+    name: &str,
+    workspace: &Workspace,
+    args: Vec<OsString>,
+) -> Result<Vec<OsString>> {
+    let argv = commands.get(name).with_context(|| {
         format!("unknown command {name:?}; define it in [commands] in Shoal config")
     })?;
-    let command = argv.iter().map(OsString::from).chain(args).collect();
-    execution::run(&ctx.paths, workspace, command, None).await
+    let fields = [
+        ("{workspace}", OsStr::new(&workspace.name)),
+        ("{branch}", OsStr::new(&workspace.branch)),
+        ("{path}", workspace.path.as_os_str()),
+    ];
+    let mut command = Vec::new();
+    let mut args = Some(args);
+    for arg in argv {
+        if arg == "{args}" {
+            command.extend(args.take().unwrap_or_default());
+        } else {
+            command.push(render(arg, &fields));
+        }
+    }
+    command.extend(args.unwrap_or_default());
+    Ok(command)
+}
+
+/// Substitute once, preserving non-UTF-8 paths and literal inserted values.
+fn render(template: &str, fields: &[(&str, &OsStr)]) -> OsString {
+    let mut output = OsString::new();
+    let mut rest = template;
+    while let Some(start) = rest.find('{') {
+        output.push(&rest[..start]);
+        rest = &rest[start..];
+        if let Some((key, value)) = fields.iter().find(|(key, _)| rest.starts_with(key)) {
+            output.push(value);
+            rest = &rest[key.len()..];
+        } else {
+            output.push("{");
+            rest = &rest[1..];
+        }
+    }
+    output.push(rest);
+    output
 }
 
 #[cfg(test)]
@@ -92,6 +168,8 @@ mod tests {
     fn invalid_commands_are_rejected() {
         for config in [
             "[commands]\nreview = []",
+            "[commands]\nreview = ['{args}']",
+            "[commands]\nreview = ['tool', '{args}', '{args}']",
             "[commands]\nreview = ['']",
             "[commands]\nreview = ['   ']",
             "[commands]\nreview = ['tool', \"\\u0000\"]",

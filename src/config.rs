@@ -497,7 +497,8 @@ impl Config {
             end: repo.ports.end.unwrap_or(self.ports.end),
         };
         ports.validate()?;
-        let mut commands = self.commands.clone();
+        let mut commands = crate::named_commands::defaults();
+        commands.extend(self.commands.clone());
         commands.extend(repo.commands.clone());
         Ok(Effective {
             commands,
