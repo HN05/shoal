@@ -467,7 +467,7 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
     fs::write(path.join("tracked"), "changed\nagain\n").unwrap();
     fs::write(path.join("added"), "new\n").unwrap();
     git(path, &["add", "added"]);
-    fixture.ok(&["port", "reserve", "web", "summary"]);
+    fixture.ok(&["port", "acquire", "web", "summary"]);
     fixture.ok(&[
         "resource", "acquire", "devices", "summary", "--name", "tests",
     ]);
@@ -580,7 +580,7 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
 fn status_keeps_shared_state_when_the_worktree_is_missing() {
     let fixture = Fixture::with_config(Some("[auto_cleanup]\nenabled=false\n"));
     let workspace = fixture.add("missing-status");
-    fixture.ok(&["port", "reserve", "web", "missing-status"]);
+    fixture.ok(&["port", "acquire", "web", "missing-status"]);
     fs::remove_dir_all(workspace["path"].as_str().unwrap()).unwrap();
 
     let status = fixture.ok(&["status", "missing-status"]);
