@@ -14,6 +14,7 @@ mod execution_processes;
 mod existing_branch;
 mod forge;
 mod git;
+mod git_profile;
 mod happy;
 mod hooks;
 mod merge;

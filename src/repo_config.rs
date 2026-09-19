@@ -27,6 +27,7 @@ pub enum ConflictPolicy {
 pub struct RepoConfig {
     pub issue_template: Option<String>,
     pub agent_template: Option<String>,
+    pub git_profile: Option<String>,
     /// Agent `shoal issue` starts when `--agent` is omitted.
     pub default_agent: Option<Agent>,
     pub codex: Codex,
@@ -94,6 +95,9 @@ pub fn load(workspace_dir: &Path) -> Result<RepoConfig> {
 
 pub fn parse(text: &str) -> Result<RepoConfig> {
     let config: RepoConfig = toml::from_str(text)?;
+    if let Some(name) = &config.git_profile {
+        crate::validate::name("git profile", name)?;
+    }
     for (key, command) in [
         ("setup_cmd", &config.setup_cmd),
         ("post_setup_cmd", &config.post_setup_cmd),
@@ -142,6 +146,7 @@ impl RepoConfig {
         Self {
             issue_template: self.issue_template.or(base.issue_template),
             agent_template: self.agent_template.or(base.agent_template),
+            git_profile: self.git_profile.or(base.git_profile),
             default_agent: self.default_agent.or(base.default_agent),
             codex: Codex {
                 default_mode: self.codex.default_mode.or(base.codex.default_mode),

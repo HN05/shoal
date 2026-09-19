@@ -5,7 +5,7 @@
 # are examples, not defaults: uncomment a whole block and adapt it. A repository's
 # .shoal.toml (or the config saved with `shoal repo config`) holds its named
 # ports, setup and hook commands and resource pools, and may set any value below
-# for that repository except root_dir, the simulator limits and profiles, and
+# for that repository except root_dir, the simulator limits and profiles, Git profile definitions, and
 # the shared resources.
 
 # Parent of every repository's workspaces and URL clones.
@@ -19,6 +19,15 @@ root_dir = "~/shoal"
 # agent-template.md. Inline text takes precedence over the corresponding file.
 # issue_template = "Work on issue #{number}: {title}\n{url}\n\n{body}"
 # agent_template = "Follow repository instructions in {workspace} at {path}."
+
+# Git identity for new worktrees (no default); may also be set per repository.
+# git_profile = "work"
+
+# Named Git settings; omitted keys keep their normal Git values.
+# [git.profiles.work]
+# user.name = "Your Name"
+# user.email = "you@example.com"
+# commit.gpgsign = false
 
 [codex]
 # `shoal codex` without cli/app: "cli" or "app".

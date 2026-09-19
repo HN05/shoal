@@ -22,6 +22,8 @@ pub struct Effective {
 pub struct Config {
     pub issue_template: Option<String>,
     pub agent_template: Option<String>,
+    pub git: crate::git_profile::Git,
+    pub git_profile: Option<String>,
     pub root_dir: Option<PathBuf>,
     /// Former name of `root_dir`; still accepted so existing configs load.
     pub repositories_dir: Option<PathBuf>,
@@ -476,6 +478,10 @@ impl Config {
         validate_idle_minutes(config.auto_cleanup.idle_minutes)?;
         config.ports.validate()?;
         config.simulators.validate()?;
+        config.git.validate()?;
+        if let Some(name) = &config.git_profile {
+            config.git.profile(name)?;
+        }
         crate::resources::definitions(&config.resources, &config.resource_pools)?;
         Ok(config)
     }
