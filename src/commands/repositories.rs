@@ -74,8 +74,9 @@ pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
         RepoCommand::List => {
             let repos = client::repositories(&ctx.paths).await?;
             ctx.show(&repos, |repos| {
+                let palette = Palette::stdout(ctx.json);
                 for repo in repos {
-                    println!("{}", ui::repository_label(repo, Palette::stdout(ctx.json)));
+                    println!("{}", ui::repository_label(repo, palette));
                 }
             })?;
         }

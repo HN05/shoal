@@ -386,11 +386,9 @@ async fn ignore_setup_failure(ctx: &Context, workspace: &Workspace) -> Result<()
 pub(super) async fn list(ctx: &Context) -> Result<i32> {
     let workspaces = client::workspaces(&ctx.paths).await?;
     ctx.show(&workspaces, |workspaces| {
+        let palette = Palette::stdout(ctx.json);
         for workspace in workspaces {
-            println!(
-                "{}",
-                ui::workspace_label(workspace, Palette::stdout(ctx.json))
-            );
+            println!("{}", ui::workspace_label(workspace, palette));
         }
     })?;
     // A pointer for humans; agents cannot read notifications and JSON stays clean.

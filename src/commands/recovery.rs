@@ -24,8 +24,9 @@ pub(super) async fn run(
     );
     let unresolved = reports.iter().any(|r| !r.issues.is_empty());
     ctx.show(&reports, |reports| {
+        let palette = Palette::stdout(ctx.json);
         for report in reports {
-            render(report, Palette::stdout(ctx.json));
+            render(report, palette);
         }
         if reports.is_empty() {
             println!("No workspaces to reconcile");

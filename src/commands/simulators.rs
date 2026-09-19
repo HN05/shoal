@@ -30,12 +30,13 @@ pub(super) async fn run(ctx: &Context, command: SimCommand) -> Result<i32> {
             let workspace = ui::select_workspace_filter(ctx, workspace, all).await?;
             let sims = request!(&ctx.paths, Method::SimList { workspace }, Simulators);
             ctx.show(&sims, |sims| {
+                let palette = Palette::stdout(ctx.json);
                 for sim in sims {
                     println!(
                         "{}  {}  {}  {}  {}",
                         sim.udid.as_deref().unwrap_or("pending"),
                         sim.lease_name.as_deref().unwrap_or("idle"),
-                        Palette::stdout(ctx.json).simulator_state(sim.state),
+                        palette.simulator_state(sim.state),
                         sim.device,
                         sim.runtime
                     );

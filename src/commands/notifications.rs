@@ -23,8 +23,9 @@ pub(super) async fn run(ctx: &Context, all: bool, follow: bool, limit: u32) -> R
     };
     let notifications = request!(&ctx.paths, method, Notifications);
     ctx.show(&notifications, |notifications| {
+        let palette = Palette::stdout(ctx.json);
         for notification in notifications {
-            println!("{}", render(notification, Palette::stdout(ctx.json)));
+            println!("{}", render(notification, palette));
         }
         if notifications.is_empty() {
             println!("No {}notifications", if all { "" } else { "new " });
@@ -62,6 +63,7 @@ async fn follow_stream(ctx: &Context) -> Result<i32> {
         Body::Error { code, message } => bail!("{code}: {message}"),
         _ => bail!("unexpected daemon response"),
     }
+    let palette = Palette::stdout(ctx.json);
     let raise = !ctx.json && std::io::stdout().is_terminal();
     loop {
         let response: Response = protocol::read(&mut stream)
@@ -70,7 +72,7 @@ async fn follow_stream(ctx: &Context) -> Result<i32> {
         match response.body {
             Body::Notification(notification) => {
                 ctx.show(&notification, |notification| {
-                    println!("{}", render(notification, Palette::stdout(ctx.json)));
+                    println!("{}", render(notification, palette));
                 })?;
                 if raise {
                     let mut stdout = std::io::stdout().lock();

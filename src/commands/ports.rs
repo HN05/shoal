@@ -43,13 +43,14 @@ pub(super) async fn run(ctx: &Context, command: PortCommand) -> Result<i32> {
                 client::workspaces(&ctx.paths).await?
             };
             ctx.show(&ports, |ports| {
+                let palette = Palette::stdout(ctx.json);
                 for port in ports {
                     let owner = workspaces
                         .iter()
                         .find(|w| w.id == port.workspace_id)
                         .map(|w| w.name.as_str())
                         .unwrap_or(&port.workspace_id);
-                    println!("{owner}/{}", describe(port, Palette::stdout(ctx.json)));
+                    println!("{owner}/{}", describe(port, palette));
                 }
             })?;
             Ok(0)

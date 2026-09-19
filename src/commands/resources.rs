@@ -94,12 +94,9 @@ pub(super) async fn run(ctx: &Context, command: ResourceCommand) -> Result<i32> 
                 ResourceLeases
             );
             ctx.show(&leases, |leases| {
+                let palette = Palette::stdout(ctx.json);
                 for lease in leases {
-                    println!(
-                        "{}  {}",
-                        lease.workspace_id,
-                        describe_short(lease, Palette::stdout(ctx.json))
-                    );
+                    println!("{}  {}", lease.workspace_id, describe_short(lease, palette));
                 }
                 if leases.is_empty() {
                     println!("No resource leases");

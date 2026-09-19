@@ -324,12 +324,13 @@ pub async fn workspace_picker(ctx: &Context) -> Result<String> {
 }
 
 fn pick_workspace(ctx: &Context, workspaces: Vec<Workspace>) -> Result<String> {
+    let palette = Palette::stderr(ctx.json);
     pick(
         ctx,
         "Workspace> ",
         workspaces
             .into_iter()
-            .map(|w| (w.id.clone(), workspace_label(&w, Palette::stderr(ctx.json))))
+            .map(|w| (w.id.clone(), workspace_label(&w, palette)))
             .collect(),
     )
 }
