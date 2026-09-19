@@ -589,8 +589,9 @@ destination; `--json` returns the path and never changes directory.
 
 The same shell integration enables Bash and Zsh completion (initializing Zsh's
 completion system if needed). Each Tab asks the installed binary for
-subcommands, flags, fixed values, and paths without a daemon; with one running
-it also suggests repositories, workspaces, pools, members, lease names, ports,
+subcommands (including global configured commands), flags, fixed values, and
+paths without a daemon; with one running it also suggests repository-configured
+commands, repositories, workspaces, pools, members, lease names, ports,
 and simulator leases for the current or named workspace, honoring `--state-dir`
 and scope with a 500 ms timeout, never starting a daemon or picker. Targets sort
 before flags, also in fzf-tab. `shoal completions <shell>` prints scripts for

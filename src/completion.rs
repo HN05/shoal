@@ -1,15 +1,22 @@
 //! Completion runs before the normal CLI: read-only, scoped, and time bounded.
-use std::{ffi::OsStr, path::PathBuf, sync::Arc, time::Duration};
+use std::{
+    ffi::{OsStr, OsString},
+    path::PathBuf,
+    sync::Arc,
+    time::Duration,
+};
 
 use anyhow::{Context as _, Result};
 use clap::{Command, CommandFactory};
 use clap_complete::engine::{ArgValueCompleter, CompletionCandidate};
 
 use crate::{
-    client, env,
+    client,
+    config::Config,
+    env,
     model::Workspace,
     paths::Paths,
-    protocol::{Body, Method},
+    protocol::{Body, ConfigTarget, Method},
 };
 
 /// What was already typed on the command line when completion was requested.
@@ -18,6 +25,7 @@ struct Typed {
     state: Option<PathBuf>,
     workspace: Option<String>,
     pool: Option<String>,
+    custom: Option<String>,
 }
 
 /// Live values an argument can be completed with.
@@ -34,7 +42,7 @@ enum Target {
 }
 
 pub fn command() -> Command {
-    let command = crate::cli::Cli::command();
+    let mut command = crate::cli::Cli::command();
     let words: Vec<_> = std::env::args_os()
         .skip_while(|s| s != "--")
         .skip(1)
@@ -44,7 +52,7 @@ pub fn command() -> Command {
         if let Ok(matches) = command
             .clone()
             .ignore_errors(true)
-            .try_get_matches_from(words)
+            .try_get_matches_from(words.clone())
         {
             typed.state = matches
                 .try_get_one::<PathBuf>("state_dir")
@@ -52,12 +60,41 @@ pub fn command() -> Command {
                 .flatten()
                 .cloned();
             let mut leaf = &matches;
-            while let Some((_, child)) = leaf.subcommand() {
+            while let Some((name, child)) = leaf.subcommand() {
+                if child
+                    .try_get_many::<OsString>("")
+                    .ok()
+                    .flatten()
+                    .is_some_and(|args| args.len() > 0)
+                {
+                    typed.custom = Some(name.to_owned());
+                }
                 leaf = child;
             }
-            typed.workspace = value(leaf, "workspace");
+            typed.workspace = value(leaf, "workspace").or_else(|| {
+                leaf.try_get_many::<OsString>("")
+                    .ok()
+                    .flatten()
+                    .and_then(|mut args| args.next())
+                    .filter(|arg| !arg.to_string_lossy().starts_with('-'))
+                    .and_then(|arg| arg.to_str().map(str::to_owned))
+            });
             typed.pool = value(leaf, "pool");
         }
+    }
+    for name in typed.command_names() {
+        if command
+            .get_subcommands()
+            .any(|subcommand| subcommand.get_name() == name)
+        {
+            continue;
+        }
+        command = command.subcommand(
+            Command::new(name)
+                .about("Configured workspace command")
+                .arg(clap::Arg::new("workspace"))
+                .arg(clap::Arg::new("args").last(true).num_args(0..)),
+        );
     }
     decorate(command, "", Arc::new(typed))
 }
@@ -97,6 +134,52 @@ fn decorate(command: Command, parent: &str, typed: Arc<Typed>) -> Command {
 }
 
 impl Typed {
+    fn command_names(&self) -> Vec<String> {
+        let state = self
+            .state
+            .clone()
+            .or_else(|| std::env::var_os(env::STATE_DIR).map(PathBuf::from));
+        let Ok(paths) = Paths::new(state) else {
+            return vec![];
+        };
+        let mut commands = Config::load(&paths)
+            .map(|config| config.commands)
+            .unwrap_or_default();
+        if let Ok(runtime) = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+        {
+            let layer = runtime.block_on(async {
+                tokio::time::timeout(Duration::from_millis(500), async {
+                    let workspaces = client::workspaces(&paths).await?;
+                    let workspace = self
+                        .workspace(&workspaces)
+                        .or_else(|| {
+                            std::env::current_dir()
+                                .ok()
+                                .and_then(|cwd| Workspace::innermost(&workspaces, &cwd))
+                        })
+                        .context("no current workspace")?;
+                    client::call(
+                        &paths,
+                        Method::LayeredConfig {
+                            target: ConfigTarget::Workspace(workspace.id.clone()),
+                        },
+                    )
+                    .await
+                })
+                .await
+            });
+            if let Ok(Ok(Body::LayeredConfig(layer))) = layer {
+                commands.extend(layer.commands);
+            }
+        }
+        if let Some(name) = &self.custom {
+            commands.entry(name.clone()).or_default();
+        }
+        commands.into_keys().collect()
+    }
+
     fn complete(&self, target: Target, current: &OsStr) -> Vec<CompletionCandidate> {
         let Some(current) = current.to_str() else {
             return vec![];

@@ -86,8 +86,15 @@ fn shell_init_registers_completions_for_bash_and_zsh() {
 #[test]
 fn dynamic_completion_covers_nested_commands_flags_and_paths_without_daemon() {
     let home = tempfile::tempdir().unwrap();
+    fs::create_dir_all(home.path().join(".config/shoal")).unwrap();
+    fs::write(
+        home.path().join(".config/shoal/config.toml"),
+        "[commands]\nreview = ['tuicr']\n",
+    )
+    .unwrap();
     for (words, expected) in [
         (vec!["shoal", "repo", "r"], "rm"),
+        (vec!["shoal", "rev"], "review"),
         (vec!["shoal", "config", "i"], "install"),
         (vec!["shoal", "config", "install", "d"], "default"),
         (vec!["shoal", "repo", "c"], "config"),

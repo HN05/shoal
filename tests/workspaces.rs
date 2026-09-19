@@ -411,6 +411,10 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
             .all(|(i, _)| i > target)
     );
     let cwd = Path::new(first["path"].as_str().unwrap());
+    fs::write(cwd.join(".shoal.toml"), "[commands]\nreview = ['tuicr']\n").unwrap();
+    assert!(complete(&["rev"], cwd).contains(&"review".into()));
+    assert!(complete(&["review", "fi"], cwd).contains(&"first".into()));
+    assert!(complete(&["review", "fi"], fixture.root.path()).contains(&"first".into()));
     assert!(complete(&["port", "release", "w"], cwd).contains(&"web".into()));
     assert!(complete(&["resource", "acquire", "d"], cwd).contains(&"devices".into()));
     assert!(

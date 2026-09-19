@@ -5,7 +5,11 @@ use clap::{Parser, Subcommand, ValueEnum};
 use crate::happy::HappyAgent;
 
 #[derive(Debug, Parser)]
-#[command(version, about)]
+#[command(
+    version,
+    about,
+    after_help = "Configured shortcuts: shoal <name> [workspace] -- [args] (define names in [commands])."
+)]
 pub struct Cli {
     /// Override Shoal's state directory (also isolates the daemon).
     #[arg(long, global = true, env = crate::env::STATE_DIR)]
