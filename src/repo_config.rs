@@ -14,6 +14,20 @@ pub struct LocalConfig {
     pub toml: Option<String>,
 }
 
+/// The repository-owned configuration layers before they are resolved. Keeping
+/// them separate lets callers explain where an effective value came from.
+#[derive(Debug, Default, Deserialize, Serialize)]
+pub struct ConfigLayers {
+    pub worktree_file: RepoConfig,
+    pub saved_repository_config: RepoConfig,
+}
+
+impl ConfigLayers {
+    pub fn resolve(self) -> RepoConfig {
+        self.saved_repository_config.over(self.worktree_file)
+    }
+}
+
 #[derive(Debug, Default, Clone, Copy, Deserialize, Serialize, ValueEnum)]
 #[serde(rename_all = "snake_case")]
 pub enum ConflictPolicy {

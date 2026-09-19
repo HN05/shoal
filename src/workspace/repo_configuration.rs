@@ -5,7 +5,7 @@ use crate::{
     model::Workspace,
     named_commands::CommandLayers,
     protocol::ConfigTarget,
-    repo_config::{self, Hooks, LocalConfig, RepoConfig},
+    repo_config::{self, ConfigLayers, Hooks, LocalConfig, RepoConfig},
 };
 use anyhow::{Context, Result};
 use rusqlite::{OptionalExtension, params};
@@ -99,23 +99,53 @@ impl Manager {
     /// option over the worktree's own `.shoal.toml`.
     pub(crate) async fn workspace_config(&self, workspace: &Workspace) -> Result<RepoConfig> {
         let file = repo_config::load(&workspace.path)?;
-        self.layered_config(&workspace.repository_id, file).await
+        Ok(self
+            .config_layers(&workspace.repository_id, file)
+            .await?
+            .resolve())
     }
 
     /// The repository layer for `target`; a repository's file is the one in
     /// its registered checkout.
-    pub async fn layered_config_for(&self, target: ConfigTarget) -> Result<RepoConfig> {
-        match target {
+    pub async fn config_layers_for(&self, target: ConfigTarget) -> Result<ConfigLayers> {
+        let (repository_id, worktree_file) = match target {
             ConfigTarget::Workspace(selector) => {
                 let workspace = self.workspace(&selector).await?;
-                self.workspace_config(&workspace).await
+                let file = repo_config::load(&workspace.path)?;
+                (workspace.repository_id, file)
             }
             ConfigTarget::Repository(selector) => {
                 let repo = self.repository(&selector).await?;
                 let file = repo_config::load(&repo.path)?;
-                self.layered_config(&repo.id, file).await
+                (repo.id, file)
             }
-        }
+        };
+        self.config_layers(&repository_id, worktree_file).await
+    }
+
+    async fn config_layers(
+        &self,
+        repository_id: &str,
+        worktree_file: RepoConfig,
+    ) -> Result<ConfigLayers> {
+        let saved_repository_config = self
+            .local_repository_config(repository_id)
+            .await?
+            .map(|text| repo_config::parse(&text).context("parse local repository config"))
+            .transpose()?
+            .unwrap_or_default();
+        let layers = ConfigLayers {
+            worktree_file,
+            saved_repository_config,
+        };
+        // Each layer is valid alone; the layered names must agree too.
+        let mut resources = layers.worktree_file.resources.clone();
+        resources.extend(layers.saved_repository_config.resources.clone());
+        let mut resource_pools = layers.worktree_file.resource_pools.clone();
+        resource_pools.extend(layers.saved_repository_config.resource_pools.clone());
+        crate::resources::definitions(&resources, &resource_pools)
+            .context("layered repository config")?;
+        Ok(layers)
     }
 
     /// The workspace's settings after every layer: the saved config, the
@@ -123,19 +153,5 @@ impl Manager {
     pub(crate) async fn workspace_settings(&self, workspace: &Workspace) -> Result<Effective> {
         self.config
             .effective(&self.workspace_config(workspace).await?)
-    }
-
-    /// The saved local config of `repository_id`, if any, over `file`.
-    async fn layered_config(&self, repository_id: &str, file: RepoConfig) -> Result<RepoConfig> {
-        let Some(text) = self.local_repository_config(repository_id).await? else {
-            return Ok(file);
-        };
-        let config = repo_config::parse(&text)
-            .context("parse local repository config")?
-            .over(file);
-        // Each layer is valid alone; the layered names must agree too.
-        crate::resources::definitions(&config.resources, &config.resource_pools)
-            .context("layered repository config")?;
-        Ok(config)
     }
 }

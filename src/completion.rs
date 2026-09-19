@@ -180,8 +180,8 @@ impl Typed {
                 })
                 .await
             });
-            if let Ok(Ok(Body::LayeredConfig(layer))) = layer {
-                commands.extend(layer.commands);
+            if let Ok(Ok(Body::LayeredConfig(layers))) = layer {
+                commands.extend(layers.resolve().commands);
             }
         }
         if let Some(name) = &self.custom {

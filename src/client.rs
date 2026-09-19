@@ -82,8 +82,8 @@ pub async fn settings(
     paths: &Paths,
     target: crate::protocol::ConfigTarget,
 ) -> Result<crate::config::Effective> {
-    let layer = request!(paths, Method::LayeredConfig { target }, LayeredConfig);
-    let mut settings = crate::config::Config::load(paths)?.effective(&layer)?;
+    let layers = request!(paths, Method::LayeredConfig { target }, LayeredConfig);
+    let mut settings = crate::config::Config::load(paths)?.effective(&layers.resolve())?;
     if settings.issue_template.is_none() {
         let config = crate::config::Config::path(paths);
         settings.issue_template = crate::templates::read(
