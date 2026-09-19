@@ -832,6 +832,7 @@ fn trust_claude_workspace(config: &std::path::Path, workspace: &std::path::Path)
         .to_str()
         .context("workspace path is not UTF-8")?
         .to_owned();
+    let _lock = lock_trust_config(config)?;
     let text = match std::fs::read_to_string(config) {
         Ok(text) => text,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => "{}".into(),
@@ -870,7 +871,7 @@ fn trust_claude_workspace(config: &std::path::Path, workspace: &std::path::Path)
 }
 
 fn trust_codex_workspace(config: &std::path::Path, workspace: &std::path::Path) -> Result<bool> {
-    use std::{io::Write, os::unix::fs::OpenOptionsExt};
+    use std::io::Write;
     use toml_edit::{DocumentMut, Item, Table, value};
 
     let workspace = std::fs::canonicalize(workspace)?;
@@ -882,16 +883,7 @@ fn trust_codex_workspace(config: &std::path::Path, workspace: &std::path::Path) 
         Err(error) => return Err(error).with_context(|| format!("resolve {}", config.display())),
     };
     let directory = config.parent().context("Codex config has no parent")?;
-    std::fs::create_dir_all(directory)?;
-    // Serialize Shoal launches across repositories; atomic replacement alone
-    // would allow concurrent read/modify/write operations to lose trust entries.
-    let lock = std::fs::OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(false)
-        .mode(0o600)
-        .open(config.with_extension("toml.shoal-lock"))?;
-    fs2::FileExt::lock_exclusive(&lock)?;
+    let _lock = lock_trust_config(&config)?;
     let text = match std::fs::read_to_string(&config) {
         Ok(text) => text,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
@@ -924,6 +916,23 @@ fn trust_codex_workspace(config: &std::path::Path, workspace: &std::path::Path) 
         .persist(&config)
         .with_context(|| format!("replace {}", config.display()))?;
     Ok(true)
+}
+
+// This lock coordinates Shoal processes; the agents do not use it themselves.
+fn lock_trust_config(config: &std::path::Path) -> Result<std::fs::File> {
+    use std::os::unix::fs::OpenOptionsExt;
+
+    std::fs::create_dir_all(config.parent().context("agent config has no parent")?)?;
+    let mut path = config.as_os_str().to_os_string();
+    path.push(".shoal-lock");
+    let lock = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .mode(0o600)
+        .open(path)?;
+    fs2::FileExt::lock_exclusive(&lock)?;
+    Ok(lock)
 }
 
 pub(super) async fn pr(
@@ -987,31 +996,44 @@ mod tests {
     use std::fs;
 
     #[test]
-    fn concurrent_codex_trust_updates_keep_every_workspace() {
-        let dir = tempfile::tempdir().unwrap();
-        let config = dir.path().join("codex/config.toml");
-        let workspaces: Vec<_> = (0..8)
-            .map(|index| {
-                let path = dir.path().join(format!("workspace-{index}"));
-                fs::create_dir(&path).unwrap();
-                fs::canonicalize(path).unwrap()
-            })
-            .collect();
-        let barrier = std::sync::Barrier::new(workspaces.len());
-        std::thread::scope(|scope| {
-            for path in &workspaces {
-                scope.spawn(|| {
-                    barrier.wait();
-                    trust_codex_workspace(&config, path).unwrap();
-                });
+    fn concurrent_trust_updates_keep_every_workspace() {
+        for claude in [false, true] {
+            let dir = tempfile::tempdir().unwrap();
+            let config = dir.path().join("codex/config.toml");
+            let workspaces: Vec<_> = (0..8)
+                .map(|index| {
+                    let path = dir.path().join(format!("workspace-{index}"));
+                    fs::create_dir(&path).unwrap();
+                    fs::canonicalize(path).unwrap()
+                })
+                .collect();
+            let barrier = std::sync::Barrier::new(workspaces.len());
+            std::thread::scope(|scope| {
+                for path in &workspaces {
+                    scope.spawn(|| {
+                        barrier.wait();
+                        if claude {
+                            trust_claude_workspace(&config, path).unwrap();
+                        } else {
+                            trust_codex_workspace(&config, path).unwrap();
+                        }
+                    });
+                }
+            });
+            let text = fs::read_to_string(config).unwrap();
+            let root: Value = if claude {
+                serde_json::from_str(&text).unwrap()
+            } else {
+                serde_json::to_value(toml::from_str::<toml::Value>(&text).unwrap()).unwrap()
+            };
+            for path in workspaces {
+                let project = &root["projects"][path.to_str().unwrap()];
+                if claude {
+                    assert_eq!(project["hasTrustDialogAccepted"], true);
+                } else {
+                    assert_eq!(project["trust_level"], "trusted");
+                }
             }
-        });
-        let root: toml::Value = toml::from_str(&fs::read_to_string(config).unwrap()).unwrap();
-        for path in workspaces {
-            assert_eq!(
-                root["projects"][path.to_str().unwrap()]["trust_level"].as_str(),
-                Some("trusted")
-            );
         }
     }
 
