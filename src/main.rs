@@ -49,8 +49,6 @@ mod validate;
 mod workspace;
 mod worktrunk;
 
-use clap::Parser;
-use cli::Cli;
 use serde_json::json;
 
 fn main() {
@@ -62,7 +60,7 @@ fn main() {
 
 #[tokio::main]
 async fn run_cli() {
-    let cli = Cli::parse();
+    let cli = cli::parse();
     let json_output = cli.json;
     match commands::run(cli).await {
         Ok(code) => std::process::exit(code),

@@ -15,7 +15,6 @@ mod workspaces;
 use std::time::Duration;
 
 use anyhow::{Result, ensure};
-use clap::CommandFactory;
 use serde_json::json;
 use tokio::time::{Instant, sleep};
 
@@ -33,7 +32,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         return skill::run(command.as_ref(), cli.json);
     }
     if cli.command.is_none() && !Context::is_interactive(cli.json) {
-        Cli::command().print_help()?;
+        crate::cli::command().print_help()?;
         return Ok(0);
     }
     let ctx = Context::new(Paths::new(cli.state_dir)?, cli.json);

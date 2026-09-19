@@ -4,6 +4,108 @@ use clap::{Parser, Subcommand, ValueEnum};
 
 use crate::happy::HappyAgent;
 
+const HELP_SECTIONS: &[(&str, &[&str])] = &[
+    (
+        "Workspaces",
+        &[
+            "add", "issue", "prepare", "list", "cd", "inspect", "stop", "rm",
+        ],
+    ),
+    (
+        "Branches",
+        &["diff", "pull", "merge", "land", "pr", "merged"],
+    ),
+    ("Agents", &["exec", "claude", "codex", "happy", "t3"]),
+    (
+        "Resources",
+        &["port", "resource", "resources", "sim", "ports"],
+    ),
+    ("Recovery", &["notifications", "reconcile"]),
+    (
+        "Installation",
+        &[
+            "setup",
+            "daemon",
+            "config",
+            "shell",
+            "completions",
+            "skill",
+            "repo",
+            "help",
+        ],
+    ),
+];
+
+/// Build the CLI with its top-level commands grouped for help output.
+pub fn command() -> clap::Command {
+    let command = <Cli as clap::CommandFactory>::command();
+    let mut help_command = command.clone();
+    let help = help_command.render_help().to_string();
+    command.override_help(group_help_sections(&help))
+}
+
+pub fn parse() -> Cli {
+    let mut matches = command().get_matches();
+    <Cli as clap::FromArgMatches>::from_arg_matches_mut(&mut matches)
+        .unwrap_or_else(|error| error.exit())
+}
+
+fn group_help_sections(help: &str) -> String {
+    let commands_start = help
+        .find("Commands:\n")
+        .expect("clap help should contain commands");
+    let commands_end = help[commands_start..]
+        .find("\n\nOptions:\n")
+        .map(|offset| commands_start + offset)
+        .expect("clap help should contain options after commands");
+    let command_lines = &help[commands_start + "Commands:\n".len()..commands_end];
+
+    let mut entries: Vec<(&str, String)> = Vec::new();
+    for line in command_lines.lines() {
+        let starts_entry = line.starts_with("  ") && !line[2..].starts_with(' ');
+        if starts_entry {
+            let name = line.split_whitespace().next().unwrap_or_default();
+            entries.push((name, line.to_owned()));
+        } else if let Some((_, entry)) = entries.last_mut() {
+            entry.push('\n');
+            entry.push_str(line);
+        }
+    }
+
+    let mut grouped = String::new();
+    for (section, commands) in HELP_SECTIONS {
+        if !grouped.is_empty() {
+            grouped.push_str("\n\n");
+        }
+        grouped.push_str(section);
+        grouped.push_str(":\n");
+        for name in *commands {
+            let (_, entry) = entries
+                .iter()
+                .find(|(candidate, _)| candidate == name)
+                .unwrap_or_else(|| panic!("top-level help command {name:?} should exist"));
+            grouped.push_str(entry);
+            grouped.push('\n');
+        }
+        grouped.pop();
+    }
+
+    assert_eq!(
+        entries.len(),
+        HELP_SECTIONS
+            .iter()
+            .map(|(_, commands)| commands.len())
+            .sum::<usize>(),
+        "every visible top-level command should have a help section"
+    );
+
+    format!(
+        "{}{grouped}{}",
+        &help[..commands_start],
+        &help[commands_end..]
+    )
+}
+
 #[derive(Debug, Parser)]
 #[command(
     version,
