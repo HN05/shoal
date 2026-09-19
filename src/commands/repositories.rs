@@ -95,8 +95,11 @@ pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
                 &repo,
             )?;
         }
-        RepoCommand::Rm { repository, yes } => {
-            if !yes {
+        RepoCommand::Rm {
+            repository,
+            confirmation,
+        } => {
+            if !confirmation.yes {
                 ensure!(
                     ui::confirm(
                         ctx,

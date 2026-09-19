@@ -179,10 +179,19 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         Command::Stop { workspace } => workspaces::stop(&ctx, workspace).await,
         Command::Rm {
             workspace,
-            yes,
+            confirmation,
             keep_branch,
             delete_branch,
-        } => workspaces::remove(&ctx, workspace, yes, keep_branch, delete_branch).await,
+        } => {
+            workspaces::remove(
+                &ctx,
+                workspace,
+                confirmation.yes,
+                keep_branch,
+                delete_branch,
+            )
+            .await
+        }
         Command::Exec { workspace, command } => workspaces::exec(&ctx, workspace, command).await,
         Command::Claude { workspace, args } => workspaces::claude(&ctx, workspace, args).await,
         Command::Codex {

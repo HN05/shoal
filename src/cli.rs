@@ -1,6 +1,6 @@
 use std::{ffi::OsString, path::PathBuf};
 
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 
 use crate::happy::HappyAgent;
 
@@ -19,6 +19,13 @@ pub struct Cli {
     pub json: bool,
     #[command(subcommand)]
     pub command: Option<Command>,
+}
+
+#[derive(Debug, Default, Args)]
+pub struct ConfirmationArgs {
+    /// Confirm without prompting.
+    #[arg(short = 'y', long)]
+    pub yes: bool,
 }
 
 #[derive(Debug, Subcommand)]
@@ -201,12 +208,13 @@ pub enum Command {
     },
     /// Stop managed commands and verified survivors, preserving the workspace.
     Stop { workspace: Option<String> },
-    /// Remove a worktree and its redundant branch; choose what to keep if work differs.
+    /// Remove a worktree and its redundant branch.
+    ///
+    /// Differing or dirty work still needs a branch choice when confirmation is skipped.
     Rm {
         workspace: Option<String>,
-        /// Confirm removal without a prompt; differing/dirty work needs a branch choice.
-        #[arg(short = 'y', long)]
-        yes: bool,
+        #[command(flatten)]
+        confirmation: ConfirmationArgs,
         /// Remove the worktree but retain its branch, including when it contains work.
         #[arg(long, conflicts_with = "delete_branch")]
         keep_branch: bool,
@@ -477,12 +485,13 @@ pub enum RepoCommand {
         name: String,
     },
     /// Delete a repository checkout and all its Shoal workspaces and resources.
+    ///
+    /// Uncommitted and unpushed work is permanently lost.
     #[command(alias = "remove")]
     Rm {
         repository: String,
-        /// Confirm permanent deletion without prompting, including unpushed work.
-        #[arg(long)]
-        yes: bool,
+        #[command(flatten)]
+        confirmation: ConfirmationArgs,
     },
     List,
 }
@@ -633,6 +642,32 @@ pub enum ResourceCommand {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn removal_commands_share_confirmation_flags() {
+        for flag in ["-y", "--yes"] {
+            let workspace = Cli::try_parse_from(["shoal", "rm", "workspace", flag]).unwrap();
+            assert!(matches!(
+                workspace.command,
+                Some(Command::Rm {
+                    confirmation: ConfirmationArgs { yes: true },
+                    ..
+                })
+            ));
+
+            let repository =
+                Cli::try_parse_from(["shoal", "repo", "rm", "repository", flag]).unwrap();
+            assert!(matches!(
+                repository.command,
+                Some(Command::Repo {
+                    command: RepoCommand::Rm {
+                        confirmation: ConfirmationArgs { yes: true },
+                        ..
+                    }
+                })
+            ));
+        }
+    }
 
     #[test]
     fn codex_mode_flags_do_not_reserve_workspace_names() {

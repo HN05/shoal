@@ -3,7 +3,7 @@
 use anyhow::{Result, bail, ensure};
 
 use crate::{
-    cli::Command,
+    cli::{Command, ConfirmationArgs},
     client,
     context::Context,
     env,
@@ -66,7 +66,7 @@ pub(super) async fn choose(ctx: &Context) -> Result<Command> {
         "" => Command::Cd { workspace },
         "ctrl-d" => Command::Rm {
             workspace,
-            yes: false,
+            confirmation: ConfirmationArgs::default(),
             keep_branch: false,
             delete_branch: false,
         },

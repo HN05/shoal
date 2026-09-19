@@ -5057,7 +5057,7 @@ fn repository_removal_deletes_local_checkout_workspaces_and_leases_and_stops_com
         assert!(Instant::now() < deadline);
         thread::sleep(Duration::from_millis(20));
     }
-    let result = fixture.ok(&["repo", "rm", "doomed", "--yes"]);
+    let result = fixture.ok(&["repo", "rm", "doomed", "-y"]);
     assert_eq!(result["removed"], true);
     assert_eq!(result["repository_id"], repo["id"]);
     assert_eq!(result["workspaces_removed"], 2);
