@@ -150,6 +150,14 @@ pub struct SimulatorCatalog {
     pub policy: SimConfig,
 }
 
+/// Configured simulator capacity and profiles alongside current leases.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SimulatorOverview {
+    pub policy: SimConfig,
+    pub preferred: Vec<String>,
+    pub simulators: Vec<Simulator>,
+}
+
 pub enum Acquisition {
     Acquired(Box<Simulator>),
     Busy(String),
@@ -173,6 +181,22 @@ impl Manager {
                 .filter(|r| r.is_available)
                 .collect(),
             policy: self.config.simulators.clone(),
+        })
+    }
+
+    pub async fn simulator_overview(&self, selector: Option<&str>) -> Result<SimulatorOverview> {
+        let (owner, preferred) = match selector {
+            Some(selector) => {
+                let workspace = self.workspace(selector).await?;
+                let config = self.workspace_config(&workspace).await?;
+                (Some(workspace.id), config.simulators.preferred)
+            }
+            None => (None, Vec::new()),
+        };
+        Ok(SimulatorOverview {
+            policy: self.config.simulators.clone(),
+            preferred,
+            simulators: self.list_simulators(owner.as_deref()).await?,
         })
     }
 

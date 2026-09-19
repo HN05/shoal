@@ -199,6 +199,9 @@ pub enum Method {
     },
     // Simulators.
     SimCatalog,
+    SimOverview {
+        workspace: Option<String>,
+    },
     SimList {
         workspace: Option<String>,
     },
@@ -282,6 +285,7 @@ pub enum Body {
     Simulators(Vec<Simulator>),
     SimBusy { message: String },
     SimCatalog(SimulatorCatalog),
+    SimOverview(crate::simulators::SimulatorOverview),
     SimHistory(Vec<AuditEntry>),
 }
 

@@ -395,6 +395,9 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             Body::ResourceOverview(manager.resource_overview(&workspace).await?)
         }
         Method::SimCatalog => Body::SimCatalog(manager.simulator_catalog().await?),
+        Method::SimOverview { workspace } => {
+            Body::SimOverview(manager.simulator_overview(workspace.as_deref()).await?)
+        }
         Method::SimList { workspace } => {
             let owner = manager.workspace_filter(workspace.as_deref()).await?;
             Body::Simulators(manager.list_simulators(owner.as_deref()).await?)
