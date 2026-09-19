@@ -15,9 +15,10 @@ removal, check it against the rule those files state before judging it.
   without those checks is a blocker.
 - Scope: workspace commands carry a scope token and get own-worktree access
   only; workspace allocation/removal/recovery and shared repository/service
-  administration stay denied, while own-workspace setup, PR registration and
-  merge acknowledgements are allowed; notifications are read
-  by the unscoped user only and never fail the operation they record. PR cleanup defaults on,
+  administration stay denied, while own-workspace setup, PR registration,
+  merge acknowledgements and effective-configuration reads are allowed;
+  notifications are read by the unscoped user only and never fail the
+  operation they record. PR cleanup defaults on,
   stops tracked agents, and requires clean files and unchanged merged HEAD. This is
   cooperative, not a security boundary, so judge it as such.
 - Allocation is atomic and persisted before the external mutation (simctl,

@@ -4,18 +4,40 @@ use std::{fs, path::PathBuf, time::Duration};
 
 use crate::{paths::Paths, repo_config::RepoConfig};
 
+/// The global file's repository-overridable scalars as written, so an omitted
+/// one stays distinguishable from its built-in default. Unknown fields are
+/// the full parse's concern, so global-only settings never break this view.
 #[derive(Debug, Default, Deserialize)]
 #[serde(default)]
 struct RepositoryPresence {
-    codex: crate::repo_config::Codex,
-    auto_cleanup: crate::repo_config::AutoCleanup,
-    pr_cleanup: crate::repo_config::PrCleanup,
-    ports: RepositoryPortPresence,
+    codex: CodexPresence,
+    auto_cleanup: AutoCleanupPresence,
+    pr_cleanup: PrCleanupPresence,
+    ports: PortsPresence,
 }
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(default)]
-struct RepositoryPortPresence {
+struct CodexPresence {
+    default_mode: Option<crate::cli::CodexMode>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct AutoCleanupPresence {
+    enabled: Option<bool>,
+    idle_minutes: Option<u64>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct PrCleanupPresence {
+    enabled: Option<bool>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct PortsPresence {
     start: Option<u16>,
     end: Option<u16>,
 }
@@ -492,7 +514,8 @@ impl Config {
 
     /// Read the global config and project its repository-overridable values
     /// into a layer whose omitted scalar fields remain distinguishable from
-    /// built-in defaults.
+    /// built-in defaults. The file is parsed twice: once fully, once for
+    /// presence.
     pub fn load_with_repository_layer(paths: &Paths) -> Result<(Self, RepoConfig)> {
         let path = Self::path(paths);
         let config = Self::load(paths)?;
@@ -516,7 +539,9 @@ impl Config {
             )?),
             git_profile: config.git_profile.clone(),
             default_agent: config.default_agent,
-            codex: presence.codex,
+            codex: crate::repo_config::Codex {
+                default_mode: presence.codex.default_mode,
+            },
             ports: crate::repo_config::PortDefaults {
                 start: presence.ports.start,
                 end: presence.ports.end,
@@ -524,8 +549,13 @@ impl Config {
             },
             resources: config.resources.clone(),
             resource_pools: config.resource_pools.clone(),
-            auto_cleanup: presence.auto_cleanup,
-            pr_cleanup: presence.pr_cleanup,
+            auto_cleanup: crate::repo_config::AutoCleanup {
+                enabled: presence.auto_cleanup.enabled,
+                idle_minutes: presence.auto_cleanup.idle_minutes,
+            },
+            pr_cleanup: crate::repo_config::PrCleanup {
+                enabled: presence.pr_cleanup.enabled,
+            },
             ..Default::default()
         };
         Ok((config, repository_layer))

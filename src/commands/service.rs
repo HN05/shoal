@@ -5,7 +5,7 @@ use anyhow::{Context as _, Result, ensure};
 use serde_json::json;
 
 use crate::{
-    cli::{ConfigCommand, DaemonCommand},
+    cli::DaemonCommand,
     client,
     context::Context,
     daemon,
@@ -84,14 +84,14 @@ pub(super) async fn install(
     Ok(0)
 }
 
-pub(super) fn config(ctx: &Context, command: ConfigCommand) -> Result<i32> {
-    let (name, (config, backup)) = match command {
-        ConfigCommand::Show { .. } => unreachable!("config show is asynchronous"),
-        ConfigCommand::Reset => (
+/// Install the packaged config `name`, or the default one for `None`.
+pub(super) fn install_config(ctx: &Context, name: Option<String>) -> Result<i32> {
+    let (name, (config, backup)) = match name {
+        None => (
             "default".to_owned(),
             crate::config::Config::reset(&ctx.paths)?,
         ),
-        ConfigCommand::Install { name } => {
+        Some(name) => {
             let installed = crate::config::Config::install_named(&ctx.paths, &name)?;
             (name, installed)
         }
