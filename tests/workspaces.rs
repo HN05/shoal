@@ -1897,7 +1897,7 @@ fn agent_shortcuts_forward_arguments_without_starting_real_agents() {
         let mut command = fixture.command();
         command.arg(agent);
         if agent == "codex" {
-            command.arg("cli");
+            command.arg("--cli");
         }
         let output = command
             .args(["shortcut", "--", "--version", "hello with spaces"])
@@ -1990,7 +1990,7 @@ fn agent_templates_resolve_per_launch_and_reach_native_instruction_options() {
             let mut command = fixture.command();
             command.arg(agent);
             if agent == "codex" {
-                command.arg("cli");
+                command.arg("--cli");
             }
             let output = command
                 .args(["instructions", "--", "user prompt"])
@@ -7873,8 +7873,8 @@ fn cli_agent_command_defaults_can_be_replaced_at_launch() {
     );
     let output = fixture.run(&[
         "codex",
-        "cli",
         "configured-agent",
+        "--cli",
         "--",
         "--model",
         "example",
