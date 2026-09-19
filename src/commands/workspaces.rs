@@ -132,6 +132,13 @@ pub(super) async fn add(
         None => {
             let repos = client::repositories(&ctx.paths).await?;
             match issue.as_deref() {
+                Some(number)
+                    if issue_command
+                        && !number.is_empty()
+                        && number.bytes().all(|c| c.is_ascii_digit()) =>
+                {
+                    super::issues::repository_for_number(ctx, repos).await?
+                }
                 Some(url)
                     if issue_command
                         || url.starts_with("https://")

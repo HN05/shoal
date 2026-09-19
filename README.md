@@ -44,6 +44,8 @@ shoal add my-project --existing origin/feature/api --agent codex
 shoal add my-project --issue 34 --agent codex  # Issue number or URL; uses gh/fj
 shoal add --issue https://github.com/owner/repo/issues/34  # URL finds the repository
 shoal issue https://github.com/owner/repo/issues/34  # Paste an issue: finds the repository, starts the default agent
+shoal issue 34                             # Use the current repository, or pick one
+shoal issue 34 --repo my-project          # Select the repository explicitly
 ```
 
 Use `--agent claude` for Claude Code, or `--agent happy-claude`/`happy-codex` for

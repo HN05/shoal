@@ -5,7 +5,32 @@ use anyhow::{Context as _, Result, bail, ensure};
 use serde::Deserialize;
 use tokio::{process::Command, time::timeout};
 
-use crate::{forge::ForgeRepo, model::Repository, repository, validate::MAX_NAME_LEN};
+use crate::{
+    client, context::Context, forge::ForgeRepo, git, model::Repository, repository, ui,
+    validate::MAX_NAME_LEN,
+};
+
+pub(super) async fn repository_for_number(ctx: &Context, repos: Vec<Repository>) -> Result<String> {
+    let cwd = std::env::current_dir()?;
+    if let Ok(root) = git::run(&cwd, &["rev-parse", "--show-toplevel"]).await {
+        let root = std::fs::canonicalize(root.trim_end())?;
+        if let Some(repo) = repos.iter().find(|repo| repo.path == root) {
+            return Ok(repo.id.clone());
+        }
+        if let Some(workspace) = client::workspaces(&ctx.paths)
+            .await?
+            .iter()
+            .find(|workspace| workspace.path == root)
+        {
+            return Ok(workspace.repository_id.clone());
+        }
+    }
+    ensure!(
+        ctx.interactive(),
+        "no current registered repository; pass --repo <repository> or an issue URL"
+    );
+    ui::pick(ctx, "Repository> ", ui::repository_choices(repos).await?)
+}
 
 /// The registered repository whose origin the issue URL belongs to.
 pub(super) async fn repository_for<'a>(

@@ -33,6 +33,9 @@ removal, check it against the rule those files state before judging it.
 - Prompt templates follow config precedence: saved repository values, worktree,
   global config. `install` preserves existing template files; substitutions never
   evaluate or recursively expand inserted text.
+- Issue numbers use an explicit repository, the current registered checkout or
+  managed workspace, or an interactive picker. Issue URLs must match the selected
+  repository's remote; lookup failures create nothing.
 - Claude and Codex launches (including Happy and Codex app handoffs) persist
   workspace trust even when the user config is absent, preserving other settings.
 - Git profiles apply only to newly created worktrees, before setup, using

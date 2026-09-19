@@ -87,7 +87,10 @@ overrides this. With
 `{number}`, `{title}`, `{url}` and `{body}` once as literal text (forward agent
 options after `--`, not a second prompt). Codex uses CLI mode for issue
 prompts even when its default is `app`. Ordinary setup, hooks and collision rules apply.
-`shoal issue <url>` is the pasted form of the same path and starts
+`shoal issue <number-or-url> [--repo <repository>]` uses the same path. Numbers
+use the current registered checkout or managed workspace, falling back to the
+repository picker interactively; otherwise pass `--repo`. URLs select by remote
+unless `--repo` is explicit, in which case it must match. The command starts
 `--agent`, else `default_agent` from the repository or global config (`codex`, `claude`,
 `happy-claude`, `happy-codex`), else an interactive picker.
 

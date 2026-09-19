@@ -78,9 +78,13 @@ pub enum Command {
         #[arg(last = true, requires = "agent")]
         args: Vec<OsString>,
     },
-    /// Paste an issue URL: find its registered repository, create a workspace, and start an agent.
+    /// Create a workspace for an issue number or URL and start an agent.
     Issue {
-        url: String,
+        /// Forge issue number or URL.
+        issue: String,
+        /// Registered repository; defaults to the URL's repository or the current checkout/workspace.
+        #[arg(long = "repo")]
+        repository: Option<String>,
         /// Agent to start; defaults to `default_agent` in global config.
         #[arg(long, value_parser = AgentParser)]
         agent: Option<Agent>,

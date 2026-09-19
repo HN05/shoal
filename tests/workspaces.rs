@@ -389,6 +389,7 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
         vec!["repo", "config", "pr"],
         vec!["repo", "rename", "pr"],
         vec!["add", "pr"],
+        vec!["issue", "103", "--repo", "pr"],
     ] {
         assert!(
             complete(&args, fixture.root.path()).contains(&"project".into()),
@@ -6064,6 +6065,21 @@ printf '%s' '{"number":44,"title":"Literal {body}","body":"$(false)"}'
 #[test]
 fn issue_command_finds_the_repository_and_starts_the_default_agent() {
     let fixture = Fixture::with_config(Some("default_agent = 'claude'\n"));
+    let other = fixture.root.path().join("other");
+    git(
+        &fixture.repo,
+        &["clone", "-q", ".", other.to_str().unwrap()],
+    );
+    git(
+        &other,
+        &[
+            "remote",
+            "set-url",
+            "origin",
+            "git@github.com:team/other.git",
+        ],
+    );
+    fixture.ok(&["repo", "add", other.to_str().unwrap()]);
     git(
         &fixture.repo,
         &["remote", "add", "origin", "git@github.com:team/project.git"],
@@ -6094,6 +6110,9 @@ fn issue_command_finds_the_repository_and_starts_the_default_agent() {
         (41, None, "claude"),
         (42, Some("codex"), "codex"),
         (43, None, "codex"),
+        (45, None, "codex"),
+        (46, None, "codex"),
+        (47, None, "codex"),
     ] {
         if number == 43 {
             // The repository's checked-in default wins over the global one.
@@ -6124,14 +6143,31 @@ fn issue_command_finds_the_repository_and_starts_the_default_agent() {
         )
         .unwrap();
         let url = format!("https://github.com/team/project/issues/{number}");
-        let mut args = vec!["--json", "issue", &url, "--ref", "HEAD"];
+        let number_input = number.to_string();
+        let input = if number >= 45 { &number_input } else { &url };
+        let mut args = vec!["--json", "issue", input, "--ref", "HEAD"];
+        if number == 47 {
+            args.extend(["--repo", fixture.repo.to_str().unwrap()]);
+        }
         if let Some(agent) = agent {
             args.extend(["--agent", agent]);
         }
         args.extend(["--", "--model", "test-model"]);
+        let cwd = match number {
+            45 => fixture.repo.join("nested"),
+            46 => PathBuf::from(
+                fixture.ok(&["inspect", "issue-41-paste-an-issue"])["workspace"]["path"]
+                    .as_str()
+                    .unwrap(),
+            )
+            .join("nested"),
+            _ => other.clone(),
+        };
+        fs::create_dir_all(&cwd).unwrap();
         let output = fixture
             .command()
             .args(&args)
+            .current_dir(cwd)
             .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
             .env("ISSUE_RESPONSE", &response)
             .env("ISSUE_ARGS", &issue_args)
@@ -6185,7 +6221,7 @@ fn issue_command_finds_the_repository_and_starts_the_default_agent() {
     );
     assert!(!agent_args.exists());
 
-    // The default agent applies to pasted issues only, not ordinary additions.
+    // The default agent applies to the issue command, not ordinary additions.
     let output = fixture
         .command()
         .args([
@@ -6202,6 +6238,35 @@ fn issue_command_finds_the_repository_and_starts_the_default_agent() {
         .unwrap();
     assert!(output.status.success(), "{output:?}");
     assert!(!agent_args.exists());
+}
+
+#[test]
+fn issue_number_picks_a_repository_before_lookup_interactively() {
+    let fixture = Fixture::with_config(Some("default_agent = 'claude'\n"));
+    git(
+        &fixture.repo,
+        &["remote", "add", "origin", "git@github.com:team/project.git"],
+    );
+    let bin = fixture.root.path().join("bin");
+    fs::create_dir(&bin).unwrap();
+    for (tool, script) in [
+        ("fzf", "#!/bin/sh\nhead -n 1\n"),
+        (
+            "gh",
+            "#!/bin/sh\nprintf 'lookup in %s' \"$PWD\" >&2\nexit 1\n",
+        ),
+    ] {
+        let path = bin.join(tool);
+        fs::write(&path, script).unwrap();
+        fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let (output, transcript) = fixture.interactive(&["issue", "103", "--ref", "HEAD"], "");
+    assert!(!output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        transcript.contains(&format!("lookup in {}", fixture.repo.display())),
+        "{transcript}"
+    );
+    assert_eq!(fixture.ok(&["list"]), serde_json::json!([]));
 }
 
 #[test]
@@ -6273,9 +6338,36 @@ fn issue_lookup_errors_never_create_a_workspace() {
             vec!["issue", "https://github.com/team/project/issues/4"],
             "no agent selected",
         ),
+        (vec!["issue", "4", "--agent", "codex"], "pass --repo"),
         (
-            vec!["issue", "4", "--agent", "codex"],
+            vec!["issue", "not-an-issue", "--agent", "codex"],
             "expected an issue URL",
+        ),
+        (
+            vec![
+                "issue",
+                "0",
+                "--repo",
+                fixture.repo.to_str().unwrap(),
+                "--agent",
+                "codex",
+            ],
+            "must be positive",
+        ),
+        (
+            vec!["issue", "4", "--repo", "unknown", "--agent", "codex"],
+            "not registered",
+        ),
+        (
+            vec![
+                "issue",
+                "https://github.com/team/other/issues/4",
+                "--repo",
+                fixture.repo.to_str().unwrap(),
+                "--agent",
+                "codex",
+            ],
+            "different repository",
         ),
         (
             vec![
