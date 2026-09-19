@@ -577,6 +577,28 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
 }
 
 #[test]
+fn status_keeps_shared_state_when_the_worktree_is_missing() {
+    let fixture = Fixture::with_config(Some("[auto_cleanup]\nenabled=false\n"));
+    let workspace = fixture.add("missing-status");
+    fixture.ok(&["port", "reserve", "web", "missing-status"]);
+    fs::remove_dir_all(workspace["path"].as_str().unwrap()).unwrap();
+
+    let status = fixture.ok(&["status", "missing-status"]);
+    assert_eq!(status["workspace"]["name"], "missing-status");
+    assert_eq!(status["ports"].as_array().unwrap().len(), 1);
+    assert!(status["diff"].is_null());
+    assert!(!status["diff_error"].as_str().unwrap().is_empty());
+
+    let text = fixture.run(&["status", "missing-status"]);
+    assert!(text.status.success());
+    assert!(
+        String::from_utf8(text.stdout)
+            .unwrap()
+            .contains("Changes:       unavailable")
+    );
+}
+
+#[test]
 fn local_repository_without_remotes_registers_in_place_and_creates_workspaces() {
     let fixture = Fixture::new();
     git(

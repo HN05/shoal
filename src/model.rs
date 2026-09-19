@@ -94,7 +94,8 @@ pub struct DiffSummary {
 pub struct WorkspaceStatus {
     pub workspace: Workspace,
     pub setup_finished: bool,
-    pub diff: DiffSummary,
+    pub diff: Option<DiffSummary>,
+    pub diff_error: Option<String>,
     pub executions: Vec<Execution>,
     pub ports: Vec<PortReservation>,
     pub resources: Vec<ResourceLease>,

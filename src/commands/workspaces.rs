@@ -458,17 +458,21 @@ fn render_status(status: &WorkspaceStatus, json: bool) {
             "in progress"
         }
     );
-    println!(
-        "Changes:       {} file{}, +{} -{}",
-        status.diff.files_changed,
-        if status.diff.files_changed == 1 {
-            ""
-        } else {
-            "s"
-        },
-        status.diff.insertions,
-        status.diff.deletions
-    );
+    match &status.diff {
+        Some(diff) => println!(
+            "Changes:       {} file{}, +{} -{}",
+            diff.files_changed,
+            if diff.files_changed == 1 { "" } else { "s" },
+            diff.insertions,
+            diff.deletions
+        ),
+        None => {
+            println!("Changes:       unavailable");
+            if let Some(error) = &status.diff_error {
+                println!("  {}", palette.paint(Style::Warning, error));
+            }
+        }
+    }
     if let Some(error) = &workspace.error {
         println!("Error:         {}", palette.paint(Style::Error, error));
     }

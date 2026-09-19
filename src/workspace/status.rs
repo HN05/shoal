@@ -10,14 +10,21 @@ use crate::{
 impl Manager {
     pub async fn workspace_status(&self, selector: &str) -> Result<WorkspaceStatus> {
         let inspection = self.inspect_workspace(selector).await?;
-        self.verify_worktree(&inspection.workspace).await?;
-        let base = self.diff_base(&inspection.workspace.id).await?;
-        let numstat = git::run(
-            &inspection.workspace.path,
-            &["diff", "--numstat", &base.commit, "--"],
-        )
-        .await?;
-        let diff = parse_numstat(&numstat)?;
+        let diff = async {
+            self.verify_worktree(&inspection.workspace).await?;
+            let base = self.diff_base(&inspection.workspace.id).await?;
+            let numstat = git::run(
+                &inspection.workspace.path,
+                &["diff", "--numstat", &base.commit, "--"],
+            )
+            .await?;
+            parse_numstat(&numstat)
+        }
+        .await;
+        let (diff, diff_error) = match diff {
+            Ok(diff) => (Some(diff), None),
+            Err(error) => (None, Some(format!("{error:#}"))),
+        };
         let unread_notifications = self.unread_notifications().await?;
         let workspace_id = inspection.workspace.id.clone();
         let setup_finished = self
@@ -38,6 +45,7 @@ impl Manager {
             workspace,
             setup_finished,
             diff,
+            diff_error,
             executions,
             ports,
             resources,

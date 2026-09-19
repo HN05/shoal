@@ -126,10 +126,9 @@ a new-branch prompt or existing-branch picker. Noninteractive and JSON calls nev
 management commands support JSON output, while executed commands keep their
 own stdin, stdout, stderr, and exit code.
 
-`shoal status [workspace]` shows the branch, lifecycle and setup state, a
-fork-point diff summary, executions, ports, simulator and resource leases, PR
-watch, and unread notification count. `--json` returns those same fields;
-`inspect` keeps the detailed workspace and execution records.
+`shoal status [workspace]` summarizes one workspace's current state, changes
+since its fork point, and what it holds. `--json` returns the same data;
+`inspect` keeps the raw workspace and execution records.
 
 ### Configured commands
 
