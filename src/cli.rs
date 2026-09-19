@@ -120,18 +120,15 @@ pub enum Command {
         #[arg(long)]
         local: bool,
     },
-    /// Watch a PR URL; stop tracked commands and remove this workspace when merged.
+    /// Watch, acknowledge, or clear PR cleanup for a workspace.
+    #[command(arg_required_else_help = true)]
     Pr {
-        #[arg(required_unless_present = "clear", conflicts_with = "clear")]
+        /// GitHub or Forgejo PR URL to watch.
         url: Option<String>,
-        #[arg(long)]
         workspace: Option<String>,
-        /// Cancel PR cleanup for this workspace.
-        #[arg(long)]
-        clear: bool,
+        #[command(subcommand)]
+        command: Option<PrCommand>,
     },
-    /// Confirm this commit was merged; stop tracked commands and remove the workspace.
-    Merged { workspace: Option<String> },
     /// List, acquire, and release named TCP ports owned by a worktree.
     #[command(args_conflicts_with_subcommands = true)]
     Port {
@@ -276,6 +273,14 @@ pub enum Command {
         #[command(subcommand)]
         command: DaemonCommand,
     },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum PrCommand {
+    /// Confirm this commit was merged; stop tracked commands and remove the workspace.
+    Merged { workspace: Option<String> },
+    /// Cancel PR cleanup for this workspace.
+    Clear { workspace: Option<String> },
 }
 
 impl Command {

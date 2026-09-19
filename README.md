@@ -72,7 +72,7 @@ shoal notifications           # Conflicts, finished agents, and removals you mis
 shoal stop fix-login          # Stop managed commands; keep the workspace
 shoal rm fix-login            # Remove the workspace
 shoal pr https://github.com/owner/repo/pull/42  # Remove when merged
-shoal merged                  # Manually confirm merge and remove
+shoal pr merged               # Manually confirm merge and remove
 ```
 
 Inside a workspace, omit its name. Use `--json` or `shoal <command> --help`.

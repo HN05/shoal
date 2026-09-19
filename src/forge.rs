@@ -228,7 +228,7 @@ async fn query(path: &std::path::Path, tool: &str, args: &[&str]) -> Result<Stri
     command.current_dir(path).args(args).env("NO_COLOR", "1");
     tokio::time::timeout(std::time::Duration::from_secs(20), crate::subprocess::output(command))
         .await.context("PR lookup timed out")?
-        .with_context(|| format!("PR lookup requires {tool} and its existing login; otherwise confirm the merge yourself and run `shoal merged`"))
+        .with_context(|| format!("PR lookup requires {tool} and its existing login; otherwise confirm the merge yourself and run `shoal pr merged`"))
 }
 
 #[cfg(test)]

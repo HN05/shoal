@@ -21,7 +21,7 @@ use serde_json::json;
 use tokio::time::{Instant, sleep};
 
 use crate::{
-    cli::{Cli, Command, ShellCommand},
+    cli::{Cli, Command, PrCommand, ShellCommand},
     context::Context,
     env,
     paths::Paths,
@@ -137,9 +137,16 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         Command::Pr {
             workspace,
             url,
-            clear,
-        } => workspaces::pr(&ctx, workspace, url, clear).await,
-        Command::Merged { workspace } => workspaces::pr(&ctx, workspace, None, false).await,
+            command,
+        } => match command {
+            None => workspaces::pr(&ctx, workspace, url, false).await,
+            Some(PrCommand::Merged { workspace }) => {
+                workspaces::pr(&ctx, workspace, None, false).await
+            }
+            Some(PrCommand::Clear { workspace }) => {
+                workspaces::pr(&ctx, workspace, None, true).await
+            }
+        },
         Command::Inspect { workspace } => workspaces::inspect(&ctx, workspace).await,
         Command::Notifications { all, follow, limit } => {
             notifications::run(&ctx, all, follow, limit).await

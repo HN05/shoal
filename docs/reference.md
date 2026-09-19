@@ -483,15 +483,15 @@ Git protects other checkouts. Shell integration returns to `<root_dir>/<repo>`.
 
 ### PR cleanup
 
-`shoal pr <url> [--workspace <name>]` watches a GitHub/Forgejo PR using the
+`shoal pr <url> [workspace]` watches a GitHub/Forgejo PR using the
 daemon's `gh`/`fj` and existing login. Shoal stores no forge credentials.
 Persistent watches poll every ~30 seconds and suppress idle cleanup. Merged PRs
 must name the recorded branch and contain HEAD.
-`shoal merged [workspace]` manually acknowledges HEAD without forge tools; unless
+`shoal pr merged [workspace]` manually acknowledges HEAD without forge tools; unless
 the worktree is dirty, the shell returns to `<root_dir>/<repo>` as after `rm`.
 Both stop tracked agents and remove immediately, retaining dirty/newer work and
 using normal resource cleanup/branch retention. `inspect` shows errors in `pr_cleanup`.
-`shoal pr --clear` cancels. `[pr_cleanup] enabled = false` disables this
+`shoal pr clear [workspace]` cancels. `[pr_cleanup] enabled = false` disables this
 (default true), independently of idle cleanup, globally (restart after changing
 it) or in a repository config (applies at once; existing watches wait).
 

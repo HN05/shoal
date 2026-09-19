@@ -2123,11 +2123,11 @@ test "$PWD" = "$shoal_repo_dir"
 shoal add "$REPO" --name acknowledged
 test "${PWD##*/}" = acknowledged
 printf 'retained' > untracked
-shoal merged
+shoal pr merged
 test "${PWD##*/}" = acknowledged
-shoal pr --clear
+shoal pr clear
 rm untracked
-shoal merged
+shoal pr merged
 test "$PWD" = "$shoal_repo_dir"
 until ! shoal inspect acknowledged >/dev/null 2>&1; do sleep 0.1; done
 printf 'navigation-ok\n'
@@ -2295,8 +2295,8 @@ fn execution_scope_limits_management_and_expires() {
         vec!["rm", "worker", "--yes", "--delete-branch"],
         vec!["stop", "worker"],
         vec!["inspect", "other"],
-        vec!["merged", "other"],
-        vec!["pr", "--clear", "--workspace", "other"],
+        vec!["pr", "merged", "other"],
+        vec!["pr", "clear", "other"],
         vec!["port", "acquire", "web", "other"],
         vec!["repo", "rename", fixture.repo.to_str().unwrap(), "changed"],
         vec!["repo", "config", fixture.repo.to_str().unwrap()],
@@ -6441,7 +6441,7 @@ fn merged_stops_agent_and_releases_resources_without_idle_delay() {
         .spawn()
         .unwrap();
     wait_registered_execution(&fixture, "merged");
-    fixture.ok(&["merged", "merged"]);
+    fixture.ok(&["pr", "merged", "merged"]);
     wait_removed(&fixture, "merged");
     assert!(!wrapper.wait().unwrap().success());
     assert!(!Path::new(workspace["path"].as_str().unwrap()).exists());
@@ -6473,6 +6473,7 @@ fn merged_retains_dirty_work_and_changed_head_across_restart_and_can_be_cancelle
         "--",
         env!("CARGO_BIN_EXE_shoal"),
         "--json",
+        "pr",
         "merged",
     ]);
     wait_pr_error(&fixture, "retain", "uncommitted");
@@ -6492,7 +6493,7 @@ fn merged_retains_dirty_work_and_changed_head_across_restart_and_can_be_cancelle
     fixture.restart();
     wait_pr_error(&fixture, "retain", "HEAD changed");
     assert!(path.join("dirty").exists());
-    fixture.ok(&["pr", "--clear", "--workspace", "retain"]);
+    fixture.ok(&["pr", "clear", "retain"]);
     assert!(fixture.ok(&["inspect", "retain"])["pr_cleanup"].is_null());
 }
 
@@ -6500,7 +6501,7 @@ fn merged_retains_dirty_work_and_changed_head_across_restart_and_can_be_cancelle
 fn pr_cleanup_can_be_disabled_independently() {
     let fixture = Fixture::with_config(Some("[pr_cleanup]\nenabled=false\n"));
     fixture.add("keep");
-    let output = fixture.run(&["merged", "keep"]);
+    let output = fixture.run(&["pr", "merged", "keep"]);
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("PR cleanup is disabled"));
     assert!(fixture.ok(&["inspect", "keep"])["pr_cleanup"].is_null());
@@ -6529,7 +6530,7 @@ fn repository_config_sets_pr_cleanup_over_the_global_default() {
         ],
     );
     fixture.add("merged");
-    fixture.ok(&["merged", "merged"]);
+    fixture.ok(&["pr", "merged", "merged"]);
     wait_removed(&fixture, "merged");
     // The saved config is the top layer.
     let saved = fixture.root.path().join("saved.toml");
@@ -6542,7 +6543,7 @@ fn repository_config_sets_pr_cleanup_over_the_global_default() {
         saved.to_str().unwrap(),
     ]);
     fixture.add("kept");
-    let output = fixture.run(&["merged", "kept"]);
+    let output = fixture.run(&["pr", "merged", "kept"]);
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("PR cleanup is disabled"));
 }
@@ -6564,23 +6565,13 @@ fn pr_watch_checks_github_state_and_commit_and_survives_restart() {
     fs::create_dir(&bin).unwrap();
     fs::write(bin.join("gh"), "#!/bin/sh\ncat \"$HOME/pr.json\"\n").unwrap();
     fs::set_permissions(bin.join("gh"), fs::Permissions::from_mode(0o755)).unwrap();
-    let failed = fixture.run(&[
-        "pr",
-        "https://github.com/team/repo/pull/56",
-        "--workspace",
-        "watch",
-    ]);
+    let failed = fixture.run(&["pr", "https://github.com/team/repo/pull/56", "watch"]);
     assert!(!failed.status.success());
-    assert!(String::from_utf8_lossy(&failed.stderr).contains("shoal merged"));
+    assert!(String::from_utf8_lossy(&failed.stderr).contains("shoal pr merged"));
     assert!(fixture.ok(&["inspect", "watch"])["pr_cleanup"].is_null());
     assert!(
         !fixture
-            .run(&[
-                "pr",
-                "https://github.com/other/repo/pull/56",
-                "--workspace",
-                "watch"
-            ])
+            .run(&["pr", "https://github.com/other/repo/pull/56", "watch"])
             .status
             .success()
     );
@@ -6595,12 +6586,7 @@ fn pr_watch_checks_github_state_and_commit_and_survives_restart() {
     .trim()
     .to_owned();
     write_response("OPEN", &head);
-    fixture.ok(&[
-        "pr",
-        "https://github.com/team/repo/pull/56",
-        "--workspace",
-        "watch",
-    ]);
+    fixture.ok(&["pr", "https://github.com/team/repo/pull/56", "watch"]);
     fixture.restart();
     assert_eq!(
         fixture.ok(&["inspect", "watch"])["pr_cleanup"]["url"],
@@ -6646,12 +6632,7 @@ fn pr_watch_checks_forgejo_merge_and_commits_with_fixture_cli() {
         format!("commit {} (+1, -0)\nAuthor: Test\n", head.trim()),
     )
     .unwrap();
-    fixture.ok(&[
-        "pr",
-        "https://forge.example/team/repo/pulls/56",
-        "--workspace",
-        "fj-watch",
-    ]);
+    fixture.ok(&["pr", "https://forge.example/team/repo/pulls/56", "fj-watch"]);
     wait_removed(&fixture, "fj-watch");
 }
 
@@ -6683,7 +6664,7 @@ fn merged_rechecks_head_after_pre_remove_hook() {
         ],
     );
     let workspace = fixture.add("hook");
-    fixture.ok(&["merged", "hook"]);
+    fixture.ok(&["pr", "merged", "hook"]);
     wait_pr_error(&fixture, "hook", "HEAD changed during pre-remove hook");
     assert!(Path::new(workspace["path"].as_str().unwrap()).exists());
 }
@@ -7546,7 +7527,7 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
             }
         }
     });
-    fixture.ok(&["merged", "waiter"]);
+    fixture.ok(&["pr", "merged", "waiter"]);
     wait_removed(&fixture, "waiter");
     let line = lines
         .recv_timeout(Duration::from_secs(15))
