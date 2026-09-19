@@ -93,6 +93,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         } => issues::run(&ctx, url, agent, base, args).await,
         Command::Prepare { workspace } => workspaces::prepare(&ctx, workspace).await,
         Command::List => workspaces::list(&ctx).await,
+        Command::Status { workspace } => workspaces::status(&ctx, workspace).await,
         Command::Cd { workspace } => workspaces::cd(&ctx, workspace).await,
         Command::Diff { workspace } => workspaces::diff(&ctx, workspace).await,
         Command::Pull { workspace } => workspaces::pull(&ctx, workspace).await,

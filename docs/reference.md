@@ -107,6 +107,7 @@ shoal codex cli fix-login -- --help
 shoal codex app fix-login                # Codex desktop app
 shoal happy codex fix-login              # Detached Happy session for the Happy app
 shoal t3 fix-login                       # Running T3 Code desktop app
+shoal status fix-login                   # Activity, changes, and held resources
 shoal inspect fix-login
 shoal stop fix-login                     # Stop commands; keep the worktree
 shoal rm fix-login                       # Remove; choose what to keep if work differs
@@ -119,11 +120,16 @@ Ctrl-O inspects, Ctrl-S stops, Ctrl-F shows the diff. Each action returns to you
 shell.
 
 Omitted targets open an fzf picker; `rm`, `exec`, `claude`, `codex`, `happy`,
-`t3`, `diff`, `pull`, `merge`, and `land` first use the workspace containing the
+`t3`, `status`, `diff`, `pull`, `merge`, and `land` first use the workspace containing the
 current directory. `shoal add` offers repositories in most-recently-used order, then
 a new-branch prompt or existing-branch picker. Noninteractive and JSON calls never prompt;
 management commands support JSON output, while executed commands keep their
 own stdin, stdout, stderr, and exit code.
+
+`shoal status [workspace]` shows the branch, lifecycle and setup state, a
+fork-point diff summary, executions, ports, simulator and resource leases, PR
+watch, and unread notification count. `--json` returns those same fields;
+`inspect` keeps the detailed workspace and execution records.
 
 ### Configured commands
 

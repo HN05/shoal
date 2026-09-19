@@ -88,6 +88,8 @@ pub enum Command {
     Prepare { workspace: Option<String> },
     /// List managed workspaces.
     List,
+    /// Summarize what the current or named workspace is doing.
+    Status { workspace: Option<String> },
     /// Pick a workspace with fzf, enter a named workspace, or use - for the previous directory.
     Cd { workspace: Option<String> },
     /// Show your changes since the fork point using native Git diff configuration.

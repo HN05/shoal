@@ -11,7 +11,7 @@ use crate::{
     env, execution, git,
     happy::{self, HappyAgent},
     hooks::{self, Hook},
-    model::Workspace,
+    model::{Workspace, WorkspaceStatus},
     output::{Palette, Style},
     protocol::{Body, ConfigTarget, Method},
     recovery::ReconcileOptions,
@@ -427,6 +427,108 @@ pub(super) async fn list(ctx: &Context) -> Result<i32> {
         );
     }
     Ok(0)
+}
+
+pub(super) async fn status(ctx: &Context, workspace: Option<String>) -> Result<i32> {
+    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    let status = request!(
+        &ctx.paths,
+        Method::WorkspaceStatus { workspace },
+        WorkspaceStatus
+    );
+    ctx.show(&status, |status| render_status(status, ctx.json))?;
+    Ok(0)
+}
+
+fn render_status(status: &WorkspaceStatus, json: bool) {
+    let palette = Palette::stdout(json);
+    let workspace = &status.workspace;
+    println!(
+        "{}  {}",
+        palette.paint(Style::Heading, &workspace.name),
+        palette.workspace_state(workspace.state)
+    );
+    println!("Path:          {}", workspace.path.display());
+    println!("Branch:        {}", workspace.branch);
+    println!(
+        "Setup:         {}",
+        if status.setup_finished {
+            "finished"
+        } else {
+            "in progress"
+        }
+    );
+    println!(
+        "Changes:       {} file{}, +{} -{}",
+        status.diff.files_changed,
+        if status.diff.files_changed == 1 {
+            ""
+        } else {
+            "s"
+        },
+        status.diff.insertions,
+        status.diff.deletions
+    );
+    if let Some(error) = &workspace.error {
+        println!("Error:         {}", palette.paint(Style::Error, error));
+    }
+
+    println!("Executions:    {}", status.executions.len());
+    for execution in &status.executions {
+        let pid = execution
+            .child
+            .as_ref()
+            .or(execution.wrapper.as_ref())
+            .map(|identity| format!("  pid {}", identity.pid))
+            .unwrap_or_default();
+        println!(
+            "  {}  {}{}",
+            execution.id,
+            palette.execution_state(execution.state),
+            pid
+        );
+    }
+
+    println!("Ports:         {}", status.ports.len());
+    for port in &status.ports {
+        println!("  {}={} ({})", port.name, port.port, port.env_var);
+    }
+
+    println!("Simulators:    {}", status.simulators.len());
+    for simulator in &status.simulators {
+        println!(
+            "  {}={}  {}  {}  {}",
+            simulator.lease_name.as_deref().unwrap_or("default"),
+            simulator.udid.as_deref().unwrap_or("pending"),
+            palette.simulator_state(simulator.state),
+            simulator.device,
+            simulator.runtime
+        );
+    }
+
+    println!("Resources:     {}", status.resources.len());
+    for resource in &status.resources {
+        println!(
+            "  {}/{} -> {} [{}]",
+            resource.pool, resource.name, resource.resource, resource.mode
+        );
+    }
+
+    match &status.pr_cleanup {
+        Some(registration) => {
+            let target = registration
+                .url
+                .as_deref()
+                .or(registration.head.as_deref())
+                .unwrap_or("registered");
+            println!("PR watch:      {target}");
+            if let Some(error) = &registration.error {
+                println!("  {}", palette.paint(Style::Warning, error));
+            }
+        }
+        None => println!("PR watch:      none"),
+    }
+    println!("Notifications: {} unread", status.unread_notifications);
 }
 
 pub(super) async fn inspect(ctx: &Context, workspace: Option<String>) -> Result<i32> {

@@ -395,7 +395,7 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
             "{args:?}"
         );
     }
-    for command in ["rm", "cd", "exec", "diff", "inspect"] {
+    for command in ["rm", "cd", "exec", "diff", "status", "inspect"] {
         assert!(
             complete(&[command, "fi"], fixture.root.path()).contains(&"first".into()),
             "{command}"
@@ -456,6 +456,123 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
     assert!(text.lines().any(|line| line == "first"), "{text}");
     assert!(!text.lines().any(|line| line == "second"), "{text}");
     assert!(!fixture.root.path().join("wrong-state").exists());
+}
+
+#[test]
+fn status_summarizes_current_workspace_work_and_supports_json() {
+    let fixture = Fixture::with_config(Some(RESOURCE_CONFIG));
+    let workspace = fixture.add("summary");
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    fs::write(path.join("tracked"), "changed\nagain\n").unwrap();
+    fs::write(path.join("added"), "new\n").unwrap();
+    git(path, &["add", "added"]);
+    fixture.ok(&["port", "reserve", "web", "summary"]);
+    fixture.ok(&[
+        "resource", "acquire", "devices", "summary", "--name", "tests",
+    ]);
+    fixture.ok(&["resource", "acquire", "signing", "summary"]);
+    fixture.add("waiter");
+    assert_eq!(
+        fixture
+            .run(&["resource", "acquire", "signing", "waiter"])
+            .status
+            .code(),
+        Some(2)
+    );
+    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+    db.execute(
+        "INSERT INTO pr_cleanup(workspace_id,record) VALUES (?1,?2)",
+        rusqlite::params![
+            workspace["id"].as_str().unwrap(),
+            serde_json::json!({
+                "url": "https://forge.example/team/repo/pulls/7",
+                "head": null,
+                "error": null
+            })
+            .to_string()
+        ],
+    )
+    .unwrap();
+
+    let started = fixture.root.path().join("status-started");
+    let finish = fixture.root.path().join("status-finish");
+    let mut execution = fixture
+        .command()
+        .args([
+            "exec",
+            "summary",
+            "--",
+            "sh",
+            "-c",
+            "touch \"$1\"; while test ! -f \"$2\"; do sleep 0.02; done",
+            "status-test",
+            started.to_str().unwrap(),
+            finish.to_str().unwrap(),
+        ])
+        .spawn()
+        .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while !started.exists() {
+        assert!(Instant::now() < deadline, "execution did not start");
+        thread::sleep(Duration::from_millis(20));
+    }
+
+    let output = fixture
+        .command()
+        .args(["--json", "status"])
+        .current_dir(path)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let status: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(status["workspace"]["name"], "summary");
+    assert_eq!(status["workspace"]["branch"], "summary");
+    assert_eq!(status["workspace"]["state"], "ready");
+    assert_eq!(status["setup_finished"], true);
+    assert_eq!(
+        status["diff"],
+        serde_json::json!({"files_changed": 2, "insertions": 3, "deletions": 1})
+    );
+    assert_eq!(status["executions"].as_array().unwrap().len(), 1);
+    assert_eq!(status["ports"].as_array().unwrap().len(), 1);
+    assert_eq!(status["resources"].as_array().unwrap().len(), 2);
+    assert_eq!(status["simulators"], serde_json::json!([]));
+    assert_eq!(
+        status["pr_cleanup"]["url"],
+        "https://forge.example/team/repo/pulls/7"
+    );
+    assert_eq!(status["unread_notifications"], 1);
+
+    let text = fixture.run(&["status", "summary"]);
+    assert!(text.status.success());
+    let text = String::from_utf8(text.stdout).unwrap();
+    for expected in [
+        "summary  ready",
+        "Branch:        summary",
+        "Setup:         finished",
+        "Changes:       2 files, +3 -1",
+        "Executions:    1",
+        "Ports:         1",
+        "Simulators:    0",
+        "Resources:     2",
+        "PR watch:      https://forge.example/team/repo/pulls/7",
+        "Notifications: 1 unread",
+    ] {
+        assert!(text.contains(expected), "missing {expected:?} in {text:?}");
+    }
+    let missing = fixture.run(&["status"]);
+    assert!(!missing.status.success());
+    assert!(
+        String::from_utf8_lossy(&missing.stderr)
+            .contains("missing argument; pass an explicit target/name")
+    );
+
+    fs::write(finish, "done").unwrap();
+    assert!(execution.wait().unwrap().success());
 }
 
 #[test]
@@ -5115,7 +5232,7 @@ fn setup_cmd_resolves_worktree_paths_and_runs_before_agents() {
 printf 'setup output\n'
 printf '%s' "$PWD" > setup-cwd
 printf '%s' "$SHOAL_WORKSPACE" > setup-workspace
-"$SHOAL_TEST_BIN" --json inspect > during-setup.json || exit 91
+"$SHOAL_TEST_BIN" --json status > during-setup.json || exit 91
 "#,
     )
     .unwrap();
@@ -5161,6 +5278,7 @@ printf '%s' "$SHOAL_WORKSPACE" > setup-workspace
     let during: Value =
         serde_json::from_slice(&fs::read(path.join("during-setup.json")).unwrap()).unwrap();
     assert_eq!(during["workspace"]["state"], "preparing");
+    assert_eq!(during["setup_finished"], false);
     assert_eq!(during["executions"].as_array().unwrap().len(), 1);
 }
 

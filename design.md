@@ -136,14 +136,15 @@ own-branch checks.
 ## Scope and user interfaces
 
 Commands launched through Shoal inherit a daemon-validated scope token that
-confines them to their own workspace: inspect, execute, merge, and resources.
+confines them to their own workspace: status, inspect, execute, merge, and resources.
 `pull`, `land`, creation, removal, reconciliation, other workspaces, repository
 administration, and service control need an unscoped caller. PR registration and
 manual merge acknowledgement are own-workspace exceptions; nested executions keep scope.
 
 The CLI takes explicit targets and `--json` for automation, and uses
 current-directory resolution and fzf interactively; noninteractive calls never
-open a picker. Human output uses a shared semantic palette at the CLI presentation
+open a picker. `status` combines lifecycle, fork-point changes, active work and
+leases in one workspace view. Human output uses a shared semantic palette at the CLI presentation
 layer; machine output and stored values stay unstyled. Rust chooses paths,
 including `<root_dir>/<repo>` after removal; the Bash/Zsh wrapper changes directory
 without evaluating repository code.
@@ -201,7 +202,7 @@ Notifications stay in the terminal: the daemon records what a user would
 otherwise miss (busy resources and who holds them, port conflicts, exits of
 shortcut-launched agents, workspaces it removed or retained on its own) and the
 CLI shows them once, on request or as a followed stream that also raises the
-terminal's own notifications (OSC 9); `list` and `daemon status` only count them. Recording never fails the operation it describes,
+terminal's own notifications (OSC 9); `list`, workspace `status`, and `daemon status` only count them. Recording never fails the operation it describes,
 repeated polled conflicts collapse until read, and scoped processes cannot read
 them. Desktop or push delivery was considered and not adopted.
 
