@@ -460,7 +460,8 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
 
 #[test]
 fn status_summarizes_current_workspace_work_and_supports_json() {
-    let fixture = Fixture::with_config(Some(RESOURCE_CONFIG));
+    let config = format!("{RESOURCE_CONFIG}\n[pr_cleanup]\nenabled=false\n");
+    let fixture = Fixture::with_config(Some(&config));
     let workspace = fixture.add("summary");
     let path = Path::new(workspace["path"].as_str().unwrap());
     fs::write(path.join("tracked"), "changed\nagain\n").unwrap();
