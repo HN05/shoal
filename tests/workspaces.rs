@@ -7522,3 +7522,53 @@ fn git_profile_flag_overrides_config_for_new_and_existing_branches() {
     assert_eq!(fixture.ok(&["list"]), before);
     assert!(git(&fixture.repo, &["branch", "--list", "bad-profile"]).is_empty());
 }
+
+#[test]
+fn configured_commands_preserve_arguments_scope_and_exit_status() {
+    let fixture = Fixture::with_config(Some(
+        "[commands]\ncheck = ['sh', '-c', 'cat; printf \"%s\\n\" \"$SHOAL_WORKSPACE\" \"$@\"; test -n \"$SHOAL_SCOPE_TOKEN\" || exit 99; exit 7', 'check', 'literal $HOME']\n",
+    ));
+    let workspace = fixture.ok(&["add", fixture.repo.to_str().unwrap(), "--name", "custom"]);
+    let path = workspace["path"].as_str().unwrap();
+    let mut child = fixture
+        .command()
+        .current_dir(path)
+        .args(["check", "--", "two words", "--flag"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child.stdin.take().unwrap().write_all(b"pipe:").unwrap();
+    let output = child.wait_with_output().unwrap();
+    assert_eq!(
+        output.status.code(),
+        Some(7),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        output.stdout,
+        b"pipe:custom\nliteral $HOME\ntwo words\n--flag\n"
+    );
+    assert_eq!(
+        fixture.ok(&["inspect", "custom"])["executions"],
+        serde_json::json!([])
+    );
+    fs::write(
+        Path::new(path).join(".shoal.toml"),
+        "[commands]\ncheck = ['printf', '%s', 'from worktree']\n",
+    )
+    .unwrap();
+    assert_eq!(fixture.run(&["check", "custom"]).stdout, b"from worktree");
+    let saved = fixture.root.path().join("commands.toml");
+    fs::write(&saved, "[commands]\ncheck = ['printf', '%s', 'saved']\n").unwrap();
+    fixture.ok(&[
+        "repo",
+        "config",
+        fixture.repo.to_str().unwrap(),
+        "--file",
+        saved.to_str().unwrap(),
+    ]);
+    assert_eq!(fixture.run(&["check", "custom"]).stdout, b"saved");
+}

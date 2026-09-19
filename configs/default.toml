@@ -29,6 +29,10 @@ root_dir = "~/shoal"
 # user.email = "you@example.com"
 # commit.gpgsign = false
 
+# Named workspace shortcuts: shoal check [workspace] -- <extra arguments>
+# [commands]
+# check = ["cargo", "test"]
+
 [codex]
 # `shoal codex` without cli/app: "cli" or "app".
 default_mode = "cli"

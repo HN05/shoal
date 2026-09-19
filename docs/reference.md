@@ -134,6 +134,22 @@ agent's exit code; the workspace is retained even when launch fails. With shell
 integration, your shell enters the new workspace after the agent exits.
 `--json` emits the workspace record first, then the agent's unmodified output.
 
+Define workspace shortcuts in global or repository TOML:
+
+```toml
+[commands]
+check = ["cargo", "test"]
+```
+
+Run `shoal check [workspace] -- <extra arguments>`; omit the workspace to use
+the current one or the picker. Put Shoal's global flags before the command name.
+Each name resolves from saved repository config, worktree config, then global
+config; a higher layer replaces the whole argument array. Names cannot shadow
+built-in Shoal commands. The executable is resolved through PATH (or use a path),
+with the workspace as working directory. Arguments are passed literally without
+shell expansion. Execution preserves terminal I/O, scope, reserved-port variables,
+and exit status just like `exec`.
+
 Claude and Codex shortcuts, including Happy, trust the workspace directory before
 launch, creating the agent's user config if needed and preserving other settings.
 Claude uses `~/.claude.json` (or `$CLAUDE_CONFIG_DIR/.claude.json`); Codex CLI

@@ -155,6 +155,11 @@ Completion queries the installed binary per Tab and uses read-only daemon calls
 with a 500 ms timeout for live targets, honoring state directory and scope and
 never starting a daemon or picker. Targets sort before flags, including in fzf-tab.
 
+Named `[commands]` are executable/argument arrays resolved per name from saved
+repository config, worktree config, then global config at launch. They run through
+the tracked wrapper with workspace scope, terminal I/O, and literal extra arguments;
+built-in command names are reserved.
+
 Agent shortcuts use the execution wrapper: Codex CLI gets full access without
 approvals, Claude gets remote control named after the workspace. Both trust the
 workspace in their user config before launch, creating the file if needed; Happy

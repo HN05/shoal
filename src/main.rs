@@ -19,6 +19,7 @@ mod happy;
 mod hooks;
 mod merge;
 mod model;
+mod named_commands;
 mod notifications;
 mod output;
 mod paths;

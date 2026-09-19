@@ -8,6 +8,7 @@ use crate::{paths::Paths, repo_config::RepoConfig};
 /// wins, an omitted one keeps the global value or the built-in default.
 #[derive(Debug)]
 pub struct Effective {
+    pub commands: crate::named_commands::Commands,
     pub issue_template: Option<String>,
     pub agent_template: Option<String>,
     pub default_agent: Option<crate::cli::Agent>,
@@ -20,6 +21,7 @@ pub struct Effective {
 #[derive(Debug, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
+    pub commands: crate::named_commands::Commands,
     pub issue_template: Option<String>,
     pub agent_template: Option<String>,
     pub git: crate::git_profile::Git,
@@ -479,6 +481,7 @@ impl Config {
         config.ports.validate()?;
         config.simulators.validate()?;
         config.git.validate()?;
+        crate::named_commands::validate(&config.commands)?;
         if let Some(name) = &config.git_profile {
             config.git.profile(name)?;
         }
@@ -494,7 +497,10 @@ impl Config {
             end: repo.ports.end.unwrap_or(self.ports.end),
         };
         ports.validate()?;
+        let mut commands = self.commands.clone();
+        commands.extend(repo.commands.clone());
         Ok(Effective {
+            commands,
             issue_template: repo
                 .issue_template
                 .clone()

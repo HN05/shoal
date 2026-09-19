@@ -46,6 +46,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         "workspace processes cannot administer Shoal"
     );
     match command {
+        Command::Custom(args) => crate::named_commands::invoke(&ctx, args).await,
         Command::Skill { command } => skill::run(command.as_ref(), ctx.json),
         Command::Completions { shell } => {
             let script = shell::completions(shell)?;

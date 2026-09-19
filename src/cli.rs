@@ -19,6 +19,9 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    /// Run a command defined in [commands].
+    #[command(external_subcommand)]
+    Custom(Vec<OsString>),
     /// Print the bundled agent skill, or install it at user scope.
     Skill {
         #[command(subcommand)]

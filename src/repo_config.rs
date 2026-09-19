@@ -25,6 +25,7 @@ pub enum ConflictPolicy {
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct RepoConfig {
+    pub commands: crate::named_commands::Commands,
     pub issue_template: Option<String>,
     pub agent_template: Option<String>,
     pub git_profile: Option<String>,
@@ -95,6 +96,7 @@ pub fn load(workspace_dir: &Path) -> Result<RepoConfig> {
 
 pub fn parse(text: &str) -> Result<RepoConfig> {
     let config: RepoConfig = toml::from_str(text)?;
+    crate::named_commands::validate(&config.commands)?;
     if let Some(name) = &config.git_profile {
         crate::validate::name("git profile", name)?;
     }
@@ -142,8 +144,10 @@ impl RepoConfig {
     pub fn over(self, mut base: Self) -> Self {
         base.ports.definitions.extend(self.ports.definitions);
         base.resources.extend(self.resources);
+        base.commands.extend(self.commands);
         base.resource_pools.extend(self.resource_pools);
         Self {
+            commands: base.commands,
             issue_template: self.issue_template.or(base.issue_template),
             agent_template: self.agent_template.or(base.agent_template),
             git_profile: self.git_profile.or(base.git_profile),
