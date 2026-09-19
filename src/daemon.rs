@@ -368,9 +368,6 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             manager.release_port(&workspace, name).await?;
             Body::Ok
         }
-        Method::ListPorts { workspace } => {
-            Body::Ports(manager.list_ports(workspace.as_deref()).await?)
-        }
         Method::PortOverview { workspace } => {
             Body::PortOverview(manager.port_overview(&workspace).await?)
         }
@@ -387,9 +384,6 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         } => {
             manager.release_resource(&workspace, pool, name).await?;
             Body::Ok
-        }
-        Method::ResourceList { workspace } => {
-            Body::ResourceLeases(manager.list_resources(workspace.as_deref()).await?)
         }
         Method::ResourceOverview { workspace } => {
             Body::ResourceOverview(manager.resource_overview(&workspace).await?)

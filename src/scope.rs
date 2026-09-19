@@ -58,9 +58,7 @@ pub async fn authorize(
         | Method::LayeredConfig {
             target: ConfigTarget::Workspace(workspace),
         } => Some(workspace),
-        Method::ResourceList { workspace }
-        | Method::ListPorts { workspace }
-        | Method::SimOverview { workspace }
+        Method::SimOverview { workspace }
         | Method::SimList { workspace }
         | Method::SimHistory { workspace, .. } => {
             Some(workspace.get_or_insert_with(|| owner.clone()))

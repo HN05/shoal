@@ -2188,6 +2188,7 @@ fn configured_ports_are_lazy_and_conflicts_require_acceptance() {
         ],
     );
     let workspace = fixture.add("configured");
+    fixture.add("healthy");
     let path = Path::new(workspace["path"].as_str().unwrap());
     let overview = fixture
         .command()
@@ -2250,6 +2251,19 @@ fn configured_ports_are_lazy_and_conflicts_require_acceptance() {
     fixture.ok(&["port", "configured"]);
     fs::write(path.join(".shoal.toml"), "").unwrap();
     assert!(!fixture.run(&["port", "configured"]).status.success());
+    for noun in ["port", "resource"] {
+        let output = fixture.run(&["--json", noun, "--all"]);
+        assert_eq!(output.status.code(), Some(1));
+        let overviews: Value = serde_json::from_slice(&output.stdout).unwrap();
+        let overviews = overviews.as_array().unwrap();
+        assert_eq!(overviews.len(), 2);
+        assert!(overviews.iter().any(|overview| {
+            overview["workspace"]["name"] == "configured" && overview["error"].is_string()
+        }));
+        assert!(overviews.iter().any(|overview| {
+            overview["workspace"]["name"] == "healthy" && overview["error"].is_null()
+        }));
+    }
 }
 
 #[test]

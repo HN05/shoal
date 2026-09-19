@@ -13,6 +13,8 @@ use crate::{
     ui::{self, Fallback},
 };
 
+use super::WorkspaceOverviewResult;
+
 pub(super) async fn run(
     ctx: &Context,
     command: Option<PortCommand>,
@@ -134,24 +136,39 @@ async fn overview(ctx: &Context, workspace: Option<String>, all: bool) -> Result
     if all {
         let mut overviews = Vec::new();
         for workspace in client::workspaces(&ctx.paths).await? {
-            overviews.push(request!(
-                &ctx.paths,
-                Method::PortOverview {
-                    workspace: workspace.id
-                },
-                PortOverview
-            ));
+            let method = Method::PortOverview {
+                workspace: workspace.id.clone(),
+            };
+            overviews.push(match client::call(&ctx.paths, method).await {
+                Ok(Body::PortOverview(overview)) => WorkspaceOverviewResult::Ready(overview),
+                Ok(_) => WorkspaceOverviewResult::failed(
+                    workspace,
+                    "unexpected daemon response; expected PortOverview",
+                ),
+                Err(error) => WorkspaceOverviewResult::failed(workspace, format!("{error:#}")),
+            });
         }
+        let failed = overviews.iter().any(WorkspaceOverviewResult::is_failed);
         ctx.show(&overviews, |overviews| {
             let palette = Palette::stdout(ctx.json);
             for overview in overviews {
-                println!(
-                    "{}",
-                    palette.paint(Style::Heading, &overview.workspace.name)
-                );
-                render_overview(overview, palette);
+                match overview {
+                    WorkspaceOverviewResult::Ready(overview) => {
+                        println!(
+                            "{}",
+                            palette.paint(Style::Heading, &overview.workspace.name)
+                        );
+                        render_overview(overview, palette);
+                    }
+                    WorkspaceOverviewResult::Failed { workspace, error } => println!(
+                        "{}: {}",
+                        palette.paint(Style::Heading, &workspace.name),
+                        palette.paint(Style::Warning, error)
+                    ),
+                }
             }
         })?;
+        return Ok(i32::from(failed));
     } else {
         let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
         let overview = request!(&ctx.paths, Method::PortOverview { workspace }, PortOverview);

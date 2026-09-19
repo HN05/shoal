@@ -538,7 +538,6 @@ pub enum SimCommand {
     /// Show available device types, installed runtimes, and machine profiles.
     Catalog,
     /// Show configured profiles, capacity, and managed instances.
-    /// Show configured pools, capacity, and current leases.
     List {
         workspace: Option<String>,
         #[arg(long, conflicts_with = "workspace")]
@@ -608,6 +607,7 @@ pub enum ResourceCommand {
         #[arg(long, default_value = "default")]
         name: String,
     },
+    /// Show configured pools, capacity, and current leases.
     List {
         workspace: Option<String>,
         #[arg(long, conflicts_with = "workspace")]

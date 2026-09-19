@@ -16,6 +16,7 @@ use std::time::Duration;
 
 use anyhow::{Result, ensure};
 use clap::CommandFactory;
+use serde::Serialize;
 use serde_json::json;
 use tokio::time::{Instant, sleep};
 
@@ -26,6 +27,29 @@ use crate::{
     paths::Paths,
     shell,
 };
+
+#[derive(Serialize)]
+#[serde(untagged)]
+enum WorkspaceOverviewResult<T> {
+    Ready(T),
+    Failed {
+        workspace: Box<crate::model::Workspace>,
+        error: String,
+    },
+}
+
+impl<T> WorkspaceOverviewResult<T> {
+    fn failed(workspace: crate::model::Workspace, error: impl std::fmt::Display) -> Self {
+        Self::Failed {
+            workspace: Box::new(workspace),
+            error: error.to_string(),
+        }
+    }
+
+    fn is_failed(&self) -> bool {
+        matches!(self, Self::Failed { .. })
+    }
+}
 
 pub(crate) async fn run(cli: Cli) -> Result<i32> {
     // Skill delivery is independent of daemon state and socket-path limits.

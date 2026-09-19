@@ -175,9 +175,6 @@ pub enum Method {
         workspace: String,
         name: String,
     },
-    ListPorts {
-        workspace: Option<String>,
-    },
     PortOverview {
         workspace: String,
     },
@@ -190,9 +187,6 @@ pub enum Method {
         workspace: String,
         pool: String,
         name: String,
-    },
-    ResourceList {
-        workspace: Option<String>,
     },
     ResourceOverview {
         workspace: String,
@@ -274,11 +268,9 @@ pub enum Body {
     Notifications(Vec<Notification>),
     Notification(Notification),
     Port(PortReservation),
-    Ports(Vec<PortReservation>),
     PortSuggestion(PortSuggestion),
     PortOverview(PortOverview),
     ResourceLease(ResourceLease),
-    ResourceLeases(Vec<ResourceLease>),
     ResourceOverview(Overview),
     ResourceBusy { message: String },
     Simulator(Simulator),
