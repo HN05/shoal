@@ -13,6 +13,7 @@ pub struct Caller {
     pub execution_id: String,
     pub workspace_id: String,
     pub landing: bool,
+    pub setup: bool,
 }
 
 /// Resolve `token` and confine `method` to the caller's own workspace. Optional
@@ -52,6 +53,7 @@ pub async fn authorize(
         | Method::DiffBase { workspace }
         | Method::RefreshMergeSource { workspace, .. }
         | Method::Execute { workspace, .. }
+        | Method::WorkspaceHooks { workspace }
         | Method::ReservePort { workspace, .. }
         | Method::ReleasePort { workspace, .. }
         | Method::PortOverview { workspace }
@@ -63,11 +65,18 @@ pub async fn authorize(
         | Method::SimHistory { workspace, .. } => {
             Some(workspace.get_or_insert_with(|| owner.clone()))
         }
+        Method::Prepare { workspace, .. } => {
+            ensure!(
+                !caller.setup,
+                "a setup command cannot recursively run setup"
+            );
+            Some(workspace)
+        }
         Method::LandWorkspace { .. } => bail!(
             "workspace processes cannot land into the default branch; an unscoped shoal land does that"
         ),
         _ => bail!(
-            "workspace processes can only inspect their worktree, execute there, manage its resources, and merge into their own branch"
+            "workspace processes can only inspect their worktree, execute or set up there, manage its resources, and merge into their own branch"
         ),
     };
     if let Some(target) = target {

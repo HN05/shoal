@@ -2269,7 +2269,12 @@ fn configured_ports_are_lazy_and_conflicts_require_acceptance() {
 #[test]
 fn execution_scope_limits_management_and_expires() {
     let fixture = Fixture::new();
-    fixture.add("worker");
+    let setup = fixture.repo.join("setup.sh");
+    fs::write(&setup, "#!/bin/sh\nprintf setup >> setup-runs\n").unwrap();
+    fs::set_permissions(&setup, fs::Permissions::from_mode(0o755)).unwrap();
+    commit_resource_config(&fixture.repo, "setup_cmd = 'setup.sh'\n");
+    let worker = fixture.add("worker");
+    let worker_path = Path::new(worker["path"].as_str().unwrap());
     fixture.add("other");
     let binary = env!("CARGO_BIN_EXE_shoal");
     let scoped = |args: &[&str]| {
@@ -2285,12 +2290,37 @@ fn execution_scope_limits_management_and_expires() {
     let list: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(list.as_array().unwrap().len(), 1);
     assert_eq!(list[0]["name"], "worker");
+    let sibling_started = worker_path.join("sibling-started");
+    let mut sibling = fixture
+        .command()
+        .args([
+            "exec",
+            "worker",
+            "--",
+            "sh",
+            "-c",
+            "touch sibling-started; sleep 30",
+        ])
+        .spawn()
+        .unwrap();
+    wait_until("sibling execution", || sibling_started.exists());
     let output = scoped(&["setup", "worker"]);
-    assert!(!output.status.success());
+    assert!(!output.status.success(), "{output:?}");
     assert!(
-        !String::from_utf8_lossy(&output.stderr).contains("cannot administer Shoal"),
+        String::from_utf8_lossy(&output.stderr).contains("active or unknown execution"),
+        "{output:?}"
+    );
+    fixture.ok(&["stop", "worker"]);
+    assert!(!sibling.wait().unwrap().success());
+    let output = scoped(&["setup", "worker"]);
+    assert!(
+        output.status.success(),
         "{}",
         String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        fs::read_to_string(worker_path.join("setup-runs")).unwrap(),
+        "setupsetup"
     );
     let output = scoped(&["install", "--dry-run"]);
     assert!(!output.status.success());
@@ -2338,6 +2368,30 @@ fn execution_scope_limits_management_and_expires() {
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("expired or unknown"));
     assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 2);
+}
+
+#[test]
+fn setup_commands_cannot_recursively_run_setup() {
+    let fixture = Fixture::new();
+    let setup = fixture.repo.join("setup.sh");
+    fs::write(&setup, "#!/bin/sh\nexit 0\n").unwrap();
+    fs::set_permissions(&setup, fs::Permissions::from_mode(0o755)).unwrap();
+    commit_resource_config(&fixture.repo, "setup_cmd = 'setup.sh'\n");
+    let worker = fixture.add("worker");
+    let setup = Path::new(worker["path"].as_str().unwrap()).join("setup.sh");
+    fs::write(
+        &setup,
+        format!("#!/bin/sh\n'{}' setup\n", env!("CARGO_BIN_EXE_shoal")),
+    )
+    .unwrap();
+
+    let output = fixture.run(&["setup", "worker"]);
+    assert!(!output.status.success(), "{output:?}");
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("a setup command cannot recursively run setup"),
+        "{output:?}"
+    );
 }
 
 #[cfg(target_os = "macos")]

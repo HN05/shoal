@@ -9,8 +9,8 @@ use crate::{
     state::{ExecutionState, WorkspaceState},
     store,
 };
-use anyhow::{Context, Result, ensure};
-use rusqlite::{TransactionBehavior, params};
+use anyhow::{Context, Result, bail, ensure};
+use rusqlite::{OptionalExtension, TransactionBehavior, params};
 use std::{collections::HashSet, time::Duration};
 use tokio::{
     sync::watch,
@@ -25,8 +25,8 @@ pub enum ExecutionKind {
     Command,
     /// A landing authorized by an unscoped caller; the daemon holds its Git gate.
     Land,
-    /// The repository's setup command; exclusive, and its exit decides whether
-    /// the workspace becomes ready.
+    /// The repository's setup command; exclusive apart from the execution that
+    /// requested it, and its exit decides whether the workspace becomes ready.
     Setup,
 }
 
@@ -38,7 +38,9 @@ impl Manager {
         selector: &str,
         wrapper: Option<Identity>,
         kind: ExecutionKind,
+        parent_execution: Option<&str>,
     ) -> Result<(ExecutionPlan, watch::Receiver<bool>)> {
+        let parent_execution = parent_execution.map(str::to_owned);
         if let Some(wrapper) = &wrapper {
             ensure!(
                 process::alive(wrapper)?,
@@ -73,12 +75,16 @@ impl Manager {
             .run(move |db| {
                 let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
                 if setup {
-                    let busy: bool = tx.query_row(
-                        "SELECT EXISTS(SELECT 1 FROM executions WHERE workspace_id=?1)",
-                        [&workspace_id],
+                    let blocking: Option<String> = tx.query_row(
+                        "SELECT id FROM executions WHERE workspace_id=?1 AND (?2 IS NULL OR id != ?2) LIMIT 1",
+                        params![workspace_id, parent_execution],
                         |r| r.get(0),
-                    )?;
-                    ensure!(!busy, "workspace has active or unknown executions");
+                    ).optional()?;
+                    if let Some(blocking) = blocking {
+                        bail!(
+                            "workspace has active or unknown execution {blocking}; setup is unavailable until it finishes or is cleared"
+                        );
+                    }
                     let reserved = tx.execute(
                         "UPDATE workspaces SET state=?2,error=NULL,setup_finished=0 WHERE id=?1 AND state IN (?3,?4,?2)",
                         params![
@@ -114,6 +120,7 @@ impl Manager {
             Caller {
                 execution_id: id.clone(),
                 landing: kind == ExecutionKind::Land,
+                setup,
                 workspace_id: workspace.id.clone(),
             },
         )

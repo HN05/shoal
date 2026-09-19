@@ -138,7 +138,7 @@ own-branch checks.
 ## Scope and user interfaces
 
 Commands launched through Shoal inherit a daemon-validated scope token that
-confines them to their own workspace: status, inspect, execute, merge, and resources.
+confines them to their own workspace: status, inspect, execute, setup, merge, and resources.
 `land`, creation, removal, reconciliation, other workspaces, repository
 administration, and service control need an unscoped caller. PR registration and
 manual merge acknowledgement are own-workspace exceptions; nested executions keep scope.

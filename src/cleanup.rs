@@ -346,6 +346,7 @@ mod tests {
                 &workspace.id,
                 None,
                 crate::workspace::ExecutionKind::Command,
+                None,
             )
             .await
             .unwrap();

@@ -171,7 +171,7 @@ async fn serve(mut stream: UnixStream, server: Server) -> Result<()> {
                 wrapper,
                 server.manager,
                 ExecutionKind::Land,
-                None,
+                ExecutionContext::default(),
             )
             .await;
         }
@@ -188,7 +188,10 @@ async fn serve(mut stream: UnixStream, server: Server) -> Result<()> {
                 wrapper,
                 server.manager,
                 kind,
-                agent,
+                ExecutionContext {
+                    agent,
+                    ..Default::default()
+                },
             )
             .await;
         }
@@ -201,7 +204,10 @@ async fn serve(mut stream: UnixStream, server: Server) -> Result<()> {
                 wrapper,
                 server.manager,
                 kind,
-                None,
+                ExecutionContext {
+                    parent_execution: caller.map(|caller| caller.execution_id),
+                    ..Default::default()
+                },
             )
             .await;
         }
@@ -446,9 +452,14 @@ async fn watch_notifications(
     }
 }
 
+#[derive(Default)]
+struct ExecutionContext {
+    agent: Option<String>,
+    parent_execution: Option<String>,
+}
+
 /// Long-lived execution connection: register the wrapper's child, relay stop
-/// requests, and record completion when the wrapper reports it. `agent` names
-/// a shortcut-launched agent whose exit becomes a notification.
+/// requests, and record completion when the wrapper reports it.
 async fn execute(
     mut stream: UnixStream,
     request_id: u64,
@@ -456,7 +467,7 @@ async fn execute(
     wrapper: Identity,
     manager: Arc<Manager>,
     kind: ExecutionKind,
-    agent: Option<String>,
+    context: ExecutionContext,
 ) -> Result<()> {
     let landing = async {
         if kind != ExecutionKind::Land {
@@ -487,7 +498,12 @@ async fn execute(
         }
     };
     let (mut plan, mut stop) = match manager
-        .begin_execution(&workspace, Some(wrapper), kind)
+        .begin_execution(
+            &workspace,
+            Some(wrapper),
+            kind,
+            context.parent_execution.as_deref(),
+        )
         .await
     {
         Ok(begun) => begun,
@@ -536,7 +552,7 @@ async fn execute(
     let complete = manager
         .finish_execution(execution_id, kind, result.as_ref().ok().copied())
         .await?;
-    if let Some(agent) = agent {
+    if let Some(agent) = context.agent {
         let message = match &result {
             Ok(code) if complete => format!("{agent} exited with code {code}"),
             Ok(code) => format!(

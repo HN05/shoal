@@ -14,8 +14,9 @@ removal, check it against the rule those files state before judging it.
   path that deletes a directory, kills a process or mutates a simulator
   without those checks is a blocker.
 - Scope: workspace commands carry a scope token and get own-worktree access
-  only; `land`, lifecycle, repository and service administration stay denied, except
-  own-workspace PR registration/merge acknowledgements; notifications are read
+  only; workspace allocation/removal/recovery and shared repository/service
+  administration stay denied, while own-workspace setup, PR registration and
+  merge acknowledgements are allowed; notifications are read
   by the unscoped user only and never fail the operation they record. PR cleanup defaults on,
   stops tracked agents, and requires clean files and unchanged merged HEAD. This is
   cooperative, not a security boundary, so judge it as such.
@@ -30,7 +31,7 @@ removal, check it against the rule those files state before judging it.
   ancestor releases and merged PRs excluding release preparation, and GitHub
   copies the Forgejo notes.
 - Prompt templates follow config precedence: saved repository values, worktree,
-  global config. Setup preserves existing template files; substitutions never
+  global config. `install` preserves existing template files; substitutions never
   evaluate or recursively expand inserted text.
 - Claude and Codex launches (including Happy and Codex app handoffs) persist
   workspace trust even when the user config is absent, preserving other settings.
@@ -46,7 +47,7 @@ removal, check it against the rule those files state before judging it.
   styles belong at presentation sites; machine output and stored values stay plain.
 - Persistence: lifecycle enums keep their lowercase SQLite/JSON spelling and
   reject unknown values. Schema and state-file changes need a compatibility
-  story for existing daemons. Setup preserves compatible daemons and commands,
+  story for existing daemons. `install` preserves compatible daemons and commands,
   deferring service changes until restart; incompatible daemons restart.
   Packaged config installation replaces global TOML only on explicit request,
   keeps a backup, and uses templates embedded in the binary.

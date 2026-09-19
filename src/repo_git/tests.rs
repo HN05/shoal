@@ -804,6 +804,7 @@ async fn land_refuses_dirty_checkouts_other_branches_and_scoped_callers() {
             "token".into(),
             scope::Caller {
                 landing: false,
+                setup: false,
                 execution_id: "execution".into(),
                 workspace_id: workspace.id.clone(),
             },

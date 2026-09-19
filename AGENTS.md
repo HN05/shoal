@@ -24,8 +24,9 @@ when behavior changes, distinguishing decisions from proposals.
   daemon for the repository layer. Named ports are lazy, with CLI overrides and
   explicit conflicts.
 - Workspace commands inherit a scope token. Enforce own-worktree resource access
-  in the daemon and deny `shoal land` and lifecycle/repository/service
-  administration; own-workspace PR watches/merge acknowledgements are allowed.
+  in the daemon and deny workspace allocation/removal/recovery and shared
+  repository/service administration; own-workspace setup, PR watches, and merge
+  acknowledgements are allowed.
   Scope is cooperative, not a boundary against hostile same-user processes.
 - Notifications are daemon records the CLI shows: record them where the daemon
   decides (busy resources, port conflicts, agent-shortcut exits, its own
