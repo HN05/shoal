@@ -204,12 +204,8 @@ impl Manager {
             .await;
         match result {
             Ok(needs_setup) => {
-                let state = if needs_setup {
-                    WorkspaceState::Preparing
-                } else {
-                    WorkspaceState::Ready
-                };
-                self.set_state(&workspace.id, state, None).await?;
+                self.finish_materialization(&workspace.id, needs_setup)
+                    .await?
             }
             Err(error) => {
                 self.set_state(
@@ -379,6 +375,27 @@ impl Manager {
                 db.execute(
                     "UPDATE workspaces SET state=?2, error=?3 WHERE id=?1",
                     params![id, state, error],
+                )?;
+                Ok(())
+            })
+            .await
+    }
+
+    async fn finish_materialization(&self, id: &str, needs_setup: bool) -> Result<()> {
+        let id = id.to_owned();
+        self.store
+            .run(move |db| {
+                db.execute(
+                    "UPDATE workspaces SET state=?2,error=NULL,setup_finished=?3 WHERE id=?1",
+                    params![
+                        id,
+                        if needs_setup {
+                            WorkspaceState::Preparing
+                        } else {
+                            WorkspaceState::Ready
+                        },
+                        !needs_setup
+                    ],
                 )?;
                 Ok(())
             })

@@ -4,7 +4,7 @@ use super::Manager;
 use crate::{
     git,
     model::{DiffSummary, Inspection, WorkspaceStatus},
-    state::WorkspaceState,
+    store,
 };
 
 impl Manager {
@@ -19,7 +19,11 @@ impl Manager {
         .await?;
         let diff = parse_numstat(&numstat)?;
         let unread_notifications = self.unread_notifications().await?;
-        let setup_finished = inspection.workspace.state != WorkspaceState::Preparing;
+        let workspace_id = inspection.workspace.id.clone();
+        let setup_finished = self
+            .store
+            .run(move |db| store::setup_finished(db, &workspace_id))
+            .await?;
         let Inspection {
             pr_cleanup,
             workspace,

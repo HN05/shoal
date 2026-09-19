@@ -80,7 +80,7 @@ impl Manager {
                     )?;
                     ensure!(!busy, "workspace has active or unknown executions");
                     let reserved = tx.execute(
-                        "UPDATE workspaces SET state=?2,error=NULL WHERE id=?1 AND state IN (?3,?4,?2)",
+                        "UPDATE workspaces SET state=?2,error=NULL,setup_finished=0 WHERE id=?1 AND state IN (?3,?4,?2)",
                         params![
                             workspace_id,
                             WorkspaceState::Preparing,
@@ -194,8 +194,14 @@ impl Manager {
                         WorkspaceState::Failed
                     };
                     tx.execute(
-                        "UPDATE workspaces SET state=?2,error=?3 WHERE id=(SELECT workspace_id FROM executions WHERE id=?1) AND state=?4",
-                        params![record_id, state, error, WorkspaceState::Preparing],
+                        "UPDATE workspaces SET state=?2,error=?3,setup_finished=?4 WHERE id=(SELECT workspace_id FROM executions WHERE id=?1) AND state=?5",
+                        params![
+                            record_id,
+                            state,
+                            error,
+                            error.is_none(),
+                            WorkspaceState::Preparing
+                        ],
                     )?;
                 }
                 if complete {

@@ -5333,6 +5333,10 @@ fn setup_cmd_local_override_absolute_path_failure_and_retry() {
     let failed = fixture.ok(&["inspect", "failed-setup"]);
     assert_eq!(failed["workspace"]["state"], "failed");
     assert_eq!(failed["executions"], serde_json::json!([]));
+    assert_eq!(
+        fixture.ok(&["status", "failed-setup"])["setup_finished"],
+        false
+    );
     let path = Path::new(failed["workspace"]["path"].as_str().unwrap());
     assert_eq!(
         fs::read_to_string(path.join("setup-result")).unwrap(),
@@ -5347,6 +5351,10 @@ fn setup_cmd_local_override_absolute_path_failure_and_retry() {
     );
     fs::write(&script, "#!/bin/sh\nprintf complete > setup-result\n").unwrap();
     assert_eq!(fixture.ok(&["prepare", "failed-setup"])["state"], "ready");
+    assert_eq!(
+        fixture.ok(&["status", "failed-setup"])["setup_finished"],
+        true
+    );
     assert_eq!(
         fs::read_to_string(path.join("setup-result")).unwrap(),
         "complete"
@@ -5390,6 +5398,7 @@ fn setup_failure_prompt_ignores_or_deletes_only_new_workspace() {
         fixture.ok(&["inspect", "ignored"])["workspace"]["state"],
         "ready"
     );
+    assert_eq!(fixture.ok(&["status", "ignored"])["setup_finished"], false);
     let ignored_path = fixture.ok(&["inspect", "ignored"])["workspace"]["path"]
         .as_str()
         .unwrap()

@@ -11,7 +11,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 15;
+const SCHEMA_VERSION: i64 = 16;
 
 #[derive(Clone)]
 pub struct Store {
@@ -61,10 +61,7 @@ fn migrate(db: &mut Connection) -> Result<()> {
         );
         CREATE TABLE IF NOT EXISTS executions (
             id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id), state TEXT NOT NULL
-        );
-        UPDATE executions SET state='unknown' WHERE state='running';
-        UPDATE workspaces SET state='failed', error='daemon stopped during workspace operation; inspect before cleanup'
-            WHERE state IN ('preparing', 'removing', 'stopping', 'reconciling');",
+        );",
     )?;
     if version < 2 {
         db.execute_batch(
@@ -122,6 +119,20 @@ fn migrate(db: &mut Connection) -> Result<()> {
     if version < 13 {
         db.execute_batch("ALTER TABLE repositories ADD COLUMN workspaces_dir TEXT;")?;
     }
+    if version < 16 {
+        db.execute_batch(
+            "ALTER TABLE workspaces ADD COLUMN setup_finished INTEGER NOT NULL DEFAULT 0 CHECK(setup_finished IN (0,1));
+            UPDATE workspaces SET setup_finished=CASE
+                WHEN state='preparing' OR error LIKE 'setup failed (%' THEN 0
+                ELSE 1
+            END;",
+        )?;
+    }
+    db.execute_batch(
+        "UPDATE executions SET state='unknown' WHERE state='running';
+        UPDATE workspaces SET state='failed', error='daemon stopped during workspace operation; inspect before cleanup'
+            WHERE state IN ('preparing', 'removing', 'stopping', 'reconciling');",
+    )?;
     db.execute_batch(&format!(
         "CREATE TABLE IF NOT EXISTS repository_removals (
             repository_id TEXT PRIMARY KEY REFERENCES repositories(id) ON DELETE CASCADE,
@@ -243,6 +254,14 @@ pub fn executions(db: &Connection, workspace_id: &str) -> Result<Vec<Execution>>
         .collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
+pub fn setup_finished(db: &Connection, workspace_id: &str) -> Result<bool> {
+    Ok(db.query_row(
+        "SELECT setup_finished FROM workspaces WHERE id=?1",
+        [workspace_id],
+        |row| row.get(0),
+    )?)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -269,6 +288,7 @@ mod tests {
                 let workspace = db.query_row("SELECT * FROM workspaces", [], workspace)?;
                 assert_eq!(workspace.name, "feature");
                 assert!(workspace.base_commit.is_none() && workspace.base_ref.is_none());
+                assert!(setup_finished(db, "workspace")?);
                 assert_eq!(
                     executions(db, "workspace")?[0].state,
                     crate::state::ExecutionState::Unknown
@@ -292,6 +312,7 @@ mod tests {
                 ALTER TABLE resource_leases DROP COLUMN mode;
                 ALTER TABLE workspaces DROP COLUMN git_dir;
                 ALTER TABLE workspaces DROP COLUMN git_dir_id;
+                ALTER TABLE workspaces DROP COLUMN setup_finished;
                 ALTER TABLE executions DROP COLUMN wrapper;
                 ALTER TABLE executions DROP COLUMN child;
                 ALTER TABLE executions DROP COLUMN group_id;
@@ -318,5 +339,43 @@ mod tests {
             Ok(())
         }).await.unwrap();
         Store::open(path).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn migrates_setup_completion_without_losing_interrupted_state() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("state.db");
+        let store = Store::open(path.clone()).await.unwrap();
+        store
+            .run(|db| {
+                db.execute_batch(
+                    "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
+                    INSERT INTO workspaces(id,repository_id,name,path,branch,state,error) VALUES
+                        ('ready','repo','ready','/ready','ready','ready',NULL),
+                        ('preparing','repo','preparing','/preparing','preparing','preparing',NULL),
+                        ('failed','repo','failed','/failed','failed','failed','setup failed (exit 1, processes stopped: true); retry with shoal prepare');
+                    ALTER TABLE workspaces DROP COLUMN setup_finished;
+                    PRAGMA user_version=15;",
+                )?;
+                Ok(())
+            })
+            .await
+            .unwrap();
+        let migrated = Store::open(path).await.unwrap();
+        migrated
+            .run(|db| {
+                assert!(setup_finished(db, "ready")?);
+                assert!(!setup_finished(db, "preparing")?);
+                assert!(!setup_finished(db, "failed")?);
+                let state: WorkspaceState = db.query_row(
+                    "SELECT state FROM workspaces WHERE id='preparing'",
+                    [],
+                    |row| row.get(0),
+                )?;
+                assert_eq!(state, WorkspaceState::Failed);
+                Ok(())
+            })
+            .await
+            .unwrap();
     }
 }
