@@ -146,8 +146,9 @@ form is equivalent when the name does not collide with a built-in command. Omit
 the workspace to use the current one, or the picker for a globally configured
 command. Repository-only commands need a current or explicit workspace. Put
 Shoal's global flags before `run` or the shorthand command name. Bare `shoal run`
-lists each effective command's argument array and source layer; outside a managed
-workspace it lists only global commands and built-in defaults.
+lists each effective command's argument array, source layer, and whether its bare
+name is a built-in; outside a managed workspace it lists only global commands and
+built-in defaults.
 Each name resolves from saved repository config, worktree config, then global
 config and built-in defaults; a higher layer replaces the whole argument array.
 The executable is resolved through PATH (or use a path),

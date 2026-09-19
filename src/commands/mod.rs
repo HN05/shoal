@@ -75,6 +75,8 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             workspace,
             args,
         } => match name {
+            Some(name) if name == "claude" => workspaces::claude(&ctx, workspace, args).await,
+            Some(name) if name == "codex" => workspaces::codex(&ctx, None, workspace, args).await,
             Some(name) => crate::named_commands::run(&ctx, &name, workspace, args).await,
             None => crate::named_commands::list(&ctx).await,
         },

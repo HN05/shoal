@@ -1,11 +1,11 @@
 //! Configured shortcuts use the same workspace selection and wrapper as `exec`.
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     ffi::{OsStr, OsString},
 };
 
 use anyhow::{Context as _, Result, ensure};
-use clap::Parser;
+use clap::{CommandFactory, Parser};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -32,6 +32,14 @@ pub struct CommandDefinition {
     pub name: String,
     pub argv: Vec<String>,
     pub layer: CommandLayer,
+    pub bare_name: BareName,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum BareName {
+    Shorthand,
+    BuiltIn,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
@@ -140,17 +148,38 @@ pub async fn list(ctx: &Context) -> Result<i32> {
         }
     }
 
+    let built_ins: BTreeSet<_> = crate::cli::Cli::command()
+        .get_subcommands()
+        .map(|command| command.get_name().to_owned())
+        .collect();
     let definitions: Vec<_> = definitions
         .into_iter()
-        .map(|(name, (argv, layer))| CommandDefinition { name, argv, layer })
+        .map(|(name, (argv, layer))| {
+            let bare_name = if name == "help" || built_ins.contains(&name) {
+                BareName::BuiltIn
+            } else {
+                BareName::Shorthand
+            };
+            CommandDefinition {
+                name,
+                argv,
+                layer,
+                bare_name,
+            }
+        })
         .collect();
     ctx.show(&definitions, |definitions| {
         for command in definitions {
             println!(
-                "{} = {} ({})",
+                "{} = {} ({}{})",
                 command.name,
                 serde_json::to_string(&command.argv).expect("serialize command argv"),
-                command.layer
+                command.layer,
+                if command.bare_name == BareName::BuiltIn {
+                    "; bare name is built-in"
+                } else {
+                    ""
+                }
             );
         }
     })?;

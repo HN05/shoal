@@ -7875,7 +7875,10 @@ fn run_lists_command_layers_and_executes_names_that_collide_with_built_ins() {
     let listed: Vec<Value> = serde_json::from_slice(&output.stdout).unwrap();
     let command = |name: &str| listed.iter().find(|entry| entry["name"] == name).unwrap();
     assert_eq!(command("codex")["layer"], "built_in_default");
+    assert_eq!(command("codex")["bare_name"], "built_in");
     assert_eq!(command("claude")["layer"], "global_config");
+    assert_eq!(command("global")["bare_name"], "shorthand");
+    assert_eq!(command("list")["bare_name"], "built_in");
     assert_eq!(command("worktree")["layer"], "worktree_file");
     assert_eq!(command("saved")["layer"], "saved_repository_config");
     assert_eq!(command("shadowed")["argv"], serde_json::json!(["saved"]));
@@ -7904,9 +7907,35 @@ fn cli_agent_command_defaults_can_be_replaced_at_launch() {
         )
     );
     let output = fixture.run(&[
+        "run",
+        "claude",
+        "configured-agent",
+        "--",
+        "{path}",
+        "two words",
+    ]);
+    assert!(output.status.success());
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        format!(
+            "configured-agent\n{{path}}\ntwo words\nconfigured-agent\n{}\n",
+            path.display()
+        )
+    );
+    let output = fixture.run(&[
         "codex",
         "configured-agent",
         "--cli",
+        "--",
+        "--model",
+        "example",
+    ]);
+    assert!(output.status.success());
+    assert_eq!(output.stdout, b"--model\nexample\ncustom default\n");
+    let output = fixture.run(&[
+        "run",
+        "codex",
+        "configured-agent",
         "--",
         "--model",
         "example",
