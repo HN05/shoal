@@ -99,6 +99,7 @@ fn dynamic_completion_covers_nested_commands_flags_and_paths_without_daemon() {
         (vec!["shoal", "ins"], "install"),
         (vec!["shoal", "set"], "setup"),
         (vec!["shoal", "config", "i"], "install"),
+        (vec!["shoal", "config", "s"], "show"),
         (vec!["shoal", "config", "install", "d"], "default"),
         (vec!["shoal", "repo", "c"], "config"),
         (vec!["shoal", "repo", "config", "--f"], "--file"),

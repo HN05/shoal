@@ -144,7 +144,9 @@ confines them to their own workspace: status, inspect, execute, setup, merge, an
 administration, and service control need an unscoped caller. PR registration and
 manual merge acknowledgement are own-workspace exceptions; nested executions keep scope.
 
-The CLI takes explicit targets and `--json` for automation, and uses
+The CLI takes explicit targets and `--json` for automation; `config show` reports
+effective repository values with their winning layers, using a registered checkout
+before a workspace exists. Other commands use
 current-directory resolution and fzf interactively; noninteractive calls never
 open a picker. `status` combines lifecycle, fork-point changes, active work and
 leases in one workspace view. Human output uses a shared semantic palette at the CLI presentation

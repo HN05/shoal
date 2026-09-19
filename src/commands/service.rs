@@ -86,6 +86,7 @@ pub(super) async fn install(
 
 pub(super) fn config(ctx: &Context, command: ConfigCommand) -> Result<i32> {
     let (name, (config, backup)) = match command {
+        ConfigCommand::Show { .. } => unreachable!("config show is asynchronous"),
         ConfigCommand::Reset => (
             "default".to_owned(),
             crate::config::Config::reset(&ctx.paths)?,

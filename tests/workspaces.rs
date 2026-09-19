@@ -1461,6 +1461,130 @@ fn repository_config_sets_the_automatic_port_range() {
 }
 
 #[test]
+fn config_show_reports_effective_values_and_their_layers() {
+    let fixture = Fixture::with_config(Some(
+        "default_agent = 'claude'\n[commands]\nglobal = ['global']\nshared = ['global']\n\
+         [auto_cleanup]\nenabled = false\n[ports]\nstart = 2000\nend = 6000\n",
+    ));
+
+    // In a registered checkout without a workspace, the checkout file is the
+    // worktree layer for the current-directory target.
+    fs::write(
+        fixture.repo.join(".shoal.toml"),
+        "post_setup_cmd = 'checkout/attach'\n",
+    )
+    .unwrap();
+    let checkout = fixture
+        .command()
+        .current_dir(&fixture.repo)
+        .args(["--json", "config", "show"])
+        .output()
+        .unwrap();
+    assert!(checkout.status.success());
+    let checkout: Value = serde_json::from_slice(&checkout.stdout).unwrap();
+    let checkout_entry = checkout
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|entry| entry["key"] == "post_setup_cmd")
+        .unwrap();
+    assert_eq!(checkout_entry["value"], "checkout/attach");
+    assert_eq!(checkout_entry["layer"], "worktree_file");
+    fs::remove_file(fixture.repo.join(".shoal.toml")).unwrap();
+
+    let workspace = fixture.add("layered-config");
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    fs::write(
+        path.join(".shoal.toml"),
+        "setup_cmd = 'scripts/setup'\n[commands]\nworktree = ['worktree']\nshared = ['worktree']\n\
+         [ports]\nstart = 3000\n[ports.web]\nenv = 'WORKTREE_PORT'\n",
+    )
+    .unwrap();
+    let saved = fixture.root.path().join("saved-config.toml");
+    fs::write(
+        &saved,
+        "default_agent = 'codex'\n[commands]\nshared = ['saved']\n[ports]\nend = 4000\n",
+    )
+    .unwrap();
+    fixture.ok(&[
+        "repo",
+        "config",
+        fixture.repo.to_str().unwrap(),
+        "--file",
+        saved.to_str().unwrap(),
+    ]);
+
+    let report = fixture.ok(&["config", "show", "layered-config"]);
+    let entry = |key: &str| {
+        report
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|entry| entry["key"] == key)
+            .unwrap()
+    };
+    for (key, value, layer) in [
+        (
+            "default_agent",
+            serde_json::json!("codex"),
+            "saved_repository_config",
+        ),
+        (
+            "commands.shared",
+            serde_json::json!(["saved"]),
+            "saved_repository_config",
+        ),
+        (
+            "commands.worktree",
+            serde_json::json!(["worktree"]),
+            "worktree_file",
+        ),
+        (
+            "setup_cmd",
+            serde_json::json!("scripts/setup"),
+            "worktree_file",
+        ),
+        ("ports.start", serde_json::json!(3000), "worktree_file"),
+        (
+            "ports.end",
+            serde_json::json!(4000),
+            "saved_repository_config",
+        ),
+        (
+            "commands.global",
+            serde_json::json!(["global"]),
+            "global_config",
+        ),
+        (
+            "auto_cleanup.enabled",
+            serde_json::json!(false),
+            "global_config",
+        ),
+        (
+            "codex.default_mode",
+            serde_json::json!("cli"),
+            "built_in_default",
+        ),
+        (
+            "auto_cleanup.idle_minutes",
+            serde_json::json!(10),
+            "built_in_default",
+        ),
+    ] {
+        assert_eq!(entry(key)["value"], value, "{key}");
+        assert_eq!(entry(key)["layer"], layer, "{key}");
+    }
+    assert_eq!(entry("ports.web")["value"]["env"], "WORKTREE_PORT");
+    assert_eq!(entry("ports.web")["layer"], "worktree_file");
+
+    let human = fixture.run(&["config", "show", "layered-config"]);
+    assert!(human.status.success());
+    let human = String::from_utf8(human.stdout).unwrap();
+    assert!(human.contains("ports.start = 3000 (worktree file)"));
+    assert!(human.contains("default_agent = \"codex\" (saved repository config)"));
+}
+
+#[test]
 fn configured_port_range_exhaustion_and_release() {
     let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
     let number = listener.local_addr().unwrap().port();

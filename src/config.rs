@@ -4,6 +4,22 @@ use std::{fs, path::PathBuf, time::Duration};
 
 use crate::{paths::Paths, repo_config::RepoConfig};
 
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct RepositoryPresence {
+    codex: crate::repo_config::Codex,
+    auto_cleanup: crate::repo_config::AutoCleanup,
+    pr_cleanup: crate::repo_config::PrCleanup,
+    ports: RepositoryPortPresence,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct RepositoryPortPresence {
+    start: Option<u16>,
+    end: Option<u16>,
+}
+
 /// Settings a repository may set, after every layer: a repository value
 /// wins, an omitted one keeps the global value or the built-in default.
 #[derive(Debug)]
@@ -472,6 +488,47 @@ impl Config {
             Err(error) => return Err(error).with_context(|| format!("read {}", path.display())),
         };
         Self::parse(&text, paths).with_context(|| format!("parse {}", path.display()))
+    }
+
+    /// Read the global config and project its repository-overridable values
+    /// into a layer whose omitted scalar fields remain distinguishable from
+    /// built-in defaults.
+    pub fn load_with_repository_layer(paths: &Paths) -> Result<(Self, RepoConfig)> {
+        let path = Self::path(paths);
+        let config = Self::load(paths)?;
+        let text = match fs::read_to_string(&path) {
+            Ok(text) => text,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
+            Err(error) => return Err(error).with_context(|| format!("read {}", path.display())),
+        };
+        let presence: RepositoryPresence =
+            toml::from_str(&text).with_context(|| format!("parse {}", path.display()))?;
+        let directory = path.parent().context("config has no directory")?;
+        let repository_layer = RepoConfig {
+            commands: config.commands.clone(),
+            issue_template: config.issue_template.clone().or(crate::templates::read(
+                directory,
+                crate::templates::ISSUE_FILE,
+            )?),
+            agent_template: config.agent_template.clone().or(crate::templates::read(
+                directory,
+                crate::templates::AGENT_FILE,
+            )?),
+            git_profile: config.git_profile.clone(),
+            default_agent: config.default_agent,
+            codex: presence.codex,
+            ports: crate::repo_config::PortDefaults {
+                start: presence.ports.start,
+                end: presence.ports.end,
+                ..Default::default()
+            },
+            resources: config.resources.clone(),
+            resource_pools: config.resource_pools.clone(),
+            auto_cleanup: presence.auto_cleanup,
+            pr_cleanup: presence.pr_cleanup,
+            ..Default::default()
+        };
+        Ok((config, repository_layer))
     }
 
     fn parse(text: &str, paths: &Paths) -> Result<Self> {

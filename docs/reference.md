@@ -343,6 +343,14 @@ shared `core.worktree` or `core.bare = true` until those settings are migrated
 to the main checkout's `config.worktree`. Profiles cannot set repository layout
 or extensions. Other worktrees retain their settings.
 
+### Inspect effective configuration
+
+Run `shoal config show [workspace]` to print every effective repository setting
+and the layer that supplied it. With no workspace, Shoal uses the current
+workspace, or the registered checkout when no workspace exists yet. Named tables
+such as commands and ports show one entry per name because a higher layer replaces
+the whole named table. `--json` returns `key`, `value`, and `layer` for each entry.
+
 ### Store repository config outside Git
 
 ```sh

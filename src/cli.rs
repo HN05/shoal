@@ -302,7 +302,9 @@ impl Command {
         matches!(
             self,
             Command::Install { .. }
-                | Command::Config { .. }
+                | Command::Config {
+                    command: ConfigCommand::Install { .. } | ConfigCommand::Reset
+                }
                 | Command::Daemon {
                     command: DaemonCommand::Run { .. }
                         | DaemonCommand::Start
@@ -524,6 +526,8 @@ pub enum ShellCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum ConfigCommand {
+    /// Show effective repository settings and the layer each value came from.
+    Show { workspace: Option<String> },
     /// Install a packaged global config, keeping the old file as config.toml.backup.
     Install {
         #[arg(value_parser = clap::builder::PossibleValuesParser::new(
@@ -733,5 +737,19 @@ mod tests {
                 ..
             }) if workspace.as_deref() == Some("workspace")
         ));
+    }
+
+    #[test]
+    fn config_show_is_available_to_workspace_processes() {
+        let show = Cli::try_parse_from(["shoal", "config", "show", "workspace"]).unwrap();
+        assert!(matches!(
+            &show.command,
+            Some(Command::Config {
+                command: ConfigCommand::Show { workspace }
+            }) if workspace.as_deref() == Some("workspace")
+        ));
+        assert!(!show.command.unwrap().is_administrative());
+        let reset = Cli::try_parse_from(["shoal", "config", "reset"]).unwrap();
+        assert!(reset.command.unwrap().is_administrative());
     }
 }
