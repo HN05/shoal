@@ -93,6 +93,11 @@ mod tests {
             state: "/separate/state".into(),
             socket: "/separate/state/daemon.sock".into(),
         };
+        assert!(PACKAGED.contains(&("default", TEMPLATE)));
+        for (name, text) in PACKAGED {
+            Config::parse(text, &paths)
+                .unwrap_or_else(|error| panic!("invalid packaged config {name}: {error:#}"));
+        }
         let written = Config::parse(TEMPLATE, &paths).unwrap();
         let defaults = Config::default();
         assert_eq!(
@@ -412,7 +417,7 @@ impl Config {
             .open(&path)
         {
             Ok(mut file) => {
-                std::io::Write::write_all(&mut file, TEMPLATE.as_bytes())
+                std::io::Write::write_all(&mut file, default_template().as_bytes())
                     .with_context(|| format!("write {}", path.display()))?;
                 Ok((path, true))
             }
@@ -475,7 +480,19 @@ impl Config {
 }
 
 /// Written by `shoal setup` when no config exists: the defaults, stated.
+#[cfg(test)]
 const TEMPLATE: &str = include_str!("../configs/default.toml");
+
+fn default_template() -> &'static str {
+    PACKAGED
+        .iter()
+        .find(|(name, _)| *name == "default")
+        .expect("packaged default config")
+        .1
+}
+
+/// Named templates shipped in this binary, independent of the source checkout.
+pub const PACKAGED: &[(&str, &str)] = include!(concat!(env!("OUT_DIR"), "/packaged_configs.rs"));
 
 #[derive(Debug, Deserialize)]
 #[serde(default, deny_unknown_fields)]

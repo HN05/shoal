@@ -45,6 +45,8 @@ manager. The service captures the installing shell's `PATH`.
 
 Distribution is a source-built Homebrew formula in the shared HN05 tap with a
 release channel (immutable tags, selected explicitly) and a `main` channel.
+Named configuration templates in `configs/` are embedded at build time, so
+installation needs no source checkout or network access.
 Build and packaging logic lives in Shoal's `scripts/install-homebrew.sh`; the
 tap declares sources and dependencies. One Forgejo Actions workflow releases: it
 bumps versions, validates, creates and merges a version PR under normal branch
