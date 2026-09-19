@@ -22,7 +22,7 @@ use serde_json::json;
 use tokio::time::{Instant, sleep};
 
 use crate::{
-    cli::{Cli, CodexMode, Command, PrCommand, ShellCommand},
+    cli::{Cli, CodexMode, Command, ConfigCommand, PrCommand, ShellCommand},
     context::Context,
     env,
     paths::Paths,
@@ -255,10 +255,9 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             recovery::run(&ctx, workspace, all, options).await
         }
         Command::Config { command } => match command {
-            crate::cli::ConfigCommand::Show { workspace } => {
-                configuration::show(&ctx, workspace).await
-            }
-            command => service::config(&ctx, command),
+            ConfigCommand::Show { workspace } => configuration::show(&ctx, workspace).await,
+            ConfigCommand::Reset => service::install_config(&ctx, None),
+            ConfigCommand::Install { name } => service::install_config(&ctx, Some(name)),
         },
         Command::Install {
             dry_run,
