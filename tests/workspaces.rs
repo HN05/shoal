@@ -6301,6 +6301,10 @@ fn issue_lookup_errors_never_create_a_workspace() {
             "no agent selected",
         ),
         (
+            vec!["issue", "4", "--agent", "codex"],
+            "expected an issue URL",
+        ),
+        (
             vec![
                 "issue",
                 "https://github.com/team/other/issues/4",

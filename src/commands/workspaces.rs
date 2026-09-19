@@ -126,12 +126,17 @@ pub(super) async fn add(
         base,
         git_profile,
     } = creation;
+    let issue_command = matches!(agent, AgentLaunch::IssueDefault(_));
     let repository = match repository {
         Some(repo) => ui::repository_selector(repo)?,
         None => {
             let repos = client::repositories(&ctx.paths).await?;
             match issue.as_deref() {
-                Some(url) if url.starts_with("https://") || url.starts_with("http://") => {
+                Some(url)
+                    if issue_command
+                        || url.starts_with("https://")
+                        || url.starts_with("http://") =>
+                {
                     super::issues::repository_for(&repos, url).await?.id.clone()
                 }
                 _ => ui::pick(ctx, "Repository> ", ui::repository_choices(repos).await?)?,
