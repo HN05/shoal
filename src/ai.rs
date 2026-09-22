@@ -9,6 +9,7 @@ use anyhow::{Context, Result, ensure};
 use serde::Deserialize;
 
 pub type Agents = BTreeMap<String, Agent>;
+pub const BUILT_INS: [&str; 2] = ["codex", "claude"];
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]

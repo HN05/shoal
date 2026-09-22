@@ -29,12 +29,12 @@ pub(super) fn run(command: Option<&SkillCommand>, json_output: bool) -> Result<i
     let home = PathBuf::from(std::env::var_os("HOME").context("HOME is not set")?);
     ensure!(home.is_absolute(), "HOME must be an absolute path");
     let configured = crate::ai::load(&home)?;
+    let mut names = std::collections::BTreeSet::from(crate::ai::BUILT_INS);
+    names.extend(configured.keys().map(String::as_str));
     ensure!(
-        matches!(agent.as_str(), "all" | "codex" | "claude") || configured.contains_key(agent),
+        agent == "all" || names.contains(agent.as_str()),
         "unknown AI tool {agent:?}; configure [ai.{agent}] with skill_dir in global Shoal config"
     );
-    let mut names = std::collections::BTreeSet::from(["codex", "claude"]);
-    names.extend(configured.keys().map(String::as_str));
     let destinations = names
         .into_iter()
         .filter(|name| agent == "all" || agent == name)

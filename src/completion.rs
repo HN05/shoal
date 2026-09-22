@@ -144,11 +144,11 @@ fn decorate(command: Command, parent: &str, typed: Arc<Typed>) -> Command {
                 }))
             } else if parent == "skill" && name == "install" && arg.get_id() == "agent" {
                 arg.add(ArgValueCompleter::new(|current: &OsStr| {
-                    let mut names = std::collections::BTreeSet::from([
-                        "all".to_owned(),
-                        "codex".to_owned(),
-                        "claude".to_owned(),
-                    ]);
+                    let mut names: std::collections::BTreeSet<_> = ["all"]
+                        .into_iter()
+                        .chain(crate::ai::BUILT_INS)
+                        .map(str::to_owned)
+                        .collect();
                     if let Some(home) = std::env::var_os("HOME") {
                         if let Ok(agents) = crate::ai::load(&PathBuf::from(home)) {
                             names.extend(agents.into_keys());
