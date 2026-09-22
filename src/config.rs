@@ -49,6 +49,7 @@ pub struct Effective {
     pub commands: crate::named_commands::Commands,
     pub issue_template: Option<String>,
     pub agent_template: Option<String>,
+    pub agent_auth: crate::agent_auth::Config,
     pub default_agent: Option<crate::cli::Agent>,
     pub codex: Codex,
     pub auto_cleanup: AutoCleanup,
@@ -62,6 +63,7 @@ pub struct Config {
     pub commands: crate::named_commands::Commands,
     pub issue_template: Option<String>,
     pub agent_template: Option<String>,
+    pub agent_auth: crate::agent_auth::Config,
     pub git: crate::git_profile::Git,
     pub git_profile: Option<String>,
     pub root_dir: Option<PathBuf>,
@@ -537,6 +539,7 @@ impl Config {
                 directory,
                 crate::templates::AGENT_FILE,
             )?),
+            agent_auth: config.agent_auth.clone(),
             git_profile: config.git_profile.clone(),
             default_agent: config.default_agent,
             codex: crate::repo_config::Codex {
@@ -568,6 +571,7 @@ impl Config {
         config.ports.validate()?;
         config.simulators.validate()?;
         config.git.validate()?;
+        config.agent_auth.validate()?;
         crate::named_commands::validate(&config.commands)?;
         if let Some(name) = &config.git_profile {
             config.git.profile(name)?;
@@ -597,6 +601,7 @@ impl Config {
                 .agent_template
                 .clone()
                 .or_else(|| self.agent_template.clone()),
+            agent_auth: repo.agent_auth.clone().over(self.agent_auth.clone()),
             default_agent: repo.default_agent.or(self.default_agent),
             codex: Codex {
                 default_mode: repo.codex.default_mode.unwrap_or(self.codex.default_mode),

@@ -62,6 +62,7 @@ pub struct RepoConfig {
     pub commands: crate::named_commands::Commands,
     pub issue_template: Option<String>,
     pub agent_template: Option<String>,
+    pub agent_auth: crate::agent_auth::Config,
     pub git_profile: Option<String>,
     /// Agent `shoal issue` starts when `--agent` is omitted.
     pub default_agent: Option<Agent>,
@@ -131,6 +132,7 @@ pub fn load(workspace_dir: &Path) -> Result<RepoConfig> {
 pub fn parse(text: &str) -> Result<RepoConfig> {
     let config: RepoConfig = toml::from_str(text)?;
     crate::named_commands::validate(&config.commands)?;
+    config.agent_auth.validate()?;
     if let Some(name) = &config.git_profile {
         crate::validate::name("git profile", name)?;
     }
@@ -184,6 +186,7 @@ impl RepoConfig {
             commands: base.commands,
             issue_template: self.issue_template.or(base.issue_template),
             agent_template: self.agent_template.or(base.agent_template),
+            agent_auth: self.agent_auth.over(base.agent_auth),
             git_profile: self.git_profile.or(base.git_profile),
             default_agent: self.default_agent.or(base.default_agent),
             codex: Codex {

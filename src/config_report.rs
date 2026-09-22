@@ -28,7 +28,7 @@ pub async fn load(paths: &Paths, target: ConfigTarget) -> Result<Vec<Entry>> {
     // Retain the same cross-layer validation used by commands that consume the
     // configuration, especially a port range split across two layers.
     global_config.effective(&layers.clone().resolve())?;
-    entries(defaults(), global, layers)
+    entries(defaults(), global, *layers)
 }
 
 fn entries(defaults: RepoConfig, global: RepoConfig, layers: ConfigLayers) -> Result<Vec<Entry>> {
@@ -50,6 +50,12 @@ fn entries(defaults: RepoConfig, global: RepoConfig, layers: ConfigLayers) -> Re
     })?;
     scalar(&mut result, "agent_template", &sources, |config| {
         config.agent_template.as_ref()
+    })?;
+    scalar(&mut result, "agent_auth.fj", &sources, |config| {
+        config.agent_auth.fj.as_ref()
+    })?;
+    scalar(&mut result, "agent_auth.gh", &sources, |config| {
+        config.agent_auth.gh.as_ref()
     })?;
     scalar(&mut result, "git_profile", &sources, |config| {
         config.git_profile.as_ref()

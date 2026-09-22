@@ -1,3 +1,4 @@
+mod agent_auth;
 mod cleanup;
 mod cli;
 mod client;

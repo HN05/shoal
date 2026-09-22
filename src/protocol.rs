@@ -21,7 +21,7 @@ use crate::{
     simulators::{SimRequest, Simulator, SimulatorCatalog},
 };
 
-pub const VERSION: u32 = 31;
+pub const VERSION: u32 = 32;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -265,7 +265,7 @@ pub enum Body {
     RemovalResult(RemovalResult),
     DiffBase(DiffBase),
     Hooks(Hooks),
-    LayeredConfig(ConfigLayers),
+    LayeredConfig(Box<ConfigLayers>),
     CommandLayers(CommandLayers),
     PulledBranch(PulledBranch),
     Notifications(Vec<Notification>),
