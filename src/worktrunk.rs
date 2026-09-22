@@ -25,12 +25,15 @@ pub async fn create(
             .to_str()
             .context("workspace path is not UTF-8")?,
     )?;
+    // Worktrunk renders this setting as a template. Emit the entire path as
+    // one string expression so template syntax in a literal directory stays inert.
+    let template = serde_json::to_string(&format!("{{{{ {literal} }}}}"))?;
     let mut command = Command::new("wt");
     command
         .arg("--config")
         .arg(worktrunk_config)
         .arg("--config-set")
-        .arg(format!("worktree-path = {literal}"))
+        .arg(format!("worktree-path = {template}"))
         .arg("-C")
         .arg(repository_dir)
         .arg("switch");

@@ -8529,7 +8529,10 @@ fn detached_agents_use_auth_wrappers_and_invalid_wrappers_prevent_launch() {
 fn one_off_workspace_paths_preserve_repository_defaults_and_ownership() {
     let fixture = Fixture::new();
     let repo = fixture.repo.to_str().unwrap();
-    let destination = fixture.root.path().join("elsewhere/one off ' path");
+    let destination = fixture
+        .root
+        .path()
+        .join("elsewhere/one off ' {{ branch }} path");
     let path = destination.to_str().unwrap();
     let workspace = fixture.ok(&["add", repo, "custom/topic", "--path", path]);
     assert_eq!(
