@@ -11,7 +11,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 16;
+const SCHEMA_VERSION: i64 = 17;
 
 #[derive(Clone)]
 pub struct Store {
@@ -100,7 +100,15 @@ fn migrate(db: &mut Connection) -> Result<()> {
             reason TEXT, created_at INTEGER NOT NULL, UNIQUE(workspace_id,pool,name),
             FOREIGN KEY(scope,pool) REFERENCES resource_pools(scope,name)
         );
-        CREATE INDEX IF NOT EXISTS resource_lease_pool ON resource_leases(scope,pool);",
+        CREATE INDEX IF NOT EXISTS resource_lease_pool ON resource_leases(scope,pool);
+        CREATE TABLE IF NOT EXISTS access_requests (
+            id TEXT PRIMARY KEY,
+            workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+            target_key TEXT NOT NULL, name TEXT NOT NULL,
+            record TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1))
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS access_request_name
+            ON access_requests(workspace_id,target_key,name) WHERE active=1;",
     )?;
     if version < 9 {
         db.execute_batch(
@@ -265,6 +273,45 @@ pub fn setup_finished(db: &Connection, workspace_id: &str) -> Result<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn approval_records_survive_restart_and_follow_workspace_ownership() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("state.db");
+        let store = Store::open(path.clone()).await.unwrap();
+        store.run(|db| {
+            db.execute_batch("DROP TABLE access_requests;
+                PRAGMA user_version=16;
+                INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
+                INSERT INTO workspaces(id,repository_id,name,path,branch,state) VALUES ('workspace','repo','worker','/work','worker','ready');")?;
+            Ok(())
+        }).await.unwrap();
+        let migrated = Store::open(path.clone()).await.unwrap();
+        migrated.run(|db| {
+            db.execute("INSERT INTO access_requests VALUES ('request','workspace','pool','default','{}',1)", [])?;
+            assert!(db.execute("INSERT INTO access_requests VALUES ('duplicate','workspace','pool','default','{}',1)", []).is_err());
+            assert!(db.execute("INSERT INTO access_requests VALUES ('orphan','missing','pool','default','{}',1)", []).is_err());
+            Ok(())
+        }).await.unwrap();
+        Store::open(path)
+            .await
+            .unwrap()
+            .run(|db| {
+                let count = |db: &Connection| {
+                    db.query_row("SELECT COUNT(*) FROM access_requests", [], |row| {
+                        row.get::<_, u32>(0)
+                    })
+                };
+                assert_eq!(count(db)?, 1);
+                db.execute("UPDATE workspaces SET state='failed'", [])?;
+                assert_eq!(count(db)?, 1);
+                db.execute("DELETE FROM workspaces", [])?;
+                assert_eq!(count(db)?, 0);
+                Ok(())
+            })
+            .await
+            .unwrap();
+    }
 
     #[tokio::test]
     async fn migrates_original_database_without_losing_ownership_records() {
