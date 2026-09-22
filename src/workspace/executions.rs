@@ -53,23 +53,34 @@ impl Manager {
         let workspace = self.workspace(selector).await?;
         let gate = self.git_gate(&workspace.repository_id).await;
         let _guard = if setup { Some(gate.lock().await) } else { None };
+        let (setup_cmd, pre_setup) = if setup {
+            let config = self.workspace_config(&workspace).await?;
+            let pre_setup = config
+                .pre_setup_cmd
+                .as_ref()
+                .or(self.config.pre_setup_cmd.as_ref())
+                .map(|command| workspace.path.join(command));
+            ensure!(
+                config.setup_cmd.is_some() || pre_setup.is_some(),
+                "no setup_cmd configured"
+            );
+            (
+                config.setup_cmd.map(|command| workspace.path.join(command)),
+                pre_setup,
+            )
+        } else {
+            (None, None)
+        };
         let _resources = if setup {
-            Some(self.resource_guard(&workspace.id, false).await?)
+            Some(
+                self.resource_guard(&workspace.id, pre_setup.is_some())
+                    .await?,
+            )
         } else {
             None
         };
         let mut connections = self.connections.lock().await;
         let workspace = self.workspace(&workspace.id).await?;
-        let setup_cmd = if setup {
-            let command = self
-                .workspace_config(&workspace)
-                .await?
-                .setup_cmd
-                .context("no setup_cmd configured")?;
-            Some(workspace.path.join(command))
-        } else {
-            None
-        };
         ensure!(workspace.path.is_dir(), "workspace directory is missing");
         self.verify_worktree(&workspace).await?;
         self.touch(&workspace.id).await;
@@ -130,6 +141,30 @@ impl Manager {
             },
         )
         .await;
+        drop(connections);
+        drop(_guard);
+        if let Some(command) = pre_setup
+            && let Err(error) = async {
+                crate::hooks::run_detached(
+                    crate::hooks::Hook::PreSetup,
+                    &workspace,
+                    &command,
+                    &self.paths,
+                )
+                .await?;
+                self.verify_worktree(&workspace).await
+            }
+            .await
+        {
+            self.finish_execution(id, kind, Some(1)).await?;
+            self.set_state(
+                &workspace.id,
+                WorkspaceState::Failed,
+                Some(format!("{error:#}")),
+            )
+            .await?;
+            return Err(error);
+        }
         Ok((
             ExecutionPlan {
                 id,

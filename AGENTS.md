@@ -14,9 +14,10 @@ when behavior changes, distinguishing decisions from proposals.
   operations and preserve Shoal's ownership records and cleanup policy.
 - Repository TOML lives at `.shoal.toml` or `.shoal/config.toml`; reject both
   together. `setup_cmd` is tracked and gates
-  readiness; `post_setup_cmd` (CLI, after ready) and `pre_remove_cmd` (daemon,
-  inside the shared removal path) are untracked user processes with the
-  workspace identity and no scope token. Optional local repository config lives
+  readiness; hooks are untracked user processes with workspace identity and no
+  scope token. `pre_setup_cmd` runs in the daemon before tracked setup and gates
+  readiness, excluding lifecycle and permit changes; `post_setup_cmd` runs in
+  the CLI after ready, and `pre_remove_cmd` inside the shared daemon removal path. Optional local repository config lives
   in daemon state, layers per option over the worktree config, and is deleted
   with its registration. Every option that does not describe the machine may
   also be set per repository and resolves saved config, worktree file, global

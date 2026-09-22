@@ -117,7 +117,7 @@ per-worktree config, preserving other worktrees' settings. Enable the shared
 profiles cannot change layout or extensions. Reopening keeps existing settings
 and rejects an explicit profile flag.
 
-Repository config may name `setup_cmd`, `post_setup_cmd`, and `pre_remove_cmd`:
+Repository config may name setup and lifecycle hook executables:
 single executable paths resolved against the worktree, run directly without shell
 parsing or PATH lookup, with the worktree as working directory. Setup runs through
 the tracked wrapper with workspace scope; the daemon owns readiness and execution
@@ -129,11 +129,14 @@ a nonzero exit. `setup` reruns setup explicitly; nothing retries automatically.
 Hooks are deliberately untracked user processes with the workspace identity
 but no scope token, because their purpose is to start or stop things that
 outlive the hook (a tmux session, say) without becoming execution survivors.
-The post-setup hook runs from the CLI with the terminal once the workspace is
+The pre-setup hook runs in the daemon after ownership and execution checks,
+with a time limit, while preparation excludes lifecycle and permit changes;
+failure marks setup failed. It may be configured without a setup command and
+uses global defaults below repository config. The post-setup hook runs from the CLI with the terminal once the workspace is
 ready and before any agent; failure keeps the ready workspace. The pre-remove
 hook runs in the daemon inside the single removal path for manual, repository,
 and automatic removal, after checks pass and commands stop, bounded in time;
-failure retains the workspace. Both hook keys share the setup path rules.
+failure retains the workspace. Hook executables share the setup path rules.
 
 `diff` compares against the recorded base's fork point (merge-base fallback, fixed
 commits stay fixed) with native Git settings, so advancing the base is never shown

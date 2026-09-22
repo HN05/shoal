@@ -9179,3 +9179,76 @@ while test ! -f "$HOME/hook-continue"; do sleep 0.05; done
     assert!(acquire.wait_with_output().unwrap().status.success());
     fixture.ok(&["rm", "hooked", "--yes", "--delete-branch"]);
 }
+
+#[test]
+fn pre_setup_hook_gates_readiness_and_supports_global_defaults() {
+    let fixture = Fixture::with_config(Some("pre_setup_cmd = 'before.sh'\n"));
+    fs::write(
+        fixture.repo.join("before.sh"),
+        r#"#!/bin/sh
+set -eu
+test "$SHOAL_HOOK" = pre_setup
+test -z "${SHOAL_SCOPE_TOKEN:-}"
+test -z "${SHOAL_EXECUTION_ID:-}"
+echo before >> "$HOME/setup-order"
+test ! -f "$HOME/fail-before" || { echo 'prepare failed' >&2; exit 7; }
+"#,
+    )
+    .unwrap();
+    fs::write(
+        fixture.repo.join("setup.sh"),
+        "#!/bin/sh\necho setup >> \"$HOME/setup-order\"\n",
+    )
+    .unwrap();
+    for name in ["before.sh", "setup.sh"] {
+        fs::set_permissions(fixture.repo.join(name), fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    commit_resource_config(&fixture.repo, "setup_cmd = 'setup.sh'\n");
+    let home = fixture.root.path();
+    fs::write(home.join("fail-before"), "").unwrap();
+    let output = fixture.run(&["add", fixture.repo.to_str().unwrap(), "hooked"]);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("pre_setup_cmd exited with 7"));
+    let inspection = fixture.ok(&["inspect", "hooked"]);
+    assert_eq!(inspection["workspace"]["state"], "failed");
+    assert_eq!(inspection["executions"], serde_json::json!([]));
+    assert_eq!(
+        fs::read_to_string(home.join("setup-order")).unwrap(),
+        "before\n"
+    );
+    fs::remove_file(home.join("fail-before")).unwrap();
+    assert_eq!(fixture.ok(&["setup", "hooked"])["state"], "ready");
+    assert_eq!(
+        fs::read_to_string(home.join("setup-order")).unwrap(),
+        "before\nbefore\nsetup\n"
+    );
+    let path = Path::new(inspection["workspace"]["path"].as_str().unwrap());
+    // A repository override wins; a pre-setup hook alone still gates readiness.
+    fs::write(
+        path.join(".shoal.toml"),
+        "pre_setup_cmd = '/usr/bin/true'\n",
+    )
+    .unwrap();
+    assert_eq!(fixture.ok(&["setup", "hooked"])["state"], "ready");
+    fs::write(fixture.repo.join(".shoal.toml"), "").unwrap();
+    git(&fixture.repo, &["add", ".shoal.toml"]);
+    git(
+        &fixture.repo,
+        &[
+            "-c",
+            "user.name=Shoal Test",
+            "-c",
+            "user.email=shoal@example.invalid",
+            "commit",
+            "-m",
+            "hook only",
+        ],
+    );
+    assert_eq!(fixture.add("hook-only")["state"], "ready");
+    assert_eq!(
+        fs::read_to_string(home.join("setup-order")).unwrap(),
+        "before\nbefore\nsetup\nbefore\n"
+    );
+    fixture.ok(&["rm", "hooked", "--yes", "--delete-branch"]);
+    fixture.ok(&["rm", "hook-only", "--yes", "--delete-branch"]);
+}

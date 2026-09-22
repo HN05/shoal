@@ -12,6 +12,7 @@ const MAX_DIAGNOSTIC_CHARS: usize = 4096;
 
 #[derive(Debug, Clone, Copy)]
 pub enum Hook<'a> {
+    PreSetup,
     PostSetup,
     PreRemove,
     PostResourceAcquire(&'a ResourceLease),
@@ -21,6 +22,7 @@ pub enum Hook<'a> {
 impl Hook<'_> {
     fn key(self) -> &'static str {
         match self {
+            Hook::PreSetup => "pre_setup_cmd",
             Hook::PostSetup => "post_setup_cmd",
             Hook::PreRemove => "pre_remove_cmd",
             Hook::PostResourceAcquire(_) => "post_resource_acquire_cmd",
@@ -30,6 +32,7 @@ impl Hook<'_> {
 
     fn name(self) -> &'static str {
         match self {
+            Hook::PreSetup => "pre_setup",
             Hook::PostSetup => "post_setup",
             Hook::PreRemove => "pre_remove",
             Hook::PostResourceAcquire(_) => "post_resource_acquire",

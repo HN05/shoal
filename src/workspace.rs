@@ -403,7 +403,9 @@ impl Manager {
                 .await
                 .with_context(|| format!("apply git profile {name}"))?;
         }
-        Ok(config.setup_cmd.is_some())
+        Ok(config.setup_cmd.is_some()
+            || config.pre_setup_cmd.is_some()
+            || self.config.pre_setup_cmd.is_some())
     }
 
     pub(crate) async fn set_state(

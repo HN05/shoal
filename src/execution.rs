@@ -231,7 +231,7 @@ async fn run_tracked(
         },
         Mode::Land { .. } => Method::LandWorkspace { workspace, wrapper },
     };
-    let start_timeout = if matches!(mode, Mode::Land { .. }) {
+    let start_timeout = if matches!(mode, Mode::Land { .. } | Mode::Setup { .. }) {
         120
     } else {
         5
@@ -260,7 +260,11 @@ async fn run_tracked(
             None => command,
         }
     };
-    let mut result = supervise(&mut stream, paths, &plan, &command, &mode, auth.as_ref()).await;
+    let mut result = if mode.is_setup() && command.is_empty() {
+        Ok(0)
+    } else {
+        supervise(&mut stream, paths, &plan, &command, &mode, auth.as_ref()).await
+    };
     if !matches!(result, Ok(0))
         && let Some(land) = &plan.land
         && let Err(error) = crate::repo_git::rollback_land(land).await

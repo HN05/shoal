@@ -549,6 +549,7 @@ Repository config (`.shoal.toml`, `.shoal/config.toml`, or the imported local
 config) can name lifecycle executables:
 
 ```toml
+pre_setup_cmd = "scripts/before.sh"   # Before tracked setup, without a terminal
 setup_cmd = "scripts/setup.sh"        # Prepares the worktree; must exit 0
 post_setup_cmd = "scripts/attach.sh"  # After the workspace is ready, e.g. open tmux
 pre_remove_cmd = "scripts/detach.sh"  # Before the worktree is removed, e.g. close it
@@ -557,6 +558,11 @@ pre_remove_cmd = "scripts/detach.sh"  # Before the worktree is removed, e.g. clo
 Each value is one path, relative to the worktree root or absolute, run with the
 worktree as working directory. Give scripts a shebang and put arguments and
 shell logic inside them.
+
+`pre_setup_cmd` runs in the daemon before tracked setup, after ownership and
+execution checks, with a 60-second limit. It may also be a global default and
+works without a `setup_cmd`. Failure marks the workspace failed and skips setup;
+retry with `shoal setup`. Lifecycle and permit changes are rejected while it runs.
 
 `setup_cmd` runs through the tracked execution wrapper with workspace scope and
 your CLI environment. `shoal add` waits for it before entering the worktree or
