@@ -11,6 +11,7 @@ use crate::{state::states, workspace::Manager};
 const RETAINED: usize = 500;
 
 states!(NotificationKind {
+    AccessRequested => "access_requested",
     /// A resource or simulator request found no free capacity.
     ResourceBusy => "resource_busy",
     /// A preferred port was in use.

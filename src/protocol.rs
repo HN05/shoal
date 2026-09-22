@@ -21,7 +21,7 @@ use crate::{
     simulators::{SimRequest, Simulator, SimulatorCatalog},
 };
 
-pub const VERSION: u32 = 36;
+pub const VERSION: u32 = 37;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -192,6 +192,13 @@ pub enum Method {
     PortOverview {
         workspace: String,
     },
+    ListAccess {
+        workspace: Option<String>,
+    },
+    DecideAccess {
+        id: String,
+        approve: bool,
+    },
     // Cooperative resources.
     ResourceAcquire {
         workspace: String,
@@ -286,6 +293,8 @@ pub enum Body {
     Port(PortReservation),
     PortSuggestion(PortSuggestion),
     PortOverview(PortOverview),
+    AccessRequest(Box<crate::access::AccessRequest>),
+    AccessRequests(Vec<crate::access::AccessRequest>),
     ResourceLease(ResourceLease),
     ResourceOverview(Overview),
     ResourceBusy { message: String },

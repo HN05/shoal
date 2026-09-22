@@ -34,6 +34,8 @@ impl clap::ValueEnum for LockMode {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct ResourceConfig {
+    pub requires_approval: bool,
+    pub approval_lifetime: crate::access::Lifetime,
     pub kind: ResourceKind,
     pub capacity: u32,
     pub reason: Option<String>,
@@ -42,6 +44,8 @@ pub struct ResourceConfig {
 impl Default for ResourceConfig {
     fn default() -> Self {
         Self {
+            requires_approval: false,
+            approval_lifetime: crate::access::Lifetime::Lease,
             kind: ResourceKind::Semaphore,
             capacity: 1,
             reason: None,
@@ -158,6 +162,7 @@ pub struct ResourceRequest {
 pub enum Acquisition {
     Acquired(ResourceLease),
     Busy(String),
+    Approval(Box<crate::access::AccessRequest>),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -391,7 +396,8 @@ impl Manager {
     pub async fn acquire_resource(
         &self,
         selector: &str,
-        request: ResourceRequest,
+        mut request: ResourceRequest,
+        scoped: bool,
     ) -> Result<Acquisition> {
         validate::lowercase_name("resource", &request.pool)?;
         validate::lowercase_name("resource", &request.name)?;
@@ -446,9 +452,16 @@ impl Manager {
                     "INSERT INTO resource_pools(scope,name,definition) VALUES (?1,?2,?3) ON CONFLICT(scope,name) DO UPDATE SET definition=excluded.definition",
                     params![scope, request.pool, serde_json::to_string(&definition)?],
                 )?;
+                let target = format!("resource/{scope}/{}", request.pool);
+                if scoped && let Some(pending) = crate::access::current(&tx, &workspace.id, &target, &request.name)? {
+                    let member = pending.specification["member"].as_str().unwrap_or_default();
+                    ensure!(request.resource.as_deref().is_none_or(|r| r == member), "access request member changed; release it first");
+                    request.resource = Some(member.into());
+                }
                 let pool_available = definition.capacity.saturating_sub(pool_used(&active));
                 let Some((resource, settings, mode)) =
                     select_member(&definition, &request, &active, pool_available)?
+                        .or(select_member(&definition, &request, &[], definition.capacity)?)
                 else {
                     return Ok(Acquisition::Busy(format!(
                         "no compatible capacity for {} in pool {}{}",
@@ -457,6 +470,18 @@ impl Manager {
                         holders(&tx, &active)?
                     )));
                 };
+                if scoped && settings.requires_approval {
+                    let approval = crate::access::AccessRequest::new(&workspace.id, target, &request.name,
+                        serde_json::json!({"definition": definition, "member": resource, "mode": mode}),
+                        settings.approval_lifetime, request.reason.as_deref());
+                    if let Some(approval) = crate::access::check(&tx, approval)? {
+                        tx.commit()?;
+                        return Ok(Acquisition::Approval(Box::new(approval)));
+                    }
+                }
+                if !settings.can_acquire(mode, usage(&active, resource), pool_available) {
+                    return Ok(Acquisition::Busy(format!("no compatible capacity in pool {}{}", request.pool, holders(&tx, &active)?)));
+                }
                 let lease = ResourceLease {
                     mode,
                     id: Uuid::new_v4().to_string(),
@@ -509,6 +534,9 @@ impl Manager {
             )
             .await;
         }
+        if let Acquisition::Approval(request) = &acquisition {
+            self.notify_access(&workspace_name, request).await;
+        }
         Ok(acquisition)
     }
 
@@ -530,23 +558,38 @@ impl Manager {
                 leases(db, Some(&id))
             })
             .await?;
-        let lease = owned
+        if let Some(lease) = owned
             .iter()
             .find(|lease| lease.pool == pool && lease.name == name)
-            .context("unknown resource lease")?;
-        self.run_resource_release_hook(&workspace, lease, hook.as_deref())
-            .await?;
+        {
+            self.run_resource_release_hook(&workspace, lease, hook.as_deref())
+                .await?;
+        }
         // Release must work even after a definition is edited or deleted.
         self.store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
                 store::require_ready(&tx, &workspace.id)?;
+                let approval = crate::access::list(&tx, Some(&workspace.id))?
+                    .into_iter()
+                    .find(|r| {
+                        r.active
+                            && r.name == name
+                            && r.target.ends_with(&format!("/{pool}"))
+                            && r.target.starts_with("resource/")
+                    });
+                let released = if let Some(approval) = approval {
+                    crate::access::release(&tx, &workspace.id, &approval.target, &name)?
+                } else {
+                    false
+                };
                 ensure!(
                     tx.execute(
                         "DELETE FROM resource_leases WHERE workspace_id=?1 AND pool=?2 AND name=?3",
                         params![workspace.id, pool, name]
-                    )? == 1,
-                    "unknown resource lease"
+                    )? == 1
+                        || released,
+                    "unknown resource lease or access request"
                 );
                 tx.commit()?;
                 Ok(())

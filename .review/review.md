@@ -38,6 +38,9 @@ removal, check it against the rule those files state before judging it.
   the worktree exists; failure retains leases. Retrying acquisition reruns its
   hook. Permit/lifecycle changes cannot overlap resource hooks in one workspace;
   user scripts own external resource integrations.
+- Resource approvals bind effective allocation settings and require an unscoped
+  decision. Pending requests reserve nothing; grant lifetime follows configuration
+  and approval never bypasses capacity or simulator cleanup rules.
 - Explicit creation bases resolve locally and are recorded for diff; only a base
   naming the local default branch is refreshed.
 - Explicit workspace paths override only that creation; reject overlaps with state,

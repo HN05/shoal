@@ -312,6 +312,14 @@ Release hooks also run in the shared removal path while the worktree exists;
 all permits remain owned until removal succeeds. User scripts own integrations
 with the underlying resources.
 
+Configured resources may require human approval for scoped acquisition. The daemon
+persists a request with a caller-supplied reason and the effective allocation settings;
+only an unscoped caller decides it. Pending requests consume no capacity. Approval
+lasts until release by default, or for the workspace when configured, limited to the
+same resource and access settings. Changed settings require a new request; approval
+never overrides capacity, scope, or simulator cleanup rules. Requests and grants
+survive restart and failed removal, and disappear with successful removal.
+
 Port, simulator, and generic resource commands share the same shape: the bare
 noun (or `list`) combines relevant configuration or capacity with leases;
 `acquire` and `release` change ownership. Simulator machine inventory remains

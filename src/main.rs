@@ -1,3 +1,4 @@
+mod access;
 mod agent_auth;
 mod ai;
 mod cleanup;

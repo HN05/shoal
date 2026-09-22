@@ -392,10 +392,20 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::PortOverview { workspace } => {
             Body::PortOverview(manager.port_overview(&workspace).await?)
         }
+        Method::ListAccess { workspace } => {
+            Body::AccessRequests(manager.access_requests(workspace.as_deref()).await?)
+        }
+        Method::DecideAccess { id, approve } => {
+            Body::AccessRequest(Box::new(manager.decide_access(id, approve).await?))
+        }
         Method::ResourceAcquire { workspace, request } => {
-            match manager.acquire_resource(&workspace, request).await? {
+            match manager
+                .acquire_resource(&workspace, request, caller.is_some())
+                .await?
+            {
                 crate::resources::Acquisition::Acquired(lease) => Body::ResourceLease(lease),
                 crate::resources::Acquisition::Busy(message) => Body::ResourceBusy { message },
+                crate::resources::Acquisition::Approval(request) => Body::AccessRequest(request),
             }
         }
         Method::ResourceRelease {

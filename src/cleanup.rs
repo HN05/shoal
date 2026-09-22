@@ -293,7 +293,7 @@ mod tests {
         // Work on the local default branch is retained without any remote.
         git_cmd(&["merge", "--ff-only", "idle"]);
         manager
-            .acquire_resource(&workspace.id, lease("test-lock", None))
+            .acquire_resource(&workspace.id, lease("test-lock", None), false)
             .await
             .unwrap();
         assert!(
@@ -311,7 +311,7 @@ mod tests {
             crate::resources::LockMode::Write,
         ] {
             manager
-                .acquire_resource(&workspace.id, lease("cache", Some(mode)))
+                .acquire_resource(&workspace.id, lease("cache", Some(mode)), false)
                 .await
                 .unwrap();
             // Remove config so only the lease can keep this clean/pushed worktree alive.
