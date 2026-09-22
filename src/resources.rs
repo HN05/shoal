@@ -482,7 +482,7 @@ impl Manager {
                     }
                 }
                 if !settings.can_acquire(mode, usage(&active, resource), pool_available) {
-                    return Ok(Acquisition::Busy(format!("no compatible capacity in pool {}{}", request.pool, holders(&tx, &active)?)));
+                    return Ok(Acquisition::Busy(format!("no compatible capacity for {} in pool {}{}", request.resource.as_deref().unwrap_or("any resource"), request.pool, holders(&tx, &active)?)));
                 }
                 let lease = ResourceLease {
                     mode,
