@@ -244,7 +244,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             workspace,
             all,
         } => simulators::run(&ctx, command, workspace, all).await,
-        Command::Reconcile {
+        Command::Doctor {
             workspace,
             all,
             repair,

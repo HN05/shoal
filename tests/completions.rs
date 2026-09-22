@@ -29,7 +29,7 @@ COMP_WORDS=(shoal codex --c); COMP_CWORD=2; COMP_LINE='shoal codex --c'; COMP_PO
 _clap_complete_shoal "${COMP_WORDS[0]}" "${COMP_WORDS[COMP_CWORD]}" "${COMP_WORDS[COMP_CWORD-1]}"; printf '%s\n' "${COMPREPLY[@]}"
 COMP_WORDS=(shoal codex --a); COMP_CWORD=2; COMP_LINE='shoal codex --a'; COMP_POINT=${#COMP_LINE}
 _clap_complete_shoal "${COMP_WORDS[0]}" "${COMP_WORDS[COMP_CWORD]}" "${COMP_WORDS[COMP_CWORD-1]}"; printf '%s\n' "${COMPREPLY[@]}"
-COMP_WORDS=(shoal reconcile --re); COMP_CWORD=2; COMP_LINE='shoal reconcile --re'; COMP_POINT=${#COMP_LINE}
+COMP_WORDS=(shoal doctor --re); COMP_CWORD=2; COMP_LINE='shoal doctor --re'; COMP_POINT=${#COMP_LINE}
 _clap_complete_shoal "${COMP_WORDS[0]}" "${COMP_WORDS[COMP_CWORD]}" "${COMP_WORDS[COMP_CWORD-1]}"; printf '%s\n' "${COMPREPLY[@]}"
 "#, "completion-test"])
         .arg(&script).env("HOME", home.path()).output().unwrap();

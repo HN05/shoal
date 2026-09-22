@@ -63,7 +63,7 @@ when behavior changes, distinguishing decisions from proposals.
   enforce or manage the underlying resource's lifecycle.
 - Workspace and execution lifecycle states are typed enums; preserve their
   existing lowercase SQLite/JSON representation and reject unknown values.
-- Reconciliation reports by default; repair preserves work and resource leases.
+- `doctor` reports by default; repair preserves work and resource leases.
   Startup audits ownership but never clears unknown executions or deletes work.
   Verify native PID birth identity before signaling survivors; unknown ownership
   must not authorize a kill. Explicit acknowledgement cannot bypass visible live

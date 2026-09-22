@@ -434,7 +434,7 @@ async fn prepare_workspace(ctx: &Context, workspace: &Workspace) -> Result<Optio
         let name = &workspace.name;
         ensure!(
             ctx.interactive(),
-            "setup failed for {name}: {error}; workspace retained. Retry with `shoal setup {name}`, ignore with `shoal reconcile {name} --repair`, or delete with `shoal rm {name} --yes --delete-branch`"
+            "setup failed for {name}: {error}; workspace retained. Retry with `shoal setup {name}`, ignore with `shoal doctor {name} --repair`, or delete with `shoal rm {name} --yes --delete-branch`"
         );
         eprintln!(
             "{} for {name}: {error}",
@@ -486,20 +486,20 @@ async fn delete_failed_workspace(ctx: &Context, workspace: &Workspace) -> Result
 async fn ignore_setup_failure(ctx: &Context, workspace: &Workspace) -> Result<()> {
     let reports = request!(
         &ctx.paths,
-        Method::Reconcile {
+        Method::Doctor {
             workspace: Some(workspace.id.clone()),
             options: ReconcileOptions {
                 repair: true,
                 ..Default::default()
             },
         },
-        Reconciliation
+        Doctor
     );
     ensure!(
         reports
             .iter()
             .all(|r| r.workspace.state == WorkspaceState::Ready),
-        "workspace still has unresolved ownership or processes; inspect with shoal reconcile"
+        "workspace still has unresolved ownership or processes; inspect with shoal doctor"
     );
     Ok(())
 }

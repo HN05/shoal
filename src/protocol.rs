@@ -122,7 +122,7 @@ pub enum Method {
         choice: BranchChoice,
         caller_pid: u32,
     },
-    Reconcile {
+    Doctor {
         workspace: Option<String>,
         options: ReconcileOptions,
     },
@@ -270,7 +270,7 @@ pub enum Body {
     OpenedWorkspace(crate::existing_branch::OpenedWorkspace),
     Inspection(Inspection),
     WorkspaceStatus(WorkspaceStatus),
-    Reconciliation(Vec<Report>),
+    Doctor(Vec<Report>),
     Execution(ExecutionPlan),
     RemovalCheck(RemovalCheck),
     RemovalResult(RemovalResult),

@@ -4480,7 +4480,7 @@ fn recovery_report(fixture: &Fixture, args: &[&str]) -> Value {
 }
 
 #[test]
-fn reconcile_repairs_interrupted_state_and_preserves_work_and_leases() {
+fn doctor_repairs_interrupted_state_and_preserves_work_and_leases() {
     let mut fixture = Fixture::with_config(Some("[resources.lock]\n"));
     let workspace = fixture.add("interrupted");
     let path = Path::new(workspace["path"].as_str().unwrap());
@@ -4498,7 +4498,7 @@ fn reconcile_repairs_interrupted_state_and_preserves_work_and_leases() {
         fixture.ok(&["inspect", "interrupted"])["workspace"]["state"],
         "failed"
     );
-    let preview = recovery_report(&fixture, &["reconcile", "interrupted"]);
+    let preview = recovery_report(&fixture, &["doctor", "interrupted"]);
     assert_eq!(preview[0]["directory"], "valid");
     let issue = preview[0]["issues"][0].as_str().unwrap();
     assert!(issue.starts_with(preview[0]["workspace"]["error"].as_str().unwrap()));
@@ -4512,14 +4512,14 @@ fn reconcile_repairs_interrupted_state_and_preserves_work_and_leases() {
         [],
     )
     .unwrap();
-    let preview = recovery_report(&fixture, &["reconcile", "interrupted"]);
+    let preview = recovery_report(&fixture, &["doctor", "interrupted"]);
     assert!(
         preview[0]["issues"][0]
             .as_str()
             .unwrap()
             .contains("--repair")
     );
-    let repaired = fixture.ok(&["reconcile", "interrupted", "--repair"]);
+    let repaired = fixture.ok(&["doctor", "interrupted", "--repair"]);
     assert_eq!(repaired[0]["workspace"]["state"], "ready");
     assert_eq!(
         fs::read_to_string(path.join("uncommitted")).unwrap(),
@@ -4531,7 +4531,7 @@ fn reconcile_repairs_interrupted_state_and_preserves_work_and_leases() {
         resource
     );
     assert!(
-        fixture.ok(&["reconcile", "interrupted", "--repair"])[0]["changes"]
+        fixture.ok(&["doctor", "interrupted", "--repair"])[0]["changes"]
             .as_array()
             .unwrap()
             .is_empty()
@@ -4543,7 +4543,7 @@ fn reconcile_repairs_interrupted_state_and_preserves_work_and_leases() {
                 "interrupted",
                 "--",
                 env!("CARGO_BIN_EXE_shoal"),
-                "reconcile",
+                "doctor",
                 "--all",
                 "--repair"
             ])
@@ -4553,7 +4553,7 @@ fn reconcile_repairs_interrupted_state_and_preserves_work_and_leases() {
 }
 
 #[test]
-fn reconcile_detects_moved_and_replaced_worktrees_without_deleting_data() {
+fn doctor_detects_moved_and_replaced_worktrees_without_deleting_data() {
     let fixture = Fixture::new();
     let workspace = fixture.add("original");
     let path = Path::new(workspace["path"].as_str().unwrap());
@@ -4568,9 +4568,9 @@ fn reconcile_detects_moved_and_replaced_worktrees_without_deleting_data() {
             moved.to_str().unwrap(),
         ],
     );
-    let report = recovery_report(&fixture, &["reconcile", "original", "--repair"]);
+    let report = recovery_report(&fixture, &["doctor", "original", "--repair"]);
     assert_eq!(report[0]["directory"], "moved");
-    let preview = recovery_report(&fixture, &["reconcile", "original"]);
+    let preview = recovery_report(&fixture, &["doctor", "original"]);
     assert_eq!(preview[0]["issues"], report[0]["issues"]);
     assert_eq!(preview[0]["issues"].as_array().unwrap().len(), 1);
     assert!(!fixture.run(&["rm", "original"]).status.success());
@@ -4584,7 +4584,7 @@ fn reconcile_detects_moved_and_replaced_worktrees_without_deleting_data() {
             path.to_str().unwrap(),
         ],
     );
-    fixture.ok(&["reconcile", "original", "--repair"]);
+    fixture.ok(&["doctor", "original", "--repair"]);
     // Replace the admin directory at its SAME path, proving pathname checks alone are insufficient.
     let admin = Path::new(workspace["git_dir"].as_str().unwrap());
     let old = fixture.root.path().join("old-admin");
@@ -4596,7 +4596,7 @@ fn reconcile_detects_moved_and_replaced_worktrees_without_deleting_data() {
             fs::copy(entry.path(), admin.join(entry.file_name())).unwrap();
         }
     }
-    let report = recovery_report(&fixture, &["reconcile", "original", "--repair"]);
+    let report = recovery_report(&fixture, &["doctor", "original", "--repair"]);
     assert_eq!(report[0]["directory"], "unverified");
     assert!(
         report[0]["issues"]
@@ -4712,7 +4712,7 @@ fn wait_registered_execution(fixture: &Fixture, workspace: &str) -> Value {
 }
 
 #[test]
-fn reconcile_stops_identity_verified_orphans_after_wrapper_death() {
+fn doctor_stops_identity_verified_orphans_after_wrapper_death() {
     let fixture = Fixture::new();
     fixture.add("orphan");
     let mut wrapper = fixture
@@ -4730,7 +4730,7 @@ fn reconcile_stops_identity_verified_orphans_after_wrapper_death() {
         assert!(Instant::now() < deadline);
         thread::sleep(Duration::from_millis(20));
     }
-    let report = recovery_report(&fixture, &["reconcile", "orphan", "--repair"]);
+    let report = recovery_report(&fixture, &["doctor", "orphan", "--repair"]);
     assert!(
         report[0]["executions"][0]["processes"]
             .as_array()
@@ -4746,7 +4746,7 @@ fn reconcile_stops_identity_verified_orphans_after_wrapper_death() {
         1
     );
     fixture.ok(&[
-        "reconcile",
+        "doctor",
         "orphan",
         "--repair",
         "--stop",
@@ -4763,7 +4763,7 @@ fn reconcile_stops_identity_verified_orphans_after_wrapper_death() {
 }
 
 #[test]
-fn reconcile_recovers_daemon_crash_and_requires_acknowledgement_for_legacy_records() {
+fn doctor_recovers_daemon_crash_and_requires_acknowledgement_for_legacy_records() {
     let mut fixture = Fixture::new();
     let workspace = fixture.add("crash");
     let port = fixture.ok(&["port", "acquire", "web", "crash"]);
@@ -4777,9 +4777,9 @@ fn reconcile_recovers_daemon_crash_and_requires_acknowledgement_for_legacy_recor
     wait_registered_execution(&fixture, "crash");
     fixture.restart();
     wrapper.wait().unwrap();
-    let report = recovery_report(&fixture, &["reconcile", "crash"]);
+    let report = recovery_report(&fixture, &["doctor", "crash"]);
     assert_eq!(report[0]["executions"][0]["state"], "unknown");
-    fixture.ok(&["reconcile", "crash", "--repair", "--acknowledge-stopped"]);
+    fixture.ok(&["doctor", "crash", "--repair", "--acknowledge-stopped"]);
     assert_eq!(fixture.ok(&["port", "crash"])["reserved"][0], port);
     let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
     db.execute(
@@ -4787,9 +4787,9 @@ fn reconcile_recovers_daemon_crash_and_requires_acknowledgement_for_legacy_recor
         [workspace["id"].as_str().unwrap()],
     )
     .unwrap();
-    let report = recovery_report(&fixture, &["reconcile", "crash", "--repair"]);
+    let report = recovery_report(&fixture, &["doctor", "crash", "--repair"]);
     assert!(!report[0]["executions"][0]["cleared"].as_bool().unwrap());
-    fixture.ok(&["reconcile", "crash", "--repair", "--acknowledge-stopped"]);
+    fixture.ok(&["doctor", "crash", "--repair", "--acknowledge-stopped"]);
     assert_eq!(
         fixture.ok(&["inspect", "crash"])["executions"],
         serde_json::json!([])
@@ -4797,7 +4797,7 @@ fn reconcile_recovers_daemon_crash_and_requires_acknowledgement_for_legacy_recor
 }
 
 #[test]
-fn reconcile_finds_detached_tagged_children_even_after_the_command_exits() {
+fn doctor_finds_detached_tagged_children_even_after_the_command_exits() {
     let fixture = Fixture::new();
     fixture.add("detached");
     let script = "import os, subprocess, sys; subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'], start_new_session=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)";
@@ -4808,7 +4808,7 @@ fn reconcile_finds_detached_tagged_children_even_after_the_command_exits() {
         String::from_utf8_lossy(&output.stderr)
     );
     assert!(String::from_utf8_lossy(&output.stderr).contains("surviving or unverified"));
-    let report = recovery_report(&fixture, &["reconcile", "detached"]);
+    let report = recovery_report(&fixture, &["doctor", "detached"]);
     assert!(
         !report[0]["executions"][0]["processes"]
             .as_array()
@@ -4816,7 +4816,7 @@ fn reconcile_finds_detached_tagged_children_even_after_the_command_exits() {
             .is_empty()
     );
     fixture.ok(&[
-        "reconcile",
+        "doctor",
         "detached",
         "--repair",
         "--stop",
@@ -4866,12 +4866,12 @@ fn manual_removal_stops_recorded_orphans_before_releasing_resources() {
 }
 
 #[test]
-fn reconcile_all_reports_each_workspace_independently() {
+fn doctor_all_reports_each_workspace_independently() {
     let fixture = Fixture::new();
     fixture.add("healthy");
     let missing = fixture.add("missing");
     fs::remove_dir_all(missing["path"].as_str().unwrap()).unwrap();
-    let reports = recovery_report(&fixture, &["reconcile", "--all", "--repair"]);
+    let reports = recovery_report(&fixture, &["doctor", "--all", "--repair"]);
     assert_eq!(reports.as_array().unwrap().len(), 2);
     assert_eq!(reports[0]["workspace"]["name"], "healthy");
     assert_eq!(reports[0]["workspace"]["state"], "ready");
@@ -4879,7 +4879,7 @@ fn reconcile_all_reports_each_workspace_independently() {
 }
 
 #[test]
-fn reconcile_preserves_connected_commands_until_stop_is_explicit() {
+fn doctor_preserves_connected_commands_until_stop_is_explicit() {
     let fixture = Fixture::new();
     fixture.add("connected");
     let port = fixture.ok(&["port", "acquire", "web", "connected"]);
@@ -4891,11 +4891,11 @@ fn reconcile_preserves_connected_commands_until_stop_is_explicit() {
         .spawn()
         .unwrap();
     wait_registered_execution(&fixture, "connected");
-    let report = fixture.ok(&["reconcile", "connected", "--repair"]);
+    let report = fixture.ok(&["doctor", "connected", "--repair"]);
     assert_eq!(report[0]["executions"][0]["connected"], true);
     assert_eq!(report[0]["executions"][0]["cleared"], false);
     assert!(wrapper.try_wait().unwrap().is_none());
-    fixture.ok(&["reconcile", "connected", "--repair", "--stop"]);
+    fixture.ok(&["doctor", "connected", "--repair", "--stop"]);
     wrapper.wait().unwrap();
     assert_eq!(
         fixture.ok(&["inspect", "connected"])["executions"],
@@ -5808,7 +5808,7 @@ fn setup_cmd_local_override_absolute_path_failure_and_retry() {
     let failed = fixture.ok(&["inspect", "failed-setup"]);
     assert_eq!(failed["workspace"]["state"], "failed");
     assert_eq!(failed["executions"], serde_json::json!([]));
-    let report = recovery_report(&fixture, &["reconcile", "failed-setup"]);
+    let report = recovery_report(&fixture, &["doctor", "failed-setup"]);
     assert_eq!(report[0]["directory"], "valid");
     let issues = report[0]["issues"].as_array().unwrap();
     assert_eq!(issues.len(), 1);
@@ -5816,7 +5816,7 @@ fn setup_cmd_local_override_absolute_path_failure_and_retry() {
     assert!(issue.contains("setup failed (exit 17"));
     assert!(issue.contains("retry with shoal setup"));
     assert!(issue.contains("alternatively, use --repair"));
-    let output = fixture.run(&["reconcile", "failed-setup"]);
+    let output = fixture.run(&["doctor", "failed-setup"]);
     assert_eq!(output.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&output.stdout).contains(issue));
     assert_eq!(

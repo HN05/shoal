@@ -322,7 +322,7 @@ binds to HEAD. Both stop tracked agents immediately through shared removal,
 rechecking clean files and HEAD after stopping. Failures retain work and leases;
 registered workspaces are excluded from idle cleanup until cleared or removed.
 
-Reconciliation reports current issues by default, falling back to the recorded
+`doctor` reports current issues by default, falling back to the recorded
 failure and repair guidance; repair restores verified worktrees and clears
 executions proven stopped while preserving work and leases. Startup audits but never deletes, kills,
 clears unknown executions, or releases leases.

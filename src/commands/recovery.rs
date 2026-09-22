@@ -17,11 +17,7 @@ pub(super) async fn run(
     options: ReconcileOptions,
 ) -> Result<i32> {
     let workspace = ui::select_workspace_filter(ctx, workspace, all).await?;
-    let reports = request!(
-        &ctx.paths,
-        Method::Reconcile { workspace, options },
-        Reconciliation
-    );
+    let reports = request!(&ctx.paths, Method::Doctor { workspace, options }, Doctor);
     let unresolved = reports.iter().any(|r| !r.issues.is_empty());
     ctx.show(&reports, |reports| {
         let palette = Palette::stdout(ctx.json);
@@ -29,7 +25,7 @@ pub(super) async fn run(
             render(report, palette);
         }
         if reports.is_empty() {
-            println!("No workspaces to reconcile");
+            println!("No workspaces to diagnose");
         }
     })?;
     Ok(if unresolved { super::EXIT_BUSY } else { 0 })

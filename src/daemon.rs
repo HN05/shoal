@@ -344,7 +344,7 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
                 .remove_workspace(&workspace, choice, caller_pid)
                 .await?,
         ),
-        Method::Reconcile { workspace, options } => Body::Reconciliation(
+        Method::Doctor { workspace, options } => Body::Doctor(
             manager
                 .reconcile_workspaces(workspace.as_deref(), options)
                 .await?,
@@ -573,9 +573,9 @@ async fn execute(
         let message = match &result {
             Ok(code) if complete => format!("{agent} exited with code {code}"),
             Ok(code) => format!(
-                "{agent} exited with code {code}, leaving processes behind; run shoal reconcile"
+                "{agent} exited with code {code}, leaving processes behind; run shoal doctor"
             ),
-            Err(_) => format!("{agent} disconnected without reporting; run shoal reconcile"),
+            Err(_) => format!("{agent} disconnected without reporting; run shoal doctor"),
         };
         manager
             .notify(

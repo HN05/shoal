@@ -256,19 +256,19 @@ impl Manager {
         let after = process::scan(HashSet::from([execution.id.clone()])).await?;
         ensure!(
             after.processes.is_empty(),
-            "owned processes survived stopping; retry after shoal reconcile"
+            "owned processes survived stopping; retry after shoal doctor"
         );
         // Manual removal retains its policy: unrelated/unverifiable processes do
         // not block deletion. A plain stop must not claim those processes stopped.
         if !manual_removal {
             ensure!(
                 processes.launch_recorded && processes.group_candidates.is_empty(),
-                "execution ownership is incomplete; use shoal reconcile to inspect it"
+                "execution ownership is incomplete; use shoal doctor to inspect it"
             );
             let after = Processes::inspect(execution, &after).await?;
             ensure!(
                 !after.has_survivors() && after.visibility_complete(),
-                "process state remains uncertain; use shoal reconcile to inspect it"
+                "process state remains uncertain; use shoal doctor to inspect it"
             );
             let id = execution.id.clone();
             self.store

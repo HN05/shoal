@@ -568,7 +568,7 @@ workspace, and sends setup output to stderr. Then choose explicitly:
 
 ```sh
 shoal setup fix-login                      # Rerun setup and the post-setup hook
-shoal reconcile fix-login --repair          # Ignore the failure after ownership checks
+shoal doctor fix-login --repair          # Ignore the failure after ownership checks
 shoal rm fix-login --yes --delete-branch    # Delete this workspace and branch
 ```
 
@@ -641,7 +641,7 @@ shoal notifications --follow   # Keep printing, and raise terminal notifications
 The daemon records what happens while you are not looking: a resource or
 simulator request that found no capacity (naming the workspaces holding the
 pool), a preferred port in use, a tracked agent
-exiting (with its code, or a note to reconcile when it left processes
+exiting (with its code, or a note to run `doctor` when it left processes
 behind), and workspaces it removed or retained on its own through PR, merge, or
 idle cleanup. Each line shows the local time, the workspace, and the message;
 `--json` returns records with `kind`, `created_at`, and `read`. On a terminal,
@@ -722,15 +722,15 @@ Bash, Zsh, Fish, PowerShell, and Elvish.
 ### Recovery
 
 ```sh
-shoal reconcile fix-login                  # Report only
-shoal --json reconcile --all
-shoal reconcile fix-login --repair         # Repair verified state, retain work and leases
-shoal reconcile fix-login --repair --stop  # Also stop verified surviving commands
+shoal doctor fix-login                  # Report only
+shoal --json doctor --all
+shoal doctor fix-login --repair         # Repair verified state, retain work and leases
+shoal doctor fix-login --repair --stop  # Also stop verified surviving commands
 ```
 
 Exit 2 while issues remain, 0 when resolved; JSON is an array of reports.
 When current checks find no issues, reports show the recorded failure and repair guidance.
-Reconciliation is unavailable inside scoped executions. Startup marks interrupted
+`doctor` is unavailable inside scoped executions. Startup marks interrupted
 lifecycle operations failed and disconnected executions unknown, and audits
 worktrees without deleting files or releasing leases. Repair restores verified
 worktrees to ready and clears executions proven stopped; connected commands keep

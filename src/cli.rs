@@ -203,7 +203,7 @@ pub enum Command {
         limit: u32,
     },
     /// Inspect interrupted executions/worktrees; optionally repair verified state.
-    Reconcile {
+    Doctor {
         workspace: Option<String>,
         #[arg(long, conflicts_with = "workspace")]
         all: bool,
@@ -675,6 +675,18 @@ pub enum ResourceCommand {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn doctor_replaces_reconcile_without_an_alias() {
+        use clap::CommandFactory;
+        let command = Cli::command();
+        assert!(command.find_subcommand("doctor").is_some());
+        assert!(command.find_subcommand("reconcile").is_none());
+        for flag in ["--stop", "--acknowledge-stopped"] {
+            assert!(Cli::try_parse_from(["shoal", "doctor", flag]).is_err());
+            assert!(Cli::try_parse_from(["shoal", "doctor", "--repair", flag]).is_ok());
+        }
+    }
 
     #[test]
     fn removal_commands_share_confirmation_flags() {

@@ -421,7 +421,7 @@ async fn report_completion(stream: &mut UnixStream, code: i32, mode: &Mode) -> R
             if let Control::Finished { complete } = protocol::read::<Control>(stream).await? {
                 if !complete {
                     eprintln!(
-                        "warning: execution has surviving or unverified processes; run shoal reconcile to inspect it"
+                        "warning: execution has surviving or unverified processes; run shoal doctor to inspect it"
                     );
                     ensure!(
                         !mode.is_setup(),

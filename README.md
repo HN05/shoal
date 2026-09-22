@@ -181,7 +181,7 @@ in a repository's `.shoal.toml`, or for every repository in
 enabled = false
 ```
 
-For a workspace that needs recovery, start with `shoal reconcile <name>`; see
+For a workspace that needs recovery, start with `shoal doctor <name>`; see
 [cleanup](docs/reference.md#automatic-cleanup) and [recovery](docs/reference.md#recovery) for details.
 
 ## Update
