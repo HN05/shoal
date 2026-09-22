@@ -182,13 +182,6 @@ impl Manager {
         report: &mut Report,
     ) -> Result<()> {
         self.reconcile_directory(workspace, options, report).await?;
-        if !options.repair && workspace.state != WorkspaceState::Ready {
-            report
-                .issues
-                .push(workspace.error.clone().unwrap_or_else(|| {
-                    "Workspace state requires repair; inspect this report then use --repair".into()
-                }));
-        }
         let executions = self.inspect_workspace(&workspace.id).await?.executions;
         let ids: HashSet<_> = executions.iter().map(|e| e.id.clone()).collect();
         let mut scan = process::scan(ids.clone()).await?;
@@ -197,6 +190,14 @@ impl Manager {
                 .reconcile_execution(workspace, &execution, options, report, &mut scan, &ids)
                 .await?;
             report.executions.push(entry);
+        }
+        if !options.repair && workspace.state != WorkspaceState::Ready && report.issues.is_empty() {
+            report.issues.push(match &workspace.error {
+                Some(error) => format!(
+                    "{error}; alternatively, use --repair to restore verified state without retrying failed operations"
+                ),
+                None => "Workspace state requires repair; inspect this report then use --repair".into(),
+            });
         }
         if options.repair
             && matches!(report.directory, DirectoryState::Valid)

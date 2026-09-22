@@ -4395,7 +4395,9 @@ fn reconcile_repairs_interrupted_state_and_preserves_work_and_leases() {
     );
     let preview = recovery_report(&fixture, &["reconcile", "interrupted"]);
     assert_eq!(preview[0]["directory"], "valid");
-    assert_eq!(preview[0]["issues"][0], preview[0]["workspace"]["error"]);
+    let issue = preview[0]["issues"][0].as_str().unwrap();
+    assert!(issue.starts_with(preview[0]["workspace"]["error"].as_str().unwrap()));
+    assert!(issue.contains("--repair"));
     assert_eq!(
         fixture.ok(&["inspect", "interrupted"])["workspace"]["state"],
         "failed"
@@ -4463,6 +4465,9 @@ fn reconcile_detects_moved_and_replaced_worktrees_without_deleting_data() {
     );
     let report = recovery_report(&fixture, &["reconcile", "original", "--repair"]);
     assert_eq!(report[0]["directory"], "moved");
+    let preview = recovery_report(&fixture, &["reconcile", "original"]);
+    assert_eq!(preview[0]["issues"], report[0]["issues"]);
+    assert_eq!(preview[0]["issues"].as_array().unwrap().len(), 1);
     assert!(!fixture.run(&["rm", "original"]).status.success());
     assert_eq!(fs::read_to_string(moved.join("dirty")).unwrap(), "saved");
     git(
@@ -5705,6 +5710,7 @@ fn setup_cmd_local_override_absolute_path_failure_and_retry() {
     let issue = issues[0].as_str().unwrap();
     assert!(issue.contains("setup failed (exit 17"));
     assert!(issue.contains("retry with shoal setup"));
+    assert!(issue.contains("alternatively, use --repair"));
     let output = fixture.run(&["reconcile", "failed-setup"]);
     assert_eq!(output.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&output.stdout).contains(issue));
