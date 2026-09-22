@@ -37,6 +37,12 @@ codex = ["codex", "{args}", "--sandbox", "danger-full-access", "--ask-for-approv
 # Local committed-change review, with tuicr installed on PATH:
 # review = ["tuicr", "-r", "{diff_base}..HEAD"]
 
+# Separate forge logins for tracked agents; user-owned executable wrappers.
+# See docs/reference.md#agent-forge-authentication for setup.
+# [agent_auth]
+# fj = "~/bin/fj-agent"
+# gh = "~/bin/gh-agent"
+
 [codex]
 # `shoal codex` without --cli/--app: "cli" or "app".
 default_mode = "cli"

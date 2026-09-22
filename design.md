@@ -18,7 +18,12 @@ Macraft owns VM/container provisioning. Shoal does not provision tools, manage
 browsers, schedule agent tasks, or store conversations. Agent shortcuts
 (`claude`, `codex`, `happy`, `t3`) are thin launchers around the generic `exec`
 path; CLI launcher argument arrays are configurable defaults; session and desktop
-adapters retain their tool-specific setup.
+adapters retain their tool-specific setup. Opt-in forge authentication wrappers
+are user-owned executables selected per tool through repository/global config;
+tracked agents receive them on a private PATH inherited by their descendants.
+Wrappers own credentials and tool-specific environment changes; Shoal stores no
+tokens and does not switch the user's or daemon's login. Desktop handoffs have
+no authentication override because they may reuse an existing process.
 
 ## Architecture
 

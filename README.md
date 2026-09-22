@@ -101,6 +101,16 @@ CLI agents run in the terminal through Shoal; Happy sessions run detached, log
 to a file Shoal names, and stop with `shoal stop`. The Codex shortcut disables
 Codex's sandbox and approval prompts; use `shoal exec fix-login -- codex` for a
 custom invocation. Shoal's resource scope is cooperative, not a filesystem sandbox.
+For separate agent forge logins, configure executable wrappers:
+
+```toml
+[agent_auth]
+fj = "~/bin/fj-agent"
+gh = "~/bin/gh-agent"
+```
+
+See [agent forge authentication](docs/reference.md#agent-forge-authentication)
+for wrapper setup.
 
 ## Share resources
 

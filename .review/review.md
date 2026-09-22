@@ -44,6 +44,9 @@ removal, check it against the rule those files state before judging it.
   repository's remote; lookup failures create nothing.
 - Claude and Codex launches (including Happy and Codex app handoffs) persist
   workspace trust even when the user config is absent, preserving other settings.
+- Agent forge wrappers are opt-in, resolve per tool through configuration layers,
+  and change only the tracked agent's PATH, inherited by descendants. Wrappers
+  own authentication; Shoal must not read tokens or switch the user's login.
 - Git profiles apply only to newly created worktrees, before setup, using
   per-worktree config; other worktrees keep their settings.
 - Named commands follow repository/global precedence per name and use the

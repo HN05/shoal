@@ -1,7 +1,7 @@
 //! User-owned forge authentication wrappers, selected only for agent launches.
-use anyhow::{Result, ensure};
+use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::{ffi::OsString, os::unix::fs::PermissionsExt, path::PathBuf};
 
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
@@ -11,6 +11,41 @@ pub struct Config {
 }
 
 impl Config {
+    /// Keep the private PATH directory alive for the tracked execution, including
+    /// nested commands. Only the child's environment changes.
+    pub fn prepare(&self, paths: &crate::paths::Paths) -> Result<Option<Launch>> {
+        if self.fj.is_none() && self.gh.is_none() {
+            return Ok(None);
+        }
+        self.validate()?;
+        let directory = tempfile::Builder::new()
+            .prefix("agent-auth-")
+            .tempdir_in(&paths.state)?;
+        for (name, path) in [("fj", &self.fj), ("gh", &self.gh)] {
+            let Some(path) = path else { continue };
+            let path = match path.strip_prefix("~/") {
+                Ok(relative) => paths.home.join(relative),
+                Err(_) => path.clone(),
+            };
+            let metadata = std::fs::metadata(&path)
+                .with_context(|| format!("agent_auth.{name}: inspect {}", path.display()))?;
+            ensure!(
+                metadata.is_file() && metadata.permissions().mode() & 0o111 != 0,
+                "agent_auth.{name}: {} is not an executable file",
+                path.display()
+            );
+            std::os::unix::fs::symlink(&path, directory.path().join(name))?;
+        }
+        let inherited = std::env::var_os("PATH").unwrap_or_default();
+        let path = std::env::join_paths(
+            std::iter::once(directory.path().to_owned()).chain(std::env::split_paths(&inherited)),
+        )?;
+        Ok(Some(Launch {
+            _directory: directory,
+            path,
+        }))
+    }
+
     pub fn validate(&self) -> Result<()> {
         for (name, path) in [("fj", &self.fj), ("gh", &self.gh)] {
             if let Some(path) = path {
@@ -30,6 +65,11 @@ impl Config {
             gh: self.gh.or(base.gh),
         }
     }
+}
+
+pub struct Launch {
+    _directory: tempfile::TempDir,
+    pub path: OsString,
 }
 
 #[cfg(test)]

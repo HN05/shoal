@@ -209,6 +209,17 @@ async fn run_tracked(
     mode: Mode,
     agent: Option<String>,
 ) -> Result<i32> {
+    let auth = if agent.is_some() {
+        client::settings(
+            paths,
+            crate::protocol::ConfigTarget::Workspace(workspace.clone()),
+        )
+        .await?
+        .agent_auth
+        .prepare(paths)?
+    } else {
+        None
+    };
     let wrapper = process_identity::capture(std::process::id())?
         .context("cannot identify execution wrapper")?;
     let method = match mode {
@@ -249,7 +260,7 @@ async fn run_tracked(
             None => command,
         }
     };
-    let mut result = supervise(&mut stream, paths, &plan, &command, &mode).await;
+    let mut result = supervise(&mut stream, paths, &plan, &command, &mode, auth.as_ref()).await;
     if !matches!(result, Ok(0))
         && let Some(land) = &plan.land
         && let Err(error) = crate::repo_git::rollback_land(land).await
@@ -276,11 +287,12 @@ async fn supervise(
     plan: &ExecutionPlan,
     command: &[OsString],
     mode: &Mode,
+    auth: Option<&crate::agent_auth::Launch>,
 ) -> Result<i32> {
     let mut terminate = signal(SignalKind::terminate())?;
     let mut interrupt = signal(SignalKind::interrupt())?;
     let mut quit = signal(SignalKind::quit())?;
-    let mut child = spawn(paths, plan, command, mode)?;
+    let mut child = spawn(paths, plan, command, mode, auth)?;
     let group = ProcessGroup(child.id().context("child PID unavailable")? as i32);
     protocol::write(
         stream,
@@ -325,12 +337,21 @@ async fn supervise(
     Ok(exit_code(status))
 }
 
-fn spawn(paths: &Paths, plan: &ExecutionPlan, command: &[OsString], mode: &Mode) -> Result<Child> {
+fn spawn(
+    paths: &Paths,
+    plan: &ExecutionPlan,
+    command: &[OsString],
+    mode: &Mode,
+    auth: Option<&crate::agent_auth::Launch>,
+) -> Result<Child> {
     let mut process = Command::new(&command[0]);
     process
         .args(&command[1..])
         .current_dir(&plan.workspace.path);
     configure_environment(&mut process, paths, plan);
+    if let Some(auth) = auth {
+        process.env("PATH", &auth.path);
+    }
     let quiet = matches!(mode, Mode::Setup { json: true });
     let (stdin, stdout, stderr) = match mode {
         Mode::Detached { log } => {
