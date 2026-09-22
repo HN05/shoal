@@ -255,9 +255,7 @@ precedence and appear in `config show`. Tracked agent shortcuts prepend a privat
 directory containing these tool names to the child's PATH; nested commands inherit
 it. Missing or non-executable wrappers fail before the agent starts. The directory
 lasts for that execution and is removed on exit; wrappers and credentials remain
-user-owned. Ordinary executions, setup, hooks, desktop handoffs, and daemon PR
-polling keep their inherited environment. Issue lookup before launch uses the
-invoking CLI's login.
+user-owned. Issue lookup before launch uses the invoking CLI's login.
 
 Wrappers receive arguments unchanged and must invoke the real tool by absolute
 path to avoid recursion. They own credential selection, including overriding
