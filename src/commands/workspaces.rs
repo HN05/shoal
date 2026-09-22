@@ -101,6 +101,7 @@ fn navigate(ctx: &Context, path: &std::path::Path) -> Result<()> {
 }
 
 pub(super) struct Creation {
+    pub path: Option<PathBuf>,
     pub branch: Option<String>,
     pub existing: Option<String>,
     pub base: Option<String>,
@@ -121,11 +122,15 @@ pub(super) async fn add(
     mut args: Vec<OsString>,
 ) -> Result<i32> {
     let Creation {
+        path,
         branch,
         mut existing,
         base,
         git_profile,
     } = creation;
+    let path = path
+        .map(|path| super::repositories::absolute(ctx, path))
+        .transpose()?;
     let issue_command = matches!(agent, AgentLaunch::IssueDefault(_));
     let repository = match repository {
         Some(repo) => ui::repository_selector(repo)?,
@@ -239,6 +244,7 @@ pub(super) async fn add(
         let opened = request!(
             &ctx.paths,
             Method::OpenBranch {
+                path,
                 repository,
                 branch,
                 git_profile
@@ -263,6 +269,7 @@ pub(super) async fn add(
             request!(
                 &ctx.paths,
                 Method::CreateWorkspace {
+                    path,
                     repository,
                     name,
                     base,

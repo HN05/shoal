@@ -27,6 +27,8 @@ removal, check it against the rule those files state before judging it.
   with successful removal. Active permits block automatic cleanup.
 - Explicit creation bases resolve locally and are recorded for diff; only a base
   naming the local default branch is refreshed.
+- Explicit workspace paths override only that creation; reject overlaps with state,
+  checkouts, workspaces, and other repository directories; never delete their parents.
 - Existing branches use unsuffixed worktrees; reopen verified owned workspaces,
   reject other checkouts, never adopt the main checkout, and keep the default
   branch on removal unless deletion was explicit. Idle cleanup accepts commits

@@ -1,6 +1,7 @@
 //! Shared daemon state, workspace lookup, and worktree creation.
 mod executions;
 mod lifecycle;
+mod location;
 mod ownership;
 mod registry;
 mod repo_configuration;
@@ -150,6 +151,7 @@ impl Manager {
         name: String,
         base: Option<String>,
         git_profile: Option<&str>,
+        path: Option<std::path::PathBuf>,
     ) -> Result<Workspace> {
         let repo = self.repository(repository).await?;
         git::check_branch_name(Some(&repo.path), &name).await?;
@@ -159,8 +161,15 @@ impl Manager {
         self.repository(&repo.id).await?;
         self.ensure_repository_available(&repo.id).await?;
         let branch = self.available_branch(&repo, &name).await?;
-        self.create_branch_workspace(&repo, name, branch, WorkspaceSource::New(base), git_profile)
-            .await
+        self.create_branch_workspace(
+            &repo,
+            name,
+            branch,
+            WorkspaceSource::New(base),
+            git_profile,
+            path,
+        )
+        .await
     }
 
     // The caller holds the per-repository Git gate through materialization.
@@ -171,6 +180,7 @@ impl Manager {
         branch: String,
         source: WorkspaceSource,
         git_profile: Option<&str>,
+        path: Option<std::path::PathBuf>,
     ) -> Result<Workspace> {
         if let Some(name) = git_profile {
             self.config.git.profile(name)?;
@@ -180,10 +190,14 @@ impl Manager {
             WorkspaceSource::Existing(branch) => (None, Some(branch)),
         };
         let name = derive_workspace_name(&name);
+        let path = match path {
+            Some(path) => self.workspace_location(repo, &path).await?,
+            None => self.workspaces_dir(repo).await?.join(&name),
+        };
         let workspace = Workspace {
             id: Uuid::new_v4().to_string(),
             repository_id: repo.id.clone(),
-            path: self.workspaces_dir(repo).await?.join(&name),
+            path,
             name,
             branch,
             state: WorkspaceState::Preparing,
@@ -194,7 +208,10 @@ impl Manager {
             git_dir_id: None,
         };
         ensure!(
-            !workspace.path.exists(),
+            workspace
+                .path
+                .symlink_metadata()
+                .is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound),
             "workspace path already exists: {}",
             workspace.path.display()
         );
@@ -233,6 +250,16 @@ impl Manager {
                     |r| r.get(0),
                 )?;
                 ensure!(!taken, "workspace name already exists: {}", record.name);
+                let paths = tx.prepare("SELECT path FROM workspaces")?
+                    .query_map([], |row| row.get::<_, String>(0))?
+                    .collect::<rusqlite::Result<Vec<_>>>()?;
+                for path in paths {
+                    let path = std::path::Path::new(&path);
+                    ensure!(
+                        !record.path.starts_with(path) && !path.starts_with(&record.path),
+                        "workspace path overlaps a recorded workspace: {}", path.display()
+                    );
+                }
                 tx.execute(
                     "INSERT INTO workspaces (id,repository_id,name,path,branch,state) VALUES (?1,?2,?3,?4,?5,?6)",
                     params![

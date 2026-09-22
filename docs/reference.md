@@ -324,7 +324,12 @@ setup/hooks or refresh; other checkouts block creation, including checked-out `m
 Full `refs/heads/...` and `refs/remotes/...` selectors disambiguate names.
 The workspace name replaces non-ASCII-alphanumeric/`-_` characters with `-`, drops
 leading `-_`, truncates to 64 characters, and falls back to `workspace`. Globally
-colliding names fail. Commands use this name or ID; directories live in the repo root.
+colliding names fail. Commands use this name or ID. Directories default to the repo root;
+`add --path <dir>` selects an exact new directory for this workspace only (relative
+to the current directory; `~/` allowed). Existing paths and overlaps with Shoal
+state, checkouts, workspaces, or another repository's reserved directory are refused.
+Reopening accepts its current path but cannot relocate it. Custom locations have
+the same setup, ownership, and cleanup rules as default locations.
 
 For new branches, names taken by a local branch, known remote branch, branch
 namespace, or retained Shoal record get `-2`, `-3`, etc. on the leaf; when an
@@ -354,7 +359,7 @@ commit if on it or unavailable.
 Register a local checkout in place (no remote required) or a clone URL. Each
 repository gets `~/shoal/<name>/`, named by `--name` or the source basename without
 `.git`, suffixed `-2`, `-3` on conflict with files or recorded paths; its workspaces
-are created inside it and a URL clone lives there as `.checkout`. A local checkout
+default to it and a URL clone lives there as `.checkout`. A local checkout
 already at `~/shoal/<name>/<anything>` keeps that directory. `root_dir =
 "~/Projects"` in the global config (absolute or `~/` path outside Shoal's state
 directory and every checkout; daemon restart required) changes the parent for new

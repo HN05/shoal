@@ -77,11 +77,13 @@ pub enum Method {
         repository: String,
     },
     OpenBranch {
+        path: Option<std::path::PathBuf>,
         repository: String,
         branch: String,
         git_profile: Option<String>,
     },
     CreateWorkspace {
+        path: Option<std::path::PathBuf>,
         repository: String,
         name: String,
         base: Option<String>,

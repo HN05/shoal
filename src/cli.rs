@@ -72,6 +72,9 @@ pub enum Command {
         /// Derive a name and agent prompt from a forge issue number or URL.
         #[arg(long)]
         issue: Option<String>,
+        /// Create this worktree at an exact new directory instead of the repository default.
+        #[arg(long)]
+        path: Option<PathBuf>,
         /// Starting Git ref (defaults to the repository's default branch, refreshed from its upstream).
         #[arg(long, value_name = "REF")]
         base: Option<String>,

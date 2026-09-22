@@ -8524,3 +8524,73 @@ fn detached_agents_use_auth_wrappers_and_invalid_wrappers_prevent_launch() {
             .all(|e| e["state"] != "running")
     );
 }
+
+#[test]
+fn one_off_workspace_paths_preserve_repository_defaults_and_ownership() {
+    let fixture = Fixture::new();
+    let repo = fixture.repo.to_str().unwrap();
+    let destination = fixture.root.path().join("elsewhere/one off ' path");
+    let path = destination.to_str().unwrap();
+    let workspace = fixture.ok(&["add", repo, "custom/topic", "--path", path]);
+    assert_eq!(
+        Path::new(workspace["path"].as_str().unwrap()),
+        fs::canonicalize(path).unwrap()
+    );
+    assert_eq!(workspace["name"], "custom-topic");
+    assert_eq!(
+        fixture.ok(&["add", repo, "--existing", "custom/topic", "--path", path])["id"],
+        workspace["id"]
+    );
+    assert!(
+        !fixture
+            .run(&[
+                "add",
+                repo,
+                "--existing",
+                "custom/topic",
+                "--path",
+                fixture.root.path().join("different").to_str().unwrap()
+            ])
+            .status
+            .success()
+    );
+    let ordinary = fixture.add("ordinary");
+    assert!(Path::new(ordinary["path"].as_str().unwrap()).starts_with(fixture.shoal_dir()));
+    fixture.ok(&["rm", "custom-topic", "--keep-branch", "--yes"]);
+    assert!(!destination.exists());
+    assert!(destination.parent().unwrap().exists());
+    git(&fixture.repo, &["branch", "existing-path"]);
+    fixture.ok(&["add", repo, "--existing", "existing-path", "--path", path]);
+}
+
+#[test]
+fn one_off_workspace_paths_reject_existing_and_protected_directories() {
+    use std::os::unix::fs::symlink;
+    let fixture = Fixture::new();
+    let repo = fixture.repo.to_str().unwrap();
+    let owned = fixture.add("owned");
+    let owned = Path::new(owned["path"].as_str().unwrap());
+    let alias = fixture.root.path().join("alias");
+    symlink(&fixture.repo, &alias).unwrap();
+    let occupied = fixture.root.path().join("occupied");
+    fs::create_dir(&occupied).unwrap();
+    fs::write(occupied.join("keep"), "precious").unwrap();
+    for path in [
+        occupied.clone(),
+        fixture.repo.join("nested"),
+        alias.join("nested"),
+        fixture.root.path().join("state/nested"),
+        owned.join("nested"),
+        owned.parent().unwrap().to_path_buf(),
+        fixture.root.path().to_path_buf(),
+    ] {
+        let output = fixture.run(&["add", repo, "rejected", "--path", path.to_str().unwrap()]);
+        assert!(!output.status.success(), "accepted {}", path.display());
+    }
+    assert_eq!(
+        fs::read_to_string(occupied.join("keep")).unwrap(),
+        "precious"
+    );
+    assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
+    assert!(!git(&fixture.repo, &["branch", "--list", "rejected"]).contains("rejected"));
+}

@@ -274,22 +274,24 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         }
         Method::ListBranches { repository } => Body::Branches(manager.branches(&repository).await?),
         Method::OpenBranch {
+            path,
             repository,
             branch,
             git_profile,
         } => Body::OpenedWorkspace(
             manager
-                .open_branch(&repository, &branch, git_profile.as_deref())
+                .open_branch(&repository, &branch, git_profile.as_deref(), path)
                 .await?,
         ),
         Method::CreateWorkspace {
+            path,
             repository,
             name,
             base,
             git_profile,
         } => Body::Workspace(
             manager
-                .create_workspace(&repository, name, base, git_profile.as_deref())
+                .create_workspace(&repository, name, base, git_profile.as_deref(), path)
                 .await?,
         ),
         Method::ListWorkspaces => {

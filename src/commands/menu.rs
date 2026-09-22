@@ -50,6 +50,7 @@ pub(super) async fn choose(ctx: &Context) -> Result<Command> {
     let picked = ui::pick_with_keys(ctx, "Shoal> ", entries, Some(bindings))?;
     if picked.key == "ctrl-a" || (picked.key.is_empty() && picked.id == ADD_ENTRY) {
         return Ok(Command::Add {
+            path: None,
             repository: None,
             branch: None,
             existing: None,

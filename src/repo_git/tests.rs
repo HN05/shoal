@@ -78,7 +78,7 @@ impl Fixture {
 
     async fn add(&self, name: &str) -> crate::model::Workspace {
         self.manager
-            .create_workspace(&self.repo_id, name.into(), None, None)
+            .create_workspace(&self.repo_id, name.into(), None, None, None)
             .await
             .unwrap()
     }
@@ -202,6 +202,7 @@ async fn non_main_default_refresh_preserves_safety_and_explicit_overrides() {
                 format!("blocked-{index}"),
                 base.map(str::to_owned),
                 None,
+                None,
             )
             .await
             .unwrap_err();
@@ -214,7 +215,13 @@ async fn non_main_default_refresh_preserves_safety_and_explicit_overrides() {
     }
     let explicit = f
         .manager
-        .create_workspace(&f.repo_id, "explicit".into(), Some("main".into()), None)
+        .create_workspace(
+            &f.repo_id,
+            "explicit".into(),
+            Some("main".into()),
+            None,
+            None,
+        )
         .await
         .unwrap();
     assert_eq!(git(&explicit.path, &["rev-parse", "HEAD"]), before);
@@ -236,7 +243,7 @@ async fn local_defaults_and_unavailable_or_ambiguous_remote_defaults() {
     git(&f.repo, &["checkout", "--detach"]);
     assert!(
         f.manager
-            .create_workspace(&f.repo_id, "detached".into(), None, None)
+            .create_workspace(&f.repo_id, "detached".into(), None, None, None)
             .await
             .is_err()
     );
@@ -245,6 +252,7 @@ async fn local_defaults_and_unavailable_or_ambiguous_remote_defaults() {
             &f.repo_id,
             "explicit-detached".into(),
             Some("trunk".into()),
+            None,
             None,
         )
         .await
@@ -261,7 +269,7 @@ async fn local_defaults_and_unavailable_or_ambiguous_remote_defaults() {
     );
     assert!(
         f.manager
-            .create_workspace(&f.repo_id, "offline".into(), None, None)
+            .create_workspace(&f.repo_id, "offline".into(), None, None, None)
             .await
             .is_err()
     );
@@ -270,6 +278,7 @@ async fn local_defaults_and_unavailable_or_ambiguous_remote_defaults() {
             &f.repo_id,
             "explicit-offline".into(),
             Some("trunk".into()),
+            None,
             None,
         )
         .await
@@ -280,7 +289,7 @@ async fn local_defaults_and_unavailable_or_ambiguous_remote_defaults() {
     );
     let error = f
         .manager
-        .create_workspace(&f.repo_id, "ambiguous".into(), None, None)
+        .create_workspace(&f.repo_id, "ambiguous".into(), None, None, None)
         .await
         .unwrap_err();
     assert!(
@@ -333,6 +342,7 @@ async fn creation_refreshes_main_instead_of_using_checkout_head() {
                 &f.repo_id,
                 format!("worker-{index}"),
                 base.map(str::to_owned),
+                None,
                 None,
             )
             .await
@@ -397,7 +407,7 @@ async fn creation_refuses_failed_refreshes_without_creating_a_branch() {
         let before = git(&f.repo, &["rev-parse", "main"]);
         let error = f
             .manager
-            .create_workspace(&f.repo_id, "worker".into(), None, None)
+            .create_workspace(&f.repo_id, "worker".into(), None, None, None)
             .await
             .unwrap_err();
         assert!(
@@ -433,6 +443,7 @@ async fn creation_honors_explicit_history_and_preserves_ahead_main() {
                 format!("explicit-{index}"),
                 Some(base.into()),
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -460,7 +471,7 @@ async fn existing_branch_opens_without_suffix_and_reuses_owned_workspace() {
     git(&f.repo, &["branch", "coworker/topic"]);
     let opened = f
         .manager
-        .open_branch(&f.repo_id, "coworker/topic", None)
+        .open_branch(&f.repo_id, "coworker/topic", None, None)
         .await
         .unwrap();
     assert!(!opened.reused);
@@ -476,7 +487,7 @@ async fn existing_branch_opens_without_suffix_and_reuses_owned_workspace() {
     );
     let again = f
         .manager
-        .open_branch(&f.repo_id, "refs/heads/coworker/topic", None)
+        .open_branch(&f.repo_id, "refs/heads/coworker/topic", None, None)
         .await
         .unwrap();
     assert!(again.reused);
@@ -484,7 +495,7 @@ async fn existing_branch_opens_without_suffix_and_reuses_owned_workspace() {
     git(&opened.workspace.path, &["switch", "--detach"]);
     assert!(
         f.manager
-            .open_branch(&f.repo_id, "coworker/topic", None)
+            .open_branch(&f.repo_id, "coworker/topic", None, None)
             .await
             .is_err()
     );
@@ -495,7 +506,7 @@ async fn existing_branch_refuses_other_checkouts_and_name_collisions() {
     let f = Fixture::new().await;
     let error = f
         .manager
-        .open_branch(&f.repo_id, "main", None)
+        .open_branch(&f.repo_id, "main", None, None)
         .await
         .unwrap_err();
     assert!(error.to_string().contains("already checked out"));
@@ -504,7 +515,7 @@ async fn existing_branch_refuses_other_checkouts_and_name_collisions() {
     f.add("topic-one").await;
     assert!(
         f.manager
-            .open_branch(&f.repo_id, "topic/one", None)
+            .open_branch(&f.repo_id, "topic/one", None, None)
             .await
             .is_err()
     );
@@ -512,7 +523,7 @@ async fn existing_branch_refuses_other_checkouts_and_name_collisions() {
     git(&f.repo, &["switch", "--detach"]);
     let main = f
         .manager
-        .open_branch(&f.repo_id, "main", None)
+        .open_branch(&f.repo_id, "main", None, None)
         .await
         .unwrap();
     assert_eq!(main.workspace.branch, "main");
@@ -547,7 +558,7 @@ async fn existing_remote_branch_discovers_fetches_and_tracks_new_heads() {
     );
     let opened = f
         .manager
-        .open_branch(&f.repo_id, "origin/coworker/topic", None)
+        .open_branch(&f.repo_id, "origin/coworker/topic", None, None)
         .await
         .unwrap();
     assert_eq!(opened.workspace.branch, "coworker/topic");
@@ -565,7 +576,7 @@ async fn existing_remote_branch_discovers_fetches_and_tracks_new_heads() {
     );
     assert!(
         f.manager
-            .open_branch(&f.repo_id, "origin/coworker/topic", None)
+            .open_branch(&f.repo_id, "origin/coworker/topic", None, None)
             .await
             .unwrap()
             .reused
@@ -585,7 +596,7 @@ async fn existing_remote_branch_rejects_ambiguity_and_unrelated_local_branch() {
     );
     assert!(
         f.manager
-            .open_branch(&f.repo_id, "topic", None)
+            .open_branch(&f.repo_id, "topic", None, None)
             .await
             .unwrap_err()
             .to_string()
@@ -594,7 +605,7 @@ async fn existing_remote_branch_rejects_ambiguity_and_unrelated_local_branch() {
     git(&f.repo, &["branch", "topic"]);
     assert!(
         f.manager
-            .open_branch(&f.repo_id, "origin/topic", None)
+            .open_branch(&f.repo_id, "origin/topic", None, None)
             .await
             .unwrap_err()
             .to_string()
@@ -613,7 +624,7 @@ async fn existing_remote_branch_rejects_ambiguity_and_unrelated_local_branch() {
     );
     assert!(
         f.manager
-            .open_branch(&f.repo_id, "topic", None)
+            .open_branch(&f.repo_id, "topic", None, None)
             .await
             .is_ok()
     );
@@ -632,7 +643,7 @@ async fn existing_tracking_branch_fast_forwards_and_refuses_divergence() {
     git(&author, &["push", "origin", "topic"]);
     let opened = f
         .manager
-        .open_branch(&f.repo_id, "origin/topic", None)
+        .open_branch(&f.repo_id, "origin/topic", None, None)
         .await
         .unwrap();
     assert_eq!(
@@ -652,7 +663,7 @@ async fn existing_tracking_branch_fast_forwards_and_refuses_divergence() {
     git(&author, &["push", "origin", "diverged"]);
     assert!(
         f.manager
-            .open_branch(&f.repo_id, "origin/diverged", None)
+            .open_branch(&f.repo_id, "origin/diverged", None, None)
             .await
             .is_err()
     );
@@ -674,7 +685,7 @@ async fn existing_default_branch_survives_normal_workspace_removal() {
     git(&f.repo, &["switch", "--detach"]);
     let opened = f
         .manager
-        .open_branch(&f.repo_id, "main", None)
+        .open_branch(&f.repo_id, "main", None, None)
         .await
         .unwrap();
     let opening = git(&f.repo, &["rev-parse", "main"]);
@@ -706,7 +717,7 @@ async fn existing_default_branch_survives_normal_workspace_removal() {
     assert_eq!(git(&f.repo, &["rev-parse", "main"]), before);
     assert!(
         f.manager
-            .open_branch(&f.repo_id, "main", None)
+            .open_branch(&f.repo_id, "main", None, None)
             .await
             .is_ok()
     );

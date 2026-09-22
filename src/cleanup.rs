@@ -257,7 +257,7 @@ mod tests {
             .await
             .unwrap();
         let workspace = manager
-            .create_workspace(&repo.id, "idle".into(), None, None)
+            .create_workspace(&repo.id, "idle".into(), None, None, None)
             .await
             .unwrap();
         let snapshot = |manager: &Arc<Manager>| {
