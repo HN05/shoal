@@ -344,6 +344,7 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
                 .remove_workspace(&workspace, choice, caller_pid)
                 .await?,
         ),
+        Method::Diagnose => Body::Diagnostics(manager.diagnose().await?),
         Method::Doctor { workspace, options } => Body::Doctor(
             manager
                 .reconcile_workspaces(workspace.as_deref(), options)

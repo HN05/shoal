@@ -4469,6 +4469,54 @@ fn cd_always_picks_even_inside_a_workspace_and_cancel_does_not_navigate() {
     assert!(String::from_utf8_lossy(&output.stderr).contains("explicit target"));
 }
 
+#[test]
+fn doctor_daemon_reports_untracked_worktrees_without_adopting_them() {
+    use std::{
+        io::{BufRead, BufReader},
+        os::unix::net::UnixStream,
+    };
+    let fixture = Fixture::new();
+    let owned = fixture.add("owned");
+    let owned_path = Path::new(owned["path"].as_str().unwrap());
+    let orphan = owned_path.parent().unwrap().join("nested/orphan");
+    let outside = fixture.root.path().join("outside");
+    for (path, branch) in [(&orphan, "orphan"), (&outside, "outside")] {
+        git(
+            &fixture.repo,
+            &["worktree", "add", "-b", branch, path.to_str().unwrap()],
+        );
+    }
+    fs::write(orphan.join("dirty"), "keep me").unwrap();
+    let call = |request: Value| {
+        let mut socket =
+            UnixStream::connect(fixture.root.path().join("state/daemon.sock")).unwrap();
+        writeln!(socket, "{request}").unwrap();
+        let mut line = String::new();
+        BufReader::new(socket).read_line(&mut line).unwrap();
+        serde_json::from_str::<Value>(&line).unwrap()
+    };
+    let protocol =
+        call(serde_json::json!({"protocol":0,"id":1,"method":"status"}))["protocol"].clone();
+    let response = call(serde_json::json!({"protocol":protocol,"id":2,"method":"diagnose"}));
+    assert_eq!(response["type"], "diagnostics");
+    let findings: Vec<_> = response["data"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|c| c["name"].as_str().unwrap().starts_with("worktrees:"))
+        .collect();
+    assert_eq!(findings.len(), 1);
+    assert_eq!(findings[0]["status"], "warning");
+    assert!(
+        findings[0]["message"]
+            .as_str()
+            .unwrap()
+            .contains(orphan.to_str().unwrap())
+    );
+    assert_eq!(fs::read_to_string(orphan.join("dirty")).unwrap(), "keep me");
+    assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
+}
+
 fn recovery_report(fixture: &Fixture, args: &[&str]) -> Value {
     let output = fixture.command().arg("--json").args(args).output().unwrap();
     assert!(

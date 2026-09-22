@@ -21,7 +21,7 @@ use crate::{
     simulators::{SimRequest, Simulator, SimulatorCatalog},
 };
 
-pub const VERSION: u32 = 34;
+pub const VERSION: u32 = 35;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -122,6 +122,7 @@ pub enum Method {
         choice: BranchChoice,
         caller_pid: u32,
     },
+    Diagnose,
     Doctor {
         workspace: Option<String>,
         options: ReconcileOptions,
@@ -270,6 +271,7 @@ pub enum Body {
     OpenedWorkspace(crate::existing_branch::OpenedWorkspace),
     Inspection(Inspection),
     WorkspaceStatus(WorkspaceStatus),
+    Diagnostics(Vec<crate::doctor::Check>),
     Doctor(Vec<Report>),
     Execution(ExecutionPlan),
     RemovalCheck(RemovalCheck),

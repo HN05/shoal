@@ -12,6 +12,7 @@ mod context;
 mod daemon;
 mod default_branch;
 mod diff;
+mod doctor;
 mod env;
 mod execution;
 mod execution_processes;

@@ -12,8 +12,9 @@ removal, check it against the rule those files state before judging it.
   work and leases on failure, never adopts moved or replaced worktrees, and
   never signals a process whose recorded identity was not verified. Any new
   path that deletes a directory, kills a process or mutates a simulator
-  without those checks is a blocker.
-- Reconciliation reports current issues before falling back to the recorded
+  without those checks is a blocker. Doctor environment and untracked-worktree
+  checks diagnose only, including when repair is requested.
+- Doctor reports current issues before falling back to the recorded
   failure and repair guidance; repair remains an explicit choice.
 - Scope: workspace commands carry a scope token and get own-worktree access
   only; workspace allocation/removal/recovery and shared repository/service
