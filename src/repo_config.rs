@@ -98,6 +98,8 @@ pub struct PortDefaults {
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct PortDefinition {
+    pub requires_approval: bool,
+    pub approval_lifetime: crate::access::Lifetime,
     pub port: Option<u16>,
     pub env: Option<String>,
     pub reason: Option<String>,

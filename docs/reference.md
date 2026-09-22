@@ -898,10 +898,13 @@ lifecycle changes in the same workspace fail while a resource hook is running.
 
 ### Resource approvals
 
-Set `requires_approval = true` on a resource definition to gate scoped acquisition.
+Set `requires_approval = true` on a resource or named port definition to gate scoped
+acquisition.
 `approval_lifetime = "lease"` (default) ends approval on release;
 `"workspace"` permits later acquisitions of the same member and access settings.
-Unscoped acquisition needs no separate approval.
+Unscoped acquisition needs no separate approval. Port approvals bind the preferred
+port, automatic range, environment variable, and conflict policy; an accepted conflict
+suggestion with changed settings requires a new request.
 
 Agents use the normal acquire command with `--reason`. `shoal access` lists
 requests and retained workspace grants; `shoal access list <workspace>` filters

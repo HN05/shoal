@@ -381,9 +381,13 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             workspace,
             name,
             request,
-        } => match manager.reserve_port(&workspace, name, request).await? {
+        } => match manager
+            .reserve_port(&workspace, name, request, caller.is_some())
+            .await?
+        {
             ReserveOutcome::Reserved(port) => Body::Port(port),
             ReserveOutcome::Suggested(proposal) => Body::PortSuggestion(proposal),
+            ReserveOutcome::Approval(request) => Body::AccessRequest(request),
         },
         Method::ReleasePort { workspace, name } => {
             manager.release_port(&workspace, name).await?;

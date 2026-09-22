@@ -9467,3 +9467,56 @@ fn workspace_approvals_survive_release_but_do_not_expand_access_modes() {
     fixture.ok(&["rm", "agent", "--yes"]);
     assert!(fixture.ok(&["access"]).as_array().unwrap().is_empty());
 }
+
+#[test]
+fn port_approvals_bind_overrides_and_follow_both_lifetimes() {
+    for lifetime in ["lease", "workspace"] {
+        let mut fixture = Fixture::new();
+        commit_resource_config(
+            &fixture.repo,
+            &format!("[ports.web]\nrequires_approval=true\napproval_lifetime='{lifetime}'\n"),
+        );
+        fixture.add("agent");
+        let args = ["port", "acquire", "web", "--reason", "serve preview"];
+        let pending = pending_access(scoped_command(&fixture, "agent", &args));
+        assert!(
+            fixture.ok(&["port", "agent"])["reserved"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
+        let id = pending["id"].as_str().unwrap();
+        fixture.ok(&["access", "approve", id]);
+        assert!(
+            !scoped_command(
+                &fixture,
+                "agent",
+                &[
+                    "port",
+                    "acquire",
+                    "web",
+                    "--env",
+                    "OTHER_PORT",
+                    "--reason",
+                    "serve preview"
+                ]
+            )
+            .status
+            .success()
+        );
+        fixture.restart();
+        assert!(scoped_command(&fixture, "agent", &args).status.success());
+        fixture.ok(&["port", "release", "web", "agent"]);
+        let next = scoped_command(&fixture, "agent", &args);
+        if lifetime == "workspace" {
+            assert!(
+                next.status.success(),
+                "{}",
+                String::from_utf8_lossy(&next.stderr)
+            );
+        } else {
+            assert_ne!(pending_access(next)["id"], id);
+        }
+        fixture.ok(&["port", "release", "web", "agent"]);
+    }
+}

@@ -28,6 +28,7 @@ pub struct PortRequest {
 
 pub enum ReserveOutcome {
     Reserved(PortReservation),
+    Approval(Box<crate::access::AccessRequest>),
     /// The preferred port is taken and policy asks the caller to confirm.
     Suggested(PortSuggestion),
 }
@@ -109,6 +110,7 @@ impl Manager {
         selector: &str,
         name: String,
         request: PortRequest,
+        scoped: bool,
     ) -> Result<ReserveOutcome> {
         let workspace = self.workspace(selector).await?;
         let config = self.workspace_config(&workspace).await?;
@@ -167,6 +169,15 @@ impl Manager {
                     !existing.iter().any(|p| p.env_var == env_var),
                     "environment variable already assigned to another port"
                 );
+                if scoped && definition.requires_approval {
+                    let approval = crate::access::AccessRequest::new(&workspace.id, format!("port/{name}"), &name,
+                        serde_json::json!({"preferred": preferred, "env": env_var, "on_conflict": policy,
+                            "range": [range.start, range.end]}), definition.approval_lifetime, request.reason.as_deref());
+                    if let Some(approval) = crate::access::check(&tx, approval)? {
+                        tx.commit()?;
+                        return Ok((ReserveOutcome::Approval(Box::new(approval)), None));
+                    }
+                }
                 let reserved = store::ports(&tx, None)?;
                 let free = |port| -> Result<bool> {
                     Ok(!reserved.iter().any(|p| p.port == port) && available(port)?)
@@ -236,6 +247,9 @@ impl Manager {
             )
             .await;
         }
+        if let ReserveOutcome::Approval(request) = &outcome {
+            self.notify_access(&workspace_name, request).await;
+        }
         Ok(outcome)
     }
 
@@ -265,12 +279,15 @@ impl Manager {
             .run(move |db| {
                 let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
                 store::require_ready(&tx, &workspace.id)?;
+                let released =
+                    crate::access::release(&tx, &workspace.id, &format!("port/{name}"), &name)?;
                 ensure!(
                     tx.execute(
                         "DELETE FROM ports WHERE workspace_id=?1 AND name=?2",
                         params![workspace.id, name]
-                    )? == 1,
-                    "unknown port reservation"
+                    )? == 1
+                        || released,
+                    "unknown port reservation or access request"
                 );
                 tx.commit()?;
                 Ok(())

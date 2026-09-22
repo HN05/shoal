@@ -78,6 +78,7 @@ async fn reserve(
                 )?;
                 return Ok(0);
             }
+            Body::AccessRequest(request) => return super::access::declined(ctx, &request),
             Body::PortSuggestion(proposal) => {
                 if !ctx.interactive() {
                     let mut value = serde_json::to_value(&proposal)?;

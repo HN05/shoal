@@ -333,6 +333,7 @@ mod tests {
                     reason: Some("cleanup test".into()),
                     ..Default::default()
                 },
+                false,
             )
             .await
             .unwrap();
