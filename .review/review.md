@@ -25,6 +25,8 @@ removal, check it against the rule those files state before judging it.
 - Allocation is atomic and persisted before the external mutation (simctl,
   Worktrunk). Leases survive restart and failed removal and are released only
   with successful removal. Active permits block automatic cleanup.
+- Explicit creation bases resolve locally and are recorded for diff; only a base
+  naming the local default branch is refreshed.
 - Existing branches use unsuffixed worktrees; reopen verified owned workspaces,
   reject other checkouts, never adopt the main checkout, and keep the default
   branch on removal unless deletion was explicit. Idle cleanup accepts commits

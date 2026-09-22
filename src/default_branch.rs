@@ -13,7 +13,7 @@ pub async fn resolve(repo: &Path, discover: bool) -> Result<String> {
     if remotes.is_empty() {
         let head = git::run(repo, &["symbolic-ref", "--quiet", "HEAD"])
             .await
-            .context("local repository has no default branch; select a starting ref with --ref")?;
+            .context("local repository has no default branch; select a starting ref with --base")?;
         return Ok(head
             .trim_end_matches('\n')
             .strip_prefix("refs/heads/")
@@ -25,7 +25,7 @@ pub async fn resolve(repo: &Path, discover: bool) -> Result<String> {
     } else {
         ensure!(
             remotes.len() == 1,
-            "repository default remote is ambiguous (no origin); select a starting ref with --ref"
+            "repository default remote is ambiguous (no origin); select a starting ref with --base"
         );
         remotes[0]
     };
@@ -44,7 +44,7 @@ pub async fn resolve(repo: &Path, discover: bool) -> Result<String> {
         .await
         .with_context(|| {
             format!(
-                "discover {remote}'s default branch; use --ref to select a starting point explicitly"
+                "discover {remote}'s default branch; use --base to select a starting point explicitly"
             )
         })?;
     let branch = advertised
@@ -54,7 +54,7 @@ pub async fn resolve(repo: &Path, discover: bool) -> Result<String> {
                 .strip_suffix("\tHEAD")
         })
         .context(
-            "remote HEAD does not advertise a default branch; select a starting ref with --ref",
+            "remote HEAD does not advertise a default branch; select a starting ref with --base",
         )?;
     git::run(repo, &["symbolic-ref", &head, &format!("{prefix}{branch}")]).await?;
     Ok(branch.to_owned())

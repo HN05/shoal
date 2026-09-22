@@ -40,6 +40,7 @@ shoal codex fix-login --cli
 Use `shoal add my-project` to pick a new or existing branch, or pass it explicitly:
 
 ```sh
+shoal add my-project fix-api --base feature/api  # Branch from another branch, tag, or commit
 shoal add my-project --existing origin/feature/api --agent codex
 shoal add my-project --issue 68           # Create from an issue; add --agent codex to start an agent
 shoal add --issue https://github.com/owner/repo/issues/34  # URL finds the repository
@@ -54,8 +55,9 @@ Happy app. `shoal issue` takes the same `--agent`, or `default_agent = "codex"`
 from the repository or global config. Edit `~/.config/shoal/issue-template.md`
 to customize issue prompts and `agent-template.md` for general instructions;
 put those files in a repository root to override them for that project.
-New workspaces branch from the repository's
-default branch. With shell integration, `shoal add` enters the workspace.
+New workspaces branch from the repository's default branch unless `--base REF`
+is supplied to `add` or `issue`. With shell integration, `shoal add` enters the
+workspace.
 
 ## Everyday commands
 

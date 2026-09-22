@@ -73,7 +73,7 @@ pub enum Command {
         #[arg(long)]
         issue: Option<String>,
         /// Starting Git ref (defaults to the repository's default branch, refreshed from its upstream).
-        #[arg(long = "ref")]
+        #[arg(long, visible_alias = "ref", value_name = "REF")]
         base: Option<String>,
         /// Apply a named Git profile to the new worktree, overriding repository defaults.
         #[arg(long)]
@@ -96,7 +96,7 @@ pub enum Command {
         #[arg(long, value_parser = AgentParser)]
         agent: Option<Agent>,
         /// Starting Git ref (defaults to the repository's default branch, refreshed from its upstream).
-        #[arg(long = "ref")]
+        #[arg(long, visible_alias = "ref", value_name = "REF")]
         base: Option<String>,
         /// Arguments forwarded to the agent.
         #[arg(last = true)]
@@ -725,6 +725,29 @@ mod tests {
             }) if repository.as_deref() == Some("repo")
                 && existing.as_deref() == Some("origin/topic")
         ));
+    }
+
+    #[test]
+    fn creation_accepts_base_and_legacy_ref_flags() {
+        for flag in ["--base", "--ref"] {
+            for args in [
+                vec!["shoal", "add", "repo", "topic", flag, "release/v1"],
+                vec!["shoal", "add", "repo", "--issue", "122", flag, "v1.0"],
+                vec!["shoal", "issue", "122", flag, "HEAD~1"],
+            ] {
+                let expected = *args.last().unwrap();
+                let parsed = Cli::try_parse_from(args).unwrap();
+                let base = match parsed.command.unwrap() {
+                    Command::Add { base, .. } | Command::Issue { base, .. } => base,
+                    _ => panic!("wrong command"),
+                };
+                assert_eq!(base.as_deref(), Some(expected));
+            }
+            assert!(
+                Cli::try_parse_from(["shoal", "add", "repo", "--existing", "topic", flag, "main"])
+                    .is_err()
+            );
+        }
     }
 
     #[test]

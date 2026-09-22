@@ -264,7 +264,7 @@ consume templates. User prompt arguments are preserved.
 ### Branch and workspace names
 `shoal add <repository> [branch]` creates a literal Git branch;
 `--existing <branch|remote/branch>` uses an existing one (incompatible with the
-branch argument, `--issue`, and `--ref`). The picker
+branch argument, `--issue`, and `--base`). The picker
 queries remotes for current branches. Local branches take precedence and remain
 unchanged; remote selections fetch and create tracking branches, or fast-forward
 a matching local tracking branch without discarding ahead commits. Ambiguous
@@ -286,14 +286,17 @@ New branches start from the repository's default branch: `origin/HEAD`, or the
 sole remote's HEAD without `origin` (several remotes without `origin` are
 ambiguous). A missing symbolic remote HEAD is discovered with `ls-remote` and
 cached; update it with `git remote set-head origin --auto`. Without remotes, the
-registered checkout's current branch is used; a detached checkout needs `--ref`.
+registered checkout's current branch is used; a detached checkout needs `--base`.
 
 Before branching, Shoal fetches that local branch's upstream and fast-forwards
 it, even when the registered checkout is on another branch. A missing branch or
 upstream, failed fetch, divergence, or a dirty or managed default-branch
-checkout stops creation; an already-ahead branch is preserved. `--ref <git-ref>`
-starts elsewhere without refreshing, except the default branch. Existing-branch
-workspaces diff against the local default, or their opening commit if on it or unavailable.
+checkout stops creation; an already-ahead branch is preserved. `--base REF`
+(`--ref` is an alias) starts from any locally resolvable Git ref that names a
+commit, including branches, tags, and commit IDs. It skips refreshing unless it
+names the local default branch. The selected ref is recorded for `shoal diff`.
+Existing-branch workspaces diff against the local default, or their opening
+commit if on it or unavailable.
 
 ### Repositories
 

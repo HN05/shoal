@@ -1036,7 +1036,7 @@ fn dirty_workspace_is_retained_and_failed_creation_can_be_removed() {
                 "add",
                 fixture.repo.to_str().unwrap(),
                 "broken",
-                "--ref",
+                "--base",
                 "does-not-exist"
             ])
             .status
@@ -1752,7 +1752,7 @@ fn invalid_branch_names_and_normalized_name_collisions_preserve_existing_work() 
 fn interactive_add_preserves_literal_branch_spelling() {
     let fixture = Fixture::new();
     let (output, transcript) = fixture.interactive(
-        &["add", fixture.repo.to_str().unwrap(), "--ref", "main"],
+        &["add", fixture.repo.to_str().unwrap(), "--base", "main"],
         "\u{2003}henrik/topic\u{2003}\n",
     );
     assert!(output.status.success(), "{transcript}");
@@ -3766,6 +3766,98 @@ fn add_uses_develop_as_the_repository_default() {
     assert_eq!(workspace["base_commit"], expected.trim());
     let name = workspace["name"].as_str().unwrap();
     assert_eq!(fixture.ok(&["rm", name])["branch_deleted"], true);
+}
+
+#[test]
+fn add_base_accepts_branches_tags_commits_and_revision_expressions() {
+    let fixture = Fixture::new();
+    let initial = git(&fixture.repo, &["rev-parse", "HEAD"]);
+    git(&fixture.repo, &["checkout", "-b", "feature/source"]);
+    fs::write(fixture.repo.join("source-only"), "base branch content\n").unwrap();
+    git(&fixture.repo, &["add", "."]);
+    git(
+        &fixture.repo,
+        &[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "-m",
+            "source change",
+        ],
+    );
+    let source = git(&fixture.repo, &["rev-parse", "HEAD"]);
+    git(
+        &fixture.repo,
+        &[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "tag",
+            "-a",
+            "v1",
+            "-m",
+            "release",
+        ],
+    );
+    git(
+        &fixture.repo,
+        &["update-ref", "refs/remotes/origin/topic", source.trim()],
+    );
+    git(&fixture.repo, &["checkout", "main"]);
+    // Explicit non-default bases must work even when the default cannot refresh.
+    git(
+        &fixture.repo,
+        &["remote", "add", "origin", "/nonexistent/shoal-test-remote"],
+    );
+    git(
+        &fixture.repo,
+        &[
+            "symbolic-ref",
+            "refs/remotes/origin/HEAD",
+            "refs/remotes/origin/main",
+        ],
+    );
+    for (index, (base, expected, reference)) in [
+        (
+            "feature/source",
+            source.trim(),
+            Some("refs/heads/feature/source"),
+        ),
+        (
+            "refs/heads/feature/source",
+            source.trim(),
+            Some("refs/heads/feature/source"),
+        ),
+        (
+            "origin/topic",
+            source.trim(),
+            Some("refs/remotes/origin/topic"),
+        ),
+        ("v1", source.trim(), Some("refs/tags/v1")),
+        (source.trim(), source.trim(), None),
+        ("feature/source~1", initial.trim(), None),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let name = format!("from-base-{index}");
+        let workspace = fixture.ok(&["add", fixture.repo.to_str().unwrap(), &name, "--base", base]);
+        let path = Path::new(workspace["path"].as_str().unwrap());
+        assert_eq!(git(path, &["rev-parse", "HEAD"]).trim(), expected);
+        assert_eq!(workspace["base_commit"], expected);
+        assert_eq!(workspace["base_ref"], serde_json::json!(reference));
+        fs::write(path.join("tracked"), "workspace change\n").unwrap();
+        let output = fixture.run(&["diff", &name]);
+        assert!(output.status.success(), "{output:?}");
+        let diff = String::from_utf8(output.stdout).unwrap();
+        assert!(diff.contains("workspace change"));
+        assert!(!diff.contains("source-only"));
+    }
+    assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), initial);
+    assert_eq!(git(&fixture.repo, &["rev-parse", "feature/source"]), source);
 }
 
 #[test]
@@ -6317,7 +6409,7 @@ fn issue_command_finds_the_repository_and_starts_the_default_agent() {
         let url = format!("https://github.com/team/project/issues/{number}");
         let number_input = number.to_string();
         let input = if number >= 45 { &number_input } else { &url };
-        let mut args = vec!["--json", "issue", input, "--ref", "HEAD"];
+        let mut args = vec!["--json", "issue", input, "--base", "HEAD"];
         if number == 47 {
             args.extend(["--repo", fixture.repo.to_str().unwrap()]);
         }
@@ -6660,7 +6752,7 @@ fn add_existing_branch_runs_setup_once_and_denies_scoped_creation() {
             .status
             .success()
     );
-    for flag in ["--ref", "--issue"] {
+    for flag in ["--base", "--ref", "--issue"] {
         assert!(
             !fixture
                 .run(&[

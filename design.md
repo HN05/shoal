@@ -77,9 +77,10 @@ A new branch starts from the repository default branch: `origin/HEAD`, the sole
 remote's HEAD, or the checkout's current branch without remotes, never a guessed
 `main`. The selected local default branch is fast-forwarded from its upstream first,
 preserving an ahead branch and refusing divergence, dirty or managed checkouts, and
-failed fetches. `--ref` starts elsewhere without refreshing, except when it names
-the default branch. Creation, default-branch refresh, setup, repository removal, and
-recovery share a per-repository Git gate.
+failed fetches. `--base REF` (`--ref` alias) starts from any locally resolvable
+commit ref without refreshing, except when it names the local default branch.
+Creation, default-branch refresh, setup, repository removal, and recovery share
+a per-repository Git gate.
 
 New-branch creation accepts literal Git branch names and derives a portable,
 globally unique workspace name and directory from them; a normalization collision
