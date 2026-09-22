@@ -11,8 +11,13 @@ shoal install
 shoal skill install
 ```
 
+Homebrew builds Shoal from source and hides compiler output by default. The
+`bash scripts/install-homebrew.sh ...` step can take several minutes; add
+`--verbose` to `brew install` to see progress. On macOS, follow an ongoing build
+with `tail -f ~/Library/Logs/Homebrew/shoal/01.bash.log`.
+
 Use `brew install --HEAD hn05/tap/shoal` to track `main` instead of releases, or
-download a prebuilt macOS or Linux binary from a [release](https://github.com/HN05/shoal/releases);
+skip compilation by downloading a prebuilt macOS or Linux binary from a [release](https://github.com/HN05/shoal/releases);
 the macOS binaries are unsigned, so clear the download quarantine first with
 `xattr -d com.apple.quarantine shoal`.
 Homebrew installs the runtime dependencies. `shoal install` starts the per-user
