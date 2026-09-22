@@ -64,15 +64,8 @@ workspace.
 
 ## Everyday commands
 
-Use configured commands as custom agents:
-
-```toml
-default_agent = "pi"
-[commands]
-pi = ["pi", "{args}"]
-```
-
-Then run `shoal add my-project fix-api --agent pi` or `shoal issue <url>`.
+After [configuring a custom agent](docs/reference.md#agents), run
+`shoal add my-project fix-api --agent pi` or `shoal issue <url>`.
 
 ```sh
 shoal                         # Interactive workspace menu
