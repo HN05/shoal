@@ -60,6 +60,7 @@ pub struct Effective {
 #[derive(Debug, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
+    pub ai: crate::ai::Agents,
     pub commands: crate::named_commands::Commands,
     pub issue_template: Option<String>,
     pub agent_template: Option<String>,
@@ -425,10 +426,14 @@ impl Config {
 
     /// `$XDG_CONFIG_HOME/shoal/config.toml`, or `~/.config/shoal/config.toml`.
     pub fn path(paths: &Paths) -> PathBuf {
+        Self::path_for_home(&paths.home)
+    }
+
+    pub fn path_for_home(home: &std::path::Path) -> PathBuf {
         std::env::var_os("XDG_CONFIG_HOME")
             .map(PathBuf::from)
             .filter(|p| p.is_absolute())
-            .unwrap_or_else(|| paths.home.join(".config"))
+            .unwrap_or_else(|| home.join(".config"))
             .join("shoal/config.toml")
     }
 
@@ -596,6 +601,7 @@ impl Config {
 
     fn parse(text: &str, paths: &Paths) -> Result<Self> {
         let config: Self = toml::from_str(text)?;
+        crate::ai::validate(&config.ai, &paths.home)?;
         config.root_dir(paths)?;
         validate_idle_minutes(config.auto_cleanup.idle_minutes)?;
         config.ports.validate()?;

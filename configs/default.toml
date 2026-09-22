@@ -5,7 +5,7 @@
 # are examples, not defaults: uncomment a whole block and adapt it. A repository's
 # .shoal.toml (or the config saved with `shoal repo config`) holds its named
 # ports, setup and hook commands and resource pools, and may set any value below
-# for that repository except root_dir, the simulator limits and profiles, Git profile definitions, and
+# for that repository except root_dir, AI skill directories, the simulator limits and profiles, Git profile definitions, and
 # the shared resources.
 
 # Parent of every repository's workspaces and URL clones.
@@ -42,6 +42,11 @@ codex = ["codex", "{args}", "--sandbox", "danger-full-access", "--ask-for-approv
 # [agent_auth]
 # fj = "~/bin/fj-agent"
 # gh = "~/bin/gh-agent"
+
+# User-level skill locations for additional AI tools: shoal skill install pi.
+# Shoal adds shoal/SKILL.md beneath skill_dir. Launchers belong in [commands].
+# [ai.pi]
+# skill_dir = "~/.pi/agent/skills"
 
 [codex]
 # `shoal codex` without --cli/--app: "cli" or "app".

@@ -847,13 +847,28 @@ separate read/write availability.
 ## Agent skill outside project repositories
 
 ```sh
-shoal skill install          # Codex and Claude Code
-shoal skill install codex    # Or: claude
+shoal skill install          # All configured tools, including built-in defaults
+shoal skill install pi       # One tool configured below
 ```
+
+Define additional tools' user-level skill directories in global Shoal config:
+
+```toml
+[ai.pi]
+skill_dir = "~/.pi/agent/skills"
+
+[ai.opencode]
+skill_dir = "~/.config/opencode/skills"
+```
+
+Names are portable identifiers; `all` is reserved. `skill_dir` must be absolute
+or start with `~/`; Shoal appends `shoal/SKILL.md`. These machine settings cannot
+be set per repository. Use `[commands]` for custom launchers.
 
 Installs the bundled `SKILL.md` at user scope with no daemon: Codex at
 `~/.agents/skills/shoal/SKILL.md`, Claude at `~/.claude/skills/shoal/SKILL.md`
-(honoring an absolute `CLAUDE_CONFIG_DIR`). Homebrew installs symlink to the
+(honoring an absolute `CLAUDE_CONFIG_DIR`); `[ai.codex]` and `[ai.claude]` can
+override those directories. Homebrew installs symlink to the
 packaged skill so upgrades apply automatically; Cargo installs copy it, so
 rerun after upgrading. Other files in the skill directory are preserved. Run it
 outside scoped executions. `shoal skill` prints the instructions (`--json`

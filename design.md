@@ -236,8 +236,11 @@ terminal's own notifications (OSC 9); `list`, workspace `status`, and `daemon st
 repeated polled conflicts collapse until read, and scoped processes cannot read
 them. Desktop or push delivery was considered and not adopted.
 
-The skill is installed at user scope for Codex and Claude, independent of the
-daemon and never from a scoped execution; its availability registers nothing.
+The skill is installed at user scope, independent of the daemon and never from
+a scoped execution; its availability registers nothing. Global `[ai.<name>]`
+settings name skill directories for user-configured tools, with Codex and Claude
+defaults. Skill directories describe the machine and cannot be set per repository;
+custom launchers use named commands without tool-specific integrations.
 
 ## Resource ownership
 

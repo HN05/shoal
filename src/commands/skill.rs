@@ -9,7 +9,7 @@ use std::{
 use anyhow::{Context, Result, ensure};
 use serde_json::json;
 
-use crate::cli::{SkillAgent, SkillCommand};
+use crate::cli::SkillCommand;
 
 const SKILL: &str = include_str!("../../SKILL.md");
 
@@ -28,14 +28,27 @@ pub(super) fn run(command: Option<&SkillCommand>, json_output: bool) -> Result<i
     );
     let home = PathBuf::from(std::env::var_os("HOME").context("HOME is not set")?);
     ensure!(home.is_absolute(), "HOME must be an absolute path");
-    let mut destinations = Vec::new();
-    if matches!(agent, SkillAgent::All | SkillAgent::Codex) {
-        destinations.push(("codex", home.join(".agents/skills/shoal/SKILL.md")));
-    }
-    if matches!(agent, SkillAgent::All | SkillAgent::Claude) {
-        let config = crate::env::claude_config_dir()?.unwrap_or_else(|| home.join(".claude"));
-        destinations.push(("claude", config.join("skills/shoal/SKILL.md")));
-    }
+    let configured = crate::ai::load(&home)?;
+    ensure!(
+        matches!(agent.as_str(), "all" | "codex" | "claude") || configured.contains_key(agent),
+        "unknown AI tool {agent:?}; configure [ai.{agent}] with skill_dir in global Shoal config"
+    );
+    let mut names = std::collections::BTreeSet::from(["codex", "claude"]);
+    names.extend(configured.keys().map(String::as_str));
+    let destinations = names
+        .into_iter()
+        .filter(|name| agent == "all" || agent == name)
+        .map(|name| {
+            let directory = match configured.get(name) {
+                Some(settings) => crate::ai::skill_dir(settings, &home)?,
+                None if name == "claude" => crate::env::claude_config_dir()?
+                    .unwrap_or_else(|| home.join(".claude"))
+                    .join("skills"),
+                None => home.join(".agents/skills"),
+            };
+            Ok((name, directory.join("shoal/SKILL.md")))
+        })
+        .collect::<Result<Vec<_>>>()?;
     let mut installed = Vec::new();
     let source = option_env!("SHOAL_SKILL_PATH").map(Path::new);
     if let Some(source) = source {

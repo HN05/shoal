@@ -89,7 +89,7 @@ fn dynamic_completion_covers_nested_commands_flags_and_paths_without_daemon() {
     fs::create_dir_all(home.path().join(".config/shoal")).unwrap();
     fs::write(
         home.path().join(".config/shoal/config.toml"),
-        "[commands]\nreview = ['tuicr']\n",
+        "[commands]\nreview = ['tuicr']\n[ai.pi]\nskill_dir = '~/pi-skills'\n",
     )
     .unwrap();
     for (words, expected) in [
@@ -114,6 +114,7 @@ fn dynamic_completion_covers_nested_commands_flags_and_paths_without_daemon() {
         (vec!["shoal", "add", "--agent", "happy-cl"], "happy-claude"),
         (vec!["shoal", "happy", "co"], "codex"),
         (vec!["shoal", "skill", "install", "co"], "codex"),
+        (vec!["shoal", "skill", "install", "pi"], "pi"),
     ] {
         for shell in ["bash", "zsh"] {
             let output = Command::new(env!("CARGO_BIN_EXE_shoal"))

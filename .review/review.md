@@ -61,6 +61,8 @@ removal, check it against the rule those files state before judging it.
   are replaceable; substitutions expand once and forwarded arguments stay literal.
   Repository-only commands require a current or explicit workspace.
   `{diff_base}` resolves lazily through the shared daemon diff-base lookup.
+- AI skill directories are machine-only configuration. Skill installation accepts
+  configured tool names, needs no daemon, and remains denied to scoped processes.
 - External tools are invoked with argument arrays, never shell strings.
   Terminal I/O stays in the execution wrapper; the daemon owns state. CLI
   styles and transient progress belong at presentation sites; machine output and

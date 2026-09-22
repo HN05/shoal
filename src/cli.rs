@@ -460,19 +460,12 @@ impl clap::builder::TypedValueParser for AgentParser {
 
 #[derive(Debug, Subcommand)]
 pub enum SkillCommand {
-    /// Install or refresh the bundled skill for Codex and Claude Code (no daemon needed).
+    /// Install or refresh the bundled skill for configured AI tools (no daemon needed).
     Install {
-        /// Install for one agent, or both by default.
-        #[arg(value_enum, default_value = "all")]
-        agent: SkillAgent,
+        /// Install for one AI tool, or all configured tools by default.
+        #[arg(default_value = "all")]
+        agent: String,
     },
-}
-
-#[derive(Debug, Clone, Copy, ValueEnum)]
-pub enum SkillAgent {
-    All,
-    Codex,
-    Claude,
 }
 
 #[derive(Debug, Subcommand)]

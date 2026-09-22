@@ -127,6 +127,24 @@ fn decorate(command: Command, parent: &str, typed: Arc<Typed>) -> Command {
                 arg.add(ArgValueCompleter::new(move |current: &OsStr| {
                     typed.complete(target, current)
                 }))
+            } else if parent == "skill" && name == "install" && arg.get_id() == "agent" {
+                arg.add(ArgValueCompleter::new(|current: &OsStr| {
+                    let mut names = std::collections::BTreeSet::from([
+                        "all".to_owned(),
+                        "codex".to_owned(),
+                        "claude".to_owned(),
+                    ]);
+                    if let Some(home) = std::env::var_os("HOME") {
+                        if let Ok(agents) = crate::ai::load(&PathBuf::from(home)) {
+                            names.extend(agents.into_keys());
+                        }
+                    }
+                    names
+                        .into_iter()
+                        .filter(|name| name.starts_with(current.to_string_lossy().as_ref()))
+                        .map(CompletionCandidate::new)
+                        .collect::<Vec<_>>()
+                }))
             } else if parent == "repo" && name == "add" && arg.get_id() == "source" {
                 arg.value_hint(clap::ValueHint::DirPath)
             } else {
