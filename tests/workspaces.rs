@@ -8914,6 +8914,19 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
     assert!(!fixture.root.path().join(".claude.json").exists());
     assert!(!fixture.root.path().join(".codex/config.toml").exists());
 
+    let output = fixture.run(&[
+        "run",
+        "pi",
+        workspace["id"].as_str().unwrap(),
+        "--",
+        "literal {prompt}",
+    ]);
+    assert_eq!(output.status.code(), Some(7), "{output:?}");
+    assert_eq!(
+        fs::read_to_string(fixture.root.path().join("agent-args")).unwrap(),
+        format!("--prompt=\0literal {{prompt}}\0{branch}\0")
+    );
+
     // Without an explicit prompt slot, context precedes literal forwarded arguments.
     fs::write(&saved, "[commands]\npi = ['fake-agent', '{args}']\n").unwrap();
     fixture.ok(&[

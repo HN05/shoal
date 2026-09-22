@@ -200,7 +200,8 @@ Custom `--agent` and `default_agent` names select named commands through the
 same configuration layers. They run as tracked agents with scope, forge wrappers,
 and exit notifications. Their `{prompt}` argument combines general instructions
 and issue context; without it, nonempty context precedes forwarded arguments.
-User arguments and inserted prompt text remain literal. Built-in names retain
+Plain command invocations expand `{prompt}` to an empty string. User arguments
+and inserted prompt text remain literal. Built-in names retain
 their specialized launchers; custom names add no tool-specific flags or trust setup.
 
 Agent shortcuts use the execution wrapper: by default Codex CLI gets full access without

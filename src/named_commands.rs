@@ -226,7 +226,15 @@ pub async fn expand(
     workspace: &Workspace,
     args: Vec<OsString>,
 ) -> Result<Vec<OsString>> {
-    expand_with_fields(paths, commands, name, workspace, args, &[]).await
+    expand_with_fields(
+        paths,
+        commands,
+        name,
+        workspace,
+        args,
+        &[("{prompt}", OsStr::new(""))],
+    )
+    .await
 }
 
 pub async fn expand_with_fields(

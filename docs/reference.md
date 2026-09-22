@@ -223,7 +223,8 @@ issue prompt, separated by a blank line. Without that placeholder, nonempty cont
 becomes the first forwarded argument. Substitutions happen once; user arguments
 remain literal. Built-in agent names keep their specialized launchers; custom
 agents receive no tool-specific flags or trust setup. `shoal run <name>` remains
-a plain command invocation without agent prompts or exit notifications.
+a plain command invocation without agent prompts or exit notifications, expanding
+`{prompt}` to an empty string.
 
 `shoal codex` without `--cli`/`--app` uses `codex.default_mode` from the workspace's
 repository config or `~/.config/shoal/config.toml` (or

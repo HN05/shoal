@@ -64,6 +64,7 @@ removal, check it against the rule those files state before judging it.
   Custom agent names select named commands and run as tracked agents. Their
   `{prompt}` combines general instructions and issue context, prepended to
   forwarded arguments when no prompt placeholder is configured.
+  Plain command invocations expand `{prompt}` to an empty string.
 - AI skill directories are machine-only configuration. Skill installation accepts
   configured tool names, needs no daemon, and remains denied to scoped processes.
 - External tools are invoked with argument arrays, never shell strings.
