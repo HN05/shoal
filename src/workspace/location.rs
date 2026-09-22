@@ -39,7 +39,12 @@ impl Manager {
                     "workspace path overlaps a reserved repository directory"
                 );
             }
-            for tree in git::worktrees(&other.path).await? {
+            let trees = match git::worktrees(&other.path).await {
+                Ok(trees) => trees,
+                Err(_) if other.id != repo.id => continue,
+                Err(error) => return Err(error),
+            };
+            for tree in trees {
                 // The candidate itself can be an explicitly adopted worktree.
                 ensure!(
                     path == tree.path || !overlaps(&path, &tree.path),

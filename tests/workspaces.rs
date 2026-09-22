@@ -8659,3 +8659,52 @@ fn adopt_cli_preserves_work_and_uses_normal_lifecycle() {
     assert!(!path.exists());
     assert!(fixture.ok(&["list"]).as_array().unwrap().is_empty());
 }
+
+#[test]
+fn explicit_locations_do_not_require_unrelated_checkouts_to_be_readable() {
+    let fixture = Fixture::new();
+    let repo = fixture.repo.to_str().unwrap();
+    let offline = fixture.root.path().join("offline-repo");
+    fs::create_dir(&offline).unwrap();
+    git(&offline, &["init", "-b", "main"]);
+    let registration = fixture.ok(&["repo", "add", offline.to_str().unwrap()]);
+    fs::remove_dir_all(&offline).unwrap();
+    let destination = fixture.root.path().join("custom");
+    fixture.ok(&[
+        "add",
+        repo,
+        "custom",
+        "--path",
+        destination.to_str().unwrap(),
+    ]);
+    let adopted = fixture.root.path().join("adopted");
+    git(
+        &fixture.repo,
+        &[
+            "worktree",
+            "add",
+            "-b",
+            "adopted",
+            adopted.to_str().unwrap(),
+        ],
+    );
+    fixture.ok(&["adopt", repo, adopted.to_str().unwrap()]);
+    for protected in [
+        offline.join("nested"),
+        Path::new(registration["workspaces_dir"].as_str().unwrap()).join("nested"),
+    ] {
+        assert!(
+            !fixture
+                .run(&[
+                    "add",
+                    repo,
+                    "rejected",
+                    "--path",
+                    protected.to_str().unwrap()
+                ])
+                .status
+                .success()
+        );
+    }
+    assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 2);
+}
