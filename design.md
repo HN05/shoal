@@ -254,7 +254,8 @@ while the CLI reads agent settings per command. Repository TOML comes from the
 worktree (`.shoal.toml` or `.shoal/config.toml`, both together is an error) with
 a local override stored in the database by repository ID layered over it per
 option, a named table replacing the one below it whole, and deleted with the
-registration. Every option
+registration. Inline repository key edits use the same validation as imports and
+serialize read/modify/write in the daemon; unset restores lower-layer values. Every option
 that does not describe the machine may be set at either level and resolves per
 option: saved config, worktree file, global config, then the built-in default.
 Prompt templates follow the same precedence, with repository-root Markdown files

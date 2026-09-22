@@ -442,7 +442,11 @@ shoal repo config my-project --clear  # Return to worktree config
 ```
 
 The file uses the `.shoal.toml` format and is validated and copied into Shoal's
-database; reimport it after edits. Repository options resolve per option, for
+database; reimport it after edits, or use `shoal config set KEY VALUE --repo NAME`
+and `shoal config unset KEY --repo NAME` to edit individual saved keys with the
+same syntax and validation as global edits. Repository edits are serialized in
+the daemon and leave worktree files untouched. Unsetting removes only the saved
+value, allowing lower layers to supply it. Repository options resolve per option, for
 every workspace of that repository: a value in the saved config wins, one it
 omits comes from the worktree's `.shoal.toml` or `.shoal/config.toml` (both
 together is an error), and a named `[ports.<name>]`, `[resources.<name>]` or

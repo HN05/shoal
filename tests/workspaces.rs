@@ -2524,6 +2524,21 @@ fn execution_scope_limits_management_and_expires() {
         vec!["pr", "merged", "other"],
         vec!["pr", "clear", "other"],
         vec!["config", "show", "other"],
+        vec![
+            "config",
+            "set",
+            "default_agent",
+            "codex",
+            "--repo",
+            fixture.repo.to_str().unwrap(),
+        ],
+        vec![
+            "config",
+            "unset",
+            "default_agent",
+            "--repo",
+            fixture.repo.to_str().unwrap(),
+        ],
         vec!["port", "acquire", "web", "other"],
         vec!["repo", "rename", fixture.repo.to_str().unwrap(), "changed"],
         vec!["repo", "config", fixture.repo.to_str().unwrap()],
@@ -3410,6 +3425,69 @@ fn resource_claims_are_atomic_persistent_and_wait_for_release() {
             .iter()
             .all(|overview| overview["leases"] == serde_json::json!([]))
     );
+}
+
+#[test]
+fn inline_repository_config_edits_preserve_layers_and_serialize_updates() {
+    let mut fixture = Fixture::new();
+    commit_resource_config(&fixture.repo, "default_agent = 'codex'\n");
+    fixture.add("worker");
+    let repo = fixture.ok(&["repo", "list"])[0].clone();
+    let id = repo["id"].as_str().unwrap();
+    let saved = fixture.ok(&["config", "set", "default_agent", "claude", "--repo", id]);
+    assert_eq!(saved["repository_id"], id);
+    let agent = || {
+        fixture
+            .ok(&["config", "show", "worker"])
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|entry| entry["key"] == "default_agent")
+            .unwrap()
+            .clone()
+    };
+    assert_eq!(agent()["value"], "claude");
+    assert_eq!(agent()["layer"], "saved_repository_config");
+    for (key, value) in [
+        ("auto_cleanup.enabled", "maybe"),
+        ("root_dir", "/tmp/no"),
+        ("default_agnet", "codex"),
+    ] {
+        assert!(
+            !fixture
+                .run(&["config", "set", key, value, "--repo", id])
+                .status
+                .success()
+        );
+        assert_eq!(fixture.ok(&["repo", "config", id]), saved);
+    }
+    fixture.ok(&["config", "unset", "default_agent", "--repo", id]);
+    assert_eq!(agent()["value"], "codex");
+    assert_eq!(agent()["layer"], "worktree_file");
+    assert_eq!(
+        fs::read_to_string(fixture.repo.join(".shoal.toml")).unwrap(),
+        "default_agent = 'codex'\n"
+    );
+    thread::scope(|scope| {
+        for index in 0..8 {
+            let fixture = &fixture;
+            scope.spawn(move || {
+                fixture.ok(&[
+                    "config",
+                    "set",
+                    &format!("commands.check{index}"),
+                    "['true']",
+                    "--repo",
+                    id,
+                ]);
+            });
+        }
+    });
+    let saved = fixture.ok(&["repo", "config", id]);
+    let config: toml::Value = toml::from_str(saved["toml"].as_str().unwrap()).unwrap();
+    assert_eq!(config["commands"].as_table().unwrap().len(), 8);
+    fixture.restart();
+    assert_eq!(fixture.ok(&["repo", "config", id]), saved);
 }
 
 #[test]

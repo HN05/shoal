@@ -269,6 +269,15 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::SetRepositoryConfig { repository, toml } => {
             Body::RepositoryConfig(manager.set_repository_config(&repository, toml).await?)
         }
+        Method::EditRepositoryConfig {
+            repository,
+            key,
+            value,
+        } => Body::RepositoryConfig(
+            manager
+                .edit_repository_config(&repository, &key, value.as_deref())
+                .await?,
+        ),
         Method::RemoveRepository { repository } => {
             Body::RepositoryRemoved(manager.remove_repository(&repository).await?)
         }

@@ -9,7 +9,25 @@ use crate::{
     protocol::ConfigTarget,
 };
 
-pub(super) fn edit(ctx: &Context, key: String, value: Option<String>) -> Result<i32> {
+pub(super) async fn edit(
+    ctx: &Context,
+    key: String,
+    value: Option<String>,
+    repository: Option<String>,
+) -> Result<i32> {
+    if let Some(repository) = repository {
+        let config = crate::client::request!(
+            &ctx.paths,
+            crate::protocol::Method::EditRepositoryConfig {
+                repository,
+                key,
+                value
+            },
+            RepositoryConfig
+        );
+        ctx.emit("Updated saved repository config", &config)?;
+        return Ok(0);
+    }
     let (path, backup) = crate::config::Config::edit(&ctx.paths, &key, value.as_deref())?;
     ctx.emit(
         &format!("Updated {}", path.display()),

@@ -285,7 +285,7 @@ pub enum Command {
         #[arg(last = true, required = true)]
         command: Vec<OsString>,
     },
-    /// Manage the global configuration file.
+    /// Inspect effective settings and edit global or saved repository config.
     Config {
         #[command(subcommand)]
         command: ConfigCommand,
@@ -549,14 +549,22 @@ pub enum ShellCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum ConfigCommand {
-    /// Set a global config value using a TOML dotted key.
+    /// Set a config value using a TOML dotted key (global by default).
     Set {
         key: String,
         /// A TOML value, or an unquoted string.
         value: String,
+        /// Edit this repository's saved config instead of the global file.
+        #[arg(long = "repo")]
+        repository: Option<String>,
     },
-    /// Remove a global config key or table, restoring its defaults.
-    Unset { key: String },
+    /// Remove a config key or table, falling back to lower layers or defaults.
+    Unset {
+        key: String,
+        /// Edit this repository's saved config instead of the global file.
+        #[arg(long = "repo")]
+        repository: Option<String>,
+    },
     /// Show effective repository settings and the layer each value came from.
     Show { workspace: Option<String> },
     /// Install a packaged global config, keeping the old file as config.toml.backup.

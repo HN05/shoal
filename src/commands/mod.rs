@@ -259,8 +259,14 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             recovery::run(&ctx, workspace, all, options).await
         }
         Command::Config { command } => match command {
-            ConfigCommand::Set { key, value } => configuration::edit(&ctx, key, Some(value)),
-            ConfigCommand::Unset { key } => configuration::edit(&ctx, key, None),
+            ConfigCommand::Set {
+                key,
+                value,
+                repository,
+            } => configuration::edit(&ctx, key, Some(value), repository).await,
+            ConfigCommand::Unset { key, repository } => {
+                configuration::edit(&ctx, key, None, repository).await
+            }
             ConfigCommand::Show { workspace } => configuration::show(&ctx, workspace).await,
             ConfigCommand::Reset => service::install_config(&ctx, None),
             ConfigCommand::Install { name } => service::install_config(&ctx, Some(name)),

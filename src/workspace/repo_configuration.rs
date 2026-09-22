@@ -50,22 +50,49 @@ impl Manager {
         let _registry = self.registry_gate.lock().await;
         let repo = self.repository(selector).await?;
         self.ensure_repository_available(&repo.id).await?;
+        self.save_repository_config(repo.id, toml).await
+    }
+
+    pub async fn edit_repository_config(
+        &self,
+        selector: &str,
+        key: &str,
+        value: Option<&str>,
+    ) -> Result<LocalConfig> {
+        // Hold the same gate as imports and removal across read/modify/write.
+        let _registry = self.registry_gate.lock().await;
+        let repo = self.repository(selector).await?;
+        self.ensure_repository_available(&repo.id).await?;
+        let text = self
+            .local_repository_config(&repo.id)
+            .await?
+            .unwrap_or_default();
+        let edited = crate::config_edit::edit(&text, key, value)?;
+        repo_config::parse(&edited).context("invalid local repository config")?;
+        self.save_repository_config(repo.id, Some(edited)).await
+    }
+
+    async fn save_repository_config(
+        &self,
+        repository_id: String,
+        toml: Option<String>,
+    ) -> Result<LocalConfig> {
         self.store
             .run(move |db| {
                 if let Some(text) = &toml {
                     db.execute(
                         "INSERT INTO repository_configs(repository_id,toml) VALUES (?1,?2)
                      ON CONFLICT(repository_id) DO UPDATE SET toml=excluded.toml",
-                        params![repo.id, text],
+                        params![repository_id, text],
                     )?;
                 } else {
                     db.execute(
                         "DELETE FROM repository_configs WHERE repository_id=?1",
-                        [&repo.id],
+                        [&repository_id],
                     )?;
                 }
                 Ok(LocalConfig {
-                    repository_id: repo.id,
+                    repository_id,
                     toml,
                 })
             })

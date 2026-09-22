@@ -21,7 +21,7 @@ use crate::{
     simulators::{SimRequest, Simulator, SimulatorCatalog},
 };
 
-pub const VERSION: u32 = 33;
+pub const VERSION: u32 = 34;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -68,6 +68,11 @@ pub enum Method {
     SetRepositoryConfig {
         repository: String,
         toml: Option<String>,
+    },
+    EditRepositoryConfig {
+        repository: String,
+        key: String,
+        value: Option<String>,
     },
     RemoveRepository {
         repository: String,
