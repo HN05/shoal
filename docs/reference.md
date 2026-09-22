@@ -346,8 +346,8 @@ and paths overlapping protected locations are refused. Repeating adoption reopen
 a verified ready workspace; it cannot repair a moved or replaced managed worktree.
 
 Adoption preserves commits, dirty files, and Git settings without fetching, setup,
-or post-setup hooks. It takes full Shoal ownership: ordinary manual, idle, PR, and
-repository cleanup apply, including the pre-remove hook. Disable automatic cleanup
+or post-setup hooks. It takes full Shoal ownership with normal cleanup, including
+the pre-remove hook. Disable automatic cleanup
 in repository configuration before adopting work that should stay indefinitely.
 Use `shoal setup` explicitly when setup is wanted.
 
