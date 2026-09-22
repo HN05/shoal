@@ -5,9 +5,9 @@ Start with the [usage guide](../README.md).
 Human-readable output uses color when its destination is a terminal. Set a
 nonempty `NO_COLOR` or `TERM=dumb` to disable it. Redirected output and `--json`
 stay plain; stdout and stderr are detected independently.
-Repository registration and removal show a spinner with elapsed seconds after
-half a second, cleared before the result. Progress uses terminal stderr only and
-is suppressed with `--json` or `TERM=dumb`.
+Repository registration, removal and service changes show the pending operation
+with a spinner and elapsed seconds after half a second, cleared before the result.
+Progress uses terminal stderr only and is suppressed with `--json` or `TERM=dumb`.
 
 - [Installation and upgrades](#homebrew)
 - [Daemon](#daemon)

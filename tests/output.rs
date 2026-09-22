@@ -155,6 +155,40 @@ fn repository_progress_respects_output_mode_and_clears_before_errors() {
 }
 
 #[test]
+fn install_progress_clears_on_failure_and_leaves_json_and_preview_clean() {
+    for json in [false, true] {
+        let args = if json {
+            vec!["--json", "install"]
+        } else {
+            vec!["install"]
+        };
+        let (output, text) = run_with_reply(
+            &args,
+            Some(false),
+            &[("NO_COLOR", "1")],
+            Some((
+                Duration::from_millis(700),
+                serde_json::json!({
+                    "type": "error", "data": {"code": "test", "message": "status failed"}
+                }),
+            )),
+        );
+        assert!(!output.status.success());
+        assert!(output.stdout.is_empty());
+        if json {
+            let value: serde_json::Value = serde_json::from_str(&text).unwrap();
+            assert_eq!(value["error"]["message"], "test: status failed");
+        } else {
+            assert!(text.contains("Checking daemon"), "{text:?}");
+            assert!(text.contains(" \rerror: test: status failed"), "{text:?}");
+        }
+    }
+    let (output, text) = run(&["install", "--dry-run"], Some(false), &[]);
+    assert!(output.status.success());
+    assert!(text.is_empty());
+}
+
+#[test]
 fn terminal_styles_respect_redirection_json_and_environment() {
     for (args, stdout, marker) in [
         (

@@ -30,7 +30,10 @@ pub(super) async fn install(
         })?;
         return Ok(0);
     }
-    let preserve_running = match client::status(&ctx.paths).await {
+    let preserve_running = match ctx
+        .progress("Checking daemon", client::status(&ctx.paths))
+        .await
+    {
         Ok(Some(status)) => {
             ensure!(
                 status.managed,
@@ -50,7 +53,7 @@ pub(super) async fn install(
             if !ctx.json {
                 eprintln!("Updating daemon service after a protocol change...");
             }
-            stop(&ctx.paths).await.context(
+            ctx.progress("Stopping incompatible daemon", stop(&ctx.paths)).await.context(
                 "could not stop the incompatible daemon service; stop any foreground daemon before rerunning `shoal install`",
             )?;
             false
@@ -59,8 +62,13 @@ pub(super) async fn install(
     };
     let (config, config_created) = crate::config::Config::install(&ctx.paths)?;
     crate::templates::install(&ctx.paths)?;
-    service::setup(&ctx.paths, &executable, preserve_running).await?;
-    client::wait(&ctx.paths, true).await?;
+    ctx.progress(
+        "Installing daemon service",
+        service::setup(&ctx.paths, &executable, preserve_running),
+    )
+    .await?;
+    ctx.progress("Waiting for daemon", client::wait(&ctx.paths, true))
+        .await?;
     ctx.emit_styled(
         Style::Success,
         "Daemon service installed and running",
@@ -143,29 +151,37 @@ pub(super) async fn run(ctx: Context, command: DaemonCommand) -> Result<i32> {
             return Ok(if running { 0 } else { 1 });
         }
         DaemonCommand::Start => {
-            service::start(&ctx.paths).await?;
-            client::wait(&ctx.paths, true).await?;
+            start(&ctx).await?;
             ctx.emit_styled(Style::Success, "Daemon started", json!({"running": true}))?;
         }
         DaemonCommand::Stop => {
-            stop(&ctx.paths).await?;
+            ctx.progress("Stopping daemon", stop(&ctx.paths)).await?;
             ctx.emit_styled(Style::Success, "Daemon stopped", json!({"running": false}))?;
         }
         DaemonCommand::Restart => {
             // Service administration must still work after a protocol upgrade.
-            if let Ok(Some(status)) = client::status(&ctx.paths).await {
+            if let Ok(Some(status)) = ctx
+                .progress("Checking daemon", client::status(&ctx.paths))
+                .await
+            {
                 ensure!(
                     status.managed,
                     "foreground daemon: stop it and run `shoal daemon run` again"
                 );
             }
-            stop(&ctx.paths).await?;
-            service::start(&ctx.paths).await?;
-            client::wait(&ctx.paths, true).await?;
+            ctx.progress("Stopping daemon", stop(&ctx.paths)).await?;
+            start(&ctx).await?;
             ctx.emit_styled(Style::Success, "Daemon restarted", json!({"running": true}))?;
         }
     }
     Ok(0)
+}
+
+async fn start(ctx: &Context) -> Result<()> {
+    ctx.progress("Starting daemon service", service::start(&ctx.paths))
+        .await?;
+    ctx.progress("Waiting for daemon", client::wait(&ctx.paths, true))
+        .await
 }
 
 /// Stop a foreground daemon over the socket, or a managed one via the OS.

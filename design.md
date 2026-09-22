@@ -156,11 +156,10 @@ noninteractive calls and `config show` never open a picker. `config show` report
 effective repository values with their winning layers and uses a registered checkout
 before a workspace exists. `status` combines lifecycle, fork-point changes, active work and
 leases in one workspace view. Human output uses a shared semantic palette at the CLI presentation
-layer; machine output and stored values stay unstyled. Slow repository registration
-and removal show transient elapsed-time feedback on terminal stderr, suppressed
-for JSON and dumb terminals; progress belongs to the CLI, without protocol changes.
-Rust chooses paths,
-including `<root_dir>/<repo>` after removal; the Bash/Zsh wrapper changes directory
+layer; machine output and stored values stay unstyled. Slow repository registration,
+removal and service changes show transient elapsed-time feedback on terminal stderr,
+suppressed for JSON and dumb terminals; progress belongs to the CLI, without protocol
+changes. Rust chooses paths, including `<root_dir>/<repo>` after removal; the Bash/Zsh wrapper changes directory
 without evaluating repository code.
 Confirmations show the action and ask `[y/N]`, cancel on Enter, `n`, EOF or
 Ctrl-C (also after a tracked execution), and are bypassed only by
