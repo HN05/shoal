@@ -88,6 +88,13 @@ pub enum Command {
         #[arg(last = true, requires = "agent")]
         args: Vec<OsString>,
     },
+    /// Take ownership of an existing linked worktree, including normal automatic cleanup.
+    Adopt {
+        /// Registered repository that owns the linked worktree.
+        repository: String,
+        /// Existing worktree root; files and Git settings are preserved, setup is skipped.
+        path: PathBuf,
+    },
     /// Create a workspace for an issue number or URL and start an agent.
     Issue {
         /// Forge issue number or URL.

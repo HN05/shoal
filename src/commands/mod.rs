@@ -122,6 +122,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             )
             .await
         }
+        Command::Adopt { repository, path } => workspaces::adopt(&ctx, repository, path).await,
         Command::Issue {
             issue,
             repository,

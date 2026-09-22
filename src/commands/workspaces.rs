@@ -320,6 +320,27 @@ pub(super) async fn add(
     }
 }
 
+pub(super) async fn adopt(ctx: &Context, repository: String, path: PathBuf) -> Result<i32> {
+    let repository = ui::repository_selector(repository)?;
+    let path = super::repositories::absolute(ctx, path)?;
+    let workspace = request!(
+        &ctx.paths,
+        Method::AdoptWorkspace { repository, path },
+        Workspace
+    );
+    ctx.emit(
+        &format!(
+            "Adopted {} on branch {} at {} (normal cleanup applies)",
+            Palette::stdout(ctx.json).paint(Style::Heading, &workspace.name),
+            workspace.branch,
+            workspace.path.display()
+        ),
+        &workspace,
+    )?;
+    shell::navigate(&workspace.path, ctx.json)?;
+    Ok(0)
+}
+
 pub(super) async fn setup(ctx: &Context, workspace: Option<String>) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let inspection = client::inspect(&ctx.paths, workspace).await?;

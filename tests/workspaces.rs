@@ -8594,3 +8594,65 @@ fn one_off_workspace_paths_reject_existing_and_protected_directories() {
     assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
     assert!(!git(&fixture.repo, &["branch", "--list", "rejected"]).contains("rejected"));
 }
+
+#[test]
+fn adopt_cli_preserves_work_and_uses_normal_lifecycle() {
+    let mut fixture = Fixture::new();
+    let path = fixture.root.path().join("existing worktree");
+    git(
+        &fixture.repo,
+        &[
+            "worktree",
+            "add",
+            "-b",
+            "adopt/topic",
+            path.to_str().unwrap(),
+        ],
+    );
+    fs::write(path.join("tracked"), "work in progress\n").unwrap();
+    fs::write(
+        path.join(".shoal.toml"),
+        "setup_cmd = 'missing'\npost_setup_cmd = 'missing'\ngit_profile = 'missing'\n",
+    )
+    .unwrap();
+    let output = fixture
+        .command()
+        .current_dir(fixture.root.path())
+        .args([
+            "--json",
+            "adopt",
+            fixture.repo.to_str().unwrap(),
+            "existing worktree",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let w: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(w["name"], "adopt-topic");
+    assert_eq!(w["state"], "ready");
+    fixture.restart();
+    let again = fixture.ok(&[
+        "adopt",
+        fixture.repo.to_str().unwrap(),
+        "~/existing worktree",
+    ]);
+    assert_eq!(again["id"], w["id"]);
+    let output = fixture.run(&["exec", "adopt-topic", "--", "cat", "tracked"]);
+    assert!(output.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "work in progress\n"
+    );
+    let diff = fixture.run(&["diff", "adopt-topic"]);
+    assert!(diff.status.success());
+    assert!(String::from_utf8_lossy(&diff.stdout).contains("+work in progress"));
+    // Full ownership includes resource release and repository removal of this external path.
+    fixture.ok(&["port", "acquire", "test", "adopt-topic"]);
+    fixture.ok(&["repo", "rm", fixture.repo.to_str().unwrap(), "--yes"]);
+    assert!(!path.exists());
+    assert!(fixture.ok(&["list"]).as_array().unwrap().is_empty());
+}

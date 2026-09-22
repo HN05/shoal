@@ -1,4 +1,4 @@
-//! Existing branches become ordinary owned worktrees; never adopt another checkout.
+//! Existing-branch selection creates or reopens worktrees; adoption is explicit.
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 
@@ -180,7 +180,7 @@ impl Manager {
             .find(|tree| tree.is_branch(name))
         {
             anyhow::bail!(
-                "branch {name} is already checked out at {}; Shoal cannot create another worktree for it",
+                "branch {name} is already checked out at {}; Shoal cannot create another worktree for it; use shoal adopt for an unmanaged linked worktree",
                 tree.path.display()
             );
         }

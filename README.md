@@ -43,6 +43,7 @@ Use `shoal add my-project` to pick a new or existing branch, or pass it explicit
 shoal add my-project fix-api --base feature/api  # Branch from feature/api
 shoal add my-project --existing origin/feature/api --agent codex
 shoal add my-project quick-fix --path ../quick-fix
+shoal adopt my-project ../existing-worktree  # Take ownership, including automatic cleanup
 shoal add my-project --issue 68           # Create from an issue; add --agent codex to start an agent
 shoal add --issue https://github.com/owner/repo/issues/34  # URL finds the repository
 shoal issue https://github.com/owner/repo/issues/34  # Paste an issue: finds the repository, starts the default agent

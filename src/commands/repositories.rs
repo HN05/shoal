@@ -138,7 +138,7 @@ pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
     Ok(0)
 }
 
-/// Expand `~` and resolve relative clone paths against the caller's directory.
+/// Expand `~` and resolve relative paths against the caller's directory.
 pub(super) fn absolute(ctx: &Context, path: PathBuf) -> Result<PathBuf> {
     let path = match path.strip_prefix("~") {
         Ok(relative) => ctx.paths.home.join(relative),

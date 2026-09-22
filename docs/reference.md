@@ -337,6 +337,20 @@ ancestor blocks it, that component is suffixed (`feature` makes `feature/topic`
 into `feature-2/topic`). `HEAD`, Worktrunk's `@`, and full hex object IDs are
 reserved. Suffixes never change the derived workspace name.
 
+### Adopting a worktree
+`shoal adopt <repository> <path>` registers an existing linked worktree in place
+and enters it with shell integration. The path is relative to the current directory
+(`~/` allowed) and must name its root. Its local branch derives the workspace name;
+name or ownership conflicts fail. Main checkouts, detached or locked worktrees,
+and paths overlapping protected locations are refused. Repeating adoption reopens
+a verified ready workspace; it cannot repair a moved or replaced managed worktree.
+
+Adoption preserves commits, dirty files, and Git settings without fetching, setup,
+or post-setup hooks. It takes full Shoal ownership: ordinary manual, idle, PR, and
+repository cleanup apply, including the pre-remove hook. Disable automatic cleanup
+in repository configuration before adopting work that should stay indefinitely.
+Use `shoal setup` explicitly when setup is wanted.
+
 ### Base branch
 New branches start from the repository's default branch: `origin/HEAD`, or the
 sole remote's HEAD without `origin` (several remotes without `origin` are
