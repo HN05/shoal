@@ -21,7 +21,7 @@ use crate::{
     simulators::{SimRequest, Simulator, SimulatorCatalog},
 };
 
-pub const VERSION: u32 = 32;
+pub const VERSION: u32 = 33;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -88,6 +88,10 @@ pub enum Method {
         name: String,
         base: Option<String>,
         git_profile: Option<String>,
+    },
+    AdoptWorkspace {
+        repository: String,
+        path: std::path::PathBuf,
     },
     ListWorkspaces,
     SetPr {

@@ -101,7 +101,12 @@ discovered live and become local tracking branches. Local selection preserves
 commits; remote selection fast-forwards matching tracking branches. Ready owned
 workspaces reopen without setup, hooks, or refresh; other checkouts block creation.
 Existing worktrees use the local default as their diff base, or the opening commit
-if unavailable or on that same branch. Never adopt main checkouts.
+if unavailable or on that same branch. Explicit adoption accepts a linked worktree
+root on a local branch of the registered repository, preserving dirty files and
+Git settings and recording it ready without setup or hooks. It takes normal
+cleanup ownership. Require a linked, unlocked worktree on a local branch with no
+ownership conflict; reopening verifies its record, and adoption cannot repair a moved
+or replaced managed worktree. Never adopt a main checkout.
 
 Named Git profiles live in global config; repository or global `git_profile`
 selects one for newly created worktrees, overridden by `add --git-profile`.

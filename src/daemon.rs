@@ -294,6 +294,9 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
                 .create_workspace(&repository, name, base, git_profile.as_deref(), path)
                 .await?,
         ),
+        Method::AdoptWorkspace { repository, path } => {
+            Body::Workspace(manager.adopt_workspace(&repository, &path).await?)
+        }
         Method::ListWorkspaces => {
             let mut workspaces = manager.list_workspaces().await?;
             if let Some(caller) = caller {

@@ -898,3 +898,166 @@ impl Manager {
         super::finish_land(self.prepare_land(selector).await?).await
     }
 }
+
+#[tokio::test]
+async fn adoption_preserves_dirty_worktree_and_persists_identity_and_readiness() {
+    let f = Fixture::new().await;
+    let path = f.root.path().join("external");
+    git(
+        &f.repo,
+        &[
+            "worktree",
+            "add",
+            "-b",
+            "adopt/topic",
+            path.to_str().unwrap(),
+        ],
+    );
+    fs::write(path.join("tracked"), "unfinished work\n").unwrap();
+    fs::write(
+        path.join(".shoal.toml"),
+        "setup_cmd = 'missing'\npost_setup_cmd = 'missing'\ngit_profile = 'missing'\n",
+    )
+    .unwrap();
+    let before = git(&path, &["status", "--porcelain"]);
+    let w = f.manager.adopt_workspace(&f.repo_id, &path).await.unwrap();
+    assert_eq!(w.name, "adopt-topic");
+    assert_eq!(w.state, crate::state::WorkspaceState::Ready);
+    assert_eq!(w.base_ref.as_deref(), Some("refs/heads/main"));
+    assert!(w.git_dir.is_some() && w.git_dir_id.is_some());
+    assert_eq!(git(&path, &["status", "--porcelain"]), before);
+    assert_eq!(
+        f.manager
+            .adopt_workspace(&f.repo_id, &path)
+            .await
+            .unwrap()
+            .id,
+        w.id
+    );
+    let restored = Manager::open(Paths {
+        home: f.root.path().into(),
+        state: f.root.path().join("state"),
+        socket: f.root.path().join("unused.sock"),
+    })
+    .await
+    .unwrap();
+    assert_eq!(
+        restored.workspace(&w.id).await.unwrap().git_dir_id,
+        w.git_dir_id
+    );
+    assert!(restored.verify_worktree(&w).await.is_ok());
+    assert!(f.manager.verify_worktree(&w).await.is_ok());
+    let mut method = Method::AdoptWorkspace {
+        repository: f.repo_id.clone(),
+        path,
+    };
+    f.manager
+        .issue_scope(
+            "adoption-test".into(),
+            scope::Caller {
+                execution_id: "test".into(),
+                workspace_id: w.id,
+                landing: false,
+                setup: false,
+            },
+        )
+        .await;
+    assert!(
+        scope::authorize(&f.manager, Some("adoption-test"), &mut method)
+            .await
+            .is_err()
+    );
+}
+
+#[tokio::test]
+async fn adoption_refuses_invalid_roots_and_moved_owned_worktrees() {
+    let f = Fixture::new().await;
+    assert!(
+        f.manager
+            .adopt_workspace(&f.repo_id, &f.repo)
+            .await
+            .is_err()
+    );
+    let path = f.root.path().join("external");
+    git(
+        &f.repo,
+        &["worktree", "add", "--detach", path.to_str().unwrap()],
+    );
+    assert!(f.manager.adopt_workspace(&f.repo_id, &path).await.is_err());
+    git(&path, &["switch", "-c", "adopt/topic"]);
+    git(&f.repo, &["worktree", "lock", path.to_str().unwrap()]);
+    assert!(f.manager.adopt_workspace(&f.repo_id, &path).await.is_err());
+    git(&f.repo, &["worktree", "unlock", path.to_str().unwrap()]);
+    fs::create_dir(path.join("child")).unwrap();
+    assert!(
+        f.manager
+            .adopt_workspace(&f.repo_id, &path.join("child"))
+            .await
+            .is_err()
+    );
+    let other = Fixture::new().await;
+    assert!(
+        other
+            .manager
+            .adopt_workspace(&other.repo_id, &path)
+            .await
+            .is_err()
+    );
+    let owned = f.add("owned").await;
+    let moved = f.root.path().join("moved");
+    git(
+        &f.repo,
+        &[
+            "worktree",
+            "move",
+            owned.path.to_str().unwrap(),
+            moved.to_str().unwrap(),
+        ],
+    );
+    git(&moved, &["switch", "-c", "renamed"]);
+    assert!(f.manager.adopt_workspace(&f.repo_id, &moved).await.is_err());
+    f.add("adopt-topic").await;
+    assert!(f.manager.adopt_workspace(&f.repo_id, &path).await.is_err());
+    assert_eq!(f.manager.list_workspaces().await.unwrap().len(), 2);
+    assert!(path.join("tracked").exists());
+}
+
+#[tokio::test]
+async fn adoption_of_default_branch_uses_opening_commit_and_retains_branch() {
+    let f = Fixture::new().await;
+    git(&f.repo, &["switch", "--detach"]);
+    let path = f.root.path().join("external");
+    git(
+        &f.repo,
+        &["worktree", "add", path.to_str().unwrap(), "main"],
+    );
+    // A symbolic remote HEAD lets default discovery work from the detached main checkout.
+    git(
+        &f.repo,
+        &["remote", "add", "origin", "https://example.invalid/repo"],
+    );
+    git(
+        &f.repo,
+        &[
+            "symbolic-ref",
+            "refs/remotes/origin/HEAD",
+            "refs/remotes/origin/main",
+        ],
+    );
+    let w = f.manager.adopt_workspace(&f.repo_id, &path).await.unwrap();
+    assert!(w.base_ref.is_none());
+    assert_eq!(
+        w.base_commit.as_deref(),
+        Some(git(&path, &["rev-parse", "HEAD"]).trim())
+    );
+    f.manager
+        .remove_workspace(&w.id, crate::removal::BranchChoice::Auto, 0)
+        .await
+        .unwrap();
+    assert!(!path.exists());
+    assert!(
+        !git(&f.repo, &["branch", "--list", "main"])
+            .trim()
+            .is_empty()
+    );
+}

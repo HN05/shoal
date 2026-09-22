@@ -76,7 +76,10 @@ when behavior changes, distinguishing decisions from proposals.
 - Accept literal Git branch names and derive portable workspace names separately.
   Suffix conflicting branch components with `-2`, `-3`, etc.; keep derived workspace
   names/directories unchanged; serialize allocation per repo. Existing branches get
-  unsuffixed worktrees or reopen owned ones; reject other checkouts and name collisions.
+  unsuffixed worktrees or reopen owned ones; other checkouts require explicit adoption.
+  Adopt only linked, unlocked worktree roots on local branches, preserving files and
+  settings without setup; record identity and readiness atomically under normal cleanup.
+  Reject ownership/name collisions and never use adoption to repair moved worktrees.
 - `shoal diff` uses Git fork-point/merge-base against the recorded base branch;
   do not compare directly to today's main tip or a frozen commit after a rebase.
   Preserve native Git pager/external-diff configuration.

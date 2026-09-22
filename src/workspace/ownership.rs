@@ -113,7 +113,7 @@ async fn git_common_dir(path: &Path) -> Result<PathBuf> {
     Ok(fs::canonicalize(dir.trim())?)
 }
 
-async fn git_dir(path: &Path) -> Result<PathBuf> {
+pub(super) async fn git_dir(path: &Path) -> Result<PathBuf> {
     let dir = git::run(path, &["rev-parse", "--path-format=absolute", "--git-dir"]).await?;
     Ok(fs::canonicalize(dir.trim())?)
 }
@@ -131,7 +131,7 @@ pub(super) fn device_inode(metadata: &fs::Metadata) -> String {
     format!("{}:{}", metadata.dev(), metadata.ino())
 }
 
-fn directory_identity(path: &Path) -> Result<String> {
+pub(super) fn directory_identity(path: &Path) -> Result<String> {
     let metadata = fs::metadata(path)?;
     ensure!(metadata.is_dir(), "Git metadata is not a directory");
     Ok(device_inode(&metadata))

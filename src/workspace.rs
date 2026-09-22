@@ -1,4 +1,5 @@
 //! Shared daemon state, workspace lookup, and worktree creation.
+mod adoption;
 mod executions;
 mod lifecycle;
 mod location;
@@ -250,25 +251,35 @@ impl Manager {
                     |r| r.get(0),
                 )?;
                 ensure!(!taken, "workspace name already exists: {}", record.name);
-                let paths = tx.prepare("SELECT path FROM workspaces")?
-                    .query_map([], |row| row.get::<_, String>(0))?
+                let workspaces = tx.prepare("SELECT * FROM workspaces")?
+                    .query_map([], store::workspace)?
                     .collect::<rusqlite::Result<Vec<_>>>()?;
-                for path in paths {
-                    let path = std::path::Path::new(&path);
+                for workspace in workspaces {
+                    let path = &workspace.path;
                     ensure!(
                         !record.path.starts_with(path) && !path.starts_with(&record.path),
                         "workspace path overlaps a recorded workspace: {}", path.display()
                     );
+                    ensure!(record.git_dir.is_none() || (record.git_dir != workspace.git_dir
+                        && record.git_dir_id != workspace.git_dir_id),
+                        "Git worktree is already owned by {}; restore its recorded path", workspace.name);
+                    ensure!(record.repository_id != workspace.repository_id || record.branch != workspace.branch,
+                        "branch is already owned by workspace {}", workspace.name);
                 }
                 tx.execute(
-                    "INSERT INTO workspaces (id,repository_id,name,path,branch,state) VALUES (?1,?2,?3,?4,?5,?6)",
+                    "INSERT INTO workspaces (id,repository_id,name,path,branch,state,git_dir,git_dir_id,base_commit,base_ref,setup_finished) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
                     params![
                         record.id,
                         record.repository_id,
                         record.name,
                         record.path.to_str(),
                         record.branch,
-                        record.state
+                        record.state,
+                        record.git_dir.and_then(|p| p.to_str().map(str::to_owned)),
+                        record.git_dir_id,
+                        record.base_commit,
+                        record.base_ref,
+                        record.state == WorkspaceState::Ready,
                     ],
                 )?;
                 tx.execute(
@@ -295,32 +306,7 @@ impl Manager {
             self.materialize_branch(repo, branch).await?;
         }
         let base = if existing.is_some() {
-            Some(
-                match crate::default_branch::resolve(&repo.path, false).await {
-                    Ok(name)
-                        if name != workspace.branch
-                            && git::run_isolated(
-                                &repo.path,
-                                &["show-ref", "--verify", "--", &format!("refs/heads/{name}")],
-                            )
-                            .await
-                            .is_ok() =>
-                    {
-                        format!("refs/heads/{name}")
-                    }
-                    _ => git::run_isolated(
-                        &repo.path,
-                        &[
-                            "rev-parse",
-                            "--verify",
-                            &format!("refs/heads/{}", workspace.branch),
-                        ],
-                    )
-                    .await?
-                    .trim()
-                    .to_owned(),
-                },
-            )
+            Some(existing_base(repo, &workspace.branch).await?)
         } else {
             base
         };
@@ -499,4 +485,30 @@ fn derive_workspace_name(branch: &str) -> String {
     } else {
         name.chars().take(crate::validate::MAX_NAME_LEN).collect()
     }
+}
+
+/// Existing worktrees use a live local default ref, or their opening commit.
+async fn existing_base(repo: &crate::model::Repository, branch: &str) -> Result<String> {
+    Ok(
+        match crate::default_branch::resolve(&repo.path, false).await {
+            Ok(name)
+                if name != branch
+                    && git::run_isolated(
+                        &repo.path,
+                        &["show-ref", "--verify", "--", &format!("refs/heads/{name}")],
+                    )
+                    .await
+                    .is_ok() =>
+            {
+                format!("refs/heads/{name}")
+            }
+            _ => git::run_isolated(
+                &repo.path,
+                &["rev-parse", "--verify", &format!("refs/heads/{}", branch)],
+            )
+            .await?
+            .trim()
+            .to_owned(),
+        },
+    )
 }

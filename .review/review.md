@@ -30,9 +30,12 @@ removal, check it against the rule those files state before judging it.
 - Explicit workspace paths override only that creation; reject overlaps with state,
   checkouts, workspaces, and other repository directories; never delete their parents.
 - Existing branches use unsuffixed worktrees; reopen verified owned workspaces,
-  reject other checkouts, never adopt the main checkout, and keep the default
-  branch on removal unless deletion was explicit. Idle cleanup accepts commits
-  retained on the local default branch as well as remote-tracking branches.
+  require explicit adoption for other linked checkouts, never adopt the main checkout,
+  and keep the default branch on removal unless deletion was explicit. Adoption records
+  identity and readiness atomically without setup, hooks, or Git setting changes;
+  it takes normal cleanup ownership and cannot repair moved managed worktrees.
+  Idle cleanup accepts commits retained on the local default branch as well as
+  remote-tracking branches.
 - Releases are pinned to the merged version commit; changelogs use published
   ancestor releases and merged PRs excluding release preparation, and GitHub
   keeps change descriptions with a GitHub comparison link, omitting unmirrored
