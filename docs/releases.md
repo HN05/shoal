@@ -42,5 +42,4 @@ while a partial upload is replaced whole.
 
 Builds run in the CI image described in AGENTS.md, which carries the pinned
 Rust toolchain, Worktrunk, Zig and cargo-zigbuild; rebuild it after changing
-its Containerfile. Archives include the agent skill for Homebrew installation;
-only `--HEAD` builds from source.
+its Containerfile. Archives include the agent skill for Homebrew installation.

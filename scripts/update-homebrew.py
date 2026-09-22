@@ -104,7 +104,6 @@ def main():
     package = tomllib.loads(git("show", f"{revision}:Cargo.toml"))["package"]
     if package["name"] != "shoal" or package["version"] != version:
         raise ValueError("release tag must match Shoal's Cargo package version")
-    git("cat-file", "-e", f"{revision}:scripts/install-homebrew.sh")
     if args.source_url == "https://github.com/HN05/shoal.git":
         # Do not publish a formula before the source mirror has the exact tag.
         refs = git("ls-remote", "https://github.com/HN05/shoal.git",
