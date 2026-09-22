@@ -167,6 +167,8 @@ pub enum Acquisition {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ResourceStatus {
+    pub requires_approval: bool,
+    pub approval_lifetime: crate::access::Lifetime,
     pub kind: ResourceKind,
     pub readers: u32,
     pub writers: u32,
@@ -715,6 +717,8 @@ fn pool_status(
             let occupancy = usage(active, name);
             let used = occupancy.slots();
             ResourceStatus {
+                requires_approval: r.requires_approval,
+                approval_lifetime: r.approval_lifetime,
                 kind: r.kind,
                 readers: occupancy.readers,
                 writers: occupancy.writers,

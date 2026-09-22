@@ -198,6 +198,12 @@ fn render_overview(overview: &Overview, palette: Palette) {
             }
         );
         for resource in &pool.resources {
+            if resource.requires_approval {
+                println!(
+                    "  {}: approval required ({:?})",
+                    resource.name, resource.approval_lifetime
+                );
+            }
             if resource.kind == ResourceKind::Rwlock {
                 println!(
                     "  {}: {} readers, {} writers; read available: {}, write available: {}",

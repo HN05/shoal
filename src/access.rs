@@ -24,6 +24,8 @@ states!(Status {
 pub struct AccessRequest {
     pub id: String,
     pub workspace_id: String,
+    #[serde(default)]
+    pub workspace: String,
     pub target: String,
     pub name: String,
     pub specification: Value,
@@ -95,6 +97,11 @@ pub fn check(tx: &Transaction<'_>, mut request: AccessRequest) -> Result<Option<
         "approval requires --reason explaining the requested access"
     );
     crate::validate::reason("access", Some(&request.reason))?;
+    request.workspace = tx.query_row(
+        "SELECT name FROM workspaces WHERE id=?1",
+        [&request.workspace_id],
+        |r| r.get(0),
+    )?;
     request.id = uuid::Uuid::new_v4().to_string();
     tx.execute("INSERT INTO access_requests(id,workspace_id,target_key,name,record) VALUES (?1,?2,?3,?4,?5)",
         params![request.id,request.workspace_id,request.target,request.name,serde_json::to_string(&request)?])?;
@@ -113,6 +120,7 @@ impl AccessRequest {
         Self {
             id: String::new(),
             workspace_id: owner.into(),
+            workspace: String::new(),
             target,
             name: name.into(),
             specification,

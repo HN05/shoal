@@ -38,6 +38,7 @@ enum Target {
     Pools,
     Members,
     ResourceNames,
+    AccessRequests,
     Ports,
     ReservedPorts,
     SimNames,
@@ -111,6 +112,7 @@ fn decorate(command: Command, parent: &str, typed: Arc<Typed>) -> Command {
     command
         .mut_args(|arg| {
             let target = match (arg.get_id().as_str(), parent, name.as_str()) {
+                ("id", "access", "approve" | "deny") => Some(Target::AccessRequests),
                 ("name", _, "run") => Some(Target::Commands),
                 ("repository", _, _) => Some(Target::Repositories),
                 ("workspace", _, _) => Some(Target::Workspaces),
@@ -270,6 +272,18 @@ impl Typed {
                 current,
             ));
         }
+        if matches!(target, Target::AccessRequests) {
+            if let Body::AccessRequests(requests) =
+                client::call(&paths, Method::ListAccess { workspace: None }).await?
+            {
+                return Ok(requests
+                    .into_iter()
+                    .filter(|r| r.status == crate::access::Status::Pending)
+                    .map(|r| CompletionCandidate::new(r.id))
+                    .collect());
+            }
+            return Ok(Vec::new());
+        }
         let workspaces = client::workspaces(&paths).await?;
         if matches!(target, Target::Workspaces) {
             return Ok(workspaces
@@ -325,7 +339,10 @@ impl Typed {
                     names.extend(simulators.into_iter().filter_map(|s| s.lease_name));
                 }
             }
-            Target::Commands | Target::Repositories | Target::Workspaces => unreachable!(),
+            Target::Commands
+            | Target::Repositories
+            | Target::Workspaces
+            | Target::AccessRequests => unreachable!(),
         }
         Ok(names.into_iter().map(CompletionCandidate::new).collect())
     }

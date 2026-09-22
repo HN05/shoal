@@ -53,7 +53,7 @@ fn describe(request: &AccessRequest) -> String {
         request.status,
         request.target,
         request.name,
-        request.workspace_id,
+        request.workspace,
         request.lifetime,
         request.reason
     )

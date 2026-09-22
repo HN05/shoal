@@ -9376,6 +9376,11 @@ fn resource_approvals_require_unscoped_decisions_and_preserve_capacity() {
     let args = ["resource", "acquire", "signing", "--reason", "sign build"];
     let pending = pending_access(scoped_command(&fixture, "agent", &args));
     let id = pending["id"].as_str().unwrap();
+    assert_eq!(pending["workspace"], "agent");
+    assert_eq!(
+        fixture.ok(&["resource", "agent"])["pools"][0]["resources"][0]["requires_approval"],
+        true
+    );
     assert_eq!(
         pending_access(scoped_command(&fixture, "agent", &args))["id"],
         id
