@@ -123,5 +123,6 @@ pub async fn remove(
         branch: result["branch"].as_str().map(str::to_owned),
         branch_deleted: branch_outcome == "deleted",
         branch_outcome,
+        hook_error: None,
     })
 }

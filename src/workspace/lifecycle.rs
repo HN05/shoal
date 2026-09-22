@@ -180,6 +180,22 @@ impl Manager {
         // cannot be deleted by an unattended removal.
         let present = workspace.path.try_exists()?;
         let result = async {
+            let post_remove = if present {
+                let config = self.workspace_config(&workspace).await?;
+                let command = config
+                    .post_remove_cmd
+                    .as_ref()
+                    .or(self.config.post_remove_cmd.as_ref());
+                match command {
+                    Some(command) => {
+                        let checkout = self.repository(&workspace.repository_id).await?.path;
+                        Some((checkout.join(command), checkout))
+                    }
+                    None => None,
+                }
+            } else {
+                None
+            };
             let outcome = match removal {
                 Removal::Deleted if present => bail!("workspace directory exists"),
                 _ if present => self.remove_present_worktree(&workspace, removal).await?,
@@ -193,16 +209,34 @@ impl Manager {
                     tx.execute("DELETE FROM executions WHERE workspace_id=?1", [&id])?;
                     tx.execute("DELETE FROM workspaces WHERE id=?1", [id])?;
                     tx.commit()?;
-                    Ok(outcome)
+                    Ok((outcome, post_remove))
                 })
                 .await
         }
         .await;
         match result {
-            Ok(outcome) => {
+            Ok((mut outcome, post_remove)) => {
                 self.forget_workspace(&workspace.id).await;
                 // Session logs are run data owned by the record just deleted.
                 let _ = std::fs::remove_dir_all(self.paths.workspace_state(&workspace.id));
+                if let Some((command, checkout)) = post_remove
+                    && let Err(error) = hooks::run_detached(
+                        Hook::PostRemove(&checkout),
+                        &workspace,
+                        &command,
+                        &self.paths,
+                    )
+                    .await
+                {
+                    let message = format!("workspace removed; {error:#}");
+                    self.notify(
+                        Some(&workspace.name),
+                        crate::notifications::NotificationKind::HookFailed,
+                        &message,
+                    )
+                    .await;
+                    outcome.hook_error = Some(message);
+                }
                 Ok(outcome)
             }
             Err(error) => {
@@ -349,6 +383,7 @@ impl Manager {
                 branch: Some(workspace.branch.clone()),
                 branch_deleted: false,
                 branch_outcome: "retained".into(),
+                hook_error: None,
             })
         }
     }

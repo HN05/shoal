@@ -37,6 +37,8 @@ pub struct RemovalResult {
     pub branch: Option<String>,
     pub branch_deleted: bool,
     pub branch_outcome: String,
+    /// Removal succeeded, but its best-effort post hook failed.
+    pub hook_error: Option<String>,
 }
 
 impl RemovalCheck {

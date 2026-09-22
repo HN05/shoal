@@ -15,6 +15,7 @@ pub enum Hook<'a> {
     PreSetup,
     PostSetup,
     PreRemove,
+    PostRemove(&'a Path),
     PostResourceAcquire(&'a ResourceLease),
     PreResourceRelease(&'a ResourceLease),
 }
@@ -25,6 +26,7 @@ impl Hook<'_> {
             Hook::PreSetup => "pre_setup_cmd",
             Hook::PostSetup => "post_setup_cmd",
             Hook::PreRemove => "pre_remove_cmd",
+            Hook::PostRemove(_) => "post_remove_cmd",
             Hook::PostResourceAcquire(_) => "post_resource_acquire_cmd",
             Hook::PreResourceRelease(_) => "pre_resource_release_cmd",
         }
@@ -35,6 +37,7 @@ impl Hook<'_> {
             Hook::PreSetup => "pre_setup",
             Hook::PostSetup => "post_setup",
             Hook::PreRemove => "pre_remove",
+            Hook::PostRemove(_) => "post_remove",
             Hook::PostResourceAcquire(_) => "post_resource_acquire",
             Hook::PreResourceRelease(_) => "pre_resource_release",
         }
@@ -52,7 +55,10 @@ fn command(
         command.env_remove(name);
     }
     command
-        .current_dir(&workspace.path)
+        .current_dir(match hook {
+            Hook::PostRemove(checkout) => checkout,
+            _ => &workspace.path,
+        })
         .env(env::HOOK, hook.name())
         .env(env::WORKSPACE_ID, &workspace.id)
         .env(env::WORKSPACE_PATH, &workspace.path)

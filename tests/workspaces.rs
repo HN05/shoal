@@ -9252,3 +9252,91 @@ test ! -f "$HOME/fail-before" || { echo 'prepare failed' >&2; exit 7; }
     fixture.ok(&["rm", "hooked", "--yes", "--delete-branch"]);
     fixture.ok(&["rm", "hook-only", "--yes", "--delete-branch"]);
 }
+
+#[test]
+fn post_remove_hook_uses_checkout_and_reports_failure_after_removal() {
+    let fixture = Fixture::with_config(Some("post_remove_cmd = '/usr/bin/false'\n"));
+    fs::write(
+        fixture.repo.join("after removal.sh"),
+        r#"#!/bin/sh
+set -eu
+test "$SHOAL_HOOK" = post_remove
+test -z "${SHOAL_SCOPE_TOKEN:-}"
+test -z "${SHOAL_EXECUTION_ID:-}"
+test ! -e "$SHOAL_WORKSPACE_PATH"
+printf '%s\n%s\n%s\n' "$PWD" "$SHOAL_WORKSPACE" "$SHOAL_WORKSPACE_PATH" >> "$HOME/removed"
+test ! -f "$HOME/fail-after" || { echo 'external cleanup failed' >&2; exit 8; }
+"#,
+    )
+    .unwrap();
+    fs::set_permissions(
+        fixture.repo.join("after removal.sh"),
+        fs::Permissions::from_mode(0o755),
+    )
+    .unwrap();
+    commit_resource_config(
+        &fixture.repo,
+        "post_remove_cmd = 'after removal.sh'\n[resources.signing]\n",
+    );
+    let workspace = fixture.add("hooked");
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    fixture.ok(&["resource", "acquire", "signing", "hooked"]);
+    let config = path.join(".shoal.toml");
+    fs::write(
+        &config,
+        "post_remove_cmd = 'after removal.sh'\npre_remove_cmd = '/usr/bin/false'\n",
+    )
+    .unwrap();
+    assert!(
+        !fixture
+            .run(&["rm", "hooked", "--yes", "--delete-branch"])
+            .status
+            .success()
+    );
+    assert!(!fixture.root.path().join("removed").exists());
+    fs::write(&config, "post_remove_cmd = 'after removal.sh'\n").unwrap();
+    fs::write(fixture.root.path().join("fail-after"), "").unwrap();
+    let result = fixture.ok(&["rm", "hooked", "--yes", "--delete-branch"]);
+    assert_eq!(result["removed"], true);
+    assert!(
+        result["hook_error"]
+            .as_str()
+            .unwrap()
+            .contains("external cleanup failed")
+    );
+    assert!(!fixture.run(&["inspect", "hooked"]).status.success());
+    let notifications = fixture.ok(&["notifications"]);
+    assert!(
+        notifications
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|n| n["kind"] == "hook_failed" && n["workspace"] == "hooked")
+    );
+    assert_eq!(
+        fs::read_to_string(fixture.root.path().join("removed")).unwrap(),
+        format!("{}\nhooked\n{}\n", fixture.repo.display(), path.display())
+    );
+    fs::remove_file(fixture.root.path().join("fail-after")).unwrap();
+    fixture.add("next");
+    fixture.ok(&["resource", "acquire", "signing", "next"]);
+    let missing = fixture.add("missing");
+    fs::remove_dir_all(missing["path"].as_str().unwrap()).unwrap();
+    fixture.ok(&["rm", "missing", "--yes", "--keep-branch"]);
+    assert_eq!(
+        fs::read_to_string(fixture.root.path().join("removed"))
+            .unwrap()
+            .lines()
+            .count(),
+        3
+    );
+    // Repository removal invokes the hook before deleting its checkout.
+    fixture.ok(&["repo", "rm", fixture.repo.to_str().unwrap(), "--yes"]);
+    assert_eq!(
+        fs::read_to_string(fixture.root.path().join("removed"))
+            .unwrap()
+            .lines()
+            .count(),
+        6
+    );
+}

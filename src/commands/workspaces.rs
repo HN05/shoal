@@ -712,6 +712,9 @@ pub(super) async fn remove(
     let Body::RemovalResult(result) = result? else {
         bail!("unexpected removal response");
     };
+    if let Some(error) = &result.hook_error {
+        eprintln!("warning: {error}");
+    }
     ctx.emit_styled(Style::Success, &removal_message(&result), &result)?;
     Ok(0)
 }

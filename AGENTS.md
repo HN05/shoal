@@ -17,7 +17,10 @@ when behavior changes, distinguishing decisions from proposals.
   readiness; hooks are untracked user processes with workspace identity and no
   scope token. `pre_setup_cmd` runs in the daemon before tracked setup and gates
   readiness, excluding lifecycle and permit changes; `post_setup_cmd` runs in
-  the CLI after ready, and `pre_remove_cmd` inside the shared daemon removal path. Optional local repository config lives
+  the CLI after ready, and `pre_remove_cmd` inside the shared daemon removal path.
+  `post_remove_cmd` runs from the repository checkout after successful removal;
+  failure reports a warning and notification without restoring ownership.
+  Missing-worktree cleanup skips hooks. Optional local repository config lives
   in daemon state, layers per option over the worktree config, and is deleted
   with its registration. Every option that does not describe the machine may
   also be set per repository and resolves saved config, worktree file, global
@@ -60,7 +63,8 @@ when behavior changes, distinguishing decisions from proposals.
   one member share a pool slot; its final release frees the slot. New rwlock
   leases default to write; mode changes require release. Allocation must be atomic. Global pools span repositories; repo pools span
   that repo's worktrees. Preserve leases on failed removal/restart; release them
-  with successful removal. Active permits prevent automatic removal. Resource hooks run after a claim is
+  with successful removal. Active permits prevent automatic removal. Resource
+  hooks run after a claim is
   persisted and before release, including workspace removal; failure retains
   leases. Retries rerun hooks, and permit/lifecycle changes cannot overlap them
   in the same workspace. User scripts own underlying resource integrations.

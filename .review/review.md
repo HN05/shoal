@@ -16,7 +16,10 @@ removal, check it against the rule those files state before judging it.
   checks diagnose only, including when repair is requested.
 - Pre-setup hooks run untracked in the daemon after ownership and execution
   checks, with a timeout; failure gates readiness even without a setup command.
-  Lifecycle and permit changes are excluded while the hook runs.
+  Lifecycle and permit changes are excluded while the hook runs. Post-remove
+  runs from the repository checkout after ownership is released; failure is a
+  warning and notification, never restored ownership. Already-missing worktrees
+  skip hooks, and post-remove events are not replayed on restart.
 - Doctor reports current issues before falling back to the recorded
   failure and repair guidance; repair remains an explicit choice.
 - Scope: workspace commands carry a scope token and get own-worktree access

@@ -182,11 +182,10 @@ Select a named Git identity with `git_profile = "work"` in that file, or use
 `shoal add my-project feature --git-profile work`. Define the profile
 in global config; see [Git profiles](docs/reference.md#git-profiles).
 
-The same file can name a `setup_cmd` that prepares each new worktree, a
-`post_setup_cmd` that runs once it is ready (open a tmux session, say), and a
-`pre_remove_cmd` that runs before it is removed. See the
-[command reference](docs/reference.md) for simulator profiles, shared resource
-pools, setup and hooks, and configuration outside Git.
+The same file can name a `setup_cmd` and hooks around setup, removal, and
+resource acquisition/release, for example to open a tmux session or prepare an
+external device. See [setup and hooks](docs/reference.md#workspace-setup-and-hooks)
+and [resource hooks](docs/reference.md#resource-hooks) for configuration and failure behavior.
 
 ## Cleanup
 

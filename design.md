@@ -118,8 +118,9 @@ profiles cannot change layout or extensions. Reopening keeps existing settings
 and rejects an explicit profile flag.
 
 Repository config may name setup and lifecycle hook executables:
-single executable paths resolved against the worktree, run directly without shell
-parsing or PATH lookup, with the worktree as working directory. Setup runs through
+single executable paths run directly without shell parsing or PATH lookup.
+Hooks that run with a worktree resolve paths against it and use it as their
+working directory. Setup runs through
 the tracked wrapper with workspace scope; the daemon owns readiness and execution
 records, and `add` keeps the workspace preparing until setup exits cleanly with no
 survivors. Failures preserve files, branches, and leases; interactive callers choose
@@ -132,11 +133,16 @@ outlive the hook (a tmux session, say) without becoming execution survivors.
 The pre-setup hook runs in the daemon after ownership and execution checks,
 with a time limit, while preparation excludes lifecycle and permit changes;
 failure marks setup failed. It may be configured without a setup command and
-uses global defaults below repository config. The post-setup hook runs from the CLI with the terminal once the workspace is
-ready and before any agent; failure keeps the ready workspace. The pre-remove
+uses global defaults below repository config. The post-setup hook runs from the CLI
+with the terminal once the workspace is ready and before any agent; failure keeps the ready workspace. The pre-remove
 hook runs in the daemon inside the single removal path for manual, repository,
 and automatic removal, after checks pass and commands stop, bounded in time;
-failure retains the workspace. Hook executables share the setup path rules.
+failure retains the workspace. Post-remove runs after ownership is released,
+from the repository checkout with its copy of the executable, retaining the old
+workspace path in the environment. Its command is selected before removal, with
+repository values above global defaults. It is best-effort: failure is a warning
+and notification, never a failed removal or restored ownership. Missing-worktree
+cleanup skips hooks; post-remove events are not durably queued or replayed.
 
 `diff` compares against the recorded base's fork point (merge-base fallback, fixed
 commits stay fixed) with native Git settings, so advancing the base is never shown

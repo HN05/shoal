@@ -553,11 +553,13 @@ pre_setup_cmd = "scripts/before.sh"   # Before tracked setup, without a terminal
 setup_cmd = "scripts/setup.sh"        # Prepares the worktree; must exit 0
 post_setup_cmd = "scripts/attach.sh"  # After the workspace is ready, e.g. open tmux
 pre_remove_cmd = "scripts/detach.sh"  # Before the worktree is removed, e.g. close it
+post_remove_cmd = "scripts/removed.sh" # After removal, from the repository checkout
 ```
 
-Each value is one path, relative to the worktree root or absolute, run with the
-worktree as working directory. Give scripts a shebang and put arguments and
-shell logic inside them.
+Each value is one executable path, run directly without shell parsing or PATH
+lookup. Hooks that run while the worktree exists resolve relative paths against
+its root and use it as their working directory. Give scripts a shebang and put
+arguments and shell logic inside them.
 
 `pre_setup_cmd` runs in the daemon before tracked setup, after ownership and
 execution checks, with a 60-second limit. It may also be a global default and
@@ -580,8 +582,7 @@ shoal rm fix-login --yes --delete-branch    # Delete this workspace and branch
 
 Hooks are untracked: they run as your own processes with `SHOAL_HOOK` (the key
 without `_cmd`), `SHOAL_WORKSPACE`, `SHOAL_WORKSPACE_ID`, `SHOAL_WORKSPACE_PATH`,
-and `SHOAL_STATE_DIR`,
-without a scope token or port variables, so whatever they leave running (a tmux
+and `SHOAL_STATE_DIR`, without a scope token or port variables, so whatever they leave running (a tmux
 server, say) is not a Shoal execution. `post_setup_cmd` runs from the CLI with your
 terminal after `add` or `setup` has a ready workspace and before any `--agent`; a
 nonzero exit keeps the workspace, skips the agent, and fails the command.
@@ -589,6 +590,15 @@ nonzero exit keeps the workspace, skips the agent, and fails the command.
 after the removal checks pass and managed commands stop, without a terminal and with
 a 60-second limit; a nonzero exit or timeout retains the workspace with the hook's
 stderr as its error. It is skipped when the worktree directory is already gone.
+
+`post_remove_cmd` runs after successful removal from the shared daemon path,
+with a 60-second limit and no terminal. Its path and working directory are relative
+to the repository checkout, whose copy of the script must exist; `SHOAL_WORKSPACE_PATH`
+still names the removed worktree. The command is selected before removal using
+repository config over the global default. Failure cannot undo deletion: removal
+still succeeds, with a CLI warning, JSON `hook_error`, and a `hook_failed`
+notification. It is skipped for already-missing worktrees and is not replayed
+following a daemon restart. Use a pre-remove hook when failure must retain ownership.
 
 ### Remove a workspace
 

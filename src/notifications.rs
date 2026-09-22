@@ -21,6 +21,8 @@ states!(NotificationKind {
     WorkspaceRemoved => "workspace_removed",
     /// An automatic removal was attempted and the workspace retained.
     CleanupFailed => "cleanup_failed",
+    /// Removal succeeded, but its post hook failed.
+    HookFailed => "hook_failed",
 });
 
 impl NotificationKind {
