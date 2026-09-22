@@ -1,10 +1,18 @@
 //! Forge identity and read-only PR queries using the user's gh/fj login.
 use anyhow::{Context, Result, ensure};
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub(crate) struct ForgeRepo {
     pub host: String,
     pub path: String,
+    web_scheme: &'static str,
+}
+
+impl PartialEq for ForgeRepo {
+    fn eq(&self, other: &Self) -> bool {
+        // Transport is not part of repository identity.
+        self.host == other.host && self.path == other.path
+    }
 }
 
 impl ForgeRepo {
@@ -50,6 +58,11 @@ impl ForgeRepo {
         Ok(Self {
             host: host.to_ascii_lowercase(),
             path: path.into(),
+            web_scheme: if remote.starts_with("http://") {
+                "http"
+            } else {
+                "https"
+            },
         })
     }
 
@@ -80,7 +93,10 @@ impl ForgeRepo {
         } else {
             (
                 input,
-                format!("https://{}/{}/issues/{input}", self.host, self.path),
+                format!(
+                    "{}://{}/{}/issues/{input}",
+                    self.web_scheme, self.host, self.path
+                ),
             )
         };
         ensure!(
@@ -115,7 +131,10 @@ impl ForgeRepo {
         } else {
             (
                 input,
-                format!("https://{}/{}{marker}{input}", self.host, self.path),
+                format!(
+                    "{}://{}/{}{marker}{input}",
+                    self.web_scheme, self.host, self.path
+                ),
             )
         };
         ensure!(
@@ -274,7 +293,7 @@ mod tests {
             ),
             (
                 "http://forge.example:3000/team/repo.git",
-                "https://forge.example:3000/team/repo/pulls/56",
+                "http://forge.example:3000/team/repo/pulls/56",
             ),
         ] {
             let repo = ForgeRepo::parse(remote).unwrap();
@@ -299,5 +318,24 @@ mod tests {
                 assert!(repo.pull(input).is_err(), "{input}");
             }
         }
+    }
+
+    #[test]
+    fn forge_link_scheme_does_not_change_repository_identity() {
+        let repo = ForgeRepo::parse("http://forge.example/team/repo.git").unwrap();
+        assert_eq!(
+            repo,
+            ForgeRepo::parse("git@forge.example:team/repo.git").unwrap()
+        );
+        assert_eq!(
+            repo.issue("56").unwrap().1,
+            "http://forge.example/team/repo/issues/56"
+        );
+        assert_eq!(
+            repo.pull("https://forge.example/team/repo/pulls/56")
+                .unwrap()
+                .1,
+            "https://forge.example/team/repo/pulls/56"
+        );
     }
 }
