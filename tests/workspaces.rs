@@ -7312,36 +7312,41 @@ fn pr_watch_checks_forgejo_merge_and_commits_with_fixture_cli() {
 }
 
 #[test]
-fn merged_rechecks_head_after_pre_remove_hook() {
-    let fixture = Fixture::new();
-    fs::write(
-        fixture.repo.join(".shoal.toml"),
-        "pre_remove_cmd = 'hook.sh'\n",
-    )
-    .unwrap();
-    fs::write(fixture.repo.join("hook.sh"), "#!/bin/sh\ngit -c user.name=Test -c user.email=test@example.invalid commit --allow-empty -m 'hook work'\n").unwrap();
-    fs::set_permissions(
-        fixture.repo.join("hook.sh"),
-        fs::Permissions::from_mode(0o755),
-    )
-    .unwrap();
-    git(&fixture.repo, &["add", "."]);
-    git(
-        &fixture.repo,
-        &[
-            "-c",
-            "user.name=Test",
-            "-c",
-            "user.email=test@example.invalid",
-            "commit",
-            "-m",
-            "hook",
-        ],
-    );
-    let workspace = fixture.add("hook");
-    fixture.ok(&["pr", "merged", "hook"]);
-    wait_pr_error(&fixture, "hook", "HEAD changed during pre-remove hook");
-    assert!(Path::new(workspace["path"].as_str().unwrap()).exists());
+fn merged_rechecks_head_after_removal_hooks() {
+    for key in ["pre_remove_cmd", "pre_resource_release_cmd"] {
+        let fixture = Fixture::new();
+        fs::write(
+            fixture.repo.join(".shoal.toml"),
+            format!("{key} = 'hook.sh'\n[resources.signing]\n"),
+        )
+        .unwrap();
+        fs::write(fixture.repo.join("hook.sh"), "#!/bin/sh\ngit -c user.name=Test -c user.email=test@example.invalid commit --allow-empty -m 'hook work'\n").unwrap();
+        fs::set_permissions(
+            fixture.repo.join("hook.sh"),
+            fs::Permissions::from_mode(0o755),
+        )
+        .unwrap();
+        git(&fixture.repo, &["add", "."]);
+        git(
+            &fixture.repo,
+            &[
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.invalid",
+                "commit",
+                "-m",
+                "hook",
+            ],
+        );
+        let workspace = fixture.add("hook");
+        if key == "pre_resource_release_cmd" {
+            fixture.ok(&["resource", "acquire", "signing", "hook"]);
+        }
+        fixture.ok(&["pr", "merged", "hook"]);
+        wait_pr_error(&fixture, "hook", "HEAD changed during removal hooks");
+        assert!(Path::new(workspace["path"].as_str().unwrap()).exists());
+    }
 }
 
 #[test]
@@ -9036,4 +9041,141 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
     assert!(!unknown.status.success());
     assert!(String::from_utf8_lossy(&unknown.stderr).contains("unknown agent"));
     assert_eq!(fixture.ok(&["list"]), before);
+}
+
+#[test]
+fn resource_hooks_retain_leases_on_failure_and_run_during_removal() {
+    let mut fixture = Fixture::new();
+    fs::write(
+        fixture.repo.join("permit.sh"),
+        r#"#!/bin/sh
+set -eu
+test -z "${SHOAL_SCOPE_TOKEN:-}"
+test -z "${SHOAL_EXECUTION_ID:-}"
+test "$PWD" = "$SHOAL_WORKSPACE_PATH"
+printf '%s\n' "$SHOAL_RESOURCE_LEASE" >> "$HOME/$SHOAL_HOOK"
+test ! -f "$SHOAL_HOOK-fails" || { echo 'resource busy' >&2; exit 3; }
+"#,
+    )
+    .unwrap();
+    fs::set_permissions(
+        fixture.repo.join("permit.sh"),
+        fs::Permissions::from_mode(0o755),
+    )
+    .unwrap();
+    commit_resource_config(
+        &fixture.repo,
+        "post_resource_acquire_cmd = 'permit.sh'\npre_resource_release_cmd = 'permit.sh'\n[resources.signing]\n",
+    );
+    let workspace = fixture.add("hooked");
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    fixture.add("waiter");
+    fs::write(path.join("post_resource_acquire-fails"), "").unwrap();
+    let output = fixture.run(&[
+        "resource",
+        "acquire",
+        "signing",
+        "hooked",
+        "--reason",
+        "test signing",
+    ]);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("resource lease retained"));
+    let inspection = fixture.ok(&["inspect", "hooked"]);
+    let lease = &inspection["resources"][0];
+    assert_eq!(lease["reason"], "test signing");
+    assert_eq!(inspection["executions"], serde_json::json!([]));
+    assert_eq!(
+        fixture
+            .run(&["resource", "acquire", "signing", "waiter"])
+            .status
+            .code(),
+        Some(2)
+    );
+    fixture.restart();
+    fs::remove_file(path.join("post_resource_acquire-fails")).unwrap();
+    assert_eq!(
+        &fixture.ok(&["resource", "acquire", "signing", "hooked"]),
+        lease
+    );
+    let events = fs::read_to_string(fixture.root.path().join("post_resource_acquire")).unwrap();
+    let events: Vec<Value> = events
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(events, vec![lease.clone(), lease.clone()]);
+    fs::write(path.join("pre_resource_release-fails"), "").unwrap();
+    for args in [
+        vec!["resource", "release", "signing", "hooked"],
+        vec!["rm", "hooked", "--yes", "--delete-branch"],
+    ] {
+        let output = fixture.run(&args);
+        assert!(!output.status.success());
+        assert!(String::from_utf8_lossy(&output.stderr).contains("resource busy"));
+        assert_eq!(fixture.ok(&["inspect", "hooked"])["resources"][0], *lease);
+        assert!(path.exists());
+    }
+    fs::remove_file(path.join("pre_resource_release-fails")).unwrap();
+    // Removing the definition does not prevent release of an existing lease.
+    fs::write(
+        path.join(".shoal.toml"),
+        "pre_resource_release_cmd = 'permit.sh'\n",
+    )
+    .unwrap();
+    fixture.ok(&["resource", "release", "signing", "hooked"]);
+    fixture.ok(&["resource", "acquire", "signing", "waiter"]);
+    fixture.ok(&["rm", "waiter", "--yes", "--delete-branch"]);
+    let events = fs::read_to_string(fixture.root.path().join("pre_resource_release")).unwrap();
+    assert_eq!(events.lines().count(), 4);
+    fixture.ok(&["rm", "hooked", "--yes", "--delete-branch"]);
+}
+
+#[test]
+fn resource_hooks_exclude_concurrent_release_setup_and_removal() {
+    let fixture = Fixture::new();
+    fs::write(
+        fixture.repo.join("permit.sh"),
+        r#"#!/bin/sh
+set -eu
+touch "$HOME/hook-entered"
+while test ! -f "$HOME/hook-continue"; do sleep 0.05; done
+"#,
+    )
+    .unwrap();
+    fs::set_permissions(
+        fixture.repo.join("permit.sh"),
+        fs::Permissions::from_mode(0o755),
+    )
+    .unwrap();
+    commit_resource_config(
+        &fixture.repo,
+        "post_resource_acquire_cmd = 'permit.sh'\nsetup_cmd = '/usr/bin/true'\n[resources.signing]\n",
+    );
+    fixture.add("hooked");
+    let acquire = fixture
+        .command()
+        .args(["resource", "acquire", "signing", "hooked"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    wait_until("permit hook", || {
+        fixture.root.path().join("hook-entered").exists()
+    });
+    for args in [
+        vec!["resource", "acquire", "signing", "hooked"],
+        vec!["resource", "release", "signing", "hooked"],
+        vec!["setup", "hooked"],
+        vec!["rm", "hooked", "--yes", "--delete-branch"],
+    ] {
+        let output = fixture.run(&args);
+        assert!(!output.status.success());
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains("resource operation is in progress"),
+            "{output:?}"
+        );
+    }
+    fs::write(fixture.root.path().join("hook-continue"), "").unwrap();
+    assert!(acquire.wait_with_output().unwrap().status.success());
+    fixture.ok(&["rm", "hooked", "--yes", "--delete-branch"]);
 }

@@ -27,7 +27,11 @@ removal, check it against the rule those files state before judging it.
   cooperative, not a security boundary, so judge it as such.
 - Allocation is atomic and persisted before the external mutation (simctl,
   Worktrunk). Leases survive restart and failed removal and are released only
-  with successful removal. Active permits block automatic cleanup.
+  with successful removal. Active permits block automatic cleanup. Permit hooks
+  run after persistent acquisition and before release, including removal while
+  the worktree exists; failure retains leases. Retrying acquisition reruns its
+  hook. Permit/lifecycle changes cannot overlap resource hooks in one workspace;
+  user scripts own external resource integrations.
 - Explicit creation bases resolve locally and are recorded for diff; only a base
   naming the local default branch is refreshed.
 - Explicit workspace paths override only that creation; reject overlaps with state,

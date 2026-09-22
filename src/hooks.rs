@@ -1,30 +1,30 @@
-//! Repository lifecycle hooks: `post_setup_cmd` after a workspace is ready and
-//! `pre_remove_cmd` before its worktree is removed. Hooks are the user's own
-//! untracked processes, so a tmux server or other daemon they leave behind is
-//! not an execution survivor. They receive the workspace identity, not a scope
-//! token.
+//! Untracked user hooks receive workspace identity without an execution scope.
 use std::{path::Path, process::Stdio, time::Duration};
 
 use anyhow::{Context, Result, ensure};
 use tokio::{process::Command, time::timeout};
 
-use crate::{env, model::Workspace, paths::Paths};
+use crate::{env, model::Workspace, paths::Paths, resources::ResourceLease};
 
-/// Longest a daemon-side hook may run before removal fails.
+/// Longest a daemon-side hook may run before the operation fails.
 const DETACHED_TIMEOUT: Duration = Duration::from_secs(60);
 const MAX_DIAGNOSTIC_CHARS: usize = 4096;
 
 #[derive(Debug, Clone, Copy)]
-pub enum Hook {
+pub enum Hook<'a> {
     PostSetup,
     PreRemove,
+    PostResourceAcquire(&'a ResourceLease),
+    PreResourceRelease(&'a ResourceLease),
 }
 
-impl Hook {
+impl Hook<'_> {
     fn key(self) -> &'static str {
         match self {
             Hook::PostSetup => "post_setup_cmd",
             Hook::PreRemove => "pre_remove_cmd",
+            Hook::PostResourceAcquire(_) => "post_resource_acquire_cmd",
+            Hook::PreResourceRelease(_) => "pre_resource_release_cmd",
         }
     }
 
@@ -32,11 +32,18 @@ impl Hook {
         match self {
             Hook::PostSetup => "post_setup",
             Hook::PreRemove => "pre_remove",
+            Hook::PostResourceAcquire(_) => "post_resource_acquire",
+            Hook::PreResourceRelease(_) => "pre_resource_release",
         }
     }
 }
 
-fn command(hook: Hook, workspace: &Workspace, executable: &Path, paths: &Paths) -> Command {
+fn command(
+    hook: Hook<'_>,
+    workspace: &Workspace,
+    executable: &Path,
+    paths: &Paths,
+) -> Result<Command> {
     let mut command = Command::new(executable);
     for name in env::inherited_port_exports() {
         command.env_remove(name);
@@ -45,6 +52,8 @@ fn command(hook: Hook, workspace: &Workspace, executable: &Path, paths: &Paths) 
         .current_dir(&workspace.path)
         .env(env::HOOK, hook.name())
         .env(env::WORKSPACE_ID, &workspace.id)
+        .env(env::WORKSPACE_PATH, &workspace.path)
+        .env_remove(env::RESOURCE_LEASE)
         .env(env::RUN_ID, &workspace.id)
         .env(env::WORKSPACE_NAME, &workspace.name)
         .env(env::STATE_DIR, &paths.state)
@@ -54,20 +63,23 @@ fn command(hook: Hook, workspace: &Workspace, executable: &Path, paths: &Paths) 
         .env_remove(env::SHELL_DIRECTIVE)
         .process_group(0)
         .kill_on_drop(true);
-    command
+    if let Hook::PostResourceAcquire(lease) | Hook::PreResourceRelease(lease) = hook {
+        command.env(env::RESOURCE_LEASE, serde_json::to_string(lease)?);
+    }
+    Ok(command)
 }
 
 /// Run a hook from the CLI with the caller's terminal. `quiet` keeps stdout
 /// clean for `--json` output, as setup does.
 pub async fn run_interactive(
-    hook: Hook,
+    hook: Hook<'_>,
     workspace: &Workspace,
     executable: &Path,
     paths: &Paths,
     quiet: bool,
 ) -> Result<()> {
     let background_terminal = crate::execution::Terminal::stdin_is_background();
-    let mut child = command(hook, workspace, executable, paths)
+    let mut child = command(hook, workspace, executable, paths)?
         .stdin(if quiet || background_terminal {
             Stdio::null()
         } else {
@@ -101,14 +113,14 @@ pub async fn run_interactive(
 
 /// Run a hook from the daemon, without a terminal and with a time limit.
 pub async fn run_detached(
-    hook: Hook,
+    hook: Hook<'_>,
     workspace: &Workspace,
     executable: &Path,
     paths: &Paths,
 ) -> Result<()> {
     let output = timeout(
         DETACHED_TIMEOUT,
-        command(hook, workspace, executable, paths)
+        command(hook, workspace, executable, paths)?
             .stdin(Stdio::null())
             .output(),
     )

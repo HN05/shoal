@@ -24,7 +24,7 @@ use crate::{
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{OptionalExtension, TransactionBehavior, params};
 use std::{collections::HashMap, fs, sync::Arc};
-use tokio::sync::{Mutex, watch};
+use tokio::sync::{Mutex, RwLock, watch};
 use uuid::Uuid;
 
 pub(crate) enum WorkspaceSource {
@@ -32,18 +32,29 @@ pub(crate) enum WorkspaceSource {
     Existing(crate::existing_branch::Branch),
 }
 
+pub(crate) enum ResourceGuard {
+    Operation {
+        _guard: tokio::sync::OwnedRwLockReadGuard<()>,
+    },
+    Hook {
+        _guard: tokio::sync::OwnedRwLockWriteGuard<()>,
+    },
+}
+
 pub struct Manager {
     pub store: Store,
     pub(crate) pr_gate: Mutex<()>,
     pub cleanup_notify: tokio::sync::Notify,
     pub config: Config,
-    paths: Paths,
+    pub(crate) paths: Paths,
     /// Serializes every simctl transition.
     pub(crate) simulator_gate: Mutex<()>,
     /// Serializes repository registration, removal, and local config changes.
     registry_gate: Mutex<()>,
     /// Per-repository gate for ref updates and worktree creation/removal.
     git_gates: Mutex<HashMap<String, Arc<Mutex<()>>>>,
+    /// Excludes lifecycle transitions and overlapping permit hooks per workspace.
+    resource_gates: Mutex<HashMap<String, Arc<RwLock<()>>>>,
     /// Scope token → the execution it was issued to.
     scopes: Mutex<HashMap<String, Caller>>,
     /// Connected executions and the channel that asks their wrapper to stop.
@@ -68,6 +79,7 @@ impl Manager {
             simulator_gate: Mutex::new(()),
             registry_gate: Mutex::new(()),
             git_gates: Mutex::new(HashMap::new()),
+            resource_gates: Mutex::new(HashMap::new()),
             scopes: Mutex::new(HashMap::new()),
             connections: Mutex::new(HashMap::new()),
             activity: Mutex::new(HashMap::new()),
@@ -82,6 +94,24 @@ impl Manager {
             .entry(repository.to_owned())
             .or_default()
             .clone()
+    }
+
+    pub(crate) async fn resource_guard(&self, id: &str, hook: bool) -> Result<ResourceGuard> {
+        let gate = self
+            .resource_gates
+            .lock()
+            .await
+            .entry(id.to_owned())
+            .or_default()
+            .clone();
+        let guard = if hook {
+            gate.try_write_owned()
+                .map(|guard| ResourceGuard::Hook { _guard: guard })
+        } else {
+            gate.try_read_owned()
+                .map(|guard| ResourceGuard::Operation { _guard: guard })
+        };
+        guard.context("workspace resource operation is in progress; retry when its hook finishes")
     }
 
     pub(crate) async fn caller(&self, token: &str) -> Option<Caller> {
@@ -418,6 +448,7 @@ impl Manager {
     /// Move a ready or failed workspace into a transient lifecycle state,
     /// excluding every other lifecycle operation until it is restored.
     pub(crate) async fn reserve_lifecycle(&self, id: &str, state: WorkspaceState) -> Result<()> {
+        let _resources = self.resource_guard(id, false).await?;
         let id = id.to_owned();
         self.store
             .run(move |db| {

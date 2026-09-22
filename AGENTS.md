@@ -59,8 +59,10 @@ when behavior changes, distinguishing decisions from proposals.
   one member share a pool slot; its final release frees the slot. New rwlock
   leases default to write; mode changes require release. Allocation must be atomic. Global pools span repositories; repo pools span
   that repo's worktrees. Preserve leases on failed removal/restart; release them
-  with successful removal. Active permits prevent automatic removal. Do not
-  enforce or manage the underlying resource's lifecycle.
+  with successful removal. Active permits prevent automatic removal. Resource hooks run after a claim is
+  persisted and before release, including workspace removal; failure retains
+  leases. Retries rerun hooks, and permit/lifecycle changes cannot overlap them
+  in the same workspace. User scripts own underlying resource integrations.
 - Workspace and execution lifecycle states are typed enums; preserve their
   existing lowercase SQLite/JSON representation and reject unknown values.
 - `doctor` reports by default; repair preserves work and resource leases.

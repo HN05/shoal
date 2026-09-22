@@ -17,8 +17,12 @@ pub const WORKSPACE_NAME: &str = "SHOAL_WORKSPACE";
 pub const RESERVED_PORT_ENV: &str = "SHOAL_RESERVED_PORT_ENV";
 /// Prefix of the default environment variable for a named port reservation.
 pub const PORT_PREFIX: &str = "SHOAL_PORT_";
-/// Which lifecycle hook is running: `post_setup` or `pre_remove`.
+/// Which hook is running, using the configuration key without `_cmd`.
 pub const HOOK: &str = "SHOAL_HOOK";
+/// Recorded worktree path, including after removal.
+pub const WORKSPACE_PATH: &str = "SHOAL_WORKSPACE_PATH";
+/// JSON resource lease passed to permit hooks.
+pub const RESOURCE_LEASE: &str = "SHOAL_RESOURCE_LEASE";
 /// File the shell wrapper reads to change directory after the command exits.
 pub const SHELL_DIRECTIVE: &str = "SHOAL_SHELL_DIRECTIVE";
 /// The shell wrapper's `OLDPWD`, passed explicitly because it is shell-local.

@@ -276,10 +276,15 @@ impl Manager {
         {
             hooks::run_detached(Hook::PreRemove, workspace, &command, &self.paths).await?;
         }
+        let release_hook = self.resource_hook(workspace, false).await?;
+        for lease in self.list_resources(Some(&workspace.id)).await? {
+            self.run_resource_release_hook(workspace, &lease, release_hook.as_deref())
+                .await?;
+        }
         if let Removal::Merged { head } = removal {
             ensure!(
                 crate::pr::current_head(workspace).await? == head,
-                "HEAD changed during pre-remove hook"
+                "HEAD changed during removal hooks"
             );
             removal.verify(
                 &self.check_removal(&workspace.id, 0).await?,

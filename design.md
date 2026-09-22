@@ -294,8 +294,14 @@ an audit record written before the destructive step, and delete devices on
 removal or idle expiry. Generic permits consume pool and member capacity in
 one transaction; rwlock members allow unlimited readers sharing one slot or one
 writer, default to write, and require release to change mode. Definition drift
-blocks new claims but never revokes permits. Shoal does not manage the
-underlying resources.
+blocks new claims but never revokes permits. Optional daemon hooks run after a
+permit is persisted and before it is released; failure retains ownership.
+Repeated acquisition reruns its hook against the same lease, so scripts must be
+idempotent. Hooks receive lease JSON, use normal config precedence and executable
+path rules, and cannot overlap permit or lifecycle transitions in their workspace.
+Release hooks also run in the shared removal path while the worktree exists;
+all permits remain owned until removal succeeds. User scripts own integrations
+with the underlying resources.
 
 Port, simulator, and generic resource commands share the same shape: the bare
 noun (or `list`) combines relevant configuration or capacity with leases;
@@ -305,7 +311,7 @@ under `sim catalog`.
 ## Removal and recovery
 
 Manual and automatic cleanup share one path: establish ownership, stop owned
-executions, run the pre-remove hook, remove owned simulators, remove the worktree,
+executions, run removal hooks, remove owned simulators, remove the worktree,
 and release leases with the record. Failures retain what is needed to retry.
 Manual removal deletes a redundant branch (tree equal to the local default or its
 upstream, or merged into the default) and otherwise requires an explicit keep or

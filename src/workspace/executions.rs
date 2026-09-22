@@ -53,6 +53,11 @@ impl Manager {
         let workspace = self.workspace(selector).await?;
         let gate = self.git_gate(&workspace.repository_id).await;
         let _guard = if setup { Some(gate.lock().await) } else { None };
+        let _resources = if setup {
+            Some(self.resource_guard(&workspace.id, false).await?)
+        } else {
+            None
+        };
         let mut connections = self.connections.lock().await;
         let workspace = self.workspace(&workspace.id).await?;
         let setup_cmd = if setup {

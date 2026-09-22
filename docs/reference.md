@@ -546,7 +546,7 @@ follow Git. A missing or unrelated base is an error.
 ### Workspace setup and hooks
 
 Repository config (`.shoal.toml`, `.shoal/config.toml`, or the imported local
-config) names up to three executables:
+config) can name lifecycle executables:
 
 ```toml
 setup_cmd = "scripts/setup.sh"        # Prepares the worktree; must exit 0
@@ -572,8 +572,9 @@ shoal doctor fix-login --repair             # Ignore the failure after ownership
 shoal rm fix-login --yes --delete-branch    # Delete this workspace and branch
 ```
 
-Hooks are untracked: they run as your own processes with `SHOAL_HOOK` (`post_setup`
-or `pre_remove`), `SHOAL_WORKSPACE`, `SHOAL_WORKSPACE_ID`, and `SHOAL_STATE_DIR`,
+Hooks are untracked: they run as your own processes with `SHOAL_HOOK` (the key
+without `_cmd`), `SHOAL_WORKSPACE`, `SHOAL_WORKSPACE_ID`, `SHOAL_WORKSPACE_PATH`,
+and `SHOAL_STATE_DIR`,
 without a scope token or port variables, so whatever they leave running (a tmux
 server, say) is not a Shoal execution. `post_setup_cmd` runs from the CLI with your
 terminal after `add` or `setup` has a ready workspace and before any `--agent`; a
@@ -860,6 +861,24 @@ per request, and conflicting definitions block new claims until they agree or le
 drain. Leases survive command exit and restarts, block automatic cleanup, and are
 released by successful removal. Shoal accounts for permits only; stop using a
 resource before releasing it.
+
+### Resource hooks
+
+Global or repository config can name `post_resource_acquire_cmd` and
+`pre_resource_release_cmd`, using the [hook path and environment rules](#workspace-setup-and-hooks).
+They apply to generic permits, run in the daemon without a terminal, and have a
+60-second limit. `SHOAL_RESOURCE_LEASE` contains the lease as JSON, including its
+`id`, `scope`, `pool`, `resource`, `name`, `mode`, and `reason`.
+
+Acquisition records the lease before running its hook, including when an existing
+lease is returned; busy requests run no hook. A failed acquisition hook returns
+an error but retains the permit: repeat acquisition to retry, or release it.
+Release runs its hook before freeing capacity; failure retains the lease.
+Workspace removal runs release hooks after `pre_remove_cmd`, keeping every lease
+until removal succeeds. Hooks are skipped when the worktree is already missing.
+Make hooks idempotent: retries can repeat them, and reader hooks run per lease,
+not once per shared member. Hooks may inspect state, but overlapping permit or
+lifecycle changes in the same workspace fail while a resource hook is running.
 
 ### Shared readers and exclusive writers
 

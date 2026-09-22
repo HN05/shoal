@@ -1,5 +1,5 @@
 //! Cooperative semaphores and reader/writer locks; only Shoal bookkeeping is enforced.
-use anyhow::{Result, ensure};
+use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, params};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
@@ -405,6 +405,12 @@ impl Manager {
         let (scope, definition) = definitions
             .remove(&request.pool)
             .ok_or_else(|| anyhow::anyhow!("unknown resource or pool: {}", request.pool))?;
+        let hook_workspace = workspace.clone();
+        let hook = self.resource_hook(&workspace, true).await?;
+        let _resources = self.resource_guard(&workspace.id, hook.is_some()).await?;
+        if hook.is_some() {
+            self.verify_worktree(&workspace).await?;
+        }
         let workspace_name = workspace.name.clone();
         let acquisition = self
             .store
@@ -483,6 +489,18 @@ impl Manager {
                 Ok(Acquisition::Acquired(lease))
             })
             .await?;
+        if let Acquisition::Acquired(lease) = &acquisition
+            && let Some(command) = hook
+        {
+            crate::hooks::run_detached(
+                crate::hooks::Hook::PostResourceAcquire(lease),
+                &hook_workspace,
+                &command,
+                &self.paths,
+            )
+            .await
+            .context("resource lease retained; repeat acquire to retry the hook, or release it")?;
+        }
         if let Acquisition::Busy(message) = &acquisition {
             self.notify(
                 Some(&workspace_name),
@@ -502,6 +520,22 @@ impl Manager {
     pub async fn release_resource(&self, selector: &str, pool: String, name: String) -> Result<()> {
         let workspace = self.workspace(selector).await?;
         self.touch(&workspace.id).await;
+        let hook = self.resource_hook(&workspace, false).await?;
+        let _resources = self.resource_guard(&workspace.id, hook.is_some()).await?;
+        let id = workspace.id.clone();
+        let owned = self
+            .store
+            .run(move |db| {
+                store::require_ready(db, &id)?;
+                leases(db, Some(&id))
+            })
+            .await?;
+        let lease = owned
+            .iter()
+            .find(|lease| lease.pool == pool && lease.name == name)
+            .context("unknown resource lease")?;
+        self.run_resource_release_hook(&workspace, lease, hook.as_deref())
+            .await?;
         // Release must work even after a definition is edited or deleted.
         self.store
             .run(move |db| {
@@ -518,6 +552,46 @@ impl Manager {
                 Ok(())
             })
             .await
+    }
+
+    pub(crate) async fn resource_hook(
+        &self,
+        workspace: &crate::model::Workspace,
+        acquire: bool,
+    ) -> Result<Option<std::path::PathBuf>> {
+        let config = self.workspace_config(workspace).await?;
+        let command = if acquire {
+            config
+                .post_resource_acquire_cmd
+                .as_ref()
+                .or(self.config.post_resource_acquire_cmd.as_ref())
+        } else {
+            config
+                .pre_resource_release_cmd
+                .as_ref()
+                .or(self.config.pre_resource_release_cmd.as_ref())
+        };
+        Ok(command.map(|command| workspace.path.join(command)))
+    }
+
+    pub(crate) async fn run_resource_release_hook(
+        &self,
+        workspace: &crate::model::Workspace,
+        lease: &ResourceLease,
+        command: Option<&std::path::Path>,
+    ) -> Result<()> {
+        if let Some(command) = command {
+            self.verify_worktree(workspace).await?;
+            crate::hooks::run_detached(
+                crate::hooks::Hook::PreResourceRelease(lease),
+                workspace,
+                command,
+                &self.paths,
+            )
+            .await
+            .context("resource lease retained; retry release after fixing its hook")?;
+        }
+        Ok(())
     }
 
     pub async fn resource_overview(&self, selector: &str) -> Result<Overview> {
