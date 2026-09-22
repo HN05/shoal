@@ -127,6 +127,21 @@ fn decorate(command: Command, parent: &str, typed: Arc<Typed>) -> Command {
                 arg.add(ArgValueCompleter::new(move |current: &OsStr| {
                     typed.complete(target, current)
                 }))
+            } else if matches!(name.as_str(), "add" | "issue") && arg.get_id() == "agent" {
+                let typed = typed.clone();
+                arg.add(ArgValueCompleter::new(move |current: &OsStr| {
+                    let mut names = crate::cli::Agent::possible_values();
+                    names.extend(
+                        typed.command_names().into_iter().filter(|name| {
+                            matches!(name.parse(), Ok(crate::cli::Agent::Custom(_)))
+                        }),
+                    );
+                    names
+                        .into_iter()
+                        .filter(|name| name.starts_with(current.to_string_lossy().as_ref()))
+                        .map(CompletionCandidate::new)
+                        .collect::<Vec<_>>()
+                }))
             } else if parent == "skill" && name == "install" && arg.get_id() == "agent" {
                 arg.add(ArgValueCompleter::new(|current: &OsStr| {
                     let mut names = std::collections::BTreeSet::from([

@@ -61,6 +61,9 @@ removal, check it against the rule those files state before judging it.
   are replaceable; substitutions expand once and forwarded arguments stay literal.
   Repository-only commands require a current or explicit workspace.
   `{diff_base}` resolves lazily through the shared daemon diff-base lookup.
+  Custom agent names select named commands and run as tracked agents. Their
+  `{prompt}` combines general instructions and issue context, prepended to
+  forwarded arguments when no prompt placeholder is configured.
 - AI skill directories are machine-only configuration. Skill installation accepts
   configured tool names, needs no daemon, and remains denied to scoped processes.
 - External tools are invoked with argument arrays, never shell strings.

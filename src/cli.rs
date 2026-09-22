@@ -81,7 +81,7 @@ pub enum Command {
         /// Apply a named Git profile to the new worktree, overriding repository defaults.
         #[arg(long)]
         git_profile: Option<String>,
-        /// Start an agent after worktree creation succeeds: codex, claude, or happy-<agent>.
+        /// Start a built-in agent or a configured command after worktree creation.
         #[arg(long, value_parser = AgentParser)]
         agent: Option<Agent>,
         /// Arguments forwarded to the agent.
@@ -102,7 +102,7 @@ pub enum Command {
         /// Registered repository; defaults to the URL's repository or the current checkout/workspace.
         #[arg(long = "repo")]
         repository: Option<String>,
-        /// Agent to start; defaults to `default_agent` in global config.
+        /// Agent to start; defaults to the repository or global `default_agent`.
         #[arg(long, value_parser = AgentParser)]
         agent: Option<Agent>,
         /// Starting Git ref (defaults to the repository's default branch, refreshed from its upstream).
@@ -346,17 +346,18 @@ pub enum CodexMode {
 }
 
 /// What `add --agent` starts: a terminal agent, or a detached Happy session
-/// running one of Happy's agents (`happy-<agent>`, visible in the Happy app).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+/// running one of Happy's agents, or a user-configured command.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 #[serde(try_from = "String", into = "String")]
 pub enum Agent {
     Codex,
     Claude,
     Happy(HappyAgent),
+    Custom(String),
 }
 
 impl Agent {
-    /// Every spelling `--agent` accepts, in help and completion order.
+    /// Built-in agent spellings, in help and completion order.
     pub fn possible_values() -> Vec<String> {
         let mut values = vec!["codex".to_owned(), "claude".to_owned()];
         values.extend(
@@ -378,11 +379,15 @@ impl std::str::FromStr for Agent {
         match value {
             "codex" => Ok(Agent::Codex),
             "claude" => Ok(Agent::Claude),
-            _ => value
+            _ if value.starts_with(HAPPY_PREFIX) => value
                 .strip_prefix(HAPPY_PREFIX)
                 .and_then(|agent| HappyAgent::from_str(agent, false).ok())
                 .map(Agent::Happy)
                 .ok_or(()),
+            _ if value != "happy" && crate::validate::lowercase_name("agent", value).is_ok() => {
+                Ok(Agent::Custom(value.to_owned()))
+            }
+            _ => Err(()),
         }
     }
 }
@@ -394,7 +399,7 @@ impl TryFrom<String> for Agent {
     fn try_from(value: String) -> Result<Self, String> {
         value.parse().map_err(|()| {
             format!(
-                "unknown agent {value:?}; expected one of {}",
+                "invalid agent {value:?}; use a configured command name or one of {}",
                 Agent::possible_values().join(", ")
             )
         })
@@ -407,6 +412,7 @@ impl From<Agent> for String {
             Agent::Codex => "codex".into(),
             Agent::Claude => "claude".into(),
             Agent::Happy(agent) => format!("{HAPPY_PREFIX}{}", agent.name()),
+            Agent::Custom(name) => name,
         }
     }
 }

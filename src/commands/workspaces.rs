@@ -160,7 +160,7 @@ pub(super) async fn add(
         AgentLaunch::IssueDefault(agent) => {
             let settings =
                 client::settings(&ctx.paths, ConfigTarget::Repository(repository.clone())).await?;
-            match agent.or(settings.default_agent) {
+            match agent.or(settings.default_agent.clone()) {
                 Some(agent) => Some(agent),
                 None if ctx.interactive() => Some(
                     ui::pick(
@@ -168,6 +168,13 @@ pub(super) async fn add(
                         "Agent> ",
                         Agent::possible_values()
                             .into_iter()
+                            .chain(
+                                settings
+                                    .commands
+                                    .keys()
+                                    .filter(|name| matches!(name.parse(), Ok(Agent::Custom(_))))
+                                    .cloned(),
+                            )
                             .map(|value| (value.clone(), value))
                             .collect(),
                     )?
@@ -181,7 +188,15 @@ pub(super) async fn add(
         }
     };
     // Validate launch configuration before creating a workspace.
-    let codex_mode = match agent {
+    if let Some(Agent::Custom(name)) = &agent {
+        let settings =
+            client::settings(&ctx.paths, ConfigTarget::Repository(repository.clone())).await?;
+        ensure!(
+            settings.commands.contains_key(name),
+            "unknown agent {name:?}; define it in [commands] in Shoal config"
+        );
+    }
+    let codex_mode = match &agent {
         Some(Agent::Codex) if issue.is_some() => Some(CodexMode::Cli),
         Some(Agent::Codex) => Some(
             client::settings(&ctx.paths, ConfigTarget::Repository(repository.clone()))
@@ -308,7 +323,7 @@ pub(super) async fn add(
         None
     };
     if let Some(prompt) = &prompt
-        && !matches!(agent, Some(Agent::Happy(_)))
+        && !matches!(agent, Some(Agent::Happy(_) | Agent::Custom(_)))
     {
         args.insert(0, prompt.into());
     }
@@ -316,8 +331,43 @@ pub(super) async fn add(
         Some(Agent::Codex) => codex(ctx, codex_mode, Some(workspace.id), args).await,
         Some(Agent::Claude) => claude(ctx, Some(workspace.id), args).await,
         Some(Agent::Happy(agent)) => happy(ctx, agent, Some(workspace.id), prompt, args).await,
+        Some(Agent::Custom(name)) => custom_agent(ctx, &name, workspace, prompt, args).await,
         None => Ok(0),
     }
+}
+
+async fn custom_agent(
+    ctx: &Context,
+    name: &str,
+    workspace: Workspace,
+    prompt: Option<String>,
+    mut args: Vec<OsString>,
+) -> Result<i32> {
+    let settings =
+        client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
+    let instructions = templates::instructions(settings.agent_template.as_deref(), &workspace);
+    let prompt = [instructions, prompt.unwrap_or_default()]
+        .into_iter()
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    let argv = settings
+        .commands
+        .get(name)
+        .with_context(|| format!("unknown agent {name:?}; define it in [commands]"))?;
+    if !prompt.is_empty() && !argv.iter().any(|arg| arg.contains("{prompt}")) {
+        args.insert(0, prompt.clone().into());
+    }
+    let command = crate::named_commands::expand_with_fields(
+        &ctx.paths,
+        &settings.commands,
+        name,
+        &workspace,
+        args,
+        &[("{prompt}", std::ffi::OsStr::new(&prompt))],
+    )
+    .await?;
+    execution::run(&ctx.paths, workspace.id, command, Some(name.into())).await
 }
 
 pub(super) async fn adopt(ctx: &Context, repository: String, path: PathBuf) -> Result<i32> {

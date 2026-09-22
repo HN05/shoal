@@ -226,6 +226,17 @@ pub async fn expand(
     workspace: &Workspace,
     args: Vec<OsString>,
 ) -> Result<Vec<OsString>> {
+    expand_with_fields(paths, commands, name, workspace, args, &[]).await
+}
+
+pub async fn expand_with_fields(
+    paths: &Paths,
+    commands: &Commands,
+    name: &str,
+    workspace: &Workspace,
+    args: Vec<OsString>,
+    extra_fields: &[(&str, &OsStr)],
+) -> Result<Vec<OsString>> {
     let argv = commands.get(name).with_context(|| {
         format!("unknown command {name:?}; define it in [commands] in Shoal config")
     })?;
@@ -251,6 +262,7 @@ pub async fn expand(
     if let Some(base) = &base {
         fields.push(("{diff_base}", OsStr::new(base)));
     }
+    fields.extend_from_slice(extra_fields);
     let mut command = Vec::new();
     let mut args = Some(args);
     for arg in argv {

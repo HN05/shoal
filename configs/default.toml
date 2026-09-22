@@ -12,7 +12,7 @@
 root_dir = "~/shoal"
 
 # Agent `shoal issue <url>` starts when --agent is omitted (no default):
-# codex, claude, happy-claude, or happy-codex.
+# A built-in launcher or a name defined in [commands].
 # default_agent = "codex"
 
 # Prompt templates normally live beside this file as issue-template.md and
@@ -34,6 +34,9 @@ root_dir = "~/shoal"
 claude = ["claude", "{args}", "--remote-control", "{workspace}"]
 codex = ["codex", "{args}", "--sandbox", "danger-full-access", "--ask-for-approval=never"]
 # check = ["cargo", "test"]
+# Custom agents: shoal add <repository> <branch> --agent pi
+# pi = ["pi", "{args}"]
+# opencode = ["opencode", "--prompt", "{prompt}", "{args}"]
 # Local committed-change review, with tuicr installed on PATH:
 # review = ["tuicr", "-r", "{diff_base}..HEAD"]
 

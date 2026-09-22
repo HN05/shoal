@@ -95,8 +95,8 @@ prompts even when its default is `app`. Ordinary setup, hooks and collision rule
 use the current registered checkout or managed workspace, falling back to the
 repository picker interactively; otherwise pass `--repo`. URLs select by remote
 unless `--repo` is explicit, in which case it must match. The command starts
-`--agent`, else `default_agent` from the repository or global config (`codex`, `claude`,
-`happy-claude`, `happy-codex`), else an interactive picker.
+`--agent`, else `default_agent` from the repository or global config, else an
+interactive picker. Agent names select built-in launchers or entries in `[commands]`.
 
 ```sh
 shoal repo add /path/to/repo             # Or a Git clone URL; register once
@@ -201,12 +201,29 @@ Shoal tracks execution; the review tool owns sessions, exports, and forge access
 
 ### Agents
 
-`add --agent codex|claude|happy-<agent>` starts the agent after worktree creation, setup, and
+`add --agent <name>` starts the agent after worktree creation, setup, and
 the post-setup hook succeed; arguments after `--` go to the agent. CLI agents
 run in your terminal through the tracked execution wrapper and return the
 agent's exit code; the workspace is retained even when launch fails. With shell
 integration, your shell enters the new workspace after the agent exits.
 `--json` emits the workspace record first, then the agent's unmodified output.
+
+Custom agents use `[commands]` with normal repository/global precedence:
+
+```toml
+default_agent = "pi"
+
+[commands]
+pi = ["pi", "{args}"]
+opencode = ["opencode", "--prompt", "{prompt}", "{args}"]
+```
+
+For custom agent launches, `{prompt}` combines the rendered `agent_template` and
+issue prompt, separated by a blank line. Without that placeholder, nonempty context
+becomes the first forwarded argument. Substitutions happen once; user arguments
+remain literal. Built-in agent names keep their specialized launchers; custom
+agents receive no tool-specific flags or trust setup. `shoal run <name>` remains
+a plain command invocation without agent prompts or exit notifications.
 
 `shoal codex` without `--cli`/`--app` uses `codex.default_mode` from the workspace's
 repository config or `~/.config/shoal/config.toml` (or
@@ -619,8 +636,8 @@ shoal notifications --follow   # Keep printing, and raise terminal notifications
 
 The daemon records what happens while you are not looking: a resource or
 simulator request that found no capacity (naming the workspaces holding the
-pool), a preferred port in use, an agent started with `claude`, `codex --cli`, or
-`happy` exiting (with its code, or a note to reconcile when it left processes
+pool), a preferred port in use, a tracked agent
+exiting (with its code, or a note to reconcile when it left processes
 behind), and workspaces it removed or retained on its own through PR, merge, or
 idle cleanup. Each line shows the local time, the workspace, and the message;
 `--json` returns records with `kind`, `created_at`, and `read`. On a terminal,

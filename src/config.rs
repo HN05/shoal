@@ -241,6 +241,7 @@ mod tests {
         for (text, agent) in [
             ("default_agent = 'codex'", Agent::Codex),
             ("default_agent = 'claude'", Agent::Claude),
+            ("default_agent = 'pi'", Agent::Custom("pi".into())),
             (
                 "default_agent = 'happy-codex'",
                 Agent::Happy(HappyAgent::Codex),
@@ -576,7 +577,7 @@ impl Config {
             )?),
             agent_auth: config.agent_auth.clone(),
             git_profile: config.git_profile.clone(),
-            default_agent: config.default_agent,
+            default_agent: config.default_agent.clone(),
             codex: crate::repo_config::Codex {
                 default_mode: presence.codex.default_mode,
             },
@@ -638,7 +639,10 @@ impl Config {
                 .clone()
                 .or_else(|| self.agent_template.clone()),
             agent_auth: repo.agent_auth.clone().over(self.agent_auth.clone()),
-            default_agent: repo.default_agent.or(self.default_agent),
+            default_agent: repo
+                .default_agent
+                .clone()
+                .or_else(|| self.default_agent.clone()),
             codex: Codex {
                 default_mode: repo.codex.default_mode.unwrap_or(self.codex.default_mode),
             },

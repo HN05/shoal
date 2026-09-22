@@ -196,6 +196,13 @@ arguments; a standalone `{args}` places the caller's literal arguments.
 the tools own review storage, exports, and forge authentication, with explicit
 feedback handoff to agents.
 
+Custom `--agent` and `default_agent` names select named commands through the
+same configuration layers. They run as tracked agents with scope, forge wrappers,
+and exit notifications. Their `{prompt}` argument combines general instructions
+and issue context; without it, nonempty context precedes forwarded arguments.
+User arguments and inserted prompt text remain literal. Built-in names retain
+their specialized launchers; custom names add no tool-specific flags or trust setup.
+
 Agent shortcuts use the execution wrapper: by default Codex CLI gets full access without
 approvals, Claude gets remote control named after the workspace. Both trust the
 workspace in their user config before launch, creating the file if needed; Happy

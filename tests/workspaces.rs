@@ -8845,3 +8845,109 @@ fn explicit_locations_do_not_require_unrelated_checkouts_to_be_readable() {
     }
     assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 2);
 }
+
+#[test]
+fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
+    let fixture = Fixture::with_config(Some(
+        "default_agent = 'pi'\nagent_template = 'Follow {branch}'\nissue_template = '{title}: {body}'\n[commands]\npi = ['missing-global-launcher']\n",
+    ));
+    let bin = fixture.root.path().join("bin");
+    fs::create_dir_all(&bin).unwrap();
+    for (name, script) in [
+        (
+            "gh",
+            "#!/bin/sh\nprintf '%s' '{\"number\":37,\"title\":\"Literal {branch}\",\"body\":\"$(false)\"}'\n",
+        ),
+        (
+            "fake-agent",
+            "#!/bin/sh\ntest -n \"$SHOAL_SCOPE_TOKEN\" || exit 99\nprintf '%s\\0' \"$@\" > \"$HOME/agent-args\"\nexit 7\n",
+        ),
+    ] {
+        let path = bin.join(name);
+        fs::write(&path, script).unwrap();
+        fs::set_permissions(path, fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    git(
+        &fixture.repo,
+        &["remote", "add", "origin", "git@github.com:team/project.git"],
+    );
+    let saved = fixture.root.path().join("saved.toml");
+    fs::write(
+        &saved,
+        "[commands]\npi = ['fake-agent', '--prompt={prompt}', '{args}', '{branch}']\n",
+    )
+    .unwrap();
+    fixture.ok(&[
+        "repo",
+        "config",
+        fixture.repo.to_str().unwrap(),
+        "--file",
+        saved.to_str().unwrap(),
+    ]);
+    let output = fixture.run(&[
+        "--json",
+        "issue",
+        "37",
+        "--repo",
+        fixture.repo.to_str().unwrap(),
+        "--base",
+        "HEAD",
+        "--",
+        "literal {prompt}",
+    ]);
+    assert_eq!(output.status.code(), Some(7), "{output:?}");
+    let workspace: Value =
+        serde_json::from_slice(output.stdout.split(|b| *b == b'\n').next().unwrap()).unwrap();
+    let branch = workspace["branch"].as_str().unwrap();
+    assert_eq!(
+        fs::read_to_string(fixture.root.path().join("agent-args")).unwrap(),
+        format!(
+            "--prompt=Follow {branch}\n\nLiteral {{branch}}: $(false)\0literal {{prompt}}\0{branch}\0"
+        )
+    );
+    assert_eq!(
+        fixture.ok(&["inspect", workspace["id"].as_str().unwrap()])["executions"],
+        serde_json::json!([])
+    );
+    let notifications = fixture.ok(&["notifications"]);
+    assert!(notifications.to_string().contains("pi exited with code 7"));
+    assert!(!fixture.root.path().join(".claude.json").exists());
+    assert!(!fixture.root.path().join(".codex/config.toml").exists());
+
+    // Without an explicit prompt slot, context precedes literal forwarded arguments.
+    fs::write(&saved, "[commands]\npi = ['fake-agent', '{args}']\n").unwrap();
+    fixture.ok(&[
+        "repo",
+        "config",
+        fixture.repo.to_str().unwrap(),
+        "--file",
+        saved.to_str().unwrap(),
+    ]);
+    let output = fixture.run(&[
+        "add",
+        fixture.repo.to_str().unwrap(),
+        "custom-add",
+        "--base",
+        "HEAD",
+        "--agent",
+        "pi",
+        "--",
+        "user message",
+    ]);
+    assert_eq!(output.status.code(), Some(7), "{output:?}");
+    assert_eq!(
+        fs::read_to_string(fixture.root.path().join("agent-args")).unwrap(),
+        "Follow custom-add\0user message\0"
+    );
+    let before = fixture.ok(&["list"]);
+    let unknown = fixture.run(&[
+        "add",
+        fixture.repo.to_str().unwrap(),
+        "unknown-agent",
+        "--agent",
+        "typo",
+    ]);
+    assert!(!unknown.status.success());
+    assert!(String::from_utf8_lossy(&unknown.stderr).contains("unknown agent"));
+    assert_eq!(fixture.ok(&["list"]), before);
+}
