@@ -51,6 +51,20 @@ pub(super) async fn run(
             ));
         }
     }
+    let shell_loaded =
+        std::env::var_os(crate::env::SHELL_DIRECTIVE).is_some_and(|value| !value.is_empty());
+    report.checks.push(Check::new(
+        "shell_integration",
+        if shell_loaded { Status::Ok } else { Status::Warning },
+        if shell_loaded {
+            "Shell integration is loaded in the calling shell".to_owned()
+        } else {
+            format!(
+                "Shell integration is not loaded in the calling shell; `shoal cd` only prints a path. Run `{}`",
+                crate::shell::INIT_COMMAND
+            )
+        },
+    ));
     let unresolved = report.checks.iter().any(|c| c.status != Status::Ok)
         || report.workspaces.iter().any(|r| !r.issues.is_empty());
     ctx.show(&report, |report| {
