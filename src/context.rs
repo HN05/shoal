@@ -16,6 +16,15 @@ pub struct Context {
 }
 
 impl Context {
+    /// Show elapsed time while waiting for silent work, without changing its result.
+    pub async fn progress<T>(
+        &self,
+        message: &str,
+        work: impl std::future::Future<Output = T>,
+    ) -> T {
+        crate::progress::run(self.json, message, work).await
+    }
+
     pub fn new(paths: Paths, json: bool) -> Self {
         Self { paths, json }
     }

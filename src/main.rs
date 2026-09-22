@@ -28,6 +28,7 @@ mod ports;
 mod pr;
 mod process_identity;
 mod processes;
+mod progress;
 mod protocol;
 mod recovery;
 mod removal;

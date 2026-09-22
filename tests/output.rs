@@ -1,13 +1,41 @@
 use std::{
     fs::File,
-    io::Read,
+    io::{BufRead, BufReader, Read, Write},
     os::fd::{AsRawFd, FromRawFd},
+    os::unix::net::UnixListener,
     process::{Command, Output, Stdio},
+    thread,
+    time::Duration,
 };
 
 // Run short, offline commands with either output stream attached to a terminal.
 fn run(args: &[&str], terminal: Option<bool>, env: &[(&str, &str)]) -> (Output, String) {
+    run_with_reply(args, terminal, env, None)
+}
+
+fn run_with_reply(
+    args: &[&str],
+    terminal: Option<bool>,
+    env: &[(&str, &str)],
+    reply: Option<(Duration, serde_json::Value)>,
+) -> (Output, String) {
     let root = tempfile::tempdir_in("/tmp").unwrap();
+    let server = reply.map(|(delay, mut reply)| {
+        let listener = UnixListener::bind(root.path().join("daemon.sock")).unwrap();
+        thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(5)))
+                .unwrap();
+            let mut line = String::new();
+            BufReader::new(&stream).read_line(&mut line).unwrap();
+            let request: serde_json::Value = serde_json::from_str(&line).unwrap();
+            reply["protocol"] = request["protocol"].clone();
+            reply["id"] = request["id"].clone();
+            thread::sleep(delay);
+            writeln!(stream, "{reply}").unwrap();
+        })
+    });
     let mut command = Command::new(env!("CARGO_BIN_EXE_shoal"));
     command
         .args(["--state-dir", root.path().to_str().unwrap()])
@@ -47,6 +75,9 @@ fn run(args: &[&str], terminal: Option<bool>, env: &[(&str, &str)]) -> (Output, 
         master
     });
     let output = command.output().unwrap();
+    if let Some(server) = server {
+        server.join().unwrap();
+    }
     // Keep the slave open while draining: macOS can discard unread data on close.
     let mut transcript = String::new();
     if let Some(master) = &mut master {
@@ -57,6 +88,70 @@ fn run(args: &[&str], terminal: Option<bool>, env: &[(&str, &str)]) -> (Output, 
         }
     }
     (output, transcript)
+}
+
+#[test]
+fn repository_progress_respects_output_mode_and_clears_before_errors() {
+    let success = serde_json::json!({
+        "type": "repository",
+        "data": {"id": "test", "path": "/test", "source": "/test", "last_used": 0}
+    });
+    for (terminal, json, env, visible) in [
+        (Some(false), false, vec![], true),
+        (Some(false), false, vec![("NO_COLOR", "1")], true),
+        (Some(false), true, vec![], false),
+        (Some(false), false, vec![("TERM", "dumb")], false),
+        (Some(true), false, vec![], false),
+        (None, false, vec![], false),
+    ] {
+        let mut args = vec!["repo", "add", "/test"];
+        if json {
+            args.insert(0, "--json");
+        }
+        let (output, text) = run_with_reply(
+            &args,
+            terminal,
+            &env,
+            Some((Duration::from_millis(1200), success.clone())),
+        );
+        assert!(output.status.success(), "{output:?} {text:?}");
+        assert_eq!(text.contains("Registering repository"), visible, "{text:?}");
+        assert!(!output.stdout.contains(&b'\r'));
+        assert!(output.stderr.is_empty());
+        if visible {
+            assert!(text.contains("(1s)"), "{text:?}");
+            assert!(text.contains("| Registering") && text.contains("/ Registering"));
+            assert!(text.ends_with(" \r"), "{text:?}");
+        }
+        if json {
+            assert!(text.is_empty());
+            let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+            assert_eq!(value["id"], "test");
+        }
+    }
+    let (output, text) = run_with_reply(
+        &["repo", "add", "/test"],
+        Some(false),
+        &[],
+        Some((Duration::ZERO, success)),
+    );
+    assert!(output.status.success());
+    assert!(text.is_empty(), "{text:?}");
+
+    let (output, text) = run_with_reply(
+        &["repo", "rm", "/test", "--yes"],
+        Some(false),
+        &[("NO_COLOR", "1")],
+        Some((
+            Duration::from_millis(700),
+            serde_json::json!({
+                "type": "error", "data": {"code": "test", "message": "removal failed"}
+            }),
+        )),
+    );
+    assert!(!output.status.success());
+    assert!(text.contains("Removing repository"), "{text:?}");
+    assert!(text.contains(" \rerror: test: removal failed"), "{text:?}");
 }
 
 #[test]

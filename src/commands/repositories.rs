@@ -58,11 +58,15 @@ pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
         RepoCommand::Add { source, name, path } => {
             let source = ui::repository_selector(source)?;
             let path = path.map(|path| absolute(ctx, path)).transpose()?;
-            let repo = request!(
-                &ctx.paths,
-                Method::RegisterRepository { source, name, path },
-                Repository
-            );
+            let repo = ctx
+                .progress("Registering repository", async {
+                    Ok::<_, anyhow::Error>(request!(
+                        &ctx.paths,
+                        Method::RegisterRepository { source, name, path },
+                        Repository
+                    ))
+                })
+                .await?;
             ctx.emit(
                 &format!(
                     "Registered {}",
@@ -112,11 +116,15 @@ pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
                 );
             }
             let repository = ui::repository_selector(repository)?;
-            let result = request!(
-                &ctx.paths,
-                Method::RemoveRepository { repository },
-                RepositoryRemoved
-            );
+            let result = ctx
+                .progress("Removing repository", async {
+                    Ok::<_, anyhow::Error>(request!(
+                        &ctx.paths,
+                        Method::RemoveRepository { repository },
+                        RepositoryRemoved
+                    ))
+                })
+                .await?;
             ctx.emit(
                 &format!(
                     "Deleted {} and {} Shoal workspaces",

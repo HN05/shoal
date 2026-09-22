@@ -53,7 +53,9 @@ removal, check it against the rule those files state before judging it.
   `{diff_base}` resolves lazily through the shared daemon diff-base lookup.
 - External tools are invoked with argument arrays, never shell strings.
   Terminal I/O stays in the execution wrapper; the daemon owns state. CLI
-  styles belong at presentation sites; machine output and stored values stay plain.
+  styles and transient progress belong at presentation sites; machine output and
+  stored values stay plain. Progress clears before results and stays off for JSON,
+  redirected stderr and dumb terminals.
 - Persistence: lifecycle enums keep their lowercase SQLite/JSON spelling and
   reject unknown values. Schema and state-file changes need a compatibility
   story for existing daemons. `install` preserves compatible daemons and commands,
