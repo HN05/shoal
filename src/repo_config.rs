@@ -68,6 +68,10 @@ pub struct RepoConfig {
     pub default_agent: Option<Agent>,
     pub codex: Codex,
     pub setup_cmd: Option<String>,
+    pub pre_setup_cmd: Option<String>,
+    pub post_remove_cmd: Option<String>,
+    pub post_resource_acquire_cmd: Option<String>,
+    pub pre_resource_release_cmd: Option<String>,
     /// Runs untracked after the workspace is ready, e.g. to open a tmux session.
     pub post_setup_cmd: Option<String>,
     /// Runs untracked before the worktree is removed, e.g. to close that session.
@@ -138,6 +142,13 @@ pub fn parse(text: &str) -> Result<RepoConfig> {
     }
     for (key, command) in [
         ("setup_cmd", &config.setup_cmd),
+        ("pre_setup_cmd", &config.pre_setup_cmd),
+        ("post_remove_cmd", &config.post_remove_cmd),
+        (
+            "post_resource_acquire_cmd",
+            &config.post_resource_acquire_cmd,
+        ),
+        ("pre_resource_release_cmd", &config.pre_resource_release_cmd),
         ("post_setup_cmd", &config.post_setup_cmd),
         ("pre_remove_cmd", &config.pre_remove_cmd),
     ] {
@@ -193,6 +204,14 @@ impl RepoConfig {
                 default_mode: self.codex.default_mode.or(base.codex.default_mode),
             },
             setup_cmd: self.setup_cmd.or(base.setup_cmd),
+            pre_setup_cmd: self.pre_setup_cmd.or(base.pre_setup_cmd),
+            post_remove_cmd: self.post_remove_cmd.or(base.post_remove_cmd),
+            post_resource_acquire_cmd: self
+                .post_resource_acquire_cmd
+                .or(base.post_resource_acquire_cmd),
+            pre_resource_release_cmd: self
+                .pre_resource_release_cmd
+                .or(base.pre_resource_release_cmd),
             post_setup_cmd: self.post_setup_cmd.or(base.post_setup_cmd),
             pre_remove_cmd: self.pre_remove_cmd.or(base.pre_remove_cmd),
             ports: PortDefaults {
@@ -226,6 +245,10 @@ impl RepoConfig {
         let resolve = |command: &Option<String>| command.as_ref().map(|c| worktree.join(c));
         Hooks {
             post_setup_cmd: resolve(&self.post_setup_cmd),
+            pre_setup_cmd: resolve(&self.pre_setup_cmd),
+            post_remove_cmd: resolve(&self.post_remove_cmd),
+            post_resource_acquire_cmd: resolve(&self.post_resource_acquire_cmd),
+            pre_resource_release_cmd: resolve(&self.pre_resource_release_cmd),
             pre_remove_cmd: resolve(&self.pre_remove_cmd),
         }
     }
@@ -234,6 +257,10 @@ impl RepoConfig {
 /// The effective, resolved lifecycle hooks of one workspace.
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct Hooks {
+    pub pre_setup_cmd: Option<PathBuf>,
+    pub post_remove_cmd: Option<PathBuf>,
+    pub post_resource_acquire_cmd: Option<PathBuf>,
+    pub pre_resource_release_cmd: Option<PathBuf>,
     pub post_setup_cmd: Option<PathBuf>,
     pub pre_remove_cmd: Option<PathBuf>,
 }
@@ -360,6 +387,27 @@ mod tests {
                 .on_conflict
                 .is_none()
         );
+    }
+
+    #[test]
+    fn additional_hooks_validate_layer_and_resolve_paths() {
+        for key in [
+            "pre_setup_cmd",
+            "post_remove_cmd",
+            "post_resource_acquire_cmd",
+            "pre_resource_release_cmd",
+        ] {
+            assert!(parse(&format!("{key} = ' '")).is_err());
+            assert!(parse(&format!(r#"{key} = "a\u0000b""#)).is_err());
+            let base = parse(&format!("{key} = '/base/hook'")).unwrap();
+            let inherited = parse("").unwrap().over(base.clone());
+            assert_eq!(serde_json::to_value(inherited).unwrap()[key], "/base/hook");
+            let config = parse(&format!("{key} = 'scripts/hook'"))
+                .unwrap()
+                .over(base);
+            let hooks = serde_json::to_value(config.hooks(Path::new("/work/tree"))).unwrap();
+            assert_eq!(hooks[key], "/work/tree/scripts/hook");
+        }
     }
 
     #[test]

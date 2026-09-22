@@ -67,6 +67,10 @@ pub struct Config {
     pub agent_auth: crate::agent_auth::Config,
     pub git: crate::git_profile::Git,
     pub git_profile: Option<String>,
+    pub pre_setup_cmd: Option<String>,
+    pub post_remove_cmd: Option<String>,
+    pub post_resource_acquire_cmd: Option<String>,
+    pub pre_resource_release_cmd: Option<String>,
     pub root_dir: Option<PathBuf>,
     /// Former name of `root_dir`; still accepted so existing configs load.
     pub repositories_dir: Option<PathBuf>,
@@ -132,6 +136,25 @@ mod tests {
             "[codex]\ndefaut_mode = 'app'",
         ] {
             assert!(toml::from_str::<Config>(text).is_err());
+        }
+    }
+
+    #[test]
+    fn additional_hook_paths_are_validated_in_global_config() {
+        let paths = Paths {
+            home: "/home/test".into(),
+            state: "/separate/state".into(),
+            socket: "/separate/state/daemon.sock".into(),
+        };
+        for key in [
+            "pre_setup_cmd",
+            "post_remove_cmd",
+            "post_resource_acquire_cmd",
+            "pre_resource_release_cmd",
+        ] {
+            assert!(Config::parse(&format!("{key} = 'scripts/hook'"), &paths).is_ok());
+            assert!(Config::parse(&format!("{key} = ' '"), &paths).is_err());
+            assert!(Config::parse(&format!(r#"{key} = "a\u0000b""#), &paths).is_err());
         }
     }
 
@@ -577,6 +600,10 @@ impl Config {
             )?),
             agent_auth: config.agent_auth.clone(),
             git_profile: config.git_profile.clone(),
+            pre_setup_cmd: config.pre_setup_cmd.clone(),
+            post_remove_cmd: config.post_remove_cmd.clone(),
+            post_resource_acquire_cmd: config.post_resource_acquire_cmd.clone(),
+            pre_resource_release_cmd: config.pre_resource_release_cmd.clone(),
             default_agent: config.default_agent.clone(),
             codex: crate::repo_config::Codex {
                 default_mode: presence.codex.default_mode,
@@ -609,6 +636,22 @@ impl Config {
         config.simulators.validate()?;
         config.git.validate()?;
         config.agent_auth.validate()?;
+        for (key, command) in [
+            ("pre_setup_cmd", &config.pre_setup_cmd),
+            ("post_remove_cmd", &config.post_remove_cmd),
+            (
+                "post_resource_acquire_cmd",
+                &config.post_resource_acquire_cmd,
+            ),
+            ("pre_resource_release_cmd", &config.pre_resource_release_cmd),
+        ] {
+            if let Some(command) = command {
+                ensure!(
+                    !command.trim().is_empty() && !command.contains('\0'),
+                    "{key} must be a nonempty executable path"
+                );
+            }
+        }
         crate::named_commands::validate(&config.commands)?;
         if let Some(name) = &config.git_profile {
             config.git.profile(name)?;
