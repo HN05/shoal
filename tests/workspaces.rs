@@ -977,7 +977,7 @@ fn registration_reuses_repositories_by_origin_across_paths_and_url_forms() {
     assert_eq!(fixture.ok(&["repo", "add", url]), original);
     assert_eq!(fixture.ok(&["repo", "list"]).as_array().unwrap().len(), 1);
     // This remote tests identity matching only; explicitly use local history.
-    fixture.ok(&["add", ssh_url, "alias", "--ref", "HEAD"]);
+    fixture.ok(&["add", ssh_url, "alias", "--base", "HEAD"]);
     fixture.ok(&["rm", "alias"]);
 }
 
@@ -1145,7 +1145,7 @@ fn branch_removal_compares_contents_to_main_or_upstream_and_honors_explicit_choi
         "add",
         fixture.repo.to_str().unwrap(),
         "divergent",
-        "--ref",
+        "--base",
         "HEAD",
     ]);
     let path = Path::new(divergent["path"].as_str().unwrap());
@@ -1886,7 +1886,7 @@ exit 7
             "add",
             fixture.repo.to_str().unwrap(),
             "bad-base",
-            "--ref",
+            "--base",
             "missing-ref",
             "--agent",
             "codex",
@@ -4296,7 +4296,7 @@ fn cd_always_picks_even_inside_a_workspace_and_cancel_does_not_navigate() {
             "add",
             fixture.repo.to_str().unwrap(),
             "missing",
-            "--ref",
+            "--base",
             "not-a-ref",
         ])
         .output()
@@ -6156,7 +6156,7 @@ fn add_from_issue_uses_existing_forge_cli_and_passes_context_to_agents() {
                 "--json",
                 "add",
                 fixture.repo.to_str().unwrap(),
-                "--ref",
+                "--base",
                 "HEAD",
                 "--issue",
                 &input,
@@ -6212,7 +6212,7 @@ fn add_from_issue_uses_existing_forge_cli_and_passes_context_to_agents() {
             "add",
             fixture.repo.to_str().unwrap(),
             "custom-issue-name",
-            "--ref",
+            "--base",
             "HEAD",
             "--issue",
             "37",
@@ -6310,7 +6310,7 @@ printf '%s' '{"number":44,"title":"Literal {body}","body":"$(false)"}'
                 "add",
                 fixture.repo.to_str().unwrap(),
                 &format!("template-{index}"),
-                "--ref",
+                "--base",
                 "HEAD",
                 "--issue",
                 "44",
@@ -6479,7 +6479,7 @@ fn issue_command_finds_the_repository_and_starts_the_default_agent() {
             command.arg(repository);
         }
         let output = command
-            .args(["--issue", input, "--ref", "HEAD"])
+            .args(["--issue", input, "--base", "HEAD"])
             .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
             .env("ISSUE_RESPONSE", &response)
             .env("ISSUE_ARGS", &issue_args)
@@ -6506,7 +6506,7 @@ fn issue_command_finds_the_repository_and_starts_the_default_agent() {
             "add",
             fixture.repo.to_str().unwrap(),
             "plain",
-            "--ref",
+            "--base",
             "HEAD",
         ])
         .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
@@ -6537,7 +6537,7 @@ fn issue_number_picks_a_repository_before_lookup_interactively() {
         fs::write(&path, script).unwrap();
         fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
     }
-    let (output, transcript) = fixture.interactive(&["issue", "103", "--ref", "HEAD"], "");
+    let (output, transcript) = fixture.interactive(&["issue", "103", "--base", "HEAD"], "");
     assert!(!output.status.success(), "{output:?}\n{transcript}");
     assert!(
         transcript.contains(&format!("lookup in {}", fixture.repo.display())),
@@ -6590,7 +6590,7 @@ fn issue_lookup_errors_never_create_a_workspace() {
             .args([
                 "add",
                 fixture.repo.to_str().unwrap(),
-                "--ref",
+                "--base",
                 "HEAD",
                 "--issue",
                 input,
@@ -6752,7 +6752,7 @@ fn add_existing_branch_runs_setup_once_and_denies_scoped_creation() {
             .status
             .success()
     );
-    for flag in ["--base", "--ref", "--issue"] {
+    for flag in ["--base", "--issue"] {
         assert!(
             !fixture
                 .run(&[
@@ -7487,7 +7487,7 @@ fn happy_issue_prompts_reach_claude_and_are_saved_for_codex() {
                 "--json",
                 "add",
                 fixture.repo.to_str().unwrap(),
-                "--ref",
+                "--base",
                 "HEAD",
                 "--issue",
                 "34",
