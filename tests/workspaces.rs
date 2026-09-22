@@ -4517,6 +4517,19 @@ fn doctor_daemon_reports_untracked_worktrees_without_adopting_them() {
     assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
 }
 
+fn repaired_workspaces(fixture: &Fixture, args: &[&str]) -> Value {
+    let reports = recovery_report(fixture, args);
+    assert!(
+        reports
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|r| r["issues"].as_array().unwrap().is_empty()),
+        "{reports}"
+    );
+    reports
+}
+
 fn recovery_report(fixture: &Fixture, args: &[&str]) -> Value {
     let output = fixture.command().arg("--json").args(args).output().unwrap();
     assert!(
@@ -4524,7 +4537,7 @@ fn recovery_report(fixture: &Fixture, args: &[&str]) -> Value {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    serde_json::from_slice(&output.stdout).unwrap()
+    serde_json::from_slice::<Value>(&output.stdout).unwrap()["workspaces"].take()
 }
 
 #[test]
@@ -4567,7 +4580,7 @@ fn doctor_repairs_interrupted_state_and_preserves_work_and_leases() {
             .unwrap()
             .contains("--repair")
     );
-    let repaired = fixture.ok(&["doctor", "interrupted", "--repair"]);
+    let repaired = repaired_workspaces(&fixture, &["doctor", "interrupted", "--repair"]);
     assert_eq!(repaired[0]["workspace"]["state"], "ready");
     assert_eq!(
         fs::read_to_string(path.join("uncommitted")).unwrap(),
@@ -4579,7 +4592,7 @@ fn doctor_repairs_interrupted_state_and_preserves_work_and_leases() {
         resource
     );
     assert!(
-        fixture.ok(&["doctor", "interrupted", "--repair"])[0]["changes"]
+        repaired_workspaces(&fixture, &["doctor", "interrupted", "--repair"])[0]["changes"]
             .as_array()
             .unwrap()
             .is_empty()
@@ -4632,7 +4645,7 @@ fn doctor_detects_moved_and_replaced_worktrees_without_deleting_data() {
             path.to_str().unwrap(),
         ],
     );
-    fixture.ok(&["doctor", "original", "--repair"]);
+    repaired_workspaces(&fixture, &["doctor", "original", "--repair"]);
     // Replace the admin directory at its SAME path, proving pathname checks alone are insufficient.
     let admin = Path::new(workspace["git_dir"].as_str().unwrap());
     let old = fixture.root.path().join("old-admin");
@@ -4793,13 +4806,16 @@ fn doctor_stops_identity_verified_orphans_after_wrapper_death() {
             .len(),
         1
     );
-    fixture.ok(&[
-        "doctor",
-        "orphan",
-        "--repair",
-        "--stop",
-        "--acknowledge-stopped",
-    ]);
+    repaired_workspaces(
+        &fixture,
+        &[
+            "doctor",
+            "orphan",
+            "--repair",
+            "--stop",
+            "--acknowledge-stopped",
+        ],
+    );
     assert_eq!(
         fixture.ok(&["inspect", "orphan"])["executions"],
         serde_json::json!([])
@@ -4827,7 +4843,10 @@ fn doctor_recovers_daemon_crash_and_requires_acknowledgement_for_legacy_records(
     wrapper.wait().unwrap();
     let report = recovery_report(&fixture, &["doctor", "crash"]);
     assert_eq!(report[0]["executions"][0]["state"], "unknown");
-    fixture.ok(&["doctor", "crash", "--repair", "--acknowledge-stopped"]);
+    repaired_workspaces(
+        &fixture,
+        &["doctor", "crash", "--repair", "--acknowledge-stopped"],
+    );
     assert_eq!(fixture.ok(&["port", "crash"])["reserved"][0], port);
     let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
     db.execute(
@@ -4837,7 +4856,10 @@ fn doctor_recovers_daemon_crash_and_requires_acknowledgement_for_legacy_records(
     .unwrap();
     let report = recovery_report(&fixture, &["doctor", "crash", "--repair"]);
     assert!(!report[0]["executions"][0]["cleared"].as_bool().unwrap());
-    fixture.ok(&["doctor", "crash", "--repair", "--acknowledge-stopped"]);
+    repaired_workspaces(
+        &fixture,
+        &["doctor", "crash", "--repair", "--acknowledge-stopped"],
+    );
     assert_eq!(
         fixture.ok(&["inspect", "crash"])["executions"],
         serde_json::json!([])
@@ -4863,13 +4885,16 @@ fn doctor_finds_detached_tagged_children_even_after_the_command_exits() {
             .unwrap()
             .is_empty()
     );
-    fixture.ok(&[
-        "doctor",
-        "detached",
-        "--repair",
-        "--stop",
-        "--acknowledge-stopped",
-    ]);
+    repaired_workspaces(
+        &fixture,
+        &[
+            "doctor",
+            "detached",
+            "--repair",
+            "--stop",
+            "--acknowledge-stopped",
+        ],
+    );
     assert_eq!(
         fixture.ok(&["inspect", "detached"])["executions"],
         serde_json::json!([])
@@ -4939,11 +4964,11 @@ fn doctor_preserves_connected_commands_until_stop_is_explicit() {
         .spawn()
         .unwrap();
     wait_registered_execution(&fixture, "connected");
-    let report = fixture.ok(&["doctor", "connected", "--repair"]);
+    let report = repaired_workspaces(&fixture, &["doctor", "connected", "--repair"]);
     assert_eq!(report[0]["executions"][0]["connected"], true);
     assert_eq!(report[0]["executions"][0]["cleared"], false);
     assert!(wrapper.try_wait().unwrap().is_none());
-    fixture.ok(&["doctor", "connected", "--repair", "--stop"]);
+    repaired_workspaces(&fixture, &["doctor", "connected", "--repair", "--stop"]);
     wrapper.wait().unwrap();
     assert_eq!(
         fixture.ok(&["inspect", "connected"])["executions"],

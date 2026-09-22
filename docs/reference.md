@@ -568,7 +568,7 @@ workspace, and sends setup output to stderr. Then choose explicitly:
 
 ```sh
 shoal setup fix-login                      # Rerun setup and the post-setup hook
-shoal doctor fix-login --repair          # Ignore the failure after ownership checks
+shoal doctor fix-login --repair             # Ignore the failure after ownership checks
 shoal rm fix-login --yes --delete-branch    # Delete this workspace and branch
 ```
 
@@ -728,7 +728,13 @@ shoal doctor fix-login --repair         # Repair verified state, retain work and
 shoal doctor fix-login --repair --stop  # Also stop verified surviving commands
 ```
 
-Exit 2 while issues remain, 0 when resolved; JSON is an array of reports.
+Exit 2 while findings or incomplete checks remain, 0 when clear. JSON contains
+`checks` and `workspaces`. Environment checks cover daemon reachability and
+version, executable `git`, `wt`, `lsof`, and `fzf` (for interactive pickers) on
+the daemon's PATH, and Git worktrees under registered repository roots that
+Shoal does not track. They run regardless of the workspace selection and only
+diagnose, even with `--repair`. An unavailable or mismatched daemon leaves its
+checks marked as skipped; doctor never starts or restarts it.
 When current checks find no issues, reports show the recorded failure and repair guidance.
 `doctor` is unavailable inside scoped executions. Startup marks interrupted
 lifecycle operations failed and disconnected executions unknown, and audits

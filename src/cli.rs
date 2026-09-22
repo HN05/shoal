@@ -202,7 +202,7 @@ pub enum Command {
         #[arg(long, default_value_t = 50, value_parser = clap::value_parser!(u32).range(1..=200))]
         limit: u32,
     },
-    /// Inspect interrupted executions/worktrees; optionally repair verified state.
+    /// Diagnose Shoal and its workspaces; optionally repair verified state.
     Doctor {
         workspace: Option<String>,
         #[arg(long, conflicts_with = "workspace")]
@@ -320,7 +320,8 @@ impl Command {
     pub fn is_administrative(&self) -> bool {
         matches!(
             self,
-            Command::Install { .. }
+            Command::Doctor { .. }
+                | Command::Install { .. }
                 | Command::Config {
                     command: ConfigCommand::Install { .. }
                         | ConfigCommand::Reset

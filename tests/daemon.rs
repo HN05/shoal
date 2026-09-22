@@ -25,8 +25,16 @@ struct Daemon {
 
 impl Daemon {
     fn start() -> Self {
+        Self::with_path(None)
+    }
+
+    fn with_path(path: Option<&Path>) -> Self {
         let root = tempfile::tempdir_in("/tmp").unwrap();
-        let child = command(root.path())
+        let mut launch = command(root.path());
+        if let Some(path) = path {
+            launch.env("PATH", path);
+        }
+        let child = launch
             .args(["daemon", "run"])
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -224,6 +232,10 @@ struct IncompatibleDaemon {
 
 impl IncompatibleDaemon {
     fn listen(root: &Path, malformed: bool) -> Self {
+        Self::with_version(root, malformed, false)
+    }
+
+    fn with_version(root: &Path, malformed: bool, version_mismatch: bool) -> Self {
         fs::create_dir_all(root.join("state")).unwrap();
         let listener = UnixListener::bind(root.join("state/daemon.sock")).unwrap();
         listener.set_nonblocking(true).unwrap();
@@ -247,6 +259,13 @@ impl IncompatibleDaemon {
                 let request: Value = serde_json::from_str(&line).unwrap();
                 if malformed {
                     writeln!(stream, "not json").unwrap();
+                } else if version_mismatch {
+                    let response = json!({
+                        "protocol": request["protocol"], "id": request["id"], "type": "status",
+                        "data": {"pid": 123, "version": "0.0.0", "uptime_secs": 1,
+                                 "managed": false, "unread_notifications": 0}
+                    });
+                    writeln!(stream, "{response}").unwrap();
                 } else {
                     let response = json!({
                         "protocol": request["protocol"].as_u64().unwrap() + 1,
@@ -534,4 +553,82 @@ esac
     run(&["daemon", "stop"]);
     run(&["daemon", "start"]);
     run(&["daemon", "stop"]);
+}
+
+fn doctor_report(root: &Path) -> Value {
+    let output = command(root)
+        .args(["--json", "doctor", "--all", "--repair"])
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(2), "{output:?}");
+    serde_json::from_slice(&output.stdout).unwrap()
+}
+
+#[test]
+fn doctor_reports_a_stopped_daemon_without_creating_state() {
+    let root = tempfile::tempdir_in("/tmp").unwrap();
+    let report = doctor_report(root.path());
+    assert!(
+        report["checks"][0]["message"]
+            .as_str()
+            .unwrap()
+            .contains("stopped or unreachable")
+    );
+    assert_eq!(report["checks"][1]["status"], "skipped");
+    assert_eq!(report["workspaces"], json!([]));
+    assert!(!root.path().join("state").exists());
+}
+
+#[test]
+fn doctor_reports_incompatible_unresponsive_and_wrong_version_daemons() {
+    for malformed in [false, true] {
+        let root = tempfile::tempdir_in("/tmp").unwrap();
+        let _daemon = IncompatibleDaemon::listen(root.path(), malformed);
+        let report = doctor_report(root.path());
+        assert_eq!(report["checks"][0]["status"], "error");
+        assert_eq!(report["checks"][1]["status"], "skipped");
+    }
+    let root = tempfile::tempdir_in("/tmp").unwrap();
+    let _daemon = IncompatibleDaemon::with_version(root.path(), false, true);
+    let report = doctor_report(root.path());
+    assert!(
+        report["checks"][0]["message"]
+            .as_str()
+            .unwrap()
+            .contains("Daemon version 0.0.0 differs")
+    );
+    assert_eq!(report["checks"][1]["status"], "skipped");
+
+    let root = tempfile::tempdir_in("/tmp").unwrap();
+    fs::create_dir(root.path().join("state")).unwrap();
+    let _listener = UnixListener::bind(root.path().join("state/daemon.sock")).unwrap();
+    let start = Instant::now();
+    let report = doctor_report(root.path());
+    assert!(
+        report["checks"][0]["message"]
+            .as_str()
+            .unwrap()
+            .contains("timed out")
+    );
+    assert!(start.elapsed() < Duration::from_secs(6));
+}
+
+#[test]
+fn doctor_checks_the_daemon_path_even_when_the_cli_has_dependencies() {
+    let empty = tempfile::tempdir().unwrap();
+    let daemon = Daemon::with_path(Some(empty.path()));
+    let report = doctor_report(daemon.root.path());
+    assert_eq!(report["checks"][0]["status"], "ok");
+    for name in ["git", "wt", "lsof", "fzf"] {
+        let check = report["checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["name"] == format!("dependency:{name}"))
+            .unwrap();
+        assert_eq!(
+            check["status"],
+            if name == "fzf" { "warning" } else { "error" }
+        );
+    }
 }

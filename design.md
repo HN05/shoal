@@ -326,7 +326,8 @@ registered workspaces are excluded from idle cleanup until cleared or removed.
 failure and repair guidance; repair restores verified worktrees and clears
 executions proven stopped while preserving work and leases. Added
 environment and untracked-worktree checks are diagnosis only. The daemon
-checks its own PATH and Git worktree registrations under owned repository roots. Startup
+checks its own PATH and Git worktree registrations under owned repository roots;
+the CLI diagnoses daemon health before requesting workspace checks. Startup
 audits but never deletes, kills, clears unknown executions, or releases leases.
 Survivors are signaled only after verifying PID birth identity and same-user
 ownership; acknowledgement cannot override visible live processes. Moved or
