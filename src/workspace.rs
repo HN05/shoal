@@ -493,6 +493,7 @@ impl Manager {
     /// Drop in-memory bookkeeping for a workspace that no longer exists.
     pub(crate) async fn forget_workspace(&self, id: &str) {
         self.activity.lock().await.remove(id);
+        self.resource_gates.lock().await.remove(id);
         self.scopes
             .lock()
             .await
