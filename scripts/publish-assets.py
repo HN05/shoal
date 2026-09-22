@@ -3,10 +3,10 @@
 
 `forgejo <tag> <files...>` uploads to the existing Forgejo release for the tag.
 `github <tag> <files...>` waits for the push mirror to carry the tag, creates the
-GitHub release when missing, and uploads the files. SHA256SUMS goes last and
-marks a complete set: a release that has it is left alone, and one without it
-has any partial upload from an earlier build replaced whole, so a rerun never
-mixes files from two builds.
+GitHub release when missing, synchronizes its adapted notes, and uploads the
+files. SHA256SUMS goes last and marks a complete asset set: assets on a release
+that has it are left alone, and one without it has any partial upload from an
+earlier build replaced whole, so a rerun never mixes files from two builds.
 """
 import argparse
 import json
@@ -19,6 +19,8 @@ import time
 import uuid
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
+
+import release_notes
 
 GITHUB_API = "https://api.github.com"
 GITHUB_UPLOADS = "https://uploads.github.com"
@@ -105,21 +107,26 @@ def github(tag, files, revision):
     token = os.environ["RELEASE_TOKEN_GITHUB"]
     mirrored(repository, tag, revision)
     base = f"{GITHUB_API}/repos/{repository}/releases"
+    source_api = os.environ["RELEASE_API_URL"].rstrip("/")
+    source = request(f"{source_api}/repos/{repository}/releases/tags/{tag}",
+                     os.environ["RELEASE_AUTOMATION_TOKEN"], "token")
+    body = release_notes.for_github(
+        source["body"], source_api.removesuffix("/api/v1") + f"/{repository}", repository)
     try:
         release = request(f"{base}/tags/{tag}", token, "Bearer")
     except HTTPError as error:
         if error.code != 404:
             raise
-        source = request(os.environ["RELEASE_API_URL"].rstrip("/")
-                         + f"/repos/{repository}/releases/tags/{tag}",
-                         os.environ["RELEASE_AUTOMATION_TOKEN"], "token")
+        error.close()
         release = request(base, token, "Bearer", {
             "tag_name": tag, "name": f"Shoal {version(tag)}", "draft": False, "prerelease": False,
-            "body": source["body"],
+            "body": body,
         })
         print(f"created GitHub release {tag}")
     if release.get("draft") or release["tag_name"] != tag:
         raise ValueError(f"unexpected GitHub release for {tag}")
+    if release.get("body") != body:
+        request(f"{base}/{release['id']}", token, "Bearer", {"body": body}, method="PATCH")
     uploads, stale = plan(files, release["assets"])
     for asset_id in stale:
         request(f"{GITHUB_API}/repos/{repository}/releases/assets/{asset_id}", token, "Bearer",

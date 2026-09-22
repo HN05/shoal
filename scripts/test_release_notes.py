@@ -8,6 +8,22 @@ import release_notes
 
 
 class ReleaseNotesTests(unittest.TestCase):
+    def test_github_notes_omit_unmirrored_references_and_keep_public_links(self):
+        source = "https://git.henriknordvik.com/HN05/shoal"
+        body = ("Install via [Homebrew](https://github.com/HN05/homebrew-tap).\n\n"
+                "## Changes since v0.1.0\n\n"
+                f"- Fix \\[cleanup\\] ([#2]({source}/pulls/2))"
+                f" — Issues: [#12]({source}/issues/12), [#14]({source}/issues/14)\n"
+                f"- Keep (parentheses) ([#3]({source}/pulls/3))\n\n"
+                f"[Full changes]({source}/compare/v0.1.0...v0.2.0)")
+        expected = ("Install via [Homebrew](https://github.com/HN05/homebrew-tap).\n\n"
+                    "## Changes since v0.1.0\n\n"
+                    "- Fix \\[cleanup\\]\n- Keep (parentheses)\n\n"
+                    "[Full changes](https://github.com/HN05/shoal/compare/v0.1.0...v0.2.0)")
+        self.assertEqual(release_notes.for_github(body, source, "HN05/shoal"), expected)
+        first = "## Changes in this first release\n\nNo merged pull requests in this release range."
+        self.assertEqual(release_notes.for_github(first, source, "HN05/shoal"), first)
+
     def test_published_ancestry_pagination_and_referenced_issues(self):
         with tempfile.TemporaryDirectory() as root:
             def git(*args):

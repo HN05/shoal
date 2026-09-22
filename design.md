@@ -54,8 +54,10 @@ bumps versions, validates, creates and merges a version PR under normal branch
 protection, tags the exact merged commit, publishes merged-PR notes excluding release
 preparation since the nearest earlier published ancestor release with issue links, and from
 that tag updates both taps (Forgejo- and GitHub-sourced via a push mirror), attaches
-cross-built Linux and macOS binaries, and recreates the release on GitHub, which
-mirrors do not carry. It never tags a later commit, downgrades, or force merges;
+cross-built Linux and macOS binaries, and recreates the release on GitHub with
+change descriptions and a GitHub comparison link, omitting Forgejo PR and issue
+references that Git mirrors do not carry. Reruns synchronize those notes while
+preserving complete asset sets. It never tags a later commit, downgrades, or force merges;
 explicitly selecting the current tagged version resumes from that tag, and tap
 updates retry against the tap's latest main without force pushes.
 

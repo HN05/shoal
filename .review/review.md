@@ -30,7 +30,9 @@ removal, check it against the rule those files state before judging it.
   retained on the local default branch as well as remote-tracking branches.
 - Releases are pinned to the merged version commit; changelogs use published
   ancestor releases and merged PRs excluding release preparation, and GitHub
-  copies the Forgejo notes.
+  keeps change descriptions with a GitHub comparison link, omitting unmirrored
+  Forgejo PR and issue references; reruns synchronize notes without replacing
+  complete asset sets.
 - Prompt templates follow config precedence: saved repository values, worktree,
   global config. `install` preserves existing template files; substitutions never
   evaluate or recursively expand inserted text.

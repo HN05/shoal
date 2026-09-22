@@ -13,6 +13,16 @@ def is_release_pr(pr):
     return branch.startswith("release/") and STABLE_TAG.fullmatch(branch[8:]) is not None
 
 
+def for_github(body, source_url, repository):
+    """Adapt generated notes for a Git mirror without Forgejo's PRs or issues."""
+    url = re.escape(source_url.rstrip("/"))
+    issue = rf"\[#[0-9]+\]\({url}/issues/[0-9]+\)"
+    body = re.sub(rf" \(\[#[0-9]+\]\({url}/pulls/[0-9]+\)\)"
+                  rf"(?: — Issues: {issue}(?:, {issue})*)?$", "", body, flags=re.MULTILINE)
+    return body.replace(f"{source_url.rstrip('/')}/compare/",
+                        f"https://github.com/{repository}/compare/")
+
+
 def generate(tag, git, get, url):
     def pages(path):
         page = 1
