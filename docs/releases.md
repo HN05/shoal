@@ -11,10 +11,12 @@ immutable tag and Forgejo release. Notes list merged PRs excluding release prepa
 since the nearest earlier published ancestor release, link referenced issues, and
 are copied to GitHub.
 Dependent jobs then work from that exact tag:
-both Homebrew taps are updated, `shoal-vX.Y.Z-<os>-<arch>.tar.gz` is cross-built
+`shoal-vX.Y.Z-<os>-<arch>.tar.gz` is cross-built
 for `linux` (static musl) and `macos` on `x86_64` and `arm64` and attached to the
 Forgejo release with a `SHA256SUMS` file, and the same release with the same
-files is created on GitHub once the push mirror carries the tag. Push mirrors
+files is created on GitHub once the push mirror carries the tag. Both Homebrew
+taps then use their host's published checksums to install the matching archive.
+Push mirrors
 copy branches and tags only, never releases, which is why GitHub needs its own
 token. There is no separate Homebrew or GitHub workflow to run.
 
@@ -40,5 +42,5 @@ while a partial upload is replaced whole.
 
 Builds run in the CI image described in AGENTS.md, which carries the pinned
 Rust toolchain, Worktrunk, Zig and cargo-zigbuild; rebuild it after changing
-its Containerfile. Homebrew still builds from source; the attached binaries are
-for direct download.
+its Containerfile. Archives include the agent skill for Homebrew installation;
+only `--HEAD` builds from source.

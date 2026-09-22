@@ -42,7 +42,8 @@ removal, check it against the rule those files state before judging it.
   ancestor releases and merged PRs excluding release preparation, and GitHub
   keeps change descriptions with a GitHub comparison link, omitting unmirrored
   Forgejo PR and issue references; reruns synchronize notes without replacing
-  complete asset sets.
+  complete asset sets. Homebrew releases install checksummed binaries after
+  both release hosts publish assets; only `--HEAD` builds from source with Rust.
 - Prompt templates follow config precedence: saved repository values, worktree,
   global config. `install` preserves existing template files; substitutions never
   evaluate or recursively expand inserted text.

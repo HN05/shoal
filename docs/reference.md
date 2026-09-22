@@ -24,8 +24,9 @@ Progress uses terminal stderr only and is suppressed with `--json` or `TERM=dumb
 
 ## Homebrew
 
-The [HN05 tap](https://github.com/HN05/homebrew-tap) builds releases or `--HEAD`
-from source with Worktrunk, Git, fzf and lsof dependencies.
+The [HN05 tap](https://github.com/HN05/homebrew-tap) installs prebuilt releases
+on macOS and Linux (arm64 or x86_64); `--HEAD` builds from source and requires
+Rust. Both channels depend on Worktrunk, Git, fzf and lsof.
 
 ```sh
 brew tap hn05/tap

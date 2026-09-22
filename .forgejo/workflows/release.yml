@@ -77,7 +77,7 @@ jobs:
           printf 'tag=%s\n' "$tag" >> "$GITHUB_OUTPUT"
 
   update-tap:
-    needs: publish
+    needs: [publish, binaries, github-release]
     runs-on: docker
     strategy:
       fail-fast: false
@@ -193,6 +193,7 @@ jobs:
             cargo zigbuild --locked --release --target "$target"
             tar --sort=name --mtime="@$epoch" --owner=0 --group=0 --numeric-owner \
               -C "$CARGO_TARGET_DIR/$target/release" -cf - shoal \
+              -C "$PWD" SKILL.md \
               | gzip -n -9 > "dist/shoal-$RELEASE_TAG-$platform.tar.gz"
           done
           (cd dist && sha256sum shoal-*.tar.gz > SHA256SUMS && cat SHA256SUMS)

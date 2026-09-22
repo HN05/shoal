@@ -49,19 +49,20 @@ writable state outside the binary's directory. Service setup manages one per-use
 launchd/systemd service; foreground mode covers environments without a service
 manager. The service captures the installing shell's `PATH`.
 
-Distribution is a source-built Homebrew formula in the shared HN05 tap with a
-release channel (immutable tags, selected explicitly) and a `main` channel.
+Distribution is a Homebrew formula in the shared HN05 tap: releases install
+checksummed prebuilt Linux and macOS binaries on x86_64 and arm64; `--HEAD`
+builds `main` from source.
 Named configuration templates in `configs/` are embedded at build time, so
 installation needs no source checkout or network access.
-Build and packaging logic lives in Shoal's `scripts/install-homebrew.sh`; the
-tap declares sources and dependencies. One Forgejo Actions workflow releases: it
+Shoal owns the generated formula and source-install script; Rust is required
+only for `--HEAD`. One Forgejo Actions workflow releases: it
 bumps versions, validates, creates and merges a version PR under normal branch
 protection, tags the exact merged commit, publishes merged-PR notes excluding release
 preparation since the nearest earlier published ancestor release with issue links, and from
-that tag updates both taps (Forgejo- and GitHub-sourced via a push mirror), attaches
-cross-built Linux and macOS binaries, and recreates the release on GitHub with
+that tag attaches cross-built binaries and recreates the release on GitHub with
 change descriptions and a GitHub comparison link, omitting Forgejo PR and issue
-references that Git mirrors do not carry. Reruns synchronize those notes while
+references that Git mirrors do not carry, then updates both taps from their
+respective host's published checksums. Reruns synchronize those notes while
 preserving complete asset sets. It never tags a later commit, downgrades, or force merges;
 explicitly selecting the current tagged version resumes from that tag, and tap
 updates retry against the tap's latest main without force pushes.
@@ -341,7 +342,7 @@ polish, then filesystem restrictions. Open items:
   tracking or cleanup for GUI agents.
 - **Storage policy:** ownership and retention for run data outside the
   worktree, caches, logs, and audit history.
-- **Distribution:** Homebrew bottles; stable service identity across
+- **Distribution:** stable service identity across
   upgrades; native Linux service and recovery validation.
 - **Execution environments:** host/guest and cross-user coordination;
   independent state directories currently have independent capacity.
