@@ -70,6 +70,7 @@ removal, check it against the rule those files state before judging it.
   reject unknown values. Schema and state-file changes need a compatibility
   story for existing daemons. `install` preserves compatible daemons and commands,
   deferring service changes until restart; incompatible daemons restart.
+  Config key edits preserve unrelated settings and comments and validate before saving.
   Packaged config installation replaces global TOML only on explicit request,
   keeps a backup, and uses templates embedded in the binary.
 - Tests run in temporary state directories and repositories, use the isolated

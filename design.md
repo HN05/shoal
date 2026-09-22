@@ -247,8 +247,9 @@ are released explicitly or by successful removal. Resources are lazy, never
 claimed at creation.
 
 Global TOML is machine policy, seeded by `install` with the stated defaults when
-absent and replaced only by an explicit reset or named template installation,
-with the previous file kept as a backup; the daemon reads it at startup,
+absent; explicit key edits preserve unrelated settings and comments and validate
+before saving, while reset or named template installation replaces the file.
+Global writes keep the previous file as a backup; the daemon reads it at startup,
 while the CLI reads agent settings per command. Repository TOML comes from the
 worktree (`.shoal.toml` or `.shoal/config.toml`, both together is an error) with
 a local override stored in the database by repository ID layered over it per

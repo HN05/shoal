@@ -68,6 +68,9 @@ shoal                         # Interactive workspace menu
 shoal list                    # List workspaces
 shoal status fix-login        # Workspace activity, changes, and resources
 shoal config show fix-login   # Effective settings and the source of each value
+shoal config set default_agent codex
+shoal config set auto_cleanup.idle_minutes 30
+shoal config unset default_agent  # Restore the default
 shoal cd fix-login             # Enter a workspace; omit the name for a picker
 shoal exec fix-login -- cargo test
 shoal run check fix-login      # With [commands] check = ["cargo", "test"] in config

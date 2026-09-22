@@ -9,6 +9,15 @@ use crate::{
     protocol::ConfigTarget,
 };
 
+pub(super) fn edit(ctx: &Context, key: String, value: Option<String>) -> Result<i32> {
+    let (path, backup) = crate::config::Config::edit(&ctx.paths, &key, value.as_deref())?;
+    ctx.emit(
+        &format!("Updated {}", path.display()),
+        serde_json::json!({"config": path, "backup": backup}),
+    )?;
+    Ok(0)
+}
+
 pub(super) async fn show(ctx: &Context, workspace: Option<String>) -> Result<i32> {
     let target = target(ctx, workspace).await?;
     let entries = config_report::load(&ctx.paths, target).await?;

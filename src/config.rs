@@ -445,6 +445,23 @@ impl Config {
         Self::install_named(paths, "default")
     }
 
+    pub fn edit(
+        paths: &Paths,
+        key: &str,
+        value: Option<&str>,
+    ) -> Result<(PathBuf, Option<PathBuf>)> {
+        let path = Self::path(paths);
+        let _lock = Self::lock_file(&path)?;
+        let text = match fs::read_to_string(&path) {
+            Ok(text) => text,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
+            Err(error) => return Err(error).with_context(|| format!("read {}", path.display())),
+        };
+        let edited = crate::config_edit::edit(&text, key, value)?;
+        Self::parse(&edited, paths).context("invalid edited config")?;
+        Self::replace_at(path, &edited)
+    }
+
     pub fn install_named(paths: &Paths, name: &str) -> Result<(PathBuf, Option<PathBuf>)> {
         let text = PACKAGED
             .iter()
@@ -452,7 +469,20 @@ impl Config {
             .map(|(_, text)| *text)
             .with_context(|| format!("unknown packaged config: {name}"))?;
         Self::parse(text, paths).with_context(|| format!("validate packaged config {name}"))?;
-        Self::replace_at(Self::path(paths), text)
+        let path = Self::path(paths);
+        let _lock = Self::lock_file(&path)?;
+        Self::replace_at(path, text)
+    }
+
+    fn lock_file(path: &std::path::Path) -> Result<fs::File> {
+        fs::create_dir_all(path.parent().context("config path has no parent")?)?;
+        let file = fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(path.with_extension("toml.lock"))?;
+        fs2::FileExt::lock_exclusive(&file)?;
+        Ok(file)
     }
 
     fn replace_at(path: PathBuf, text: &str) -> Result<(PathBuf, Option<PathBuf>)> {

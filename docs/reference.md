@@ -424,6 +424,15 @@ workspace, or the registered checkout when no workspace exists yet. Named tables
 such as commands and ports show one entry per name. `--json` returns `key`, `value`,
 and `layer` for each entry.
 
+`shoal config set KEY VALUE` edits the global file without a daemon, creating it
+if absent; `shoal config unset KEY` removes an existing key or table to restore
+defaults. Keys use TOML dotted syntax (quote a component containing dots); values
+use TOML syntax, falling back to a string when they are not TOML values. Quote
+arrays for the shell, for example `shoal config set commands.check '["cargo", "test"]'`.
+Edits preserve unrelated settings and comments, validate the resulting config
+before saving, and keep the previous file as `config.toml.backup`. Invalid edits
+leave both files unchanged. Scoped workspace commands cannot edit configuration.
+
 ### Store repository config outside Git
 
 ```sh

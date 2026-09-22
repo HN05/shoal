@@ -12,6 +12,68 @@ fn command(home: &Path) -> Command {
 }
 
 #[test]
+fn inline_edits_validate_preserve_comments_and_work_without_a_daemon() {
+    let home = tempfile::tempdir().unwrap();
+    let config = home.path().join("xdg/shoal/config.toml");
+    let run = |args: &[&str]| command(home.path()).args(args).output().unwrap();
+    let output = run(&["--json", "config", "set", "default_agent", "codex"]);
+    assert!(output.status.success(), "{:?}", output);
+    let result: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(result["config"], config.to_str().unwrap());
+    assert!(result["backup"].is_null());
+    let original =
+        "# policy\ndefault_agent = 'codex' # chosen\n[ports]\nstart = 3000\nend = 4000\n";
+    fs::write(&config, original).unwrap();
+    let output = run(&["config", "set", "default_agent", "claude"]);
+    assert!(output.status.success(), "{:?}", output);
+    assert_eq!(
+        fs::read_to_string(config.with_extension("toml.backup")).unwrap(),
+        original
+    );
+    let saved = fs::read_to_string(&config).unwrap();
+    assert!(saved.contains("# chosen"));
+    assert!(saved.contains("# policy"));
+    for args in [
+        vec!["config", "set", "ports.start", "5000"],
+        vec!["config", "set", "auto_cleanup.enabled", "maybe"],
+        vec!["config", "set", "default_agnet", "codex"],
+        vec!["config", "unset", "missing"],
+    ] {
+        assert!(!run(&args).status.success(), "{args:?}");
+        assert_eq!(fs::read_to_string(&config).unwrap(), saved);
+        assert_eq!(
+            fs::read_to_string(config.with_extension("toml.backup")).unwrap(),
+            original
+        );
+    }
+    assert!(run(&["config", "unset", "default_agent"]).status.success());
+    assert!(
+        !fs::read_to_string(&config)
+            .unwrap()
+            .contains("default_agent")
+    );
+    assert!(!home.path().join("state").exists());
+}
+
+#[test]
+fn scoped_inline_edits_leave_config_untouched() {
+    let home = tempfile::tempdir().unwrap();
+    for args in [
+        vec!["config", "set", "default_agent", "codex"],
+        vec!["config", "unset", "default_agent"],
+    ] {
+        let output = command(home.path())
+            .args(args)
+            .env("SHOAL_SCOPE_TOKEN", "test-scope")
+            .output()
+            .unwrap();
+        assert!(!output.status.success());
+        assert!(String::from_utf8_lossy(&output.stderr).contains("cannot administer"));
+    }
+    assert!(!home.path().join("xdg").exists());
+}
+
+#[test]
 fn install_works_offline_and_backs_up_the_existing_config() {
     let home = tempfile::tempdir().unwrap();
     let config = home.path().join("xdg/shoal/config.toml");

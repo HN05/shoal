@@ -322,7 +322,10 @@ impl Command {
             self,
             Command::Install { .. }
                 | Command::Config {
-                    command: ConfigCommand::Install { .. } | ConfigCommand::Reset
+                    command: ConfigCommand::Install { .. }
+                        | ConfigCommand::Reset
+                        | ConfigCommand::Set { .. }
+                        | ConfigCommand::Unset { .. }
                 }
                 | Command::Daemon {
                     command: DaemonCommand::Run { .. }
@@ -546,6 +549,14 @@ pub enum ShellCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum ConfigCommand {
+    /// Set a global config value using a TOML dotted key.
+    Set {
+        key: String,
+        /// A TOML value, or an unquoted string.
+        value: String,
+    },
+    /// Remove a global config key or table, restoring its defaults.
+    Unset { key: String },
     /// Show effective repository settings and the layer each value came from.
     Show { workspace: Option<String> },
     /// Install a packaged global config, keeping the old file as config.toml.backup.
