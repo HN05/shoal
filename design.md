@@ -62,7 +62,8 @@ preparation since the nearest earlier published ancestor release with issue link
 that tag attaches cross-built binaries and recreates the release on GitHub with
 change descriptions and a GitHub comparison link, omitting Forgejo PR and issue
 references that Git mirrors do not carry, then updates both taps from their
-respective host's published checksums. Reruns synchronize those notes while
+respective host's published checksums. Release notes link to the runtime
+dependencies in the tagged README on each host. Reruns synchronize those notes while
 preserving complete asset sets. It never tags a later commit, downgrades, or force merges;
 explicitly selecting the current tagged version resumes from that tag, and tap
 updates retry against the tap's latest main without force pushes.

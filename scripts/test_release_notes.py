@@ -11,12 +11,15 @@ class ReleaseNotesTests(unittest.TestCase):
     def test_github_notes_omit_unmirrored_references_and_keep_public_links(self):
         source = "https://git.henriknordvik.com/HN05/shoal"
         body = ("Install via [Homebrew](https://github.com/HN05/homebrew-tap).\n\n"
+                f"[Runtime dependencies]({source}/src/tag/v0.2.0/README.md#runtime-dependencies)\n\n"
                 "## Changes since v0.1.0\n\n"
                 f"- Fix \\[cleanup\\] ([#2]({source}/pulls/2))"
                 f" — Issues: [#12]({source}/issues/12), [#14]({source}/issues/14)\n"
                 f"- Keep (parentheses) ([#3]({source}/pulls/3))\n\n"
                 f"[Full changes]({source}/compare/v0.1.0...v0.2.0)")
         expected = ("Install via [Homebrew](https://github.com/HN05/homebrew-tap).\n\n"
+                    "[Runtime dependencies](https://github.com/HN05/shoal/blob/v0.2.0/"
+                    "README.md#runtime-dependencies)\n\n"
                     "## Changes since v0.1.0\n\n"
                     "- Fix \\[cleanup\\]\n- Keep (parentheses)\n\n"
                     "[Full changes](https://github.com/HN05/shoal/compare/v0.1.0...v0.2.0)")
@@ -86,6 +89,8 @@ class ReleaseNotesTests(unittest.TestCase):
                 return release_notes.generate("v0.2.0", git, api, "https://forge.test/owner/repo")
 
             notes = generate()
+            self.assertIn("[runtime dependencies](https://forge.test/owner/repo/src/tag/v0.2.0/"
+                          "README.md#runtime-dependencies)", notes)
             self.assertIn("Changes since v0.1.0", notes)
             self.assertIn("- Fix \\[cleanup\\] ([#2](https://forge.test/owner/repo/pulls/2))"
                           " — Issues: [#12](https://forge.test/owner/repo/issues/12), "

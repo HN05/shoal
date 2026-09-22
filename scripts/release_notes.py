@@ -20,7 +20,9 @@ def for_github(body, source_url, repository):
     body = re.sub(rf" \(\[#[0-9]+\]\({url}/pulls/[0-9]+\)\)"
                   rf"(?: — Issues: {issue}(?:, {issue})*)?$", "", body, flags=re.MULTILINE)
     return body.replace(f"{source_url.rstrip('/')}/compare/",
-                        f"https://github.com/{repository}/compare/")
+                        f"https://github.com/{repository}/compare/").replace(
+                            f"{source_url.rstrip('/')}/src/tag/",
+                            f"https://github.com/{repository}/blob/")
 
 
 def generate(tag, git, get, url):
@@ -60,7 +62,9 @@ def generate(tag, git, get, url):
                    key=lambda pr: pr["number"])
     lines = [f"Shoal {tag[1:]}.", "", "Install or upgrade through the "
              "[HN05 Homebrew tap](https://github.com/HN05/homebrew-tap), or download a "
-             "prebuilt Linux or macOS binary below.", "",
+             "prebuilt Linux or macOS binary below. For a manual binary install, "
+             f"install the [runtime dependencies]({url}/src/tag/{tag}/README.md#runtime-dependencies) "
+             "before running `shoal install`.", "",
              f"## Changes since {previous}" if previous else "## Changes in this first release", ""]
     issues = {}
     for pr in pulls:

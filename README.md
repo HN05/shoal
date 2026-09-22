@@ -15,7 +15,9 @@ Use `brew install --HEAD hn05/tap/shoal` to track `main` instead of releases, or
 download a prebuilt macOS or Linux binary from a [release](https://github.com/HN05/shoal/releases);
 the macOS binaries are unsigned, so clear the download quarantine first with
 `xattr -d com.apple.quarantine shoal`.
-Homebrew installs the runtime dependencies. `shoal install` starts the per-user
+Homebrew installs the core runtime dependencies. For a downloaded binary, install
+the [runtime dependencies](#runtime-dependencies) before running `shoal install`.
+`shoal install` starts the per-user
 daemon and writes missing config and prompt template defaults in `~/.config/shoal/`;
 `shoal skill install` installs instructions for Codex, Claude Code, and
 [configured AI tools](docs/reference.md#agent-skill-outside-project-repositories).
@@ -26,6 +28,26 @@ For directory navigation and tab completion, add this to your `.zshrc` or
 ```sh
 source <(shoal shell init)
 ```
+
+### Runtime dependencies
+
+Put these tools on `PATH` before running `shoal install`, which captures it for
+the daemon. Prebuilt binaries do not require Rust.
+
+| Tool | Needed for |
+| --- | --- |
+| Git (`git`) | Repository and branch operations |
+| [Worktrunk](https://worktrunk.dev/) (`wt`, tested with 0.77.0) | Creating and removing worktrees |
+| `lsof` | Checking whether a workspace is in use before cleanup |
+| `ps` (included with macOS; typically `procps` or `procps-ng` on Linux) | Tracking and stopping processes |
+| [fzf](https://github.com/junegunn/fzf) | Interactive menus and pickers |
+
+Feature-specific tools are installed separately: an authenticated `gh` (GitHub)
+or `fj` (Forgejo) for issues and PR watches; the agent or command you want to run;
+and `happy` plus `curl` for Happy sessions. Simulator use requires macOS with
+Xcode, `xcrun simctl`, and an installed simulator runtime.
+Service installation uses launchd on macOS or a systemd user session on Linux;
+without one, [run the daemon in the foreground](docs/reference.md#daemon).
 
 ## Create a workspace
 
@@ -201,9 +223,8 @@ links update automatically; reload `source <(shoal shell init)` in open terminal
 See [design.md](design.md) for decisions and the [command reference](docs/reference.md) for behavior.
 Create releases through **Actions → release** ([setup](docs/releases.md)).
 
-Requires Rust, Git, `lsof`, and Worktrunk (`wt`, tested with 0.77.0). Interactive menus
-require `fzf`. Install the runtime tools before running `shoal install` so the
-daemon captures a PATH that includes them. Integration tests also use Bash, Zsh, and Python 3.
+Requires Rust and the [runtime dependencies](#runtime-dependencies).
+Integration tests also use Bash, Zsh, and Python 3.
 
 ```sh
 cargo build

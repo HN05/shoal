@@ -9,7 +9,7 @@ The workflow updates both Cargo versions, runs checks and a release build,
 creates and merges a version PR, validates the merged commit, and publishes its
 immutable tag and Forgejo release. Notes list merged PRs excluding release preparation
 since the nearest earlier published ancestor release, link referenced issues, and
-are copied to GitHub.
+are copied to GitHub, with runtime dependency links to each host's tagged README.
 Dependent jobs then work from that exact tag:
 `shoal-vX.Y.Z-<os>-<arch>.tar.gz` is cross-built
 for `linux` (static musl) and `macos` on `x86_64` and `arm64` and attached to the

@@ -42,7 +42,8 @@ removal, check it against the rule those files state before judging it.
 - Releases are pinned to the merged version commit; changelogs use published
   ancestor releases and merged PRs excluding release preparation, and GitHub
   keeps change descriptions with a GitHub comparison link, omitting unmirrored
-  Forgejo PR and issue references; reruns synchronize notes without replacing
+  Forgejo PR and issue references. Runtime dependency links target the tagged
+  README on each host; reruns synchronize notes without replacing
   complete asset sets. Homebrew releases install checksummed binaries after
   both release hosts publish assets; only `--HEAD` builds from source with Rust.
 - Prompt templates follow config precedence: saved repository values, worktree,
