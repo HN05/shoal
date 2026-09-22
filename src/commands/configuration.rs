@@ -16,6 +16,7 @@ pub(super) async fn edit(
     repository: Option<String>,
 ) -> Result<i32> {
     if let Some(repository) = repository {
+        let repository = crate::ui::repository_selector(repository)?;
         let config = crate::client::request!(
             &ctx.paths,
             crate::protocol::Method::EditRepositoryConfig {

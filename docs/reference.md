@@ -431,7 +431,7 @@ use TOML syntax, falling back to a string when they are not TOML values. Quote
 arrays for the shell, for example `shoal config set commands.check '["cargo", "test"]'`.
 Edits preserve unrelated settings and comments, validate the resulting config
 before saving, and keep the previous file as `config.toml.backup`. Invalid edits
-leave both files unchanged. Scoped workspace commands cannot edit configuration.
+leave both files unchanged.
 
 ### Store repository config outside Git
 

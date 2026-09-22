@@ -3428,6 +3428,33 @@ fn resource_claims_are_atomic_persistent_and_wait_for_release() {
 }
 
 #[test]
+fn inline_repository_config_resolves_relative_paths_in_the_callers_directory() {
+    let fixture = Fixture::new();
+    for args in [
+        vec!["config", "set", "default_agent", "claude", "--repo", "."],
+        vec!["config", "unset", "default_agent", "--repo", "."],
+    ] {
+        let output = fixture
+            .command()
+            .current_dir(&fixture.repo)
+            .arg("--json")
+            .args(&args)
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{args:?}: {output:?}");
+        let result: Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert_eq!(
+            result["repository_id"],
+            fixture.ok(&["repo", "list"])[0]["id"]
+        );
+        assert_eq!(
+            result,
+            fixture.ok(&["repo", "config", fixture.repo.to_str().unwrap()])
+        );
+    }
+}
+
+#[test]
 fn inline_repository_config_edits_preserve_layers_and_serialize_updates() {
     let mut fixture = Fixture::new();
     commit_resource_config(&fixture.repo, "default_agent = 'codex'\n");
