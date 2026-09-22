@@ -40,7 +40,7 @@ shoal codex fix-login --cli
 Use `shoal add my-project` to pick a new or existing branch, or pass it explicitly:
 
 ```sh
-shoal add my-project fix-api --base feature/api  # Branch from another branch, tag, or commit
+shoal add my-project fix-api --base feature/api  # Branch from feature/api
 shoal add my-project --existing origin/feature/api --agent codex
 shoal add my-project --issue 68           # Create from an issue; add --agent codex to start an agent
 shoal add --issue https://github.com/owner/repo/issues/34  # URL finds the repository
