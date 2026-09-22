@@ -52,13 +52,16 @@ impl Manager {
         } else {
             self.verify_worktree(&workspace).await?;
             let head = current_head(&workspace).await?;
-            if let Some(url) = &url {
-                let (forge, number) = self.pr_forge(&workspace, url).await?;
-                // Detect missing tools/login, wrong branches and invalid URLs now.
+            let url = if let Some(input) = &url {
+                let (forge, number, url) = self.pr_forge(&workspace, input).await?;
+                // Detect missing tools/login, wrong branches and invalid PRs now.
                 forge
                     .merged_commits(&workspace.path, number, &workspace.branch)
                     .await?;
-            }
+                Some(url)
+            } else {
+                None
+            };
             Some(Registration {
                 head: url.is_none().then_some(head),
                 url,
@@ -79,7 +82,11 @@ impl Manager {
         Ok(())
     }
 
-    async fn pr_forge(&self, workspace: &Workspace, url: &str) -> Result<(ForgeRepo, u64)> {
+    async fn pr_forge(
+        &self,
+        workspace: &Workspace,
+        input: &str,
+    ) -> Result<(ForgeRepo, u64, String)> {
         let remote = repository::remote_url(
             workspace
                 .path
@@ -89,8 +96,8 @@ impl Manager {
         .await?
         .context("PR lookup needs an origin remote")?;
         let forge = ForgeRepo::parse(&remote)?;
-        let number = forge.pull(url)?;
-        Ok((forge, number))
+        let (number, url) = forge.pull(input)?;
+        Ok((forge, number, url))
     }
 
     /// Watches survive restarts. A failed lookup never counts as a merge and a
@@ -119,7 +126,7 @@ impl Manager {
                 self.verify_worktree(&workspace).await?;
                 let head = current_head(&workspace).await?;
                 if let Some(url) = &registration.url {
-                    let (forge, number) = self.pr_forge(&workspace, url).await?;
+                    let (forge, number, _) = self.pr_forge(&workspace, url).await?;
                     let Some(commits) = forge.merged_commits(&workspace.path, number, &workspace.branch).await? else { return Ok(false); };
                     ensure!(commits.contains(&head), "merged PR does not contain the current workspace commit; retaining workspace");
                 } else {

@@ -94,33 +94,37 @@ impl ForgeRepo {
 }
 
 impl ForgeRepo {
-    pub fn pull(&self, input: &str) -> Result<u64> {
+    pub fn pull(&self, input: &str) -> Result<(u64, String)> {
         let marker = if self.host == "github.com" {
             "/pull/"
         } else {
             "/pulls/"
         };
-        let input = input
-            .split(['?', '#'])
-            .next()
-            .unwrap()
-            .trim_end_matches('/');
-        ensure!(
-            input.starts_with("https://") || input.starts_with("http://"),
-            "provide a full PR URL"
-        );
-        let (repo, number) = input.rsplit_once(marker).context("invalid PR URL")?;
-        ensure!(
-            Self::parse(repo)? == *self,
-            "PR belongs to a different repository"
-        );
+        let (number, url) = if input.starts_with("https://") || input.starts_with("http://") {
+            let input = input
+                .split(['?', '#'])
+                .next()
+                .unwrap()
+                .trim_end_matches('/');
+            let (repo, number) = input.rsplit_once(marker).context("invalid PR URL")?;
+            ensure!(
+                Self::parse(repo)? == *self,
+                "PR belongs to a different repository"
+            );
+            (number, input.to_owned())
+        } else {
+            (
+                input,
+                format!("https://{}/{}{marker}{input}", self.host, self.path),
+            )
+        };
         ensure!(
             !number.is_empty() && number.bytes().all(|b| b.is_ascii_digit()),
             "invalid PR number"
         );
         let number = number.parse::<u64>()?;
         ensure!(number > 0, "invalid PR number");
-        Ok(number)
+        Ok((number, url))
     }
 
     /// Fail closed on changed CLI output. Only commits actually listed in the
@@ -239,10 +243,9 @@ mod tests {
         let repo = ForgeRepo::parse("git@example.com:team/repo.git").unwrap();
         assert_eq!(
             repo.pull("https://example.com/team/repo/pulls/56").unwrap(),
-            56
+            (56, "https://example.com/team/repo/pulls/56".into())
         );
         for url in [
-            "56",
             "https://example.com/other/repo/pulls/56",
             "https://other.com/team/repo/pulls/56",
             "https://example.com/team/repo/pulls/0",
@@ -256,5 +259,45 @@ mod tests {
         assert!(fj_merged(output, "57", "feature").is_err());
         assert!(fj_merged(output, "56", "other").is_err());
         assert!(fj_merged("Merged", "56", "feature").is_err());
+    }
+
+    #[test]
+    fn pr_numbers_resolve_against_the_forge_remote() {
+        for (remote, url) in [
+            (
+                "git@github.com:team/repo.git",
+                "https://github.com/team/repo/pull/56",
+            ),
+            (
+                "ssh://git@forge.example:2222/team/repo.git",
+                "https://forge.example/team/repo/pulls/56",
+            ),
+            (
+                "http://forge.example:3000/team/repo.git",
+                "https://forge.example:3000/team/repo/pulls/56",
+            ),
+        ] {
+            let repo = ForgeRepo::parse(remote).unwrap();
+            assert_eq!(repo.pull("56").unwrap(), (56, url.into()));
+            assert_eq!(repo.pull(url).unwrap(), (56, url.into()));
+            assert_eq!(
+                repo.pull(&format!("{url}/?tab=files#diff")).unwrap(),
+                (56, url.into())
+            );
+            for input in [
+                "",
+                "0",
+                "-1",
+                "+56",
+                "#56",
+                "56/",
+                "56?x",
+                "56#x",
+                "abc",
+                "18446744073709551616",
+            ] {
+                assert!(repo.pull(input).is_err(), "{input}");
+            }
+        }
     }
 }

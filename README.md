@@ -76,7 +76,7 @@ shoal inspect fix-login       # Detailed workspace and execution records
 shoal notifications           # Conflicts, finished agents, and removals you missed
 shoal stop fix-login          # Stop managed commands; keep the workspace
 shoal rm fix-login            # Remove the workspace
-shoal pr https://github.com/owner/repo/pull/42  # Remove when merged
+shoal pr 42                   # Remove when merged (also accepts a PR URL)
 shoal pr merged               # Manually confirm merge and remove
 ```
 

@@ -6887,6 +6887,10 @@ fn repository_config_sets_pr_cleanup_over_the_global_default() {
 fn pr_watch_checks_github_state_and_commit_and_survives_restart() {
     let mut fixture = Fixture::with_config(Some("[auto_cleanup]\nenabled=false\n"));
     let workspace = fixture.add("watch");
+    let failed = fixture.run(&["pr", "56", "watch"]);
+    assert!(!failed.status.success());
+    assert!(String::from_utf8_lossy(&failed.stderr).contains("origin remote"));
+    assert!(fixture.ok(&["inspect", "watch"])["pr_cleanup"].is_null());
     git(
         &fixture.repo,
         &[
@@ -6922,10 +6926,44 @@ fn pr_watch_checks_github_state_and_commit_and_survives_restart() {
     .to_owned();
     write_response("OPEN", &head);
     fixture.ok(&["pr", "https://github.com/team/repo/pull/56", "watch"]);
+    fixture.ok(&["pr", "clear", "watch"]);
+    fixture.ok(&["pr", "56", "watch"]);
+    fixture.ok(&["pr", "clear", "watch"]);
+    // Scoped callers can omit the workspace and register by number too.
+    fixture.ok(&[
+        "exec",
+        "watch",
+        "--",
+        env!("CARGO_BIN_EXE_shoal"),
+        "--json",
+        "pr",
+        "56",
+    ]);
     fixture.restart();
     assert_eq!(
         fixture.ok(&["inspect", "watch"])["pr_cleanup"]["url"],
         "https://github.com/team/repo/pull/56"
+    );
+    // A persisted number must not silently follow a changed origin.
+    git(
+        &fixture.repo,
+        &[
+            "remote",
+            "set-url",
+            "origin",
+            "https://github.com/other/repo.git",
+        ],
+    );
+    fixture.restart();
+    wait_pr_error(&fixture, "watch", "different repository");
+    git(
+        &fixture.repo,
+        &[
+            "remote",
+            "set-url",
+            "origin",
+            "https://github.com/team/repo.git",
+        ],
     );
     write_response("MERGED", &"a".repeat(40));
     fixture.restart();
@@ -6967,7 +7005,7 @@ fn pr_watch_checks_forgejo_merge_and_commits_with_fixture_cli() {
         format!("commit {} (+1, -0)\nAuthor: Test\n", head.trim()),
     )
     .unwrap();
-    fixture.ok(&["pr", "https://forge.example/team/repo/pulls/56", "fj-watch"]);
+    fixture.ok(&["pr", "56", "fj-watch"]);
     wait_removed(&fixture, "fj-watch");
 }
 

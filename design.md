@@ -284,7 +284,8 @@ deletes the checkout and every workspace through that path, refuses external
 worktrees and dangerous paths, persists progress, and blocks new workspaces until
 an interrupted removal is retried.
 PR cleanup is separately enabled by default: persisted watches use the
-user's gh/fj login and require a merged PR containing HEAD; manual acknowledgement
+user's gh/fj login, resolve numbers against the workspace's origin into stored
+URLs bound to that repository, and require a merged PR containing HEAD; manual acknowledgement
 binds to HEAD. Both stop tracked agents immediately through shared removal,
 rechecking clean files and HEAD after stopping. Failures retain work and leases;
 registered workspaces are excluded from idle cleanup until cleared or removed.

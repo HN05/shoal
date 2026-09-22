@@ -139,7 +139,8 @@ pub enum Command {
     /// Watch, acknowledge, or clear PR cleanup for a workspace.
     #[command(arg_required_else_help = true, args_conflicts_with_subcommands = true)]
     Pr {
-        /// GitHub or Forgejo PR URL to watch.
+        /// GitHub or Forgejo PR number or URL to watch.
+        #[arg(value_name = "NUMBER_OR_URL")]
         url: Option<String>,
         workspace: Option<String>,
         #[command(subcommand)]

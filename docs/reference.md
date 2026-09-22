@@ -490,8 +490,9 @@ Git protects other checkouts. Shell integration returns to `<root_dir>/<repo>`.
 
 ### PR cleanup
 
-`shoal pr <url> [workspace]` watches a GitHub/Forgejo PR using the
-daemon's `gh`/`fj` and existing login. Shoal stores no forge credentials.
+`shoal pr <number-or-url> [workspace]` watches a GitHub/Forgejo PR using the
+daemon's `gh`/`fj` and existing login. Numbers resolve against the selected
+workspace's origin remote; URLs must match it. Shoal stores no forge credentials.
 Persistent watches poll every ~30 seconds and suppress idle cleanup. Merged PRs
 must name the recorded branch and contain HEAD.
 `shoal pr merged [workspace]` manually acknowledges HEAD without forge tools; unless
