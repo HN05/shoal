@@ -305,9 +305,10 @@ binds to HEAD. Both stop tracked agents immediately through shared removal,
 rechecking clean files and HEAD after stopping. Failures retain work and leases;
 registered workspaces are excluded from idle cleanup until cleared or removed.
 
-Reconciliation reports by default; repair restores verified worktrees and
-clears executions proven stopped while preserving work and leases. Startup
-audits but never deletes, kills, clears unknown executions, or releases leases.
+Reconciliation reports the recorded failure by default, including setup retry
+guidance; repair restores verified worktrees and clears executions proven stopped
+while preserving work and leases. Startup audits but never deletes, kills,
+clears unknown executions, or releases leases.
 Survivors are signaled only after verifying PID birth identity and same-user
 ownership; acknowledgement cannot override visible live processes. Moved or
 replaced worktrees stay unresolved until restored. A deleted directory means

@@ -183,9 +183,11 @@ impl Manager {
     ) -> Result<()> {
         self.reconcile_directory(workspace, options, report).await?;
         if !options.repair && workspace.state != WorkspaceState::Ready {
-            report.issues.push(
-                "Workspace state requires repair; inspect this report then use --repair".into(),
-            );
+            report
+                .issues
+                .push(workspace.error.clone().unwrap_or_else(|| {
+                    "Workspace state requires repair; inspect this report then use --repair".into()
+                }));
         }
         let executions = self.inspect_workspace(&workspace.id).await?.executions;
         let ids: HashSet<_> = executions.iter().map(|e| e.id.clone()).collect();

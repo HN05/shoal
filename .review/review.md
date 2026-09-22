@@ -13,6 +13,8 @@ removal, check it against the rule those files state before judging it.
   never signals a process whose recorded identity was not verified. Any new
   path that deletes a directory, kills a process or mutates a simulator
   without those checks is a blocker.
+- Reconciliation reports the recorded failure so setup failures retain their
+  retry guidance; repair remains an explicit choice.
 - Scope: workspace commands carry a scope token and get own-worktree access
   only; workspace allocation/removal/recovery and shared repository/service
   administration stay denied, while own-workspace setup, PR registration,

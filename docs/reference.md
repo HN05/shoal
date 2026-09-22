@@ -695,6 +695,7 @@ shoal reconcile fix-login --repair --stop  # Also stop verified surviving comman
 ```
 
 Exit 2 while issues remain, 0 when resolved; JSON is an array of reports.
+Reports include the recorded failure; failed setup points to `shoal setup`.
 Reconciliation is unavailable inside scoped executions. Startup marks interrupted
 lifecycle operations failed and disconnected executions unknown, and audits
 worktrees without deleting files or releasing leases. Repair restores verified

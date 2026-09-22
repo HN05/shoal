@@ -4395,10 +4395,22 @@ fn reconcile_repairs_interrupted_state_and_preserves_work_and_leases() {
     );
     let preview = recovery_report(&fixture, &["reconcile", "interrupted"]);
     assert_eq!(preview[0]["directory"], "valid");
-    assert!(!preview[0]["issues"].as_array().unwrap().is_empty());
+    assert_eq!(preview[0]["issues"][0], preview[0]["workspace"]["error"]);
     assert_eq!(
         fixture.ok(&["inspect", "interrupted"])["workspace"]["state"],
         "failed"
+    );
+    db.execute(
+        "UPDATE workspaces SET error=NULL WHERE name='interrupted'",
+        [],
+    )
+    .unwrap();
+    let preview = recovery_report(&fixture, &["reconcile", "interrupted"]);
+    assert!(
+        preview[0]["issues"][0]
+            .as_str()
+            .unwrap()
+            .contains("--repair")
     );
     let repaired = fixture.ok(&["reconcile", "interrupted", "--repair"]);
     assert_eq!(repaired[0]["workspace"]["state"], "ready");
@@ -5686,6 +5698,20 @@ fn setup_cmd_local_override_absolute_path_failure_and_retry() {
     let failed = fixture.ok(&["inspect", "failed-setup"]);
     assert_eq!(failed["workspace"]["state"], "failed");
     assert_eq!(failed["executions"], serde_json::json!([]));
+    let report = recovery_report(&fixture, &["reconcile", "failed-setup"]);
+    assert_eq!(report[0]["directory"], "valid");
+    let issues = report[0]["issues"].as_array().unwrap();
+    assert_eq!(issues.len(), 1);
+    let issue = issues[0].as_str().unwrap();
+    assert!(issue.contains("setup failed (exit 17"));
+    assert!(issue.contains("retry with shoal setup"));
+    let output = fixture.run(&["reconcile", "failed-setup"]);
+    assert_eq!(output.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&output.stdout).contains(issue));
+    assert_eq!(
+        fixture.ok(&["inspect", "failed-setup"])["workspace"],
+        failed["workspace"]
+    );
     assert_eq!(
         fixture.ok(&["status", "failed-setup"])["setup_finished"],
         false
