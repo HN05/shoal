@@ -7,13 +7,13 @@ description: Use Shoal to merge local or remote branches into your managed workt
 
 Use `--json`, omit targets for the current context, and request only needed resources.
 
-`shoal skill install` refreshes user-level instructions for Codex and Claude.
+`shoal skill install` refreshes user-level instructions for all configured tools.
 Homebrew links follow upgrades; Cargo installs need refreshing. Run installation
-outside a scoped execution; an optional `codex` or `claude` selects one.
+outside a scoped execution; an optional tool name selects one.
 
 ## Workspace context
 
-Inside `shoal exec`, `shoal claude`, or `shoal codex --cli`, commands inherit scope
+Inside Shoal's tracked execution wrapper, commands inherit scope
 and resolve to your own workspace. Agents launched independently in a managed
 worktree can use the same commands: Shoal resolves the workspace from the current
 directory, but the session itself has no execution scope or lifecycle tracking.
