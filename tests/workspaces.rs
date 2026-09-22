@@ -9661,3 +9661,29 @@ fn simulator_approval_defaults_layer_per_option_and_release_expires_lease_grants
     );
     fixture.ok(&["sim", "release", "default", "agent"]);
 }
+
+#[test]
+fn releasing_resource_names_clears_requests_from_previous_pool_scopes() {
+    let config = "[resources.signing]\nrequires_approval=true\n";
+    let mut fixture = Fixture::with_config(Some(config));
+    let workspace = fixture.add("agent");
+    let args = ["resource", "acquire", "signing", "--reason", "sign build"];
+    let previous = pending_access(scoped_command(&fixture, "agent", &args));
+    fs::write(fixture.root.path().join(".config/shoal/config.toml"), "").unwrap();
+    fs::write(
+        Path::new(workspace["path"].as_str().unwrap()).join(".shoal.toml"),
+        config,
+    )
+    .unwrap();
+    fixture.restart();
+    let current = pending_access(scoped_command(&fixture, "agent", &args));
+    assert_ne!(previous["target"], current["target"]);
+    fixture.ok(&["access", "approve", current["id"].as_str().unwrap()]);
+    assert!(scoped_command(&fixture, "agent", &args).status.success());
+    fixture.ok(&["resource", "release", "signing", "agent"]);
+    assert!(fixture.ok(&["access"]).as_array().unwrap().is_empty());
+    assert_ne!(
+        pending_access(scoped_command(&fixture, "agent", &args))["id"],
+        current["id"]
+    );
+}

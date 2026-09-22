@@ -572,19 +572,19 @@ impl Manager {
             .run(move |db| {
                 let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
                 store::require_ready(&tx, &workspace.id)?;
-                let approval = crate::access::list(&tx, Some(&workspace.id))?
+                let mut released = false;
+                for approval in crate::access::list(&tx, Some(&workspace.id))?
                     .into_iter()
-                    .find(|r| {
+                    .filter(|r| {
                         r.active
                             && r.name == name
                             && r.target.ends_with(&format!("/{pool}"))
                             && r.target.starts_with("resource/")
-                    });
-                let released = if let Some(approval) = approval {
-                    crate::access::release(&tx, &workspace.id, &approval.target, &name)?
-                } else {
-                    false
-                };
+                    })
+                {
+                    released |=
+                        crate::access::release(&tx, &workspace.id, &approval.target, &name)?;
+                }
                 ensure!(
                     tx.execute(
                         "DELETE FROM resource_leases WHERE workspace_id=?1 AND pool=?2 AND name=?3",
