@@ -896,6 +896,28 @@ Make hooks idempotent: retries can repeat them, and reader hooks run per lease,
 not once per shared member. Hooks may inspect state, but overlapping permit or
 lifecycle changes in the same workspace fail while a resource hook is running.
 
+### Resource approvals
+
+Set `requires_approval = true` on a resource definition to gate scoped acquisition.
+`approval_lifetime = "lease"` (default) ends approval on release;
+`"workspace"` permits later acquisitions of the same member and access settings.
+Unscoped acquisition needs no separate approval.
+
+Agents use the normal acquire command with `--reason`. `shoal access` lists
+requests and retained workspace grants; `shoal access list <workspace>` filters
+by workspace. Scoped callers can see only their own requests. An unscoped user
+reviews the recorded settings and uses `shoal access approve <id>` or
+`shoal access deny <id>`. Approval reserves no capacity: retry acquisition after
+the decision. Pending requests produce a daemon notification, collapsed until read.
+
+An acquisition waiting for a decision returns exit 2 and JSON
+`code: "approval_pending"` with the request; denial returns `"approval_denied"`.
+`--wait` polls pending approvals and capacity, stopping on denial. Retrying the same
+name preserves the request; changing its settings or reason requires release first.
+Release cancels a pending or denied request even without a lease. Changed effective
+settings cannot reuse a grant. Requests survive restart and failed removal and are
+deleted with the workspace; they do not prevent idle cleanup.
+
 ### Shared readers and exclusive writers
 
 Set `kind = "rwlock"` on a standalone resource or pool member and acquire with

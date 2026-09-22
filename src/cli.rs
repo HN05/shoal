@@ -167,6 +167,11 @@ pub enum Command {
         #[arg(long, conflicts_with = "workspace")]
         all: bool,
     },
+    /// Review, approve, or deny requests for resource access.
+    Access {
+        #[command(subcommand)]
+        command: Option<AccessCommand>,
+    },
     /// Acquire, list, and release cooperative resource permits.
     #[command(args_conflicts_with_subcommands = true)]
     Resource {
@@ -638,6 +643,16 @@ pub enum SimCommand {
         name: String,
         workspace: Option<String>,
     },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum AccessCommand {
+    /// List requests and retained grants (scoped callers see their own workspace).
+    List { workspace: Option<String> },
+    /// Approve the exact settings recorded in a request; does not allocate capacity.
+    Approve { id: String },
+    /// Deny a pending request.
+    Deny { id: String },
 }
 
 #[derive(Debug, Subcommand)]

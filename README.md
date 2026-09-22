@@ -176,7 +176,13 @@ env = "PORT"
 
 [resources.signing]
 capacity = 1
+requires_approval = true
+approval_lifetime = "lease"    # Or "workspace"
 ```
+
+Agents request protected resources with `acquire --reason "purpose"`. Review
+requests with `shoal access`, then use `shoal access approve <id>` or
+`shoal access deny <id>` from an unscoped terminal.
 
 Select a named Git identity with `git_profile = "work"` in that file, or use
 `shoal add my-project feature --git-profile work`. Define the profile

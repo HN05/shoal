@@ -9340,3 +9340,130 @@ test ! -f "$HOME/fail-after" || { echo 'external cleanup failed' >&2; exit 8; }
         6
     );
 }
+
+fn scoped_command(fixture: &Fixture, workspace: &str, args: &[&str]) -> Output {
+    fixture
+        .command()
+        .args([
+            "exec",
+            workspace,
+            "--",
+            env!("CARGO_BIN_EXE_shoal"),
+            "--json",
+        ])
+        .args(args)
+        .output()
+        .unwrap()
+}
+
+fn pending_access(output: Output) -> Value {
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let value: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(value["code"], "approval_pending");
+    value["request"].clone()
+}
+
+#[test]
+fn resource_approvals_require_unscoped_decisions_and_preserve_capacity() {
+    let mut fixture = Fixture::with_config(Some("[resources.signing]\nrequires_approval=true\n"));
+    fixture.add("agent");
+    fixture.add("human");
+    let args = ["resource", "acquire", "signing", "--reason", "sign build"];
+    let pending = pending_access(scoped_command(&fixture, "agent", &args));
+    let id = pending["id"].as_str().unwrap();
+    assert_eq!(
+        pending_access(scoped_command(&fixture, "agent", &args))["id"],
+        id
+    );
+    assert_eq!(fixture.ok(&["access"])[0]["id"], id);
+    assert!(
+        fixture.ok(&["resource", "agent"])["leases"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        !scoped_command(&fixture, "agent", &["access", "approve", id])
+            .status
+            .success()
+    );
+    assert!(
+        !scoped_command(&fixture, "agent", &["access", "deny", id])
+            .status
+            .success()
+    );
+    assert!(
+        !scoped_command(&fixture, "human", &["access", "list", "agent"])
+            .status
+            .success()
+    );
+    let other: Value =
+        serde_json::from_slice(&scoped_command(&fixture, "human", &["access"]).stdout).unwrap();
+    assert!(other.as_array().unwrap().is_empty());
+    fixture.ok(&["resource", "acquire", "signing", "human"]);
+    fixture.ok(&["access", "approve", id]);
+    fixture.restart();
+    let busy: Value =
+        serde_json::from_slice(&scoped_command(&fixture, "agent", &args).stdout).unwrap();
+    assert_eq!(busy["code"], "resource_busy");
+    fixture.ok(&["resource", "release", "signing", "human"]);
+    assert!(scoped_command(&fixture, "agent", &args).status.success());
+    assert!(
+        scoped_command(&fixture, "agent", &["resource", "release", "signing"])
+            .status
+            .success()
+    );
+    let next = pending_access(scoped_command(&fixture, "agent", &args));
+    assert_ne!(next["id"], id);
+    fixture.ok(&["access", "deny", next["id"].as_str().unwrap()]);
+    let denied: Value =
+        serde_json::from_slice(&scoped_command(&fixture, "agent", &args).stdout).unwrap();
+    assert_eq!(denied["code"], "approval_denied");
+    fixture.ok(&["resource", "release", "signing", "agent"]);
+    assert!(fixture.ok(&["access"]).as_array().unwrap().is_empty());
+}
+
+#[test]
+fn workspace_approvals_survive_release_but_do_not_expand_access_modes() {
+    let mut fixture = Fixture::with_config(Some(
+        "[resources.cache]\nkind='rwlock'\nrequires_approval=true\napproval_lifetime='workspace'\n",
+    ));
+    fixture.add("agent");
+    let args = [
+        "resource",
+        "acquire",
+        "cache",
+        "--mode",
+        "read",
+        "--reason",
+        "inspect cache",
+    ];
+    let pending = pending_access(scoped_command(&fixture, "agent", &args));
+    fixture.ok(&["access", "approve", pending["id"].as_str().unwrap()]);
+    assert!(scoped_command(&fixture, "agent", &args).status.success());
+    fixture.ok(&["resource", "release", "cache", "agent"]);
+    fixture.restart();
+    assert!(scoped_command(&fixture, "agent", &args).status.success());
+    fixture.ok(&["resource", "release", "cache", "agent"]);
+    let write = pending_access(scoped_command(
+        &fixture,
+        "agent",
+        &[
+            "resource",
+            "acquire",
+            "cache",
+            "--mode",
+            "write",
+            "--reason",
+            "rebuild cache",
+        ],
+    ));
+    assert_ne!(write["id"], pending["id"]);
+    fixture.ok(&["rm", "agent", "--yes"]);
+    assert!(fixture.ok(&["access"]).as_array().unwrap().is_empty());
+}

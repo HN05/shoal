@@ -6,6 +6,10 @@ description: Use Shoal to merge local or remote branches into your managed workt
 # Shoal
 
 Use `--json`, omit targets for the current context, and request only needed resources.
+When acquisition returns `approval_pending`, give the user the request ID and wait
+for an unscoped `shoal access approve <id>` or `deny <id>`. Supply `--reason` for
+protected access; inspect your requests with `shoal access`. Retry after approval,
+and stop on `approval_denied`. Never remove scope to approve your own request.
 
 `shoal skill install` refreshes user-level instructions for all configured tools.
 Homebrew links follow upgrades; Cargo installs need refreshing. Run installation

@@ -38,23 +38,28 @@ pub(super) async fn run(
                 name,
                 reason,
             };
+            let mut approval = None;
             let outcome = retry_while_busy(wait, async || {
                 let method = Method::ResourceAcquire {
                     workspace: workspace.clone(),
                     request: request.clone(),
                 };
+                approval = None;
                 Ok(match client::call(&ctx.paths, method).await? {
-                    Body::ResourceLease(lease) => Attempt::Ready(lease),
+                    Body::ResourceLease(lease) => Attempt::Ready(Ok(lease)),
+                    Body::AccessRequest(request) => super::access::attempt(&mut approval, request),
                     Body::ResourceBusy { message } => Attempt::Busy(message),
                     _ => bail!("unexpected resource acquisition response"),
                 })
             })
             .await?;
             match outcome {
-                Ok(lease) => {
+                Ok(Ok(lease)) => {
                     ctx.emit(&describe(&lease, Palette::stdout(ctx.json)), &lease)?;
                     Ok(0)
                 }
+                Ok(Err(request)) => super::access::declined(ctx, &request),
+                Err(_) if approval.is_some() => super::access::declined(ctx, &approval.unwrap()),
                 Err(message) => {
                     ctx.emit_styled(
                         Style::Warning,
