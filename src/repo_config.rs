@@ -245,10 +245,6 @@ impl RepoConfig {
         let resolve = |command: &Option<String>| command.as_ref().map(|c| worktree.join(c));
         Hooks {
             post_setup_cmd: resolve(&self.post_setup_cmd),
-            pre_setup_cmd: resolve(&self.pre_setup_cmd),
-            post_remove_cmd: resolve(&self.post_remove_cmd),
-            post_resource_acquire_cmd: resolve(&self.post_resource_acquire_cmd),
-            pre_resource_release_cmd: resolve(&self.pre_resource_release_cmd),
             pre_remove_cmd: resolve(&self.pre_remove_cmd),
         }
     }
@@ -257,10 +253,6 @@ impl RepoConfig {
 /// The effective, resolved lifecycle hooks of one workspace.
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct Hooks {
-    pub pre_setup_cmd: Option<PathBuf>,
-    pub post_remove_cmd: Option<PathBuf>,
-    pub post_resource_acquire_cmd: Option<PathBuf>,
-    pub pre_resource_release_cmd: Option<PathBuf>,
     pub post_setup_cmd: Option<PathBuf>,
     pub pre_remove_cmd: Option<PathBuf>,
 }
@@ -390,7 +382,7 @@ mod tests {
     }
 
     #[test]
-    fn additional_hooks_validate_layer_and_resolve_paths() {
+    fn additional_hooks_validate_and_layer_paths() {
         for key in [
             "pre_setup_cmd",
             "post_remove_cmd",
@@ -405,8 +397,7 @@ mod tests {
             let config = parse(&format!("{key} = 'scripts/hook'"))
                 .unwrap()
                 .over(base);
-            let hooks = serde_json::to_value(config.hooks(Path::new("/work/tree"))).unwrap();
-            assert_eq!(hooks[key], "/work/tree/scripts/hook");
+            assert_eq!(serde_json::to_value(config).unwrap()[key], "scripts/hook");
         }
     }
 
