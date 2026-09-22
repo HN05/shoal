@@ -61,6 +61,13 @@ impl Paths {
         self.state.join("worktrunk.toml")
     }
 
+    /// Private forge-wrapper PATH directory, held for one tracked agent launch.
+    pub fn agent_auth_directory(&self) -> std::io::Result<tempfile::TempDir> {
+        tempfile::Builder::new()
+            .prefix("agent-auth-")
+            .tempdir_in(&self.state)
+    }
+
     /// Run data Shoal keeps for one workspace, such as detached session logs;
     /// deleted with the workspace record.
     pub fn workspace_state(&self, workspace_id: &str) -> PathBuf {

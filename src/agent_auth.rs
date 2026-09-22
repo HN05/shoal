@@ -18,9 +18,7 @@ impl Config {
             return Ok(None);
         }
         self.validate()?;
-        let directory = tempfile::Builder::new()
-            .prefix("agent-auth-")
-            .tempdir_in(&paths.state)?;
+        let directory = paths.agent_auth_directory()?;
         for (name, path) in [("fj", &self.fj), ("gh", &self.gh)] {
             let Some(path) = path else { continue };
             let path = match path.strip_prefix("~/") {
