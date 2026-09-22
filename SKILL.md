@@ -45,7 +45,7 @@ workspaces; the human or console session does.
 
 ## PR completion
 
-After opening a PR, run `shoal pr <url>`. Shoal checks with `gh`/`fj` and, when
+After opening a PR, run `shoal pr <number-or-url>`. Shoal checks with `gh`/`fj` and, when
 merged, stops tracked agents and removes the clean workspace. Without those
 tools/login, confirm the merge yourself and call `shoal pr merged` as your last
 command. Never acknowledge unmerged work. `[pr_cleanup] enabled = false` disables
