@@ -15,7 +15,8 @@ Use `brew install --HEAD hn05/tap/shoal` to track `main` instead of releases, or
 download a prebuilt macOS or Linux binary from a [release](https://github.com/HN05/shoal/releases);
 the macOS binaries are unsigned, so clear the download quarantine first with
 `xattr -d com.apple.quarantine shoal`.
-Homebrew installs the core runtime dependencies. For a downloaded binary, install
+Homebrew installs the additional tools for workspace management and interactive
+menus. For a downloaded binary, install
 the [runtime dependencies](#runtime-dependencies) before running `shoal install`.
 `shoal install` starts the per-user
 daemon and writes missing config and prompt template defaults in `~/.config/shoal/`;
