@@ -27,9 +27,12 @@ states!(NotificationKind {
 
 impl NotificationKind {
     /// Polled operations repeat identical events every retry or sweep; those
-    /// collapse into one unread notification. Every agent exit is its own.
+    /// collapse into one unread notification; completed events remain distinct.
     fn collapses(self) -> bool {
-        !matches!(self, Self::AgentExited | Self::WorkspaceRemoved)
+        !matches!(
+            self,
+            Self::AgentExited | Self::WorkspaceRemoved | Self::HookFailed
+        )
     }
 }
 
@@ -196,7 +199,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn repeated_conflicts_collapse_until_read_and_agent_exits_never_do() {
+    async fn repeated_conflicts_collapse_until_read_and_completed_events_never_do() {
         let (_temp, manager) = manager().await;
         let watcher = manager.notifications_changed.subscribe();
         for _ in 0..3 {
@@ -212,6 +215,15 @@ mod tests {
                 .notify(Some("a"), NotificationKind::AgentExited, "claude exited")
                 .await;
         }
+        for _ in 0..2 {
+            manager
+                .notify(
+                    Some("a"),
+                    NotificationKind::HookFailed,
+                    "workspace removed; hook failed",
+                )
+                .await;
+        }
         assert!(watcher.has_changed().unwrap());
         let unread = manager.notifications(true, 50).await.unwrap();
         let summary: Vec<_> = unread
@@ -225,9 +237,19 @@ mod tests {
                 (Some("b"), NotificationKind::ResourceBusy, "pool busy"),
                 (Some("a"), NotificationKind::AgentExited, "claude exited"),
                 (Some("a"), NotificationKind::AgentExited, "claude exited"),
+                (
+                    Some("a"),
+                    NotificationKind::HookFailed,
+                    "workspace removed; hook failed"
+                ),
+                (
+                    Some("a"),
+                    NotificationKind::HookFailed,
+                    "workspace removed; hook failed"
+                ),
             ]
         );
-        assert_eq!(manager.unread_notifications().await.unwrap(), 4);
+        assert_eq!(manager.unread_notifications().await.unwrap(), 6);
         // A limited unread listing is the oldest part of the backlog.
         assert_eq!(
             manager.notifications(true, 2).await.unwrap()[1].id,
@@ -239,7 +261,7 @@ mod tests {
             .await
             .unwrap();
         assert!(manager.notifications(true, 50).await.unwrap().is_empty());
-        assert_eq!(manager.notifications(false, 50).await.unwrap().len(), 4);
+        assert_eq!(manager.notifications(false, 50).await.unwrap().len(), 6);
         assert_eq!(manager.notifications(false, 1).await.unwrap()[0].id, last);
         // Once read, the same conflict is news again.
         manager
