@@ -9520,3 +9520,139 @@ fn port_approvals_bind_overrides_and_follow_both_lifetimes() {
         fixture.ok(&["port", "release", "web", "agent"]);
     }
 }
+
+#[test]
+#[cfg(target_os = "macos")]
+fn simulator_approvals_precede_mutations_and_cannot_be_bypassed_by_device_args() {
+    let config = SIM_CONFIG.replace(
+        "[simulators.profiles.phone]",
+        "[simulators.profiles.phone]\nrequires_approval=true\napproval_lifetime='workspace'",
+    );
+    let mut fixture = Fixture::with_tools(Some(&config), true);
+    commit_resource_config(&fixture.repo, "[simulators]\nrequires_approval=false\n");
+    fixture.add("agent");
+    let args = ["sim", "acquire", "--reason", "test app"];
+    let pending = pending_access(scoped_command(&fixture, "agent", &args));
+    let explicit = [
+        "sim",
+        "acquire",
+        "--device",
+        "type.Phone",
+        "--runtime",
+        "iOS Test",
+        "--reason",
+        "test app",
+    ];
+    assert_eq!(
+        pending_access(scoped_command(&fixture, "agent", &explicit))["id"],
+        pending["id"]
+    );
+    let events = fs::read_to_string(fixture.root.path().join("sim-events")).unwrap();
+    assert!(
+        events
+            .lines()
+            .all(|line| serde_json::from_str::<Value>(line).unwrap()[0] == "list")
+    );
+    assert!(!fixture.root.path().join("sim-devices.json").exists());
+    fixture.ok(&["access", "approve", pending["id"].as_str().unwrap()]);
+    assert!(scoped_command(&fixture, "agent", &args).status.success());
+    fixture.ok(&["sim", "release", "default", "agent"]);
+    fixture.restart();
+    assert!(
+        scoped_command(&fixture, "agent", &explicit)
+            .status
+            .success()
+    );
+    fixture.ok(&["sim", "release", "default", "agent"]);
+    let clean = pending_access(scoped_command(
+        &fixture,
+        "agent",
+        &["sim", "acquire", "--clean", "--reason", "isolate app state"],
+    ));
+    assert_ne!(clean["id"], pending["id"]);
+    fixture.ok(&["access", "deny", clean["id"].as_str().unwrap()]);
+    let denied: Value = serde_json::from_slice(
+        &scoped_command(
+            &fixture,
+            "agent",
+            &["sim", "acquire", "--clean", "--reason", "isolate app state"],
+        )
+        .stdout,
+    )
+    .unwrap();
+    assert_eq!(denied["code"], "approval_denied");
+    fixture.ok(&["sim", "release", "default", "agent"]);
+    let events = fs::read_to_string(fixture.root.path().join("sim-events")).unwrap();
+    assert!(!events.contains("\"erase\""));
+    let child = fixture
+        .command()
+        .args([
+            "exec",
+            "agent",
+            "--",
+            env!("CARGO_BIN_EXE_shoal"),
+            "--json",
+            "sim",
+            "acquire",
+            "--clean",
+            "--reason",
+            "reset test data",
+            "--wait",
+            "10",
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let id = loop {
+        let requests = fixture.ok(&["access"]);
+        if let Some(request) = requests
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r["status"] == "pending")
+        {
+            break request["id"].as_str().unwrap().to_owned();
+        }
+        assert!(
+            Instant::now() < deadline,
+            "waiting acquisition did not request approval"
+        );
+        thread::sleep(Duration::from_millis(20));
+    };
+    fixture.ok(&["access", "approve", &id]);
+    let output = child.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let history = fixture.ok(&["sim", "history", "agent"]);
+    assert_eq!(history[0]["status"], "acquired");
+    assert_eq!(history[0]["request"]["reason"], "reset test data");
+    assert_eq!(history[0]["action"], "create");
+}
+
+#[test]
+#[cfg(target_os = "macos")]
+fn simulator_approval_defaults_layer_per_option_and_release_expires_lease_grants() {
+    let config = SIM_CONFIG.replace(
+        "[simulators]",
+        "[simulators]\nrequires_approval=true\napproval_lifetime='workspace'",
+    );
+    let fixture = Fixture::with_tools(Some(&config), true);
+    commit_resource_config(&fixture.repo, "[simulators]\napproval_lifetime='lease'\n");
+    fixture.add("agent");
+    let args = ["sim", "acquire", "--reason", "test app"];
+    let pending = pending_access(scoped_command(&fixture, "agent", &args));
+    assert_eq!(pending["lifetime"], "lease");
+    fixture.ok(&["access", "approve", pending["id"].as_str().unwrap()]);
+    assert!(scoped_command(&fixture, "agent", &args).status.success());
+    fixture.ok(&["sim", "release", "default", "agent"]);
+    assert_ne!(
+        pending_access(scoped_command(&fixture, "agent", &args))["id"],
+        pending["id"]
+    );
+    fixture.ok(&["sim", "release", "default", "agent"]);
+}

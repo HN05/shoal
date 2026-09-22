@@ -53,23 +53,28 @@ pub(super) async fn run(
                 runtime,
                 reason,
             };
+            let mut approval = None;
             let outcome = retry_while_busy(wait, async || {
                 let method = Method::SimAcquire {
                     workspace: workspace.clone(),
                     request: request.clone(),
                 };
+                approval = None;
                 Ok(match client::call(&ctx.paths, method).await? {
-                    Body::Simulator(sim) => Attempt::Ready(sim),
+                    Body::Simulator(sim) => Attempt::Ready(Ok(sim)),
+                    Body::AccessRequest(request) => super::access::attempt(&mut approval, request),
                     Body::SimBusy { message } => Attempt::Busy(message),
                     _ => bail!("unexpected simulator acquisition response"),
                 })
             })
             .await?;
             match outcome {
-                Ok(sim) => {
+                Ok(Ok(sim)) => {
                     ctx.emit_styled(Style::Success, &describe(&sim), &sim)?;
                     Ok(0)
                 }
+                Ok(Err(request)) => super::access::declined(ctx, &request),
+                Err(_) if approval.is_some() => super::access::declined(ctx, &approval.unwrap()),
                 Err(message) => {
                     ctx.emit_styled(
                         Style::Warning,

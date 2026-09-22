@@ -21,6 +21,10 @@ use crate::{
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Profile {
+    #[serde(default)]
+    pub requires_approval: bool,
+    #[serde(default)]
+    pub approval_lifetime: crate::access::Lifetime,
     pub device: String,
     pub runtime: String,
 }
@@ -28,6 +32,8 @@ pub struct Profile {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct SimConfig {
+    pub requires_approval: bool,
+    pub approval_lifetime: crate::access::Lifetime,
     pub max_booted: usize,
     pub max_devices: usize,
     pub idle_seconds: u64,
@@ -40,6 +46,8 @@ pub struct SimConfig {
 impl Default for SimConfig {
     fn default() -> Self {
         Self {
+            requires_approval: false,
+            approval_lifetime: crate::access::Lifetime::Lease,
             max_booted: 2,
             max_devices: 4,
             idle_seconds: 120,
@@ -161,6 +169,7 @@ pub struct SimulatorOverview {
 pub enum Acquisition {
     Acquired(Box<Simulator>),
     Busy(String),
+    Approval(Box<crate::access::AccessRequest>),
 }
 
 pub(crate) fn now() -> u64 {
@@ -301,6 +310,7 @@ impl Manager {
     ) -> Result<Acquisition> {
         let _guard = self.simulator_gate.lock().await;
         let workspace = self.workspace(selector).await?;
+        let scoped = execution_id.is_some();
         let mut audit = if request.clean {
             Some(
                 self.start_clean_request(&workspace, &request, execution_id)
@@ -311,7 +321,7 @@ impl Manager {
         };
         let workspace_name = workspace.name.clone();
         let result = self
-            .allocate_simulator(workspace, request, &mut audit)
+            .allocate_simulator(workspace, request, &mut audit, scoped)
             .await;
         if let Ok(Acquisition::Busy(message)) = &result {
             self.notify(
@@ -320,6 +330,9 @@ impl Manager {
                 format!("simulator: {message}"),
             )
             .await;
+        }
+        if let Ok(Acquisition::Approval(request)) = &result {
+            self.notify_access(&workspace_name, request).await;
         }
         if let Some(mut audit) = audit {
             audit.updated_at = now();
@@ -332,6 +345,17 @@ impl Manager {
                 Ok(Acquisition::Busy(message)) => {
                     audit.status = CleanRequestStatus::Busy;
                     audit.error = Some(message.clone());
+                }
+                Ok(Acquisition::Approval(request)) => {
+                    audit.status = if request.status == crate::access::Status::Denied {
+                        CleanRequestStatus::Failed
+                    } else {
+                        CleanRequestStatus::Busy
+                    };
+                    audit.error = Some(format!(
+                        "access approval {} ({})",
+                        request.status, request.id
+                    ));
                 }
                 Err(error) => {
                     audit.status = CleanRequestStatus::Failed;
@@ -350,6 +374,7 @@ impl Manager {
         workspace: Workspace,
         request: SimRequest,
         audit: &mut Option<CleanRequest>,
+        scoped: bool,
     ) -> Result<Acquisition> {
         validate::name("simulator lease", &request.name)?;
         validate::reason("simulator", request.reason.as_deref())?;
@@ -404,6 +429,29 @@ impl Manager {
             return Ok(Acquisition::Acquired(Box::new(sim.clone())));
         }
         let profile = profile.unwrap();
+        if scoped && profile.requires_approval {
+            let approval = crate::access::AccessRequest::new(
+                &workspace.id,
+                "simulator".into(),
+                &request.name,
+                serde_json::json!({"profile": profile, "clean": request.clean}),
+                profile.approval_lifetime,
+                request.reason.as_deref(),
+            );
+            let pending = self
+                .store
+                .run(move |db| {
+                    let tx =
+                        db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+                    let pending = crate::access::check(&tx, approval)?;
+                    tx.commit()?;
+                    Ok(pending)
+                })
+                .await?;
+            if let Some(pending) = pending {
+                return Ok(Acquisition::Approval(Box::new(pending)));
+            }
+        }
         // Cache live counts without booting stopped devices just to inspect them.
         if request.clean && records.len() >= limits.max_devices {
             for sim in records.iter_mut().filter(|s| s.workspace_id.is_none()) {
@@ -608,6 +656,8 @@ impl Manager {
                 bail!("--device and --runtime are required together");
             };
             Profile {
+                requires_approval: false,
+                approval_lifetime: crate::access::Lifetime::Lease,
                 device: device.clone(),
                 runtime: runtime.clone(),
             }
@@ -650,12 +700,37 @@ impl Manager {
                 )
             })?
         };
-        let profile = resolve(&profile)?;
-        let allowed = config
+        let mut profile = resolve(&profile)?;
+        let matching: Vec<_> = config
             .profiles
             .values()
             .filter_map(|p| resolve(p).ok())
-            .any(|p| p.device == profile.device && p.runtime == profile.runtime);
+            .filter(|p| p.device == profile.device && p.runtime == profile.runtime)
+            .collect();
+        let allowed = !matching.is_empty();
+        let repo = self.workspace_config(workspace).await?;
+        let mut lifetimes: Vec<_> = matching
+            .iter()
+            .filter(|p| p.requires_approval)
+            .map(|p| p.approval_lifetime)
+            .collect();
+        if repo
+            .simulators
+            .requires_approval
+            .unwrap_or(config.requires_approval)
+        {
+            lifetimes.push(
+                repo.simulators
+                    .approval_lifetime
+                    .unwrap_or(config.approval_lifetime),
+            );
+        }
+        profile.requires_approval = !lifetimes.is_empty();
+        profile.approval_lifetime = if lifetimes.contains(&crate::access::Lifetime::Lease) {
+            crate::access::Lifetime::Lease
+        } else {
+            crate::access::Lifetime::Workspace
+        };
         ensure!(
             allowed || config.allow_any,
             "simulator is not in the machine's allowed profiles"
@@ -675,14 +750,22 @@ impl Manager {
             "workspace is not ready"
         );
         self.touch(&workspace.id).await;
-        let mut sim = self
+        let sim = self
             .list_simulators(Some(&workspace.id))
             .await?
             .into_iter()
-            .find(|s| s.is_leased_by(&workspace.id, &name))
-            .ok_or_else(|| anyhow::anyhow!("unknown simulator lease: {name}"))?;
+            .find(|s| s.is_leased_by(&workspace.id, &name));
+        let Some(mut sim) = sim else {
+            ensure!(
+                self.release_simulator_access(workspace.id, name).await?,
+                "unknown simulator lease or access request"
+            );
+            return Ok(());
+        };
         if sim.state != SimulatorState::Leased {
-            return self.delete_sim(&mut sim).await;
+            self.delete_sim(&mut sim).await?;
+            self.release_simulator_access(workspace.id, name).await?;
+            return Ok(());
         }
         sim.installed_apps = match sim.udid.as_deref() {
             Some(udid) => simctl::user_app_count(udid).await.ok(),
@@ -692,7 +775,20 @@ impl Manager {
         sim.lease_name = None;
         sim.state = SimulatorState::Idle;
         sim.last_used = now();
-        self.save_sim(&sim).await
+        self.save_sim(&sim).await?;
+        self.release_simulator_access(workspace.id, name).await?;
+        Ok(())
+    }
+
+    async fn release_simulator_access(&self, owner: String, name: String) -> Result<bool> {
+        self.store
+            .run(move |db| {
+                let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+                let released = crate::access::release(&tx, &owner, "simulator", &name)?;
+                tx.commit()?;
+                Ok(released)
+            })
+            .await
     }
 
     pub async fn remove_simulators(&self, owner: &str) -> Result<()> {
@@ -762,5 +858,6 @@ fn resolve_profile(inventory: &Inventory, profile: &Profile) -> Result<Profile> 
     Ok(Profile {
         device: devices[0].identifier.clone(),
         runtime: runtimes[0].identifier.clone(),
+        ..profile.clone()
     })
 }

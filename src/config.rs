@@ -14,6 +14,14 @@ struct RepositoryPresence {
     auto_cleanup: AutoCleanupPresence,
     pr_cleanup: PrCleanupPresence,
     ports: PortsPresence,
+    simulators: SimulatorPresence,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct SimulatorPresence {
+    requires_approval: Option<bool>,
+    approval_lifetime: Option<crate::access::Lifetime>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -611,6 +619,11 @@ impl Config {
             ports: crate::repo_config::PortDefaults {
                 start: presence.ports.start,
                 end: presence.ports.end,
+                ..Default::default()
+            },
+            simulators: crate::repo_config::SimulatorPreferences {
+                requires_approval: presence.simulators.requires_approval,
+                approval_lifetime: presence.simulators.approval_lifetime,
                 ..Default::default()
             },
             resources: config.resources.clone(),

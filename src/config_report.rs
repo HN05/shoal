@@ -111,6 +111,18 @@ fn entries(defaults: RepoConfig, global: RepoConfig, layers: ConfigLayers) -> Re
     named(&mut result, "resource_pools", &sources, |config| {
         &config.resource_pools
     })?;
+    scalar(
+        &mut result,
+        "simulators.requires_approval",
+        &sources,
+        |config| config.simulators.requires_approval.as_ref(),
+    )?;
+    scalar(
+        &mut result,
+        "simulators.approval_lifetime",
+        &sources,
+        |config| config.simulators.approval_lifetime.as_ref(),
+    )?;
     let preferred = sources
         .iter()
         .find(|(config, _)| !config.simulators.preferred.is_empty())
@@ -187,6 +199,11 @@ fn defaults() -> RepoConfig {
             on_conflict: Some(repo_config::ConflictPolicy::default()),
             start: Some(config::Ports::default().start),
             end: Some(config::Ports::default().end),
+            ..Default::default()
+        },
+        simulators: repo_config::SimulatorPreferences {
+            requires_approval: Some(false),
+            approval_lifetime: Some(crate::access::Lifetime::Lease),
             ..Default::default()
         },
         auto_cleanup: repo_config::AutoCleanup {

@@ -439,6 +439,7 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             {
                 crate::simulators::Acquisition::Acquired(sim) => Body::Simulator(*sim),
                 crate::simulators::Acquisition::Busy(message) => Body::SimBusy { message },
+                crate::simulators::Acquisition::Approval(request) => Body::AccessRequest(request),
             }
         }
         Method::SimRelease { workspace, name } => {

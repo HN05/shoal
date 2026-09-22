@@ -224,10 +224,20 @@ impl RepoConfig {
             },
             resources: base.resources,
             resource_pools: base.resource_pools,
-            simulators: if self.simulators.preferred.is_empty() {
-                base.simulators
-            } else {
-                self.simulators
+            simulators: SimulatorPreferences {
+                preferred: if self.simulators.preferred.is_empty() {
+                    base.simulators.preferred
+                } else {
+                    self.simulators.preferred
+                },
+                requires_approval: self
+                    .simulators
+                    .requires_approval
+                    .or(base.simulators.requires_approval),
+                approval_lifetime: self
+                    .simulators
+                    .approval_lifetime
+                    .or(base.simulators.approval_lifetime),
             },
             auto_cleanup: AutoCleanup {
                 enabled: self.auto_cleanup.enabled.or(base.auto_cleanup.enabled),
@@ -262,6 +272,8 @@ pub struct Hooks {
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct SimulatorPreferences {
+    pub requires_approval: Option<bool>,
+    pub approval_lifetime: Option<crate::access::Lifetime>,
     pub preferred: Vec<String>,
 }
 

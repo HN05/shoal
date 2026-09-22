@@ -898,13 +898,18 @@ lifecycle changes in the same workspace fail while a resource hook is running.
 
 ### Resource approvals
 
-Set `requires_approval = true` on a resource or named port definition to gate scoped
-acquisition.
+Set `requires_approval = true` on a resource, named port, or simulator profile to
+gate scoped acquisition. `[simulators]` also accepts approval defaults with normal
+repository/global precedence. A protected machine profile cannot be relaxed by
+repository defaults or by selecting its device/runtime directly; where policies
+overlap, lease lifetime is stricter than workspace lifetime.
 `approval_lifetime = "lease"` (default) ends approval on release;
 `"workspace"` permits later acquisitions of the same member and access settings.
 Unscoped acquisition needs no separate approval. Port approvals bind the preferred
 port, automatic range, environment variable, and conflict policy; an accepted conflict
-suggestion with changed settings requires a new request.
+suggestion with changed settings requires a new request. Simulator approvals bind
+the installed device/runtime and whether a clean device was requested; clean requests
+still need a reason and the usual audit before mutations.
 
 Agents use the normal acquire command with `--reason`. `shoal access` lists
 requests and retained workspace grants; `shoal access list <workspace>` filters
