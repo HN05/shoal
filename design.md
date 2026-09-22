@@ -249,6 +249,9 @@ a scoped execution; its availability registers nothing. Global `[ai.<name>]`
 settings name skill directories for user-configured tools, with Codex and Claude
 defaults. Skill directories describe the machine and cannot be set per repository;
 custom launchers use named commands without tool-specific integrations.
+Packagers may set `SHOAL_SKILL_PATH` at runtime, overriding the build-time path,
+to link the skill through a stable installation prefix; unpackaged binaries
+install the embedded copy.
 
 ## Resource ownership
 

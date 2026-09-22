@@ -80,6 +80,8 @@ removal, check it against the rule those files state before judging it.
   repository edits serialize read/modify/write in the daemon and leave worktree files alone.
   Packaged config installation replaces global TOML only on explicit request,
   keeps a backup, and uses templates embedded in the binary.
+  Packaged skills use the runtime `SHOAL_SKILL_PATH` before the build-time path;
+  the path must name an absolute, existing file.
 - Tests run in temporary state directories and repositories, use the isolated
   xcrun fixture, and never install services or touch personal simulators.
 - Documentation: usage lives in README.md, behavior in docs/reference.md,

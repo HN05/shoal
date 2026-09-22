@@ -50,20 +50,15 @@ pub(super) fn run(command: Option<&SkillCommand>, json_output: bool) -> Result<i
         })
         .collect::<Result<Vec<_>>>()?;
     let mut installed = Vec::new();
-    let source = option_env!("SHOAL_SKILL_PATH").map(Path::new);
-    if let Some(source) = source {
-        ensure!(source.is_absolute(), "packaged skill path must be absolute");
-        ensure!(
-            source.is_file(),
-            "packaged skill is missing: {}",
-            source.display()
-        );
-    }
+    let source = packaged_source(
+        std::env::var_os("SHOAL_SKILL_PATH").map(PathBuf::from),
+        option_env!("SHOAL_SKILL_PATH").map(PathBuf::from),
+    )?;
     for (agent, path) in destinations {
         let directory = path.parent().context("missing skill directory")?;
         fs::create_dir_all(directory)
             .with_context(|| format!("create skill directory {}", directory.display()))?;
-        install(&path, source)?;
+        install(&path, source.as_deref())?;
         if !json_output {
             println!("Installed {agent} skill at {}", path.display());
         }
@@ -73,6 +68,19 @@ pub(super) fn run(command: Option<&SkillCommand>, json_output: bool) -> Result<i
         println!("{}", json!({"installed": installed}));
     }
     Ok(0)
+}
+
+fn packaged_source(runtime: Option<PathBuf>, compiled: Option<PathBuf>) -> Result<Option<PathBuf>> {
+    let source = runtime.or(compiled);
+    if let Some(source) = &source {
+        ensure!(source.is_absolute(), "packaged skill path must be absolute");
+        ensure!(
+            source.is_file(),
+            "packaged skill is missing: {}",
+            source.display()
+        );
+    }
+    Ok(source)
 }
 
 fn install(path: &Path, source: Option<&Path>) -> Result<()> {
@@ -99,6 +107,30 @@ fn install(path: &Path, source: Option<&Path>) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn runtime_skill_path_overrides_build_path_and_requires_a_file() {
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("SKILL.md");
+        let missing = root.path().join("missing.md");
+        fs::write(&source, "packaged").unwrap();
+        assert_eq!(
+            packaged_source(Some(source.clone()), Some(missing.clone())).unwrap(),
+            Some(source.clone())
+        );
+        assert_eq!(
+            packaged_source(None, Some(source.clone())).unwrap(),
+            Some(source.clone())
+        );
+        assert_eq!(packaged_source(None, None).unwrap(), None);
+        for invalid in [
+            PathBuf::from("relative.md"),
+            missing,
+            root.path().to_owned(),
+        ] {
+            assert!(packaged_source(Some(invalid), Some(source.clone())).is_err());
+        }
+    }
 
     #[test]
     fn packaged_skill_tracks_upgrades_and_preserves_previous_source() {
