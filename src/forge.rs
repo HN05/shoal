@@ -303,6 +303,11 @@ fn fj_pull(text: &str, number: &str) -> Result<(String, String, String)> {
                 .split_once("` into `")
         })
         .context("unrecognized fj PR branches")?;
+    // fj names a fork's head `<repository>:<branch>`; branch names cannot contain `:`.
+    ensure!(
+        !head.contains(':'),
+        "PR #{number} comes from a fork; only branches in this repository can be opened"
+    );
     Ok((title.to_owned(), head.to_owned(), base.to_owned()))
 }
 
@@ -383,6 +388,16 @@ mod tests {
             ("Fix `x` #2".into(), "feature/a".into(), "main".into())
         );
         assert!(fj_pull(output, "57").is_err());
+        let fork = output.replace(
+            "From `\u{2068}feature/a",
+            "From `\u{2068}someone/repo:feature/a",
+        );
+        assert!(
+            fj_pull(&fork, "56")
+                .unwrap_err()
+                .to_string()
+                .contains("fork")
+        );
         assert!(fj_pull("Title #56\nBy user\n", "56").is_err());
         let repo = ForgeRepo::from_pull_url("https://github.com/team/repo/pull/56/files").unwrap();
         assert_eq!(repo, ForgeRepo::parse("git@github.com:team/repo").unwrap());
