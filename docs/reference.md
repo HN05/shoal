@@ -200,6 +200,10 @@ review-worktree = ["tuicr", "-w"]
 terminal. Manual review runs the `review` command (`shoal run review` also does);
 without one, the agent reviews. The agent is chosen as for `shoal issue` and is
 prompted to report findings, not to change files, commit, push, or post.
+`shoal pr review <number-or-url>` looks up the PR with your `gh`/`fj` login and
+reviews it the same way in the workspace that owns its head branch, or opens one
+from origin whose base is the PR's refreshed `origin/<base>`; fork PRs are refused.
+Numbers and `--repo` select the repository as for `shoal issue`.
 `shoal review-worktree [workspace]` reviews uncommitted changes. The committed
 range excludes working-tree changes that `shoal diff` includes. Export feedback
 from tuicr and hand it to your agent explicitly; see

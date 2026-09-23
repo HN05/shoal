@@ -168,6 +168,7 @@ impl ForgeRepo {
                     "--json",
                     "number,state,headRefName,commits",
                 ],
+                MERGED_HINT,
             )
             .await?;
             #[derive(serde::Deserialize)]
@@ -196,13 +197,13 @@ impl ForgeRepo {
             let args = [
                 "--style", "minimal", "pr", "view", &number, "--host", &self.host,
             ];
-            let output = query(path, "fj", &args).await?;
+            let output = query(path, "fj", &args, MERGED_HINT).await?;
             if !fj_merged(&output, &number, branch)? {
                 return Ok(None);
             }
             let mut args = args.to_vec();
             args.push("commits");
-            let output = query(path, "fj", &args).await?;
+            let output = query(path, "fj", &args, MERGED_HINT).await?;
             Ok(Some(
                 output
                     .lines()
@@ -215,6 +216,94 @@ impl ForgeRepo {
             ))
         }
     }
+}
+
+/// A PR's branches, for checking it out locally.
+#[derive(Debug, PartialEq)]
+pub(crate) struct PullRequest {
+    pub number: u64,
+    pub title: String,
+    pub url: String,
+    pub head: String,
+    pub base: String,
+}
+
+impl ForgeRepo {
+    /// The repository a PR URL belongs to.
+    pub fn from_pull_url(url: &str) -> Result<Self> {
+        let url = url.split(['?', '#']).next().unwrap().trim_end_matches('/');
+        let (repo, _) = url
+            .rsplit_once("/pull/")
+            .or_else(|| url.rsplit_once("/pulls/"))
+            .context("expected a PR URL ending in /pull/<number> or /pulls/<number>")?;
+        Self::parse(repo)
+    }
+
+    /// Only PRs whose head branch lives in this repository can be checked out.
+    pub async fn pull_request(&self, path: &std::path::Path, input: &str) -> Result<PullRequest> {
+        let (number, url) = self.pull(input)?;
+        let id = number.to_string();
+        let (title, head, base) = if self.host == "github.com" {
+            let repo = format!("{}/{}", self.host, self.path);
+            let fields = "number,title,headRefName,baseRefName,isCrossRepository";
+            let args = ["pr", "view", &id, "--repo", &repo, "--json", fields];
+            #[derive(serde::Deserialize)]
+            #[serde(rename_all = "camelCase")]
+            struct Pull {
+                number: u64,
+                title: String,
+                head_ref_name: String,
+                base_ref_name: String,
+                is_cross_repository: bool,
+            }
+            let pull: Pull = serde_json::from_str(&query(path, "gh", &args, "").await?)
+                .context("invalid gh PR response")?;
+            ensure!(pull.number == number, "gh returned a different PR");
+            ensure!(
+                !pull.is_cross_repository,
+                "PR #{number} comes from a fork; only branches in this repository can be opened"
+            );
+            (pull.title, pull.head_ref_name, pull.base_ref_name)
+        } else {
+            let args = [
+                "--style", "minimal", "pr", "view", &id, "--host", &self.host,
+            ];
+            fj_pull(&query(path, "fj", &args, "").await?, &id)?
+        };
+        ensure!(
+            !head.is_empty() && !base.is_empty(),
+            "PR #{number} has no head or base branch"
+        );
+        Ok(PullRequest {
+            number,
+            title,
+            url,
+            head,
+            base,
+        })
+    }
+}
+
+/// Title, head and base from fj's minimal `pr view`.
+fn fj_pull(text: &str, number: &str) -> Result<(String, String, String)> {
+    let text: String = text
+        .chars()
+        .filter(|c| !matches!(c, '\u{2066}'..='\u{2069}'))
+        .collect();
+    let mut lines = text.lines();
+    let title = lines
+        .next()
+        .and_then(|s| s.trim_end().strip_suffix(&format!(" #{number}")))
+        .context("unrecognized fj PR header")?;
+    let (head, base) = lines
+        .nth(1)
+        .and_then(|s| {
+            s.strip_prefix("From `")?
+                .strip_suffix('`')?
+                .split_once("` into `")
+        })
+        .context("unrecognized fj PR branches")?;
+    Ok((title.to_owned(), head.to_owned(), base.to_owned()))
 }
 
 fn fj_merged(text: &str, number: &str, branch: &str) -> Result<bool> {
@@ -246,12 +335,18 @@ fn fj_merged(text: &str, number: &str, branch: &str) -> Result<bool> {
     Ok(state == "Merged")
 }
 
-async fn query(path: &std::path::Path, tool: &str, args: &[&str]) -> Result<String> {
+const MERGED_HINT: &str = "; otherwise confirm the merge yourself and run `shoal pr merged`";
+
+async fn query(path: &std::path::Path, tool: &str, args: &[&str], hint: &str) -> Result<String> {
     let mut command = tokio::process::Command::new(tool);
     command.current_dir(path).args(args).env("NO_COLOR", "1");
-    tokio::time::timeout(std::time::Duration::from_secs(20), crate::subprocess::output(command))
-        .await.context("PR lookup timed out")?
-        .with_context(|| format!("PR lookup requires {tool} and its existing login; otherwise confirm the merge yourself and run `shoal pr merged`"))
+    tokio::time::timeout(
+        std::time::Duration::from_secs(20),
+        crate::subprocess::output(command),
+    )
+    .await
+    .context("PR lookup timed out")?
+    .with_context(|| format!("PR lookup requires {tool} and its existing login{hint}"))
 }
 
 #[cfg(test)]
@@ -278,6 +373,20 @@ mod tests {
         assert!(fj_merged(output, "57", "feature").is_err());
         assert!(fj_merged(output, "56", "other").is_err());
         assert!(fj_merged("Merged", "56", "feature").is_err());
+    }
+
+    #[test]
+    fn fj_pull_reads_title_and_branches() {
+        let output = "\u{2068}Fix `x` #2\u{2069} #\u{2068}56\u{2069}\nBy user — Open — +1 -0\n\u{2068}From `\u{2068}feature/a\u{2069}` into `\u{2068}main\u{2069}`\u{2069}\n";
+        assert_eq!(
+            fj_pull(output, "56").unwrap(),
+            ("Fix `x` #2".into(), "feature/a".into(), "main".into())
+        );
+        assert!(fj_pull(output, "57").is_err());
+        assert!(fj_pull("Title #56\nBy user\n", "56").is_err());
+        let repo = ForgeRepo::from_pull_url("https://github.com/team/repo/pull/56/files").unwrap();
+        assert_eq!(repo, ForgeRepo::parse("git@github.com:team/repo").unwrap());
+        assert!(ForgeRepo::from_pull_url("https://github.com/team/repo/issues/56").is_err());
     }
 
     #[test]

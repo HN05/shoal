@@ -27,7 +27,7 @@ pub(super) async fn repository_for_number(ctx: &Context, repos: Vec<Repository>)
     }
     ensure!(
         ctx.interactive(),
-        "no current registered repository; pass --repo <repository> or an issue URL"
+        "no current registered repository; pass --repo <repository> or a forge URL"
     );
     ui::pick(ctx, "Repository> ", ui::repository_choices(repos).await?)
 }
@@ -37,7 +37,21 @@ pub(super) async fn repository_for<'a>(
     repos: &'a [Repository],
     url: &str,
 ) -> Result<&'a Repository> {
-    let forge = ForgeRepo::from_issue_url(url)?;
+    repository_with_remote(
+        repos,
+        ForgeRepo::from_issue_url(url)?,
+        "shoal add <repository> --issue <url>",
+    )
+    .await
+}
+
+/// The only registered repository whose origin is `forge`; `retry` names the
+/// spelling that selects one explicitly.
+pub(super) async fn repository_with_remote<'a>(
+    repos: &'a [Repository],
+    forge: ForgeRepo,
+    retry: &str,
+) -> Result<&'a Repository> {
     let mut matches = Vec::new();
     for repo in repos {
         let Some(remote) = repository::remote_url(&repo.source).await? else {
@@ -55,7 +69,7 @@ pub(super) async fn repository_for<'a>(
             forge.path
         ),
         _ => bail!(
-            "several registered repositories share the remote {}/{}; use `shoal add <repository> --issue <url>`",
+            "several registered repositories share the remote {}/{}; use `{retry}`",
             forge.host,
             forge.path
         ),

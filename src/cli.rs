@@ -331,6 +331,24 @@ pub enum PrCommand {
     Merged { workspace: Option<String> },
     /// Cancel PR cleanup for this workspace.
     Clear { workspace: Option<String> },
+    /// Open a PR's branch in a workspace and review it manually or with an agent.
+    Review {
+        /// GitHub or Forgejo PR number or URL.
+        #[arg(value_name = "NUMBER_OR_URL")]
+        url: String,
+        /// Registered repository; defaults to the URL's repository or the current checkout/workspace.
+        #[arg(long = "repo")]
+        repository: Option<String>,
+        /// Run the configured `review` command without asking.
+        #[arg(long, conflicts_with = "agent")]
+        manual: bool,
+        /// Start this agent with a review prompt without asking.
+        #[arg(long, value_parser = AgentParser)]
+        agent: Option<Agent>,
+        /// Arguments forwarded to the review command or agent.
+        #[arg(last = true)]
+        args: Vec<OsString>,
+    },
 }
 
 impl Command {
@@ -825,7 +843,7 @@ mod tests {
 
     #[test]
     fn pr_workspace_names_can_match_action_names() {
-        for workspace_name in ["merged", "clear"] {
+        for workspace_name in ["merged", "clear", "review"] {
             let cli = Cli::try_parse_from([
                 "shoal",
                 "pr",
@@ -869,6 +887,21 @@ mod tests {
                 ..
             }) if workspace.as_deref() == Some("workspace")
         ));
+
+        let review = Cli::try_parse_from(["shoal", "pr", "review", "7", "--agent", "claude"]);
+        assert!(matches!(
+            review.unwrap().command,
+            Some(Command::Pr {
+                command: Some(PrCommand::Review { url, agent: Some(Agent::Claude), .. }),
+                ..
+            }) if url == "7"
+        ));
+        assert!(
+            Cli::try_parse_from([
+                "shoal", "pr", "review", "7", "--manual", "--agent", "claude"
+            ])
+            .is_err()
+        );
     }
 
     #[test]

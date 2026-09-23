@@ -1,12 +1,14 @@
 //! Review a workspace's changes with the configured `review` command or an agent.
 use std::ffi::OsString;
 
-use anyhow::{Result, bail};
+use anyhow::{Context as _, Result, bail};
 
 use crate::{
     cli::{Agent, CodexMode},
     client,
     context::Context,
+    forge::{ForgeRepo, PullRequest},
+    git,
     model::Workspace,
     protocol::ConfigTarget,
     ui::{self, Fallback},
@@ -21,11 +23,112 @@ pub(super) enum Reviewer {
     Agent(Option<Agent>),
 }
 
-/// The pull request under review, named in an agent's prompt.
-pub(super) struct PullRequest {
-    pub number: u64,
-    pub title: String,
-    pub url: String,
+impl Reviewer {
+    pub fn new(manual: bool, agent: Option<Agent>) -> Self {
+        match (manual, agent) {
+            (true, _) => Reviewer::Manual,
+            (false, Some(agent)) => Reviewer::Agent(Some(agent)),
+            (false, None) => Reviewer::Ask,
+        }
+    }
+}
+
+/// Review a PR in the workspace that owns its head branch, opening one from
+/// origin that is compared against the PR's base when none does.
+pub(super) async fn pull_request(
+    ctx: &Context,
+    input: String,
+    repository: Option<String>,
+    reviewer: Reviewer,
+    args: Vec<OsString>,
+) -> Result<i32> {
+    let repos = client::repositories(&ctx.paths).await?;
+    let repository = match repository {
+        Some(repository) => ui::repository_selector(repository)?,
+        None if input.starts_with("https://") || input.starts_with("http://") => {
+            super::issues::repository_with_remote(
+                &repos,
+                ForgeRepo::from_pull_url(&input)?,
+                "shoal pr review <url> --repo <repository>",
+            )
+            .await?
+            .id
+            .clone()
+        }
+        None => super::issues::repository_for_number(ctx, repos.clone()).await?,
+    };
+    let repo = crate::repository::select(&repos, &repository).await?;
+    let remote =
+        crate::repository::remote_url(repo.path.to_str().context("repository path is not UTF-8")?)
+            .await?
+            .context("PR review needs an origin remote")?;
+    let pull = ForgeRepo::parse(&remote)?
+        .pull_request(&repo.path, &input)
+        .await?;
+    let owner = client::workspaces(&ctx.paths)
+        .await?
+        .into_iter()
+        .find(|workspace| workspace.repository_id == repo.id && workspace.branch == pull.head);
+    let workspace = match owner {
+        Some(workspace) => {
+            eprintln!(
+                "Reviewing PR #{} in workspace {}",
+                pull.number, workspace.name
+            );
+            workspace.id
+        }
+        None => {
+            git::check_branch_name(None, &pull.base)
+                .await
+                .with_context(|| format!("PR base {:?} is not a branch name", pull.base))?;
+            // The base is compared through its remote-tracking ref, so bring it
+            // up to date without touching local branches.
+            let tracking = format!("refs/remotes/origin/{}", pull.base);
+            git::run(
+                &repo.path,
+                &[
+                    "fetch",
+                    "--no-tags",
+                    "--no-recurse-submodules",
+                    "--no-write-fetch-head",
+                    "--refmap=",
+                    "--",
+                    "origin",
+                    &format!("+refs/heads/{}:{tracking}", pull.base),
+                ],
+            )
+            .await
+            .with_context(|| format!("could not fetch the PR base {}", pull.base))?;
+            let creation = super::workspaces::Creation {
+                path: None,
+                branch: None,
+                existing: Some(format!("refs/remotes/origin/{}", pull.head)),
+                base: Some(tracking),
+                git_profile: None,
+            };
+            let code = super::workspaces::add(
+                ctx,
+                Some(repo.id.clone()),
+                creation,
+                None,
+                super::workspaces::AgentLaunch::Explicit(None),
+                Vec::new(),
+            )
+            .await?;
+            if code != 0 {
+                return Ok(code);
+            }
+            client::workspaces(&ctx.paths)
+                .await?
+                .into_iter()
+                .find(|workspace| {
+                    workspace.repository_id == repo.id && workspace.branch == pull.head
+                })
+                .context("the opened PR workspace is missing")?
+                .id
+        }
+    };
+    run(ctx, Some(workspace), reviewer, Some(pull), args).await
 }
 
 pub(super) async fn run(

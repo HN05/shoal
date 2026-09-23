@@ -159,11 +159,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             agent,
             args,
         } => {
-            let reviewer = match (manual, agent) {
-                (true, _) => review::Reviewer::Manual,
-                (false, Some(agent)) => review::Reviewer::Agent(Some(agent)),
-                (false, None) => review::Reviewer::Ask,
-            };
+            let reviewer = review::Reviewer::new(manual, agent);
             review::run(&ctx, workspace, reviewer, None, args).await
         }
         Command::Merge {
@@ -190,6 +186,16 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             }
             Some(PrCommand::Clear { workspace }) => {
                 workspaces::pr(&ctx, workspace, None, true).await
+            }
+            Some(PrCommand::Review {
+                url,
+                repository,
+                manual,
+                agent,
+                args,
+            }) => {
+                let reviewer = review::Reviewer::new(manual, agent);
+                review::pull_request(&ctx, url, repository, reviewer, args).await
             }
         },
         Command::Inspect { workspace } => workspaces::inspect(&ctx, workspace).await,
