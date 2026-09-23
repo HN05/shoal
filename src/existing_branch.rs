@@ -66,6 +66,7 @@ impl Manager {
         selector: &str,
         git_profile: Option<&str>,
         path: Option<std::path::PathBuf>,
+        base: Option<String>,
     ) -> Result<OpenedWorkspace> {
         let repo = self.repository(repository).await?;
         let gate = self.git_gate(&repo.id).await;
@@ -155,6 +156,11 @@ impl Manager {
                 "--git-profile applies only to new worktrees; workspace {} already exists",
                 workspace.name
             );
+            ensure!(
+                base.is_none(),
+                "--base applies only to new worktrees; workspace {} already exists",
+                workspace.name
+            );
             if let Some(path) = &path {
                 ensure!(
                     std::fs::canonicalize(path).is_ok_and(|p| p == workspace.path),
@@ -189,7 +195,7 @@ impl Manager {
                 &repo,
                 name.clone(),
                 name.clone(),
-                crate::workspace::WorkspaceSource::Existing(branch),
+                crate::workspace::WorkspaceSource::Existing(branch, base),
                 git_profile,
                 path,
             )

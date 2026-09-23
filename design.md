@@ -102,9 +102,9 @@ Existing-branch selection creates a worktree without suffixing; remote heads are
 discovered live and become local tracking branches. Local selection preserves
 commits; remote selection fast-forwards matching tracking branches. Ready owned
 workspaces reopen without setup, hooks, or refresh; other checkouts block creation.
-Existing worktrees use the local default as their diff base, or the opening commit
-if unavailable or on that same branch. Explicit adoption accepts an unlocked linked
-worktree root on a local branch of the registered repository with no ownership
+Existing worktrees use an explicit base ref, otherwise the local default, as their
+diff base, or the opening commit if unavailable or on that same branch. Explicit
+adoption accepts an unlocked linked worktree root on a local branch of the registered repository with no ownership
 conflict, preserving dirty files and Git settings and recording it ready without
 setup or hooks. It takes normal cleanup ownership. Reopening verifies its record;
 adoption cannot repair a moved or replaced managed worktree. Never adopt a main checkout.

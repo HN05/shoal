@@ -262,7 +262,8 @@ pub(super) async fn add(
                 path,
                 repository,
                 branch,
-                git_profile
+                git_profile,
+                base
             },
             OpenedWorkspace
         );

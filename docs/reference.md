@@ -336,7 +336,8 @@ consume templates. User prompt arguments are preserved.
 ### Branch and workspace names
 `shoal add <repository> [branch]` creates a literal Git branch;
 `--existing <branch|remote/branch>` uses an existing one (incompatible with the
-branch argument, `--issue`, and `--base`). The picker
+branch argument and `--issue`); its `--base` is the ref `diff` and `{diff_base}`
+compare against instead of the default branch, for new worktrees only. The picker
 queries remotes for current branches. Local branches take precedence and remain
 unchanged; remote selections fetch and create tracking branches, or fast-forward
 a matching local tracking branch without discarding ahead commits. Ambiguous

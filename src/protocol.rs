@@ -86,6 +86,7 @@ pub enum Method {
         repository: String,
         branch: String,
         git_profile: Option<String>,
+        base: Option<String>,
     },
     CreateWorkspace {
         path: Option<std::path::PathBuf>,

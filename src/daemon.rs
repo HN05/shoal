@@ -287,9 +287,10 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             repository,
             branch,
             git_profile,
+            base,
         } => Body::OpenedWorkspace(
             manager
-                .open_branch(&repository, &branch, git_profile.as_deref(), path)
+                .open_branch(&repository, &branch, git_profile.as_deref(), path, base)
                 .await?,
         ),
         Method::CreateWorkspace {

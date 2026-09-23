@@ -67,7 +67,7 @@ pub enum Command {
         /// Git branch name; a portable workspace name is derived from it.
         branch: Option<String>,
         /// Use an existing local branch or remote/branch without creating a new branch.
-        #[arg(long, conflicts_with_all = ["branch", "issue", "base"])]
+        #[arg(long, conflicts_with_all = ["branch", "issue"])]
         existing: Option<String>,
         /// Derive a name and agent prompt from a forge issue number or URL.
         #[arg(long)]
@@ -75,7 +75,8 @@ pub enum Command {
         /// Create this worktree at an exact new directory instead of the repository default.
         #[arg(long)]
         path: Option<PathBuf>,
-        /// Starting Git ref (defaults to the repository's default branch, refreshed from its upstream).
+        /// Starting Git ref (defaults to the repository's default branch, refreshed from its upstream);
+        /// with --existing, the ref its changes are compared against.
         #[arg(long, value_name = "REF")]
         base: Option<String>,
         /// Apply a named Git profile to the new worktree, overriding repository defaults.
@@ -789,6 +790,15 @@ mod tests {
             vec!["shoal", "add", "repo", "topic", "--base", "release/v1"],
             vec!["shoal", "add", "repo", "--issue", "122", "--base", "v1.0"],
             vec!["shoal", "issue", "122", "--base", "HEAD~1"],
+            vec![
+                "shoal",
+                "add",
+                "repo",
+                "--existing",
+                "topic",
+                "--base",
+                "main",
+            ],
         ] {
             let expected = *args.last().unwrap();
             let parsed = Cli::try_parse_from(args).unwrap();
@@ -798,18 +808,6 @@ mod tests {
             };
             assert_eq!(base.as_deref(), Some(expected));
         }
-        assert!(
-            Cli::try_parse_from([
-                "shoal",
-                "add",
-                "repo",
-                "--existing",
-                "topic",
-                "--base",
-                "main"
-            ])
-            .is_err()
-        );
     }
 
     #[test]

@@ -29,7 +29,8 @@ use uuid::Uuid;
 
 pub(crate) enum WorkspaceSource {
     New(Option<String>),
-    Existing(crate::existing_branch::Branch),
+    /// An existing branch, with an optional base ref overriding the default branch.
+    Existing(crate::existing_branch::Branch, Option<String>),
 }
 
 pub(crate) enum ResourceGuard {
@@ -218,7 +219,7 @@ impl Manager {
         }
         let (base, existing) = match source {
             WorkspaceSource::New(base) => (base, None),
-            WorkspaceSource::Existing(branch) => (None, Some(branch)),
+            WorkspaceSource::Existing(branch, base) => (base, Some(branch)),
         };
         let name = derive_workspace_name(&name);
         let path = match path {
@@ -335,7 +336,7 @@ impl Manager {
         if let Some(branch) = &existing {
             self.materialize_branch(repo, branch).await?;
         }
-        let base = if existing.is_some() {
+        let base = if existing.is_some() && base.is_none() {
             Some(existing_base(repo, &workspace.branch).await?)
         } else {
             base
