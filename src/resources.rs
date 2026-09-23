@@ -461,10 +461,12 @@ impl Manager {
                     request.resource = Some(member.into());
                 }
                 let pool_available = definition.capacity.saturating_sub(pool_used(&active));
-                let Some((resource, settings, mode)) =
-                    select_member(&definition, &request, &active, pool_available)?
-                        .or(select_member(&definition, &request, &[], definition.capacity)?)
-                else {
+                let selected = match select_member(&definition, &request, &active, pool_available)? {
+                    Some(selected) => Some(selected),
+                    // A busy pool still selects the member an approval request binds.
+                    None => select_member(&definition, &request, &[], definition.capacity)?,
+                };
+                let Some((resource, settings, mode)) = selected else {
                     return Ok(Acquisition::Busy(format!(
                         "no compatible capacity for {} in pool {}{}",
                         request.resource.as_deref().unwrap_or("any resource"),

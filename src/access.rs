@@ -166,6 +166,8 @@ impl Manager {
     }
 
     pub async fn decide_access(&self, id: String, approve: bool) -> Result<AccessRequest> {
+        // Simulator allocation checks approval and mutates devices in separate
+        // transactions under this gate; a decision must not land between them.
         let _guard = self.simulator_gate.lock().await;
         self.store
             .run(move |db| {
