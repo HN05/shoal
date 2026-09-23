@@ -48,7 +48,7 @@ async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32> {
 
 fn describe(request: &AccessRequest) -> String {
     format!(
-        "{} [{}] {} / {} (workspace {}, {:?}): {}",
+        "{} [{}] {} / {} (workspace {}, {}): {}",
         request.id,
         request.status,
         request.target,

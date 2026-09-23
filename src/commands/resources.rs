@@ -200,7 +200,7 @@ fn render_overview(overview: &Overview, palette: Palette) {
         for resource in &pool.resources {
             if resource.requires_approval {
                 println!(
-                    "  {}: approval required ({:?})",
+                    "  {}: approval required ({})",
                     resource.name, resource.approval_lifetime
                 );
             }

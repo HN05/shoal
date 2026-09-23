@@ -14,6 +14,15 @@ pub enum Lifetime {
     Workspace,
 }
 
+impl std::fmt::Display for Lifetime {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Lease => "lease",
+            Self::Workspace => "workspace",
+        })
+    }
+}
+
 states!(Status {
     Pending => "pending",
     Approved => "approved",
@@ -218,6 +227,7 @@ mod tests {
             db.execute_batch("INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
                 INSERT INTO workspaces(id,repository_id,name,path,branch,state) VALUES ('owner','repo','worker','/work','worker','ready');")?;
             for lifetime in [Lifetime::Lease, Lifetime::Workspace] {
+                assert_eq!(serde_json::to_value(lifetime)?, lifetime.to_string());
                 let tx = db.transaction()?;
                 let request = AccessRequest::new("owner", "resource/global/lock".into(), "default",
                     serde_json::json!({"mode":"read"}), lifetime, Some("read shared data"));
