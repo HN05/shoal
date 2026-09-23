@@ -9,6 +9,7 @@ mod ports;
 mod recovery;
 mod repositories;
 mod resources;
+mod review;
 mod service;
 mod simulators;
 mod skill;
@@ -152,6 +153,19 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         Command::Status { workspace } => workspaces::status(&ctx, workspace).await,
         Command::Cd { workspace } => workspaces::cd(&ctx, workspace).await,
         Command::Diff { workspace } => workspaces::diff(&ctx, workspace).await,
+        Command::Review {
+            workspace,
+            manual,
+            agent,
+            args,
+        } => {
+            let reviewer = match (manual, agent) {
+                (true, _) => review::Reviewer::Manual,
+                (false, Some(agent)) => review::Reviewer::Agent(Some(agent)),
+                (false, None) => review::Reviewer::Ask,
+            };
+            review::run(&ctx, workspace, reviewer, None, args).await
+        }
         Command::Merge {
             branch,
             workspace,

@@ -123,6 +123,19 @@ pub enum Command {
     Cd { workspace: Option<String> },
     /// Show your changes since the fork point using native Git diff configuration.
     Diff { workspace: Option<String> },
+    /// Review changes since the fork point manually or with an agent.
+    Review {
+        workspace: Option<String>,
+        /// Run the configured `review` command without asking.
+        #[arg(long, conflicts_with = "agent")]
+        manual: bool,
+        /// Start this agent with a review prompt without asking.
+        #[arg(long, value_parser = AgentParser)]
+        agent: Option<Agent>,
+        /// Arguments forwarded to the review command or agent.
+        #[arg(last = true)]
+        args: Vec<OsString>,
+    },
     /// Merge a local or remote branch into this workspace's own branch.
     Merge {
         branch: String,

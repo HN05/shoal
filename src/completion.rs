@@ -129,7 +129,8 @@ fn decorate(command: Command, parent: &str, typed: Arc<Typed>) -> Command {
                 arg.add(ArgValueCompleter::new(move |current: &OsStr| {
                     typed.complete(target, current)
                 }))
-            } else if matches!(name.as_str(), "add" | "issue") && arg.get_id() == "agent" {
+            } else if matches!(name.as_str(), "add" | "issue" | "review") && arg.get_id() == "agent"
+            {
                 let typed = typed.clone();
                 arg.add(ArgValueCompleter::new(move |current: &OsStr| {
                     let mut names = crate::cli::Agent::possible_values();

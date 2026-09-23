@@ -1359,7 +1359,7 @@ fn diff_excludes_new_main_commits_before_and_after_rebase_and_uses_git_configura
             fs::write(path.join("tracked"), "unstaged workspace content\n").unwrap();
         }
         let base = git(path, &["merge-base", "main", "HEAD"]);
-        let review = fixture.run(&["review", "changes", "--", "{diff_base}"]);
+        let review = fixture.run(&["review", "changes", "--manual", "--", "{diff_base}"]);
         assert!(
             review.status.success(),
             "{}",
@@ -1402,7 +1402,12 @@ fn diff_excludes_new_main_commits_before_and_after_rebase_and_uses_git_configura
     assert!(String::from_utf8_lossy(&output.stdout).contains("configured-diff"));
     // A missing base blocks review, but is irrelevant to commands without the placeholder.
     git(&fixture.repo, &["branch", "-m", "renamed-main"]);
-    assert!(!fixture.run(&["review", "changes"]).status.success());
+    assert!(
+        !fixture
+            .run(&["review", "changes", "--manual"])
+            .status
+            .success()
+    );
     assert_eq!(
         fixture
             .run(&["plain", "changes", "--", "{diff_base}"])
@@ -1410,6 +1415,45 @@ fn diff_excludes_new_main_commits_before_and_after_rebase_and_uses_git_configura
         b"{diff_base}"
     );
     fixture.ok(&["rm", "changes", "--yes", "--delete-branch"]);
+}
+
+#[test]
+fn review_runs_the_configured_command_or_prompts_an_agent() {
+    let fixture = Fixture::with_config(Some(
+        "default_agent = 'reviewer'\n[commands]\nreview = ['printf', 'manual %s', '{branch}']\nreviewer = ['printf', '%s|', '{prompt}', '{args}']\n",
+    ));
+    fixture.add("changes");
+    let output = fixture.run(&["review", "changes"]);
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("--manual or --agent"),
+        "{output:?}"
+    );
+    assert_eq!(
+        fixture.run(&["review", "changes", "--manual"]).stdout,
+        b"manual changes"
+    );
+    for args in [
+        &["review", "changes", "--agent", "reviewer", "--", "extra"][..],
+        &["run", "reviewer", "changes", "--", "extra"][..],
+    ] {
+        let output = fixture.run(args);
+        assert!(output.status.success(), "{output:?}");
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        assert!(stdout.ends_with("|extra|"), "{stdout}");
+        if args[0] == "review" {
+            assert!(stdout.contains("Review the changes on branch changes"));
+            assert!(stdout.contains("`shoal diff`"));
+        }
+    }
+    // Without a configured review command, the default agent reviews.
+    let fixture = Fixture::with_config(Some(
+        "default_agent = 'reviewer'\n[commands]\nreviewer = ['printf', '%s', '{prompt}']\n",
+    ));
+    fixture.add("agent-only");
+    let output = fixture.run(&["review", "agent-only"]);
+    assert!(output.status.success(), "{output:?}");
+    assert!(String::from_utf8_lossy(&output.stdout).contains("branch agent-only"));
 }
 
 #[test]

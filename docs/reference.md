@@ -195,7 +195,11 @@ review = ["tuicr", "-r", "{diff_base}..HEAD"]
 review-worktree = ["tuicr", "-w"]
 ```
 
-`shoal review [workspace]` reviews committed changes since the workspace's base;
+`shoal review [workspace]` asks whether to review manually or with an agent;
+`--manual` or `--agent <name>` skips the question, which is required without a
+terminal. Manual review runs the `review` command (`shoal run review` also does);
+without one, the agent reviews. The agent is chosen as for `shoal issue` and is
+prompted to report findings, not to change files, commit, push, or post.
 `shoal review-worktree [workspace]` reviews uncommitted changes. The committed
 range excludes working-tree changes that `shoal diff` includes. Export feedback
 from tuicr and hand it to your agent explicitly; see

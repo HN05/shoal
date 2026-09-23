@@ -126,7 +126,8 @@ shoal land                    # Merge your branch into the default branch; no re
 ```
 
 For local code review, configure `[commands] review = ["tuicr", "-r",
-"{diff_base}..HEAD"]` and run `shoal review fix-login`. See the
+"{diff_base}..HEAD"]` and run `shoal review fix-login`, then choose manual or
+agent review. See the
 [command and review configuration](docs/reference.md#configured-commands) for uncommitted
 review and exporting feedback to an agent.
 

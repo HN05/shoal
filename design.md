@@ -203,9 +203,10 @@ provides an explicit spelling for names that collide with built-ins; built-ins w
 the bare shorthand. Repository-only commands require a current or explicit
 workspace, so unknown names never open a picker. Workspace fields expand once within individual
 arguments; a standalone `{args}` places the caller's literal arguments.
-`{diff_base}` lazily uses `diff`'s daemon lookup. Review tools use these commands;
-the tools own review storage, exports, and forge authentication, with explicit
-feedback handoff to agents.
+`{diff_base}` lazily uses `diff`'s daemon lookup. Built-in `review` chooses
+between the `review` command and an agent prompted to report, not change, the
+work. Review tools own review storage, exports, and forge authentication, with
+explicit feedback handoff to agents.
 
 Custom `--agent` and `default_agent` names select named commands through the
 same configuration layers. They run as tracked agents with scope, forge wrappers,
