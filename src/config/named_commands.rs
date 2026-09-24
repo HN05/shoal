@@ -15,7 +15,7 @@ use crate::{
         ui::{self, Fallback},
         workspace_context::{ScopeOrder, WorkspaceContext},
     },
-    config::{Config, repo::ConfigLayer},
+    config::{Config, placeholders::render_os as render, repo::ConfigLayer},
     execution,
     model::{DiffBase, Workspace},
     paths::Paths,
@@ -278,25 +278,6 @@ pub async fn expand_with_fields(
     }
     command.extend(args.unwrap_or_default());
     Ok(command)
-}
-
-/// Substitute once, preserving non-UTF-8 paths and literal inserted values.
-fn render(template: &str, fields: &[(&str, &OsStr)]) -> OsString {
-    let mut output = OsString::new();
-    let mut rest = template;
-    while let Some(start) = rest.find('{') {
-        output.push(&rest[..start]);
-        rest = &rest[start..];
-        if let Some((key, value)) = fields.iter().find(|(key, _)| rest.starts_with(key)) {
-            output.push(value);
-            rest = &rest[key.len()..];
-        } else {
-            output.push("{");
-            rest = &rest[1..];
-        }
-    }
-    output.push(rest);
-    output
 }
 
 #[cfg(test)]

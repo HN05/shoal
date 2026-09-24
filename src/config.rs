@@ -1,5 +1,6 @@
 pub mod edit;
 pub mod named_commands;
+mod placeholders;
 pub mod repo;
 pub mod report;
 pub mod templates;
