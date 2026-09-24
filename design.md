@@ -364,8 +364,12 @@ executions proven stopped while preserving work and leases. Added
 environment and untracked-worktree checks are diagnosis only. The daemon
 checks its own PATH and Git worktree registrations under owned repository roots;
 the CLI diagnoses daemon health before requesting workspace checks and checks
-shell integration locally, including when the daemon is unavailable. Startup
-audits but never deletes, kills, clears unknown executions, or releases leases.
+shell integration locally, including when the daemon is unavailable. Opening
+persistence only migrates schema. Under the daemon lock, startup then atomically
+quarantines interrupted operations in a separate transaction before ownership
+auditing, serving requests, or cleanup; failure aborts startup and leaves committed
+migrations available for retry. Startup audits but never deletes, kills, clears
+unknown executions, or releases leases.
 Survivors are signaled only after verifying PID birth identity and same-user
 ownership; acknowledgement cannot override visible live processes. Moved or
 replaced worktrees stay unresolved until restored. A deleted directory means

@@ -4875,6 +4875,111 @@ fn recovery_report(fixture: &Fixture, args: &[&str]) -> Value {
 }
 
 #[test]
+fn daemon_startup_quarantines_operations_and_retains_claims_across_restarts() {
+    let mut fixture = Fixture::with_tools(Some("[resources.lock]\n"), true);
+    let states = [
+        "preparing",
+        "removing",
+        "stopping",
+        "reconciling",
+        "ready",
+        "failed",
+    ];
+    let workspaces: Vec<_> = states.iter().map(|name| fixture.add(name)).collect();
+    let port = fixture.ok(&["port", "acquire", "web", "preparing"]);
+    let resource = fixture.ok(&["resource", "acquire", "lock", "preparing"]);
+    let owner = workspaces[0]["id"].as_str().unwrap();
+    let simulator = serde_json::json!({
+        "id": "simulator", "udid": null, "device": "type.Phone", "runtime": "runtime.iOS",
+        "workspace_id": owner, "last_workspace_id": owner, "lease_name": "default",
+        "reason": null, "state": "creating", "last_used": 1, "error": null
+    });
+    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+    for (state, workspace) in states.iter().zip(&workspaces) {
+        db.execute(
+            "UPDATE workspaces SET state=?1,error='original error' WHERE id=?2",
+            rusqlite::params![state, workspace["id"].as_str().unwrap()],
+        )
+        .unwrap();
+    }
+    db.execute("INSERT INTO executions(id,workspace_id,state) VALUES ('execution',?1,'running'),('legacy',?1,'unknown')", [owner]).unwrap();
+    db.execute(
+        "INSERT INTO simulators(id,record) VALUES ('simulator',?1)",
+        [simulator.to_string()],
+    )
+    .unwrap();
+    for status in ["requested", "acquired", "busy", "failed", "interrupted"] {
+        db.execute("INSERT INTO simulator_clean_requests(request_id,workspace_id,record) VALUES (?1,?2,?3)",
+            rusqlite::params![status, owner, serde_json::json!({"status": status, "reason": "preserve audit", "evicted": ["recorded-device"]}).to_string()]).unwrap();
+    }
+    for _ in 0..2 {
+        fixture.restart();
+        for (state, workspace) in states.iter().zip(&workspaces) {
+            let inspection = fixture.ok(&["inspect", state]);
+            let saved = &inspection["workspace"];
+            assert_eq!(
+                saved["state"],
+                if *state == "ready" { "ready" } else { "failed" }
+            );
+            assert_eq!(saved["git_dir"], workspace["git_dir"]);
+            assert_eq!(saved["git_dir_id"], workspace["git_dir_id"]);
+            let expected_error = if ["ready", "failed"].contains(state) {
+                "original error"
+            } else {
+                "daemon stopped during workspace operation; inspect before cleanup"
+            };
+            assert_eq!(saved["error"], expected_error);
+            assert!(
+                Path::new(saved["path"].as_str().unwrap())
+                    .join("tracked")
+                    .exists()
+            );
+            if *state == "preparing" {
+                let executions = inspection["executions"].as_array().unwrap();
+                assert_eq!(executions.len(), 2);
+                assert!(
+                    executions
+                        .iter()
+                        .all(|execution| execution["state"] == "unknown")
+                );
+            }
+        }
+        assert_eq!(fixture.ok(&["port", "preparing"])["reserved"][0], port);
+        assert_eq!(
+            fixture.ok(&["resource", "preparing"])["leases"][0],
+            resource
+        );
+        let saved: String = db
+            .query_row("SELECT record FROM simulators", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(serde_json::from_str::<Value>(&saved).unwrap(), simulator);
+        let audits = db
+            .prepare("SELECT request_id,record FROM simulator_clean_requests")
+            .unwrap()
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+            .unwrap()
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .unwrap();
+        assert_eq!(audits.len(), 5);
+        for (status, record) in audits {
+            let expected = if status == "requested" {
+                "interrupted"
+            } else {
+                &status
+            };
+            assert_eq!(
+                serde_json::from_str::<Value>(&record).unwrap(),
+                serde_json::json!({
+                    "status": expected, "reason": "preserve audit", "evicted": ["recorded-device"]
+                })
+            );
+        }
+    }
+}
+
+#[test]
 fn doctor_repairs_interrupted_state_and_preserves_work_and_leases() {
     let mut fixture = Fixture::with_config(Some("[resources.lock]\n"));
     let workspace = fixture.add("interrupted");

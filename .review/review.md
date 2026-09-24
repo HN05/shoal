@@ -99,7 +99,10 @@ removal, check it against the rule those files state before judging it.
 - Client response extraction reports expected and received variants and preserves
   daemon error codes and messages as structured errors without changing the wire format.
 - Persistence: Shoal lifecycle enums keep their lowercase SQLite/JSON spelling and
-  reject unknown values. The separate native simulator state enum preserves
+  reject unknown values. Opening persistence only migrates schema; daemon startup
+  quarantines interrupted operations atomically after migration and before ownership
+  auditing, requests, or cleanup. Failure aborts startup without undoing migration.
+  The separate native simulator state enum preserves
   unfamiliar strings and native spellings; only confirmed shutdown frees running
   capacity. Schema and state-file changes need a compatibility
   story for existing daemons. `install` preserves compatible daemons and commands,

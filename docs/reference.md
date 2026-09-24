@@ -766,9 +766,10 @@ does not track, and shell integration in the calling shell. They run regardless
 of the workspace selection and only diagnose, even with `--repair`. An unavailable or mismatched daemon leaves its
 checks marked as skipped; doctor never starts or restarts it.
 When current checks find no issues, reports show the recorded failure and repair guidance.
-`doctor` is unavailable inside scoped executions. Startup marks interrupted
-lifecycle operations failed and disconnected executions unknown, and audits
-worktrees without deleting files or releasing leases. Repair restores verified
+`doctor` is unavailable inside scoped executions. Before accepting requests or
+running cleanup, daemon startup atomically marks unfinished simulator cleans
+interrupted, transient lifecycle operations failed, and disconnected executions
+unknown, then audits worktrees without deleting files or releasing leases. Repair restores verified
 worktrees to ready and clears executions proven stopped; connected commands keep
 running unless `--stop`. Moved worktrees must return to their recorded path,
 replaced metadata is refused, and a deleted directory is forgotten by the next

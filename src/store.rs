@@ -19,10 +19,32 @@ pub struct Store {
 }
 
 impl Store {
+    /// Open persistence and migrate its schema without changing active operations.
     pub async fn open(path: PathBuf) -> Result<Self> {
         let store = Self { path };
-        store.run(migrate).await?;
+        store
+            .run(migrate)
+            .await
+            .context("migrate Shoal state database")?;
         Ok(store)
+    }
+
+    /// Quarantine interrupted operations while the daemon holds its startup lock.
+    /// This commits separately from migration and must precede auditing or serving.
+    pub async fn quarantine_interrupted_operations(&self) -> Result<()> {
+        self.run(|db| {
+            let tx = db.transaction()?;
+            tx.execute_batch(
+                "UPDATE simulator_clean_requests SET record=json_set(record, '$.status', 'interrupted') WHERE json_extract(record, '$.status')='requested';
+                UPDATE executions SET state='unknown' WHERE state='running';
+                UPDATE workspaces SET state='failed', error='daemon stopped during workspace operation; inspect before cleanup'
+                    WHERE state IN ('preparing', 'removing', 'stopping', 'reconciling');",
+            )?;
+            tx.commit()?;
+            Ok(())
+        })
+        .await
+        .context("quarantine interrupted operations at daemon startup")
     }
 
     /// Run `operation` on a fresh connection on the blocking pool.
@@ -48,10 +70,13 @@ fn migrate(db: &mut Connection) -> Result<()> {
         version <= SCHEMA_VERSION,
         "state database was written by a newer Shoal version"
     );
-    // Interrupted operations are quarantined rather than assumed complete.
+    if version == SCHEMA_VERSION {
+        return Ok(());
+    }
+    let tx = db.transaction()?;
+    let db = &tx;
     db.execute_batch(
-        "BEGIN;
-        CREATE TABLE IF NOT EXISTS repositories (
+        "CREATE TABLE IF NOT EXISTS repositories (
             id TEXT PRIMARY KEY, path TEXT NOT NULL UNIQUE, source TEXT NOT NULL, last_used INTEGER NOT NULL
         );
         CREATE TABLE IF NOT EXISTS workspaces (
@@ -90,7 +115,6 @@ fn migrate(db: &mut Connection) -> Result<()> {
             workspace_id TEXT NOT NULL, record TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS clean_requests_workspace ON simulator_clean_requests(workspace_id,id);
-        UPDATE simulator_clean_requests SET record=json_set(record, '$.status', 'interrupted') WHERE json_extract(record, '$.status')='requested';
         CREATE TABLE IF NOT EXISTS resource_pools (
             scope TEXT NOT NULL, name TEXT NOT NULL, definition TEXT NOT NULL, PRIMARY KEY(scope,name)
         );
@@ -136,11 +160,6 @@ fn migrate(db: &mut Connection) -> Result<()> {
             END;",
         )?;
     }
-    db.execute_batch(
-        "UPDATE executions SET state='unknown' WHERE state='running';
-        UPDATE workspaces SET state='failed', error='daemon stopped during workspace operation; inspect before cleanup'
-            WHERE state IN ('preparing', 'removing', 'stopping', 'reconciling');",
-    )?;
     db.execute_batch(&format!(
         "CREATE TABLE IF NOT EXISTS repository_removals (
             repository_id TEXT PRIMARY KEY REFERENCES repositories(id) ON DELETE CASCADE,
@@ -160,9 +179,9 @@ fn migrate(db: &mut Connection) -> Result<()> {
             kind TEXT NOT NULL, message TEXT NOT NULL, read INTEGER NOT NULL DEFAULT 0 CHECK(read IN (0,1))
         );
         CREATE INDEX IF NOT EXISTS notifications_unread ON notifications(read,id);
-        PRAGMA user_version={SCHEMA_VERSION};
-        COMMIT;"
+        PRAGMA user_version={SCHEMA_VERSION};"
     ))?;
+    tx.commit()?;
     Ok(())
 }
 
@@ -412,8 +431,92 @@ mod tests {
         Ok(())
     }
 
+    fn seed_interrupted_operations(db: &mut Connection) -> Result<()> {
+        db.execute_batch(
+            "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);",
+        )?;
+        for state in [
+            "preparing",
+            "removing",
+            "stopping",
+            "reconciling",
+            "ready",
+            "failed",
+        ] {
+            db.execute("INSERT INTO workspaces(id,repository_id,name,path,branch,state,error) VALUES (?1,'repo',?1,?1,?1,?1,'original error')", [state])?;
+        }
+        db.execute_batch("INSERT INTO executions(id,workspace_id,state) VALUES ('execution','preparing','running');
+            INSERT INTO simulator_clean_requests(request_id,workspace_id,record)
+                VALUES ('clean','preparing','{\"status\":\"requested\",\"reason\":\"keep audit\"}');")?;
+        Ok(())
+    }
+
+    fn operation_snapshot(db: &mut Connection) -> Result<Vec<String>> {
+        Ok(db
+            .prepare(
+                "SELECT json_array(id,state,error) FROM workspaces
+            UNION ALL SELECT json_array(id,state) FROM executions
+            UNION ALL SELECT record FROM simulator_clean_requests ORDER BY 1",
+            )?
+            .query_map([], |row| row.get(0))?
+            .collect::<rusqlite::Result<_>>()?)
+    }
+
     #[tokio::test]
-    async fn approval_records_survive_restart_and_follow_workspace_ownership() {
+    async fn current_schema_reopen_preserves_active_operations() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("state.db");
+        let store = Store::open(path.clone()).await.unwrap();
+        store.run(seed_interrupted_operations).await.unwrap();
+        let before = store.run(operation_snapshot).await.unwrap();
+        for _ in 0..2 {
+            let reopened = Store::open(path.clone()).await.unwrap();
+            assert_eq!(reopened.run(operation_snapshot).await.unwrap(), before);
+        }
+    }
+
+    #[tokio::test]
+    async fn failed_quarantine_rolls_back_without_undoing_migration() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("state.db");
+        let store = Store::open(path.clone()).await.unwrap();
+        store.run(seed_interrupted_operations).await.unwrap();
+        store
+            .run(|db| {
+                db.execute_batch(
+                    "DROP TABLE access_requests;
+                PRAGMA user_version=16;
+                CREATE TRIGGER fail_quarantine BEFORE UPDATE OF state ON workspaces
+                    BEGIN SELECT RAISE(ABORT, 'quarantine blocked'); END;",
+                )?;
+                Ok(())
+            })
+            .await
+            .unwrap();
+        let before = store.run(operation_snapshot).await.unwrap();
+        let migrated = Store::open(path.clone()).await.unwrap();
+        let error = migrated
+            .quarantine_interrupted_operations()
+            .await
+            .unwrap_err();
+        assert!(format!("{error:#}").contains("quarantine blocked"));
+        assert_eq!(migrated.run(operation_snapshot).await.unwrap(), before);
+        migrated.run(|db| {
+            assert_eq!(db.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))?, SCHEMA_VERSION);
+            db.execute("INSERT INTO access_requests VALUES ('request','preparing','pool','default','{}',1)", [])?;
+            db.execute_batch("DROP TRIGGER fail_quarantine;")?;
+            Ok(())
+        }).await.unwrap();
+        migrated.quarantine_interrupted_operations().await.unwrap();
+        let recovered = migrated.run(operation_snapshot).await.unwrap();
+        assert_ne!(recovered, before);
+        let reopened = Store::open(path).await.unwrap();
+        reopened.quarantine_interrupted_operations().await.unwrap();
+        assert_eq!(reopened.run(operation_snapshot).await.unwrap(), recovered);
+    }
+
+    #[tokio::test]
+    async fn approval_records_survive_reopen_and_follow_workspace_ownership() {
         let root = tempfile::tempdir().unwrap();
         let path = root.path().join("state.db");
         let store = Store::open(path.clone()).await.unwrap();
@@ -484,14 +587,26 @@ mod tests {
                 assert!(setup_finished(db, "workspace")?);
                 assert_eq!(
                     executions(db, "workspace")?[0].state,
-                    crate::state::ExecutionState::Unknown
+                    crate::state::ExecutionState::Running
                 );
                 assert!(ports(db, None)?.is_empty());
                 Ok(())
             })
             .await
             .unwrap();
-        Store::open(path).await.unwrap();
+        store.quarantine_interrupted_operations().await.unwrap();
+        Store::open(path)
+            .await
+            .unwrap()
+            .run(|db| {
+                assert_eq!(
+                    executions(db, "workspace")?[0].state,
+                    crate::state::ExecutionState::Unknown
+                );
+                Ok(())
+            })
+            .await
+            .unwrap();
     }
 
     #[tokio::test]
@@ -565,7 +680,23 @@ mod tests {
                     [],
                     |row| row.get(0),
                 )?;
-                assert_eq!(state, WorkspaceState::Failed);
+                assert_eq!(state, WorkspaceState::Preparing);
+                Ok(())
+            })
+            .await
+            .unwrap();
+        migrated.quarantine_interrupted_operations().await.unwrap();
+        migrated
+            .run(|db| {
+                assert!(!setup_finished(db, "preparing")?);
+                assert_eq!(
+                    db.query_row(
+                        "SELECT state FROM workspaces WHERE id='preparing'",
+                        [],
+                        |row| row.get::<_, WorkspaceState>(0)
+                    )?,
+                    WorkspaceState::Failed
+                );
                 Ok(())
             })
             .await

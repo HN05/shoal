@@ -69,6 +69,7 @@ pub async fn run(paths: Paths, managed: bool) -> Result<()> {
         _lock: lock,
     };
     let manager = Manager::open(paths.clone()).await?;
+    manager.store.quarantine_interrupted_operations().await?;
     manager.audit_worktrees().await?;
     let listener = UnixListener::bind(&paths.socket).context("bind daemon socket")?;
     fs::set_permissions(&paths.socket, fs::Permissions::from_mode(0o600))?;
