@@ -1,6 +1,6 @@
 //! The bare `shoal` invocation: an fzf menu over workspaces that turns a
 //! selection plus key binding into an ordinary [`Command`].
-use anyhow::{Result, bail, ensure};
+use anyhow::{Result, ensure};
 
 use crate::{
     cli::{CodexMode, Command, ConfirmationArgs},
@@ -13,14 +13,35 @@ use crate::{
 
 const ADD_ENTRY: &str = "add-workspace";
 
-const SCOPED_BINDINGS: KeyBindings = KeyBindings {
-    keys: "ctrl-e,ctrl-o,ctrl-f",
-    header: "enter: enter   ctrl-e: execute   ctrl-o: inspect   ctrl-f: diff",
-};
-const FULL_BINDINGS: KeyBindings = KeyBindings {
-    keys: "ctrl-d,ctrl-e,ctrl-a,ctrl-o,ctrl-s,ctrl-f",
-    header: "enter: enter   ctrl-d: delete   ctrl-e: execute   ctrl-a: add   ctrl-o: inspect   ctrl-s: stop   ctrl-f: diff",
-};
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum MenuAction {
+    Enter,
+    Delete,
+    Execute,
+    Add,
+    Inspect,
+    Stop,
+    Diff,
+}
+
+const BINDINGS: &[(&str, &str, MenuAction)] = &[
+    ("enter", "enter", MenuAction::Enter),
+    ("ctrl-d", "delete", MenuAction::Delete),
+    ("ctrl-e", "execute", MenuAction::Execute),
+    ("ctrl-a", "add", MenuAction::Add),
+    ("ctrl-o", "inspect", MenuAction::Inspect),
+    ("ctrl-s", "stop", MenuAction::Stop),
+    ("ctrl-f", "diff", MenuAction::Diff),
+];
+
+impl MenuAction {
+    fn allowed_scoped(self) -> bool {
+        matches!(
+            self,
+            Self::Enter | Self::Execute | Self::Inspect | Self::Diff
+        )
+    }
+}
 
 pub(super) async fn choose(ctx: &Context) -> Result<Command> {
     let repos = ui::repository_choices(client::repositories(&ctx.paths).await?).await?;
@@ -43,14 +64,24 @@ pub(super) async fn choose(ctx: &Context) -> Result<Command> {
     if !scoped {
         entries.push((ADD_ENTRY.into(), "+ Add workspace".into()));
     }
-    let bindings = if scoped {
-        SCOPED_BINDINGS
+    let bindings: Vec<_> = BINDINGS
+        .iter()
+        .copied()
+        .filter(|(_, _, action)| !scoped || action.allowed_scoped())
+        .collect();
+    let picked = ui::pick_with_keys(ctx, "Shoal> ", entries, KeyBindings(&bindings))?;
+    let action = if picked.action == MenuAction::Enter && picked.id == ADD_ENTRY {
+        MenuAction::Add
     } else {
-        FULL_BINDINGS
+        picked.action
     };
-    let picked = ui::pick_with_keys(ctx, "Shoal> ", entries, Some(bindings))?;
-    if picked.key == "ctrl-a" || (picked.key.is_empty() && picked.id == ADD_ENTRY) {
-        return Ok(Command::Add {
+    ensure!(
+        action == MenuAction::Add || picked.id != ADD_ENTRY,
+        "select a workspace for this action"
+    );
+    let workspace = Some(picked.id);
+    Ok(match action {
+        MenuAction::Add => Command::Add {
             path: None,
             repository: None,
             branch: None,
@@ -60,23 +91,18 @@ pub(super) async fn choose(ctx: &Context) -> Result<Command> {
             git_profile: None,
             agent: None,
             args: vec![],
-        });
-    }
-    ensure!(picked.id != ADD_ENTRY, "select a workspace for this action");
-    let workspace = Some(picked.id);
-    Ok(match picked.key.as_str() {
-        "" => Command::Cd { workspace },
-        "ctrl-d" => Command::Rm {
+        },
+        MenuAction::Enter => Command::Cd { workspace },
+        MenuAction::Delete => Command::Rm {
             workspace,
             confirmation: ConfirmationArgs::default(),
             keep_branch: false,
             delete_branch: false,
         },
-        "ctrl-o" => Command::Inspect { workspace },
-        "ctrl-s" => Command::Stop { workspace },
-        "ctrl-f" => Command::Diff { workspace },
-        "ctrl-e" => execute_command(ctx, workspace)?,
-        _ => bail!("unknown picker action"),
+        MenuAction::Inspect => Command::Inspect { workspace },
+        MenuAction::Stop => Command::Stop { workspace },
+        MenuAction::Diff => Command::Diff { workspace },
+        MenuAction::Execute => execute_command(ctx, workspace)?,
     })
 }
 

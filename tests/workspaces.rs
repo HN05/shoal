@@ -4646,6 +4646,69 @@ fn cd_previous_cannot_escape_execution_scope() {
 }
 
 #[test]
+fn menu_bindings_preserve_enter_inspect_cancel_and_scope() {
+    let fixture = Fixture::new();
+    let workspace = fixture.add("menu-worker");
+    let bin = fixture.root.path().join("bin");
+    fs::create_dir_all(&bin).unwrap();
+    let picker = bin.join("fzf");
+    for scoped in [false, true] {
+        for key in ["", "ctrl-o", "ctrl-z", "cancel"] {
+            fs::write(
+                &picker,
+                format!(
+                    r#"#!/bin/sh
+printf '%s\n' "$@" > "$HOME/picker-args"
+cat > "$HOME/picker-input"
+[ '{key}' != cancel ] || exit 130
+printf '%s\n' '{key}'
+head -n 1 "$HOME/picker-input"
+"#
+                ),
+            )
+            .unwrap();
+            fs::set_permissions(&picker, fs::Permissions::from_mode(0o755)).unwrap();
+            let args = if scoped {
+                vec!["exec", "menu-worker", "--", env!("CARGO_BIN_EXE_shoal")]
+            } else {
+                vec![]
+            };
+            let (output, transcript) = fixture.interactive(&args, "");
+            let args = fs::read_to_string(fixture.root.path().join("picker-args")).unwrap();
+            let input = fs::read_to_string(fixture.root.path().join("picker-input")).unwrap();
+            assert!(input.contains(workspace["id"].as_str().unwrap()));
+            assert_eq!(input.contains("+ Add workspace"), !scoped);
+            let (keys, header) = if scoped {
+                (
+                    "ctrl-e,ctrl-o,ctrl-f",
+                    "enter: enter   ctrl-e: execute   ctrl-o: inspect   ctrl-f: diff",
+                )
+            } else {
+                (
+                    "ctrl-d,ctrl-e,ctrl-a,ctrl-o,ctrl-s,ctrl-f",
+                    "enter: enter   ctrl-d: delete   ctrl-e: execute   ctrl-a: add   ctrl-o: inspect   ctrl-s: stop   ctrl-f: diff",
+                )
+            };
+            assert!(args.contains(&format!("--expect={keys}\n--header\n{header}\n")));
+            match key {
+                "cancel" => {
+                    assert!(!output.status.success());
+                    assert!(transcript.contains("selection canceled"), "{transcript}");
+                }
+                "ctrl-z" => {
+                    assert!(!output.status.success());
+                    assert!(transcript.contains("unknown picker action"), "{transcript}");
+                }
+                _ => {
+                    assert!(output.status.success(), "{transcript}");
+                    assert!(String::from_utf8_lossy(&output.stdout).contains("menu-worker"));
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn cd_always_picks_even_inside_a_workspace_and_cancel_does_not_navigate() {
     use std::os::fd::FromRawFd;
     let fixture = Fixture::new();

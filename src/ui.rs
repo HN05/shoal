@@ -176,21 +176,63 @@ pub fn choose_removal(ctx: &Context, check: &RemovalCheck) -> Result<BranchChoic
 /// `(id, label)` pairs; the id is returned, only the label is shown.
 pub type Entries = Vec<(String, String)>;
 
-/// Result of an fzf picker with key bindings: which key (empty for Enter) and
-/// which entry id.
-pub struct Picked {
-    pub key: String,
+/// A typed action and the selected entry id.
+pub struct Picked<T> {
+    pub action: T,
     pub id: String,
 }
 
-/// fzf key bindings offered in a picker: the `--expect` key list and header.
-pub struct KeyBindings {
-    pub keys: &'static str,
-    pub header: &'static str,
+/// `(key, label, action)` bindings, including `enter` for the default action.
+pub struct KeyBindings<'a, T>(pub &'a [(&'a str, &'a str, T)]);
+
+impl<T: Clone> KeyBindings<'_, T> {
+    fn keys(&self) -> String {
+        self.0
+            .iter()
+            .map(|(key, _, _)| *key)
+            .filter(|key| *key != "enter")
+            .collect::<Vec<_>>()
+            .join(",")
+    }
+
+    fn header(&self) -> String {
+        self.0
+            .iter()
+            .map(|(key, label, _)| format!("{key}: {label}"))
+            .collect::<Vec<_>>()
+            .join("   ")
+    }
+
+    fn action(&self, key: &str) -> Result<T> {
+        let key = if key.is_empty() { "enter" } else { key };
+        self.0
+            .iter()
+            .find(|(bound, _, _)| *bound == key)
+            .map(|(_, _, action)| action.clone())
+            .context("unknown picker action")
+    }
 }
 
 pub fn pick(ctx: &Context, prompt: &str, entries: Entries) -> Result<String> {
-    Ok(pick_with_keys(ctx, prompt, entries, None)?.id)
+    Ok(run_picker(ctx, prompt, entries, None)?.id)
+}
+
+pub fn pick_with_keys<T: Clone>(
+    ctx: &Context,
+    prompt: &str,
+    entries: Entries,
+    bindings: KeyBindings<'_, T>,
+) -> Result<Picked<T>> {
+    let picked = run_picker(
+        ctx,
+        prompt,
+        entries,
+        Some((bindings.keys(), bindings.header())),
+    )?;
+    Ok(Picked {
+        action: bindings.action(&picked.action)?,
+        id: picked.id,
+    })
 }
 
 /// Choose a typed value; labels are display-only, even when they repeat.
@@ -208,12 +250,12 @@ pub fn pick_choice<T: Clone>(ctx: &Context, prompt: &str, choices: &[(T, &str)])
         .context("picker returned an unknown choice")
 }
 
-pub fn pick_with_keys(
+fn run_picker(
     ctx: &Context,
     prompt: &str,
     entries: Entries,
-    bindings: Option<KeyBindings>,
-) -> Result<Picked> {
+    bindings: Option<(String, String)>,
+) -> Result<Picked<String>> {
     require_interactive(ctx)?;
     ensure!(
         !entries.is_empty(),
@@ -234,10 +276,10 @@ pub fn pick_with_keys(
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit());
-    if let Some(bindings) = &bindings {
+    if let Some((keys, header)) = &bindings {
         command
-            .arg(format!("--expect={}", bindings.keys))
-            .args(["--header", bindings.header]);
+            .arg(format!("--expect={keys}"))
+            .args(["--header", header]);
     }
     let mut picker = command
         .spawn()
@@ -270,7 +312,7 @@ pub fn pick_with_keys(
         "picker returned an unknown item"
     );
     Ok(Picked {
-        key: key.to_owned(),
+        action: key.to_owned(),
         id,
     })
 }
