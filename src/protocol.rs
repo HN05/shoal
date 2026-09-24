@@ -60,6 +60,15 @@ pub mod timing {
     pub const WORKSPACE_STOP_TIMEOUT: Duration = Duration::from_secs(10);
     /// Notice completed execution records promptly while workspace stopping waits.
     pub const WORKSPACE_STOP_POLL_INTERVAL: Duration = Duration::from_millis(50);
+
+    const _: () = {
+        assert!(COMPLETION_ACK_TIMEOUT.as_millis() > PROCESS_INVENTORY_TIMEOUT.as_millis());
+        assert!(
+            DETACHED_LAUNCH_TIMEOUT.as_millis()
+                > EXECUTION_START_TIMEOUT.as_millis() + START_ACK_TIMEOUT.as_millis()
+        );
+        assert!(WORKSPACE_STOP_TIMEOUT.as_millis() > EXECUTION_STOP_GRACE.as_millis());
+    };
 }
 
 #[derive(Debug, Serialize, Deserialize)]
