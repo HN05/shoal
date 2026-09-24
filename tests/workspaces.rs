@@ -627,6 +627,7 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
         String::from_utf8_lossy(&output.stderr)
     );
     let status: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(status.get("inspection").is_none());
     assert_eq!(status["workspace"]["name"], "summary");
     assert_eq!(status["workspace"]["branch"], "summary");
     assert_eq!(status["workspace"]["state"], "ready");

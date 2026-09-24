@@ -92,15 +92,11 @@ pub struct DiffSummary {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct WorkspaceStatus {
-    pub workspace: Workspace,
+    #[serde(flatten)]
+    pub inspection: Inspection,
     pub setup_finished: bool,
     pub diff: Option<DiffSummary>,
     pub diff_error: Option<String>,
-    pub executions: Vec<Execution>,
-    pub ports: Vec<PortReservation>,
-    pub resources: Vec<ResourceLease>,
-    pub simulators: Vec<Simulator>,
-    pub pr_cleanup: Option<crate::forge::pr::Registration>,
     pub unread_notifications: u64,
 }
 

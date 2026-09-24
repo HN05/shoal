@@ -4,12 +4,12 @@ use super::Manager;
 use crate::{
     daemon::store,
     git,
-    model::{DiffSummary, Inspection, WorkspaceStatus},
+    model::{DiffSummary, WorkspaceStatus},
 };
 
 impl Manager {
     pub async fn workspace_status(&self, selector: &str) -> Result<WorkspaceStatus> {
-        let inspection = self.inspect_workspace(selector).await?;
+        let mut inspection = self.inspect_workspace(selector).await?;
         let diff = async {
             self.verify_worktree(&inspection.workspace).await?;
             let base = self.diff_base(&inspection.workspace.id).await?;
@@ -31,26 +31,14 @@ impl Manager {
             .store
             .run(move |db| store::setup_finished(db, &workspace_id))
             .await?;
-        let Inspection {
-            pr_cleanup,
-            workspace,
-            executions,
-            ports,
-            resources,
-            mut simulators,
-        } = inspection;
-        simulators
-            .retain(|simulator| simulator.workspace_id.as_deref() == Some(workspace.id.as_str()));
+        inspection.simulators.retain(|simulator| {
+            simulator.workspace_id.as_deref() == Some(inspection.workspace.id.as_str())
+        });
         Ok(WorkspaceStatus {
-            workspace,
+            inspection,
             setup_finished,
             diff,
             diff_error,
-            executions,
-            ports,
-            resources,
-            simulators,
-            pr_cleanup,
             unread_notifications,
         })
     }

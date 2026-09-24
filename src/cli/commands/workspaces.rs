@@ -577,7 +577,8 @@ pub(super) async fn status(ctx: &Context, workspace: Option<String>) -> Result<i
 
 fn render_status(status: &WorkspaceStatus, json: bool) {
     let palette = Palette::stdout(json);
-    let workspace = &status.workspace;
+    let inspection = &status.inspection;
+    let workspace = &inspection.workspace;
     println!(
         "{}  {}",
         palette.paint(Style::Heading, &workspace.name),
@@ -612,8 +613,8 @@ fn render_status(status: &WorkspaceStatus, json: bool) {
         println!("Error:         {}", palette.paint(Style::Error, error));
     }
 
-    println!("Executions:    {}", status.executions.len());
-    for execution in &status.executions {
+    println!("Executions:    {}", inspection.executions.len());
+    for execution in &inspection.executions {
         let pid = execution
             .child
             .as_ref()
@@ -628,13 +629,13 @@ fn render_status(status: &WorkspaceStatus, json: bool) {
         );
     }
 
-    println!("Ports:         {}", status.ports.len());
-    for port in &status.ports {
+    println!("Ports:         {}", inspection.ports.len());
+    for port in &inspection.ports {
         println!("  {}={} ({})", port.name, port.port, port.env_var);
     }
 
-    println!("Simulators:    {}", status.simulators.len());
-    for simulator in &status.simulators {
+    println!("Simulators:    {}", inspection.simulators.len());
+    for simulator in &inspection.simulators {
         println!(
             "  {}={}  {}  {}  {}",
             simulator.lease_name.as_deref().unwrap_or("default"),
@@ -645,15 +646,15 @@ fn render_status(status: &WorkspaceStatus, json: bool) {
         );
     }
 
-    println!("Resources:     {}", status.resources.len());
-    for resource in &status.resources {
+    println!("Resources:     {}", inspection.resources.len());
+    for resource in &inspection.resources {
         println!(
             "  {}/{} -> {} [{}]",
             resource.pool, resource.name, resource.resource, resource.mode
         );
     }
 
-    match &status.pr_cleanup {
+    match &inspection.pr_cleanup {
         Some(registration) => {
             let target = match &registration.kind {
                 RegistrationKind::Watch { url } => url,
