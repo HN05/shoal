@@ -76,9 +76,9 @@ impl Manager {
         let local = git::strip_local(selector).unwrap_or(selector);
         let local_ref = git::local_ref(local);
         let branch = if git::strip_remote(selector).is_none()
-            && git::run_isolated(&repo.path, &["show-ref", "--verify", "--", &local_ref])
+            && git::ref_exists(&repo.path, &local_ref, git::isolated_command)
                 .await
-                .is_ok()
+                .unwrap_or(false)
         {
             Branch {
                 name: local.into(),
@@ -110,12 +110,10 @@ impl Manager {
         );
         git::check_branch_name(Some(&repo.path), name).await?;
         if let Some(remote) = &branch.remote {
-            let local_exists = git::run_isolated(
-                &repo.path,
-                &["show-ref", "--verify", "--", &git::local_ref(name)],
-            )
-            .await
-            .is_ok();
+            let local_exists =
+                git::ref_exists(&repo.path, &git::local_ref(name), git::isolated_command)
+                    .await
+                    .unwrap_or(false);
             if local_exists {
                 let upstream = git::run_isolated(
                     &repo.path,
@@ -218,9 +216,9 @@ impl Manager {
             )
             .await?;
             let local = git::local_ref(&branch.name);
-            if git::run_isolated(&repo.path, &["show-ref", "--verify", "--", &local])
+            if git::ref_exists(&repo.path, &local, git::isolated_command)
                 .await
-                .is_ok()
+                .unwrap_or(false)
             {
                 self.refresh_branch(repo, &branch.name, UpstreamPolicy::Required)
                     .await?;

@@ -4,6 +4,8 @@ mod diff;
 pub mod existing_branch;
 pub mod fetch;
 pub mod merge;
+mod predicates;
+pub use predicates::{is_ancestor, ref_exists};
 pub mod repo;
 pub mod worktrunk;
 

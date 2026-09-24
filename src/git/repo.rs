@@ -356,21 +356,6 @@ fn allocate_branch(name: &str, taken: &[String]) -> String {
     prefix
 }
 
-/// Whether `ancestor` is reachable from `descendant`.
-async fn is_ancestor(repo: &Path, ancestor: &str, descendant: &str) -> Result<bool> {
-    let mut command = git::isolated_command(repo);
-    command.args(["merge-base", "--is-ancestor", ancestor, descendant]);
-    let output = command.output().await.context("compare commits")?;
-    match output.status.code() {
-        Some(0) => Ok(true),
-        Some(1) => Ok(false),
-        _ => bail!(
-            "git merge-base failed: {}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        ),
-    }
-}
-
 /// A branch's checkout must be exactly on that branch and clean before Shoal
 /// moves it.
 async fn clean_branch(path: &Path, branch: &str) -> Result<()> {
@@ -440,10 +425,11 @@ pub async fn finish_land(plan: LandPlan) -> Result<LandedBranch> {
         fast_forward,
         default_refresh,
     };
-    if is_ancestor(&repo.path, &source, &previous).await? {
+    if git::is_ancestor(&repo.path, &source, &previous, git::isolated_command).await? {
         return Ok(landed(previous.clone(), false, true));
     }
-    let fast_forward = is_ancestor(&repo.path, &previous, &source).await?;
+    let fast_forward =
+        git::is_ancestor(&repo.path, &previous, &source, git::isolated_command).await?;
     match checkout {
         Some(checkout) => {
             clean_branch(&checkout, &default).await?;

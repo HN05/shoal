@@ -37,7 +37,7 @@ the daemon. Prebuilt binaries do not require Rust.
 
 | Tool | Needed for |
 | --- | --- |
-| Git (`git`) | Repository and branch operations |
+| Git 2.46+ (`git`) | Repository and branch operations |
 | [Worktrunk](https://worktrunk.dev/) (`wt`, tested with 0.77.0) | Creating and removing worktrees |
 | `lsof` | Checking whether a workspace is in use before cleanup |
 | `ps` (included with macOS; typically `procps` or `procps-ng` on Linux) | Tracking and stopping processes |
