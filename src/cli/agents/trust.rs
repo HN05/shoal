@@ -1,4 +1,5 @@
 //! Best-effort trust configuration shared by the launch adapters.
+use crate::fsutil::{self, Permissions, ReplaceOptions};
 use anyhow::{Context as _, Result};
 use serde_json::json;
 
@@ -63,21 +64,19 @@ fn trust_claude_workspace(config: &std::path::Path, workspace: &std::path::Path)
     project.insert("hasTrustDialogAccepted".into(), Value::Bool(true));
     let directory = config.parent().context("Claude config has no parent")?;
     std::fs::create_dir_all(directory)?;
-    let mut temporary = tempfile::NamedTempFile::new_in(directory)?;
-    serde_json::to_writer_pretty(&mut temporary, &root)?;
-    if let Ok(metadata) = std::fs::metadata(config) {
-        temporary
-            .as_file()
-            .set_permissions(metadata.permissions())?;
-    }
-    temporary
-        .persist(config)
-        .with_context(|| format!("replace {}", config.display()))?;
+    fsutil::replace_atomically(
+        config,
+        &serde_json::to_vec_pretty(&root)?,
+        ReplaceOptions {
+            permissions: Permissions::Preserve,
+            sync: false,
+        },
+    )
+    .with_context(|| format!("replace {}", config.display()))?;
     Ok(true)
 }
 
 fn trust_codex_workspace(config: &std::path::Path, workspace: &std::path::Path) -> Result<bool> {
-    use std::io::Write;
     use toml_edit::{DocumentMut, Item, Table, value};
 
     let workspace = std::fs::canonicalize(workspace)?;
@@ -88,7 +87,7 @@ fn trust_codex_workspace(config: &std::path::Path, workspace: &std::path::Path) 
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => config.to_owned(),
         Err(error) => return Err(error).with_context(|| format!("resolve {}", config.display())),
     };
-    let directory = config.parent().context("Codex config has no parent")?;
+    config.parent().context("Codex config has no parent")?;
     let _lock = lock_trust_config(&config)?;
     let text = crate::fsutil::read_optional(&config)
         .with_context(|| format!("read {}", config.display()))?
@@ -109,16 +108,15 @@ fn trust_codex_workspace(config: &std::path::Path, workspace: &std::path::Path) 
         return Ok(false);
     }
     project.insert("trust_level", value("trusted"));
-    let mut temporary = tempfile::NamedTempFile::new_in(directory)?;
-    temporary.write_all(root.to_string().as_bytes())?;
-    if let Ok(metadata) = std::fs::metadata(&config) {
-        temporary
-            .as_file()
-            .set_permissions(metadata.permissions())?;
-    }
-    temporary
-        .persist(&config)
-        .with_context(|| format!("replace {}", config.display()))?;
+    fsutil::replace_atomically(
+        &config,
+        root.to_string().as_bytes(),
+        ReplaceOptions {
+            permissions: Permissions::Preserve,
+            sync: false,
+        },
+    )
+    .with_context(|| format!("replace {}", config.display()))?;
     Ok(true)
 }
 
@@ -144,6 +142,28 @@ mod tests {
     use super::*;
     use serde_json::Value;
     use std::fs;
+
+    #[test]
+    fn trust_updates_preserve_existing_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = tempfile::tempdir().unwrap();
+        let config = root.path().join("config");
+        let workspace = root.path().join("workspace");
+        fs::create_dir(&workspace).unwrap();
+        for claude in [false, true] {
+            fs::write(&config, if claude { "{}" } else { "" }).unwrap();
+            fs::set_permissions(&config, fs::Permissions::from_mode(0o640)).unwrap();
+            if claude {
+                trust_claude_workspace(&config, &workspace).unwrap();
+            } else {
+                trust_codex_workspace(&config, &workspace).unwrap();
+            }
+            assert_eq!(
+                fs::metadata(&config).unwrap().permissions().mode() & 0o777,
+                0o640
+            );
+        }
+    }
 
     #[test]
     fn concurrent_trust_updates_keep_every_workspace() {

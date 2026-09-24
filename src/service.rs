@@ -1,3 +1,4 @@
+use crate::fsutil::{self, Permissions, ReplaceOptions};
 use crate::tools::Tool;
 use std::{
     fs,
@@ -197,12 +198,15 @@ pub async fn setup(paths: &Paths, executable: &Path, preserve_running: bool) -> 
                 .parent()
                 .context("missing service directory")?,
         )?;
-        let mut temporary = tempfile::NamedTempFile::new_in(definition.path.parent().unwrap())?;
-        std::io::Write::write_all(&mut temporary, definition.content.as_bytes())?;
-        temporary.as_file().sync_all()?;
-        temporary
-            .persist(&definition.path)
-            .context("write service definition")?;
+        fsutil::replace_atomically(
+            &definition.path,
+            definition.content.as_bytes(),
+            ReplaceOptions {
+                permissions: Permissions::Temporary,
+                sync: true,
+            },
+        )
+        .context("write service definition")?;
     }
     match platform {
         Platform::Mac => {

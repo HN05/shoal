@@ -10,6 +10,7 @@ use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use std::{fs, path::PathBuf, time::Duration};
 
+use crate::fsutil::{self, Permissions, ReplaceOptions};
 use crate::paths::Paths;
 use repo::{ConfigLayers, RepoConfig};
 pub use resolve::Effective;
@@ -537,8 +538,14 @@ impl Config {
         let parent = path.parent().context("config path has no parent")?;
         fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
         // Prepare the complete replacement before moving the user's current file.
-        let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
-        std::io::Write::write_all(&mut temporary, text.as_bytes())?;
+        let temporary = fsutil::prepare_atomic_write(
+            &path,
+            text.as_bytes(),
+            ReplaceOptions {
+                permissions: Permissions::Temporary,
+                sync: false,
+            },
+        )?;
         if let Ok(metadata) = fs::symlink_metadata(&path) {
             ensure!(
                 !metadata.is_dir(),

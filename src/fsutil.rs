@@ -1,7 +1,8 @@
 //! Small filesystem operations shared by the CLI and daemon.
 use std::{
     ffi::OsStr,
-    fs, io,
+    fs,
+    io::{self, Write},
     os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
 };
@@ -45,10 +46,136 @@ pub fn read_optional(path: &Path) -> io::Result<Option<String>> {
     }
 }
 
+pub enum Permissions {
+    /// Keep the private permissions chosen by NamedTempFile.
+    Temporary,
+    /// Copy the destination's permissions if its metadata can be read.
+    Preserve,
+    Mode(u32),
+}
+
+pub struct ReplaceOptions {
+    pub permissions: Permissions,
+    /// Sync the replacement file before publishing it; does not sync the directory.
+    pub sync: bool,
+}
+
+/// Prepare beside the destination so a later persist stays on the same filesystem.
+/// The caller creates parent directories and may move a backup before publishing.
+pub fn prepare_atomic_write(
+    path: &Path,
+    contents: &[u8],
+    options: ReplaceOptions,
+) -> io::Result<tempfile::NamedTempFile> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "destination has no parent"))?;
+    let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
+    temporary.write_all(contents)?;
+    let permissions = match options.permissions {
+        Permissions::Temporary => None,
+        Permissions::Preserve => fs::metadata(path)
+            .ok()
+            .map(|metadata| metadata.permissions()),
+        Permissions::Mode(mode) => Some(fs::Permissions::from_mode(mode)),
+    };
+    if let Some(permissions) = permissions {
+        temporary.as_file().set_permissions(permissions)?;
+    }
+    if options.sync {
+        temporary.as_file().sync_all()?;
+    }
+    Ok(temporary)
+}
+
+/// Replace the directory entry, including an existing symlink, with a complete file.
+pub fn replace_atomically(path: &Path, contents: &[u8], options: ReplaceOptions) -> io::Result<()> {
+    prepare_atomic_write(path, contents, options)?
+        .persist(path)
+        .map_err(|error| error.error)?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::os::unix::{ffi::OsStrExt, fs::symlink};
+
+    #[test]
+    fn atomic_replace_applies_permissions_and_replaces_symlinks() {
+        use std::io::Read;
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("source");
+        let path = root.path().join("destination");
+        for (permissions, expected, sync) in [
+            (Permissions::Temporary, 0o600, false),
+            (Permissions::Preserve, 0o640, true),
+            (Permissions::Mode(0o644), 0o644, false),
+        ] {
+            fs::write(&source, "old").unwrap();
+            fs::set_permissions(&source, fs::Permissions::from_mode(0o640)).unwrap();
+            symlink(&source, &path).unwrap();
+            let mut old = fs::File::open(&path).unwrap();
+            replace_atomically(&path, b"new", ReplaceOptions { permissions, sync }).unwrap();
+            assert!(!path.is_symlink());
+            assert_eq!(fs::read_to_string(&path).unwrap(), "new");
+            assert_eq!(
+                fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+                expected
+            );
+            let mut text = String::new();
+            old.read_to_string(&mut text).unwrap();
+            assert_eq!(text, "old");
+            assert_eq!(fs::read_to_string(&source).unwrap(), "old");
+            fs::remove_file(&path).unwrap();
+        }
+        replace_atomically(
+            &path,
+            b"created",
+            ReplaceOptions {
+                permissions: Permissions::Preserve,
+                sync: false,
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+    }
+
+    #[test]
+    fn failed_or_abandoned_replacements_leave_no_temporary_files() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("destination");
+        fs::create_dir(&path).unwrap();
+        fs::write(path.join("keep"), "old").unwrap();
+        assert!(
+            replace_atomically(
+                &path,
+                b"new",
+                ReplaceOptions {
+                    permissions: Permissions::Temporary,
+                    sync: false,
+                }
+            )
+            .is_err()
+        );
+        assert_eq!(fs::read_to_string(path.join("keep")).unwrap(), "old");
+        assert_eq!(fs::read_dir(root.path()).unwrap().count(), 1);
+        let prepared = prepare_atomic_write(
+            &path,
+            b"new",
+            ReplaceOptions {
+                permissions: Permissions::Temporary,
+                sync: false,
+            },
+        )
+        .unwrap();
+        assert!(path.is_dir());
+        drop(prepared);
+        assert_eq!(fs::read_dir(root.path()).unwrap().count(), 1);
+    }
 
     #[test]
     fn home_expansion_only_replaces_a_leading_tilde_component() {

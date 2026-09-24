@@ -1,8 +1,8 @@
 //! User-level skill delivery; no daemon, repository, or agent process is needed.
+use crate::fsutil::{self, Permissions, ReplaceOptions};
 use std::{
     fs,
-    io::Write,
-    os::unix::fs::{PermissionsExt, symlink},
+    os::unix::fs::symlink,
     path::{Path, PathBuf},
 };
 
@@ -92,14 +92,15 @@ fn install(path: &Path, source: Option<&Path>) -> Result<()> {
         symlink(source, &link)?;
         fs::rename(link, path).with_context(|| format!("link skill at {}", path.display()))?;
     } else {
-        let mut temporary = tempfile::NamedTempFile::new_in(directory)?;
-        temporary.write_all(SKILL.as_bytes())?;
-        temporary
-            .as_file()
-            .set_permissions(fs::Permissions::from_mode(0o644))?;
-        temporary
-            .persist(path)
-            .with_context(|| format!("install skill at {}", path.display()))?;
+        fsutil::replace_atomically(
+            path,
+            SKILL.as_bytes(),
+            ReplaceOptions {
+                permissions: Permissions::Mode(0o644),
+                sync: false,
+            },
+        )
+        .with_context(|| format!("install skill at {}", path.display()))?;
     }
     Ok(())
 }
@@ -107,6 +108,25 @@ fn install(path: &Path, source: Option<&Path>) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn embedded_skill_replaces_symlinks_with_a_readable_file() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("personal.md");
+        let path = root.path().join("SKILL.md");
+        fs::write(&source, "personal").unwrap();
+        fs::set_permissions(&source, fs::Permissions::from_mode(0o600)).unwrap();
+        symlink(&source, &path).unwrap();
+        install(&path, None).unwrap();
+        assert!(!path.is_symlink());
+        assert_eq!(fs::read_to_string(&path).unwrap(), SKILL);
+        assert_eq!(
+            fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+            0o644
+        );
+        assert_eq!(fs::read_to_string(source).unwrap(), "personal");
+    }
 
     #[test]
     fn runtime_skill_path_overrides_build_path_and_requires_a_file() {
