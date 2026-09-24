@@ -284,6 +284,32 @@ pub fn leases(db: &Connection, owner: Option<&str>) -> Result<Vec<ResourceLease>
         .collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
+// Deliberately independent of scope: configuration drift must not hide a name
+// already held by this workspace under the previous scope.
+fn named_lease(
+    db: &Connection,
+    workspace: &str,
+    pool: &str,
+    name: &str,
+) -> Result<Option<ResourceLease>> {
+    Ok(db
+        .query_row(
+            &format!("SELECT {LEASE_COLUMNS} FROM resource_leases WHERE workspace_id=?1 AND pool=?2 AND name=?3"),
+            params![workspace, pool, name],
+            row_lease,
+        )
+        .optional()?)
+}
+
+fn pool_leases(db: &Connection, scope: &Scope, pool: &str) -> Result<Vec<ResourceLease>> {
+    Ok(db
+        .prepare(&format!(
+            "SELECT {LEASE_COLUMNS} FROM resource_leases WHERE scope=?1 AND pool=?2 ORDER BY resource,name,id"
+        ))?
+        .query_map(params![scope, pool], row_lease)?
+        .collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
 /// The definition recorded when a pool's leases were granted, if any.
 fn stored_definition(
     tx: &Transaction<'_>,
@@ -642,11 +668,8 @@ fn acquire_lease(
 ) -> Result<Allocation<ResourceLease>> {
     let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
     store::require_ready(&tx, &workspace_id)?;
-    let all = leases(&tx, None)?;
-    if let Some(existing) = all.iter().find(|l| {
-        l.workspace_id == workspace_id && l.pool == request.pool && l.name == request.name
-    }) {
-        return renew_lease(tx, existing, &scope, request);
+    if let Some(existing) = named_lease(&tx, &workspace_id, &request.pool, &request.name)? {
+        return renew_lease(tx, &existing, &scope, request);
     }
     if let Some(resource) = &request.resource {
         ensure!(
@@ -655,10 +678,8 @@ fn acquire_lease(
             request.pool
         );
     }
-    let active: Vec<_> = all
-        .iter()
-        .filter(|l| l.scope == scope && l.pool == request.pool)
-        .collect();
+    let candidates = pool_leases(&tx, &scope, &request.pool)?;
+    let active: Vec<_> = candidates.iter().collect();
     if let Some(stored) = stored_definition(&tx, &scope, &request.pool)? {
         ensure!(
             active.is_empty() || stored == definition,
@@ -886,6 +907,91 @@ mod tests {
             row_lease,
         )?;
         assert_eq!(serde_json::to_value(lease)?, expected);
+        Ok(())
+    }
+
+    #[test]
+    fn allocation_reads_only_the_named_lease_and_selected_pool() -> Result<()> {
+        let mut db = Connection::open_in_memory()?;
+        db.execute_batch(include_str!("../../tests/fixtures/schema_v17.sql"))?;
+        db.execute_batch(
+            "INSERT INTO repositories(id,path,source,last_used) VALUES ('a','/a','a',0),('b','/b','b',0);
+             INSERT INTO workspaces(id,repository_id,name,path,branch,state) VALUES
+             ('a','a','a','/a/w','a','ready'),('b','b','b','/b/w','b','ready');
+             INSERT INTO resource_pools VALUES ('global','target','{}'),('repo/a','target','{}'),
+             ('repo/b','target','{}'),('global','other','{}');",
+        )?;
+        for (id, owner, scope, pool, member, mode) in [
+            ("one", "a", "global", "target", "z", "permit"),
+            ("two", "b", "global", "target", "a", "read"),
+            ("three", "a", "repo/a", "target", "a", "write"),
+            ("four", "b", "repo/b", "target", "a", "read"),
+            ("five", "a", "global", "other", "a", "permit"),
+        ] {
+            db.execute(
+                "INSERT INTO resource_leases VALUES (?1,?2,?3,?4,?1,?5,NULL,0,?6)",
+                params![id, owner, scope, pool, member, mode],
+            )?;
+        }
+        for unrelated in [0, 100, 10_000] {
+            db.execute("DELETE FROM resource_leases WHERE name LIKE 'noise-%'", [])?;
+            let tx = db.transaction()?;
+            for i in 0..unrelated {
+                tx.execute(
+                    "INSERT INTO resource_leases VALUES (?1,'b','global','other',?1,'a',NULL,0,'permit')",
+                    [format!("noise-{i}")],
+                )?;
+            }
+            tx.commit()?;
+            let all = leases(&db, None)?;
+            for scope in [
+                Scope::Global,
+                Scope::Repo("a".into()),
+                Scope::Repo("b".into()),
+            ] {
+                let selected = pool_leases(&db, &scope, "target")?;
+                let expected: Vec<_> = all
+                    .iter()
+                    .filter(|l| l.scope == scope && l.pool == "target")
+                    .collect();
+                assert_eq!(
+                    serde_json::to_value(&selected)?,
+                    serde_json::to_value(expected)?
+                );
+            }
+            let selected = pool_leases(&db, &Scope::Global, "target")?;
+            assert_eq!(selected.len(), 2);
+            let existing = named_lease(&db, "a", "target", "three")?.unwrap();
+            assert_eq!(existing.scope, Scope::Repo("a".into()));
+            assert!(named_lease(&db, "b", "target", "three")?.is_none());
+            assert!(named_lease(&db, "a", "other", "three")?.is_none());
+            let request = ResourceRequest {
+                mode: None,
+                pool: "target".into(),
+                name: "three".into(),
+                resource: None,
+                reason: Some("renewed".into()),
+            };
+            // A new global definition cannot hide a repository-scoped name.
+            let error = renew_lease(
+                db.transaction()?,
+                &existing,
+                &Scope::Global,
+                request.clone(),
+            )
+            .err()
+            .unwrap();
+            assert!(error.to_string().contains("different settings"));
+            renew_lease(db.transaction()?, &existing, &existing.scope, request)?;
+            let renewed = named_lease(&db, "a", "target", "three")?.unwrap();
+            assert_eq!(renewed.id, existing.id);
+            assert_eq!(renewed.reason.as_deref(), Some("renewed"));
+            eprintln!(
+                "unrelated={unrelated}: global rows={}, candidate rows={}, renewal rows=1",
+                all.len(),
+                selected.len()
+            );
+        }
         Ok(())
     }
 

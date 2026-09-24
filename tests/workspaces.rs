@@ -4775,6 +4775,44 @@ fn rwlock_modes_survive_restart_wait_and_failed_removal() {
 }
 
 #[test]
+fn resource_renewals_reject_scope_drift_before_allocating() {
+    let config = "[resources.cache]\nkind='rwlock'\n";
+    let mut fixture = Fixture::with_config(Some(config));
+    let workspace = fixture.add("owner");
+    let args = ["resource", "acquire", "cache", "owner", "--mode", "read"];
+    let original = fixture.ok(&args);
+    fs::write(
+        Path::new(workspace["path"].as_str().unwrap()).join(".shoal.toml"),
+        config,
+    )
+    .unwrap();
+    fs::write(fixture.root.path().join(".config/shoal/config.toml"), "").unwrap();
+    fixture.restart();
+    let rejected = fixture.run(&args);
+    assert!(!rejected.status.success());
+    assert!(String::from_utf8_lossy(&rejected.stderr).contains("different settings"));
+    assert_eq!(
+        fixture.ok(&["resource", "owner"])["leases"],
+        serde_json::json!([original])
+    );
+    fixture.ok(&["resource", "release", "cache", "owner"]);
+    let local = fixture.ok(&args);
+    assert_ne!(local["scope"], original["scope"]);
+    assert_eq!(fixture.ok(&args), local);
+    fs::write(
+        fixture.root.path().join(".config/shoal/config.toml"),
+        config,
+    )
+    .unwrap();
+    fixture.restart();
+    assert!(!fixture.run(&args).status.success());
+    assert_eq!(
+        fixture.ok(&["resource", "owner"])["leases"],
+        serde_json::json!([local])
+    );
+}
+
+#[test]
 fn rwlock_scope_and_kind_drift_preserve_active_leases() {
     let fixture = Fixture::new();
     commit_resource_config(&fixture.repo, "[resources.cache]\nkind='rwlock'\n");
