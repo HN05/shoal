@@ -4222,6 +4222,23 @@ fn repo_resources_share_across_branches_and_refuse_conflicting_definitions() {
         .find(|p| p["name"] == "signing")
         .unwrap();
     assert_eq!(signing["configuration_matches"], false);
+    fs::copy(
+        second_path.join(".shoal.toml"),
+        first_path.join(".shoal.toml"),
+    )
+    .unwrap();
+    let renewed = fixture.ok(&[
+        "resource",
+        "acquire",
+        "signing",
+        "first",
+        "--reason",
+        "still signing",
+    ]);
+    assert_eq!(renewed["id"], lease["id"]);
+    assert_eq!(renewed["created_at"], lease["created_at"]);
+    assert_eq!(renewed["reason"], "still signing");
+    assert_eq!(fixture.ok(&["inspect", "first"])["resources"][0], renewed);
     fs::remove_file(first_path.join(".shoal.toml")).unwrap();
     fixture.ok(&["resource", "release", "signing", "first"]);
     fixture.ok(&["resource", "acquire", "signing", "second"]);
@@ -10009,6 +10026,9 @@ while test ! -f "$HOME/hook-continue"; do sleep 0.05; done
     wait_until("permit hook", || {
         fixture.root.path().join("hook-entered").exists()
     });
+    let leases = fixture.ok(&["inspect", "hooked"])["resources"].clone();
+    assert_eq!(leases.as_array().unwrap().len(), 1);
+    assert_eq!(leases[0]["resource"], "signing");
     for args in [
         vec!["resource", "acquire", "signing", "hooked"],
         vec!["resource", "release", "signing", "hooked"],
@@ -10374,6 +10394,56 @@ fn resource_approvals_require_unscoped_decisions_and_preserve_capacity() {
     assert_eq!(denied["code"], "approval_denied");
     fixture.ok(&["resource", "release", "signing", "agent"]);
     assert!(fixture.ok(&["access"]).as_array().unwrap().is_empty());
+}
+
+#[test]
+fn resource_approvals_bind_a_member_even_when_the_pool_is_busy() {
+    let fixture = Fixture::with_config(Some(
+        "[resource_pools.devices]\ncapacity=1\n\
+         [resource_pools.devices.resources.alpha]\nrequires_approval=true\n\
+         [resource_pools.devices.resources.beta]\nrequires_approval=true\n",
+    ));
+    fixture.add("human");
+    fixture.add("agent");
+    fixture.ok(&[
+        "resource",
+        "acquire",
+        "devices",
+        "human",
+        "--resource",
+        "alpha",
+    ]);
+    let args = ["resource", "acquire", "devices", "--reason", "test device"];
+    let pending = pending_access(scoped_command(&fixture, "agent", &args));
+    let id = pending["id"].as_str().unwrap();
+    assert_eq!(pending["specification"]["member"], "alpha");
+    assert_eq!(pending["specification"]["mode"], "permit");
+    assert_eq!(fixture.ok(&["access"])[0], pending);
+    let overview = fixture.ok(&["resource", "agent"]);
+    assert_eq!(overview["pools"][0]["used"], 1);
+    assert_eq!(overview["leases"], serde_json::json!([]));
+    fixture.ok(&["access", "approve", id]);
+    let busy = scoped_command(&fixture, "agent", &args);
+    assert_eq!(busy.status.code(), Some(2));
+    let busy: Value = serde_json::from_slice(&busy.stdout).unwrap();
+    assert_eq!(busy["code"], "resource_busy");
+    assert_eq!(
+        busy["message"],
+        "no compatible capacity for alpha in pool devices; held by human"
+    );
+    let changed = scoped_command(
+        &fixture,
+        "agent",
+        &["resource", "acquire", "devices", "--resource", "beta"],
+    );
+    assert!(!changed.status.success());
+    assert!(String::from_utf8_lossy(&changed.stderr).contains("member changed; release it first"));
+    fixture.ok(&["resource", "release", "devices", "human"]);
+    let acquired = scoped_command(&fixture, "agent", &args);
+    assert!(acquired.status.success());
+    let lease: Value = serde_json::from_slice(&acquired.stdout).unwrap();
+    assert_eq!(lease["resource"], "alpha");
+    assert_eq!(fixture.ok(&["resource", "agent"])["pools"][0]["used"], 1);
 }
 
 #[test]
