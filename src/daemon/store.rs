@@ -12,7 +12,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 17;
+const SCHEMA_VERSION: i64 = 18;
 
 #[derive(Clone)]
 pub struct Store {
@@ -207,6 +207,11 @@ const MIGRATIONS: &[(i64, &str)] = &[
         CREATE UNIQUE INDEX IF NOT EXISTS access_request_name
             ON access_requests(workspace_id,target_key,name) WHERE active=1;",
     ),
+    (
+        18,
+        "CREATE INDEX IF NOT EXISTS executions_workspace ON executions(workspace_id);
+        CREATE INDEX IF NOT EXISTS workspaces_repository ON workspaces(repository_id);",
+    ),
 ];
 
 fn migrate(db: &mut Connection) -> Result<()> {
@@ -341,11 +346,13 @@ fn execution(row: &Row<'_>) -> rusqlite::Result<Execution> {
     })
 }
 
+fn executions_query() -> String {
+    format!("SELECT {EXECUTION_COLUMNS} FROM executions WHERE workspace_id=?1")
+}
+
 pub fn executions(db: &Connection, workspace_id: &str) -> Result<Vec<Execution>> {
     Ok(db
-        .prepare(&format!(
-            "SELECT {EXECUTION_COLUMNS} FROM executions WHERE workspace_id=?1",
-        ))?
+        .prepare(&executions_query())?
         .query_map([workspace_id], execution)?
         .collect::<rusqlite::Result<Vec<_>>>()?)
 }
@@ -374,6 +381,12 @@ mod tests {
             return Ok(db);
         }
         db.execute_batch(include_str!("../../tests/fixtures/schema_v17.sql"))?;
+        if version >= 18 {
+            db.execute_batch(
+                "CREATE INDEX executions_workspace ON executions(workspace_id);
+                CREATE INDEX workspaces_repository ON workspaces(repository_id);",
+            )?;
+        }
         if version < 4 {
             db.execute_batch("DROP INDEX repository_names;")?;
         }
@@ -431,7 +444,7 @@ mod tests {
 
     #[test]
     fn migrates_every_recorded_version_to_the_same_schema() -> Result<()> {
-        let expected = schema_snapshot(&historical_database(17)?)?;
+        let expected = schema_snapshot(&historical_database(18)?)?;
         assert_eq!(MIGRATIONS.last().unwrap().0, SCHEMA_VERSION);
         for version in 0..=SCHEMA_VERSION {
             let mut db = historical_database(version)?;

@@ -72,7 +72,7 @@ fn check_query_growth(db: &Connection, sql: &str, table: &str, owner_column: &st
         );
         let mut statement = db.prepare(sql)?;
         let rows = statement
-            .query_map(["owner-0"], |row| row.get::<_, String>(0))?
+            .query_map(["owner-0"], |row| row.get::<_, rusqlite::types::Value>(0))?
             .collect::<rusqlite::Result<Vec<_>>>()?;
         assert!(!rows.is_empty());
         assert_eq!(statement.get_status(StatementStatus::FullscanStep), 0);
@@ -163,6 +163,107 @@ fn resource_lists_propagate_decoding_and_prepare_errors() -> Result<()> {
     for owner in [None, Some("owner-0")] {
         assert!(ports(&db, owner).is_err());
         assert!(resources::leases(&db, owner).is_err());
+    }
+    Ok(())
+}
+
+#[test]
+fn execution_owner_reads_search_migrated_index() -> Result<()> {
+    let mut db = populated_database()?;
+    migrate(&mut db)?;
+    check_query_growth(&db, &executions_query(), "executions", "workspace_id")
+}
+
+#[test]
+fn repository_workspace_reads_search_migrated_index() -> Result<()> {
+    let mut db = populated_database()?;
+    migrate(&mut db)?;
+    check_query_growth(
+        &db,
+        &format!("SELECT {WORKSPACE_COLUMNS} FROM workspaces WHERE repository_id=?1"),
+        "workspaces",
+        "repository_id",
+    )?;
+    // Repository removal also probes for remaining ownership through EXISTS.
+    let plan = db
+        .prepare(
+            "EXPLAIN QUERY PLAN SELECT EXISTS(SELECT 1 FROM workspaces WHERE repository_id=?1)",
+        )?
+        .query_map(["missing"], |row| row.get::<_, String>(3))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    assert!(
+        plan.iter().any(|step| step.contains("SEARCH workspaces")
+            && step.contains("INDEX")
+            && step.contains("repository_id=?")),
+        "{plan:?}"
+    );
+    assert!(!exists(
+        &db,
+        "SELECT 1 FROM workspaces WHERE repository_id=?1",
+        ["missing"]
+    )?);
+    Ok(())
+}
+
+fn ownership_snapshot(db: &mut Connection) -> Result<Vec<Vec<Vec<rusqlite::types::Value>>>> {
+    [
+        "repositories",
+        "workspaces",
+        "ports",
+        "resource_pools",
+        "resource_leases",
+        "executions",
+    ]
+    .into_iter()
+    .map(|table| {
+        let mut statement = db.prepare(&format!("SELECT * FROM {table} ORDER BY rowid"))?;
+        let columns = statement.column_count();
+        Ok(statement
+            .query_map([], |row| (0..columns).map(|i| row.get(i)).collect())?
+            .collect::<rusqlite::Result<_>>()?)
+    })
+    .collect()
+}
+
+#[tokio::test]
+async fn v17_upgrade_and_reopen_preserve_ownership_leases_and_executions() -> Result<()> {
+    let root = tempfile::tempdir()?;
+    let path = root.path().join("state.db");
+    let mut old = populated_database()?;
+    old.execute_batch(
+        r#"UPDATE workspaces SET state='preparing', git_dir='/git/worktrees/owner',
+            git_dir_id='1:2', base_commit='abc', base_ref='refs/heads/main';
+        UPDATE executions SET wrapper='{"pid":123,"birth":"wrapper"}',
+            child='{"pid":456,"birth":"child"}', group_id=456;"#,
+    )?;
+    let before = ownership_snapshot(&mut old)?;
+    old.execute("VACUUM INTO ?1", [path.to_str().unwrap()])?;
+    drop(old);
+    for _ in 0..2 {
+        let reopened = Store::open(path.clone()).await?;
+        assert_eq!(reopened.run(ownership_snapshot).await?, before);
+        reopened
+            .run(|db| {
+                assert_eq!(
+                    db.query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))?,
+                    18
+                );
+                for (index, column) in [
+                    ("executions_workspace", "workspace_id"),
+                    ("workspaces_repository", "repository_id"),
+                ] {
+                    let columns = db
+                        .prepare(&format!("PRAGMA index_info({index})"))?
+                        .query_map([], |row| row.get::<_, String>(2))?
+                        .collect::<rusqlite::Result<Vec<_>>>()?;
+                    assert_eq!(columns, [column]);
+                }
+                assert_eq!(executions(db, "owner-0")?[0].state, ExecutionState::Running);
+                assert_eq!(ports(db, Some("owner-0"))?.len(), 2);
+                assert_eq!(resources::leases(db, Some("owner-0"))?.len(), 2);
+                Ok(())
+            })
+            .await?;
     }
     Ok(())
 }
