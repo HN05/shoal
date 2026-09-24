@@ -298,6 +298,37 @@ fn stored_definition(
         .map_err(Into::into)
 }
 
+fn save_definition(
+    tx: &Transaction<'_>,
+    scope: &Scope,
+    pool: &str,
+    definition: &Definition,
+) -> Result<()> {
+    tx.execute(
+        "INSERT INTO resource_pools(scope,name,definition) VALUES (?1,?2,?3) ON CONFLICT(scope,name) DO UPDATE SET definition=excluded.definition",
+        params![scope, pool, serde_json::to_string(definition)?],
+    )?;
+    Ok(())
+}
+
+fn insert_lease(tx: &Transaction<'_>, lease: &ResourceLease) -> Result<()> {
+    tx.execute(
+        "INSERT INTO resource_leases(id,workspace_id,scope,pool,name,resource,reason,created_at,mode) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
+        params![
+            lease.id,
+            lease.workspace_id,
+            lease.scope,
+            lease.pool,
+            lease.name,
+            lease.resource,
+            lease.reason,
+            lease.created_at,
+            lease.mode
+        ],
+    )?;
+    Ok(())
+}
+
 /// Occupancy of one pool member.
 #[derive(Default, Clone, Copy)]
 struct Usage {
@@ -432,7 +463,7 @@ impl Manager {
     pub async fn acquire_resource(
         &self,
         selector: &str,
-        mut request: ResourceRequest,
+        request: ResourceRequest,
         caller: Option<&Caller>,
     ) -> Result<Allocation<ResourceLease>> {
         validate::lowercase_name("resource", &request.pool)?;
@@ -464,106 +495,7 @@ impl Manager {
         let scoped = caller.is_some();
         let acquisition = self
             .store
-            .run(move |db| {
-                let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
-                store::require_ready(&tx, &workspace.id)?;
-                let all = leases(&tx, None)?;
-                if let Some(existing) = all.iter().find(|l| {
-                    l.workspace_id == workspace.id
-                        && l.pool == request.pool
-                        && l.name == request.name
-                }) {
-                    return renew_lease(tx, existing, &scope, request);
-                }
-                if let Some(resource) = &request.resource {
-                    ensure!(
-                        definition.resources.contains_key(resource),
-                        "unknown resource {resource} in pool {}",
-                        request.pool
-                    );
-                }
-                let active: Vec<_> = all
-                    .iter()
-                    .filter(|l| l.scope == scope && l.pool == request.pool)
-                    .collect();
-                if let Some(stored) = stored_definition(&tx, &scope, &request.pool)? {
-                    ensure!(
-                        active.is_empty() || stored == definition,
-                        "resource definition changed while leases are active; align repo configs or release all leases before changing kind/capacity/members"
-                    );
-                }
-                tx.execute(
-                    "INSERT INTO resource_pools(scope,name,definition) VALUES (?1,?2,?3) ON CONFLICT(scope,name) DO UPDATE SET definition=excluded.definition",
-                    params![scope, request.pool, serde_json::to_string(&definition)?],
-                )?;
-                let target = Target::Resource { scope: scope.clone(), pool: request.pool.clone() };
-                if scoped && let Some(pending) = access::current(&tx, &workspace.id, &target, &request.name)? {
-                    let Specification::Resource(bound) = &pending.specification else {
-                        bail!("access request {} for {target} does not select a pool member; release the name and request again", pending.id);
-                    };
-                    ensure!(request.resource.as_deref().is_none_or(|r| r == bound.member), "access request member changed; release it first");
-                    request.resource = Some(bound.member.clone());
-                }
-                let pool_available = definition.capacity.saturating_sub(pool_used(&active));
-                let selected = match select_member(&definition, &request, &active, pool_available)? {
-                    Some(selected) => Some(selected),
-                    // A busy pool still selects the member an approval request binds.
-                    None => select_member(&definition, &request, &[], definition.capacity)?,
-                };
-                let busy = || -> Result<Allocation<ResourceLease>> {
-                    Ok(Allocation::Busy(format!(
-                        "no compatible capacity for {} in pool {}{}",
-                        request.resource.as_deref().unwrap_or("any resource"),
-                        request.pool,
-                        holders(&tx, &active)?
-                    )))
-                };
-                let Some((resource, settings, mode)) = selected else {
-                    return busy();
-                };
-                if scoped && settings.requires_approval {
-                    let bound = ResourceSpecification { definition: definition.clone(), member: resource.clone(), mode };
-                    let approval = AccessRequest::new(&workspace.id, target, &request.name,
-                        Specification::Resource(bound), settings.approval_lifetime, request.reason.as_deref());
-                    if let Some(approval) = access::check(&tx, approval)? {
-                        tx.commit()?;
-                        return Ok(Allocation::Approval(Box::new(approval)));
-                    }
-                }
-                if !settings.can_acquire(mode, usage(&active, resource), pool_available) {
-                    return busy();
-                }
-                let lease = ResourceLease {
-                    mode,
-                    id: Uuid::new_v4().to_string(),
-                    workspace_id: workspace.id,
-                    scope,
-                    pool: request.pool,
-                    name: request.name,
-                    resource: resource.clone(),
-                    reason: request
-                        .reason
-                        .or_else(|| settings.reason.clone())
-                        .or(definition.reason.clone()),
-                    created_at: i64::try_from(crate::time::unix_seconds())?,
-                };
-                tx.execute(
-                    "INSERT INTO resource_leases(id,workspace_id,scope,pool,name,resource,reason,created_at,mode) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
-                    params![
-                        lease.id,
-                        lease.workspace_id,
-                        lease.scope,
-                        lease.pool,
-                        lease.name,
-                        lease.resource,
-                        lease.reason,
-                        lease.created_at,
-                        lease.mode
-                    ],
-                )?;
-                tx.commit()?;
-                Ok(Allocation::Granted(lease))
-            })
+            .run(move |db| acquire_lease(db, workspace.id, scope, definition, request, scoped))
             .await?;
         if let Allocation::Granted(lease) = &acquisition
             && let Some(command) = hook
@@ -691,6 +623,120 @@ impl Manager {
             })
             .await
     }
+}
+
+/// Claim or renew atomically. Approval and grant outcomes commit; busy outcomes
+/// leave the pool definition and access records unchanged.
+fn acquire_lease(
+    db: &mut Connection,
+    workspace_id: String,
+    scope: Scope,
+    definition: Definition,
+    mut request: ResourceRequest,
+    scoped: bool,
+) -> Result<Allocation<ResourceLease>> {
+    let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    store::require_ready(&tx, &workspace_id)?;
+    let all = leases(&tx, None)?;
+    if let Some(existing) = all.iter().find(|l| {
+        l.workspace_id == workspace_id && l.pool == request.pool && l.name == request.name
+    }) {
+        return renew_lease(tx, existing, &scope, request);
+    }
+    if let Some(resource) = &request.resource {
+        ensure!(
+            definition.resources.contains_key(resource),
+            "unknown resource {resource} in pool {}",
+            request.pool
+        );
+    }
+    let active: Vec<_> = all
+        .iter()
+        .filter(|l| l.scope == scope && l.pool == request.pool)
+        .collect();
+    if let Some(stored) = stored_definition(&tx, &scope, &request.pool)? {
+        ensure!(
+            active.is_empty() || stored == definition,
+            "resource definition changed while leases are active; align repo configs or release all leases before changing kind/capacity/members"
+        );
+    }
+    save_definition(&tx, &scope, &request.pool, &definition)?;
+    let target = Target::Resource {
+        scope: scope.clone(),
+        pool: request.pool.clone(),
+    };
+    if scoped && let Some(pending) = access::current(&tx, &workspace_id, &target, &request.name)? {
+        let Specification::Resource(bound) = &pending.specification else {
+            bail!(
+                "access request {} for {target} does not select a pool member; release the name and request again",
+                pending.id
+            );
+        };
+        ensure!(
+            request
+                .resource
+                .as_deref()
+                .is_none_or(|r| r == bound.member),
+            "access request member changed; release it first"
+        );
+        request.resource = Some(bound.member.clone());
+    }
+    let pool_available = definition.capacity.saturating_sub(pool_used(&active));
+    let selected = match select_member(&definition, &request, &active, pool_available)? {
+        Some(selected) => Some(selected),
+        // A busy pool still selects the member an approval request binds.
+        None => select_member(&definition, &request, &[], definition.capacity)?,
+    };
+    let busy = || -> Result<Allocation<ResourceLease>> {
+        Ok(Allocation::Busy(format!(
+            "no compatible capacity for {} in pool {}{}",
+            request.resource.as_deref().unwrap_or("any resource"),
+            request.pool,
+            holders(&tx, &active)?
+        )))
+    };
+    let Some((resource, settings, mode)) = selected else {
+        return busy();
+    };
+    if scoped && settings.requires_approval {
+        let bound = ResourceSpecification {
+            definition: definition.clone(),
+            member: resource.clone(),
+            mode,
+        };
+        let approval = AccessRequest::new(
+            &workspace_id,
+            target,
+            &request.name,
+            Specification::Resource(bound),
+            settings.approval_lifetime,
+            request.reason.as_deref(),
+        );
+        if let Some(approval) = access::check(&tx, approval)? {
+            tx.commit()?;
+            return Ok(Allocation::Approval(Box::new(approval)));
+        }
+    }
+    if !settings.can_acquire(mode, usage(&active, resource), pool_available) {
+        return busy();
+    }
+    let lease = ResourceLease {
+        mode,
+        id: Uuid::new_v4().to_string(),
+        workspace_id,
+        scope,
+        pool: request.pool,
+        name: request.name,
+        resource: resource.clone(),
+        reason: request
+            .reason
+            .or_else(|| settings.reason.clone())
+            .or(definition.reason.clone()),
+        created_at: i64::try_from(crate::time::unix_seconds())?,
+    };
+    insert_lease(&tx, &lease)?;
+    tx.commit()?;
+    Ok(Allocation::Granted(lease))
 }
 
 /// An existing lease with the same name is returned again, refreshing its
