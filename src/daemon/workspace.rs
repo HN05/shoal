@@ -21,14 +21,14 @@ use crate::{
     },
     git::{self, worktrunk},
     hooks::HookKind,
-    model::{Inspection, Workspace},
+    model::{Inspection, Repository, Workspace},
     paths::Paths,
     state::WorkspaceState,
 };
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{OptionalExtension, TransactionBehavior, params};
 use std::{collections::HashMap, fs, sync::Arc};
-use tokio::sync::{Mutex, RwLock, watch};
+use tokio::sync::{Mutex, OwnedMutexGuard, RwLock, watch};
 use uuid::Uuid;
 
 pub(crate) enum WorkspaceSource {
@@ -99,6 +99,18 @@ impl Manager {
             .entry(repository.to_owned())
             .or_default()
             .clone()
+    }
+
+    pub(crate) async fn lock_repository(
+        &self,
+        selector: &str,
+    ) -> Result<(Repository, OwnedMutexGuard<()>)> {
+        let repo = self.repository(selector).await?;
+        let guard = self.git_gate(&repo.id).await.lock_owned().await;
+        // Removal may have completed or failed while this request waited.
+        let repo = self.repository(&repo.id).await?;
+        self.ensure_repository_available(&repo.id).await?;
+        Ok((repo, guard))
     }
 
     pub(crate) async fn resource_guard(&self, id: &str, hook: bool) -> Result<ResourceGuard> {
@@ -195,13 +207,8 @@ impl Manager {
         git_profile: Option<&str>,
         path: Option<std::path::PathBuf>,
     ) -> Result<Workspace> {
-        let repo = self.repository(repository).await?;
+        let (repo, _guard) = self.lock_repository(repository).await?;
         git::check_branch_name(Some(&repo.path), &name).await?;
-        let gate = self.git_gate(&repo.id).await;
-        let _guard = gate.lock().await;
-        // Removal may have completed or failed while this request waited.
-        self.repository(&repo.id).await?;
-        self.ensure_repository_available(&repo.id).await?;
         let branch = self.available_branch(&repo, &name).await?;
         self.create_branch_workspace(
             &repo,

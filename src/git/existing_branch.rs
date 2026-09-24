@@ -72,11 +72,7 @@ impl Manager {
         path: Option<std::path::PathBuf>,
         base: Option<String>,
     ) -> Result<OpenedWorkspace> {
-        let repo = self.repository(repository).await?;
-        let gate = self.git_gate(&repo.id).await;
-        let _guard = gate.lock().await;
-        self.repository(&repo.id).await?;
-        self.ensure_repository_available(&repo.id).await?;
+        let (repo, _guard) = self.lock_repository(repository).await?;
         let local = git::strip_local(selector).unwrap_or(selector);
         let local_ref = git::local_ref(local);
         let branch = if git::strip_remote(selector).is_none()

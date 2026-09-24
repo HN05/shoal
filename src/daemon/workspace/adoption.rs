@@ -9,11 +9,7 @@ use uuid::Uuid;
 
 impl Manager {
     pub async fn adopt_workspace(&self, repository: &str, path: &Path) -> Result<Workspace> {
-        let repo = self.repository(repository).await?;
-        let gate = self.git_gate(&repo.id).await;
-        let _guard = gate.lock().await;
-        self.repository(&repo.id).await?;
-        self.ensure_repository_available(&repo.id).await?;
+        let (repo, _guard) = self.lock_repository(repository).await?;
         let path = self.workspace_location(&repo, path).await?;
         let trees = git::worktrees(&repo.path, git::run).await?;
         let tree = trees
