@@ -8,11 +8,8 @@ import tomllib
 from urllib.parse import urlparse
 from urllib.request import urlopen
 
-
-def release_version(value):
-    if not re.fullmatch(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", value):
-        raise ValueError("expected a stable major.minor.patch version")
-    return tuple(map(int, value.split(".")))
+from release_metadata import (commit_id, tag_version, verified_tag_commit,
+                              version_parts as release_version)
 
 
 PLATFORMS = ("macos-arm64", "macos-x86_64", "linux-arm64", "linux-x86_64")
@@ -38,8 +35,7 @@ def update_formula(text, version, revision, manifest,
             or parsed.path != "/HN05/shoal.git" or parsed.query or parsed.fragment):
         raise ValueError("expected an HTTPS Shoal repository URL")
     new_version = release_version(version)
-    if not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", revision):
-        raise ValueError("expected a full Git commit ID")
+    commit_id(revision)
     versions = re.findall(r'^  version "([^"\n]+)"$', text, re.M)
     if len(versions) != 1:
         raise ValueError("expected exactly one formula version")
@@ -91,10 +87,7 @@ def main():
     parser.add_argument("--source-url", required=True,
                         help="Expected HTTPS source repository URL for this tap")
     args = parser.parse_args()
-    if not args.tag.startswith("v"):
-        parser.error("release tags must start with v")
-    version = args.tag[1:]
-    release_version(version)
+    version = tag_version(args.tag)
     source = Path(__file__).resolve().parent.parent
 
     def git(*arguments):
@@ -108,9 +101,7 @@ def main():
         # Do not publish a formula before the source mirror has the exact tag.
         refs = git("ls-remote", "https://github.com/HN05/shoal.git",
                    f"refs/tags/{args.tag}", f"refs/tags/{args.tag}^{{}}")
-        targets = dict(line.split()[::-1] for line in refs.splitlines())
-        mirrored = targets.get(f"refs/tags/{args.tag}^{{}}", targets.get(f"refs/tags/{args.tag}"))
-        if mirrored != revision:
+        if verified_tag_commit(refs, args.tag, revision) is None:
             raise ValueError("GitHub source tag is missing or differs; wait for the Shoal mirror and retry")
     formula = args.tap / "Formula/shoal.rb"
     original = formula.read_text()

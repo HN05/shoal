@@ -13,7 +13,6 @@ import json
 import mimetypes
 import os
 from pathlib import Path
-import re
 import subprocess
 import time
 import uuid
@@ -21,16 +20,11 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 import release_notes
+from release_metadata import commit_id, tag_version as version, verified_tag_commit
 
 GITHUB_API = "https://api.github.com"
 GITHUB_UPLOADS = "https://uploads.github.com"
 MANIFEST = "SHA256SUMS"
-
-
-def version(tag):
-    if not re.fullmatch(r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", tag):
-        raise ValueError("expected a stable vMAJOR.MINOR.PATCH tag")
-    return tag[1:]
 
 
 def request(url, token, scheme, data=None, content_type="application/json", method=None):
@@ -90,12 +84,8 @@ def mirrored(repository, tag, revision, attempts=30, delay=20):
         refs = subprocess.check_output(
             ["git", "ls-remote", f"https://github.com/{repository}.git",
              f"refs/tags/{tag}", f"refs/tags/{tag}^{{}}"], text=True)
-        targets = dict(line.split()[::-1] for line in refs.splitlines())
-        found = targets.get(f"refs/tags/{tag}^{{}}", targets.get(f"refs/tags/{tag}"))
-        if found == revision:
+        if verified_tag_commit(refs, tag, revision) is not None:
             return
-        if found is not None:
-            raise ValueError(f"GitHub tag {tag} points at {found}, not the released {revision}")
         if attempt + 1 < attempts:
             print(f"waiting for the GitHub mirror to receive {tag}")
             time.sleep(delay)
@@ -154,8 +144,7 @@ def main():
         if args.forge == "forgejo":
             forgejo(args.tag, args.files)
         else:
-            if not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", args.revision or ""):
-                raise ValueError("github needs --revision with the released commit ID")
+            commit_id(args.revision or "")
             github(args.tag, args.files, args.revision)
     except (ValueError, KeyError, subprocess.CalledProcessError, HTTPError) as error:
         parser.exit(1, f"Publishing assets failed: {error}\n")

@@ -12,6 +12,7 @@ import tomllib
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 import release_notes
+from release_metadata import commit_id, version_parts as parts, version_tag
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -23,12 +24,6 @@ def run(*args, capture=False):
 
 def git(*args):
     return run("git", *args, capture=True).strip()
-
-
-def parts(version):
-    if not re.fullmatch(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", version):
-        raise ValueError("use MAJOR.MINOR.PATCH without v or a prerelease suffix")
-    return tuple(map(int, version.split(".")))
 
 
 def versions(manifest, lock):
@@ -146,7 +141,7 @@ def publish(version, dry_run, merged_commit=None):
         raise ValueError("check out the release commit before publishing")
     if versions(git("show", f"{sha}:Cargo.toml"), git("show", f"{sha}:Cargo.lock")) != version:
         raise ValueError("requested version is not merged into main")
-    tag = f"v{version}"
+    tag = version_tag(version)
     existing = git("tag", "--list", tag)
     if existing and git("rev-parse", f"refs/tags/{tag}^{{commit}}") != sha:
         raise ValueError("release tag already points elsewhere; it will not be moved")
@@ -164,7 +159,7 @@ def create_release(version):
     repository = os.environ.get("RELEASE_REPOSITORY", "HN05/shoal")
     server = os.environ.get("RELEASE_API_URL", "https://git.henriknordvik.com/api/v1")
     url = server.rstrip("/").removesuffix("/api/v1") + "/" + repository
-    tag = f"v{version}"
+    tag = version_tag(version)
     try:
         existing = api(f"/repos/{repository}/releases/tags/{tag}", authenticated=False)
     except HTTPError as error:
@@ -205,9 +200,7 @@ def merged_release(pr, repository, number):
         raise ValueError("expected a release/vMAJOR.MINOR.PATCH branch")
     version = branch.removeprefix("release/v")
     parts(version)
-    sha = pr.get("merge_commit_sha", "")
-    if not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", sha):
-        raise ValueError("missing merged commit ID")
+    sha = commit_id(pr.get("merge_commit_sha", ""))
     return version, sha
 
 
@@ -226,7 +219,7 @@ def publish_merged(pr, repository, number):
 def resume(version):
     if git("status", "--porcelain"):
         raise ValueError("resume requires a clean checkout")
-    tag = f"v{version}"
+    tag = version_tag(version)
     run("git", "fetch", "origin", "+refs/heads/main:refs/remotes/origin/main", "--tags")
     if not git("tag", "--list", tag):
         raise ValueError("the current version can only resume from its existing release tag")

@@ -2,7 +2,7 @@
 import re
 from urllib.error import HTTPError
 
-STABLE_TAG = re.compile(r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
+from release_metadata import STABLE_TAG, tag_version, version_parts
 
 
 def is_release_pr(pr):
@@ -39,7 +39,7 @@ def generate(tag, git, get, url):
             page += 1
 
     def version(value):
-        return tuple(map(int, STABLE_TAG.fullmatch(value).groups()))
+        return version_parts(tag_version(value))
 
     target = git("rev-parse", f"{tag}^{{commit}}")
     history = set(git("rev-list", target).splitlines())
@@ -60,7 +60,7 @@ def generate(tag, git, get, url):
                     if pr.get("merged") and pr["base"]["ref"] == "main"
                     and pr.get("merge_commit_sha") in commits and not is_release_pr(pr)),
                    key=lambda pr: pr["number"])
-    lines = [f"Shoal {tag[1:]}.", "", "Install or upgrade through the "
+    lines = [f"Shoal {tag_version(tag)}.", "", "Install or upgrade through the "
              "[HN05 Homebrew tap](https://github.com/HN05/homebrew-tap), or download a "
              "prebuilt Linux or macOS binary below. For a manual binary install, "
              f"install the [runtime dependencies]({url}/src/tag/{tag}/README.md#runtime-dependencies) "
