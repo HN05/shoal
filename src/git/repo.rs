@@ -2,11 +2,15 @@
 use std::path::Path;
 
 use anyhow::{Context, Result, bail, ensure};
-use uuid::Uuid;
 
 use crate::{
     daemon::workspace::Manager,
-    git::{self, default_branch::DefaultBranchLookup, run_isolated as git_run, worktrunk},
+    git::{
+        self,
+        default_branch::DefaultBranchLookup,
+        fetch::{self, FetchPolicy},
+        run_isolated as git_run, worktrunk,
+    },
     model::{LandPlan, LandedBranch, PulledBranch, Repository},
 };
 
@@ -235,20 +239,17 @@ impl Manager {
             clean_branch(checkout, branch).await?;
         }
 
-        // A private fetch ref avoids races with unrelated fetches overwriting FETCH_HEAD.
-        let fetched = format!("refs/shoal/pull/{}", Uuid::new_v4());
-        let result = async {
-            git_run(
+        let commit = fetch::with_temporary_ref(&repo.path, "pull", git_run, async |fetched| {
+            let commit = fetch::fetch_commit(
                 &repo.path,
-                &[
-                    git::FETCH_SAFE_ARGS,
-                    &["--", remote, &format!("{reference}:{fetched}")],
-                ]
-                .concat(),
+                remote,
+                reference,
+                fetched,
+                FetchPolicy::ConfiguredRefmap,
+                git_run,
             )
             .await?;
-            let commit = git_run(&repo.path, &["rev-parse", "--verify", &fetched]).await?;
-            let commit = commit.trim();
+            let commit = commit.as_str();
             ensure!(
                 git_run(&repo.path, &["rev-parse", &local_ref])
                     .await?
@@ -294,11 +295,8 @@ impl Manager {
                 git::fast_forward_local(&repo.path, commit, &local_ref).await?;
             }
             Ok(commit.to_owned())
-        }
-        .await;
-        let cleanup = git_run(&repo.path, &["update-ref", "-d", &fetched]).await;
-        let commit = result?;
-        cleanup.context("could not remove temporary fetch ref")?;
+        })
+        .await?;
         Ok(PulledBranch {
             branch: branch.into(),
             repository_id: repo.id.clone(),

@@ -312,6 +312,10 @@ async fn creation_refreshes_main_instead_of_using_checkout_head() {
             .unwrap();
         assert_eq!(git(&workspace.path, &["rev-parse", "HEAD"]), expected);
         assert_eq!(git(&f.repo, &["rev-parse", "main"]), expected);
+        assert_eq!(
+            git(&f.repo, &["rev-parse", "refs/remotes/source/main"]),
+            expected
+        );
         assert_eq!(git(&f.repo, &["rev-parse", "HEAD"]), original);
         assert_eq!(workspace.base_commit.as_deref(), Some(expected.trim()));
         assert_eq!(workspace.base_ref.as_deref(), Some("refs/heads/main"));

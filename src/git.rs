@@ -2,6 +2,7 @@
 pub mod default_branch;
 mod diff;
 pub mod existing_branch;
+pub mod fetch;
 pub mod merge;
 pub mod repo;
 pub mod worktrunk;
