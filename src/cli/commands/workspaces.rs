@@ -14,13 +14,16 @@ use crate::{
     },
     daemon::recovery::{ReconcileOptions, Report},
     env, execution,
-    forge::pr::{Action, RegistrationKind},
+    forge::{
+        IssueInput,
+        pr::{Action, RegistrationKind},
+    },
     git::{
         self,
         existing_branch::{Branch, OpenedWorkspace},
     },
     hooks::{self, Hook, HookKind},
-    model::{DiffBase, Workspace, WorkspaceStatus},
+    model::{DiffBase, Repository, Workspace, WorkspaceStatus},
     protocol::{ConfigTarget, Method},
     removal::{BranchChoice, RemovalCheck, RemovalResult},
     shell,
@@ -126,6 +129,128 @@ pub(super) async fn add(
     agent: AgentLaunch,
     args: Vec<OsString>,
 ) -> Result<i32> {
+    let mut creation = creation;
+    creation.path = creation
+        .path
+        .map(|path| super::repositories::absolute(ctx, path))
+        .transpose()?;
+    let target = resolve_add_target(ctx, repository, issue.as_deref(), &agent).await?;
+    let agent = resolve_add_agent(ctx, &target.selector, agent, issue.is_some()).await?;
+    let issue = match issue {
+        Some(input) => Some(super::issues::load(target.repository(ctx).await?, &input).await?),
+        None => None,
+    };
+    let opened = open_add_workspace(ctx, &target, creation, issue.as_ref()).await?;
+    let Some(workspace) = finish_add_workspace(ctx, opened).await? else {
+        return Ok(1);
+    };
+    agent.launch(ctx, workspace, issue, args).await
+}
+
+struct AddTarget {
+    selector: String,
+    repositories: tokio::sync::OnceCell<Vec<Repository>>,
+}
+
+impl AddTarget {
+    async fn repository(&self, ctx: &Context) -> Result<&Repository> {
+        let repos = self
+            .repositories
+            .get_or_try_init(|| client::repositories(&ctx.paths))
+            .await?;
+        crate::forge::repository::select(repos, &self.selector).await
+    }
+}
+
+async fn resolve_add_target(
+    ctx: &Context,
+    repository: Option<String>,
+    issue: Option<&str>,
+    agent: &AgentLaunch,
+) -> Result<AddTarget> {
+    // Load on first use so explicit targets keep their original failure order.
+    let repositories = tokio::sync::OnceCell::new();
+    let selector = match repository {
+        Some(repo) => ui::repository_selector(repo)?,
+        None => {
+            let repos = repositories
+                .get_or_try_init(|| client::repositories(&ctx.paths))
+                .await?;
+            let issue_command = matches!(agent, AgentLaunch::IssueDefault(_));
+            match issue.map(|input| (input, IssueInput::parse(input))) {
+                Some((_, IssueInput::Number)) if issue_command => {
+                    super::issues::repository_for_number(ctx, repos.clone()).await?
+                }
+                Some((url, kind)) if issue_command || kind == IssueInput::Url => {
+                    super::issues::repository_for(repos, url).await?.id.clone()
+                }
+                _ => ui::pick(
+                    ctx,
+                    "Repository> ",
+                    ui::repository_choices(repos.clone()).await?,
+                )?,
+            }
+        }
+    };
+    Ok(AddTarget {
+        selector,
+        repositories,
+    })
+}
+
+struct ResolvedAddAgent {
+    agent: Option<Agent>,
+    codex_mode: Option<CodexMode>,
+}
+
+async fn resolve_add_agent(
+    ctx: &Context,
+    repository: &str,
+    agent: AgentLaunch,
+    has_issue: bool,
+) -> Result<ResolvedAddAgent> {
+    let settings = tokio::sync::OnceCell::new();
+    let load_settings =
+        || client::settings(&ctx.paths, ConfigTarget::Repository(repository.into()));
+    let agent = match agent {
+        AgentLaunch::Explicit(agent) => agent,
+        AgentLaunch::IssueDefault(agent) => Some(agents::select_default_agent(
+            ctx,
+            settings.get_or_try_init(load_settings).await?,
+            agent,
+        )?),
+    };
+    // Validate launch configuration before looking up the issue or creating work.
+    if let Some(Agent::Custom(name)) = &agent {
+        ensure!(
+            settings
+                .get_or_try_init(load_settings)
+                .await?
+                .commands
+                .contains_key(name),
+            "unknown agent {name:?}; define it in [commands] in Shoal config"
+        );
+    }
+    let codex_mode = match &agent {
+        Some(Agent::Codex) if has_issue => Some(CodexMode::Cli),
+        Some(Agent::Codex) => Some(
+            settings
+                .get_or_try_init(load_settings)
+                .await?
+                .codex
+                .default_mode,
+        ),
+        _ => None,
+    };
+    Ok(ResolvedAddAgent { agent, codex_mode })
+}
+
+async fn open_add_workspace(
+    ctx: &Context,
+    target: &AddTarget,
+    creation: Creation,
+    issue: Option<&super::issues::Issue>,
+) -> Result<OpenedWorkspace> {
     let Creation {
         path,
         branch,
@@ -133,67 +258,8 @@ pub(super) async fn add(
         base,
         git_profile,
     } = creation;
-    let path = path
-        .map(|path| super::repositories::absolute(ctx, path))
-        .transpose()?;
-    let issue_command = matches!(agent, AgentLaunch::IssueDefault(_));
-    let repository = match repository {
-        Some(repo) => ui::repository_selector(repo)?,
-        None => {
-            let repos = client::repositories(&ctx.paths).await?;
-            match issue.as_deref() {
-                Some(number)
-                    if issue_command
-                        && !number.is_empty()
-                        && number.bytes().all(|c| c.is_ascii_digit()) =>
-                {
-                    super::issues::repository_for_number(ctx, repos).await?
-                }
-                Some(url)
-                    if issue_command
-                        || url.starts_with("https://")
-                        || url.starts_with("http://") =>
-                {
-                    super::issues::repository_for(&repos, url).await?.id.clone()
-                }
-                _ => ui::pick(ctx, "Repository> ", ui::repository_choices(repos).await?)?,
-            }
-        }
-    };
-    let agent = match agent {
-        AgentLaunch::Explicit(agent) => agent,
-        AgentLaunch::IssueDefault(agent) => Some(
-            agents::default_agent(ctx, ConfigTarget::Repository(repository.clone()), agent).await?,
-        ),
-    };
-    // Validate launch configuration before creating a workspace.
-    if let Some(Agent::Custom(name)) = &agent {
-        let settings =
-            client::settings(&ctx.paths, ConfigTarget::Repository(repository.clone())).await?;
-        ensure!(
-            settings.commands.contains_key(name),
-            "unknown agent {name:?}; define it in [commands] in Shoal config"
-        );
-    }
-    let codex_mode = match &agent {
-        Some(Agent::Codex) if issue.is_some() => Some(CodexMode::Cli),
-        Some(Agent::Codex) => Some(
-            client::settings(&ctx.paths, ConfigTarget::Repository(repository.clone()))
-                .await?
-                .codex
-                .default_mode,
-        ),
-        _ => None,
-    };
-    let issue = match issue {
-        Some(input) => {
-            let repos = client::repositories(&ctx.paths).await?;
-            let repo = crate::forge::repository::select(&repos, &repository).await?;
-            Some(super::issues::load(repo, &input).await?)
-        }
-        None => None,
-    };
-    let mut branch = branch.or_else(|| issue.as_ref().map(|issue| issue.branch_name()));
+    let repository = target.selector.clone();
+    let mut branch = branch.or_else(|| issue.map(|issue| issue.branch_name()));
     if branch.is_none() && existing.is_none() && base.is_none() && ctx.interactive() {
         #[derive(Clone, Copy)]
         enum BranchMode {
@@ -209,38 +275,11 @@ pub(super) async fn add(
             ],
         )?;
         if let BranchMode::Existing = mode {
-            let branches = request::<Vec<Branch>>(
-                &ctx.paths,
-                Method::ListBranches {
-                    repository: repository.clone(),
-                },
-            )
-            .await?;
-            let workspaces = client::workspaces(&ctx.paths).await?;
-            let repos = client::repositories(&ctx.paths).await?;
-            let repo = crate::forge::repository::select(&repos, &repository).await?;
-            let entries = branches
-                .into_iter()
-                .map(|b| {
-                    let label = match &b.remote {
-                        Some(remote) => format!("{remote}/{}  (remote)", b.name),
-                        None => format!("{}  (local)", b.name),
-                    };
-                    let label = match workspaces
-                        .iter()
-                        .find(|w| w.repository_id == repo.id && w.branch == b.name)
-                    {
-                        Some(w) => format!("{label}  [workspace: {}]", w.name),
-                        None => label,
-                    };
-                    (b.selector(), label)
-                })
-                .collect();
-            existing = Some(ui::pick(ctx, "Branch> ", entries)?);
+            existing = Some(pick_add_branch(ctx, target).await?);
         }
     }
-    let (mut workspace, reused) = if let Some(branch) = existing {
-        let opened = request::<OpenedWorkspace>(
+    if let Some(branch) = existing {
+        request::<OpenedWorkspace>(
             &ctx.paths,
             Method::OpenBranch {
                 path,
@@ -250,8 +289,7 @@ pub(super) async fn add(
                 base,
             },
         )
-        .await?;
-        (opened.workspace, opened.reused)
+        .await
     } else {
         let name = match branch.take() {
             Some(name) => name,
@@ -265,24 +303,62 @@ pub(super) async fn add(
                 }
             },
         };
-        (
-            request::<Workspace>(
-                &ctx.paths,
-                Method::CreateWorkspace {
-                    path,
-                    repository,
-                    name,
-                    base,
-                    git_profile,
-                },
-            )
-            .await?,
-            false,
+        let workspace = request::<Workspace>(
+            &ctx.paths,
+            Method::CreateWorkspace {
+                path,
+                repository,
+                name,
+                base,
+                git_profile,
+            },
         )
-    };
+        .await?;
+        Ok(OpenedWorkspace {
+            workspace,
+            reused: false,
+        })
+    }
+}
+
+async fn pick_add_branch(ctx: &Context, target: &AddTarget) -> Result<String> {
+    let branches = request::<Vec<Branch>>(
+        &ctx.paths,
+        Method::ListBranches {
+            repository: target.selector.clone(),
+        },
+    )
+    .await?;
+    let workspaces = client::workspaces(&ctx.paths).await?;
+    let repo = target.repository(ctx).await?;
+    let entries = branches
+        .into_iter()
+        .map(|b| {
+            let label = match &b.remote {
+                Some(remote) => format!("{remote}/{}  (remote)", b.name),
+                None => format!("{}  (local)", b.name),
+            };
+            let label = match workspaces
+                .iter()
+                .find(|w| w.repository_id == repo.id && w.branch == b.name)
+            {
+                Some(w) => format!("{label}  [workspace: {}]", w.name),
+                None => label,
+            };
+            (b.selector(), label)
+        })
+        .collect();
+    ui::pick(ctx, "Branch> ", entries)
+}
+
+async fn finish_add_workspace(ctx: &Context, opened: OpenedWorkspace) -> Result<Option<Workspace>> {
+    let OpenedWorkspace {
+        mut workspace,
+        reused,
+    } = opened;
     if workspace.state == WorkspaceState::Preparing {
         let Some(ready) = setup_workspace(ctx, &workspace).await? else {
-            return Ok(1);
+            return Ok(None);
         };
         workspace = ready;
     }
@@ -300,16 +376,29 @@ pub(super) async fn add(
     if !reused {
         run_post_setup(ctx, &workspace).await?;
     }
-    let prompt = if let Some(issue) = issue.filter(|_| agent.is_some()) {
-        let settings =
-            client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
-        Some(issue.prompt(settings.issue_template.as_deref()))
-    } else {
-        None
-    };
-    match agent {
-        Some(agent) => agents::launch_agent(ctx, agent, codex_mode, workspace, prompt, args).await,
-        None => Ok(0),
+    Ok(Some(workspace))
+}
+
+impl ResolvedAddAgent {
+    async fn launch(
+        self,
+        ctx: &Context,
+        workspace: Workspace,
+        issue: Option<super::issues::Issue>,
+        args: Vec<OsString>,
+    ) -> Result<i32> {
+        let Some(agent) = self.agent else {
+            return Ok(0);
+        };
+        // Use the ready worktree's settings: setup may have changed its template.
+        let prompt = if let Some(issue) = issue {
+            let settings =
+                client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
+            Some(issue.prompt(settings.issue_template.as_deref()))
+        } else {
+            None
+        };
+        agents::launch_agent(ctx, agent, self.codex_mode, workspace, prompt, args).await
     }
 }
 

@@ -10,6 +10,7 @@ use anyhow::{Result, bail};
 
 use crate::{
     cli::{Agent, CodexMode, client, context::Context, ui},
+    config::Effective,
     model::Workspace,
     protocol::ConfigTarget,
 };
@@ -25,6 +26,14 @@ pub(super) async fn default_agent(
     agent: Option<Agent>,
 ) -> Result<Agent> {
     let settings = client::settings(&ctx.paths, target).await?;
+    select_default_agent(ctx, &settings, agent)
+}
+
+pub(super) fn select_default_agent(
+    ctx: &Context,
+    settings: &Effective,
+    agent: Option<Agent>,
+) -> Result<Agent> {
     match agent.or(settings.default_agent.clone()) {
         Some(agent) => Ok(agent),
         None if ctx.interactive() => ui::pick(
