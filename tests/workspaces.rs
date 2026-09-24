@@ -2559,6 +2559,11 @@ fn configured_ports_are_lazy_and_conflicts_require_acceptance() {
     assert_eq!(overview["configured"]["web"]["port"], preferred);
     assert_eq!(overview["reserved"], serde_json::json!([]));
     assert_eq!(fixture.ok(&["port", "list", "configured"]), overview);
+    let human = fixture.run(&["port", "configured"]);
+    assert!(human.status.success());
+    assert!(String::from_utf8_lossy(&human.stdout).contains(&format!(
+        "web: not reserved (preferred: {preferred}; conflicts: suggest)"
+    )));
     for old in [
         vec!["ports", "configured"],
         vec!["resources", "configured"],
@@ -5000,6 +5005,8 @@ fn doctor_repairs_interrupted_state_and_preserves_work_and_leases() {
     );
     let preview = recovery_report(&fixture, &["doctor", "interrupted"]);
     assert_eq!(preview[0]["directory"], "valid");
+    let human = fixture.run(&["doctor", "interrupted"]);
+    assert!(String::from_utf8_lossy(&human.stdout).contains("interrupted: failed (valid)"));
     let issue = preview[0]["issues"][0].as_str().unwrap();
     assert!(issue.starts_with(preview[0]["workspace"]["error"].as_str().unwrap()));
     assert!(issue.contains("--repair"));
@@ -5070,6 +5077,8 @@ fn doctor_detects_moved_and_replaced_worktrees_without_deleting_data() {
     );
     let report = recovery_report(&fixture, &["doctor", "original", "--repair"]);
     assert_eq!(report[0]["directory"], "moved");
+    let human = fixture.run(&["doctor", "original"]);
+    assert!(String::from_utf8_lossy(&human.stdout).contains("original: failed (moved)"));
     let preview = recovery_report(&fixture, &["doctor", "original"]);
     assert_eq!(preview[0]["issues"], report[0]["issues"]);
     assert_eq!(preview[0]["issues"].as_array().unwrap().len(), 1);

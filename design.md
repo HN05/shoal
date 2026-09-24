@@ -190,9 +190,9 @@ targets from the current directory. Interactive commands may use fzf;
 noninteractive calls and `config show` never open a picker. `config show` reports
 effective repository values with their winning layers and uses a registered checkout
 before a workspace exists. `status` combines lifecycle, fork-point changes, active work and
-leases in one workspace view. Human output uses a shared semantic palette at the CLI presentation
-layer; machine output and stored values stay unstyled. Progress during silent waits
-belongs to the CLI and shows transient elapsed-time feedback on terminal stderr,
+leases in one workspace view. Human output uses `Display` for enum values and a shared
+semantic palette at the CLI presentation layer; machine output and stored values
+stay unstyled. Progress during silent waits belongs to the CLI and shows transient elapsed-time feedback on terminal stderr,
 suppressed for JSON and dumb terminals. Rust chooses paths, including
 `<root_dir>/<repo>` after removal; the Bash/Zsh wrapper changes directory
 without evaluating repository code.

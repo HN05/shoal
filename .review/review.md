@@ -93,8 +93,8 @@ removal, check it against the rule those files state before judging it.
 - External tools are invoked with argument arrays, never shell strings.
   Terminal I/O stays in the execution wrapper; the daemon owns state and prepares
   each execution kind before shared registration through one request. CLI
-  styles and transient progress belong at presentation sites; machine output and
-  stored values stay plain. Progress clears before results and stays off for JSON,
+  styles, enum `Display` formatting and transient progress belong at presentation
+  sites; machine output and stored values stay plain. Progress clears before results and stays off for JSON,
   redirected stderr and dumb terminals.
 - Client response extraction reports expected and received variants and preserves
   daemon error codes and messages as structured errors without changing the wire format.

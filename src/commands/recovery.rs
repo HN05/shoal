@@ -143,7 +143,7 @@ async fn daemon_check(ctx: &Context) -> (Check, bool) {
 
 fn render(report: &Report, palette: Palette) {
     println!(
-        "{}: {} ({:?})",
+        "{}: {} ({})",
         palette.paint(Style::Heading, &report.workspace.name),
         palette.workspace_state(report.workspace.state),
         report.directory

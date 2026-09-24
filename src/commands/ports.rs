@@ -186,7 +186,7 @@ fn render_overview(overview: &PortOverview, palette: Palette) {
             continue;
         }
         println!(
-            "{name}: not reserved (preferred: {}; conflicts: {:?})",
+            "{name}: not reserved (preferred: {}; conflicts: {})",
             definition
                 .port
                 .map(|p| p.to_string())
