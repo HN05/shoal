@@ -636,7 +636,9 @@ must name the recorded branch and contain HEAD.
 `shoal pr merged [workspace]` manually acknowledges HEAD without forge tools; unless
 the worktree is dirty, the shell returns to `<root_dir>/<repo>` as after `rm`.
 Both stop tracked agents and remove immediately, retaining dirty/newer work and
-using normal resource cleanup/branch retention. `inspect` shows errors in `pr_cleanup`.
+using normal resource cleanup/branch retention. `inspect` shows lookup and removal
+errors in `pr_cleanup`; an invalid registration instead fails inspection and
+retains the workspace until `shoal pr clear` clears it.
 `shoal pr clear [workspace]` cancels. `[pr_cleanup] enabled = false` disables this
 (default true), independently of idle cleanup, globally (restart after changing
 it) or in a repository config (applies at once; existing watches wait).
