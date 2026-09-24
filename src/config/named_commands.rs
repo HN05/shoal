@@ -289,9 +289,14 @@ mod tests {
         let global: Config =
             toml::from_str("[commands]\nreview = ['global', '--flag']\ncheck = ['check']\n")
                 .unwrap();
-        let file = config::repo::parse("[commands]\nreview = ['file']\n").unwrap();
-        let saved = config::repo::parse("[commands]\nreview = ['saved', 'two words']\n").unwrap();
-        let effective = global.effective(&saved.over(file)).unwrap();
+        let layers = config::repo::ConfigLayers {
+            worktree_file: config::repo::parse("[commands]\nreview = ['file']\n").unwrap(),
+            saved_repository_config: config::repo::parse(
+                "[commands]\nreview = ['saved', 'two words']\n",
+            )
+            .unwrap(),
+        };
+        let effective = global.resolve(&layers).unwrap();
         assert_eq!(effective.commands["review"], ["saved", "two words"]);
         assert_eq!(effective.commands["check"], ["check"]);
     }

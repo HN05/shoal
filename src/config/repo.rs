@@ -40,8 +40,11 @@ impl std::fmt::Display for ConfigLayer {
 }
 
 impl ConfigLayers {
-    pub fn resolve(self) -> RepoConfig {
-        self.saved_repository_config.over(self.worktree_file)
+    /// The repository's own layers combined, without this machine's.
+    pub fn repository(&self) -> RepoConfig {
+        self.saved_repository_config
+            .clone()
+            .over(self.worktree_file.clone())
     }
 }
 
@@ -157,73 +160,6 @@ pub fn parse(text: &str) -> Result<RepoConfig> {
     }
     crate::daemon::resources::definitions(&config.resources, &config.resource_pools)?;
     Ok(config)
-}
-
-impl RepoConfig {
-    /// This config layered over `base`: an option set here wins, an omitted
-    /// one falls through, and a named port, resource or pool replaces the
-    /// one below it whole.
-    pub fn over(self, mut base: Self) -> Self {
-        base.ports.definitions.extend(self.ports.definitions);
-        base.resources.extend(self.resources);
-        base.commands.extend(self.commands);
-        base.resource_pools.extend(self.resource_pools);
-        Self {
-            commands: base.commands,
-            issue_template: self.issue_template.or(base.issue_template),
-            agent_template: self.agent_template.or(base.agent_template),
-            agent_auth: self.agent_auth.over(base.agent_auth),
-            git_profile: self.git_profile.or(base.git_profile),
-            default_agent: self.default_agent.or(base.default_agent),
-            codex: Codex {
-                default_mode: self.codex.default_mode.or(base.codex.default_mode),
-            },
-            setup_cmd: self.setup_cmd.or(base.setup_cmd),
-            pre_setup_cmd: self.pre_setup_cmd.or(base.pre_setup_cmd),
-            post_remove_cmd: self.post_remove_cmd.or(base.post_remove_cmd),
-            post_resource_acquire_cmd: self
-                .post_resource_acquire_cmd
-                .or(base.post_resource_acquire_cmd),
-            pre_resource_release_cmd: self
-                .pre_resource_release_cmd
-                .or(base.pre_resource_release_cmd),
-            post_setup_cmd: self.post_setup_cmd.or(base.post_setup_cmd),
-            pre_remove_cmd: self.pre_remove_cmd.or(base.pre_remove_cmd),
-            ports: PortDefaults {
-                on_conflict: self.ports.on_conflict.or(base.ports.on_conflict),
-                start: self.ports.start.or(base.ports.start),
-                end: self.ports.end.or(base.ports.end),
-                definitions: base.ports.definitions,
-            },
-            resources: base.resources,
-            resource_pools: base.resource_pools,
-            simulators: SimulatorPreferences {
-                preferred: if self.simulators.preferred.is_empty() {
-                    base.simulators.preferred
-                } else {
-                    self.simulators.preferred
-                },
-                requires_approval: self
-                    .simulators
-                    .requires_approval
-                    .or(base.simulators.requires_approval),
-                approval_lifetime: self
-                    .simulators
-                    .approval_lifetime
-                    .or(base.simulators.approval_lifetime),
-            },
-            auto_cleanup: AutoCleanup {
-                enabled: self.auto_cleanup.enabled.or(base.auto_cleanup.enabled),
-                idle_minutes: self
-                    .auto_cleanup
-                    .idle_minutes
-                    .or(base.auto_cleanup.idle_minutes),
-            },
-            pr_cleanup: PrCleanup {
-                enabled: self.pr_cleanup.enabled.or(base.pr_cleanup.enabled),
-            },
-        }
-    }
 }
 
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]

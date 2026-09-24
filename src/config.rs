@@ -3,29 +3,16 @@ pub mod named_commands;
 mod placeholders;
 pub mod repo;
 pub mod report;
+pub mod resolve;
 pub mod templates;
 
 use anyhow::{Context, Result, ensure};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::{fs, path::PathBuf, time::Duration};
 
 use crate::paths::Paths;
-use repo::RepoConfig;
-
-/// Settings a repository may set, after every layer: a repository value
-/// wins, an omitted one keeps the global value or the built-in default.
-#[derive(Debug)]
-pub struct Effective {
-    pub commands: named_commands::Commands,
-    pub issue_template: Option<String>,
-    pub agent_template: Option<String>,
-    pub agent_auth: crate::agent_auth::Config,
-    pub default_agent: Option<crate::cli::Agent>,
-    pub codex: Codex,
-    pub auto_cleanup: AutoCleanup,
-    pub pr_cleanup: PrCleanup,
-    pub ports: Ports,
-}
+use repo::{ConfigLayers, RepoConfig};
+pub use resolve::Effective;
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -55,7 +42,7 @@ pub struct Config {
     pub simulators: crate::sim::SimConfig,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Serialize)]
 pub struct Codex {
     pub default_mode: crate::cli::CodexMode,
 }
@@ -69,10 +56,13 @@ pub struct PortRange {
     pub end: Option<u16>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Ports {
     pub start: u16,
     pub end: u16,
+    pub on_conflict: repo::ConflictPolicy,
+    #[serde(flatten)]
+    pub definitions: std::collections::BTreeMap<String, repo::PortDefinition>,
 }
 
 impl Default for Ports {
@@ -80,8 +70,18 @@ impl Default for Ports {
         Self {
             start: 49152,
             end: 65535,
+            on_conflict: repo::ConflictPolicy::default(),
+            definitions: Default::default(),
         }
     }
+}
+
+/// The repository-overridable simulator settings after every layer.
+#[derive(Debug, Default, Clone, Serialize)]
+pub struct Simulators {
+    pub requires_approval: bool,
+    pub approval_lifetime: crate::daemon::access::Lifetime,
+    pub preferred: Vec<String>,
 }
 
 impl Ports {
@@ -106,6 +106,16 @@ pub fn validate_port_range(start: Option<u16>, end: Option<u16>) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    impl Config {
+        /// The settings for a repository whose only layer is `repo`.
+        fn effective(&self, repo: &RepoConfig) -> Result<Effective> {
+            self.resolve(&ConfigLayers {
+                worktree_file: repo.clone(),
+                ..Default::default()
+            })
+        }
+    }
 
     #[test]
     fn codex_mode_defaults_to_cli_and_rejects_invalid_settings() {
@@ -389,7 +399,7 @@ mod tests {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct AutoCleanup {
     pub enabled: bool,
     pub idle_minutes: u64,
@@ -629,45 +639,10 @@ impl Config {
         Ok(config)
     }
 
-    /// The repository's layers over this machine's, then the built-in
-    /// defaults. Fails when the layers combine into an invalid setting, such
-    /// as a repository `ports.start` above the global `ports.end`.
-    pub fn effective(&self, repo: &RepoConfig) -> Result<Effective> {
-        let merged = repo.clone().over(self.repository_layer());
-        let ports = Ports {
-            start: merged.ports.start.unwrap_or(Ports::default().start),
-            end: merged.ports.end.unwrap_or(Ports::default().end),
-        };
-        ports.validate()?;
-        let mut commands = named_commands::defaults();
-        commands.extend(merged.commands);
-        Ok(Effective {
-            commands,
-            issue_template: merged.issue_template,
-            agent_template: merged.agent_template,
-            agent_auth: merged.agent_auth,
-            default_agent: merged.default_agent,
-            codex: Codex {
-                default_mode: merged.codex.default_mode.unwrap_or_default(),
-            },
-            auto_cleanup: AutoCleanup {
-                enabled: merged
-                    .auto_cleanup
-                    .enabled
-                    .unwrap_or(AutoCleanup::default().enabled),
-                idle_minutes: merged
-                    .auto_cleanup
-                    .idle_minutes
-                    .unwrap_or(AutoCleanup::default().idle_minutes),
-            },
-            pr_cleanup: PrCleanup {
-                enabled: merged
-                    .pr_cleanup
-                    .enabled
-                    .unwrap_or(PrCleanup::default().enabled),
-            },
-            ports,
-        })
+    /// The settings in effect for a target whose repository layers are
+    /// `layers`: those over this machine's, then the built-in defaults.
+    pub fn resolve(&self, layers: &ConfigLayers) -> Result<Effective> {
+        resolve::Stack::new(self, layers).resolve()
     }
 }
 
@@ -686,7 +661,7 @@ fn default_template() -> &'static str {
 /// Named templates shipped in this binary, independent of the source checkout.
 pub const PACKAGED: &[(&str, &str)] = include!(concat!(env!("OUT_DIR"), "/packaged_configs.rs"));
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct PrCleanup {
     pub enabled: bool,
 }

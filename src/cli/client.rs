@@ -73,7 +73,7 @@ pub async fn settings(
     target: crate::protocol::ConfigTarget,
 ) -> Result<crate::config::Effective> {
     let layers = request::<Box<ConfigLayers>>(paths, Method::LayeredConfig { target }).await?;
-    crate::config::Config::load(paths)?.effective(&layers.resolve())
+    crate::config::Config::load(paths)?.resolve(&layers)
 }
 
 pub async fn inspect(paths: &Paths, workspace: String) -> Result<Inspection> {

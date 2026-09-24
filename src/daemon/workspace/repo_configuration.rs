@@ -145,11 +145,12 @@ impl Manager {
     /// The workspace's repository config: the saved local config layered per
     /// option over the worktree's own `.shoal.toml`.
     pub(crate) async fn workspace_config(&self, workspace: &Workspace) -> Result<RepoConfig> {
+        Ok(self.workspace_layers(workspace).await?.repository())
+    }
+
+    async fn workspace_layers(&self, workspace: &Workspace) -> Result<ConfigLayers> {
         let file = config::repo::load(&workspace.path)?;
-        Ok(self
-            .config_layers(&workspace.repository_id, file)
-            .await?
-            .resolve())
+        self.config_layers(&workspace.repository_id, file).await
     }
 
     /// The repository layer for `target`; a repository's file is the one in
@@ -186,11 +187,8 @@ impl Manager {
             saved_repository_config,
         };
         // Each layer is valid alone; the layered names must agree too.
-        let mut resources = layers.worktree_file.resources.clone();
-        resources.extend(layers.saved_repository_config.resources.clone());
-        let mut resource_pools = layers.worktree_file.resource_pools.clone();
-        resource_pools.extend(layers.saved_repository_config.resource_pools.clone());
-        crate::daemon::resources::definitions(&resources, &resource_pools)
+        let repository = layers.repository();
+        crate::daemon::resources::definitions(&repository.resources, &repository.resource_pools)
             .context("layered repository config")?;
         Ok(layers)
     }
@@ -199,6 +197,6 @@ impl Manager {
     /// worktree file and the global config.
     pub(crate) async fn workspace_settings(&self, workspace: &Workspace) -> Result<Effective> {
         self.config
-            .effective(&self.workspace_config(workspace).await?)
+            .resolve(&self.workspace_layers(workspace).await?)
     }
 }

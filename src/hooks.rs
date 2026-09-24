@@ -56,6 +56,10 @@ macro_rules! hook_kinds {
                 match self { $(Self::$kind => config.$field.as_ref()),+ }
             }
 
+            pub fn repository_command_mut(self, config: &mut RepoConfig) -> &mut Option<String> {
+                match self { $(Self::$kind => &mut config.$field),+ }
+            }
+
             pub fn global_command(self, config: &Config) -> Option<&String> {
                 match self { $(Self::$kind => hook_kinds!(@global config, $field, $global)),+ }
             }

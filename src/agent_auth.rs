@@ -63,13 +63,6 @@ impl Config {
         }
         Ok(())
     }
-
-    pub fn over(self, base: Self) -> Self {
-        Self {
-            fj: self.fj.or(base.fj),
-            gh: self.gh.or(base.gh),
-        }
-    }
 }
 
 pub struct Launch {
@@ -94,7 +87,7 @@ mod tests {
             )
             .unwrap(),
         };
-        let effective = global.effective(&layers.clone().resolve()).unwrap();
+        let effective = global.resolve(&layers).unwrap();
         assert_eq!(effective.agent_auth.fj, Some("/saved/fj-agent".into()));
         assert_eq!(effective.agent_auth.gh, Some("/global/gh-agent".into()));
     }

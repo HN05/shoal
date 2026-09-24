@@ -226,7 +226,7 @@ impl Typed {
                 .await
             });
             if let Ok(Ok(layers)) = layer {
-                commands.extend(layers.resolve().commands);
+                commands.extend(layers.repository().commands);
             }
         }
         if let Some(name) = &self.custom {

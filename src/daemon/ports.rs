@@ -119,7 +119,7 @@ impl Manager {
     ) -> Result<Acquisition> {
         let workspace = self.workspace(selector).await?;
         let config = self.workspace_config(&workspace).await?;
-        let range = self.config.effective(&config)?.ports;
+        let range = self.workspace_settings(&workspace).await?.ports;
         let definition = config
             .ports
             .definitions
