@@ -1,5 +1,7 @@
 use super::*;
 
+mod boundary;
+
 fn git(repo: &Path, args: &[&str]) -> String {
     let output = std::process::Command::new("git")
         .arg("-C")

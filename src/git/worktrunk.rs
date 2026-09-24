@@ -1,13 +1,80 @@
 //! Worktree creation and removal through Worktrunk (`wt`).
 use anyhow::{Context, Result, ensure};
+use serde::{Deserialize, de::DeserializeOwned};
 use serde_json::Value;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tokio::process::Command;
 
-use crate::{removal::RemovalResult, subprocess};
+use crate::{
+    removal::{BranchOutcome, RemovalResult},
+    subprocess,
+};
 
 #[cfg(test)]
 mod tests;
+
+/// Fields consumed from Worktrunk 0.78.0's SwitchJsonOutput. Other fields are
+/// informational; only `created` (not `existing` or `already_at`) is success.
+#[derive(Debug, Deserialize)]
+struct CreationOutput {
+    action: String,
+    path: PathBuf,
+}
+
+/// Fields consumed from RemovalPlan::to_json in Worktrunk 0.78.0. A detached
+/// worktree has no branch. Extra fields vary for worktree/branch-only removal.
+#[derive(Deserialize)]
+struct RemovalOutput {
+    branch: Option<String>,
+    branch_outcome: BranchOutcome,
+}
+
+fn decode_object<T: DeserializeOwned>(value: Value) -> Result<T> {
+    // Serde structs can also accept positional arrays; the external contract
+    // requires objects, including after singleton-array normalization.
+    ensure!(value.is_object(), "expected a Worktrunk result object");
+    Ok(serde_json::from_value(value)?)
+}
+
+fn decode_creation(output: &str, workspace_dir: &Path) -> Result<()> {
+    let value = serde_json::from_str(output).context("invalid Worktrunk creation result")?;
+    let result: CreationOutput =
+        decode_object(value).context("invalid Worktrunk creation result")?;
+    ensure!(
+        result.action == "created",
+        "Worktrunk did not create a new workspace: {result:?}"
+    );
+    ensure!(
+        std::fs::canonicalize(result.path)? == std::fs::canonicalize(workspace_dir)?,
+        "Worktrunk created an unexpected workspace path"
+    );
+    Ok(())
+}
+
+fn decode_removal(output: &str, workspace_dir: &Path) -> Result<RemovalResult> {
+    let result = match serde_json::from_str(output).context("invalid Worktrunk removal result")? {
+        Value::Array(mut entries) => {
+            ensure!(
+                entries.len() == 1,
+                "unexpected number of Worktrunk removal results"
+            );
+            entries.remove(0)
+        }
+        result => result,
+    };
+    let result: RemovalOutput =
+        decode_object(result).context("invalid Worktrunk removal result")?;
+    ensure!(
+        !workspace_dir.exists(),
+        "Worktrunk returned before workspace removal completed"
+    );
+    Ok(RemovalResult {
+        removed: true,
+        branch: result.branch,
+        branch_outcome: result.branch_outcome,
+        hook_error: None,
+    })
+}
 
 /// Names that cannot portably identify a literal branch through Worktrunk.
 /// Worktrunk 0.78.0 expands `@`; Git treats `HEAD` and full object IDs
@@ -59,20 +126,7 @@ pub async fn create(
         default_branch_override(&mut command, &crate::git::local_ref(branch))?;
     }
     command.args([branch, "--no-cd", "--no-hooks", "--format=json"]);
-    let result: Value = serde_json::from_str(&subprocess::output(command).await?)
-        .context("invalid Worktrunk creation result")?;
-    ensure!(
-        result["action"] == "created",
-        "Worktrunk did not create a new workspace: {result}"
-    );
-    let reported = result["path"]
-        .as_str()
-        .context("Worktrunk omitted workspace path")?;
-    ensure!(
-        std::fs::canonicalize(reported)? == std::fs::canonicalize(workspace_dir)?,
-        "Worktrunk created an unexpected workspace path"
-    );
-    Ok(())
+    decode_creation(&subprocess::output(command).await?, workspace_dir)
 }
 
 fn default_branch_override(command: &mut Command, reference: &str) -> Result<()> {
@@ -111,28 +165,5 @@ pub async fn remove(
         command.arg("--force");
     }
     command.arg("--").arg(workspace_dir);
-    let result: Value = serde_json::from_str(&subprocess::output(command).await?)
-        .context("invalid Worktrunk removal result")?;
-    let result = match result.as_array() {
-        Some(entries) => {
-            ensure!(
-                entries.len() == 1,
-                "unexpected number of Worktrunk removal results"
-            );
-            &entries[0]
-        }
-        None => &result,
-    };
-    ensure!(
-        !workspace_dir.exists(),
-        "Worktrunk returned before workspace removal completed"
-    );
-    let branch_outcome = serde_json::from_value(result["branch_outcome"].clone())
-        .context("invalid Worktrunk branch outcome")?;
-    Ok(RemovalResult {
-        removed: true,
-        branch: result["branch"].as_str().map(str::to_owned),
-        branch_outcome,
-        hook_error: None,
-    })
+    decode_removal(&subprocess::output(command).await?, workspace_dir)
 }
