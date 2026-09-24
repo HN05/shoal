@@ -7234,7 +7234,7 @@ fn interactive_add_picks_existing_branch_and_reopens_workspace() {
     let bin = fixture.root.path().join("bin");
     fs::create_dir_all(&bin).unwrap();
     let picker = bin.join("fzf");
-    fs::write(&picker, "#!/bin/sh\nawk -F '\\t' '$1 == \"existing\" || $1 == \"refs/heads/coworker/topic\" {print}'\n").unwrap();
+    fs::write(&picker, "#!/bin/sh\nawk -F '\\t' '$2 == \"Use an existing branch\" || $1 == \"refs/heads/coworker/topic\" {print}'\n").unwrap();
     fs::set_permissions(&picker, fs::Permissions::from_mode(0o755)).unwrap();
     let directive = fixture.root.path().join("destination");
     for _ in 0..2 {

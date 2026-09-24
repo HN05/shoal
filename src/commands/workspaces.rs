@@ -193,15 +193,20 @@ pub(super) async fn add(
     };
     let mut branch = branch.or_else(|| issue.as_ref().map(|issue| issue.branch_name()));
     if branch.is_none() && existing.is_none() && base.is_none() && ctx.interactive() {
-        let mode = ui::pick(
+        #[derive(Clone, Copy)]
+        enum BranchMode {
+            New,
+            Existing,
+        }
+        let mode = ui::pick_choice(
             ctx,
             "Workspace> ",
-            vec![
-                ("new".into(), "Create a new branch".into()),
-                ("existing".into(), "Use an existing branch".into()),
+            &[
+                (BranchMode::New, "Create a new branch"),
+                (BranchMode::Existing, "Use an existing branch"),
             ],
         )?;
-        if mode == "existing" {
+        if let BranchMode::Existing = mode {
             let branches = request::<Vec<Branch>>(
                 &ctx.paths,
                 Method::ListBranches {

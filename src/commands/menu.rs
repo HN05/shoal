@@ -3,10 +3,11 @@
 use anyhow::{Result, bail, ensure};
 
 use crate::{
-    cli::{Command, ConfirmationArgs},
+    cli::{CodexMode, Command, ConfirmationArgs},
     client,
     context::Context,
     env,
+    happy::HappyAgent,
     ui::{self, KeyBindings},
 };
 
@@ -79,50 +80,51 @@ pub(super) async fn choose(ctx: &Context) -> Result<Command> {
     })
 }
 
+#[derive(Clone, Copy)]
+enum ExecuteChoice {
+    Claude,
+    Codex(CodexMode),
+    Happy(HappyAgent),
+    T3,
+    Shell,
+}
+
 fn execute_command(ctx: &Context, workspace: Option<String>) -> Result<Command> {
-    const CHOICES: [&str; 7] = [
-        "claude",
-        "codex cli",
-        "codex app",
-        "happy claude",
-        "happy codex",
-        "t3",
-        "custom shell command",
-    ];
-    let choice = ui::pick(
+    let choice = ui::pick_choice(
         ctx,
         "Execute> ",
-        CHOICES
-            .iter()
-            .map(|s| (s.to_string(), s.to_string()))
-            .collect(),
+        &[
+            (ExecuteChoice::Claude, "claude"),
+            (ExecuteChoice::Codex(CodexMode::Cli), "codex cli"),
+            (ExecuteChoice::Codex(CodexMode::App), "codex app"),
+            (ExecuteChoice::Happy(HappyAgent::Claude), "happy claude"),
+            (ExecuteChoice::Happy(HappyAgent::Codex), "happy codex"),
+            (ExecuteChoice::T3, "t3"),
+            (ExecuteChoice::Shell, "custom shell command"),
+        ],
     )?;
-    Ok(match choice.as_str() {
-        "claude" => Command::Claude {
+    Ok(match choice {
+        ExecuteChoice::Claude => Command::Claude {
             workspace,
             args: vec![],
         },
-        "codex cli" | "codex app" => Command::Codex {
+        ExecuteChoice::Codex(mode) => Command::Codex {
             workspace,
-            cli: choice == "codex cli",
-            app: choice == "codex app",
+            cli: mode == CodexMode::Cli,
+            app: mode == CodexMode::App,
             args: vec![],
         },
-        "happy claude" | "happy codex" => Command::Happy {
-            agent: <crate::happy::HappyAgent as clap::ValueEnum>::from_str(
-                choice.trim_start_matches("happy "),
-                false,
-            )
-            .map_err(|error| anyhow::anyhow!(error))?,
+        ExecuteChoice::Happy(agent) => Command::Happy {
+            agent,
             workspace,
             prompt: None,
             args: vec![],
         },
-        "t3" => Command::T3 {
+        ExecuteChoice::T3 => Command::T3 {
             workspace,
             args: vec![],
         },
-        _ => Command::Exec {
+        ExecuteChoice::Shell => Command::Exec {
             workspace,
             command: vec![
                 "sh".into(),

@@ -7,7 +7,7 @@ use std::{
     process::{Command, Stdio},
 };
 
-use anyhow::{Context as _, Result, bail, ensure};
+use anyhow::{Context as _, Result, ensure};
 
 use crate::{
     client,
@@ -155,26 +155,22 @@ pub fn choose_removal(ctx: &Context, check: &RemovalCheck) -> Result<BranchChoic
             Palette::stderr(ctx.json).paint(Style::Warning, warning)
         );
     }
-    let choice = pick(
+    pick_choice(
         ctx,
         "Branch action> ",
-        vec![
-            ("abort".into(), "Cancel         Keep everything".into()),
+        &[
+            (None, "Cancel         Keep everything"),
             (
-                "keep".into(),
-                "Keep branch    Delete workspace files only".into(),
+                Some(BranchChoice::KeepBranch),
+                "Keep branch    Delete workspace files only",
             ),
             (
-                "delete".into(),
-                "Delete branch  Delete workspace files and branch".into(),
+                Some(BranchChoice::DeleteBranch),
+                "Delete branch  Delete workspace files and branch",
             ),
         ],
-    )?;
-    match choice.as_str() {
-        "keep" => Ok(BranchChoice::KeepBranch),
-        "delete" => Ok(BranchChoice::DeleteBranch),
-        _ => bail!("removal canceled"),
-    }
+    )?
+    .context("removal canceled")
 }
 
 /// `(id, label)` pairs; the id is returned, only the label is shown.
@@ -195,6 +191,21 @@ pub struct KeyBindings {
 
 pub fn pick(ctx: &Context, prompt: &str, entries: Entries) -> Result<String> {
     Ok(pick_with_keys(ctx, prompt, entries, None)?.id)
+}
+
+/// Choose a typed value; labels are display-only, even when they repeat.
+pub fn pick_choice<T: Clone>(ctx: &Context, prompt: &str, choices: &[(T, &str)]) -> Result<T> {
+    let entries = choices
+        .iter()
+        .enumerate()
+        .map(|(index, (_, label))| (index.to_string(), (*label).to_owned()))
+        .collect();
+    let id = pick(ctx, prompt, entries)?;
+    let index: usize = id.parse().context("picker returned an invalid choice")?;
+    choices
+        .get(index)
+        .map(|(choice, _)| choice.clone())
+        .context("picker returned an unknown choice")
 }
 
 pub fn pick_with_keys(
