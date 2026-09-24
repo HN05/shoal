@@ -1,10 +1,13 @@
 //! Validate explicit worktree locations before claiming ownership.
-use super::{Manager, paths::contains_protected_directory};
+use super::{
+    Manager,
+    paths::{canonical_with_missing_tail, contains_protected_directory},
+};
 use crate::{git, model::Repository};
 use anyhow::{Result, ensure};
 use std::{
     fs,
-    path::{Component, Path, PathBuf},
+    path::{Path, PathBuf},
 };
 
 impl Manager {
@@ -14,7 +17,7 @@ impl Manager {
         path: &Path,
     ) -> Result<PathBuf> {
         ensure!(path.is_absolute(), "workspace path must be absolute");
-        let path = canonical_location(path)?;
+        let path = canonical_with_missing_tail(path)?;
         ensure!(
             !contains_protected_directory(&path, &self.paths)?,
             "workspace path contains home or Shoal state"
@@ -65,26 +68,4 @@ impl Manager {
 
 fn overlaps(a: &Path, b: &Path) -> bool {
     a.starts_with(b) || b.starts_with(a)
-}
-
-/// Resolve symlinks and `..` even when the final directory does not exist.
-fn canonical_location(path: &Path) -> Result<PathBuf> {
-    let mut result = PathBuf::new();
-    for component in path.components() {
-        match component {
-            Component::ParentDir => {
-                result.pop();
-            }
-            Component::CurDir => {}
-            other => {
-                result.push(other);
-                match fs::symlink_metadata(&result) {
-                    Ok(_) => result = fs::canonicalize(&result)?,
-                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-                    Err(error) => return Err(error.into()),
-                }
-            }
-        }
-    }
-    Ok(result)
 }

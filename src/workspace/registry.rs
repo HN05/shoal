@@ -1,5 +1,5 @@
 //! Repository registration and lookup; independent of worktree lifecycle.
-use super::Manager;
+use super::{Manager, paths::canonical_with_missing_tail};
 use crate::{git, model::Repository, repository, store, subprocess, validate};
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::params;
@@ -291,7 +291,7 @@ fn prepare_root<'a>(
     state: &Path,
     checkouts: impl IntoIterator<Item = &'a Path>,
 ) -> Result<PathBuf> {
-    let intended = canonicalize_missing(root)?;
+    let intended = canonical_with_missing_tail(root)?;
     ensure!(
         !intended.starts_with(state),
         "root_dir {} is inside Shoal's state directory",
@@ -305,22 +305,9 @@ fn prepare_root<'a>(
             checkout.display()
         );
     }
-    fs::create_dir_all(root)
+    fs::create_dir_all(&intended)
         .with_context(|| format!("create repository root directory {}", root.display()))?;
-    Ok(fs::canonicalize(root)?)
-}
-
-/// Canonicalize the deepest existing ancestor and append the rest.
-fn canonicalize_missing(path: &Path) -> Result<PathBuf> {
-    let mut existing = path;
-    let mut missing = Vec::new();
-    while !existing.exists() {
-        missing.push(existing.file_name().context("root_dir has no name")?);
-        existing = existing.parent().context("root_dir has no parent")?;
-    }
-    let mut canonical = fs::canonicalize(existing)?;
-    canonical.extend(missing.iter().rev());
-    Ok(canonical)
+    Ok(fs::canonicalize(&intended)?)
 }
 
 /// Reserve `<root>/<name>` (suffixed `-2`, `-3`, ... when occupied or recorded)

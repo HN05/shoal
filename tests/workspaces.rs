@@ -722,11 +722,21 @@ fn root_directory_inside_state_or_a_checkout_is_refused() {
     for (root, message, sources) in [
         ("~/state/worktrees", "state directory", vec![&url, &outer]),
         (
+            "~/missing/../state/worktrees",
+            "state directory",
+            vec![&url, &outer],
+        ),
+        (
             "~/repo with ' quotes & $literal/worktrees",
             "repository checkout",
             vec![&url, &outer],
         ),
         ("~/outer/worktrees", "repository checkout", vec![&outer]),
+        (
+            "~/missing/../outer/worktrees",
+            "repository checkout",
+            vec![&outer],
+        ),
     ] {
         fs::write(&config, format!("root_dir = {root:?}\n")).unwrap();
         fixture.restart();
@@ -736,11 +746,21 @@ fn root_directory_inside_state_or_a_checkout_is_refused() {
             assert!(String::from_utf8_lossy(&output.stderr).contains(message));
         }
         assert!(!fixture.root.path().join(&root[2..]).exists());
+        assert!(!fixture.root.path().join("missing").exists());
         assert_eq!(fixture.ok(&["repo", "list"]).as_array().unwrap().len(), 1);
     }
     // The already placed repository still creates workspaces in its own directory.
     let workspace = fixture.add("still-works");
     assert!(Path::new(workspace["path"].as_str().unwrap()).starts_with(fixture.shoal_dir()));
+}
+
+#[test]
+fn root_directory_normalizes_missing_components_before_creation() {
+    let fixture = Fixture::with_config(Some("root_dir = \"~/missing/../clones\"\n"));
+    let workspace = fixture.add("normalized-root");
+    let root = fs::canonicalize(fixture.root.path()).unwrap();
+    assert!(Path::new(workspace["path"].as_str().unwrap()).starts_with(root.join("clones")));
+    assert!(!root.join("missing").exists());
 }
 
 #[test]

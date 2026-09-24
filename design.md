@@ -78,6 +78,8 @@ Every repository owns `~/shoal/<name>/` (global `root_dir`): its workspaces
 default to it and a URL clone lives there as `.checkout`, a name no
 workspace can take, so worktrees are grouped per repository, never nested in a
 checkout, and outside the state directory; a root inside either is refused.
+Repository roots and explicit workspace paths resolve existing symlinks and lexical
+`..` before boundary checks and creation, even when trailing components are missing.
 An explicit workspace path overrides the destination for one creation, without
 changing the repository directory; reject existing paths and overlaps with state,
 checkouts, workspaces, or other repositories' directories. Cleanup owns the worktree,

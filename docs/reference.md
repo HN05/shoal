@@ -407,8 +407,9 @@ default to it and a URL clone lives there as `.checkout`. A local checkout
 already at `~/shoal/<name>/<anything>` keeps that directory. `root_dir =
 "~/Projects"` in the global config (absolute or `~/` path outside Shoal's state
 directory and every checkout; daemon restart required) changes the parent for new
-registrations; existing ones keep their paths, as do workspaces created before this
-layout. `repo add <url> --path <dir>` clones one repository to an exact new
+registrations; symlinks and `..` are resolved before checking and creating the root,
+even across missing components. Existing registrations keep their paths, as do
+workspaces created before this layout. `repo add <url> --path <dir>` clones one repository to an exact new
 directory (relative to the current directory; `~/` allowed). Re-registering a URL
 with its existing path is fine; a different path is rejected.
 

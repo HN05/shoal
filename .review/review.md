@@ -47,6 +47,8 @@ removal, check it against the rule those files state before judging it.
   overriding the user's SSH transport; interactive Git retains normal prompting.
 - Explicit workspace paths override only that creation; reject overlaps with state,
   checkouts, workspaces, and other repository directories; never delete their parents.
+  Resolve existing symlinks and lexical `..` before checking and creating repository
+  roots or explicit workspace paths, including when trailing components are missing.
 - Existing branches use unsuffixed worktrees; reopen verified owned workspaces,
   require explicit adoption for other linked checkouts, never adopt the main checkout,
   and keep the default branch on removal unless deletion was explicit. Adoption records

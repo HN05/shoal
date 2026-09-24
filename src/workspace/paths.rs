@@ -3,7 +3,7 @@ use crate::paths::Paths;
 use anyhow::{Context, Result, ensure};
 use std::{
     fs,
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
 };
 
 /// Whether a canonical candidate contains home or Shoal state, including equality.
@@ -15,6 +15,31 @@ pub(super) fn contains_protected_directory(path: &Path, paths: &Paths) -> Result
         }
     }
     Ok(false)
+}
+
+/// Normalize an absolute path, resolving existing symlinks before `..`.
+/// Missing components are retained and `..` is resolved lexically; dangling
+/// symlinks and filesystem errors other than missing components are rejected.
+pub(super) fn canonical_with_missing_tail(path: &Path) -> Result<PathBuf> {
+    ensure!(path.is_absolute(), "path must be absolute");
+    let mut result = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::ParentDir => {
+                result.pop();
+            }
+            Component::CurDir => {}
+            other => {
+                result.push(other);
+                match fs::symlink_metadata(&result) {
+                    Ok(_) => result = fs::canonicalize(&result)?,
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(error) => return Err(error.into()),
+                }
+            }
+        }
+    }
+    Ok(result)
 }
 
 /// The path with its parent canonicalized, so a missing leaf still compares
@@ -61,6 +86,49 @@ pub(super) fn real_directory_identity(path: &Path) -> Result<Option<String>> {
 mod tests {
     use super::*;
     use std::os::unix::fs::symlink;
+
+    #[test]
+    fn missing_tail_normalizes_components_without_creating_them() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let root = fs::canonicalize(temp.path())?;
+        fs::create_dir_all(root.join("target/child"))?;
+        symlink(root.join("target/child"), root.join("alias"))?;
+        for (input, expected) in [
+            ("missing/leaf", "missing/leaf"),
+            ("missing/../target/./child", "target/child"),
+            ("alias/../new/leaf", "target/new/leaf"),
+            ("alias/../child", "target/child"),
+            ("missing/../alias/../new", "target/new"),
+        ] {
+            assert_eq!(
+                canonical_with_missing_tail(&root.join(input))?,
+                root.join(expected)
+            );
+        }
+        assert!(!root.join("missing").exists());
+        assert!(!root.join("target/new").exists());
+        assert_eq!(
+            canonical_with_missing_tail(Path::new("/../../"))?,
+            Path::new("/")
+        );
+        assert!(canonical_with_missing_tail(Path::new("relative/path")).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn missing_tail_rejects_dangling_links_and_non_directory_ancestors() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let root = temp.path();
+        symlink(root.join("missing"), root.join("dangling"))?;
+        fs::write(root.join("file"), "contents")?;
+        for path in ["dangling", "dangling/leaf", "dangling/../leaf", "file/leaf"] {
+            assert!(
+                canonical_with_missing_tail(&root.join(path)).is_err(),
+                "{path}"
+            );
+        }
+        Ok(())
+    }
 
     #[test]
     fn identity_policies_distinguish_missing_files_and_symlinks() -> Result<()> {
