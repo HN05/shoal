@@ -1,6 +1,6 @@
 //! Human decisions authorize cooperative allocations; they never reserve capacity.
 use anyhow::{Context, Result, bail, ensure};
-use rusqlite::{Connection, Transaction, params};
+use rusqlite::{Connection, OptionalExtension, Params, Transaction, params};
 use serde::{Deserialize, Serialize};
 use std::{fmt, str::FromStr};
 
@@ -138,18 +138,36 @@ pub struct AccessRequest {
     pub active: bool,
 }
 
+const BY_ID: &str = "SELECT id,record,active FROM access_requests WHERE id=?1";
+const CURRENT: &str = "SELECT id,record,active FROM access_requests
+    WHERE workspace_id=?1 AND target_key=?2 AND name=?3 AND active=1";
+
+fn decode_record((id, record, active): (String, String, bool)) -> Result<AccessRequest> {
+    let mut request: AccessRequest = serde_json::from_str(&record)
+        .with_context(|| format!("access request {id} has an invalid record"))?;
+    request.active = active;
+    Ok(request)
+}
+
+fn record_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<(String, String, bool)> {
+    Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+}
+
+fn lookup(db: &Connection, sql: &str, params: impl Params) -> Result<Option<AccessRequest>> {
+    db.query_row(sql, params, record_row)
+        .optional()?
+        .map(decode_record)
+        .transpose()
+}
+
+fn by_id(db: &Connection, id: &str) -> Result<Option<AccessRequest>> {
+    lookup(db, BY_ID, [id])
+}
+
 pub fn list(db: &Connection, owner: Option<&str>) -> Result<Vec<AccessRequest>> {
-    let records = db.prepare("SELECT id,record,active FROM access_requests WHERE ?1 IS NULL OR workspace_id=?1 ORDER BY rowid")?
-        .query_map([owner], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, bool>(2)?)))?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    records
-        .into_iter()
-        .map(|(id, record, active)| {
-            let mut request: AccessRequest = serde_json::from_str(&record)
-                .with_context(|| format!("access request {id} has an invalid record"))?;
-            request.active = active;
-            Ok(request)
-        })
+    db.prepare("SELECT id,record,active FROM access_requests WHERE ?1 IS NULL OR workspace_id=?1 ORDER BY rowid")?
+        .query_map([owner], record_row)?
+        .map(|row| decode_record(row?))
         .collect()
 }
 
@@ -159,20 +177,14 @@ pub fn current(
     target: &Target,
     name: &str,
 ) -> Result<Option<AccessRequest>> {
-    Ok(list(db, Some(owner))?
-        .into_iter()
-        .find(|r| r.active && r.target == *target && r.name == name))
+    lookup(db, CURRENT, params![owner, target, name])
 }
 
 /// The caller holds the allocation transaction (or simulator gate). The exact
 /// specification includes effective policy, so a changed policy cannot reuse a grant.
 pub fn check(tx: &Transaction<'_>, mut request: AccessRequest) -> Result<Option<AccessRequest>> {
     store::require_ready(tx, &request.workspace_id)?;
-    let records = list(tx, Some(&request.workspace_id))?;
-    if let Some(existing) = records
-        .iter()
-        .find(|r| r.active && r.target == request.target && r.name == request.name)
-    {
+    if let Some(existing) = current(tx, &request.workspace_id, &request.target, &request.name)? {
         ensure!(
             existing.specification == request.specification
                 && existing.lifetime == request.lifetime,
@@ -182,9 +194,9 @@ pub fn check(tx: &Transaction<'_>, mut request: AccessRequest) -> Result<Option<
             request.reason.is_empty() || request.reason == existing.reason,
             "access request reason changed; release the resource name before retrying"
         );
-        return Ok((existing.status != DecisionStatus::Approved).then(|| existing.clone()));
+        return Ok((existing.status != DecisionStatus::Approved).then_some(existing));
     }
-    if records.iter().any(|r| {
+    if list(tx, Some(&request.workspace_id))?.iter().any(|r| {
         r.status == DecisionStatus::Approved
             && r.lifetime == Lifetime::Workspace
             && r.target == request.target
@@ -264,10 +276,8 @@ impl Manager {
         self.store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                let mut request = list(&tx, None)?
-                    .into_iter()
-                    .find(|r| r.id == id)
-                    .ok_or_else(|| anyhow::anyhow!("unknown access request"))?;
+                let mut request =
+                    by_id(&tx, &id)?.ok_or_else(|| anyhow::anyhow!("unknown access request"))?;
                 store::require_ready(&tx, &request.workspace_id)?;
                 let status = if approve {
                     DecisionStatus::Approved
@@ -325,6 +335,129 @@ mod tests {
             member: "lock".into(),
             mode,
         })
+    }
+
+    fn owners(db: &Connection) -> Result<()> {
+        db.execute_batch(
+            "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
+            INSERT INTO workspaces(id,repository_id,name,path,branch,state) VALUES
+                ('owner','repo','worker','/work','worker','ready'),
+                ('other','repo','other','/other','other','ready');",
+        )?;
+        Ok(())
+    }
+
+    fn save(db: &Connection, request: &AccessRequest) -> Result<()> {
+        db.execute(
+            "INSERT OR REPLACE INTO access_requests(id,workspace_id,target_key,name,record,active)
+            VALUES (?1,?2,?3,?4,?5,?6)",
+            params![
+                request.id,
+                request.workspace_id,
+                request.target,
+                request.name,
+                serde_json::to_string(request)?,
+                request.active
+            ],
+        )?;
+        Ok(())
+    }
+
+    fn sample(owner: &str, target: Target) -> AccessRequest {
+        AccessRequest::new(
+            owner,
+            target,
+            "default",
+            resource(LockMode::Read),
+            Lifetime::Workspace,
+            Some("read shared data"),
+        )
+    }
+
+    #[tokio::test]
+    async fn current_lookup_isolates_names_and_ignores_unrelated_history() -> Result<()> {
+        let (_root, manager) = crate::test_support::manager().await;
+        manager.store.run(|db| {
+            owners(db)?;
+            let target = Target::Resource { scope: Scope::Global, pool: "lock".into() };
+            for (id, owner, target) in [
+                ("wanted", "owner", target.clone()),
+                ("other-owner", "other", target.clone()),
+                ("other-target", "owner", Target::Resource { scope: Scope::Global, pool: "other".into() }),
+            ] {
+                let mut request = sample(owner, target.clone());
+                request.id = id.into();
+                save(db, &request)?;
+                assert_eq!(current(db, owner, &target, "default")?.unwrap().id, id);
+            }
+            db.execute("INSERT INTO access_requests VALUES ('history','owner',?1,'default','invalid',0)", [&target])?;
+            assert!(list(db, Some("owner")).is_err());
+            assert_eq!(current(db, "owner", &target, "default")?.unwrap().id, "wanted");
+            assert!(current(db, "owner", &target, "absent")?.is_none());
+            let tx = db.transaction()?;
+            let request = sample("owner", target.clone());
+            assert_eq!(check(&tx, request.clone())?.unwrap().id, "wanted");
+            let mut changed = request.clone();
+            changed.lifetime = Lifetime::Lease;
+            assert!(check(&tx, changed).is_err());
+            let mut changed = request;
+            changed.reason = "different reason".into();
+            assert!(check(&tx, changed).is_err());
+            tx.execute("UPDATE access_requests SET record='invalid' WHERE id='wanted'", [])?;
+            assert!(current(&tx, "owner", &target, "default").is_err());
+            Ok(())
+        }).await
+    }
+
+    #[tokio::test]
+    async fn decisions_decode_only_the_selected_id_and_remain_idempotent() -> Result<()> {
+        let (_root, manager) = crate::test_support::manager().await;
+        manager.store.run(|db| {
+            owners(db)?;
+            for id in ["approve", "deny"] {
+                let mut request = sample("owner", Target::Simulator);
+                request.id = id.into();
+                request.name = id.into();
+                save(db, &request)?;
+            }
+            db.execute("INSERT INTO access_requests VALUES ('broken','other','simulator','default','invalid',0)", [])?;
+            Ok(())
+        }).await?;
+        for (id, approve, status) in [
+            ("approve", true, DecisionStatus::Approved),
+            ("deny", false, DecisionStatus::Denied),
+        ] {
+            let decision = manager.decide_access(id.into(), approve).await?;
+            assert_eq!(decision.status, status);
+            let retry = manager.decide_access(id.into(), approve).await?;
+            assert_eq!(
+                serde_json::to_value(retry)?,
+                serde_json::to_value(decision)?
+            );
+            assert!(manager.decide_access(id.into(), !approve).await.is_err());
+        }
+        for (id, message) in [
+            ("missing", "unknown access request"),
+            ("broken", "access request broken has an invalid record"),
+        ] {
+            assert!(
+                manager
+                    .decide_access(id.into(), true)
+                    .await
+                    .unwrap_err()
+                    .to_string()
+                    .contains(message)
+            );
+        }
+        manager
+            .store
+            .run(|db| {
+                db.execute("UPDATE workspaces SET state='failed' WHERE id='owner'", [])?;
+                Ok(())
+            })
+            .await?;
+        assert!(manager.decide_access("approve".into(), true).await.is_err());
+        Ok(())
     }
 
     #[test]

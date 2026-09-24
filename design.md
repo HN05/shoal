@@ -353,6 +353,8 @@ lasts until release by default, or for the workspace when configured, limited to
 same resource and access settings. Changed settings require a new request; approval
 never overrides capacity, scope, or simulator cleanup rules. Requests and grants
 survive restart and failed removal, and disappear with successful removal.
+Approval lookups validate the selected ID or active workspace/target/name record;
+malformed unrelated history does not block them. Listings validate every selected record.
 
 Port, simulator, and generic resource commands share the same shape: the bare
 noun (or `list`) combines relevant configuration or capacity with leases;

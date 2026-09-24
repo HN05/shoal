@@ -52,7 +52,9 @@ removal, check it against the rule those files state before judging it.
   user scripts own external resource integrations.
 - Resource approvals bind effective allocation settings and require an unscoped
   decision. Pending requests reserve nothing; grant lifetime follows configuration
-  and approval never bypasses capacity or simulator cleanup rules.
+  and approval never bypasses capacity or simulator cleanup rules. Approval lookups
+  validate their selected ID or active workspace/target/name record; listings reject
+  invalid selected records, while malformed unrelated history does not block lookups.
 - Explicit creation bases resolve locally and are recorded for diff; only a base
   naming the local default branch is refreshed.
 - Daemon ref updates disable Git credential and SSH askpass prompts without
