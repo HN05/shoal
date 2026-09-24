@@ -37,7 +37,9 @@ pub const COMPLETE: &str = "SHOAL_COMPLETE";
 /// Runtime override for the packaged skill file.
 pub const SKILL_PATH: &str = "SHOAL_SKILL_PATH";
 /// Build-time fallback for the packaged skill file; the macro requires a literal.
-pub const COMPILED_SKILL_PATH: Option<&str> = option_env!("SHOAL_SKILL_PATH");
+/// Named apart from the runtime override, which launched agents inherit, so
+/// their own builds never embed it.
+pub const COMPILED_SKILL_PATH: Option<&str> = option_env!("SHOAL_BUILD_SKILL_PATH");
 /// Claude Code's configuration directory override (its `.claude.json` and skills).
 pub const CLAUDE_CONFIG_DIR: &str = "CLAUDE_CONFIG_DIR";
 /// Codex's user configuration and state directory override.
