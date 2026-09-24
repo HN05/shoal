@@ -86,6 +86,11 @@ jobs:
       # Built from .forgejo/ci-image/Containerfile on the runner host; the tag is
       # the Rust version.
       image: git.henriknordvik.com/hn05/ci-shoal:1.98
+      # Test fixtures keep their state, repositories and daemons under /tmp. On
+      # the runner's disk an fsync can stall for over a second under shared I/O
+      # load, so each daemon's SQLite commits overran the fixtures' time limits;
+      # tmpfs makes fsync free. Tests exec scripts there, so it must allow exec.
+      options: --tmpfs /tmp:rw,exec,nosuid,mode=1777,size=8g
     env:
       # Runner-mounted volume; a plain directory when unmounted.
       CARGO_TARGET_DIR: /ci-target
