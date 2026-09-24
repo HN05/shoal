@@ -10578,6 +10578,16 @@ fn simulator_approvals_precede_mutations_and_cannot_be_bypassed_by_device_args()
     );
     let history = fixture.ok(&["sim", "history", "agent"]);
     assert_eq!(history[0]["status"], "acquired");
+    assert_eq!(
+        history
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|entry| entry["request"]["reason"] == "reset test data")
+            .count(),
+        1,
+        "polling must keep one clean audit request"
+    );
     assert_eq!(history[0]["request"]["reason"], "reset test data");
     assert_eq!(history[0]["action"], "create");
 }

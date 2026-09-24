@@ -2,9 +2,15 @@
 use std::time::Duration;
 
 use anyhow::Result;
+use serde_json::Value;
 use tokio::time::{Instant, sleep};
 
-use crate::daemon::access::{AccessRequest, DecisionStatus};
+use super::{EXIT_BUSY, access};
+use crate::{
+    cli::{context::Context, output::Style},
+    daemon::access::{AccessRequest, DecisionStatus},
+    protocol::Body,
+};
 
 #[derive(Debug)]
 pub(super) enum Acquisition<T> {
@@ -15,11 +21,46 @@ pub(super) enum Acquisition<T> {
 }
 
 impl<T> Acquisition<T> {
-    pub(super) fn approval(request: Box<AccessRequest>) -> Self {
+    fn approval(request: Box<AccessRequest>) -> Self {
         if request.status == DecisionStatus::Denied {
             Self::ApprovalDenied(request)
         } else {
             Self::ApprovalPending(request)
+        }
+    }
+
+    /// Domain handlers supply their successful payload and capacity details;
+    /// approval rendering and exit status are shared by every acquisition.
+    pub(super) fn finish(
+        self,
+        ctx: &Context,
+        acquired: impl FnOnce(T) -> Result<()>,
+        busy: impl FnOnce(&str) -> Value,
+    ) -> Result<i32> {
+        match self {
+            Self::Acquired(value) => {
+                acquired(value)?;
+                Ok(0)
+            }
+            Self::ApprovalPending(request) | Self::ApprovalDenied(request) => {
+                access::declined(ctx, &request)
+            }
+            Self::Busy(message) => {
+                ctx.emit_styled(Style::Warning, &message, busy(&message))?;
+                Ok(EXIT_BUSY)
+            }
+        }
+    }
+}
+
+impl<T: TryFrom<Body, Error = anyhow::Error>> TryFrom<Body> for Acquisition<T> {
+    type Error = anyhow::Error;
+
+    fn try_from(body: Body) -> Result<Self> {
+        match body {
+            Body::AccessRequest(request) => Ok(Self::approval(request)),
+            Body::Busy { message } => Ok(Self::Busy(message)),
+            body => T::try_from(body).map(Self::Acquired),
         }
     }
 }

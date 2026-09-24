@@ -3,7 +3,6 @@ use anyhow::Result;
 use serde_json::json;
 
 use super::{
-    EXIT_BUSY,
     acquisition::{Acquisition, retry},
     workspace_overviews,
 };
@@ -18,7 +17,7 @@ use crate::{
     daemon::resources::{
         Overview, ResourceKind, ResourceLease, ResourceRequest, WorkspaceOverview,
     },
-    protocol::{Body, Method},
+    protocol::Method,
 };
 
 pub(super) async fn run(
@@ -50,39 +49,22 @@ pub(super) async fn run(
                     workspace: workspace.clone(),
                     request: request.clone(),
                 };
-                Ok(match client::call(&ctx.paths, method).await? {
-                    Body::ResourceLease(lease) => Acquisition::Acquired(lease),
-                    Body::AccessRequest(request) => Acquisition::approval(request),
-                    Body::Busy { message } => Acquisition::Busy(message),
-                    body => {
-                        return Err(body.unexpected("ResourceLease, AccessRequest or Busy"));
-                    }
-                })
+                client::request::<Acquisition<ResourceLease>>(&ctx.paths, method).await
             })
             .await?;
-            match outcome {
-                Acquisition::Acquired(lease) => {
-                    ctx.emit(&describe(&lease, Palette::stdout(ctx.json)), &lease)?;
-                    Ok(0)
-                }
-                Acquisition::ApprovalPending(request) | Acquisition::ApprovalDenied(request) => {
-                    super::access::declined(ctx, &request)
-                }
-                Acquisition::Busy(message) => {
-                    ctx.emit_styled(
-                        Style::Warning,
-                        &message,
-                        json!({
-                            "acquired": false,
-                            "code": "resource_busy",
-                            "pool": request.pool,
-                            "resource": request.resource,
-                            "message": message,
-                        }),
-                    )?;
-                    Ok(EXIT_BUSY)
-                }
-            }
+            outcome.finish(
+                ctx,
+                |lease| ctx.emit(&describe(&lease, Palette::stdout(ctx.json)), &lease),
+                |message| {
+                    json!({
+                        "acquired": false,
+                        "code": "resource_busy",
+                        "pool": request.pool,
+                        "resource": request.resource,
+                        "message": message,
+                    })
+                },
+            )
         }
         Some(ResourceCommand::Release {
             pool,

@@ -2,10 +2,7 @@
 use anyhow::Result;
 use serde_json::json;
 
-use super::{
-    EXIT_BUSY,
-    acquisition::{Acquisition, retry},
-};
+use super::acquisition::{Acquisition, retry};
 use crate::{
     cli::{
         SimCommand, WorkspaceScope,
@@ -14,7 +11,7 @@ use crate::{
         output::{Palette, Style},
         ui::{self, Fallback},
     },
-    protocol::{Body, Method},
+    protocol::Method,
     sim::{SimRequest, Simulator, SimulatorCatalog, SimulatorOverview, audit::AuditEntry},
 };
 
@@ -61,31 +58,14 @@ pub(super) async fn run(
                     workspace: workspace.clone(),
                     request: request.clone(),
                 };
-                Ok(match client::call(&ctx.paths, method).await? {
-                    Body::Simulator(sim) => Acquisition::Acquired(sim),
-                    Body::AccessRequest(request) => Acquisition::approval(request),
-                    Body::Busy { message } => Acquisition::Busy(message),
-                    body => return Err(body.unexpected("Simulator, AccessRequest or Busy")),
-                })
+                client::request::<Acquisition<Simulator>>(&ctx.paths, method).await
             })
             .await?;
-            match outcome {
-                Acquisition::Acquired(sim) => {
-                    ctx.emit_styled(Style::Success, &describe(&sim), &sim)?;
-                    Ok(0)
-                }
-                Acquisition::ApprovalPending(request) | Acquisition::ApprovalDenied(request) => {
-                    super::access::declined(ctx, &request)
-                }
-                Acquisition::Busy(message) => {
-                    ctx.emit_styled(
-                        Style::Warning,
-                        &message,
-                        json!({"acquired": false, "code": "simulator_busy", "message": message}),
-                    )?;
-                    Ok(EXIT_BUSY)
-                }
-            }
+            outcome.finish(
+                ctx,
+                |sim| ctx.emit_styled(Style::Success, &describe(&sim), &sim),
+                |message| json!({"acquired": false, "code": "simulator_busy", "message": message}),
+            )
         }
         Some(SimCommand::History {
             scope,
