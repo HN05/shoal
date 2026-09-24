@@ -157,12 +157,12 @@ mod tests {
     #[test]
     fn additional_hook_paths_are_validated_in_global_config() {
         let paths = Paths::for_test("/home/test");
-        for key in [
-            "pre_setup_cmd",
-            "post_remove_cmd",
-            "post_resource_acquire_cmd",
-            "pre_resource_release_cmd",
-        ] {
+        for &kind in crate::hooks::HookKind::ALL {
+            let key = kind.key();
+            if !kind.allows_global() {
+                assert!(Config::parse(&format!("{key} = 'scripts/hook'"), &paths).is_err());
+                continue;
+            }
             assert!(Config::parse(&format!("{key} = 'scripts/hook'"), &paths).is_ok());
             assert!(Config::parse(&format!("{key} = ' '"), &paths).is_err());
             assert!(Config::parse(&format!(r#"{key} = "a\u0000b""#), &paths).is_err());
@@ -637,20 +637,9 @@ impl Config {
         config.simulators.validate()?;
         config.git.validate()?;
         config.agent_auth.validate()?;
-        for (key, command) in [
-            ("pre_setup_cmd", &config.pre_setup_cmd),
-            ("post_remove_cmd", &config.post_remove_cmd),
-            (
-                "post_resource_acquire_cmd",
-                &config.post_resource_acquire_cmd,
-            ),
-            ("pre_resource_release_cmd", &config.pre_resource_release_cmd),
-        ] {
-            if let Some(command) = command {
-                ensure!(
-                    !command.trim().is_empty() && !command.contains('\0'),
-                    "{key} must be a nonempty executable path"
-                );
+        for &kind in crate::hooks::HookKind::ALL {
+            if kind.allows_global() {
+                kind.validate(kind.global_command(&config))?;
             }
         }
         named_commands::validate(&config.commands)?;

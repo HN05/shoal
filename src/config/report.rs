@@ -66,33 +66,11 @@ fn entries(defaults: RepoConfig, global: RepoConfig, layers: ConfigLayers) -> Re
     scalar(&mut result, "codex.default_mode", &sources, |config| {
         config.codex.default_mode.as_ref()
     })?;
-    scalar(&mut result, "pre_setup_cmd", &sources, |config| {
-        config.pre_setup_cmd.as_ref()
-    })?;
-    scalar(&mut result, "post_remove_cmd", &sources, |config| {
-        config.post_remove_cmd.as_ref()
-    })?;
-    scalar(
-        &mut result,
-        "post_resource_acquire_cmd",
-        &sources,
-        |config| config.post_resource_acquire_cmd.as_ref(),
-    )?;
-    scalar(
-        &mut result,
-        "pre_resource_release_cmd",
-        &sources,
-        |config| config.pre_resource_release_cmd.as_ref(),
-    )?;
-    scalar(&mut result, "setup_cmd", &sources, |config| {
-        config.setup_cmd.as_ref()
-    })?;
-    scalar(&mut result, "post_setup_cmd", &sources, |config| {
-        config.post_setup_cmd.as_ref()
-    })?;
-    scalar(&mut result, "pre_remove_cmd", &sources, |config| {
-        config.pre_remove_cmd.as_ref()
-    })?;
+    for &kind in crate::hooks::HookKind::ALL {
+        scalar(&mut result, kind.key(), &sources, |config| {
+            kind.repository_command(config)
+        })?;
+    }
     scalar(&mut result, "ports.on_conflict", &sources, |config| {
         config.ports.on_conflict.as_ref()
     })?;

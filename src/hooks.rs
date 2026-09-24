@@ -4,11 +4,87 @@ use std::{path::Path, process::Stdio, time::Duration};
 use anyhow::{Context, Result, ensure};
 use tokio::{process::Command, time::timeout};
 
-use crate::{daemon::resources::ResourceLease, env, model::Workspace, paths::Paths};
+use crate::{
+    config::{Config, repo::RepoConfig},
+    daemon::resources::ResourceLease,
+    env,
+    model::Workspace,
+    paths::Paths,
+};
 
 /// Longest a daemon-side hook may run before the operation fails.
 const DETACHED_TIMEOUT: Duration = Duration::from_secs(60);
 const MAX_DIAGNOSTIC_CHARS: usize = 4096;
+
+/// The directory used both to resolve a hook's executable and to run it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HookDirectory {
+    Worktree,
+    Checkout,
+}
+
+impl HookDirectory {
+    pub fn path<'a>(self, worktree: &'a Path, checkout: &'a Path) -> &'a Path {
+        match self {
+            Self::Worktree => worktree,
+            Self::Checkout => checkout,
+        }
+    }
+}
+
+// Keep the config field, environment name, global eligibility and directory in
+// one table. Config structs retain their existing TOML keys and strict parsing.
+macro_rules! hook_kinds {
+    ($($kind:ident => ($field:ident, $name:literal, $global:tt, $directory:ident)),+ $(,)?) => {
+        crate::state::states!(HookKind { $($kind => $name),+ });
+
+        impl HookKind {
+            pub const ALL: &[Self] = &[$(Self::$kind),+];
+
+            pub fn key(self) -> &'static str {
+                match self { $(Self::$kind => stringify!($field)),+ }
+            }
+
+            pub fn allows_global(self) -> bool {
+                match self { $(Self::$kind => $global),+ }
+            }
+
+            pub fn directory(self) -> HookDirectory {
+                match self { $(Self::$kind => HookDirectory::$directory),+ }
+            }
+
+            pub fn repository_command(self, config: &RepoConfig) -> Option<&String> {
+                match self { $(Self::$kind => config.$field.as_ref()),+ }
+            }
+
+            pub fn global_command(self, config: &Config) -> Option<&String> {
+                match self { $(Self::$kind => hook_kinds!(@global config, $field, $global)),+ }
+            }
+
+            pub fn validate(self, command: Option<&String>) -> Result<()> {
+                if let Some(command) = command {
+                    ensure!(
+                        !command.trim().is_empty() && !command.contains('\0'),
+                        "{} must be a nonempty executable path", self.key()
+                    );
+                }
+                Ok(())
+            }
+        }
+    };
+    (@global $config:ident, $field:ident, true) => { $config.$field.as_ref() };
+    (@global $config:ident, $field:ident, false) => { None };
+}
+
+hook_kinds! {
+    Setup => (setup_cmd, "setup", false, Worktree),
+    PreSetup => (pre_setup_cmd, "pre_setup", true, Worktree),
+    PostSetup => (post_setup_cmd, "post_setup", false, Worktree),
+    PreRemove => (pre_remove_cmd, "pre_remove", false, Worktree),
+    PostRemove => (post_remove_cmd, "post_remove", true, Checkout),
+    PostResourceAcquire => (post_resource_acquire_cmd, "post_resource_acquire", true, Worktree),
+    PreResourceRelease => (pre_resource_release_cmd, "pre_resource_release", true, Worktree),
+}
 
 #[derive(Debug, Clone, Copy)]
 pub enum Hook<'a> {
@@ -21,25 +97,14 @@ pub enum Hook<'a> {
 }
 
 impl Hook<'_> {
-    fn key(self) -> &'static str {
+    pub fn kind(self) -> HookKind {
         match self {
-            Hook::PreSetup => "pre_setup_cmd",
-            Hook::PostSetup => "post_setup_cmd",
-            Hook::PreRemove => "pre_remove_cmd",
-            Hook::PostRemove(_) => "post_remove_cmd",
-            Hook::PostResourceAcquire(_) => "post_resource_acquire_cmd",
-            Hook::PreResourceRelease(_) => "pre_resource_release_cmd",
-        }
-    }
-
-    fn name(self) -> &'static str {
-        match self {
-            Hook::PreSetup => "pre_setup",
-            Hook::PostSetup => "post_setup",
-            Hook::PreRemove => "pre_remove",
-            Hook::PostRemove(_) => "post_remove",
-            Hook::PostResourceAcquire(_) => "post_resource_acquire",
-            Hook::PreResourceRelease(_) => "pre_resource_release",
+            Hook::PreSetup => HookKind::PreSetup,
+            Hook::PostSetup => HookKind::PostSetup,
+            Hook::PreRemove => HookKind::PreRemove,
+            Hook::PostRemove(_) => HookKind::PostRemove,
+            Hook::PostResourceAcquire(_) => HookKind::PostResourceAcquire,
+            Hook::PreResourceRelease(_) => HookKind::PreResourceRelease,
         }
     }
 }
@@ -53,11 +118,14 @@ fn command(
     let mut command = Command::new(executable);
     env::apply_workspace_identity(&mut command, workspace, paths);
     command
-        .current_dir(match hook {
-            Hook::PostRemove(checkout) => checkout,
-            _ => &workspace.path,
-        })
-        .env(env::HOOK, hook.name())
+        .current_dir(hook.kind().directory().path(
+            &workspace.path,
+            match hook {
+                Hook::PostRemove(checkout) => checkout,
+                _ => &workspace.path,
+            },
+        ))
+        .env(env::HOOK, hook.kind().as_str())
         .env(env::WORKSPACE_PATH, &workspace.path)
         .env_remove(env::RESOURCE_LEASE)
         .env_remove(env::SCOPE_TOKEN)
@@ -93,7 +161,7 @@ pub async fn run_interactive(
             Stdio::inherit()
         })
         .spawn()
-        .with_context(|| format!("launch {} {}", hook.key(), executable.display()))?;
+        .with_context(|| format!("launch {} {}", hook.kind().key(), executable.display()))?;
     let group = child.id().context("hook process ID unavailable")? as i32;
     let _terminal = crate::execution::Terminal::give_to_if_foreground(group)?;
     // The hook may have stopped on terminal I/O before becoming foreground.
@@ -103,11 +171,11 @@ pub async fn run_interactive(
     let status = child
         .wait()
         .await
-        .with_context(|| format!("wait for {} {}", hook.key(), executable.display()))?;
+        .with_context(|| format!("wait for {} {}", hook.kind().key(), executable.display()))?;
     ensure!(
         status.success(),
         "{} exited with {}; the workspace is kept",
-        hook.key(),
+        hook.kind().key(),
         crate::execution::exit_code(status)
     );
     Ok(())
@@ -130,11 +198,11 @@ pub async fn run_detached(
     .with_context(|| {
         format!(
             "{} did not finish within {} seconds",
-            hook.key(),
+            hook.kind().key(),
             DETACHED_TIMEOUT.as_secs()
         )
     })?
-    .with_context(|| format!("launch {} {}", hook.key(), executable.display()))?;
+    .with_context(|| format!("launch {} {}", hook.kind().key(), executable.display()))?;
     let diagnostic: String = String::from_utf8_lossy(&output.stderr)
         .chars()
         .take(MAX_DIAGNOSTIC_CHARS)
@@ -142,7 +210,7 @@ pub async fn run_detached(
     ensure!(
         output.status.success(),
         "{} exited with {}: {}",
-        hook.key(),
+        hook.kind().key(),
         crate::execution::exit_code(output.status),
         diagnostic.trim()
     );

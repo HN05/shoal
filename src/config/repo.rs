@@ -144,24 +144,8 @@ pub fn parse(text: &str) -> Result<RepoConfig> {
     if let Some(name) = &config.git_profile {
         crate::validate::name("git profile", name)?;
     }
-    for (key, command) in [
-        ("setup_cmd", &config.setup_cmd),
-        ("pre_setup_cmd", &config.pre_setup_cmd),
-        ("post_remove_cmd", &config.post_remove_cmd),
-        (
-            "post_resource_acquire_cmd",
-            &config.post_resource_acquire_cmd,
-        ),
-        ("pre_resource_release_cmd", &config.pre_resource_release_cmd),
-        ("post_setup_cmd", &config.post_setup_cmd),
-        ("pre_remove_cmd", &config.pre_remove_cmd),
-    ] {
-        if let Some(command) = command {
-            ensure!(
-                !command.trim().is_empty() && !command.contains('\0'),
-                "{key} must be a nonempty executable path"
-            );
-        }
+    for &kind in crate::hooks::HookKind::ALL {
+        kind.validate(kind.repository_command(&config))?;
     }
     if let Some(minutes) = config.auto_cleanup.idle_minutes {
         crate::config::validate_idle_minutes(minutes)?;
@@ -399,12 +383,8 @@ mod tests {
 
     #[test]
     fn additional_hooks_validate_and_layer_paths() {
-        for key in [
-            "pre_setup_cmd",
-            "post_remove_cmd",
-            "post_resource_acquire_cmd",
-            "pre_resource_release_cmd",
-        ] {
+        for &kind in crate::hooks::HookKind::ALL {
+            let key = kind.key();
             assert!(parse(&format!("{key} = ' '")).is_err());
             assert!(parse(&format!(r#"{key} = "a\u0000b""#)).is_err());
             let base = parse(&format!("{key} = '/base/hook'")).unwrap();
