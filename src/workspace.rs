@@ -283,12 +283,10 @@ impl Manager {
         self.store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
-                let taken: bool = tx.query_row(
-                    "SELECT EXISTS(SELECT 1 FROM workspaces WHERE name=?1)",
-                    [&record.name],
-                    |r| r.get(0),
-                )?;
-                ensure!(!taken, "workspace name already exists: {}", record.name);
+                ensure!(
+                    !store::exists(&tx, "SELECT 1 FROM workspaces WHERE name=?1", [&record.name])?,
+                    "workspace name already exists: {}", record.name
+                );
                 let workspaces = tx.prepare(&format!("SELECT {} FROM workspaces", store::WORKSPACE_COLUMNS))?
                     .query_map([], store::workspace)?
                     .collect::<rusqlite::Result<Vec<_>>>()?;

@@ -1,7 +1,7 @@
 //! SQLite persistence: schema migrations, row mappers, and the small
 //! guards every mutation shares.
 use anyhow::{Context, Result, ensure};
-use rusqlite::{Connection, Row};
+use rusqlite::{Connection, Params, Row};
 use serde::{Serialize, de::DeserializeOwned};
 use std::{path::PathBuf, time::Duration};
 
@@ -166,6 +166,11 @@ fn migrate(db: &mut Connection) -> Result<()> {
     Ok(())
 }
 
+/// Whether the supplied SELECT query returns any rows.
+pub fn exists(db: &Connection, sql: &str, params: impl Params) -> Result<bool> {
+    Ok(db.query_row(&format!("SELECT EXISTS({sql})"), params, |row| row.get(0))?)
+}
+
 /// Fail unless the workspace is ready; resources may only change then.
 pub fn require_ready(db: &Connection, workspace_id: &str) -> Result<()> {
     let ready: bool = db.query_row(
@@ -289,6 +294,21 @@ pub fn setup_finished(db: &Connection, workspace_id: &str) -> Result<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn exists_checks_bound_queries_in_the_current_transaction() -> Result<()> {
+        let mut db = Connection::open_in_memory()?;
+        db.execute_batch("CREATE TABLE records(name TEXT);")?;
+        let tx = db.transaction()?;
+        tx.execute("INSERT INTO records(name) VALUES (?1)", ["present"])?;
+        let sql = "SELECT 1 FROM records WHERE name=?1";
+        assert!(exists(&tx, sql, ["present"])?);
+        assert!(!exists(&tx, sql, ["missing"])?);
+        assert!(exists(&tx, "SELECT 1 FROM missing_table", []).is_err());
+        tx.rollback()?;
+        assert!(!exists(&db, sql, ["present"])?);
+        Ok(())
+    }
 
     #[test]
     fn mappers_use_named_columns() -> Result<()> {

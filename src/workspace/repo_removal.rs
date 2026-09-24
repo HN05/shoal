@@ -5,6 +5,7 @@ use crate::{
     model::{Repository, RepositoryRemoval, Workspace},
     removal::BranchChoice,
     state::WorkspaceState,
+    store,
 };
 use anyhow::{Context, Result, ensure};
 use rusqlite::{OptionalExtension, params};
@@ -25,10 +26,10 @@ impl Manager {
         self.store
             .run(move |db| {
                 ensure!(
-                    !db.query_row(
-                        "SELECT EXISTS(SELECT 1 FROM repository_removals WHERE repository_id=?1)",
-                        [id],
-                        |r| r.get::<_, bool>(0)
+                    !store::exists(
+                        db,
+                        "SELECT 1 FROM repository_removals WHERE repository_id=?1",
+                        [id]
                     )?,
                     "repository removal is incomplete; retry shoal repo rm --yes"
                 );
@@ -90,10 +91,10 @@ impl Manager {
             .run(move |db| {
                 let tx = db.transaction()?;
                 ensure!(
-                    !tx.query_row(
-                        "SELECT EXISTS(SELECT 1 FROM workspaces WHERE repository_id=?1)",
-                        [&id],
-                        |row| row.get::<_, bool>(0)
+                    !store::exists(
+                        &tx,
+                        "SELECT 1 FROM workspaces WHERE repository_id=?1",
+                        [&id]
                     )?,
                     "repository still has workspaces"
                 );

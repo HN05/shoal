@@ -212,10 +212,10 @@ impl Manager {
         self.store
             .run(move |db| {
                 ensure!(
-                    !db.query_row(
-                        "SELECT EXISTS(SELECT 1 FROM repositories WHERE name=?1 AND id<>?2)",
-                        params![name, repo.id],
-                        |row| row.get::<_, bool>(0)
+                    !store::exists(
+                        db,
+                        "SELECT 1 FROM repositories WHERE name=?1 AND id<>?2",
+                        params![name, repo.id]
                     )?,
                     "repository name is already in use"
                 );
