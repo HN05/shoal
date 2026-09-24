@@ -11,6 +11,9 @@ use crate::{
 };
 use anyhow::{Result, bail, ensure};
 
+#[cfg(test)]
+mod tests;
+
 /// Who is removing the workspace, which decides how strict the checks are.
 #[derive(Clone, Copy)]
 enum Removal<'a> {
