@@ -176,6 +176,11 @@ impl Manager {
         let Ok(path) = std::fs::canonicalize(&checkout.path) else {
             return Ok(None);
         };
+        self.managed_workspace_at(&path).await
+    }
+
+    /// Match a canonical checkout path against recorded workspace locations.
+    async fn managed_workspace_at(&self, path: &Path) -> Result<Option<String>> {
         Ok(self
             .list_workspaces()
             .await?
@@ -226,9 +231,7 @@ impl Manager {
         if let Some(checkout) = &checkout {
             let path = std::fs::canonicalize(checkout)?;
             ensure!(
-                !self.list_workspaces().await?.iter().any(|w| {
-                    std::fs::canonicalize(&w.path).is_ok_and(|managed| managed == path)
-                }),
+                self.managed_workspace_at(&path).await?.is_none(),
                 "{branch} is checked out in a managed workspace; switch that workspace back to its own branch first"
             );
             clean_branch(checkout, branch).await?;
