@@ -6,6 +6,9 @@ use tokio::process::Command;
 
 use crate::{removal::RemovalResult, subprocess};
 
+#[cfg(test)]
+mod tests;
+
 fn command(repository_dir: &Path, worktrunk_config: &Path) -> Command {
     let mut command = Command::new("wt");
     command.arg("--config").arg(worktrunk_config);
