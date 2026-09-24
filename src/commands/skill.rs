@@ -51,8 +51,8 @@ pub(super) fn run(command: Option<&SkillCommand>, json_output: bool) -> Result<i
         .collect::<Result<Vec<_>>>()?;
     let mut installed = Vec::new();
     let source = packaged_source(
-        std::env::var_os("SHOAL_SKILL_PATH").map(PathBuf::from),
-        option_env!("SHOAL_SKILL_PATH").map(PathBuf::from),
+        std::env::var_os(crate::env::SKILL_PATH).map(PathBuf::from),
+        crate::env::COMPILED_SKILL_PATH.map(PathBuf::from),
     )?;
     for (agent, path) in destinations {
         let directory = path.parent().context("missing skill directory")?;

@@ -51,25 +51,18 @@ fn command(
     paths: &Paths,
 ) -> Result<Command> {
     let mut command = Command::new(executable);
-    for name in env::inherited_port_exports() {
-        command.env_remove(name);
-    }
+    env::apply_workspace_identity(&mut command, workspace, paths);
     command
         .current_dir(match hook {
             Hook::PostRemove(checkout) => checkout,
             _ => &workspace.path,
         })
         .env(env::HOOK, hook.name())
-        .env(env::WORKSPACE_ID, &workspace.id)
         .env(env::WORKSPACE_PATH, &workspace.path)
         .env_remove(env::RESOURCE_LEASE)
-        .env(env::RUN_ID, &workspace.id)
-        .env(env::WORKSPACE_NAME, &workspace.name)
-        .env(env::STATE_DIR, &paths.state)
         .env_remove(env::SCOPE_TOKEN)
         .env_remove(env::EXECUTION_ID)
         .env_remove(env::RESERVED_PORT_ENV)
-        .env_remove(env::SHELL_DIRECTIVE)
         .process_group(0)
         .kill_on_drop(true);
     if let Hook::PostResourceAcquire(lease) | Hook::PreResourceRelease(lease) = hook {

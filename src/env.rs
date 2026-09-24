@@ -2,6 +2,11 @@
 //! here so wrapper, daemon, and process scanning agree on the contract.
 use anyhow::{Result, ensure};
 use std::{ffi::OsString, path::PathBuf};
+use tokio::process::Command;
+
+use crate::{model::Workspace, paths::Paths};
+
+pub const PREFIX: &str = "SHOAL_";
 
 /// Overrides the state directory; also isolates the daemon socket.
 pub const STATE_DIR: &str = "SHOAL_STATE_DIR";
@@ -29,30 +34,30 @@ pub const SHELL_DIRECTIVE: &str = "SHOAL_SHELL_DIRECTIVE";
 pub const PREVIOUS_DIR: &str = "SHOAL_PREVIOUS_DIR";
 /// clap dynamic-completion trigger variable.
 pub const COMPLETE: &str = "SHOAL_COMPLETE";
+/// Runtime override for the packaged skill file.
+pub const SKILL_PATH: &str = "SHOAL_SKILL_PATH";
+/// Build-time fallback for the packaged skill file; the macro requires a literal.
+pub const COMPILED_SKILL_PATH: Option<&str> = option_env!("SHOAL_SKILL_PATH");
 /// Claude Code's configuration directory override (its `.claude.json` and skills).
 pub const CLAUDE_CONFIG_DIR: &str = "CLAUDE_CONFIG_DIR";
 /// Codex's user configuration and state directory override.
 pub const CODEX_HOME: &str = "CODEX_HOME";
 
 pub fn codex_home() -> Result<Option<PathBuf>> {
-    let Some(dir) = std::env::var_os(CODEX_HOME) else {
-        return Ok(None);
-    };
-    let dir = PathBuf::from(dir);
-    ensure!(dir.is_absolute(), "{CODEX_HOME} must be an absolute path");
-    Ok(Some(dir))
+    absolute_dir_var(CODEX_HOME)
 }
 
 /// The configured Claude Code directory, if any; a relative override is an error.
 pub fn claude_config_dir() -> Result<Option<PathBuf>> {
-    let Some(dir) = std::env::var_os(CLAUDE_CONFIG_DIR) else {
+    absolute_dir_var(CLAUDE_CONFIG_DIR)
+}
+
+fn absolute_dir_var(name: &str) -> Result<Option<PathBuf>> {
+    let Some(dir) = std::env::var_os(name) else {
         return Ok(None);
     };
     let dir = PathBuf::from(dir);
-    ensure!(
-        dir.is_absolute(),
-        "{CLAUDE_CONFIG_DIR} must be an absolute path"
-    );
+    ensure!(dir.is_absolute(), "{name} must be an absolute path");
     Ok(Some(dir))
 }
 
@@ -65,7 +70,7 @@ pub const PROTECTED: [&str; 4] = ["HOME", "PATH", "SHELL", "TMPDIR"];
 pub fn is_port_export(name: &str) -> bool {
     !name.is_empty()
         && !PROTECTED.contains(&name)
-        && (!name.starts_with("SHOAL_") || name.starts_with(PORT_PREFIX))
+        && (!name.starts_with(PREFIX) || name.starts_with(PORT_PREFIX))
 }
 
 /// Port variables inherited from an enclosing execution.
@@ -88,6 +93,19 @@ pub fn inherited_port_exports() -> Vec<OsString> {
     exports.sort();
     exports.dedup();
     exports
+}
+
+/// Set shared workspace identity and clear inherited port exports and shell state.
+pub fn apply_workspace_identity(command: &mut Command, workspace: &Workspace, paths: &Paths) {
+    for name in inherited_port_exports() {
+        command.env_remove(name);
+    }
+    command
+        .env(WORKSPACE_ID, &workspace.id)
+        .env(RUN_ID, &workspace.id)
+        .env(WORKSPACE_NAME, &workspace.name)
+        .env(STATE_DIR, &paths.state)
+        .env_remove(SHELL_DIRECTIVE);
 }
 
 pub fn scope_token() -> Option<String> {

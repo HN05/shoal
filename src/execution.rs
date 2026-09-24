@@ -397,20 +397,13 @@ fn report_launch(launch: &DetachedLaunch) -> Result<()> {
 /// Export the execution's identity and port reservations, dropping stale port
 /// variables inherited from an enclosing execution.
 fn configure_environment(process: &mut Command, paths: &Paths, plan: &ExecutionPlan) {
-    for name in env::inherited_port_exports() {
-        process.env_remove(name);
-    }
+    env::apply_workspace_identity(process, &plan.workspace, paths);
     let exported: Vec<_> = plan.ports.iter().map(|p| p.env_var.as_str()).collect();
     process
         .env(env::SCOPE_TOKEN, &plan.scope_token)
         .env(env::EXECUTION_ID, &plan.id)
-        .env(env::WORKSPACE_ID, &plan.workspace.id)
-        .env(env::RUN_ID, &plan.workspace.id)
-        .env(env::WORKSPACE_NAME, &plan.workspace.name)
-        .env(env::STATE_DIR, &paths.state)
         .envs(plan.ports.iter().map(|p| (&p.env_var, p.port.to_string())))
-        .env(env::RESERVED_PORT_ENV, exported.join(":"))
-        .env_remove(env::SHELL_DIRECTIVE);
+        .env(env::RESERVED_PORT_ENV, exported.join(":"));
 }
 
 async fn report_completion(stream: &mut UnixStream, code: i32, mode: &Mode) -> Result<()> {

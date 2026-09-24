@@ -98,7 +98,7 @@ fn validate_env_var(env_var: &str, default: &str) -> Result<()> {
     );
     ensure!(
         !env::PROTECTED.contains(&env_var)
-            && (!env_var.starts_with("SHOAL_") || env_var == default),
+            && (!env_var.starts_with(env::PREFIX) || env_var == default),
         "port environment variable conflicts with the execution environment"
     );
     Ok(())
