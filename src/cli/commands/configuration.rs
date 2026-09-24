@@ -70,7 +70,7 @@ async fn target(ctx: &Context, explicit: Option<String>) -> Result<ConfigTarget>
         Some(std::fs::canonicalize(std::env::current_dir()?)?)
     };
     let context = WorkspaceContext::from_directory(&workspaces, cwd.as_deref());
-    if let Some(workspace) = context.resolve(None, scoped, ScopeOrder::First) {
+    if let Some(workspace) = context.resolve(None, scoped, ScopeOrder::BeforeDirectory) {
         return Ok(ConfigTarget::Workspace(workspace.id.clone()));
     }
     let cwd = cwd.context("scoped workspace is unavailable")?;

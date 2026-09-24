@@ -348,7 +348,7 @@ pub async fn select_workspace(
         None
     };
     let context = WorkspaceContext::from_directory(&workspaces, cwd.as_deref());
-    if let Some(workspace) = context.resolve(None, scoped, ScopeOrder::First) {
+    if let Some(workspace) = context.resolve(None, scoped, ScopeOrder::BeforeDirectory) {
         return Ok(workspace.id.clone());
     }
     ensure!(!scoped, "scoped workspace is unavailable");

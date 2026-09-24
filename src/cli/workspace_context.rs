@@ -5,7 +5,7 @@ use crate::model::Workspace;
 
 #[derive(Clone, Copy)]
 pub enum ScopeOrder {
-    First,
+    BeforeDirectory,
     AfterDirectory,
 }
 
@@ -42,8 +42,8 @@ impl<'a> WorkspaceContext<'a> {
         }
         let scope = || scoped.then(|| self.workspaces.first()).flatten();
         match order {
-            ScopeOrder::First if scoped => scope(),
-            ScopeOrder::First => self.current,
+            ScopeOrder::BeforeDirectory if scoped => scope(),
+            ScopeOrder::BeforeDirectory => self.current,
             ScopeOrder::AfterDirectory => self.current.or_else(scope),
         }
     }
@@ -80,7 +80,7 @@ mod tests {
             workspaces: &workspaces,
             current: workspaces.first(),
         };
-        for order in [ScopeOrder::First, ScopeOrder::AfterDirectory] {
+        for order in [ScopeOrder::BeforeDirectory, ScopeOrder::AfterDirectory] {
             for scoped in [false, true] {
                 for selector in ["explicit", "id-explicit"] {
                     assert_eq!(
@@ -106,7 +106,10 @@ mod tests {
             current: workspaces.get(1),
         };
         assert_eq!(
-            context.resolve(None, true, ScopeOrder::First).unwrap().name,
+            context
+                .resolve(None, true, ScopeOrder::BeforeDirectory)
+                .unwrap()
+                .name,
             "own"
         );
         assert_eq!(
@@ -117,7 +120,7 @@ mod tests {
             "current"
         );
         let outside = WorkspaceContext::from_directory(&workspaces, None);
-        for order in [ScopeOrder::First, ScopeOrder::AfterDirectory] {
+        for order in [ScopeOrder::BeforeDirectory, ScopeOrder::AfterDirectory] {
             assert_eq!(outside.resolve(None, true, order).unwrap().name, "own");
             assert!(outside.resolve(None, false, order).is_none());
             assert!(
@@ -142,7 +145,7 @@ mod tests {
         let context = WorkspaceContext::from_directory(&workspaces, Some(&cwd));
         assert_eq!(
             context
-                .resolve(None, false, ScopeOrder::First)
+                .resolve(None, false, ScopeOrder::BeforeDirectory)
                 .unwrap()
                 .name,
             "inner"
@@ -150,9 +153,17 @@ mod tests {
         // Adapters retain the choice of canonical versus raw cwd.
         let raw = alias.join("nested");
         let context = WorkspaceContext::from_directory(&workspaces, Some(&raw));
-        assert!(context.resolve(None, false, ScopeOrder::First).is_none());
+        assert!(
+            context
+                .resolve(None, false, ScopeOrder::BeforeDirectory)
+                .is_none()
+        );
         let sibling = root.path().join("outer-other");
         let context = WorkspaceContext::from_directory(&workspaces, Some(&sibling));
-        assert!(context.resolve(None, false, ScopeOrder::First).is_none());
+        assert!(
+            context
+                .resolve(None, false, ScopeOrder::BeforeDirectory)
+                .is_none()
+        );
     }
 }
