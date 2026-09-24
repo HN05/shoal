@@ -57,7 +57,7 @@ pub async fn authorize(
             kind: ExecutionKind::Command,
             ..
         }
-        | Method::WorkspaceHooks { workspace }
+        | Method::WorkspaceHook { workspace, .. }
         | Method::PortAcquire { workspace, .. }
         | Method::PortRelease { workspace, .. }
         | Method::PortOverview { workspace }

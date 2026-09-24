@@ -7,7 +7,7 @@ use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWrite
 use crate::{
     config::{
         named_commands::CommandLayers,
-        repo::{ConfigLayers, Hooks, LocalConfig},
+        repo::{ConfigLayers, LocalConfig},
     },
     daemon::{
         allocation::Allocation,
@@ -17,6 +17,7 @@ use crate::{
         resources::{Overview, ResourceLease, ResourceRequest},
         workspace::ExecutionKind,
     },
+    hooks::HookKind,
     model::{
         DiffBase, ExecutionPlan, Inspection, PortOverview, PortReservation, PortSuggestion,
         PulledBranch, Repository, RepositoryRemoval, Workspace, WorkspaceStatus,
@@ -26,7 +27,7 @@ use crate::{
     sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
 };
 
-pub const VERSION: u32 = 40;
+pub const VERSION: u32 = 41;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -189,9 +190,10 @@ pub enum Method {
     DiffBase {
         workspace: String,
     },
-    /// The workspace's effective lifecycle hooks, resolved against its worktree.
-    WorkspaceHooks {
+    /// One effective hook, resolved against the directory where it runs.
+    WorkspaceHook {
         workspace: String,
+        kind: HookKind,
     },
     /// The repository layer of the target's config, for the CLI to resolve
     /// against the global config it reads at launch.
@@ -370,7 +372,7 @@ response_bodies! {
     RemovalCheck(RemovalCheck),
     RemovalResult(RemovalResult),
     DiffBase(DiffBase),
-    Hooks(Hooks),
+    Hook(Option<std::path::PathBuf>),
     LayeredConfig(Box<ConfigLayers>),
     CommandLayers(CommandLayers),
     PulledBranch(PulledBranch),
@@ -500,6 +502,16 @@ pub async fn write<T: Serialize>(stream: &mut (impl AsyncWrite + Unpin), value: 
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn workspace_hook_rejects_unknown_kinds() {
+        assert!(
+            serde_json::from_value::<Method>(serde_json::json!({
+                "workspace_hook": {"workspace": "worker", "kind": "unknown"}
+            }))
+            .is_err()
+        );
+    }
 
     #[test]
     fn tracked_execution_requests_require_a_known_kind() {

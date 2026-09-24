@@ -3,6 +3,7 @@
 use super::{Manager, ResourceGuard};
 use crate::{
     daemon::{scope::Caller, store},
+    hooks::HookKind,
     model::{Execution, ExecutionPlan, LandPlan, Workspace},
     process::{
         execution::Processes,
@@ -227,21 +228,17 @@ impl Manager {
                     .await
                     .lock_owned()
                     .await;
-                let config = self.workspace_config(workspace).await?;
-                let pre_setup = config
-                    .pre_setup_cmd
-                    .as_ref()
-                    .or(self.config.pre_setup_cmd.as_ref())
-                    .map(|command| workspace.path.join(command));
+                let setup_cmd = self.workspace_hook(workspace, HookKind::Setup).await?;
+                let pre_setup = self.workspace_hook(workspace, HookKind::PreSetup).await?;
                 ensure!(
-                    config.setup_cmd.is_some() || pre_setup.is_some(),
+                    setup_cmd.is_some() || pre_setup.is_some(),
                     "no setup_cmd configured"
                 );
                 let resources = self
                     .resource_guard(&workspace.id, pre_setup.is_some())
                     .await?;
                 Ok(PreparedExecution {
-                    setup_cmd: config.setup_cmd.map(|command| workspace.path.join(command)),
+                    setup_cmd,
                     pre_setup,
                     registration_guard: Some(git_guard),
                     _resources: Some(resources),

@@ -4,8 +4,9 @@ use crate::{
     config::{
         self, Effective,
         named_commands::CommandLayers,
-        repo::{ConfigLayers, Hooks, LocalConfig, RepoConfig},
+        repo::{ConfigLayers, LocalConfig, RepoConfig},
     },
+    hooks::{HookDirectory, HookKind},
     model::Workspace,
     protocol::ConfigTarget,
 };
@@ -116,12 +117,29 @@ impl Manager {
             .await
     }
 
-    pub async fn workspace_hooks(&self, selector: &str) -> Result<Hooks> {
-        let workspace = self.workspace(selector).await?;
-        Ok(self
-            .workspace_config(&workspace)
-            .await?
-            .hooks(&workspace.path))
+    /// Resolve a hook through saved repository config, worktree config, then
+    /// its permitted global default. Paths use the same directory as execution.
+    pub(crate) async fn workspace_hook(
+        &self,
+        workspace: &Workspace,
+        kind: HookKind,
+    ) -> Result<Option<std::path::PathBuf>> {
+        let config = self.workspace_config(workspace).await?;
+        let Some(command) = kind
+            .repository_command(&config)
+            .or_else(|| kind.global_command(&self.config))
+        else {
+            return Ok(None);
+        };
+        let checkout = match kind.directory() {
+            HookDirectory::Worktree => workspace.path.clone(),
+            HookDirectory::Checkout => self.repository(&workspace.repository_id).await?.path,
+        };
+        Ok(Some(
+            kind.directory()
+                .path(&workspace.path, &checkout)
+                .join(command),
+        ))
     }
 
     /// The workspace's repository config: the saved local config layered per

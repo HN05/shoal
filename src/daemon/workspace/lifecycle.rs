@@ -2,7 +2,7 @@
 use super::Manager;
 use crate::{
     git::worktrunk,
-    hooks::{self, Hook},
+    hooks::{self, Hook, HookKind},
     removal::{self, BranchChoice, RemovalCheck, RemovalResult},
     state::WorkspaceState,
 };
@@ -183,15 +183,13 @@ impl Manager {
         let present = workspace.path.try_exists()?;
         let result = async {
             let post_remove = if present {
-                let config = self.workspace_config(&workspace).await?;
-                let command = config
-                    .post_remove_cmd
-                    .as_ref()
-                    .or(self.config.post_remove_cmd.as_ref());
-                match command {
+                match self
+                    .workspace_hook(&workspace, HookKind::PostRemove)
+                    .await?
+                {
                     Some(command) => {
                         let checkout = self.repository(&workspace.repository_id).await?.path;
-                        Some((checkout.join(command), checkout))
+                        Some((command, checkout))
                     }
                     None => None,
                 }
@@ -306,15 +304,12 @@ impl Manager {
             "detached HEAD has unpushed commits; create a branch before choosing to keep it"
         );
         // The hook sees the worktree intact; a failing hook retains it.
-        if let Some(command) = self
-            .workspace_config(workspace)
-            .await?
-            .hooks(&workspace.path)
-            .pre_remove_cmd
-        {
+        if let Some(command) = self.workspace_hook(workspace, HookKind::PreRemove).await? {
             hooks::run_detached(Hook::PreRemove, workspace, &command, &self.paths).await?;
         }
-        let release_hook = self.resource_hook(workspace, false).await?;
+        let release_hook = self
+            .workspace_hook(workspace, HookKind::PreResourceRelease)
+            .await?;
         for lease in self.list_resources(Some(&workspace.id)).await? {
             self.run_resource_release_hook(workspace, &lease, release_hook.as_deref())
                 .await?;

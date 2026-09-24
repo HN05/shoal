@@ -405,7 +405,9 @@ impl Manager {
             .remove(&request.pool)
             .ok_or_else(|| anyhow::anyhow!("unknown resource or pool: {}", request.pool))?;
         let hook_workspace = workspace.clone();
-        let hook = self.resource_hook(&workspace, true).await?;
+        let hook = self
+            .workspace_hook(&workspace, crate::hooks::HookKind::PostResourceAcquire)
+            .await?;
         let _resources = self.resource_guard(&workspace.id, hook.is_some()).await?;
         if hook.is_some() {
             self.verify_worktree(&workspace).await?;
@@ -537,7 +539,9 @@ impl Manager {
     pub async fn release_resource(&self, selector: &str, pool: String, name: String) -> Result<()> {
         let workspace = self.workspace(selector).await?;
         self.touch(&workspace.id).await;
-        let hook = self.resource_hook(&workspace, false).await?;
+        let hook = self
+            .workspace_hook(&workspace, crate::hooks::HookKind::PreResourceRelease)
+            .await?;
         let _resources = self.resource_guard(&workspace.id, hook.is_some()).await?;
         let id = workspace.id.clone();
         let owned = self
@@ -588,26 +592,6 @@ impl Manager {
                 Ok(())
             })
             .await
-    }
-
-    pub(crate) async fn resource_hook(
-        &self,
-        workspace: &crate::model::Workspace,
-        acquire: bool,
-    ) -> Result<Option<std::path::PathBuf>> {
-        let config = self.workspace_config(workspace).await?;
-        let command = if acquire {
-            config
-                .post_resource_acquire_cmd
-                .as_ref()
-                .or(self.config.post_resource_acquire_cmd.as_ref())
-        } else {
-            config
-                .pre_resource_release_cmd
-                .as_ref()
-                .or(self.config.pre_resource_release_cmd.as_ref())
-        };
-        Ok(command.map(|command| workspace.path.join(command)))
     }
 
     pub(crate) async fn run_resource_release_hook(

@@ -12,7 +12,7 @@ use crate::{
         output::{Palette, Style},
         ui::{self, Fallback},
     },
-    config::{repo::Hooks, templates},
+    config::templates,
     daemon::recovery::{ReconcileOptions, Report},
     env, execution,
     git::{
@@ -20,7 +20,7 @@ use crate::{
         existing_branch::{Branch, OpenedWorkspace},
     },
     happy::{self, HappyAgent},
-    hooks::{self, Hook},
+    hooks::{self, Hook, HookKind},
     model::{DiffBase, Workspace, WorkspaceStatus},
     protocol::{ConfigTarget, Method},
     removal::{BranchChoice, RemovalCheck, RemovalResult},
@@ -438,14 +438,15 @@ pub(super) async fn setup(ctx: &Context, workspace: Option<String>) -> Result<i3
 /// Run the repository's `post_setup_cmd`, if any, once the workspace is ready.
 /// A failure keeps the ready workspace and stops what would follow.
 async fn run_post_setup(ctx: &Context, workspace: &Workspace) -> Result<()> {
-    let hooks = request::<Hooks>(
+    let command = request::<Option<PathBuf>>(
         &ctx.paths,
-        Method::WorkspaceHooks {
+        Method::WorkspaceHook {
             workspace: workspace.id.clone(),
+            kind: HookKind::PostSetup,
         },
     )
     .await?;
-    if let Some(command) = hooks.post_setup_cmd {
+    if let Some(command) = command {
         hooks::run_interactive(Hook::PostSetup, workspace, &command, &ctx.paths, ctx.json).await?;
     }
     Ok(())

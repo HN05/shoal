@@ -2,11 +2,7 @@ use crate::cli::{Agent, CodexMode};
 use crate::state::states;
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::BTreeMap,
-    fs,
-    path::{Path, PathBuf},
-};
+use std::{collections::BTreeMap, fs, path::Path};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LocalConfig {
@@ -237,22 +233,6 @@ impl RepoConfig {
             },
         }
     }
-
-    /// Hook executables resolved against the worktree, like `setup_cmd`.
-    pub fn hooks(&self, worktree: &Path) -> Hooks {
-        let resolve = |command: &Option<String>| command.as_ref().map(|c| worktree.join(c));
-        Hooks {
-            post_setup_cmd: resolve(&self.post_setup_cmd),
-            pre_remove_cmd: resolve(&self.pre_remove_cmd),
-        }
-    }
-}
-
-/// The effective, resolved lifecycle hooks of one workspace.
-#[derive(Debug, Default, Serialize, Deserialize)]
-pub struct Hooks {
-    pub post_setup_cmd: Option<PathBuf>,
-    pub pre_remove_cmd: Option<PathBuf>,
 }
 
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
@@ -395,28 +375,5 @@ mod tests {
                 .over(base);
             assert_eq!(serde_json::to_value(config).unwrap()[key], "scripts/hook");
         }
-    }
-
-    #[test]
-    fn hooks_resolve_relative_paths_against_the_worktree() {
-        let config =
-            parse("post_setup_cmd = 'scripts/attach.sh'\npre_remove_cmd = '/opt/detach'\n")
-                .unwrap();
-        let hooks = config.hooks(Path::new("/work/tree"));
-        assert_eq!(
-            hooks.post_setup_cmd.as_deref(),
-            Some(Path::new("/work/tree/scripts/attach.sh"))
-        );
-        assert_eq!(
-            hooks.pre_remove_cmd.as_deref(),
-            Some(Path::new("/opt/detach"))
-        );
-        assert!(
-            parse("")
-                .unwrap()
-                .hooks(Path::new("/w"))
-                .post_setup_cmd
-                .is_none()
-        );
     }
 }

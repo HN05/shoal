@@ -20,6 +20,7 @@ use crate::{
         store::{self, Store},
     },
     git::{self, worktrunk},
+    hooks::HookKind,
     model::{Inspection, Workspace},
     paths::Paths,
     state::WorkspaceState,
@@ -411,9 +412,14 @@ impl Manager {
                 .await
                 .with_context(|| format!("apply git profile {name}"))?;
         }
-        Ok(config.setup_cmd.is_some()
-            || config.pre_setup_cmd.is_some()
-            || self.config.pre_setup_cmd.is_some())
+        Ok(self
+            .workspace_hook(workspace, HookKind::Setup)
+            .await?
+            .is_some()
+            || self
+                .workspace_hook(workspace, HookKind::PreSetup)
+                .await?
+                .is_some())
     }
 
     pub(crate) async fn set_state(

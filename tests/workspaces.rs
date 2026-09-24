@@ -9665,6 +9665,102 @@ while test ! -f "$HOME/hook-continue"; do sleep 0.05; done
 }
 
 #[test]
+fn workspace_hook_resolution_preserves_layers_and_directories() {
+    use std::{
+        io::{BufRead, BufReader},
+        os::unix::net::UnixStream,
+    };
+    let mut fixture = Fixture::with_config(Some(""));
+    let workspace = fixture.add("hooks");
+    let worktree = Path::new(workspace["path"].as_str().unwrap());
+    // Global hooks are installed only after creation, so these paths need not
+    // exist: resolution must not run a hook or require its executable yet.
+    fs::write(
+        fixture.root.path().join(".config/shoal/config.toml"),
+        "pre_setup_cmd = 'global'\npost_remove_cmd = 'global'\n\
+         post_resource_acquire_cmd = 'global'\npre_resource_release_cmd = 'global'\n",
+    )
+    .unwrap();
+    fixture.restart();
+    let call = |request: Value| {
+        let mut socket =
+            UnixStream::connect(fixture.root.path().join("state/daemon.sock")).unwrap();
+        socket
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .unwrap();
+        writeln!(socket, "{request}").unwrap();
+        let mut line = String::new();
+        BufReader::new(socket).read_line(&mut line).unwrap();
+        serde_json::from_str::<Value>(&line).unwrap()
+    };
+    let protocol =
+        call(serde_json::json!({"protocol":0,"id":1,"method":"status"}))["protocol"].clone();
+    let resolve = |kind: &str| {
+        call(serde_json::json!({"protocol":protocol,"id":2,
+            "method":{"workspace_hook":{"workspace":workspace["id"],"kind":kind}}}))
+    };
+    let saved = fixture.root.path().join("saved.toml");
+    let save = |text: &str| {
+        fs::write(&saved, text).unwrap();
+        fixture.ok(&[
+            "repo",
+            "config",
+            fixture.repo.to_str().unwrap(),
+            "--file",
+            saved.to_str().unwrap(),
+        ]);
+    };
+    for (kind, global) in [
+        ("setup", false),
+        ("pre_setup", true),
+        ("post_setup", false),
+        ("pre_remove", false),
+        ("post_remove", true),
+        ("post_resource_acquire", true),
+        ("pre_resource_release", true),
+    ] {
+        let directory = if kind == "post_remove" {
+            &fixture.repo
+        } else {
+            worktree
+        };
+        let file = worktree.join(".shoal.toml");
+        fs::write(&file, "").unwrap();
+        save("");
+        let result = resolve(kind);
+        assert_eq!(result["type"], "hook", "{result}");
+        assert_eq!(
+            result["data"],
+            if global {
+                serde_json::json!(directory.join("global"))
+            } else {
+                Value::Null
+            },
+            "{kind}"
+        );
+
+        fs::write(&file, format!("{kind}_cmd = 'file hook'\n")).unwrap();
+        assert_eq!(
+            resolve(kind)["data"],
+            serde_json::json!(directory.join("file hook"))
+        );
+        // An unrelated saved option must not mask the worktree's hook.
+        save("default_agent = 'claude'\n");
+        assert_eq!(
+            resolve(kind)["data"],
+            serde_json::json!(directory.join("file hook"))
+        );
+        save(&format!("{kind}_cmd = 'saved hook'\n"));
+        assert_eq!(
+            resolve(kind)["data"],
+            serde_json::json!(directory.join("saved hook"))
+        );
+        save(&format!("{kind}_cmd = '/absolute/hook'\n"));
+        assert_eq!(resolve(kind)["data"], "/absolute/hook");
+    }
+}
+
+#[test]
 fn pre_setup_hook_gates_readiness_and_supports_global_defaults() {
     let fixture = Fixture::with_config(Some("pre_setup_cmd = 'before.sh'\n"));
     fs::write(
