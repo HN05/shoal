@@ -364,8 +364,11 @@ the same setup, ownership, and cleanup rules as default locations.
 For new branches, names taken by a local branch, known remote branch, branch
 namespace, or retained Shoal record get `-2`, `-3`, etc. on the leaf; when an
 ancestor blocks it, that component is suffixed (`feature` makes `feature/topic`
-into `feature-2/topic`). `HEAD`, Worktrunk's `@`, and full hex object IDs are
-reserved. Suffixes never change the derived workspace name.
+into `feature-2/topic`). Names interpreted specially by the Worktrunk adapter
+(`HEAD`, `@`, or entirely hexadecimal names of exactly 40 or 64 characters) are
+reserved across Git object formats: creation suffixes them, while opening an
+existing branch reports incompatibility. Nested components remain literal.
+Suffixes never change the derived workspace name.
 
 ### Adopting a worktree
 `shoal adopt <repository> <path>` registers an existing linked worktree in place

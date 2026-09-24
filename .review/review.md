@@ -49,6 +49,9 @@ removal, check it against the rule those files state before judging it.
   checkouts, workspaces, and other repository directories; never delete their parents.
   Resolve existing symlinks and lexical `..` before checking and creating repository
   roots or explicit workspace paths, including when trailing components are missing.
+- Worktrunk compatibility is shared across creation and existing-branch selection:
+  reserved names get a leaf suffix on creation and an error on opening; suffixes
+  never change derived workspace names or directories.
 - Existing branches use unsuffixed worktrees; reopen verified owned workspaces,
   require explicit adoption for other linked checkouts, never adopt the main checkout,
   and keep the default branch on removal unless deletion was explicit. Adoption records

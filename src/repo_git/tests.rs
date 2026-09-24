@@ -422,6 +422,109 @@ async fn creation_honors_explicit_history_and_preserves_ahead_main() {
 }
 
 #[tokio::test]
+async fn branch_compatibility_preserves_allocation_and_existing_branch_policies() {
+    let mut cases = vec![
+        ("HEAD".to_owned(), "HEAD".to_owned(), true),
+        ("@".to_owned(), "workspace".to_owned(), true),
+        ("topic/HEAD".to_owned(), "topic-HEAD".to_owned(), false),
+        ("HEAD/topic".to_owned(), "HEAD-topic".to_owned(), false),
+        ("topic/@".to_owned(), "topic--".to_owned(), false),
+        ("@/topic".to_owned(), "topic".to_owned(), false),
+    ];
+    for len in [39, 40, 41, 63, 64, 65] {
+        for digit in ["a", "B", "g"] {
+            let name = digit.repeat(len);
+            cases.push((
+                name.clone(),
+                digit.repeat(len.min(64)),
+                digit != "g" && matches!(len, 40 | 64),
+            ));
+            cases.push((
+                format!("topic/{name}"),
+                format!("topic-{name}").chars().take(64).collect(),
+                false,
+            ));
+        }
+    }
+    for (name, workspace_name, reserved) in cases {
+        let f = Fixture::new().await;
+        let allocated = f.add(&name).await;
+        let expected = if reserved {
+            format!("{name}-2")
+        } else {
+            name.clone()
+        };
+        assert_eq!(allocated.branch, expected);
+        assert_eq!(allocated.name, workspace_name);
+        assert_eq!(
+            allocated.path.file_name().unwrap().to_str().unwrap(),
+            workspace_name
+        );
+        assert_eq!(
+            git(&allocated.path, &["symbolic-ref", "HEAD"]),
+            format!("refs/heads/{expected}\n")
+        );
+        f.manager
+            .remove_workspace(&allocated.id, crate::removal::BranchChoice::DeleteBranch, 0)
+            .await
+            .unwrap();
+
+        let reference = format!("refs/heads/{name}");
+        git(&f.repo, &["update-ref", &reference, "refs/heads/main"]);
+        let before = git(&f.repo, &["rev-parse", &reference]);
+        let opened = f
+            .manager
+            .open_branch(&f.repo_id, &reference, None, None, None)
+            .await;
+        if reserved {
+            let error = opened.unwrap_err();
+            assert!(
+                error.to_string().contains("reserved by Worktrunk"),
+                "{name}: {error:#}"
+            );
+            assert!(f.manager.list_workspaces().await.unwrap().is_empty());
+        } else {
+            let workspace = opened.unwrap().workspace;
+            assert_eq!(workspace.branch, name);
+            assert_eq!(workspace.name, workspace_name);
+            assert_eq!(workspace.path, allocated.path);
+            assert_eq!(
+                git(&workspace.path, &["symbolic-ref", "HEAD"]),
+                format!("{reference}\n")
+            );
+        }
+        assert_eq!(git(&f.repo, &["rev-parse", &reference]), before);
+    }
+}
+
+#[tokio::test]
+async fn branch_selection_rejects_revision_shorthand() {
+    let f = Fixture::new().await;
+    git(&f.repo, &["switch", "-c", "previous"]);
+    git(&f.repo, &["switch", "main"]);
+    assert_eq!(
+        git(&f.repo, &["check-ref-format", "--branch", "@{-1}"]),
+        "previous\n"
+    );
+    for name in ["@{-1}", "main~0", "main^0", "@{0}"] {
+        assert!(
+            crate::git::check_branch_name(Some(&f.repo), name)
+                .await
+                .is_err(),
+            "{name}"
+        );
+        assert!(
+            f.manager
+                .open_branch(&f.repo_id, name, None, None, None)
+                .await
+                .is_err(),
+            "{name}"
+        );
+    }
+    assert!(f.manager.list_workspaces().await.unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn existing_branch_opens_without_suffix_and_reuses_owned_workspace() {
     let f = Fixture::new().await;
     git(&f.repo, &["branch", "coworker/topic"]);

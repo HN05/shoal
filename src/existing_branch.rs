@@ -7,6 +7,7 @@ use crate::{
     model::{Repository, Workspace},
     state::WorkspaceState,
     workspace::Manager,
+    worktrunk,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -105,17 +106,10 @@ impl Manager {
         };
         let name = &branch.name;
         ensure!(
-            name != "HEAD"
-                && name != "@"
-                && !(name.len() >= 40 && name.chars().all(|c| c.is_ascii_hexdigit())),
+            !worktrunk::is_reserved_branch_name(name),
             "branch name is reserved by Worktrunk: {name}"
         );
-        let validated =
-            git::run_isolated(&repo.path, &["check-ref-format", "--branch", name]).await?;
-        ensure!(
-            validated == format!("{name}\n"),
-            "use a literal Git branch name"
-        );
+        git::check_branch_name(Some(&repo.path), name).await?;
         if let Some(remote) = &branch.remote {
             let local_exists = git::run_isolated(
                 &repo.path,

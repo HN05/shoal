@@ -8,6 +8,7 @@ use crate::{
     git::{self, run_isolated as git_run},
     model::{LandPlan, LandedBranch, PulledBranch, Repository},
     workspace::Manager,
+    worktrunk,
 };
 
 impl Manager {
@@ -377,7 +378,7 @@ fn allocate_branch(name: &str, taken: &[String]) -> String {
         let mut candidate = base.clone();
         let mut suffix = 2_u64;
         let last = components.peek().is_none();
-        while (last && is_reserved_leaf(&candidate))
+        while (last && worktrunk::is_reserved_branch_name(&candidate))
             || taken.iter().any(|existing| {
                 existing == &candidate || (last && existing.starts_with(&format!("{candidate}/")))
             })
@@ -391,13 +392,6 @@ fn allocate_branch(name: &str, taken: &[String]) -> String {
         }
     }
     prefix
-}
-
-/// Worktrunk interprets `@` as the current branch, even with --create; Git
-/// worktree add treats full hex object IDs as commits.
-fn is_reserved_leaf(candidate: &str) -> bool {
-    matches!(candidate, "HEAD" | "@")
-        || (matches!(candidate.len(), 40 | 64) && candidate.bytes().all(|c| c.is_ascii_hexdigit()))
 }
 
 /// Whether `ancestor` is reachable from `descendant`.

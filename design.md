@@ -104,7 +104,9 @@ New-branch creation accepts literal Git branch names and derives a portable,
 globally unique workspace name and directory from them; a normalization collision
 fails without
 touching existing work. Branch conflicts get numeric suffixes on the blocking
-component only, never changing the workspace name. Worktree Git metadata identity is
+component only, never changing the workspace name. Names reserved by the Worktrunk
+adapter across supported Git object formats get a leaf suffix on creation and
+an incompatibility error on existing-branch selection. Worktree Git metadata identity is
 recorded so moved or replaced directories are never adopted silently.
 Existing-branch selection creates a worktree without suffixing; remote heads are
 discovered live and become local tracking branches. Local selection preserves
