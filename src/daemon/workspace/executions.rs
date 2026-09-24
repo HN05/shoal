@@ -4,7 +4,7 @@ use super::{GuardMode, Manager, ResourceGuard};
 use crate::{
     daemon::{scope::Caller, store},
     hooks::HookKind,
-    model::{Execution, ExecutionPlan, LandPlan, Workspace},
+    model::{Execution, ExecutionPlan, LandPlan, PortReservation, Workspace},
     process::{
         execution::Processes,
         identity::{self as process, Identity},
@@ -14,12 +14,19 @@ use crate::{
 };
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{OptionalExtension, Transaction, TransactionBehavior, params};
-use std::{collections::HashSet, path::PathBuf, time::Duration};
+use std::{
+    collections::HashSet,
+    path::{Path, PathBuf},
+    time::Duration,
+};
 use tokio::{
     sync::{OwnedMutexGuard, watch},
     time::{Instant, sleep},
 };
 use uuid::Uuid;
+
+#[cfg(test)]
+mod tests;
 
 states!(
     /// What a tracked execution runs, which decides its lifecycle rules.
@@ -61,6 +68,14 @@ struct PreparedExecution {
     lifetime_guard: Option<OwnedMutexGuard<()>>,
     land: Option<Box<LandPlan>>,
     _resources: Option<ResourceGuard>,
+}
+
+struct RegisteredExecution {
+    id: String,
+    workspace: Workspace,
+    scope_token: String,
+    ports: Vec<PortReservation>,
+    stop: watch::Receiver<bool>,
 }
 
 impl ExecutionKind {
@@ -117,15 +132,9 @@ impl Manager {
         kind: ExecutionKind,
         parent_execution: Option<&str>,
     ) -> Result<StartedExecution> {
-        let parent_execution = parent_execution.map(str::to_owned);
-        if let Some(wrapper) = &wrapper {
-            ensure!(
-                process::alive(wrapper)?,
-                "execution wrapper is no longer alive"
-            );
-        }
-        let workspace = self.workspace(selector).await?;
-        let preparation = self.prepare_execution(&workspace, kind).await?;
+        let (workspace, preparation) = self
+            .prepare_execution(selector, wrapper.as_ref(), kind)
+            .await?;
         let PreparedExecution {
             setup_cmd,
             pre_setup,
@@ -134,10 +143,40 @@ impl Manager {
             land,
             _resources,
         } = preparation;
+        let registered = self
+            .register_execution(&workspace.id, wrapper, kind, parent_execution)
+            .await?;
+        // Setup releases its Git gate before the hook; resources remain guarded
+        // until pre-setup completes, while landing's gate travels with the plan.
+        drop(registration_guard);
+        self.run_pre_setup(&registered, kind, pre_setup.as_deref())
+            .await?;
+        Ok(StartedExecution {
+            plan: ExecutionPlan {
+                id: registered.id,
+                workspace: registered.workspace,
+                scope_token: registered.scope_token,
+                setup_cmd,
+                ports: registered.ports,
+                land,
+            },
+            stop: registered.stop,
+            _git_guard: lifetime_guard,
+        })
+    }
+
+    async fn register_execution(
+        &self,
+        workspace_id: &str,
+        wrapper: Option<Identity>,
+        kind: ExecutionKind,
+        parent_execution: Option<&str>,
+    ) -> Result<RegisteredExecution> {
+        let parent_execution = parent_execution.map(str::to_owned);
         // Coordinate registration and stop notification without holding the map
         // during any external command or lifetime of the agent.
         let mut connections = self.connections.lock().await;
-        let workspace = self.workspace(&workspace.id).await?;
+        let workspace = self.workspace(workspace_id).await?;
         ensure!(workspace.path.is_dir(), "workspace directory is missing");
         self.verify_worktree(&workspace).await?;
         self.touch(&workspace.id).await;
@@ -174,22 +213,37 @@ impl Manager {
             },
         )
         .await;
-        drop(connections);
-        drop(registration_guard);
+        Ok(RegisteredExecution {
+            id,
+            workspace,
+            scope_token,
+            ports,
+            stop: receiver,
+        })
+    }
+
+    async fn run_pre_setup(
+        &self,
+        registered: &RegisteredExecution,
+        kind: ExecutionKind,
+        pre_setup: Option<&Path>,
+    ) -> Result<()> {
+        let workspace = &registered.workspace;
         if let Some(command) = pre_setup
             && let Err(error) = async {
                 crate::hooks::run_detached(
                     crate::hooks::Hook::PreSetup,
-                    &workspace,
-                    &command,
+                    workspace,
+                    command,
                     &self.paths,
                 )
                 .await?;
-                self.verify_worktree(&workspace).await
+                self.verify_worktree(workspace).await
             }
             .await
         {
-            self.finish_execution(id, kind, Some(1)).await?;
+            self.finish_execution(registered.id.clone(), kind, Some(1))
+                .await?;
             self.set_state(
                 &workspace.id,
                 WorkspaceState::Failed,
@@ -198,21 +252,27 @@ impl Manager {
             .await?;
             return Err(error);
         }
-        Ok(StartedExecution {
-            plan: ExecutionPlan {
-                id,
-                workspace,
-                scope_token,
-                setup_cmd,
-                ports,
-                land,
-            },
-            stop: receiver,
-            _git_guard: lifetime_guard,
-        })
+        Ok(())
     }
 
     async fn prepare_execution(
+        &self,
+        selector: &str,
+        wrapper: Option<&Identity>,
+        kind: ExecutionKind,
+    ) -> Result<(Workspace, PreparedExecution)> {
+        if let Some(wrapper) = wrapper {
+            ensure!(
+                process::alive(wrapper)?,
+                "execution wrapper is no longer alive"
+            );
+        }
+        let workspace = self.workspace(selector).await?;
+        let preparation = self.prepare_execution_kind(&workspace, kind).await?;
+        Ok((workspace, preparation))
+    }
+
+    async fn prepare_execution_kind(
         &self,
         workspace: &Workspace,
         kind: ExecutionKind,
