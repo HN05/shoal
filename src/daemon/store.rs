@@ -79,18 +79,10 @@ impl Store {
     }
 }
 
-fn migrate(db: &mut Connection) -> Result<()> {
-    let version: i64 = db.query_row("PRAGMA user_version", [], |r| r.get(0))?;
-    ensure!(
-        version <= SCHEMA_VERSION,
-        "state database was written by a newer Shoal version"
-    );
-    if version == SCHEMA_VERSION {
-        return Ok(());
-    }
-    let tx = db.transaction()?;
-    let db = &tx;
-    db.execute_batch(
+// Append schema changes in version order; startup recovery belongs in quarantine.
+const MIGRATIONS: &[(i64, &str)] = &[
+    (
+        1,
         "CREATE TABLE IF NOT EXISTS repositories (
             id TEXT PRIMARY KEY, path TEXT NOT NULL UNIQUE, source TEXT NOT NULL, last_used INTEGER NOT NULL
         );
@@ -102,35 +94,44 @@ fn migrate(db: &mut Connection) -> Result<()> {
         CREATE TABLE IF NOT EXISTS executions (
             id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id), state TEXT NOT NULL
         );",
-    )?;
-    if version < 2 {
-        db.execute_batch(
-            "ALTER TABLE workspaces ADD COLUMN base_commit TEXT;
-            ALTER TABLE workspaces ADD COLUMN base_ref TEXT;",
-        )?;
-    }
-    db.execute_batch(
+    ),
+    (
+        2,
+        "ALTER TABLE workspaces ADD COLUMN base_commit TEXT;
+        ALTER TABLE workspaces ADD COLUMN base_ref TEXT;",
+    ),
+    (
+        3,
         "CREATE TABLE IF NOT EXISTS ports (
             workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
             name TEXT NOT NULL, port INTEGER NOT NULL UNIQUE CHECK(port BETWEEN 1 AND 65535),
             env_var TEXT NOT NULL, PRIMARY KEY(workspace_id, name), UNIQUE(workspace_id, env_var)
         );",
-    )?;
-    if version < 4 {
-        db.execute_batch("ALTER TABLE repositories ADD COLUMN name TEXT;")?;
-    }
-    if version < 5 {
-        db.execute_batch("ALTER TABLE ports ADD COLUMN reason TEXT;")?;
-    }
-    db.execute_batch(
-        "CREATE UNIQUE INDEX IF NOT EXISTS repository_names ON repositories(name) WHERE name IS NOT NULL;
-        CREATE TABLE IF NOT EXISTS simulators(id TEXT PRIMARY KEY, record TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS simulator_clean_requests (
+    ),
+    (
+        4,
+        "ALTER TABLE repositories ADD COLUMN name TEXT;
+        CREATE UNIQUE INDEX IF NOT EXISTS repository_names ON repositories(name) WHERE name IS NOT NULL;",
+    ),
+    (
+        5,
+        "ALTER TABLE ports ADD COLUMN reason TEXT;",
+    ),
+    (
+        6,
+        "CREATE TABLE IF NOT EXISTS simulators(id TEXT PRIMARY KEY, record TEXT NOT NULL);",
+    ),
+    (
+        7,
+        "CREATE TABLE IF NOT EXISTS simulator_clean_requests (
             id INTEGER PRIMARY KEY AUTOINCREMENT, request_id TEXT NOT NULL UNIQUE,
             workspace_id TEXT NOT NULL, record TEXT NOT NULL
         );
-        CREATE INDEX IF NOT EXISTS clean_requests_workspace ON simulator_clean_requests(workspace_id,id);
-        CREATE TABLE IF NOT EXISTS resource_pools (
+        CREATE INDEX IF NOT EXISTS clean_requests_workspace ON simulator_clean_requests(workspace_id,id);",
+    ),
+    (
+        8,
+        "CREATE TABLE IF NOT EXISTS resource_pools (
             scope TEXT NOT NULL, name TEXT NOT NULL, definition TEXT NOT NULL, PRIMARY KEY(scope,name)
         );
         CREATE TABLE IF NOT EXISTS resource_leases (
@@ -139,8 +140,65 @@ fn migrate(db: &mut Connection) -> Result<()> {
             reason TEXT, created_at INTEGER NOT NULL, UNIQUE(workspace_id,pool,name),
             FOREIGN KEY(scope,pool) REFERENCES resource_pools(scope,name)
         );
-        CREATE INDEX IF NOT EXISTS resource_lease_pool ON resource_leases(scope,pool);
-        CREATE TABLE IF NOT EXISTS access_requests (
+        CREATE INDEX IF NOT EXISTS resource_lease_pool ON resource_leases(scope,pool);",
+    ),
+    (
+        9,
+        "ALTER TABLE resource_leases ADD COLUMN mode TEXT NOT NULL DEFAULT 'permit' CHECK(mode IN ('permit','read','write'));",
+    ),
+    (
+        10,
+        "ALTER TABLE workspaces ADD COLUMN git_dir TEXT;
+        ALTER TABLE workspaces ADD COLUMN git_dir_id TEXT;
+        ALTER TABLE executions ADD COLUMN wrapper TEXT;
+        ALTER TABLE executions ADD COLUMN child TEXT;
+        ALTER TABLE executions ADD COLUMN group_id INTEGER;",
+    ),
+    (
+        11,
+        "CREATE TABLE IF NOT EXISTS repository_removals (
+            repository_id TEXT PRIMARY KEY REFERENCES repositories(id) ON DELETE CASCADE,
+            directory_id TEXT,
+            deleting_files INTEGER NOT NULL DEFAULT 0 CHECK(deleting_files IN (0,1))
+        );",
+    ),
+    (
+        12,
+        "CREATE TABLE IF NOT EXISTS repository_configs (
+            repository_id TEXT PRIMARY KEY REFERENCES repositories(id) ON DELETE CASCADE,
+            toml TEXT NOT NULL
+        );",
+    ),
+    (
+        13,
+        "ALTER TABLE repositories ADD COLUMN workspaces_dir TEXT;",
+    ),
+    (
+        14,
+        "CREATE TABLE IF NOT EXISTS pr_cleanup (
+            workspace_id TEXT PRIMARY KEY REFERENCES workspaces(id) ON DELETE CASCADE,
+            record TEXT NOT NULL
+        );",
+    ),
+    (
+        15,
+        "CREATE TABLE IF NOT EXISTS notifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, created_at INTEGER NOT NULL, workspace TEXT,
+            kind TEXT NOT NULL, message TEXT NOT NULL, read INTEGER NOT NULL DEFAULT 0 CHECK(read IN (0,1))
+        );
+        CREATE INDEX IF NOT EXISTS notifications_unread ON notifications(read,id);",
+    ),
+    (
+        16,
+        "ALTER TABLE workspaces ADD COLUMN setup_finished INTEGER NOT NULL DEFAULT 0 CHECK(setup_finished IN (0,1));
+        UPDATE workspaces SET setup_finished=CASE
+                WHEN state='preparing' OR error LIKE 'setup failed (%' THEN 0
+                ELSE 1
+            END;",
+    ),
+    (
+        17,
+        "CREATE TABLE IF NOT EXISTS access_requests (
             id TEXT PRIMARY KEY,
             workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
             target_key TEXT NOT NULL, name TEXT NOT NULL,
@@ -148,54 +206,26 @@ fn migrate(db: &mut Connection) -> Result<()> {
         );
         CREATE UNIQUE INDEX IF NOT EXISTS access_request_name
             ON access_requests(workspace_id,target_key,name) WHERE active=1;",
-    )?;
-    if version < 9 {
-        db.execute_batch(
-            "ALTER TABLE resource_leases ADD COLUMN mode TEXT NOT NULL DEFAULT 'permit' CHECK(mode IN ('permit','read','write'));",
-        )?;
+    ),
+];
+
+fn migrate(db: &mut Connection) -> Result<()> {
+    let version: i64 = db.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+    ensure!(
+        version <= SCHEMA_VERSION,
+        "state database was written by a newer Shoal version"
+    );
+    if version == SCHEMA_VERSION {
+        return Ok(());
     }
-    if version < 10 {
-        db.execute_batch(
-            "ALTER TABLE workspaces ADD COLUMN git_dir TEXT;
-            ALTER TABLE workspaces ADD COLUMN git_dir_id TEXT;
-            ALTER TABLE executions ADD COLUMN wrapper TEXT;
-            ALTER TABLE executions ADD COLUMN child TEXT;
-            ALTER TABLE executions ADD COLUMN group_id INTEGER;",
-        )?;
+    let tx = db.transaction()?;
+    for &(target, sql) in MIGRATIONS {
+        if target > version {
+            tx.execute_batch(sql)
+                .with_context(|| format!("apply schema migration {target}"))?;
+            tx.pragma_update(None, "user_version", target)?;
+        }
     }
-    if version < 13 {
-        db.execute_batch("ALTER TABLE repositories ADD COLUMN workspaces_dir TEXT;")?;
-    }
-    if version < 16 {
-        db.execute_batch(
-            "ALTER TABLE workspaces ADD COLUMN setup_finished INTEGER NOT NULL DEFAULT 0 CHECK(setup_finished IN (0,1));
-            UPDATE workspaces SET setup_finished=CASE
-                WHEN state='preparing' OR error LIKE 'setup failed (%' THEN 0
-                ELSE 1
-            END;",
-        )?;
-    }
-    db.execute_batch(&format!(
-        "CREATE TABLE IF NOT EXISTS repository_removals (
-            repository_id TEXT PRIMARY KEY REFERENCES repositories(id) ON DELETE CASCADE,
-            directory_id TEXT,
-            deleting_files INTEGER NOT NULL DEFAULT 0 CHECK(deleting_files IN (0,1))
-        );
-        CREATE TABLE IF NOT EXISTS repository_configs (
-            repository_id TEXT PRIMARY KEY REFERENCES repositories(id) ON DELETE CASCADE,
-            toml TEXT NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS pr_cleanup (
-            workspace_id TEXT PRIMARY KEY REFERENCES workspaces(id) ON DELETE CASCADE,
-            record TEXT NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS notifications (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, created_at INTEGER NOT NULL, workspace TEXT,
-            kind TEXT NOT NULL, message TEXT NOT NULL, read INTEGER NOT NULL DEFAULT 0 CHECK(read IN (0,1))
-        );
-        CREATE INDEX IF NOT EXISTS notifications_unread ON notifications(read,id);
-        PRAGMA user_version={SCHEMA_VERSION};"
-    ))?;
     tx.commit()?;
     Ok(())
 }
@@ -328,6 +358,138 @@ pub fn setup_finished(db: &Connection, workspace_id: &str) -> Result<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Reconstruct old schemas from a frozen pre-refactor snapshot, independently
+    // of MIGRATIONS, so missing or misnumbered steps cannot fix their own fixture.
+    fn historical_database(version: i64) -> Result<Connection> {
+        let db = Connection::open_in_memory()?;
+        db.execute_batch("PRAGMA foreign_keys=ON;")?;
+        if version == 0 {
+            return Ok(db);
+        }
+        db.execute_batch(include_str!("../../tests/fixtures/schema_v17.sql"))?;
+        if version < 4 {
+            db.execute_batch("DROP INDEX repository_names;")?;
+        }
+        for (introduced, table, column) in [
+            (16, "workspaces", "setup_finished"),
+            (13, "repositories", "workspaces_dir"),
+            (10, "executions", "group_id"),
+            (10, "executions", "child"),
+            (10, "executions", "wrapper"),
+            (10, "workspaces", "git_dir_id"),
+            (10, "workspaces", "git_dir"),
+            (9, "resource_leases", "mode"),
+            (5, "ports", "reason"),
+            (4, "repositories", "name"),
+            (2, "workspaces", "base_ref"),
+            (2, "workspaces", "base_commit"),
+        ] {
+            if version < introduced {
+                db.execute_batch(&format!("ALTER TABLE {table} DROP COLUMN {column};"))?;
+            }
+        }
+        for (introduced, table) in [
+            (17, "access_requests"),
+            (15, "notifications"),
+            (14, "pr_cleanup"),
+            (12, "repository_configs"),
+            (11, "repository_removals"),
+            (8, "resource_leases"),
+            (8, "resource_pools"),
+            (7, "simulator_clean_requests"),
+            (6, "simulators"),
+            (3, "ports"),
+        ] {
+            if version < introduced {
+                db.execute_batch(&format!("DROP TABLE {table};"))?;
+            }
+        }
+        db.pragma_update(None, "user_version", version)?;
+        db.execute_batch(
+            "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
+            INSERT INTO workspaces(id,repository_id,name,path,branch,state)
+                VALUES ('workspace','repo','worker','/work','worker','ready');
+            INSERT INTO executions(id,workspace_id,state) VALUES ('execution','workspace','running');",
+        )?;
+        Ok(db)
+    }
+
+    fn schema_snapshot(db: &Connection) -> Result<Vec<String>> {
+        Ok(db
+            .prepare("SELECT sql FROM sqlite_schema WHERE sql IS NOT NULL ORDER BY name")?
+            .query_map([], |row| row.get::<_, String>(0))?
+            .map(|sql| Ok(sql?.split_whitespace().collect()))
+            .collect::<rusqlite::Result<_>>()?)
+    }
+
+    #[test]
+    fn migrates_every_recorded_version_to_the_same_schema() -> Result<()> {
+        let expected = schema_snapshot(&historical_database(17)?)?;
+        assert_eq!(MIGRATIONS.last().unwrap().0, SCHEMA_VERSION);
+        for version in 0..=SCHEMA_VERSION {
+            let mut db = historical_database(version)?;
+            migrate(&mut db).with_context(|| format!("upgrade from version {version}"))?;
+            assert_eq!(schema_snapshot(&db)?, expected, "from version {version}");
+            assert_eq!(
+                db.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))?,
+                SCHEMA_VERSION
+            );
+            if version > 0 {
+                assert_eq!(
+                    executions(&db, "workspace")?[0].state,
+                    ExecutionState::Running
+                );
+                assert_eq!(
+                    db.query_row("SELECT path FROM workspaces", [], |r| r.get::<_, String>(0))?,
+                    "/work"
+                );
+            }
+            migrate(&mut db)?;
+            assert_eq!(schema_snapshot(&db)?, expected);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn failed_migration_rolls_back_all_pending_steps() -> Result<()> {
+        let mut db = historical_database(1)?;
+        db.execute_batch("ALTER TABLE executions ADD COLUMN wrapper TEXT;")?;
+        let before = schema_snapshot(&db)?;
+        let error = migrate(&mut db).unwrap_err();
+        assert!(format!("{error:#}").contains("apply schema migration 10"));
+        assert_eq!(schema_snapshot(&db)?, before);
+        assert_eq!(
+            db.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))?,
+            1
+        );
+        db.execute_batch("ALTER TABLE executions DROP COLUMN wrapper;")?;
+        migrate(&mut db)?;
+        assert_eq!(
+            executions(&db, "workspace")?[0].state,
+            ExecutionState::Running
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn newer_schema_is_rejected_without_changes() -> Result<()> {
+        let mut db = historical_database(17)?;
+        db.pragma_update(None, "user_version", SCHEMA_VERSION + 1)?;
+        let before = schema_snapshot(&db)?;
+        assert!(
+            migrate(&mut db)
+                .unwrap_err()
+                .to_string()
+                .contains("newer Shoal version")
+        );
+        assert_eq!(schema_snapshot(&db)?, before);
+        assert_eq!(
+            db.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))?,
+            SCHEMA_VERSION + 1
+        );
+        Ok(())
+    }
 
     #[test]
     fn exists_checks_bound_queries_in_the_current_transaction() -> Result<()> {
