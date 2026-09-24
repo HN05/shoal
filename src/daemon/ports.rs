@@ -13,6 +13,7 @@ use crate::{
         access::{self, AccessRequest, PortSpecification, Specification, Target},
         allocation::Allocation,
         notifications::NotificationKind,
+        scope::Caller,
         store,
         workspace::Manager,
     },
@@ -114,7 +115,7 @@ impl Manager {
         selector: &str,
         name: String,
         request: PortRequest,
-        scoped: bool,
+        caller: Option<&Caller>,
     ) -> Result<Acquisition> {
         let workspace = self.workspace(selector).await?;
         let config = self.workspace_config(&workspace).await?;
@@ -142,6 +143,7 @@ impl Manager {
         }
         self.touch(&workspace.id).await;
         let workspace_name = workspace.name.clone();
+        let scoped = caller.is_some();
         let (outcome, conflict) = self
             .store
             .run(move |db| {

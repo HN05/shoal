@@ -13,8 +13,9 @@ use crate::{
     daemon::{
         access::{self, AccessRequest, ResourceSpecification, Specification, Target},
         allocation::Allocation,
+        scope::Caller,
         store,
-        workspace::Manager,
+        workspace::{GuardMode, Manager},
     },
     state::{states, text_key},
     validate,
@@ -432,7 +433,7 @@ impl Manager {
         &self,
         selector: &str,
         mut request: ResourceRequest,
-        scoped: bool,
+        caller: Option<&Caller>,
     ) -> Result<Allocation<ResourceLease>> {
         validate::lowercase_name("resource", &request.pool)?;
         validate::lowercase_name("resource", &request.name)?;
@@ -450,11 +451,17 @@ impl Manager {
         let hook = self
             .workspace_hook(&workspace, crate::hooks::HookKind::PostResourceAcquire)
             .await?;
-        let _resources = self.resource_guard(&workspace.id, hook.is_some()).await?;
+        let mode = if hook.is_some() {
+            GuardMode::Exclusive
+        } else {
+            GuardMode::Shared
+        };
+        let _resources = self.resource_guard(&workspace.id, mode).await?;
         if hook.is_some() {
             self.verify_worktree(&workspace).await?;
         }
         let workspace_name = workspace.name.clone();
+        let scoped = caller.is_some();
         let acquisition = self
             .store
             .run(move |db| {
@@ -586,7 +593,12 @@ impl Manager {
         let hook = self
             .workspace_hook(&workspace, crate::hooks::HookKind::PreResourceRelease)
             .await?;
-        let _resources = self.resource_guard(&workspace.id, hook.is_some()).await?;
+        let mode = if hook.is_some() {
+            GuardMode::Exclusive
+        } else {
+            GuardMode::Shared
+        };
+        let _resources = self.resource_guard(&workspace.id, mode).await?;
         let id = workspace.id.clone();
         let owned = self
             .store

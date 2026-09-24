@@ -37,6 +37,12 @@ pub(crate) enum WorkspaceSource {
     Existing(crate::git::existing_branch::Branch, Option<String>),
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum GuardMode {
+    Shared,
+    Exclusive,
+}
+
 pub(crate) enum ResourceGuard {
     Operation {
         _guard: tokio::sync::OwnedRwLockReadGuard<()>,
@@ -113,7 +119,7 @@ impl Manager {
         Ok((repo, guard))
     }
 
-    pub(crate) async fn resource_guard(&self, id: &str, hook: bool) -> Result<ResourceGuard> {
+    pub(crate) async fn resource_guard(&self, id: &str, mode: GuardMode) -> Result<ResourceGuard> {
         let gate = self
             .resource_gates
             .lock()
@@ -121,12 +127,13 @@ impl Manager {
             .entry(id.to_owned())
             .or_default()
             .clone();
-        let guard = if hook {
-            gate.try_write_owned()
-                .map(|guard| ResourceGuard::Hook { _guard: guard })
-        } else {
-            gate.try_read_owned()
-                .map(|guard| ResourceGuard::Operation { _guard: guard })
+        let guard = match mode {
+            GuardMode::Exclusive => gate
+                .try_write_owned()
+                .map(|guard| ResourceGuard::Hook { _guard: guard }),
+            GuardMode::Shared => gate
+                .try_read_owned()
+                .map(|guard| ResourceGuard::Operation { _guard: guard }),
         };
         guard.context("workspace resource operation is in progress; retry when its hook finishes")
     }
@@ -465,7 +472,7 @@ impl Manager {
     /// Move a ready or failed workspace into a transient lifecycle state,
     /// excluding every other lifecycle operation until it is restored.
     pub(crate) async fn reserve_lifecycle(&self, id: &str, state: WorkspaceState) -> Result<()> {
-        let _resources = self.resource_guard(id, false).await?;
+        let _resources = self.resource_guard(id, GuardMode::Shared).await?;
         let id = id.to_owned();
         self.store
             .run(move |db| {

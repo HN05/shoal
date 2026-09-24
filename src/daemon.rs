@@ -364,7 +364,7 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             name,
             request,
         } => match manager
-            .acquire_port(&workspace, name, request, caller.is_some())
+            .acquire_port(&workspace, name, request, caller)
             .await?
         {
             Acquisition::Allocation(allocation) => allocation.into_body(Body::Port),
@@ -384,7 +384,7 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             Body::AccessRequest(Box::new(manager.decide_access(id, approve).await?))
         }
         Method::ResourceAcquire { workspace, request } => manager
-            .acquire_resource(&workspace, request, caller.is_some())
+            .acquire_resource(&workspace, request, caller)
             .await?
             .into_body(Body::ResourceLease),
         Method::ResourceRelease {

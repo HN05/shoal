@@ -1,6 +1,6 @@
 //! Daemon-side execution registration and stopping. Terminal I/O stays in
 //! crate::execution, in the invoking CLI process.
-use super::{Manager, ResourceGuard};
+use super::{GuardMode, Manager, ResourceGuard};
 use crate::{
     daemon::{scope::Caller, store},
     hooks::HookKind,
@@ -234,9 +234,12 @@ impl Manager {
                     setup_cmd.is_some() || pre_setup.is_some(),
                     "no setup_cmd configured"
                 );
-                let resources = self
-                    .resource_guard(&workspace.id, pre_setup.is_some())
-                    .await?;
+                let mode = if pre_setup.is_some() {
+                    GuardMode::Exclusive
+                } else {
+                    GuardMode::Shared
+                };
+                let resources = self.resource_guard(&workspace.id, mode).await?;
                 Ok(PreparedExecution {
                     setup_cmd,
                     pre_setup,
