@@ -137,7 +137,7 @@ impl Fixture {
     }
 
     fn interactive(&self, args: &[&str], answer: &str) -> (Output, String) {
-        use std::{io::Read, os::fd::FromRawFd};
+        use std::{io::Read, os::fd::FromRawFd, os::unix::process::CommandExt};
         let (mut master, mut slave) = (-1, -1);
         assert_eq!(
             unsafe {
@@ -158,8 +158,18 @@ impl Fixture {
             unsafe { libc::fcntl(master.as_raw_fd(), libc::F_SETFL, libc::O_NONBLOCK) },
             -1
         );
-        let mut child = self
-            .command()
+        let mut command = self.command();
+        // A tracked command needs a controlling terminal to transfer foreground
+        // ownership to its child, not just file descriptors that pass isatty.
+        unsafe {
+            command.pre_exec(|| {
+                if libc::setsid() < 0 || libc::ioctl(libc::STDIN_FILENO, libc::TIOCSCTTY, 0) < 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+        let mut child = command
             .args(args)
             .stdin(slave.try_clone().unwrap())
             .stderr(slave)
@@ -4673,7 +4683,12 @@ head -n 1 "$HOME/picker-input"
             } else {
                 vec![]
             };
+            fs::remove_file(fixture.root.path().join("picker-input")).ok();
             let (output, transcript) = fixture.interactive(&args, "");
+            assert!(
+                fixture.root.path().join("picker-input").exists(),
+                "picker did not run: {transcript}"
+            );
             let args = fs::read_to_string(fixture.root.path().join("picker-args")).unwrap();
             let input = fs::read_to_string(fixture.root.path().join("picker-input")).unwrap();
             assert!(input.contains(workspace["id"].as_str().unwrap()));
@@ -5910,6 +5925,41 @@ fn repository_removal_ignores_only_missing_prunable_unlocked_worktrees() {
     fixture.ok(&["repo", "rm", target, "--yes"]);
     assert!(!fixture.repo.exists());
     assert!(fixture.ok(&["repo", "list"]).as_array().unwrap().is_empty());
+}
+
+#[test]
+fn removal_picker_keeps_or_deletes_the_selected_branch_and_can_cancel() {
+    let fixture = Fixture::new();
+    let bin = fixture.root.path().join("bin");
+    fs::create_dir_all(&bin).unwrap();
+    let picker = bin.join("fzf");
+    for (name, label) in [
+        ("cancel-choice", "Cancel"),
+        ("keep-choice", "Keep branch"),
+        ("delete-choice", "Delete branch"),
+    ] {
+        let workspace = fixture.add(name);
+        let path = Path::new(workspace["path"].as_str().unwrap());
+        fs::write(path.join("uncommitted"), "requires a branch choice").unwrap();
+        fs::write(
+            &picker,
+            format!("#!/bin/sh\nawk -F '\\t' '$2 ~ /^{label} / {{ print }}'\n"),
+        )
+        .unwrap();
+        fs::set_permissions(&picker, fs::Permissions::from_mode(0o755)).unwrap();
+        let (output, transcript) = fixture.interactive(&["rm", name], "y\n");
+        assert_eq!(output.status.success(), label != "Cancel", "{transcript}");
+        assert_eq!(path.exists(), label == "Cancel");
+        let branch = git(
+            &fixture.repo,
+            &["branch", "--list", workspace["branch"].as_str().unwrap()],
+        );
+        assert_eq!(!branch.trim().is_empty(), label != "Delete branch");
+        if label == "Cancel" {
+            assert!(transcript.contains("removal canceled"), "{transcript}");
+            assert!(path.join("uncommitted").exists());
+        }
+    }
 }
 
 #[test]
