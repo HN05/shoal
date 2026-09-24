@@ -4,7 +4,7 @@ use serde_json::json;
 
 use crate::{
     cli::{
-        PortCommand,
+        PortCommand, WorkspaceScope,
         client::{self, request},
         context::{Context, optional},
         output::{Palette, Style},
@@ -20,8 +20,7 @@ use super::WorkspaceOverviewResult;
 pub(super) async fn run(
     ctx: &Context,
     command: Option<PortCommand>,
-    workspace: Option<String>,
-    all: bool,
+    scope: WorkspaceScope,
 ) -> Result<i32> {
     match command {
         Some(PortCommand::Acquire {
@@ -42,7 +41,7 @@ pub(super) async fn run(
             };
             acquire(ctx, workspace, name, request).await
         }
-        Some(PortCommand::List { workspace, all }) => overview(ctx, workspace, all).await,
+        Some(PortCommand::List { scope }) => overview(ctx, scope).await,
         Some(PortCommand::Release { name, workspace }) => {
             let workspace =
                 ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
@@ -54,7 +53,7 @@ pub(super) async fn run(
             )?;
             Ok(0)
         }
-        None => overview(ctx, workspace, all).await,
+        None => overview(ctx, scope).await,
     }
 }
 
@@ -135,8 +134,8 @@ fn describe(port: &PortReservation, palette: Palette) -> String {
     )
 }
 
-async fn overview(ctx: &Context, workspace: Option<String>, all: bool) -> Result<i32> {
-    if all {
+async fn overview(ctx: &Context, scope: WorkspaceScope) -> Result<i32> {
+    if scope.all {
         let mut overviews = Vec::new();
         for workspace in client::workspaces(&ctx.paths).await? {
             let method = Method::PortOverview {
@@ -169,7 +168,8 @@ async fn overview(ctx: &Context, workspace: Option<String>, all: bool) -> Result
         })?;
         return Ok(i32::from(failed));
     } else {
-        let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+        let workspace =
+            ui::select_workspace(ctx, scope.workspace, Fallback::CurrentDirectory).await?;
         let overview =
             request::<PortOverview>(&ctx.paths, Method::PortOverview { workspace }).await?;
         ctx.show(&overview, |overview| {

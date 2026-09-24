@@ -5,7 +5,7 @@ use serde_json::json;
 use super::{Attempt, EXIT_BUSY, WorkspaceOverviewResult, retry_while_busy};
 use crate::{
     cli::{
-        ResourceCommand,
+        ResourceCommand, WorkspaceScope,
         client::{self, request},
         context::{Context, optional},
         output::{Palette, Style},
@@ -20,8 +20,7 @@ use crate::{
 pub(super) async fn run(
     ctx: &Context,
     command: Option<ResourceCommand>,
-    workspace: Option<String>,
-    all: bool,
+    scope: WorkspaceScope,
 ) -> Result<i32> {
     match command {
         Some(ResourceCommand::Acquire {
@@ -102,8 +101,8 @@ pub(super) async fn run(
             )?;
             Ok(0)
         }
-        Some(ResourceCommand::List { workspace, all }) => overview(ctx, workspace, all).await,
-        None => overview(ctx, workspace, all).await,
+        Some(ResourceCommand::List { scope }) => overview(ctx, scope).await,
+        None => overview(ctx, scope).await,
     }
 }
 
@@ -129,8 +128,8 @@ fn describe_short(lease: &ResourceLease, palette: Palette) -> String {
     )
 }
 
-async fn overview(ctx: &Context, workspace: Option<String>, all: bool) -> Result<i32> {
-    if all {
+async fn overview(ctx: &Context, scope: WorkspaceScope) -> Result<i32> {
+    if scope.all {
         let mut overviews = Vec::new();
         for workspace in client::workspaces(&ctx.paths).await? {
             let method = Method::ResourceOverview {
@@ -166,7 +165,8 @@ async fn overview(ctx: &Context, workspace: Option<String>, all: bool) -> Result
         })?;
         return Ok(i32::from(failed));
     } else {
-        let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+        let workspace =
+            ui::select_workspace(ctx, scope.workspace, Fallback::CurrentDirectory).await?;
         let overview =
             request::<Overview>(&ctx.paths, Method::ResourceOverview { workspace }).await?;
         ctx.show(&overview, |overview| {

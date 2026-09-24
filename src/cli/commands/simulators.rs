@@ -5,7 +5,7 @@ use serde_json::json;
 use super::{Attempt, EXIT_BUSY, retry_while_busy};
 use crate::{
     cli::{
-        SimCommand,
+        SimCommand, WorkspaceScope,
         client::{self, request},
         context::{Context, optional},
         output::{Palette, Style},
@@ -18,8 +18,7 @@ use crate::{
 pub(super) async fn run(
     ctx: &Context,
     command: Option<SimCommand>,
-    workspace: Option<String>,
-    all: bool,
+    scope: WorkspaceScope,
 ) -> Result<i32> {
     match command {
         Some(SimCommand::Catalog) => {
@@ -32,7 +31,7 @@ pub(super) async fn run(
             })?;
             Ok(0)
         }
-        Some(SimCommand::List { workspace, all }) => overview(ctx, workspace, all).await,
+        Some(SimCommand::List { scope }) => overview(ctx, scope).await,
         Some(SimCommand::Acquire {
             workspace,
             name,
@@ -87,12 +86,11 @@ pub(super) async fn run(
             }
         }
         Some(SimCommand::History {
-            workspace,
-            all,
+            scope,
             limit,
             before,
         }) => {
-            let workspace = ui::select_workspace_filter(ctx, workspace, all).await?;
+            let workspace = ui::select_workspace_filter(ctx, scope).await?;
             let entries = request::<Vec<AuditEntry>>(
                 &ctx.paths,
                 Method::SimHistory {
@@ -123,12 +121,12 @@ pub(super) async fn run(
             )?;
             Ok(0)
         }
-        None => overview(ctx, workspace, all).await,
+        None => overview(ctx, scope).await,
     }
 }
 
-async fn overview(ctx: &Context, workspace: Option<String>, all: bool) -> Result<i32> {
-    let workspace = ui::select_workspace_filter(ctx, workspace, all).await?;
+async fn overview(ctx: &Context, scope: WorkspaceScope) -> Result<i32> {
+    let workspace = ui::select_workspace_filter(ctx, scope).await?;
     let overview =
         request::<SimulatorOverview>(&ctx.paths, Method::SimOverview { workspace }).await?;
     ctx.show(&overview, |overview| {

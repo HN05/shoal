@@ -39,6 +39,13 @@ pub struct ConfirmationArgs {
     pub yes: bool,
 }
 
+#[derive(Debug, Default, Args)]
+pub struct WorkspaceScope {
+    pub workspace: Option<String>,
+    #[arg(long, conflicts_with = "workspace")]
+    pub all: bool,
+}
+
 #[derive(Debug, Subcommand)]
 pub enum Command {
     /// List or run commands defined in [commands].
@@ -182,15 +189,16 @@ pub enum Command {
         command: Option<PrCommand>,
     },
     /// List, acquire, and release named TCP ports owned by a worktree.
-    #[command(args_conflicts_with_subcommands = true)]
+    #[command(
+        args_conflicts_with_subcommands = true,
+        mut_arg("workspace", |arg| arg.help("Show the effective configuration and reservations for this workspace")),
+        mut_arg("all", |arg| arg.help("Show every managed workspace"))
+    )]
     Port {
         #[command(subcommand)]
         command: Option<PortCommand>,
-        /// Show the effective configuration and reservations for this workspace.
-        workspace: Option<String>,
-        /// Show every managed workspace.
-        #[arg(long, conflicts_with = "workspace")]
-        all: bool,
+        #[command(flatten)]
+        scope: WorkspaceScope,
     },
     /// Review, approve, or deny requests for resource access.
     Access {
@@ -198,26 +206,28 @@ pub enum Command {
         command: Option<AccessCommand>,
     },
     /// Acquire, list, and release cooperative resource permits.
-    #[command(args_conflicts_with_subcommands = true)]
+    #[command(
+        args_conflicts_with_subcommands = true,
+        mut_arg("workspace", |arg| arg.help("Show effective capacity and leases for this workspace")),
+        mut_arg("all", |arg| arg.help("Show every managed workspace"))
+    )]
     Resource {
         #[command(subcommand)]
         command: Option<ResourceCommand>,
-        /// Show effective capacity and leases for this workspace.
-        workspace: Option<String>,
-        /// Show every managed workspace.
-        #[arg(long, conflicts_with = "workspace")]
-        all: bool,
+        #[command(flatten)]
+        scope: WorkspaceScope,
     },
     /// Share Shoal-managed Xcode simulators between worktrees.
-    #[command(args_conflicts_with_subcommands = true)]
+    #[command(
+        args_conflicts_with_subcommands = true,
+        mut_arg("workspace", |arg| arg.help("Show configured profiles, capacity, and devices for this workspace")),
+        mut_arg("all", |arg| arg.help("Show every managed device"))
+    )]
     Sim {
         #[command(subcommand)]
         command: Option<SimCommand>,
-        /// Show configured profiles, capacity, and devices for this workspace.
-        workspace: Option<String>,
-        /// Show every managed device.
-        #[arg(long, conflicts_with = "workspace")]
-        all: bool,
+        #[command(flatten)]
+        scope: WorkspaceScope,
     },
     /// Inspect a workspace and its executions.
     Inspect { workspace: Option<String> },
@@ -234,9 +244,8 @@ pub enum Command {
     },
     /// Diagnose Shoal and its workspaces; optionally repair verified state.
     Doctor {
-        workspace: Option<String>,
-        #[arg(long, conflicts_with = "workspace")]
-        all: bool,
+        #[command(flatten)]
+        scope: WorkspaceScope,
         /// Apply safe state repairs; preserve files, branches, and resource leases.
         #[arg(long)]
         repair: bool,
@@ -581,9 +590,8 @@ pub enum PortCommand {
     },
     /// Show configured ports and current reservations.
     List {
-        workspace: Option<String>,
-        #[arg(long, conflicts_with = "workspace")]
-        all: bool,
+        #[command(flatten)]
+        scope: WorkspaceScope,
     },
     Release {
         name: String,
@@ -646,9 +654,8 @@ pub enum SimCommand {
     Catalog,
     /// Show configured profiles, capacity, and managed instances.
     List {
-        workspace: Option<String>,
-        #[arg(long, conflicts_with = "workspace")]
-        all: bool,
+        #[command(flatten)]
+        scope: WorkspaceScope,
     },
     /// Acquire exclusive use; reuse the same named lease on repeated requests.
     Acquire {
@@ -672,9 +679,8 @@ pub enum SimCommand {
     },
     /// Review clean-device requests, including failed and busy requests.
     History {
-        workspace: Option<String>,
-        #[arg(long, conflicts_with = "workspace")]
-        all: bool,
+        #[command(flatten)]
+        scope: WorkspaceScope,
         #[arg(long, default_value_t = 20, value_parser = clap::value_parser!(u32).range(1..=50))]
         limit: u32,
         /// Show entries older than this audit ID.
@@ -726,9 +732,8 @@ pub enum ResourceCommand {
     },
     /// Show configured pools, capacity, and current leases.
     List {
-        workspace: Option<String>,
-        #[arg(long, conflicts_with = "workspace")]
-        all: bool,
+        #[command(flatten)]
+        scope: WorkspaceScope,
     },
 }
 

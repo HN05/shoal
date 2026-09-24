@@ -261,25 +261,12 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         } => {
             crate::execution::run_detached_wrapper(&ctx.paths, workspace, log, command, agent).await
         }
-        Command::Port {
-            command,
-            workspace,
-            all,
-        } => ports::run(&ctx, command, workspace, all).await,
+        Command::Port { command, scope } => ports::run(&ctx, command, scope).await,
         Command::Access { command } => access::run(&ctx, command).await,
-        Command::Resource {
-            command,
-            workspace,
-            all,
-        } => resources::run(&ctx, command, workspace, all).await,
-        Command::Sim {
-            command,
-            workspace,
-            all,
-        } => simulators::run(&ctx, command, workspace, all).await,
+        Command::Resource { command, scope } => resources::run(&ctx, command, scope).await,
+        Command::Sim { command, scope } => simulators::run(&ctx, command, scope).await,
         Command::Doctor {
-            workspace,
-            all,
+            scope,
             repair,
             stop,
             acknowledge_stopped,
@@ -289,7 +276,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
                 stop,
                 acknowledge_stopped,
             };
-            recovery::run(&ctx, workspace, all, options).await
+            recovery::run(&ctx, scope, options).await
         }
         Command::Config { command } => match command {
             ConfigCommand::Set {

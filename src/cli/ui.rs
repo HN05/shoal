@@ -12,7 +12,7 @@ use anyhow::{Context as _, Result, ensure};
 
 use crate::{
     cli::{
-        client,
+        WorkspaceScope, client,
         context::Context,
         output::{Palette, Style},
         workspace_context::{ScopeOrder, WorkspaceContext},
@@ -362,13 +362,12 @@ pub async fn select_workspace(
 /// `Some(workspace)` unless `--all` was passed.
 pub async fn select_workspace_filter(
     ctx: &Context,
-    explicit: Option<String>,
-    all: bool,
+    scope: WorkspaceScope,
 ) -> Result<Option<String>> {
-    if all {
+    if scope.all {
         return Ok(None);
     }
-    select_workspace(ctx, explicit, Fallback::CurrentDirectory)
+    select_workspace(ctx, scope.workspace, Fallback::CurrentDirectory)
         .await
         .map(Some)
 }

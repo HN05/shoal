@@ -4,6 +4,7 @@ use serde::Serialize;
 
 use crate::{
     cli::{
+        WorkspaceScope,
         client::{self, request},
         context::Context,
         output::{Palette, Style},
@@ -18,8 +19,7 @@ use crate::{
 
 pub(super) async fn run(
     ctx: &Context,
-    workspace: Option<String>,
-    all: bool,
+    scope: WorkspaceScope,
     options: ReconcileOptions,
 ) -> Result<i32> {
     let (daemon, available) = daemon_check(ctx).await;
@@ -37,7 +37,7 @@ pub(super) async fn run(
                 format!("Could not check daemon environment: {error:#}"),
             )),
         }
-        match workspace_reports(ctx, workspace, all, options).await {
+        match workspace_reports(ctx, scope, options).await {
             Ok(workspaces) => report.workspaces = workspaces,
             Err(error) => report.checks.push(Check::new(
                 "workspaces",
@@ -97,14 +97,13 @@ struct DoctorReport {
 
 async fn workspace_reports(
     ctx: &Context,
-    workspace: Option<String>,
-    all: bool,
+    scope: WorkspaceScope,
     options: ReconcileOptions,
 ) -> Result<Vec<Report>> {
-    if workspace.is_none() && !all && client::workspaces(&ctx.paths).await?.is_empty() {
+    if scope.workspace.is_none() && !scope.all && client::workspaces(&ctx.paths).await?.is_empty() {
         return Ok(vec![]);
     }
-    let workspace = ui::select_workspace_filter(ctx, workspace, all).await?;
+    let workspace = ui::select_workspace_filter(ctx, scope).await?;
     request(&ctx.paths, Method::Doctor { workspace, options }).await
 }
 
