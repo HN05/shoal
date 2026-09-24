@@ -206,17 +206,19 @@ pub struct WorkspaceOverview {
     pub overview: Overview,
 }
 
+const LEASE_COLUMNS: &str = "id,workspace_id,scope,pool,name,resource,reason,created_at,mode";
+
 fn row_lease(row: &rusqlite::Row<'_>) -> rusqlite::Result<ResourceLease> {
     Ok(ResourceLease {
-        id: row.get(0)?,
-        workspace_id: row.get(1)?,
-        scope: row.get(2)?,
-        pool: row.get(3)?,
-        name: row.get(4)?,
-        resource: row.get(5)?,
-        reason: row.get(6)?,
-        created_at: row.get(7)?,
-        mode: row.get(8)?,
+        id: row.get("id")?,
+        workspace_id: row.get("workspace_id")?,
+        scope: row.get("scope")?,
+        pool: row.get("pool")?,
+        name: row.get("name")?,
+        resource: row.get("resource")?,
+        reason: row.get("reason")?,
+        created_at: row.get("created_at")?,
+        mode: row.get("mode")?,
     })
 }
 
@@ -242,9 +244,9 @@ fn holders(db: &Connection, active: &[&ResourceLease]) -> Result<String> {
 
 pub fn leases(db: &Connection, owner: Option<&str>) -> Result<Vec<ResourceLease>> {
     Ok(db
-        .prepare(
-            "SELECT id,workspace_id,scope,pool,name,resource,reason,created_at,mode FROM resource_leases WHERE ?1 IS NULL OR workspace_id=?1 ORDER BY scope,pool,resource,name,id",
-        )?
+        .prepare(&format!(
+            "SELECT {LEASE_COLUMNS} FROM resource_leases WHERE ?1 IS NULL OR workspace_id=?1 ORDER BY scope,pool,resource,name,id",
+        ))?
         .query_map([owner], row_lease)?
         .collect::<rusqlite::Result<Vec<_>>>()?)
 }
@@ -749,6 +751,33 @@ fn pool_status(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn leases_use_named_columns() -> Result<()> {
+        let db = Connection::open_in_memory()?;
+        // Deliberately use a physical order different from LEASE_COLUMNS.
+        db.execute_batch(
+            "CREATE TABLE resource_leases AS SELECT
+            'read' AS mode, 123 AS created_at, NULL AS reason, 'member' AS resource,
+            'default' AS name, 'pool' AS pool, 'global' AS scope,
+            'workspace' AS workspace_id, 'lease' AS id;",
+        )?;
+        let expected = serde_json::json!({
+            "id": "lease", "workspace_id": "workspace", "scope": "global", "pool": "pool",
+            "name": "default", "resource": "member", "reason": null, "created_at": 123, "mode": "read"
+        });
+        assert_eq!(serde_json::to_value(&leases(&db, None)?[0])?, expected);
+        assert_eq!(leases(&db, Some("workspace"))?.len(), 1);
+        assert!(leases(&db, Some("other"))?.is_empty());
+        let reordered = LEASE_COLUMNS.split(',').rev().collect::<Vec<_>>().join(",");
+        let lease = db.query_row(
+            &format!("SELECT {reordered} FROM resource_leases"),
+            [],
+            row_lease,
+        )?;
+        assert_eq!(serde_json::to_value(lease)?, expected);
+        Ok(())
+    }
 
     #[test]
     fn config_defaults_sum_member_capacities_and_reject_invalid_definitions() {

@@ -19,7 +19,10 @@ impl Manager {
         self.store
             .run(|db| {
                 Ok(db
-                    .prepare("SELECT * FROM repositories ORDER BY last_used DESC")?
+                    .prepare(&format!(
+                        "SELECT {} FROM repositories ORDER BY last_used DESC",
+                        store::REPOSITORY_COLUMNS
+                    ))?
                     .query_map([], store::repository)?
                     .collect::<rusqlite::Result<Vec<_>>>()?)
             })
@@ -151,7 +154,7 @@ impl Manager {
                     params![id, path, source, workspaces_dir],
                 )?;
                 Ok(db.query_row(
-                    "SELECT * FROM repositories WHERE path=?1",
+                    &format!("SELECT {} FROM repositories WHERE path=?1", store::REPOSITORY_COLUMNS),
                     [path],
                     store::repository,
                 )?)
@@ -221,7 +224,10 @@ impl Manager {
                     params![repo.id, name],
                 )?;
                 Ok(db.query_row(
-                    "SELECT * FROM repositories WHERE id=?1",
+                    &format!(
+                        "SELECT {} FROM repositories WHERE id=?1",
+                        store::REPOSITORY_COLUMNS
+                    ),
                     [repo.id],
                     store::repository,
                 )?)

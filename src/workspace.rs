@@ -129,7 +129,10 @@ impl Manager {
         self.store
             .run(|db| {
                 Ok(db
-                    .prepare("SELECT * FROM workspaces ORDER BY name")?
+                    .prepare(&format!(
+                        "SELECT {} FROM workspaces ORDER BY name",
+                        store::WORKSPACE_COLUMNS
+                    ))?
                     .query_map([], store::workspace)?
                     .collect::<rusqlite::Result<Vec<_>>>()?)
             })
@@ -142,7 +145,10 @@ impl Manager {
         self.store
             .run(move |db| {
                 db.query_row(
-                    "SELECT * FROM workspaces WHERE id=?1 OR name=?1",
+                    &format!(
+                        "SELECT {} FROM workspaces WHERE id=?1 OR name=?1",
+                        store::WORKSPACE_COLUMNS
+                    ),
                     [&selector],
                     store::workspace,
                 )
@@ -283,7 +289,7 @@ impl Manager {
                     |r| r.get(0),
                 )?;
                 ensure!(!taken, "workspace name already exists: {}", record.name);
-                let workspaces = tx.prepare("SELECT * FROM workspaces")?
+                let workspaces = tx.prepare(&format!("SELECT {} FROM workspaces", store::WORKSPACE_COLUMNS))?
                     .query_map([], store::workspace)?
                     .collect::<rusqlite::Result<Vec<_>>>()?;
                 for workspace in workspaces {

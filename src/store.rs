@@ -186,7 +186,8 @@ pub fn json_text<T: Serialize>(value: Option<&T>) -> Result<Option<String>> {
 }
 
 /// Parse an optional JSON text column, reporting failures as SQL conversions.
-fn json_column<T: DeserializeOwned>(row: &Row<'_>, index: usize) -> rusqlite::Result<Option<T>> {
+fn json_column<T: DeserializeOwned>(row: &Row<'_>, name: &str) -> rusqlite::Result<Option<T>> {
+    let index = row.as_ref().column_index(name)?;
     row.get::<_, Option<String>>(index)?
         .map(|json| {
             serde_json::from_str(&json).map_err(|error| {
@@ -200,65 +201,80 @@ fn json_column<T: DeserializeOwned>(row: &Row<'_>, index: usize) -> rusqlite::Re
         .transpose()
 }
 
+pub const REPOSITORY_COLUMNS: &str = "id,path,source,last_used,name,workspaces_dir";
+
 pub fn repository(row: &Row<'_>) -> rusqlite::Result<Repository> {
     Ok(Repository {
-        id: row.get(0)?,
-        path: PathBuf::from(row.get::<_, String>(1)?),
-        source: row.get(2)?,
-        last_used: row.get(3)?,
-        name: row.get(4)?,
-        workspaces_dir: row.get::<_, Option<String>>(5)?.map(PathBuf::from),
+        id: row.get("id")?,
+        path: PathBuf::from(row.get::<_, String>("path")?),
+        source: row.get("source")?,
+        last_used: row.get("last_used")?,
+        name: row.get("name")?,
+        workspaces_dir: row
+            .get::<_, Option<String>>("workspaces_dir")?
+            .map(PathBuf::from),
     })
 }
 
+pub const WORKSPACE_COLUMNS: &str =
+    "id,repository_id,name,path,branch,state,error,base_commit,base_ref,git_dir,git_dir_id";
+
 pub fn workspace(row: &Row<'_>) -> rusqlite::Result<Workspace> {
     Ok(Workspace {
-        id: row.get(0)?,
-        repository_id: row.get(1)?,
-        name: row.get(2)?,
-        path: PathBuf::from(row.get::<_, String>(3)?),
-        branch: row.get(4)?,
-        state: row.get(5)?,
-        error: row.get(6)?,
-        base_commit: row.get(7)?,
-        base_ref: row.get(8)?,
-        git_dir: row.get::<_, Option<String>>(9)?.map(PathBuf::from),
-        git_dir_id: row.get(10)?,
+        id: row.get("id")?,
+        repository_id: row.get("repository_id")?,
+        name: row.get("name")?,
+        path: PathBuf::from(row.get::<_, String>("path")?),
+        branch: row.get("branch")?,
+        state: row.get("state")?,
+        error: row.get("error")?,
+        base_commit: row.get("base_commit")?,
+        base_ref: row.get("base_ref")?,
+        git_dir: row.get::<_, Option<String>>("git_dir")?.map(PathBuf::from),
+        git_dir_id: row.get("git_dir_id")?,
+    })
+}
+
+const PORT_COLUMNS: &str = "workspace_id,name,port,env_var,reason";
+
+fn port(row: &Row<'_>) -> rusqlite::Result<PortReservation> {
+    Ok(PortReservation {
+        workspace_id: row.get("workspace_id")?,
+        name: row.get("name")?,
+        port: row.get("port")?,
+        env_var: row.get("env_var")?,
+        reason: row.get("reason")?,
     })
 }
 
 pub fn ports(db: &Connection, workspace_id: Option<&str>) -> Result<Vec<PortReservation>> {
     Ok(db
-        .prepare(
-            "SELECT workspace_id,name,port,env_var,reason FROM ports WHERE ?1 IS NULL OR workspace_id=?1 ORDER BY workspace_id,name",
-        )?
-        .query_map([workspace_id], |row| {
-            Ok(PortReservation {
-                workspace_id: row.get(0)?,
-                name: row.get(1)?,
-                port: row.get(2)?,
-                env_var: row.get(3)?,
-                reason: row.get(4)?,
-            })
-        })?
+        .prepare(&format!(
+            "SELECT {PORT_COLUMNS} FROM ports WHERE ?1 IS NULL OR workspace_id=?1 ORDER BY workspace_id,name",
+        ))?
+        .query_map([workspace_id], port)?
         .collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
+const EXECUTION_COLUMNS: &str = "id,workspace_id,state,wrapper,child,group_id";
+
+fn execution(row: &Row<'_>) -> rusqlite::Result<Execution> {
+    Ok(Execution {
+        id: row.get("id")?,
+        workspace_id: row.get("workspace_id")?,
+        state: row.get("state")?,
+        wrapper: json_column(row, "wrapper")?,
+        child: json_column(row, "child")?,
+        group_id: row.get("group_id")?,
+    })
 }
 
 pub fn executions(db: &Connection, workspace_id: &str) -> Result<Vec<Execution>> {
     Ok(db
-        .prepare(
-            "SELECT id, workspace_id, state, wrapper, child, group_id FROM executions WHERE workspace_id=?1",
-        )?
-        .query_map([workspace_id], |row| {
-            Ok(Execution {
-                id: row.get(0)?,
-                workspace_id: row.get(1)?,
-                state: row.get(2)?,
-                wrapper: json_column(row, 3)?,
-                child: json_column(row, 4)?,
-                group_id: row.get(5)?,
-            })
-        })?
+        .prepare(&format!(
+            "SELECT {EXECUTION_COLUMNS} FROM executions WHERE workspace_id=?1",
+        ))?
+        .query_map([workspace_id], execution)?
         .collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
@@ -273,6 +289,108 @@ pub fn setup_finished(db: &Connection, workspace_id: &str) -> Result<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mappers_use_named_columns() -> Result<()> {
+        let mut db = Connection::open_in_memory()?;
+        migrate(&mut db)?;
+        db.execute_batch(
+            r#"INSERT INTO repositories(id,path,source,last_used,name,workspaces_dir)
+                VALUES ('repo','/checkout','origin',42,'project','/workspaces');
+            INSERT INTO workspaces(id,repository_id,name,path,branch,state,error,
+                base_commit,base_ref,git_dir,git_dir_id,setup_finished)
+                VALUES ('workspace','repo','worker','/work','feature','failed','setup error',
+                    'abc','refs/heads/main','/git/worktrees/worker','1:2',1);
+            INSERT INTO ports(workspace_id,name,port,env_var,reason)
+                VALUES ('workspace','web',12345,'WEB_PORT',NULL);
+            INSERT INTO executions(id,workspace_id,state,wrapper,child,group_id)
+                VALUES ('execution','workspace','unknown','{"pid":123,"birth":"wrapper"}',
+                    '{"pid":456,"birth":"child"}',456);"#,
+        )?;
+        check_columns(
+            &db,
+            "repositories",
+            REPOSITORY_COLUMNS,
+            repository,
+            serde_json::json!({
+                "id": "repo", "path": "/checkout", "source": "origin", "last_used": 42,
+                "name": "project", "workspaces_dir": "/workspaces"
+            }),
+        )?;
+        check_columns(
+            &db,
+            "workspaces",
+            WORKSPACE_COLUMNS,
+            workspace,
+            serde_json::json!({
+                "id": "workspace", "repository_id": "repo", "name": "worker", "path": "/work",
+                "branch": "feature", "state": "failed", "error": "setup error",
+                "base_commit": "abc", "base_ref": "refs/heads/main",
+                "git_dir": "/git/worktrees/worker", "git_dir_id": "1:2"
+            }),
+        )?;
+        check_columns(
+            &db,
+            "ports",
+            PORT_COLUMNS,
+            port,
+            serde_json::json!({
+                "workspace_id": "workspace", "name": "web", "port": 12345,
+                "env_var": "WEB_PORT", "reason": null
+            }),
+        )?;
+        check_columns(
+            &db,
+            "executions",
+            EXECUTION_COLUMNS,
+            execution,
+            serde_json::json!({
+                "id": "execution", "workspace_id": "workspace", "state": "unknown",
+                "wrapper": {"pid": 123, "birth": "wrapper"},
+                "child": {"pid": 456, "birth": "child"}, "group_id": 456
+            }),
+        )?;
+        assert!(setup_finished(&db, "workspace")?);
+        Ok(())
+    }
+
+    fn check_columns<T: Serialize>(
+        db: &Connection,
+        table: &str,
+        columns: &str,
+        mapper: fn(&Row<'_>) -> rusqlite::Result<T>,
+        expected: serde_json::Value,
+    ) -> Result<()> {
+        // Exercise the shared projection and a reordered projection with an
+        // unrelated leading column, as a changed schema or query might supply.
+        let reordered = format!(
+            "'extra' AS unrelated,{}",
+            columns.split(',').rev().collect::<Vec<_>>().join(",")
+        );
+        for projection in [columns, &reordered] {
+            let record = db.query_row(&format!("SELECT {projection} FROM {table}"), [], mapper)?;
+            assert_eq!(serde_json::to_value(record)?, expected);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn execution_json_errors_report_the_named_column_index() -> Result<()> {
+        let db = Connection::open_in_memory()?;
+        let error = db
+            .query_row(
+                "SELECT 'bad json' AS child, NULL AS wrapper, 'e' AS id,
+                'w' AS workspace_id, 'unknown' AS state, NULL AS group_id",
+                [],
+                execution,
+            )
+            .unwrap_err();
+        assert!(matches!(
+            error,
+            rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, _)
+        ));
+        Ok(())
+    }
 
     #[tokio::test]
     async fn approval_records_survive_restart_and_follow_workspace_ownership() {
@@ -329,10 +447,18 @@ mod tests {
         let store = Store::open(path.clone()).await.unwrap();
         store
             .run(|db| {
-                let repo = db.query_row("SELECT * FROM repositories", [], repository)?;
+                let repo = db.query_row(
+                    &format!("SELECT {REPOSITORY_COLUMNS} FROM repositories"),
+                    [],
+                    repository,
+                )?;
                 assert_eq!(repo.id, "repo");
                 assert!(repo.name.is_none() && repo.workspaces_dir.is_none());
-                let workspace = db.query_row("SELECT * FROM workspaces", [], workspace)?;
+                let workspace = db.query_row(
+                    &format!("SELECT {WORKSPACE_COLUMNS} FROM workspaces"),
+                    [],
+                    workspace,
+                )?;
                 assert_eq!(workspace.name, "feature");
                 assert!(workspace.base_commit.is_none() && workspace.base_ref.is_none());
                 assert!(setup_finished(db, "workspace")?);
