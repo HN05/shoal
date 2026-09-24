@@ -316,12 +316,15 @@ fn port(row: &Row<'_>) -> rusqlite::Result<PortReservation> {
     })
 }
 
+fn ports_query(scoped: bool) -> String {
+    let filter = if scoped { "WHERE workspace_id=?1" } else { "" };
+    format!("SELECT {PORT_COLUMNS} FROM ports {filter} ORDER BY workspace_id,name")
+}
+
 pub fn ports(db: &Connection, workspace_id: Option<&str>) -> Result<Vec<PortReservation>> {
     Ok(db
-        .prepare(&format!(
-            "SELECT {PORT_COLUMNS} FROM ports WHERE ?1 IS NULL OR workspace_id=?1 ORDER BY workspace_id,name",
-        ))?
-        .query_map([workspace_id], port)?
+        .prepare(&ports_query(workspace_id.is_some()))?
+        .query_map(rusqlite::params_from_iter(workspace_id), port)?
         .collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
@@ -354,6 +357,9 @@ pub fn setup_finished(db: &Connection, workspace_id: &str) -> Result<bool> {
         |row| row.get(0),
     )?)
 }
+
+#[cfg(test)]
+pub(super) mod query_tests;
 
 #[cfg(test)]
 mod tests {

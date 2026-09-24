@@ -270,12 +270,17 @@ fn holders(db: &Connection, active: &[&ResourceLease]) -> Result<String> {
     })
 }
 
+fn leases_query(scoped: bool) -> String {
+    let filter = if scoped { "WHERE workspace_id=?1" } else { "" };
+    format!(
+        "SELECT {LEASE_COLUMNS} FROM resource_leases {filter} ORDER BY scope,pool,resource,name,id"
+    )
+}
+
 pub fn leases(db: &Connection, owner: Option<&str>) -> Result<Vec<ResourceLease>> {
     Ok(db
-        .prepare(&format!(
-            "SELECT {LEASE_COLUMNS} FROM resource_leases WHERE ?1 IS NULL OR workspace_id=?1 ORDER BY scope,pool,resource,name,id",
-        ))?
-        .query_map([owner], row_lease)?
+        .prepare(&leases_query(owner.is_some()))?
+        .query_map(rusqlite::params_from_iter(owner), row_lease)?
         .collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
@@ -818,6 +823,15 @@ fn pool_status(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn owner_lease_reads_search_existing_index() -> Result<()> {
+        store::query_tests::check_owner_query(
+            &leases_query(true),
+            "resource_leases",
+            "workspace_id",
+        )
+    }
 
     #[test]
     fn scopes_keep_their_stored_spelling() -> Result<()> {
