@@ -357,7 +357,8 @@ survive restart and failed removal, and disappear with successful removal.
 Port, simulator, and generic resource commands share the same shape: the bare
 noun (or `list`) combines relevant configuration or capacity with leases;
 `acquire` and `release` change ownership. Simulator machine inventory remains
-under `sim catalog`.
+under `sim catalog`. All-workspace overviews that need independent per-workspace
+reads use bounded concurrency, retain workspace order and report every failure.
 
 ## Removal and recovery
 

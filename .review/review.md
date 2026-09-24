@@ -120,6 +120,8 @@ removal, check it against the rule those files state before judging it.
   typed daemon error codes and messages without changing the wire format; unfamiliar
   codes survive verbatim for version compatibility.
   Resource protocol methods use domain-then-verb names matching the CLI operations.
+  Independent per-workspace overview reads use bounded concurrency, preserve
+  workspace order and account for failures without blocking other reads.
 - Persistence: closed Shoal enums with matching display and wire names share
   explicit spellings through one macro and reject unknown values. Opening persistence
   only migrates schema; daemon startup

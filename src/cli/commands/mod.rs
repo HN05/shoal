@@ -16,8 +16,12 @@ mod simulators;
 mod skill;
 mod workspaces;
 
+#[cfg(test)]
+mod tests;
+
 use anyhow::{Context as _, Result, ensure};
 use clap::CommandFactory;
+use futures_util::{StreamExt, stream};
 use serde::Serialize;
 use serde_json::json;
 
@@ -62,17 +66,11 @@ impl<T> WorkspaceOverviewResult<T> {
 /// their successful JSON payload and resource-specific text rendering.
 async fn workspace_overviews<T: Serialize>(
     ctx: &Context,
-    mut request: impl AsyncFnMut(&Workspace) -> Result<T>,
+    request: impl AsyncFn(&Workspace) -> Result<T>,
     render: impl Fn(&T, Palette),
 ) -> Result<i32> {
     let workspaces = client::workspaces(&ctx.paths).await?;
-    let mut overviews = Vec::new();
-    for workspace in &workspaces {
-        overviews.push(match request(workspace).await {
-            Ok(overview) => WorkspaceOverviewResult::Ready(overview),
-            Err(error) => WorkspaceOverviewResult::failed(workspace.clone(), format!("{error:#}")),
-        });
-    }
+    let overviews = collect_workspace_overviews(&workspaces, request).await;
     let failed = overviews.iter().any(WorkspaceOverviewResult::is_failed);
     ctx.show(&overviews, |overviews| {
         let palette = Palette::stdout(ctx.json);
@@ -90,6 +88,36 @@ async fn workspace_overviews<T: Serialize>(
         }
     })?;
     Ok(i32::from(failed))
+}
+
+// Keep concurrent reads modest: each request opens several SQLite connections.
+const WORKSPACE_OVERVIEW_CONCURRENCY: usize = 2;
+
+async fn collect_workspace_overviews<T>(
+    workspaces: &[Workspace],
+    request: impl AsyncFn(&Workspace) -> Result<T>,
+) -> Vec<WorkspaceOverviewResult<T>> {
+    let mut pending = stream::iter(workspaces.iter().enumerate())
+        .map(|(index, workspace)| {
+            let request = &request;
+            async move {
+                let result = match request(workspace).await {
+                    Ok(overview) => WorkspaceOverviewResult::Ready(overview),
+                    Err(error) => {
+                        WorkspaceOverviewResult::failed(workspace.clone(), format!("{error:#}"))
+                    }
+                };
+                (index, result)
+            }
+        })
+        .buffer_unordered(WORKSPACE_OVERVIEW_CONCURRENCY);
+    let mut overviews: Vec<_> = std::iter::repeat_with(|| None)
+        .take(workspaces.len())
+        .collect();
+    while let Some((index, overview)) = pending.next().await {
+        overviews[index] = Some(overview);
+    }
+    overviews.into_iter().map(Option::unwrap).collect()
 }
 
 pub(crate) async fn run(cli: Cli) -> Result<i32> {

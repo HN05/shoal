@@ -806,6 +806,7 @@ dependencies = [
  "crypto_box",
  "crypto_secretbox",
  "fs2",
+ "futures-util",
  "libc",
  "plist",
  "rusqlite",
