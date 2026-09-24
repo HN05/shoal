@@ -481,10 +481,7 @@ impl ForgeKind {
         };
         let output = tokio::time::timeout(
             std::time::Duration::from_secs(seconds),
-            command
-                .stdin(std::process::Stdio::null())
-                .kill_on_drop(true)
-                .output(),
+            crate::subprocess::capture(command),
         )
         .await
         .context(timed_out)?;
@@ -508,19 +505,8 @@ impl Query {
                 );
                 String::from_utf8(output.stdout).context("issue output is not UTF-8")
             }
-            Self::Pull(hint) => (|| {
-                let output = output.with_context(|| {
-                    format!("run {tool}; ensure it is installed and on the daemon's PATH")
-                })?;
-                ensure!(
-                    output.status.success(),
-                    "{tool} failed ({}): {}",
-                    output.status,
-                    diagnostic(&output.stderr, 8192)
-                );
-                String::from_utf8(output.stdout).context("tool output is not UTF-8")
-            })()
-            .with_context(|| format!("PR lookup requires {tool} and its existing login{hint}")),
+            Self::Pull(hint) => crate::subprocess::checked_output(tool, output)
+                .with_context(|| format!("PR lookup requires {tool} and its existing login{hint}")),
         }
     }
 }
