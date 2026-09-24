@@ -61,7 +61,12 @@ impl Run {
             // Drain output while writing input: either pipe may exceed its buffer.
             let write = async move {
                 if let (Some(mut stdin), Some(input)) = (stdin, self.input) {
-                    stdin.write_all(&input).await?;
+                    if let Err(error) = stdin.write_all(&input).await {
+                        // A child may reject input early; retain its status and stderr.
+                        if error.kind() != io::ErrorKind::BrokenPipe {
+                            return Err(error);
+                        }
+                    }
                 }
                 Ok::<_, io::Error>(())
             };
@@ -200,6 +205,29 @@ mod tests {
                 .ends_with(&"é".repeat(MAX_DIAGNOSTIC_CHARS))
         );
         assert!(!error.to_string().contains("END"));
+    }
+
+    #[tokio::test]
+    async fn early_stdin_close_preserves_exit_status_and_diagnostics() {
+        let output = Run::new(shell("exec 0<&-; printf 'early exit' >&2; exit 7"))
+            .input(vec![0; 1024 * 1024])
+            .timeout(Duration::from_secs(5))
+            .capture()
+            .await
+            .unwrap();
+        assert_eq!(output.status.code(), Some(7));
+        assert_eq!(output.stderr, b"early exit");
+        let error = checked_output("test tool", Ok(output)).unwrap_err();
+        assert!(error.to_string().ends_with("early exit"));
+        assert_eq!(
+            Run::new(shell("exec 0<&-; printf done"))
+                .input(vec![0; 1024 * 1024])
+                .timeout(Duration::from_secs(5))
+                .output()
+                .await
+                .unwrap(),
+            "done"
+        );
     }
 
     #[tokio::test]
