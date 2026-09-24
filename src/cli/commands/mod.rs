@@ -25,10 +25,13 @@ use tokio::time::{Instant, sleep};
 
 use crate::{
     cli::{
-        Cli, CodexMode, Command, ConfigCommand, PrCommand, ShellCommand, agents, context::Context,
+        Cli, CodexMode, Command, ConfigCommand, PrCommand, ShellCommand, agents, client,
+        context::Context,
+        output::{Palette, Style},
     },
     env,
     forge::pr::Action,
+    model::Workspace,
     paths::Paths,
     shell,
 };
@@ -54,6 +57,40 @@ impl<T> WorkspaceOverviewResult<T> {
     fn is_failed(&self) -> bool {
         matches!(self, Self::Failed { .. })
     }
+}
+
+/// Collect every workspace before reporting partial failures. Domains retain
+/// their successful JSON payload and resource-specific text rendering.
+async fn workspace_overviews<T: Serialize>(
+    ctx: &Context,
+    mut request: impl AsyncFnMut(&Workspace) -> Result<T>,
+    render: impl Fn(&T, Palette),
+) -> Result<i32> {
+    let workspaces = client::workspaces(&ctx.paths).await?;
+    let mut overviews = Vec::new();
+    for workspace in &workspaces {
+        overviews.push(match request(workspace).await {
+            Ok(overview) => WorkspaceOverviewResult::Ready(overview),
+            Err(error) => WorkspaceOverviewResult::failed(workspace.clone(), format!("{error:#}")),
+        });
+    }
+    let failed = overviews.iter().any(WorkspaceOverviewResult::is_failed);
+    ctx.show(&overviews, |overviews| {
+        let palette = Palette::stdout(ctx.json);
+        for (workspace, overview) in workspaces.iter().zip(overviews) {
+            let heading = palette.paint(Style::Heading, &workspace.name);
+            match overview {
+                WorkspaceOverviewResult::Ready(overview) => {
+                    println!("{heading}");
+                    render(overview, palette);
+                }
+                WorkspaceOverviewResult::Failed { error, .. } => {
+                    println!("{heading}: {}", palette.paint(Style::Warning, error));
+                }
+            }
+        }
+    })?;
+    Ok(i32::from(failed))
 }
 
 pub(crate) async fn run(cli: Cli) -> Result<i32> {

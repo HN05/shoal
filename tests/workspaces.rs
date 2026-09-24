@@ -2600,6 +2600,73 @@ fn interactive_navigation_reports_missing_shell_integration() {
 }
 
 #[test]
+fn resource_overviews_handle_no_workspaces() {
+    let fixture = Fixture::new();
+    for noun in ["port", "resource"] {
+        for args in [vec![noun, "--all"], vec![noun, "list", "--all"]] {
+            assert_eq!(fixture.ok(&args), serde_json::json!([]));
+            let output = fixture.run(&args);
+            assert!(output.status.success());
+            assert!(output.stdout.is_empty());
+            assert!(output.stderr.is_empty());
+        }
+    }
+}
+
+#[test]
+fn resource_overviews_preserve_results_after_workspace_errors() {
+    let fixture = Fixture::new();
+    let broken = fixture.add("broken");
+    fixture.add("healthy");
+    fs::write(
+        Path::new(broken["path"].as_str().unwrap()).join(".shoal.toml"),
+        "invalid = [",
+    )
+    .unwrap();
+    // The daemon lists by name, so a failure must not short-circuit the query.
+    let workspaces = fixture.ok(&["list"]);
+    assert_eq!(workspaces[0]["name"], "broken");
+    assert_eq!(workspaces[1]["name"], "healthy");
+    for (noun, empty_text) in [
+        ("port", "No configured or reserved ports"),
+        ("resource", "No configured resources or leases"),
+    ] {
+        let mut expected = fixture.ok(&[noun, "healthy"]);
+        expected["workspace"] = workspaces[1].clone();
+        for args in [vec![noun, "--all"], vec![noun, "list", "--all"]] {
+            let output = fixture
+                .command()
+                .arg("--json")
+                .args(&args)
+                .output()
+                .unwrap();
+            assert_eq!(output.status.code(), Some(1));
+            assert!(output.stderr.is_empty());
+            let overviews: Value = serde_json::from_slice(&output.stdout).unwrap();
+            assert_eq!(overviews.as_array().unwrap().len(), 2);
+            assert_eq!(overviews[0]["workspace"], workspaces[0]);
+            let error = overviews[0]["error"].as_str().unwrap();
+            assert!(!error.is_empty());
+            assert_eq!(overviews[0].as_object().unwrap().len(), 2);
+            assert_eq!(overviews[1], expected);
+
+            let human = fixture.run(&args);
+            assert_eq!(human.status.code(), Some(1));
+            assert!(human.stderr.is_empty());
+            assert_eq!(
+                String::from_utf8(human.stdout).unwrap(),
+                format!("broken: {error}\nhealthy\n{empty_text}\n")
+            );
+        }
+    }
+    // Once every workspace is healthy, the same overview succeeds.
+    fs::remove_file(Path::new(broken["path"].as_str().unwrap()).join(".shoal.toml")).unwrap();
+    for noun in ["port", "resource"] {
+        assert_eq!(fixture.ok(&[noun, "--all"]).as_array().unwrap().len(), 2);
+    }
+}
+
+#[test]
 fn configured_ports_are_lazy_and_conflicts_require_acceptance() {
     let fixture = Fixture::new();
     let occupied = std::net::TcpListener::bind("127.0.0.1:0").unwrap();

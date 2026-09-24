@@ -15,7 +15,7 @@ use crate::{
     protocol::{Body, Method},
 };
 
-use super::WorkspaceOverviewResult;
+use super::workspace_overviews;
 
 pub(super) async fn run(
     ctx: &Context,
@@ -136,37 +136,20 @@ fn describe(port: &PortReservation, palette: Palette) -> String {
 
 async fn overview(ctx: &Context, scope: WorkspaceScope) -> Result<i32> {
     if scope.all {
-        let mut overviews = Vec::new();
-        for workspace in client::workspaces(&ctx.paths).await? {
-            let method = Method::PortOverview {
-                workspace: workspace.id.clone(),
-            };
-            overviews.push(match request::<PortOverview>(&ctx.paths, method).await {
-                Ok(overview) => WorkspaceOverviewResult::Ready(overview),
-                Err(error) => WorkspaceOverviewResult::failed(workspace, format!("{error:#}")),
-            });
-        }
-        let failed = overviews.iter().any(WorkspaceOverviewResult::is_failed);
-        ctx.show(&overviews, |overviews| {
-            let palette = Palette::stdout(ctx.json);
-            for overview in overviews {
-                match overview {
-                    WorkspaceOverviewResult::Ready(overview) => {
-                        println!(
-                            "{}",
-                            palette.paint(Style::Heading, &overview.workspace.name)
-                        );
-                        render_overview(overview, palette);
-                    }
-                    WorkspaceOverviewResult::Failed { workspace, error } => println!(
-                        "{}: {}",
-                        palette.paint(Style::Heading, &workspace.name),
-                        palette.paint(Style::Warning, error)
-                    ),
-                }
-            }
-        })?;
-        return Ok(i32::from(failed));
+        return workspace_overviews(
+            ctx,
+            async |workspace| {
+                request::<PortOverview>(
+                    &ctx.paths,
+                    Method::PortOverview {
+                        workspace: workspace.id.clone(),
+                    },
+                )
+                .await
+            },
+            render_overview,
+        )
+        .await;
     } else {
         let workspace =
             ui::select_workspace(ctx, scope.workspace, Fallback::CurrentDirectory).await?;

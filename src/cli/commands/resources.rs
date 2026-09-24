@@ -2,7 +2,7 @@
 use anyhow::Result;
 use serde_json::json;
 
-use super::{Attempt, EXIT_BUSY, WorkspaceOverviewResult, retry_while_busy};
+use super::{Attempt, EXIT_BUSY, retry_while_busy, workspace_overviews};
 use crate::{
     cli::{
         ResourceCommand, WorkspaceScope,
@@ -130,40 +130,24 @@ fn describe_short(lease: &ResourceLease, palette: Palette) -> String {
 
 async fn overview(ctx: &Context, scope: WorkspaceScope) -> Result<i32> {
     if scope.all {
-        let mut overviews = Vec::new();
-        for workspace in client::workspaces(&ctx.paths).await? {
-            let method = Method::ResourceOverview {
-                workspace: workspace.id.clone(),
-            };
-            overviews.push(match request::<Overview>(&ctx.paths, method).await {
-                Ok(overview) => WorkspaceOverviewResult::Ready(WorkspaceOverview {
-                    workspace,
+        return workspace_overviews(
+            ctx,
+            async |workspace| {
+                let overview = request::<Overview>(
+                    &ctx.paths,
+                    Method::ResourceOverview {
+                        workspace: workspace.id.clone(),
+                    },
+                )
+                .await?;
+                Ok(WorkspaceOverview {
+                    workspace: workspace.clone(),
                     overview,
-                }),
-                Err(error) => WorkspaceOverviewResult::failed(workspace, format!("{error:#}")),
-            });
-        }
-        let failed = overviews.iter().any(WorkspaceOverviewResult::is_failed);
-        ctx.show(&overviews, |overviews| {
-            let palette = Palette::stdout(ctx.json);
-            for overview in overviews {
-                match overview {
-                    WorkspaceOverviewResult::Ready(overview) => {
-                        println!(
-                            "{}",
-                            palette.paint(Style::Heading, &overview.workspace.name)
-                        );
-                        render_overview(&overview.overview, palette);
-                    }
-                    WorkspaceOverviewResult::Failed { workspace, error } => println!(
-                        "{}: {}",
-                        palette.paint(Style::Heading, &workspace.name),
-                        palette.paint(Style::Warning, error)
-                    ),
-                }
-            }
-        })?;
-        return Ok(i32::from(failed));
+                })
+            },
+            |overview, palette| render_overview(&overview.overview, palette),
+        )
+        .await;
     } else {
         let workspace =
             ui::select_workspace(ctx, scope.workspace, Fallback::CurrentDirectory).await?;
