@@ -5,7 +5,6 @@ use super::{
 use crate::{git, model::Workspace, state::WorkspaceState};
 use anyhow::{Context, Result, ensure};
 use std::path::Path;
-use uuid::Uuid;
 
 impl Manager {
     pub async fn adopt_workspace(&self, repository: &str, path: &Path) -> Result<Workspace> {
@@ -49,17 +48,17 @@ impl Manager {
         let base = existing_base(&repo, branch).await?;
         let commit = git::resolve_commit(&repo.path, &base, git::run_isolated).await?;
         let workspace = Workspace {
-            id: Uuid::new_v4().to_string(),
-            repository_id: repo.id,
-            name: derive_workspace_name(branch),
-            path,
-            branch: branch.into(),
-            state: WorkspaceState::Ready,
-            error: None,
             base_commit: Some(commit),
             base_ref: base.starts_with("refs/").then_some(base),
             git_dir: Some(git_dir),
             git_dir_id: Some(identity),
+            ..Workspace::new_record(
+                repo.id,
+                derive_workspace_name(branch),
+                path,
+                branch.into(),
+                WorkspaceState::Ready,
+            )
         };
         self.verify_worktree(&workspace).await?;
         // Record identity, base and readiness together: a crash must never leave

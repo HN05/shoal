@@ -29,7 +29,6 @@ use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{OptionalExtension, TransactionBehavior, params};
 use std::{collections::HashMap, fs, sync::Arc};
 use tokio::sync::{Mutex, OwnedMutexGuard, RwLock, watch};
-use uuid::Uuid;
 
 pub(crate) enum WorkspaceSource {
     New(Option<String>),
@@ -250,19 +249,13 @@ impl Manager {
             Some(path) => self.workspace_location(repo, &path).await?,
             None => self.workspaces_dir(repo).await?.join(&name),
         };
-        let workspace = Workspace {
-            id: Uuid::new_v4().to_string(),
-            repository_id: repo.id.clone(),
-            path,
+        let workspace = Workspace::new_record(
+            repo.id.clone(),
             name,
+            path,
             branch,
-            state: WorkspaceState::Preparing,
-            error: None,
-            base_commit: None,
-            base_ref: None,
-            git_dir: None,
-            git_dir_id: None,
-        };
+            WorkspaceState::Preparing,
+        );
         ensure!(
             workspace
                 .path

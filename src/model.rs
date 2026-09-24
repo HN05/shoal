@@ -49,6 +49,28 @@ pub struct Workspace {
 }
 
 impl Workspace {
+    pub fn new_record(
+        repository_id: String,
+        name: String,
+        path: PathBuf,
+        branch: String,
+        state: WorkspaceState,
+    ) -> Self {
+        Self {
+            id: uuid::Uuid::new_v4().to_string(),
+            repository_id,
+            name,
+            path,
+            branch,
+            state,
+            error: None,
+            base_commit: None,
+            base_ref: None,
+            git_dir: None,
+            git_dir_id: None,
+        }
+    }
+
     /// True when `path` (canonical) lies inside this worktree.
     pub fn contains(&self, path: &Path) -> bool {
         std::fs::canonicalize(&self.path).is_ok_and(|root| path.starts_with(root))
