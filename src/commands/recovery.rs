@@ -24,8 +24,7 @@ pub(super) async fn run(
         workspaces: vec![],
     };
     if available {
-        let checks: Result<_> =
-            async { Ok(request!(&ctx.paths, Method::Diagnose, Diagnostics)) }.await;
+        let checks = request::<Vec<Check>>(&ctx.paths, Method::Diagnose).await;
         match checks {
             Ok(checks) => report.checks.extend(checks),
             Err(error) => report.checks.push(Check::new(
@@ -106,11 +105,7 @@ async fn workspace_reports(
         return Ok(vec![]);
     }
     let workspace = ui::select_workspace_filter(ctx, workspace, all).await?;
-    Ok(request!(
-        &ctx.paths,
-        Method::Doctor { workspace, options },
-        Doctor
-    ))
+    request(&ctx.paths, Method::Doctor { workspace, options }).await
 }
 
 async fn daemon_check(ctx: &Context) -> (Check, bool) {

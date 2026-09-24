@@ -12,6 +12,7 @@ use crate::{
     model::{Inspection, Repository, Workspace},
     paths::Paths,
     protocol::{self, Body, Method, Request, Response, Status},
+    repo_config::ConfigLayers,
 };
 
 #[derive(Debug)]
@@ -65,29 +66,13 @@ where
     T::try_from(call(paths, method).await?)
 }
 
-mod legacy {
-    /// Call the daemon and unwrap the expected [`Body`] variant.
-    ///
-    /// `request!(paths, Method::InspectWorkspace { workspace }, Inspection)`
-    macro_rules! request {
-        ($paths:expr, $method:expr, $variant:ident) => {
-            match $crate::client::call($paths, $method).await? {
-                $crate::protocol::Body::$variant(value) => value,
-                body => return Err(body.unexpected(stringify!($variant))),
-            }
-        };
-    }
-    pub(crate) use request;
-}
-pub(crate) use legacy::request;
-
 /// The settings that apply to `target` after every layer. The global config
 /// is read now, so launch defaults follow it without a daemon restart.
 pub async fn settings(
     paths: &Paths,
     target: crate::protocol::ConfigTarget,
 ) -> Result<crate::config::Effective> {
-    let layers = request!(paths, Method::LayeredConfig { target }, LayeredConfig);
+    let layers = request::<Box<ConfigLayers>>(paths, Method::LayeredConfig { target }).await?;
     let mut settings = crate::config::Config::load(paths)?.effective(&layers.resolve())?;
     if settings.issue_template.is_none() {
         let config = crate::config::Config::path(paths);
@@ -107,20 +92,16 @@ pub async fn settings(
 }
 
 pub async fn inspect(paths: &Paths, workspace: String) -> Result<Inspection> {
-    Ok(request!(
-        paths,
-        Method::InspectWorkspace { workspace },
-        Inspection
-    ))
+    request(paths, Method::InspectWorkspace { workspace }).await
 }
 
 /// Workspaces visible to this caller; the daemon filters scoped requests.
 pub async fn workspaces(paths: &Paths) -> Result<Vec<Workspace>> {
-    Ok(request!(paths, Method::ListWorkspaces, Workspaces))
+    request(paths, Method::ListWorkspaces).await
 }
 
 pub async fn repositories(paths: &Paths) -> Result<Vec<Repository>> {
-    Ok(request!(paths, Method::ListRepositories, Repositories))
+    request(paths, Method::ListRepositories).await
 }
 
 /// `None` when no daemon is listening on the socket.

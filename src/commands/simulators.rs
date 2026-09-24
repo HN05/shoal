@@ -10,7 +10,7 @@ use crate::{
     output::{Palette, Style},
     protocol::{Body, Method},
     sim_audit::AuditEntry,
-    simulators::{SimRequest, Simulator, SimulatorOverview},
+    simulators::{SimRequest, Simulator, SimulatorCatalog, SimulatorOverview},
     ui::{self, Fallback},
 };
 
@@ -22,7 +22,7 @@ pub(super) async fn run(
 ) -> Result<i32> {
     match command {
         Some(SimCommand::Catalog) => {
-            let catalog = request!(&ctx.paths, Method::SimCatalog, SimCatalog);
+            let catalog = request::<SimulatorCatalog>(&ctx.paths, Method::SimCatalog).await?;
             ctx.show(&catalog, |catalog| {
                 println!(
                     "{}",
@@ -92,15 +92,15 @@ pub(super) async fn run(
             before,
         }) => {
             let workspace = ui::select_workspace_filter(ctx, workspace, all).await?;
-            let entries = request!(
+            let entries = request::<Vec<AuditEntry>>(
                 &ctx.paths,
                 Method::SimHistory {
                     workspace,
                     limit,
                     before,
                 },
-                SimHistory
-            );
+            )
+            .await?;
             ctx.show(&entries, |entries| {
                 for entry in entries {
                     render_history_entry(entry);
@@ -128,7 +128,8 @@ pub(super) async fn run(
 
 async fn overview(ctx: &Context, workspace: Option<String>, all: bool) -> Result<i32> {
     let workspace = ui::select_workspace_filter(ctx, workspace, all).await?;
-    let overview = request!(&ctx.paths, Method::SimOverview { workspace }, SimOverview);
+    let overview =
+        request::<SimulatorOverview>(&ctx.paths, Method::SimOverview { workspace }).await?;
     ctx.show(&overview, |overview| {
         render_overview(overview, Palette::stdout(ctx.json))
     })?;

@@ -19,11 +19,9 @@ pub(super) async fn run(ctx: &Context, command: Option<AccessCommand>) -> Result
             let (AccessCommand::Approve { id } | AccessCommand::Deny { id }) = command else {
                 unreachable!()
             };
-            let request = request!(
-                &ctx.paths,
-                Method::DecideAccess { id, approve },
-                AccessRequest
-            );
+            let request =
+                request::<Box<AccessRequest>>(&ctx.paths, Method::DecideAccess { id, approve })
+                    .await?;
             ctx.emit(&describe(&request), &request)?;
             Ok(0)
         }
@@ -33,7 +31,8 @@ pub(super) async fn run(ctx: &Context, command: Option<AccessCommand>) -> Result
 }
 
 async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32> {
-    let requests = request!(&ctx.paths, Method::ListAccess { workspace }, AccessRequests);
+    let requests =
+        request::<Vec<AccessRequest>>(&ctx.paths, Method::ListAccess { workspace }).await?;
     ctx.show(&requests, |requests| {
         for request in requests {
             println!("{}", describe(request));

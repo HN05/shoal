@@ -13,7 +13,7 @@ use crate::{
     config::Config,
     context::Context,
     execution,
-    model::Workspace,
+    model::{DiffBase, Workspace},
     paths::Paths,
     protocol::{ConfigTarget, Method},
     repo_config::ConfigLayer,
@@ -107,13 +107,13 @@ pub async fn list(ctx: &Context) -> Result<i32> {
                     .flatten()
             });
         if let Some(workspace) = workspace {
-            let layers = request!(
+            let layers = request::<CommandLayers>(
                 &ctx.paths,
                 Method::CommandLayers {
-                    workspace: workspace.id.clone()
+                    workspace: workspace.id.clone(),
                 },
-                CommandLayers
-            );
+            )
+            .await?;
             definitions.extend(
                 layers
                     .worktree_file
@@ -250,13 +250,13 @@ pub async fn expand_with_fields(
     })?;
     let base = if argv.iter().any(|arg| arg.contains("{diff_base}")) {
         Some(
-            request!(
+            request::<DiffBase>(
                 paths,
                 Method::DiffBase {
-                    workspace: workspace.id.clone()
+                    workspace: workspace.id.clone(),
                 },
-                DiffBase
             )
+            .await?
             .commit,
         )
     } else {

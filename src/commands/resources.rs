@@ -167,11 +167,8 @@ async fn overview(ctx: &Context, workspace: Option<String>, all: bool) -> Result
         return Ok(i32::from(failed));
     } else {
         let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-        let overview = request!(
-            &ctx.paths,
-            Method::ResourceOverview { workspace },
-            ResourceOverview
-        );
+        let overview =
+            request::<Overview>(&ctx.paths, Method::ResourceOverview { workspace }).await?;
         ctx.show(&overview, |overview| {
             render_overview(overview, Palette::stdout(ctx.json))
         })?;

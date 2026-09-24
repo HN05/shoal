@@ -23,7 +23,7 @@ pub struct Entry {
 }
 
 pub async fn load(paths: &Paths, target: ConfigTarget) -> Result<Vec<Entry>> {
-    let layers = request!(paths, Method::LayeredConfig { target }, LayeredConfig);
+    let layers = request::<Box<ConfigLayers>>(paths, Method::LayeredConfig { target }).await?;
     let (global_config, global) = Config::load_with_repository_layer(paths)?;
     // Retain the same cross-layer validation used by commands that consume the
     // configuration, especially a port range split across two layers.

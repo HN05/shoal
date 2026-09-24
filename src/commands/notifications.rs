@@ -21,7 +21,7 @@ pub(super) async fn run(ctx: &Context, all: bool, follow: bool, limit: u32) -> R
         unread_only: !all,
         limit,
     };
-    let notifications = request!(&ctx.paths, method, Notifications);
+    let notifications = request::<Vec<Notification>>(&ctx.paths, method).await?;
     ctx.show(&notifications, |notifications| {
         let palette = Palette::stdout(ctx.json);
         for notification in notifications {

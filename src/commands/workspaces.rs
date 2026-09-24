@@ -8,14 +8,17 @@ use crate::{
     cli::{Agent, CodexMode},
     client::{self, request},
     context::Context,
-    env, execution, git,
+    env, execution,
+    existing_branch::{Branch, OpenedWorkspace},
+    git,
     happy::{self, HappyAgent},
     hooks::{self, Hook},
-    model::{Workspace, WorkspaceStatus},
+    model::{DiffBase, Workspace, WorkspaceStatus},
     output::{Palette, Style},
     protocol::{Body, ConfigTarget, Method},
-    recovery::ReconcileOptions,
+    recovery::{ReconcileOptions, Report},
     removal::{BranchChoice, RemovalCheck, RemovalResult},
+    repo_config::Hooks,
     shell,
     state::WorkspaceState,
     templates,
@@ -58,7 +61,7 @@ pub(super) async fn land_worker(ctx: &Context, plan: String) -> Result<i32> {
 
 pub(super) async fn diff(ctx: &Context, workspace: Option<String>) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let base = request!(&ctx.paths, Method::DiffBase { workspace }, DiffBase);
+    let base = request::<DiffBase>(&ctx.paths, Method::DiffBase { workspace }).await?;
     execution::run(
         &ctx.paths,
         base.workspace_id,
@@ -199,13 +202,13 @@ pub(super) async fn add(
             ],
         )?;
         if mode == "existing" {
-            let branches = request!(
+            let branches = request::<Vec<Branch>>(
                 &ctx.paths,
                 Method::ListBranches {
-                    repository: repository.clone()
+                    repository: repository.clone(),
                 },
-                Branches
-            );
+            )
+            .await?;
             let workspaces = client::workspaces(&ctx.paths).await?;
             let repos = client::repositories(&ctx.paths).await?;
             let repo = crate::repository::select(&repos, &repository).await?;
@@ -230,17 +233,17 @@ pub(super) async fn add(
         }
     }
     let (mut workspace, reused) = if let Some(branch) = existing {
-        let opened = request!(
+        let opened = request::<OpenedWorkspace>(
             &ctx.paths,
             Method::OpenBranch {
                 path,
                 repository,
                 branch,
                 git_profile,
-                base
+                base,
             },
-            OpenedWorkspace
-        );
+        )
+        .await?;
         (opened.workspace, opened.reused)
     } else {
         let name = match branch.take() {
@@ -256,17 +259,17 @@ pub(super) async fn add(
             },
         };
         (
-            request!(
+            request::<Workspace>(
                 &ctx.paths,
                 Method::CreateWorkspace {
                     path,
                     repository,
                     name,
                     base,
-                    git_profile
+                    git_profile,
                 },
-                Workspace
-            ),
+            )
+            .await?,
             false,
         )
     };
@@ -394,11 +397,8 @@ async fn custom_agent(
 pub(super) async fn adopt(ctx: &Context, repository: String, path: PathBuf) -> Result<i32> {
     let repository = ui::repository_selector(repository)?;
     let path = super::repositories::absolute(ctx, path)?;
-    let workspace = request!(
-        &ctx.paths,
-        Method::AdoptWorkspace { repository, path },
-        Workspace
-    );
+    let workspace =
+        request::<Workspace>(&ctx.paths, Method::AdoptWorkspace { repository, path }).await?;
     ctx.emit(
         &format!(
             "Adopted {} on branch {} at {} (normal cleanup applies)",
@@ -430,13 +430,13 @@ pub(super) async fn setup(ctx: &Context, workspace: Option<String>) -> Result<i3
 /// Run the repository's `post_setup_cmd`, if any, once the workspace is ready.
 /// A failure keeps the ready workspace and stops what would follow.
 async fn run_post_setup(ctx: &Context, workspace: &Workspace) -> Result<()> {
-    let hooks = request!(
+    let hooks = request::<Hooks>(
         &ctx.paths,
         Method::WorkspaceHooks {
             workspace: workspace.id.clone(),
         },
-        Hooks
-    );
+    )
+    .await?;
     if let Some(command) = hooks.post_setup_cmd {
         hooks::run_interactive(Hook::PostSetup, workspace, &command, &ctx.paths, ctx.json).await?;
     }
@@ -505,7 +505,7 @@ async fn delete_failed_workspace(ctx: &Context, workspace: &Workspace) -> Result
 }
 
 async fn ignore_setup_failure(ctx: &Context, workspace: &Workspace) -> Result<()> {
-    let reports = request!(
+    let reports = request::<Vec<Report>>(
         &ctx.paths,
         Method::Doctor {
             workspace: Some(workspace.id.clone()),
@@ -514,8 +514,8 @@ async fn ignore_setup_failure(ctx: &Context, workspace: &Workspace) -> Result<()
                 ..Default::default()
             },
         },
-        Doctor
-    );
+    )
+    .await?;
     ensure!(
         reports
             .iter()
@@ -554,11 +554,8 @@ pub(super) async fn list(ctx: &Context) -> Result<i32> {
 
 pub(super) async fn status(ctx: &Context, workspace: Option<String>) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let status = request!(
-        &ctx.paths,
-        Method::WorkspaceStatus { workspace },
-        WorkspaceStatus
-    );
+    let status =
+        request::<WorkspaceStatus>(&ctx.paths, Method::WorkspaceStatus { workspace }).await?;
     ctx.show(&status, |status| render_status(status, ctx.json))?;
     Ok(0)
 }
@@ -690,14 +687,14 @@ pub(super) async fn remove(
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let caller_pid = std::process::id();
-    let check = request!(
+    let check = request::<RemovalCheck>(
         &ctx.paths,
         Method::CheckRemoval {
             workspace: workspace.clone(),
             caller_pid,
         },
-        RemovalCheck
-    );
+    )
+    .await?;
     let choice = if keep_branch {
         BranchChoice::KeepBranch
     } else if delete_branch {
@@ -1186,14 +1183,14 @@ pub(super) async fn pr(
     // leave it now, unless the sweep will retain it as dirty. A watched PR
     // keeps the shell where it is until it merges.
     let escape = if url.is_none() && !clear && !env::is_scoped() {
-        let check = request!(
+        let check = request::<RemovalCheck>(
             &ctx.paths,
             Method::CheckRemoval {
                 workspace: workspace.clone(),
                 caller_pid: std::process::id(),
             },
-            RemovalCheck
-        );
+        )
+        .await?;
         if check.dirty {
             None
         } else {

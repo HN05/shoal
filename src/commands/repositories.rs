@@ -7,8 +7,10 @@ use crate::{
     cli::RepoCommand,
     client::{self, request},
     context::Context,
+    model::{Repository, RepositoryRemoval},
     output::{Palette, Style},
     protocol::Method,
+    repo_config::LocalConfig,
     ui,
 };
 
@@ -32,7 +34,7 @@ pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
             } else {
                 Method::RepositoryConfig { repository }
             };
-            let config = request!(&ctx.paths, method, RepositoryConfig);
+            let config = request::<LocalConfig>(&ctx.paths, method).await?;
             ctx.show(&config, |config| {
                 if clear {
                     println!(
@@ -59,13 +61,13 @@ pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
             let source = ui::repository_selector(source)?;
             let path = path.map(|path| absolute(ctx, path)).transpose()?;
             let repo = ctx
-                .progress("Registering repository", async {
-                    Ok::<_, anyhow::Error>(request!(
+                .progress(
+                    "Registering repository",
+                    request::<Repository>(
                         &ctx.paths,
                         Method::RegisterRepository { source, name, path },
-                        Repository
-                    ))
-                })
+                    ),
+                )
                 .await?;
             ctx.emit(
                 &format!(
@@ -86,11 +88,9 @@ pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
         }
         RepoCommand::Rename { repository, name } => {
             let repository = ui::repository_selector(repository)?;
-            let repo = request!(
-                &ctx.paths,
-                Method::RenameRepository { repository, name },
-                Repository
-            );
+            let repo =
+                request::<Repository>(&ctx.paths, Method::RenameRepository { repository, name })
+                    .await?;
             ctx.emit(
                 &format!(
                     "Renamed {}",
@@ -117,13 +117,13 @@ pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
             }
             let repository = ui::repository_selector(repository)?;
             let result = ctx
-                .progress("Removing repository", async {
-                    Ok::<_, anyhow::Error>(request!(
+                .progress(
+                    "Removing repository",
+                    request::<RepositoryRemoval>(
                         &ctx.paths,
                         Method::RemoveRepository { repository },
-                        RepositoryRemoved
-                    ))
-                })
+                    ),
+                )
                 .await?;
             ctx.emit(
                 &format!(

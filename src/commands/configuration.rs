@@ -7,6 +7,7 @@ use crate::{
     model::Workspace,
     output::{Palette, Style},
     protocol::ConfigTarget,
+    repo_config::LocalConfig,
 };
 
 pub(super) async fn edit(
@@ -17,15 +18,15 @@ pub(super) async fn edit(
 ) -> Result<i32> {
     if let Some(repository) = repository {
         let repository = crate::ui::repository_selector(repository)?;
-        let config = crate::client::request!(
+        let config = crate::client::request::<LocalConfig>(
             &ctx.paths,
             crate::protocol::Method::EditRepositoryConfig {
                 repository,
                 key,
-                value
+                value,
             },
-            RepositoryConfig
-        );
+        )
+        .await?;
         ctx.emit("Updated saved repository config", &config)?;
         return Ok(0);
     }
