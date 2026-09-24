@@ -1,7 +1,9 @@
+mod common;
+
 use std::{fs, path::Path, process::Command};
 
 fn command(home: &Path) -> Command {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_shoal"));
+    let mut command = common::isolated(env!("CARGO_BIN_EXE_shoal"));
     command
         .current_dir(home)
         .env("HOME", home)

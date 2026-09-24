@@ -1,9 +1,11 @@
+mod common;
+
 use std::{
     fs::File,
     io::{BufRead, BufReader, Read, Write},
     os::fd::{AsRawFd, FromRawFd},
     os::unix::net::UnixListener,
-    process::{Command, Output, Stdio},
+    process::{Output, Stdio},
     thread,
     time::Duration,
 };
@@ -36,7 +38,7 @@ fn run_with_reply(
             writeln!(stream, "{reply}").unwrap();
         })
     });
-    let mut command = Command::new(env!("CARGO_BIN_EXE_shoal"));
+    let mut command = common::isolated(env!("CARGO_BIN_EXE_shoal"));
     command
         .args(["--state-dir", root.path().to_str().unwrap()])
         .args(args)

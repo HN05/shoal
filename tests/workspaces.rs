@@ -1,3 +1,5 @@
+mod common;
+
 use serde_json::Value;
 use std::{
     fs,
@@ -210,7 +212,7 @@ impl Drop for Fixture {
 }
 
 fn cli(root: &Path) -> Command {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_shoal"));
+    let mut command = common::isolated(env!("CARGO_BIN_EXE_shoal"));
     command
         .arg("--state-dir")
         .arg(root.join("state"))
@@ -2454,7 +2456,7 @@ until ! shoal inspect acknowledged >/dev/null 2>&1; do sleep 0.1; done
 printf 'navigation-ok\n'
 "#;
     for shell in ["bash", "zsh"] {
-        let output = Command::new(shell)
+        let output = common::isolated(shell)
             .arg("-c")
             .arg(script)
             .env("INTEGRATION", &integration)

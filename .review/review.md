@@ -115,7 +115,8 @@ removal, check it against the rule those files state before judging it.
   keeps a backup, and uses templates embedded in the binary.
   Packaged skills use the runtime `SHOAL_SKILL_PATH` before the build-time path;
   the path must name an absolute, existing file.
-- Tests run in temporary state directories and repositories, use the isolated
+- Tests run in temporary state directories and repositories without the launching
+  environment's Shoal variables or configuration locations, use the isolated
   xcrun fixture, and never install services or touch personal simulators.
 - Documentation: usage lives in README.md, behavior in docs/reference.md,
   decisions in design.md, contributor rules in AGENTS.md. Flag behavior

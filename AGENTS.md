@@ -112,7 +112,8 @@ line count.
 ## Validation
 
 Run `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, and `cargo test`
-for Rust changes. Test in temporary state directories and repositories; never install
+for Rust changes. Test in temporary state directories and repositories, without the
+launching environment's Shoal variables or configuration locations; never install
 persistent OS services or modify real user workspaces as a side effect of tests.
 
 ## CI
