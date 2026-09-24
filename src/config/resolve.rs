@@ -72,13 +72,14 @@ impl Stack {
     /// The settings in effect; fails when the layers combine into an invalid
     /// setting, such as a repository `ports.start` above the global `ports.end`.
     pub fn resolve(self) -> Result<Effective> {
-        let merged = self
-            .layers
-            .into_iter()
-            .map(|(config, _)| config)
-            .reduce(|base, top| top.over(base))
-            .expect("the stack has a built-in layer");
-        Effective::from_merged(merged)
+        let [(built_in, _), (global, _), (worktree_file, _), (saved, _)] = self.layers;
+        let repository = saved.over(worktree_file);
+        // Each layer is valid alone; the repository's layered names must agree
+        // too. A repository name that shadows a global one is allocation's
+        // concern, so a conflict there never blocks the workspace's settings.
+        crate::daemon::resources::definitions(&repository.resources, &repository.resource_pools)
+            .context("layered repository config")?;
+        Effective::from_merged(repository.over(global.over(built_in)))
     }
 
     /// Every option with its value and winning layer, in configuration order.
@@ -137,8 +138,6 @@ impl Effective {
             definitions: merged.ports.definitions,
         };
         ports.validate()?;
-        crate::daemon::resources::definitions(&merged.resources, &merged.resource_pools)
-            .context("layered resource definitions")?;
         Ok(Self {
             commands: merged.commands,
             issue_template: merged.issue_template,
@@ -614,9 +613,9 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
             ),
             ("", "[ports]\nstart = 5000\n", "[ports]\nend = 4000\n"),
             (
-                "[resource_pools.lock]\ncapacity = 2\n",
-                "[resources.lock]\ncapacity = 1\n",
                 "",
+                "[resource_pools.lock]\ncapacity = 2\n[resource_pools.lock.resources.a]\ncapacity = 1\n",
+                "[resources.lock]\ncapacity = 1\n",
             ),
         ] {
             let stack = stack(global, worktree, saved);
@@ -626,13 +625,21 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
             );
             assert!(stack.report().is_err(), "{global}|{worktree}|{saved}");
         }
-        let stack = stack(
+        let split = stack(
             "[ports]\nstart = 3000\nend = 3100\n",
             "",
             "[ports]\nstart = 3050\n",
         );
-        let ports = stack.clone().resolve().unwrap().ports;
+        let ports = split.resolve().unwrap().ports;
         assert_eq!((ports.start, ports.end), (3050, 3100));
+        // A repository name shadowing a global one is checked at allocation,
+        // so it never blocks the settings that hooks and removal read.
+        let shadowed = stack(
+            "[resource_pools.lock]\ncapacity = 2\n[resource_pools.lock.resources.a]\ncapacity = 1\n",
+            "[resources.lock]\ncapacity = 1\n",
+            "",
+        );
+        assert!(shadowed.resolve().is_ok());
     }
 
     #[test]

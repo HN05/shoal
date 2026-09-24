@@ -153,15 +153,10 @@ impl Manager {
             .map(|text| config::repo::parse(&text).context("parse local repository config"))
             .transpose()?
             .unwrap_or_default();
-        let layers = ConfigLayers {
+        Ok(ConfigLayers {
             worktree_file,
             saved_repository_config,
-        };
-        // Each layer is valid alone; the layered names must agree too.
-        let repository = layers.repository();
-        crate::daemon::resources::definitions(&repository.resources, &repository.resource_pools)
-            .context("layered repository config")?;
-        Ok(layers)
+        })
     }
 
     /// The workspace's settings after every layer: the saved config, the

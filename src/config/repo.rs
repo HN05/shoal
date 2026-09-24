@@ -39,15 +39,6 @@ impl std::fmt::Display for ConfigLayer {
     }
 }
 
-impl ConfigLayers {
-    /// The repository's own layers combined, without this machine's.
-    pub fn repository(&self) -> RepoConfig {
-        self.saved_repository_config
-            .clone()
-            .over(self.worktree_file.clone())
-    }
-}
-
 states!(
     #[derive(Default)]
     ConflictPolicy: ValueEnum {
