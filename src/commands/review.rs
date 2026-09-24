@@ -17,6 +17,7 @@ use crate::{
 /// The configured command a manual review runs.
 const MANUAL: &str = "review";
 
+#[derive(Clone)]
 pub(super) enum Reviewer {
     Ask,
     Manual,
@@ -147,19 +148,14 @@ pub(super) async fn run(
                 .default_agent
                 .clone()
                 .map_or_else(|| "pick an agent".into(), String::from);
-            let choice = ui::pick(
+            ui::pick_choice(
                 ctx,
                 "Review> ",
-                vec![
-                    ("manual".into(), format!("Manual ({MANUAL} command)")),
-                    ("agent".into(), format!("Agent ({agent})")),
+                &[
+                    (Reviewer::Manual, &format!("Manual ({MANUAL} command)")),
+                    (Reviewer::Agent(None), &format!("Agent ({agent})")),
                 ],
-            )?;
-            if choice == "manual" {
-                Reviewer::Manual
-            } else {
-                Reviewer::Agent(None)
-            }
+            )?
         }
         Reviewer::Ask => bail!("choose a reviewer with --manual or --agent <name>"),
         reviewer => reviewer,
