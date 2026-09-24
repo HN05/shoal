@@ -9,7 +9,6 @@
 //! token on stdin, never on the command line.
 use std::{
     path::{Path, PathBuf},
-    process::Stdio,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -17,7 +16,6 @@ use anyhow::{Context, Result, bail, ensure};
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use serde_json::{Value, json};
 use tokio::{
-    io::AsyncWriteExt,
     process::Command,
     time::{Instant, sleep},
 };
@@ -150,26 +148,16 @@ impl Server {
             }
             None => None,
         };
-        curl.arg(format!("{}{path}", self.url))
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .kill_on_drop(true);
-        let mut child = curl
-            .spawn()
-            .context("run curl; install it to talk to Happy's server")?;
-        let mut stdin = child.stdin.take().context("curl stdin unavailable")?;
+        curl.arg(format!("{}{path}", self.url));
         // curl's config syntax: the token never appears on a command line.
-        stdin
-            .write_all(format!("header = \"Authorization: Bearer {}\"\n", self.token).as_bytes())
-            .await?;
-        drop(stdin);
-        let output = child.wait_with_output().await?;
-        ensure!(
-            output.status.success(),
-            "Happy server request {method} {path} failed: {}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        );
+        let output = crate::subprocess::Run::new(curl)
+            .input(format!("header = \"Authorization: Bearer {}\"\n", self.token).into_bytes())
+            .timeout(Duration::from_secs(30))
+            .checked()
+            .await
+            .with_context(|| {
+                format!("Happy server request {method} {path} failed; curl is required")
+            })?;
         if output.stdout.iter().all(u8::is_ascii_whitespace) {
             return Ok(Value::Null);
         }

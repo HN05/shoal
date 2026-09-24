@@ -94,8 +94,10 @@ removal, check it against the rule those files state before judging it.
   Plain command invocations expand `{prompt}` to an empty string.
 - AI skill directories are machine-only configuration. Skill installation accepts
   configured tool names, needs no daemon, and remains denied to scoped processes.
-- External tools are invoked with argument arrays, never shell strings. Internal
-  CLI workers use one typed builder with explicit state directory and output mode.
+- External tools are invoked with argument arrays, never shell strings. Captured
+  subprocesses share optional deadlines and bounded diagnostics, terminate on
+  cancellation, and drain output while sending input. Internal CLI workers use
+  one typed builder with explicit state directory and output mode.
   Terminal I/O stays in the execution wrapper; the daemon owns state and prepares
   each execution kind before shared registration through one request. CLI
   styles, enum `Display` formatting and transient progress belong at presentation

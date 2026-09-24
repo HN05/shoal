@@ -55,7 +55,9 @@ verified stopped before replacing their service.
 Worktrunk creates and removes worktrees through Shoal's adapter with isolated
 configuration and hooks disabled. Typed adapter outcomes preserve unfamiliar strings;
 only confirmed branch deletion sets the response deletion flag. Invoke external
-tools with argument arrays. Keep writable state outside the binary's directory.
+tools with argument arrays. Captured subprocesses share optional deadlines and a
+single diagnostic limit, terminate on cancellation, and drain output while sending
+input. Keep writable state outside the binary's directory.
 Service setup manages one per-user launchd/systemd service; foreground mode covers
 environments without a service manager. The service captures the installing shell's
 `PATH`.
