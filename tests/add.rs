@@ -1,4 +1,4 @@
-mod common;
+mod support;
 
 use serde_json::{Value, json};
 use std::{
@@ -55,7 +55,7 @@ fn add_reuses_resolution_requests_without_reordering_failures() {
             vec!["remote", "add", "origin", "https://forge.example/team/repo"],
         ] {
             assert!(
-                common::isolated("git")
+                support::isolated(root.path(), "git")
                     .current_dir(root.path())
                     .env("HOME", root.path())
                     .env("GIT_CONFIG_GLOBAL", "/dev/null")
@@ -120,7 +120,7 @@ fn add_reuses_resolution_requests_without_reordering_failures() {
             }
             methods
         });
-        let output = common::isolated(env!("CARGO_BIN_EXE_shoal"))
+        let output = support::cli(root.path())
             .args(["--state-dir", root.path().to_str().unwrap(), "--json"])
             .args(&args)
             .current_dir(root.path())
