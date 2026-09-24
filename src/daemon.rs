@@ -104,14 +104,17 @@ pub async fn run(paths: Paths, managed: bool) -> Result<()> {
     background.spawn(cleanup::run(manager.clone()));
     background.spawn(expire_simulators(manager.clone()));
     let mut clients = JoinSet::new();
-    loop {
+    let result = loop {
         tokio::select! {
-            _ = terminate.recv() => break,
-            _ = interrupt.recv() => break,
-            _ = shutdown_rx.changed() => break,
+            _ = terminate.recv() => break Ok(()),
+            _ = interrupt.recv() => break Ok(()),
+            _ = shutdown_rx.changed() => break Ok(()),
             Some(_) = clients.join_next(), if !clients.is_empty() => {},
             accepted = listener.accept(), if clients.len() < MAX_CLIENTS => {
-                let (stream, _) = accepted?;
+                let (stream, _) = match accepted {
+                    Ok(accepted) => accepted,
+                    Err(error) => break Err(error.into()),
+                };
                 let server = server.clone();
                 clients.spawn(async move {
                     if let Err(error) = serve(stream, server).await {
@@ -120,10 +123,11 @@ pub async fn run(paths: Paths, managed: bool) -> Result<()> {
                 });
             }
         }
-    }
+    };
     background.shutdown().await;
     clients.shutdown().await;
-    Ok(())
+    manager.store.shutdown().await;
+    result
 }
 
 fn remove_stale_socket(paths: &Paths) -> Result<()> {

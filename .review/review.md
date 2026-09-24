@@ -127,7 +127,10 @@ removal, check it against the rule those files state before judging it.
   Resource protocol methods use domain-then-verb names matching the CLI operations.
   Independent per-workspace overview reads use bounded concurrency, preserve
   workspace order and account for failures without blocking other reads.
-- Persistence: closed Shoal enums with matching display and wire names share
+- Persistence: SQLite work stays on its dedicated thread, with one connection and
+  a bounded queue. Shutdown drains admitted operations before releasing ownership;
+  cancellation or failure never replays a closure that may have committed.
+  Closed Shoal enums with matching display and wire names share
   explicit spellings through one macro and reject unknown values. Opening persistence
   only migrates schema; daemon startup
   quarantines interrupted operations atomically after migration and before ownership

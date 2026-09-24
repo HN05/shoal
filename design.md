@@ -34,6 +34,11 @@ The minimum Rust version follows current stable so the code can use its newest
 features; the manifest and CI toolchain advance together, with locked dependencies.
 Resource protocol methods use domain-then-verb names matching the CLI operations.
 The daemon owns SQLite state, allocation, lifecycle transitions, and recovery.
+SQLite runs on one dedicated blocking thread with one reusable connection and a
+128-operation queue; callers wait for queue space. Admitted operations run once
+even if their caller disconnects, and shutdown drains them before releasing daemon
+ownership. Connections retain foreign keys and a five-second busy timeout; a panic
+or unfinished transaction discards the connection before the next operation.
 Daemon errors retain typed codes and messages on the client without changing the
 wire format; unfamiliar codes are preserved verbatim for version compatibility.
 

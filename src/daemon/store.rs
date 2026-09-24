@@ -16,16 +16,19 @@ const SCHEMA_VERSION: i64 = 19;
 
 #[cfg(test)]
 mod benchmark;
+mod worker;
 
 #[derive(Clone)]
 pub struct Store {
-    path: PathBuf,
+    worker: std::sync::Arc<worker::Worker>,
 }
 
 impl Store {
     /// Open persistence and migrate its schema without changing active operations.
     pub async fn open(path: PathBuf) -> Result<Self> {
-        let store = Self { path };
+        let store = Self {
+            worker: worker::Worker::start(path)?,
+        };
         store
             .run(migrate)
             .await
@@ -65,20 +68,16 @@ impl Store {
         .context("quarantine interrupted operations at daemon startup")
     }
 
-    /// Run `operation` on a fresh connection on the blocking pool.
+    /// Run once on the connection's blocking worker, waiting for queue space.
     pub async fn run<T: Send + 'static>(
         &self,
         operation: impl FnOnce(&mut Connection) -> Result<T> + Send + 'static,
     ) -> Result<T> {
-        let path = self.path.clone();
-        tokio::task::spawn_blocking(move || {
-            let mut db = Connection::open(path).context("open Shoal state database")?;
-            db.busy_timeout(Duration::from_secs(5))?;
-            db.execute_batch("PRAGMA foreign_keys=ON;")?;
-            operation(&mut db)
-        })
-        .await
-        .context("database worker failed")?
+        self.worker.run(operation).await
+    }
+
+    pub async fn shutdown(&self) {
+        self.worker.shutdown().await;
     }
 }
 

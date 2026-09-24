@@ -22,6 +22,7 @@ type Job = Box<dyn FnOnce(&mut Connection) + Send>;
 #[derive(Clone)]
 enum Backend {
     Fresh(PathBuf),
+    Production(Store),
     Reuse(mpsc::SyncSender<Job>),
 }
 
@@ -83,6 +84,14 @@ impl Backend {
                     job(&mut db);
                 })
                 .await?;
+            }
+            Self::Production(store) => {
+                store
+                    .run(move |db| {
+                        job(db);
+                        Ok(())
+                    })
+                    .await?
             }
             Self::Reuse(sender) => sender
                 .try_send(job)
@@ -196,6 +205,8 @@ async fn connection_setup() -> Result<()> {
                     let metrics = Arc::new(Metrics::default());
                     let backend = if workers == 0 {
                         Backend::Fresh(path)
+                    } else if workers == 1 {
+                        Backend::Production(Store::open(path).await?)
                     } else {
                         Backend::reuse(path, workers, metrics.clone())
                     };
@@ -225,6 +236,13 @@ async fn connection_setup() -> Result<()> {
                     let elapsed = start.elapsed().as_secs_f64();
                     latencies.sort_unstable();
                     let calls = metrics.calls.load(Ordering::Relaxed) as f64;
+                    if let Backend::Production(store) = &backend {
+                        metrics.opens.store(
+                            store.worker.opens.load(Ordering::Relaxed),
+                            Ordering::Relaxed,
+                        );
+                        store.shutdown().await;
+                    }
                     println!(
                         "{workers},{rows},{clients},{},{},{:.0},{},{},{},{:.2},{:.2}",
                         if mixed { "mixed" } else { "read" },
