@@ -3,13 +3,13 @@
 use anyhow::{Result, ensure};
 
 use crate::{
+    agent::{BuiltinAgent, CodexMode},
     cli::{
-        CodexMode, Command, ConfirmationArgs, client,
+        Command, ConfirmationArgs, client,
         context::Context,
         ui::{self, KeyBindings},
     },
     env,
-    happy::HappyAgent,
 };
 
 const ADD_ENTRY: &str = "add-workspace";
@@ -111,7 +111,7 @@ pub(super) async fn choose(ctx: &Context) -> Result<Command> {
 enum ExecuteChoice {
     Claude,
     Codex(CodexMode),
-    Happy(HappyAgent),
+    Happy(BuiltinAgent),
     T3,
     Shell,
 }
@@ -124,8 +124,8 @@ fn execute_command(ctx: &Context, workspace: Option<String>) -> Result<Command> 
             (ExecuteChoice::Claude, "claude"),
             (ExecuteChoice::Codex(CodexMode::Cli), "codex cli"),
             (ExecuteChoice::Codex(CodexMode::App), "codex app"),
-            (ExecuteChoice::Happy(HappyAgent::Claude), "happy claude"),
-            (ExecuteChoice::Happy(HappyAgent::Codex), "happy codex"),
+            (ExecuteChoice::Happy(BuiltinAgent::Claude), "happy claude"),
+            (ExecuteChoice::Happy(BuiltinAgent::Codex), "happy codex"),
             (ExecuteChoice::T3, "t3"),
             (ExecuteChoice::Shell, "custom shell command"),
         ],

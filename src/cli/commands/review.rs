@@ -4,8 +4,9 @@ use std::ffi::OsString;
 use anyhow::{Context as _, Result, bail};
 
 use crate::{
+    agent::{Agent, CodexMode},
     cli::{
-        Agent, CodexMode, client,
+        client,
         context::Context,
         ui::{self, Fallback},
     },

@@ -22,11 +22,8 @@ use tokio::{
 };
 use uuid::Uuid;
 
-use super::{
-    HappyAgent,
-    crypto::{self, Variant},
-};
-use crate::{model::Workspace, paths::Paths};
+use super::crypto::{self, Variant};
+use crate::{agent::BuiltinAgent, model::Workspace, paths::Paths};
 
 pub const SERVER_URL_ENV: &str = "HAPPY_SERVER_URL";
 const DEFAULT_SERVER_URL: &str = "https://api.cluster-fluster.com";
@@ -208,7 +205,7 @@ pub struct Seeded {
 
 /// Create a session for `agent` in `workspace` on Happy's server, encrypted
 /// the way happy-cli would have encrypted it for this account.
-pub async fn seed(paths: &Paths, workspace: &Workspace, agent: HappyAgent) -> Result<Seeded> {
+pub async fn seed(paths: &Paths, workspace: &Workspace, agent: BuiltinAgent) -> Result<Seeded> {
     let happy_home = super::home(&paths.home);
     let credentials = read_credentials(&happy_home)?;
     let settings = read_settings(&happy_home);
@@ -252,7 +249,7 @@ pub async fn seed(paths: &Paths, workspace: &Workspace, agent: HappyAgent) -> Re
         "startedBy": "daemon",
         "lifecycleState": "running",
         "lifecycleStateSince": now_millis,
-        "flavor": agent.name(),
+        "flavor": agent.as_str(),
         "gitBranch": workspace.branch,
     });
     let body = json!({

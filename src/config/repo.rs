@@ -1,4 +1,4 @@
-use crate::cli::{Agent, CodexMode};
+use crate::agent::{Agent, CodexMode};
 use crate::state::states;
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
@@ -266,7 +266,7 @@ mod tests {
         let back: RepoConfig = serde_json::from_value(json).unwrap();
         assert_eq!(
             back.default_agent,
-            Some(Agent::Happy(crate::happy::HappyAgent::Codex))
+            Some(Agent::Happy(crate::agent::BuiltinAgent::Codex))
         );
         assert_eq!(back.ports.definitions["web"].port, Some(1));
         assert!(

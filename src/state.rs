@@ -145,7 +145,7 @@ mod tests {
     #[test]
     fn migrated_enums_preserve_spellings_and_defaults() {
         use crate::{
-            cli::CodexMode,
+            agent::{BuiltinAgent, CodexMode},
             config::repo::ConflictPolicy,
             daemon::{
                 access::{DecisionStatus, Lifetime},
@@ -154,7 +154,6 @@ mod tests {
                 resources::{LockMode, ResourceKind},
                 workspace::ExecutionKind,
             },
-            happy::HappyAgent,
         };
         assert_spellings(&[
             (Lifetime::Lease, "lease"),
@@ -196,7 +195,10 @@ mod tests {
             (ExecutionKind::Land, "land"),
             (ExecutionKind::Setup, "setup"),
         ]);
-        assert_spellings(&[(HappyAgent::Claude, "claude"), (HappyAgent::Codex, "codex")]);
+        assert_spellings(&[
+            (BuiltinAgent::Claude, "claude"),
+            (BuiltinAgent::Codex, "codex"),
+        ]);
         assert_eq!(Lifetime::default(), Lifetime::Lease);
         assert_eq!(ResourceKind::default(), ResourceKind::Semaphore);
         assert_eq!(ConflictPolicy::default(), ConflictPolicy::Suggest);

@@ -139,10 +139,10 @@ fn decorate(command: Command, parent: &str, typed: Arc<Typed>) -> Command {
             {
                 let typed = typed.clone();
                 arg.add(ArgValueCompleter::new(move |current: &OsStr| {
-                    let mut names = crate::cli::Agent::possible_values();
+                    let mut names = crate::agent::Agent::possible_values();
                     names.extend(
                         typed.command_names().into_iter().filter(|name| {
-                            matches!(name.parse(), Ok(crate::cli::Agent::Custom(_)))
+                            matches!(name.parse(), Ok(crate::agent::Agent::Custom(_)))
                         }),
                     );
                     names

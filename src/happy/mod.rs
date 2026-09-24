@@ -11,7 +11,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::state::states;
+use crate::agent::BuiltinAgent;
 
 /// Happy's home directory override and the daemon state file inside it.
 pub const HOME_ENV: &str = "HAPPY_HOME_DIR";
@@ -25,36 +25,25 @@ pub fn home(user_home: &Path) -> PathBuf {
         .unwrap_or_else(|| user_home.join(".happy"))
 }
 
-states!(HappyAgent: ValueEnum {
-    Claude => "claude",
-    Codex => "codex",
-});
-
-impl HappyAgent {
-    pub fn name(self) -> &'static str {
-        self.as_str()
-    }
-
-    /// `happy claude` forwards unknown arguments to Claude Code, so a
-    /// positional prompt reaches it. `happy codex` parses only its own flags
-    /// and ignores everything else, so a prompt cannot be delivered that way.
-    pub fn accepts_prompt(self) -> bool {
-        self == HappyAgent::Claude
-    }
+/// `happy claude` forwards unknown arguments to Claude Code, so a
+/// positional prompt reaches it. `happy codex` parses only its own flags
+/// and ignores everything else, so a prompt cannot be delivered that way.
+pub fn accepts_prompt(agent: BuiltinAgent) -> bool {
+    agent == BuiltinAgent::Claude
 }
 
 /// The session command: Happy's own flags first, in the order its daemon
 /// uses, then the prompt (when the agent can take one) and caller arguments.
-pub fn command(agent: HappyAgent, prompt: Option<&str>, args: Vec<OsString>) -> Vec<OsString> {
+pub fn command(agent: BuiltinAgent, prompt: Option<&str>, args: Vec<OsString>) -> Vec<OsString> {
     let mut command: Vec<OsString> = vec![
         "happy".into(),
-        agent.name().into(),
+        agent.as_str().into(),
         "--happy-starting-mode".into(),
         "remote".into(),
         "--started-by".into(),
         "daemon".into(),
     ];
-    if let Some(prompt) = prompt.filter(|_| agent.accepts_prompt()) {
+    if let Some(prompt) = prompt.filter(|_| accepts_prompt(agent)) {
         command.push(prompt.into());
     }
     command.extend(args);
@@ -77,7 +66,7 @@ mod tests {
     #[test]
     fn claude_sessions_take_the_prompt_after_happy_flags_and_before_arguments() {
         let command = command(
-            HappyAgent::Claude,
+            BuiltinAgent::Claude,
             Some("Fix #34"),
             vec!["--model".into(), "opus".into()],
         );
@@ -95,15 +84,15 @@ mod tests {
                 "opus",
             ]
         );
-        let bare = super::command(HappyAgent::Claude, None, vec![]);
+        let bare = super::command(BuiltinAgent::Claude, None, vec![]);
         assert_eq!(bare.len(), 6);
         assert_eq!(bare[1], "claude");
     }
 
     #[test]
     fn codex_sessions_never_receive_a_positional_prompt() {
-        assert!(!HappyAgent::Codex.accepts_prompt());
-        let command = command(HappyAgent::Codex, Some("Fix #34"), vec!["--yolo".into()]);
+        assert!(!accepts_prompt(BuiltinAgent::Codex));
+        let command = command(BuiltinAgent::Codex, Some("Fix #34"), vec!["--yolo".into()]);
         assert_eq!(
             strings(&command),
             [

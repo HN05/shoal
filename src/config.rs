@@ -33,7 +33,7 @@ pub struct Config {
     /// Former name of `root_dir`; still accepted so existing configs load.
     pub repositories_dir: Option<PathBuf>,
     /// Agent `shoal issue` starts when `--agent` is omitted.
-    pub default_agent: Option<crate::cli::Agent>,
+    pub default_agent: Option<crate::agent::Agent>,
     pub codex: repo::Codex,
     pub auto_cleanup: repo::AutoCleanup,
     pub pr_cleanup: repo::PrCleanup,
@@ -45,7 +45,7 @@ pub struct Config {
 
 #[derive(Debug, Default, Serialize)]
 pub struct Codex {
-    pub default_mode: crate::cli::CodexMode,
+    pub default_mode: crate::agent::CodexMode,
 }
 
 /// The global `[ports]` range as written, so an omitted bound stays
@@ -120,7 +120,7 @@ mod tests {
 
     #[test]
     fn codex_mode_defaults_to_cli_and_rejects_invalid_settings() {
-        use crate::cli::CodexMode;
+        use crate::agent::CodexMode;
 
         for text in ["", "[codex]"] {
             let config: Config = toml::from_str(text).unwrap();
@@ -225,7 +225,7 @@ mod tests {
             })
             .collect();
         let config = Config::parse(&enabled, &paths).unwrap();
-        assert_eq!(config.default_agent, Some(crate::cli::Agent::Codex));
+        assert_eq!(config.default_agent, Some(crate::agent::Agent::Codex));
         assert!(config.simulators.profiles.contains_key("phone"));
         assert!(config.resource_pools.contains_key("devices"));
     }
@@ -244,7 +244,7 @@ mod tests {
         let text = fs::read_to_string(&path).unwrap();
         assert_eq!(
             Config::parse(&text, &paths).unwrap().default_agent,
-            Some(crate::cli::Agent::Claude)
+            Some(crate::agent::Agent::Claude)
         );
         // Reset keeps the edited file as a backup and restores the template.
         let (same, backup) = Config::replace_at(expected.clone(), default_template()).unwrap();
@@ -264,7 +264,7 @@ mod tests {
 
     #[test]
     fn default_agent_accepts_agent_spellings_only() {
-        use crate::{cli::Agent, happy::HappyAgent};
+        use crate::agent::{Agent, BuiltinAgent};
 
         assert_eq!(toml::from_str::<Config>("").unwrap().default_agent, None);
         for (text, agent) in [
@@ -273,7 +273,7 @@ mod tests {
             ("default_agent = 'pi'", Agent::Custom("pi".into())),
             (
                 "default_agent = 'happy-codex'",
-                Agent::Happy(HappyAgent::Codex),
+                Agent::Happy(BuiltinAgent::Codex),
             ),
         ] {
             let config: Config = toml::from_str(text).unwrap();
@@ -337,7 +337,7 @@ mod tests {
 
     #[test]
     fn agent_defaults_come_from_the_repository_before_the_global_config() {
-        use crate::cli::{Agent, CodexMode};
+        use crate::agent::{Agent, CodexMode};
 
         let global: Config =
             toml::from_str("default_agent = 'claude'\n[codex]\ndefault_mode = 'app'\n").unwrap();

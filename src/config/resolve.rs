@@ -23,7 +23,7 @@ pub struct Effective {
     pub agent_template: Option<String>,
     pub agent_auth: crate::agent_auth::Config,
     pub git_profile: Option<String>,
-    pub default_agent: Option<crate::cli::Agent>,
+    pub default_agent: Option<crate::agent::Agent>,
     pub codex: Codex,
     pub setup_cmd: Option<String>,
     pub pre_setup_cmd: Option<String>,

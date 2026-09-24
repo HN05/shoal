@@ -9,7 +9,8 @@ use std::ffi::OsString;
 use anyhow::{Result, bail};
 
 use crate::{
-    cli::{Agent, CodexMode, client, context::Context, ui},
+    agent::{Agent, CodexMode},
+    cli::{client, context::Context, ui},
     config::Effective,
     model::Workspace,
     protocol::ConfigTarget,

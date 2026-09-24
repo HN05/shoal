@@ -13,7 +13,7 @@ use std::{ffi::OsString, path::PathBuf};
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
-use crate::{happy::HappyAgent, state::states};
+use crate::agent::{Agent, BuiltinAgent};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -305,7 +305,7 @@ pub enum Command {
     /// Start a detached Happy session (Claude Code or Codex) that appears in the Happy app.
     Happy {
         #[arg(value_enum)]
-        agent: HappyAgent,
+        agent: BuiltinAgent,
         workspace: Option<String>,
         /// First message for the session; delivered through Happy's server when the agent takes no prompt argument.
         #[arg(long)]
@@ -395,84 +395,13 @@ impl Command {
     }
 }
 
-states!(
-    #[derive(Default)]
-    CodexMode {
-        #[default]
-        Cli => "cli",
-        App => "app",
+impl ValueEnum for BuiltinAgent {
+    fn value_variants<'a>() -> &'a [Self] {
+        Self::ALL
     }
-);
 
-/// What `add --agent` starts: a terminal agent, or a detached Happy session
-/// running one of Happy's agents, or a user-configured command.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
-#[serde(try_from = "String", into = "String")]
-pub enum Agent {
-    Codex,
-    Claude,
-    Happy(HappyAgent),
-    Custom(String),
-}
-
-impl Agent {
-    /// Built-in agent spellings, in help and completion order.
-    pub fn possible_values() -> Vec<String> {
-        let mut values = vec!["codex".to_owned(), "claude".to_owned()];
-        values.extend(
-            HappyAgent::value_variants()
-                .iter()
-                .filter_map(|agent| agent.to_possible_value())
-                .map(|value| format!("{}{}", HAPPY_PREFIX, value.get_name())),
-        );
-        values
-    }
-}
-
-const HAPPY_PREFIX: &str = "happy-";
-
-impl std::str::FromStr for Agent {
-    type Err = ();
-
-    fn from_str(value: &str) -> Result<Self, ()> {
-        match value {
-            "codex" => Ok(Agent::Codex),
-            "claude" => Ok(Agent::Claude),
-            _ if value.starts_with(HAPPY_PREFIX) => value
-                .strip_prefix(HAPPY_PREFIX)
-                .and_then(|agent| HappyAgent::from_str(agent, false).ok())
-                .map(Agent::Happy)
-                .ok_or(()),
-            _ if value != "happy" && crate::validate::lowercase_name("agent", value).is_ok() => {
-                Ok(Agent::Custom(value.to_owned()))
-            }
-            _ => Err(()),
-        }
-    }
-}
-
-/// Config spelling: the same values `--agent` accepts.
-impl TryFrom<String> for Agent {
-    type Error = String;
-
-    fn try_from(value: String) -> Result<Self, String> {
-        value.parse().map_err(|()| {
-            format!(
-                "invalid agent {value:?}; use a configured command name or one of {}",
-                Agent::possible_values().join(", ")
-            )
-        })
-    }
-}
-
-impl From<Agent> for String {
-    fn from(agent: Agent) -> Self {
-        match agent {
-            Agent::Codex => "codex".into(),
-            Agent::Claude => "claude".into(),
-            Agent::Happy(agent) => format!("{HAPPY_PREFIX}{}", agent.name()),
-            Agent::Custom(name) => name,
-        }
+    fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
+        Some(clap::builder::PossibleValue::new(self.as_str()))
     }
 }
 
@@ -740,6 +669,77 @@ pub enum ResourceCommand {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn agent_cli_and_config_spellings_remain_compatible() {
+        for (spelling, expected) in [
+            ("codex", Agent::Codex),
+            ("claude", Agent::Claude),
+            ("happy-claude", Agent::Happy(BuiltinAgent::Claude)),
+            ("happy-codex", Agent::Happy(BuiltinAgent::Codex)),
+            ("my-agent_2", Agent::Custom("my-agent_2".into())),
+            ("t3", Agent::Custom("t3".into())),
+        ] {
+            let parsed = Cli::try_parse_from(["shoal", "add", "--agent", spelling]).unwrap();
+            let Some(Command::Add { agent, .. }) = parsed.command else {
+                panic!("wrong command")
+            };
+            assert_eq!(agent, Some(expected.clone()));
+            let text = format!("default_agent = {spelling:?}");
+            let global: crate::config::Config = toml::from_str(&text).unwrap();
+            let repo: crate::config::repo::RepoConfig = toml::from_str(&text).unwrap();
+            assert_eq!(global.default_agent, agent);
+            assert_eq!(repo.default_agent, agent);
+            assert_eq!(serde_json::to_value(&expected).unwrap(), spelling);
+            assert_eq!(
+                serde_json::from_value::<Agent>(spelling.into()).unwrap(),
+                expected
+            );
+        }
+        for invalid in [
+            "happy",
+            "happy-other",
+            "happy-",
+            "Codex",
+            "happy-Codex",
+            "",
+            "two words",
+        ] {
+            assert!(Cli::try_parse_from(["shoal", "add", "--agent", invalid]).is_err());
+            let text = format!("default_agent = {invalid:?}");
+            assert!(toml::from_str::<crate::config::Config>(&text).is_err());
+            assert!(toml::from_str::<crate::config::repo::RepoConfig>(&text).is_err());
+            assert!(serde_json::from_value::<Agent>(invalid.into()).is_err());
+        }
+    }
+
+    #[test]
+    fn agent_parsers_preserve_completion_order() {
+        use clap::builder::TypedValueParser;
+        let names: Vec<_> = AgentParser
+            .possible_values()
+            .unwrap()
+            .map(|value| value.get_name().to_owned())
+            .collect();
+        assert_eq!(names, ["codex", "claude", "happy-claude", "happy-codex"]);
+        let names: Vec<_> = BuiltinAgent::value_variants()
+            .iter()
+            .map(|agent| agent.to_possible_value().unwrap().get_name().to_owned())
+            .collect();
+        assert_eq!(names, ["claude", "codex"]);
+        for (name, expected) in [
+            ("claude", BuiltinAgent::Claude),
+            ("codex", BuiltinAgent::Codex),
+        ] {
+            let parsed = Cli::try_parse_from(["shoal", "happy", name]).unwrap();
+            assert!(
+                matches!(parsed.command, Some(Command::Happy { agent, .. }) if agent == expected)
+            );
+        }
+        for invalid in ["Claude", "Codex", "happy-codex", "custom"] {
+            assert!(Cli::try_parse_from(["shoal", "happy", invalid]).is_err());
+        }
+    }
 
     #[test]
     fn doctor_replaces_reconcile_without_an_alias() {

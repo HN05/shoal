@@ -6,14 +6,14 @@ use serde_json::json;
 
 use super::trust::{trust_claude, trust_codex};
 use crate::{
+    agent::BuiltinAgent,
     cli::{
         client,
         context::Context,
         ui::{self, Fallback},
     },
     config::templates,
-    execution,
-    happy::{self, HappyAgent},
+    execution, happy,
     protocol::ConfigTarget,
 };
 
@@ -23,7 +23,7 @@ use crate::{
 /// is recorded; the session's output goes to a log under Shoal's state.
 pub(in crate::cli) async fn happy(
     ctx: &Context,
-    agent: HappyAgent,
+    agent: BuiltinAgent,
     workspace: Option<String>,
     prompt: Option<String>,
     mut args: Vec<OsString>,
@@ -33,20 +33,20 @@ pub(in crate::cli) async fn happy(
     let settings =
         client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
     let instructions = templates::instructions(settings.agent_template.as_deref(), &workspace);
-    let prompt = if agent == HappyAgent::Codex && !instructions.is_empty() {
+    let prompt = if agent == BuiltinAgent::Codex && !instructions.is_empty() {
         Some(match prompt {
             Some(prompt) if !prompt.is_empty() => format!("{instructions}\n\n{prompt}"),
             _ => instructions,
         })
     } else {
-        let mut configured = templates::instruction_args(HappyAgent::Claude, instructions);
+        let mut configured = templates::instruction_args(BuiltinAgent::Claude, instructions);
         configured.append(&mut args);
         args = configured;
         prompt
     };
     match agent {
-        HappyAgent::Claude => trust_claude(ctx, &workspace.path),
-        HappyAgent::Codex => trust_codex(ctx, &workspace.path),
+        BuiltinAgent::Claude => trust_claude(ctx, &workspace.path),
+        BuiltinAgent::Codex => trust_codex(ctx, &workspace.path),
     }
     let daemon_state = happy::daemon_state_path(&ctx.paths.home);
     let daemon_recorded = daemon_state.is_file();
@@ -61,7 +61,7 @@ pub(in crate::cli) async fn happy(
         .map(|elapsed| elapsed.as_millis())
         .unwrap_or_default();
     let state_dir = ctx.paths.workspace_state(&workspace.id);
-    let stem = format!("happy-{}-{stamp_millis}", agent.name());
+    let stem = format!("happy-{}-{stamp_millis}", agent.as_str());
     let log = state_dir.join(format!("{stem}.log"));
     // Happy's Codex mode has no prompt argument: the prompt is kept in a file
     // and, when this machine is logged in to Happy, delivered through Happy's
@@ -70,7 +70,7 @@ pub(in crate::cli) async fn happy(
     let mut seeded = None;
     let mut env = Vec::new();
     if let Some(prompt) = &prompt
-        && !agent.accepts_prompt()
+        && !happy::accepts_prompt(agent)
     {
         let path = state_dir.join(format!("{stem}.prompt.md"));
         std::fs::create_dir_all(&state_dir)
@@ -96,7 +96,7 @@ pub(in crate::cli) async fn happy(
         command,
         &happy::client::RECONNECT_ENV,
         &env,
-        Some(&format!("happy {}", agent.name())),
+        Some(&format!("happy {}", agent.as_str())),
     )
     .await
     {
@@ -110,7 +110,7 @@ pub(in crate::cli) async fn happy(
         }
     };
     // A prompt passed as an argument is delivered by the launch itself.
-    let mut prompt_delivered = prompt.is_some() && agent.accepts_prompt();
+    let mut prompt_delivered = prompt.is_some() && happy::accepts_prompt(agent);
     if let (Some(seeded), Some(prompt)) = (&seeded, &prompt) {
         match seeded
             .deliver(prompt, std::time::Duration::from_secs(90))
@@ -134,7 +134,7 @@ pub(in crate::cli) async fn happy(
     ctx.emit(
         &format!(
             "Started Happy {} session in {} (execution {}, pid {})\nOutput: {}{delivery}",
-            agent.name(),
+            agent.as_str(),
             workspace.name,
             launch.execution_id,
             launch.pid,

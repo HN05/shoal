@@ -6,8 +6,9 @@ use anyhow::{Result, ensure};
 use serde_json::json;
 
 use crate::{
+    agent::{Agent, CodexMode},
     cli::{
-        Agent, CodexMode, agents,
+        agents,
         client::{self, request},
         context::Context,
         output::{Palette, Style},
