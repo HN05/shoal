@@ -1,7 +1,7 @@
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, time::Duration};
-use tokio::{process::Command, time::timeout};
+use tokio::process::Command;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Inventory {
@@ -96,23 +96,14 @@ impl Inventory {
 
 pub async fn run(args: &[&str]) -> Result<String> {
     ensure!(cfg!(target_os = "macos"), "Xcode simulators require macOS");
-    let output = timeout(
-        Duration::from_secs(180),
-        Command::new("xcrun")
-            .arg("simctl")
-            .args(args)
-            .kill_on_drop(true)
-            .output(),
-    )
-    .await
-    .context("simctl timed out; allocation retained for reconciliation")??;
-    ensure!(
-        output.status.success(),
-        "simctl {}: {}",
-        args.join(" "),
-        String::from_utf8_lossy(&output.stderr).trim()
-    );
-    Ok(String::from_utf8(output.stdout)?.trim().to_owned())
+    let mut command = Command::new("xcrun");
+    command.arg("simctl").args(args);
+    let output = crate::subprocess::Run::new(command)
+        .timeout(Duration::from_secs(180))
+        .output()
+        .await
+        .context("simctl failed; allocation retained for reconciliation")?;
+    Ok(output.trim().to_owned())
 }
 
 pub async fn inventory() -> Result<Inventory> {

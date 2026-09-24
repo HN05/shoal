@@ -57,12 +57,11 @@ pub async fn scan(ids: HashSet<String>) -> Result<Scan> {
     }
     let mut command = tokio::process::Command::new("ps");
     command.args(["-ax", "-o", "pid=,uid="]).env("LC_ALL", "C");
-    let output = tokio::time::timeout(
-        timing::PROCESS_INVENTORY_TIMEOUT,
-        crate::subprocess::output(command),
-    )
-    .await
-    .context("process inventory timed out")??;
+    let output = crate::subprocess::Run::new(command)
+        .timeout(timing::PROCESS_INVENTORY_TIMEOUT)
+        .output()
+        .await
+        .context("process inventory failed")?;
     let marker = format!("{}=", crate::env::EXECUTION_ID).into_bytes();
     tokio::task::spawn_blocking(move || {
         let mut scan = Scan::default();
@@ -277,11 +276,10 @@ pub async fn related(
     command
         .args(["-ax", "-o", "pid=,uid=,pgid=,ppid="])
         .env("LC_ALL", "C");
-    let output = tokio::time::timeout(
-        timing::PROCESS_INVENTORY_TIMEOUT,
-        crate::subprocess::output(command),
-    )
-    .await??;
+    let output = crate::subprocess::Run::new(command)
+        .timeout(timing::PROCESS_INVENTORY_TIMEOUT)
+        .output()
+        .await?;
     let mut rows = Vec::new();
     for line in output.lines() {
         // Negative UIDs (nobody) cannot parse and are never ours; see `scan`.

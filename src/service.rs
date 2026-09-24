@@ -7,7 +7,7 @@ use std::{
 
 use anyhow::{Context, Result, bail, ensure};
 use serde::Serialize;
-use tokio::{process::Command, time::timeout};
+use tokio::process::Command;
 
 use crate::paths::Paths;
 
@@ -165,14 +165,18 @@ pub fn definition(paths: &Paths, executable: &Path, platform: Platform) -> Resul
 }
 
 async fn command(program: &str, args: &[&str], check: bool) -> Result<bool> {
-    let output = timeout(Duration::from_secs(20), Command::new(program).args(args)
-        .kill_on_drop(true).output()).await.context("service manager timed out")?
+    let mut command = Command::new(program);
+    command.args(args);
+    let output = crate::subprocess::Run::new(command)
+        .timeout(Duration::from_secs(20))
+        .capture()
+        .await
         .with_context(|| format!("run {program}; a working per-user service manager is required (use `shoal daemon run` otherwise)"))?;
     if check && !output.status.success() {
         bail!(
             "{program} {} failed: {}",
             args.join(" "),
-            String::from_utf8_lossy(&output.stderr).trim()
+            crate::subprocess::diagnostic(&output.stderr).trim()
         );
     }
     Ok(output.status.success())

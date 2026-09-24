@@ -2,7 +2,7 @@
 use std::{path::Path, process::Stdio, time::Duration};
 
 use anyhow::{Context, Result, ensure};
-use tokio::{process::Command, time::timeout};
+use tokio::process::Command;
 
 use crate::{
     config::{Config, repo::RepoConfig},
@@ -14,7 +14,6 @@ use crate::{
 
 /// Longest a daemon-side hook may run before the operation fails.
 const DETACHED_TIMEOUT: Duration = Duration::from_secs(60);
-const MAX_DIAGNOSTIC_CHARS: usize = 4096;
 
 /// The directory used both to resolve a hook's executable and to run it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -188,25 +187,12 @@ pub async fn run_detached(
     executable: &Path,
     paths: &Paths,
 ) -> Result<()> {
-    let output = timeout(
-        DETACHED_TIMEOUT,
-        command(hook, workspace, executable, paths)?
-            .stdin(Stdio::null())
-            .output(),
-    )
-    .await
-    .with_context(|| {
-        format!(
-            "{} did not finish within {} seconds",
-            hook.kind().key(),
-            DETACHED_TIMEOUT.as_secs()
-        )
-    })?
-    .with_context(|| format!("launch {} {}", hook.kind().key(), executable.display()))?;
-    let diagnostic: String = String::from_utf8_lossy(&output.stderr)
-        .chars()
-        .take(MAX_DIAGNOSTIC_CHARS)
-        .collect();
+    let output = crate::subprocess::Run::new(command(hook, workspace, executable, paths)?)
+        .timeout(DETACHED_TIMEOUT)
+        .capture()
+        .await
+        .with_context(|| format!("run {} {}", hook.kind().key(), executable.display()))?;
+    let diagnostic = crate::subprocess::diagnostic(&output.stderr);
     ensure!(
         output.status.success(),
         "{} exited with {}: {}",

@@ -497,19 +497,17 @@ impl ForgeKind {
         let tool = self.tool();
         let mut command = tokio::process::Command::new(tool);
         command.current_dir(path).args(args);
-        let (seconds, timed_out) = match query {
-            Query::Issue => (30, "issue lookup timed out"),
+        let seconds = match query {
+            Query::Issue => 30,
             Query::Pull(_) => {
                 command.env("NO_COLOR", "1");
-                (20, "PR lookup timed out")
+                20
             }
         };
-        let output = tokio::time::timeout(
-            std::time::Duration::from_secs(seconds),
-            crate::subprocess::capture(command),
-        )
-        .await
-        .context(timed_out)?;
+        let output = crate::subprocess::Run::new(command)
+            .timeout(std::time::Duration::from_secs(seconds))
+            .capture()
+            .await;
         query.response(tool, output)
     }
 }
@@ -518,29 +516,14 @@ impl Query {
     fn response(self, tool: &str, output: std::io::Result<std::process::Output>) -> Result<String> {
         match self {
             Self::Issue => {
-                let output = output.with_context(|| {
-                    format!(
-                        "run {tool}; install it and run `{tool} auth login` before using --issue"
-                    )
-                })?;
-                ensure!(
-                    output.status.success(),
-                    "{tool} issue lookup failed; check `{tool} auth login` and repository access: {}",
-                    diagnostic(&output.stderr, 2048)
-                );
-                String::from_utf8(output.stdout).context("issue output is not UTF-8")
+                crate::subprocess::checked_output(tool, output).with_context(|| {
+                    format!("{tool} issue lookup failed; install it and check `{tool} auth login` and repository access before using --issue")
+                })
             }
             Self::Pull(hint) => crate::subprocess::checked_output(tool, output)
                 .with_context(|| format!("PR lookup requires {tool} and its existing login{hint}")),
         }
     }
-}
-
-fn diagnostic(stderr: &[u8], limit: usize) -> String {
-    String::from_utf8_lossy(stderr)
-        .chars()
-        .take(limit)
-        .collect()
 }
 
 #[cfg(test)]
@@ -583,9 +566,21 @@ mod tests {
 
         for tool in ["gh", "fj"] {
             for (query, limit, hint) in [
-                (Query::Issue, 2048, "auth login"),
-                (Query::Pull(MERGED_HINT), 8192, "shoal pr merged"),
-                (Query::Pull(""), 8192, "existing login"),
+                (
+                    Query::Issue,
+                    crate::subprocess::MAX_DIAGNOSTIC_CHARS,
+                    "auth login",
+                ),
+                (
+                    Query::Pull(MERGED_HINT),
+                    crate::subprocess::MAX_DIAGNOSTIC_CHARS,
+                    "shoal pr merged",
+                ),
+                (
+                    Query::Pull(""),
+                    crate::subprocess::MAX_DIAGNOSTIC_CHARS,
+                    "existing login",
+                ),
             ] {
                 let missing = query
                     .response(tool, Err(io::Error::from(io::ErrorKind::NotFound)))

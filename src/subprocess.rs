@@ -8,7 +8,7 @@ use std::{
 use tokio::{io::AsyncWriteExt, process::Command};
 
 /// Stderr kept in error messages; longer output would exceed a protocol frame.
-const MAX_DIAGNOSTIC_CHARS: usize = 8192;
+pub const MAX_DIAGNOSTIC_CHARS: usize = 8192;
 
 /// Captured subprocess with optional input and a deadline for the entire exchange.
 /// The child is killed if the deadline expires or the caller drops the future.
@@ -103,10 +103,6 @@ pub async fn output(command: Command) -> Result<String> {
     Run::new(command).output().await
 }
 
-pub async fn capture(command: Command) -> io::Result<Output> {
-    Run::new(command).capture().await
-}
-
 /// Apply the standard tool diagnostics to a captured process result.
 pub fn checked_output(program: &str, output: io::Result<Output>) -> Result<String> {
     String::from_utf8(check(program, output)?.stdout).context("tool output is not UTF-8")
@@ -117,17 +113,21 @@ fn check(program: &str, output: io::Result<Output>) -> Result<Output> {
         format!("run {program}; ensure it is installed and on the daemon's PATH")
     })?;
     if !output.status.success() {
-        let diagnostic = String::from_utf8_lossy(&output.stderr);
         bail!(
             "{program} failed ({}): {}",
             output.status,
-            diagnostic
-                .chars()
-                .take(MAX_DIAGNOSTIC_CHARS)
-                .collect::<String>()
+            diagnostic(&output.stderr)
         );
     }
     Ok(output)
+}
+
+/// Bound diagnostics even when callers interpret exit status themselves.
+pub fn diagnostic(stderr: &[u8]) -> String {
+    String::from_utf8_lossy(stderr)
+        .chars()
+        .take(MAX_DIAGNOSTIC_CHARS)
+        .collect()
 }
 
 #[cfg(test)]
