@@ -50,10 +50,16 @@ pub(in crate::daemon) fn check_owner_query(
     owner_column: &str,
 ) -> Result<()> {
     let db = populated_database()?;
-    check_query_growth(&db, sql, table, owner_column)
+    check_query_growth(&db, sql, table, owner_column, "owner-0")
 }
 
-fn check_query_growth(db: &Connection, sql: &str, table: &str, owner_column: &str) -> Result<()> {
+fn check_query_growth(
+    db: &Connection,
+    sql: &str,
+    table: &str,
+    owner_column: &str,
+    owner: &str,
+) -> Result<()> {
     let mut baseline = None;
     for end in [10, 100, 1000] {
         if end > 10 {
@@ -61,7 +67,7 @@ fn check_query_growth(db: &Connection, sql: &str, table: &str, owner_column: &st
         }
         let plan = db
             .prepare(&format!("EXPLAIN QUERY PLAN {sql}"))?
-            .query_map(["owner-0"], |row| row.get::<_, String>(3))?
+            .query_map([owner], |row| row.get::<_, String>(3))?
             .collect::<rusqlite::Result<Vec<_>>>()?;
         assert!(
             plan.iter()
@@ -72,7 +78,7 @@ fn check_query_growth(db: &Connection, sql: &str, table: &str, owner_column: &st
         );
         let mut statement = db.prepare(sql)?;
         let rows = statement
-            .query_map(["owner-0"], |row| row.get::<_, rusqlite::types::Value>(0))?
+            .query_map([owner], |row| row.get::<_, rusqlite::types::Value>(0))?
             .collect::<rusqlite::Result<Vec<_>>>()?;
         assert!(!rows.is_empty());
         assert_eq!(statement.get_status(StatementStatus::FullscanStep), 0);
@@ -171,37 +177,29 @@ fn resource_lists_propagate_decoding_and_prepare_errors() -> Result<()> {
 fn execution_owner_reads_search_migrated_index() -> Result<()> {
     let mut db = populated_database()?;
     migrate(&mut db)?;
-    check_query_growth(&db, &executions_query(), "executions", "workspace_id")
+    check_query_growth(
+        &db,
+        &executions_query(),
+        "executions",
+        "workspace_id",
+        "owner-0",
+    )
 }
 
 #[test]
 fn repository_workspace_reads_search_migrated_index() -> Result<()> {
     let mut db = populated_database()?;
     migrate(&mut db)?;
+    // A missing repository exercises the entire lookup even with EXISTS short-circuiting.
     check_query_growth(
         &db,
-        &format!("SELECT {WORKSPACE_COLUMNS} FROM workspaces WHERE repository_id=?1"),
+        &format!("SELECT EXISTS({REPOSITORY_WORKSPACES_QUERY})"),
         "workspaces",
         "repository_id",
+        "missing",
     )?;
-    // Repository removal also probes for remaining ownership through EXISTS.
-    let plan = db
-        .prepare(
-            "EXPLAIN QUERY PLAN SELECT EXISTS(SELECT 1 FROM workspaces WHERE repository_id=?1)",
-        )?
-        .query_map(["missing"], |row| row.get::<_, String>(3))?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    assert!(
-        plan.iter().any(|step| step.contains("SEARCH workspaces")
-            && step.contains("INDEX")
-            && step.contains("repository_id=?")),
-        "{plan:?}"
-    );
-    assert!(!exists(
-        &db,
-        "SELECT 1 FROM workspaces WHERE repository_id=?1",
-        ["missing"]
-    )?);
+    assert!(!repository_has_workspaces(&db, "missing")?);
+    assert!(repository_has_workspaces(&db, "owner-0")?);
     Ok(())
 }
 

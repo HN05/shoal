@@ -240,6 +240,12 @@ pub fn exists(db: &Connection, sql: &str, params: impl Params) -> Result<bool> {
     Ok(db.query_row(&format!("SELECT EXISTS({sql})"), params, |row| row.get(0))?)
 }
 
+const REPOSITORY_WORKSPACES_QUERY: &str = "SELECT 1 FROM workspaces WHERE repository_id=?1";
+
+pub fn repository_has_workspaces(db: &Connection, repository_id: &str) -> Result<bool> {
+    exists(db, REPOSITORY_WORKSPACES_QUERY, [repository_id])
+}
+
 /// Fail unless the workspace is ready; resources may only change then.
 pub fn require_ready(db: &Connection, workspace_id: &str) -> Result<()> {
     let ready: bool = db.query_row(

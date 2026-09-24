@@ -93,11 +93,7 @@ impl Manager {
             .run(move |db| {
                 let tx = db.transaction()?;
                 ensure!(
-                    !store::exists(
-                        &tx,
-                        "SELECT 1 FROM workspaces WHERE repository_id=?1",
-                        [&id]
-                    )?,
+                    !store::repository_has_workspaces(&tx, &id)?,
                     "repository still has workspaces"
                 );
                 tx.execute(
