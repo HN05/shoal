@@ -342,7 +342,7 @@ mod tests {
         assert!(manager.remove_idle(&workspace.id, original).await.is_err());
         fs::remove_file(workspace.path.join("dirty")).unwrap();
         let before_command = snapshot(&manager).await.unwrap();
-        let (plan, _) = manager
+        let started = manager
             .begin_execution(
                 &workspace.id,
                 None,
@@ -353,7 +353,11 @@ mod tests {
             .unwrap();
         assert!(snapshot(&manager).await.is_none());
         manager
-            .finish_execution(plan.id, crate::workspace::ExecutionKind::Command, Some(0))
+            .finish_execution(
+                started.plan.id,
+                crate::workspace::ExecutionKind::Command,
+                Some(0),
+            )
             .await
             .unwrap();
         let after_command = snapshot(&manager).await.unwrap();

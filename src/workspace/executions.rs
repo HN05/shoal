@@ -3,7 +3,7 @@
 use super::{Manager, ResourceGuard};
 use crate::{
     execution_processes::Processes,
-    model::{Execution, ExecutionPlan, Workspace},
+    model::{Execution, ExecutionPlan, LandPlan, Workspace},
     process_identity::{self as process, Identity},
     scope::Caller,
     state::{ExecutionState, WorkspaceState},
@@ -30,11 +30,21 @@ pub enum ExecutionKind {
     Setup,
 }
 
+/// The connection must retain the Git guard through execution completion.
+#[derive(Debug)]
+pub(crate) struct StartedExecution {
+    pub plan: ExecutionPlan,
+    pub stop: watch::Receiver<bool>,
+    pub _git_guard: Option<OwnedMutexGuard<()>>,
+}
+
 #[derive(Default)]
 struct PreparedExecution {
     setup_cmd: Option<PathBuf>,
     pre_setup: Option<PathBuf>,
-    git_guard: Option<OwnedMutexGuard<()>>,
+    registration_guard: Option<OwnedMutexGuard<()>>,
+    lifetime_guard: Option<OwnedMutexGuard<()>>,
+    land: Option<Box<LandPlan>>,
     _resources: Option<ResourceGuard>,
 }
 
@@ -78,13 +88,13 @@ impl ExecutionKind {
 impl Manager {
     /// Register an execution and issue its scope token. The returned receiver
     /// fires when the workspace asks its commands to stop.
-    pub async fn begin_execution(
+    pub(crate) async fn begin_execution(
         &self,
         selector: &str,
         wrapper: Option<Identity>,
         kind: ExecutionKind,
         parent_execution: Option<&str>,
-    ) -> Result<(ExecutionPlan, watch::Receiver<bool>)> {
+    ) -> Result<StartedExecution> {
         let parent_execution = parent_execution.map(str::to_owned);
         if let Some(wrapper) = &wrapper {
             ensure!(
@@ -97,7 +107,9 @@ impl Manager {
         let PreparedExecution {
             setup_cmd,
             pre_setup,
-            git_guard,
+            registration_guard,
+            lifetime_guard,
+            land,
             _resources,
         } = preparation;
         // Coordinate registration and stop notification without holding the map
@@ -142,7 +154,7 @@ impl Manager {
         )
         .await;
         drop(connections);
-        drop(git_guard);
+        drop(registration_guard);
         if let Some(command) = pre_setup
             && let Err(error) = async {
                 crate::hooks::run_detached(
@@ -165,17 +177,18 @@ impl Manager {
             .await?;
             return Err(error);
         }
-        Ok((
-            ExecutionPlan {
+        Ok(StartedExecution {
+            plan: ExecutionPlan {
                 id,
                 workspace,
                 scope_token,
                 setup_cmd,
                 ports,
-                land: None,
+                land,
             },
-            receiver,
-        ))
+            stop: receiver,
+            _git_guard: lifetime_guard,
+        })
     }
 
     async fn prepare_execution(
@@ -184,7 +197,20 @@ impl Manager {
         kind: ExecutionKind,
     ) -> Result<PreparedExecution> {
         match kind {
-            ExecutionKind::Command | ExecutionKind::Land => Ok(PreparedExecution::default()),
+            ExecutionKind::Command => Ok(PreparedExecution::default()),
+            ExecutionKind::Land => {
+                let guard = self
+                    .git_gate(&workspace.repository_id)
+                    .await
+                    .lock_owned()
+                    .await;
+                let land = self.prepare_land(&workspace.id).await?;
+                Ok(PreparedExecution {
+                    land: Some(Box::new(land)),
+                    lifetime_guard: Some(guard),
+                    ..Default::default()
+                })
+            }
             ExecutionKind::Setup => {
                 let git_guard = self
                     .git_gate(&workspace.repository_id)
@@ -207,8 +233,9 @@ impl Manager {
                 Ok(PreparedExecution {
                     setup_cmd: config.setup_cmd.map(|command| workspace.path.join(command)),
                     pre_setup,
-                    git_guard: Some(git_guard),
+                    registration_guard: Some(git_guard),
                     _resources: Some(resources),
+                    ..Default::default()
                 })
             }
         }

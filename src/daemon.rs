@@ -24,7 +24,7 @@ use crate::{
     process_identity::Identity,
     protocol::{self, Body, Control, ExecutionEvent, Method, Request, Response, Status},
     scope::Caller,
-    workspace::{ExecutionKind, Manager},
+    workspace::{ExecutionKind, Manager, StartedExecution},
 };
 
 const MAX_CLIENTS: usize = 128;
@@ -503,35 +503,11 @@ async fn execute(
     kind: ExecutionKind,
     context: ExecutionContext,
 ) -> Result<()> {
-    let landing = async {
-        if kind != ExecutionKind::Land {
-            return Ok(None);
-        }
-        let selected = manager.workspace(&workspace).await?;
-        let guard = manager
-            .git_gate(&selected.repository_id)
-            .await
-            .lock_owned()
-            .await;
-        let plan = manager.prepare_land(&workspace).await?;
-        anyhow::Ok(Some((guard, plan)))
-    }
-    .await;
-    let (_git_guard, land) = match landing {
-        Ok(Some((guard, plan))) => (Some(guard), Some(plan)),
-        Ok(None) => (None, None),
-        Err(error) => {
-            return protocol::write(
-                &mut stream,
-                &Response::new(
-                    request_id,
-                    Body::error("landing_failed", format!("{error:#}")),
-                ),
-            )
-            .await;
-        }
-    };
-    let (mut plan, mut stop) = match manager
+    let StartedExecution {
+        plan,
+        mut stop,
+        _git_guard,
+    } = match manager
         .begin_execution(
             &workspace,
             Some(wrapper),
@@ -546,7 +522,6 @@ async fn execute(
             return protocol::write(&mut stream, &Response::new(request_id, body)).await;
         }
     };
-    plan.land = land.map(Box::new);
     let execution_id = plan.id.clone();
     let workspace_name = plan.workspace.name.clone();
     let (mut reader, mut writer) = stream.split();

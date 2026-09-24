@@ -828,6 +828,49 @@ async fn land_fast_forwards_merges_and_aborts_conflicts_without_a_remote() {
 }
 
 #[tokio::test]
+async fn land_execution_holds_git_gate_through_completion_and_releases_on_failure() {
+    use crate::workspace::ExecutionKind;
+
+    let f = Fixture::new().await;
+    let workspace = f.add("worker").await;
+    let gate = f.manager.git_gate(&workspace.repository_id).await;
+    for exit in [Some(0), None] {
+        let started = f
+            .manager
+            .begin_execution(&workspace.id, None, ExecutionKind::Land, None)
+            .await
+            .unwrap();
+        assert!(started.plan.land.is_some());
+        assert!(gate.try_lock().is_err());
+        assert!(
+            f.manager
+                .caller(&started.plan.scope_token)
+                .await
+                .unwrap()
+                .landing
+        );
+        f.manager
+            .finish_execution(started.plan.id.clone(), ExecutionKind::Land, exit)
+            .await
+            .unwrap();
+        assert!(gate.try_lock().is_err(), "hold the gate through completion");
+        drop(started);
+        assert!(gate.try_lock().is_ok());
+    }
+    fs::write(workspace.path.join("dirty"), "preserve me").unwrap();
+    assert!(
+        f.manager
+            .begin_execution(&workspace.id, None, ExecutionKind::Land, None)
+            .await
+            .is_err()
+    );
+    assert!(
+        gate.try_lock().is_ok(),
+        "failed preparation must release the gate"
+    );
+}
+
+#[tokio::test]
 async fn land_refuses_dirty_checkouts_other_branches_and_scoped_callers() {
     let f = Fixture::new().await;
     let workspace = f.add("worker").await;

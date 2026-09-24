@@ -10,6 +10,7 @@ mod repo_removal;
 mod status;
 
 pub use executions::ExecutionKind;
+pub(crate) use executions::StartedExecution;
 
 use crate::{
     config::Config,
