@@ -5,7 +5,7 @@ use anyhow::Result;
 use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 
-use crate::{state::states, workspace::Manager};
+use crate::{daemon::workspace::Manager, state::states};
 
 /// Rows kept before older read notifications are pruned; unread ones stay.
 const RETAINED: usize = 500;

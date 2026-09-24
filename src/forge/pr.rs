@@ -4,12 +4,10 @@ use rusqlite::OptionalExtension;
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    daemon::{notifications::NotificationKind, store, workspace::Manager},
     forge::{ForgeRepo, repository},
     git,
     model::Workspace,
-    notifications::NotificationKind,
-    store,
-    workspace::Manager,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

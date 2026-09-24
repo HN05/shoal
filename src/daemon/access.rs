@@ -4,7 +4,10 @@ use rusqlite::{Connection, Transaction, params};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{state::states, store, workspace::Manager};
+use crate::{
+    daemon::{store, workspace::Manager},
+    state::states,
+};
 
 states!(
     #[derive(Default)]
@@ -196,7 +199,7 @@ impl Manager {
         if request.status == DecisionStatus::Pending {
             self.notify(
                 Some(workspace),
-                crate::notifications::NotificationKind::AccessRequested,
+                crate::daemon::notifications::NotificationKind::AccessRequested,
                 format!(
                     "access {}: {} / {}: {}; approve with shoal access approve {}",
                     request.id, request.target, request.name, request.reason, request.id

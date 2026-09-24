@@ -273,7 +273,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             stop,
             acknowledge_stopped,
         } => {
-            let options = crate::recovery::ReconcileOptions {
+            let options = crate::daemon::recovery::ReconcileOptions {
                 repair,
                 stop,
                 acknowledge_stopped,

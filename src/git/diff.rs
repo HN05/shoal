@@ -1,5 +1,5 @@
 //! Fork-point resolution for `shoal diff`.
-use crate::{git, model::DiffBase, workspace::Manager};
+use crate::{daemon::workspace::Manager, git, model::DiffBase};
 use anyhow::{Context, Result, ensure};
 
 impl Manager {

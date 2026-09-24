@@ -172,7 +172,7 @@ impl Manager {
         resources.extend(layers.saved_repository_config.resources.clone());
         let mut resource_pools = layers.worktree_file.resource_pools.clone();
         resource_pools.extend(layers.saved_repository_config.resource_pools.clone());
-        crate::resources::definitions(&resources, &resource_pools)
+        crate::daemon::resources::definitions(&resources, &resource_pools)
             .context("layered repository config")?;
         Ok(layers)
     }

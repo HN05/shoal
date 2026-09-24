@@ -204,7 +204,7 @@ fn defaults() -> RepoConfig {
         },
         simulators: config::repo::SimulatorPreferences {
             requires_approval: Some(false),
-            approval_lifetime: Some(crate::access::Lifetime::Lease),
+            approval_lifetime: Some(crate::daemon::access::Lifetime::Lease),
             ..Default::default()
         },
         auto_cleanup: config::repo::AutoCleanup {

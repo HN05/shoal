@@ -2,8 +2,8 @@
 //! including direct protocol clients; this is not a security boundary against
 //! the OS user.
 use crate::{
+    daemon::workspace::{ExecutionKind, Manager},
     protocol::{ConfigTarget, Method},
-    workspace::{ExecutionKind, Manager},
 };
 use anyhow::{Result, bail, ensure};
 

@@ -5,7 +5,11 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use uuid::Uuid;
 
-use crate::{allocation::Allocation, state::states, store, validate, workspace::Manager};
+use crate::{
+    daemon::{allocation::Allocation, store, workspace::Manager},
+    state::states,
+    validate,
+};
 
 states!(
     #[derive(Default)]
@@ -26,7 +30,7 @@ states!(LockMode: ValueEnum {
 #[serde(default, deny_unknown_fields)]
 pub struct ResourceConfig {
     pub requires_approval: bool,
-    pub approval_lifetime: crate::access::Lifetime,
+    pub approval_lifetime: crate::daemon::access::Lifetime,
     pub kind: ResourceKind,
     pub capacity: u32,
     pub reason: Option<String>,
@@ -36,7 +40,7 @@ impl Default for ResourceConfig {
     fn default() -> Self {
         Self {
             requires_approval: false,
-            approval_lifetime: crate::access::Lifetime::Lease,
+            approval_lifetime: crate::daemon::access::Lifetime::Lease,
             kind: ResourceKind::Semaphore,
             capacity: 1,
             reason: None,
@@ -153,7 +157,7 @@ pub struct ResourceRequest {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ResourceStatus {
     pub requires_approval: bool,
-    pub approval_lifetime: crate::access::Lifetime,
+    pub approval_lifetime: crate::daemon::access::Lifetime,
     pub kind: ResourceKind,
     pub readers: u32,
     pub writers: u32,
@@ -442,7 +446,7 @@ impl Manager {
                     params![scope, request.pool, serde_json::to_string(&definition)?],
                 )?;
                 let target = format!("resource/{scope}/{}", request.pool);
-                if scoped && let Some(pending) = crate::access::current(&tx, &workspace.id, &target, &request.name)? {
+                if scoped && let Some(pending) = crate::daemon::access::current(&tx, &workspace.id, &target, &request.name)? {
                     let member = pending.specification["member"].as_str().unwrap_or_default();
                     ensure!(request.resource.as_deref().is_none_or(|r| r == member), "access request member changed; release it first");
                     request.resource = Some(member.into());
@@ -465,10 +469,10 @@ impl Manager {
                     return busy();
                 };
                 if scoped && settings.requires_approval {
-                    let approval = crate::access::AccessRequest::new(&workspace.id, target, &request.name,
+                    let approval = crate::daemon::access::AccessRequest::new(&workspace.id, target, &request.name,
                         serde_json::json!({"definition": definition, "member": resource, "mode": mode}),
                         settings.approval_lifetime, request.reason.as_deref());
-                    if let Some(approval) = crate::access::check(&tx, approval)? {
+                    if let Some(approval) = crate::daemon::access::check(&tx, approval)? {
                         tx.commit()?;
                         return Ok(Allocation::Approval(Box::new(approval)));
                     }
@@ -556,7 +560,7 @@ impl Manager {
                 let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
                 store::require_ready(&tx, &workspace.id)?;
                 let mut released = false;
-                for approval in crate::access::list(&tx, Some(&workspace.id))?
+                for approval in crate::daemon::access::list(&tx, Some(&workspace.id))?
                     .into_iter()
                     .filter(|r| {
                         r.active
@@ -565,8 +569,12 @@ impl Manager {
                             && r.target.starts_with("resource/")
                     })
                 {
-                    released |=
-                        crate::access::release(&tx, &workspace.id, &approval.target, &name)?;
+                    released |= crate::daemon::access::release(
+                        &tx,
+                        &workspace.id,
+                        &approval.target,
+                        &name,
+                    )?;
                 }
                 ensure!(
                     tx.execute(

@@ -5,10 +5,12 @@ use serde::Serialize;
 use crate::{
     client::{self, request},
     context::Context,
-    doctor::{Check, CheckStatus},
+    daemon::{
+        doctor::{Check, CheckStatus},
+        recovery::{ReconcileOptions, Report},
+    },
     output::{Palette, Style},
     protocol::Method,
-    recovery::{ReconcileOptions, Report},
     ui,
 };
 

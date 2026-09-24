@@ -4,7 +4,7 @@ use std::{path::Path, process::Stdio, time::Duration};
 use anyhow::{Context, Result, ensure};
 use tokio::{process::Command, time::timeout};
 
-use crate::{env, model::Workspace, paths::Paths, resources::ResourceLease};
+use crate::{daemon::resources::ResourceLease, env, model::Workspace, paths::Paths};
 
 /// Longest a daemon-side hook may run before the operation fails.
 const DETACHED_TIMEOUT: Duration = Duration::from_secs(60);

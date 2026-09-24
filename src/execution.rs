@@ -21,12 +21,13 @@ use tokio::{
 };
 
 use crate::{
-    client, env,
+    client,
+    daemon::workspace::ExecutionKind,
+    env,
     model::{ExecutionPlan, Workspace},
     paths::Paths,
     process,
     protocol::{self, Control, ExecutionEvent, Method, timing},
-    workspace::ExecutionKind,
 };
 
 /// What a detached wrapper reports on stdout once the daemon has recorded the

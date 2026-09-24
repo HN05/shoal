@@ -3,10 +3,10 @@ use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    daemon::workspace::Manager,
     git::{self, worktrunk},
     model::{Repository, Workspace},
     state::WorkspaceState,
-    workspace::Manager,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -188,7 +188,7 @@ impl Manager {
                 &repo,
                 name.clone(),
                 name.clone(),
-                crate::workspace::WorkspaceSource::Existing(branch, base),
+                crate::daemon::workspace::WorkspaceSource::Existing(branch, base),
                 git_profile,
                 path,
             )

@@ -5,23 +5,25 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 
 use crate::{
-    allocation::Allocation,
     config::{
         named_commands::CommandLayers,
         repo::{ConfigLayers, Hooks, LocalConfig},
+    },
+    daemon::{
+        allocation::Allocation,
+        notifications::Notification,
+        ports::PortRequest,
+        recovery::{ReconcileOptions, Report},
+        resources::{Overview, ResourceLease, ResourceRequest},
+        workspace::ExecutionKind,
     },
     model::{
         DiffBase, ExecutionPlan, Inspection, PortOverview, PortReservation, PortSuggestion,
         PulledBranch, Repository, RepositoryRemoval, Workspace, WorkspaceStatus,
     },
-    notifications::Notification,
-    ports::PortRequest,
     process::identity::Identity,
-    recovery::{ReconcileOptions, Report},
     removal::{BranchChoice, RemovalCheck, RemovalResult},
-    resources::{Overview, ResourceLease, ResourceRequest},
     sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
-    workspace::ExecutionKind,
 };
 
 pub const VERSION: u32 = 40;
@@ -362,7 +364,7 @@ response_bodies! {
     OpenedWorkspace(crate::git::existing_branch::OpenedWorkspace),
     Inspection(Inspection),
     WorkspaceStatus(WorkspaceStatus),
-    Diagnostics(Vec<crate::doctor::Check>),
+    Diagnostics(Vec<crate::daemon::doctor::Check>),
     Doctor(Vec<Report>),
     Execution(ExecutionPlan),
     RemovalCheck(RemovalCheck),
@@ -377,8 +379,8 @@ response_bodies! {
     Port(PortReservation),
     PortSuggestion(PortSuggestion),
     PortOverview(PortOverview),
-    AccessRequest(Box<crate::access::AccessRequest>),
-    AccessRequests(Vec<crate::access::AccessRequest>),
+    AccessRequest(Box<crate::daemon::access::AccessRequest>),
+    AccessRequests(Vec<crate::daemon::access::AccessRequest>),
     ResourceLease(ResourceLease),
     ResourceOverview(Overview),
     Simulator(Simulator),

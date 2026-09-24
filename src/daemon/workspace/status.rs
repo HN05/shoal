@@ -2,9 +2,9 @@ use anyhow::{Context, Result};
 
 use super::Manager;
 use crate::{
+    daemon::store,
     git,
     model::{DiffSummary, Inspection, WorkspaceStatus},
-    store,
 };
 
 impl Manager {

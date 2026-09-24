@@ -28,7 +28,7 @@ struct RepositoryPresence {
 #[serde(default)]
 struct SimulatorPresence {
     requires_approval: Option<bool>,
-    approval_lifetime: Option<crate::access::Lifetime>,
+    approval_lifetime: Option<crate::daemon::access::Lifetime>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -95,8 +95,8 @@ pub struct Config {
     pub auto_cleanup: AutoCleanup,
     pub pr_cleanup: PrCleanup,
     pub ports: Ports,
-    pub resources: std::collections::BTreeMap<String, crate::resources::ResourceConfig>,
-    pub resource_pools: std::collections::BTreeMap<String, crate::resources::PoolConfig>,
+    pub resources: std::collections::BTreeMap<String, crate::daemon::resources::ResourceConfig>,
+    pub resource_pools: std::collections::BTreeMap<String, crate::daemon::resources::PoolConfig>,
     pub simulators: crate::sim::SimConfig,
 }
 
@@ -657,7 +657,7 @@ impl Config {
         if let Some(name) = &config.git_profile {
             config.git.profile(name)?;
         }
-        crate::resources::definitions(&config.resources, &config.resource_pools)?;
+        crate::daemon::resources::definitions(&config.resources, &config.resource_pools)?;
         Ok(config)
     }
 

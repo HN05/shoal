@@ -5,10 +5,10 @@ use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    daemon::workspace::Manager,
     model::Workspace,
     sim::{SimRequest, now},
     state::states,
-    workspace::Manager,
 };
 
 states!(CleanRequestStatus {

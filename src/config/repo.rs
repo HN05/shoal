@@ -79,8 +79,8 @@ pub struct RepoConfig {
     /// Runs untracked before the worktree is removed, e.g. to close that session.
     pub pre_remove_cmd: Option<String>,
     pub ports: PortDefaults,
-    pub resources: BTreeMap<String, crate::resources::ResourceConfig>,
-    pub resource_pools: BTreeMap<String, crate::resources::PoolConfig>,
+    pub resources: BTreeMap<String, crate::daemon::resources::ResourceConfig>,
+    pub resource_pools: BTreeMap<String, crate::daemon::resources::PoolConfig>,
     pub simulators: SimulatorPreferences,
     pub auto_cleanup: AutoCleanup,
     pub pr_cleanup: PrCleanup,
@@ -101,7 +101,7 @@ pub struct PortDefaults {
 #[serde(default, deny_unknown_fields)]
 pub struct PortDefinition {
     pub requires_approval: bool,
-    pub approval_lifetime: crate::access::Lifetime,
+    pub approval_lifetime: crate::daemon::access::Lifetime,
     pub port: Option<u16>,
     pub env: Option<String>,
     pub reason: Option<String>,
@@ -184,7 +184,7 @@ pub fn parse(text: &str) -> Result<RepoConfig> {
             "configured port {name} cannot use port zero"
         );
     }
-    crate::resources::definitions(&config.resources, &config.resource_pools)?;
+    crate::daemon::resources::definitions(&config.resources, &config.resource_pools)?;
     Ok(config)
 }
 
@@ -275,7 +275,7 @@ pub struct Hooks {
 #[serde(default, deny_unknown_fields)]
 pub struct SimulatorPreferences {
     pub requires_approval: Option<bool>,
-    pub approval_lifetime: Option<crate::access::Lifetime>,
+    pub approval_lifetime: Option<crate::daemon::access::Lifetime>,
     pub preferred: Vec<String>,
 }
 

@@ -151,7 +151,7 @@ impl Manager {
         let path = check.workspace.path;
         Ok(Some(
             tokio::task::spawn_blocking(move || {
-                crate::cleanup::fingerprint(&path, &head, activity)
+                crate::daemon::cleanup::fingerprint(&path, &head, activity)
             })
             .await??,
         ))
@@ -233,7 +233,7 @@ impl Manager {
                     let message = format!("workspace removed; {error:#}");
                     self.notify(
                         Some(&workspace.name),
-                        crate::notifications::NotificationKind::HookFailed,
+                        crate::daemon::notifications::NotificationKind::HookFailed,
                         &message,
                     )
                     .await;

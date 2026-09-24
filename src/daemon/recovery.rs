@@ -4,10 +4,10 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, path::PathBuf};
 
 use crate::{
+    daemon::workspace::Manager,
     model::Workspace,
     process::{execution::Processes, identity as process},
     state::{ExecutionState, WorkspaceState, states},
-    workspace::Manager,
 };
 
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]

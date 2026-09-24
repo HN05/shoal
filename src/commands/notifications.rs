@@ -8,7 +8,7 @@ use anyhow::{Context as _, Result};
 use crate::{
     client::{self, request},
     context::Context,
-    notifications::Notification,
+    daemon::notifications::Notification,
     output::{Palette, Style},
     protocol::{self, Method, Response},
 };
@@ -129,11 +129,11 @@ fn local_time(unix_seconds: i64) -> String {
 mod tests {
     #[test]
     fn terminal_notification_is_one_osc_9_sequence_without_control_characters() {
-        let notification = crate::notifications::Notification {
+        let notification = crate::daemon::notifications::Notification {
             id: 1,
             created_at: 0,
             workspace: Some("fix-login".into()),
-            kind: crate::notifications::NotificationKind::AgentExited,
+            kind: crate::daemon::notifications::NotificationKind::AgentExited,
             message: "claude exited\x07 with code 0\n".into(),
             read: false,
         };

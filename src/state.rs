@@ -109,14 +109,16 @@ mod tests {
     #[test]
     fn migrated_enums_preserve_spellings_and_defaults() {
         use crate::{
-            access::{DecisionStatus, Lifetime},
             cli::CodexMode,
             config::repo::ConflictPolicy,
-            doctor::CheckStatus,
+            daemon::{
+                access::{DecisionStatus, Lifetime},
+                doctor::CheckStatus,
+                recovery::DirectoryState,
+                resources::{LockMode, ResourceKind},
+                workspace::ExecutionKind,
+            },
             happy::HappyAgent,
-            recovery::DirectoryState,
-            resources::{LockMode, ResourceKind},
-            workspace::ExecutionKind,
         };
         assert_spellings(&[
             (Lifetime::Lease, "lease"),

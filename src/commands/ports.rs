@@ -6,9 +6,9 @@ use crate::{
     cli::PortCommand,
     client::{self, request},
     context::{Context, optional},
+    daemon::ports::PortRequest,
     model::{PortOverview, PortReservation},
     output::{Palette, Style},
-    ports::PortRequest,
     protocol::{Body, Method},
     ui::{self, Fallback},
 };

@@ -11,14 +11,13 @@ use clap::{Command, CommandFactory};
 use clap_complete::engine::{ArgValueCompleter, CompletionCandidate};
 
 use crate::{
-    access::AccessRequest,
     client,
     config::{Config, repo::ConfigLayers},
+    daemon::{access::AccessRequest, resources::Overview},
     env,
     model::{PortOverview, Workspace},
     paths::Paths,
     protocol::{ConfigTarget, Method},
-    resources::Overview,
     sim::Simulator,
 };
 
@@ -284,7 +283,7 @@ impl Typed {
             .await?;
             return Ok(requests
                 .into_iter()
-                .filter(|r| r.status == crate::access::DecisionStatus::Pending)
+                .filter(|r| r.status == crate::daemon::access::DecisionStatus::Pending)
                 .map(|r| CompletionCandidate::new(r.id))
                 .collect());
         }

@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 
 use crate::{
     config::repo::{ConflictPolicy, PortDefinition},
+    daemon::resources::ResourceLease,
     process::identity::Identity,
-    resources::ResourceLease,
     sim::Simulator,
     state::{ExecutionState, WorkspaceState},
 };

@@ -632,20 +632,41 @@ mod tests {
             Ok(())
         }).await.unwrap();
         let migrated = Store::open(path.clone()).await.unwrap();
-        migrated.run(|db| {
-            let leases = crate::resources::leases(db, None)?;
-            assert_eq!(leases.len(), 1);
-            assert_eq!(leases[0].id, "lease");
-            assert_eq!(leases[0].mode, crate::resources::LockMode::Permit);
-            assert_eq!(leases[0].created_at, 123);
-            let json: String = db.query_row("SELECT definition FROM resource_pools", [], |row| row.get(0))?;
-            let stored: crate::resources::Definition = serde_json::from_str(&json)?;
-            let config: crate::config::repo::RepoConfig = toml::from_str("[resources.worker]\ncapacity=2")?;
-            assert_eq!(stored, crate::resources::definitions(&config.resources, &config.resource_pools)?["worker"]);
-            assert!(db.execute("UPDATE resource_leases SET mode='invalid'", []).is_err());
-            assert!(db.query_row("SELECT 'invalid'", [], |row| row.get::<_, crate::resources::LockMode>(0)).is_err());
-            Ok(())
-        }).await.unwrap();
+        migrated
+            .run(|db| {
+                let leases = crate::daemon::resources::leases(db, None)?;
+                assert_eq!(leases.len(), 1);
+                assert_eq!(leases[0].id, "lease");
+                assert_eq!(leases[0].mode, crate::daemon::resources::LockMode::Permit);
+                assert_eq!(leases[0].created_at, 123);
+                let json: String =
+                    db.query_row("SELECT definition FROM resource_pools", [], |row| {
+                        row.get(0)
+                    })?;
+                let stored: crate::daemon::resources::Definition = serde_json::from_str(&json)?;
+                let config: crate::config::repo::RepoConfig =
+                    toml::from_str("[resources.worker]\ncapacity=2")?;
+                assert_eq!(
+                    stored,
+                    crate::daemon::resources::definitions(
+                        &config.resources,
+                        &config.resource_pools
+                    )?["worker"]
+                );
+                assert!(
+                    db.execute("UPDATE resource_leases SET mode='invalid'", [])
+                        .is_err()
+                );
+                assert!(
+                    db.query_row("SELECT 'invalid'", [], |row| {
+                        row.get::<_, crate::daemon::resources::LockMode>(0)
+                    })
+                    .is_err()
+                );
+                Ok(())
+            })
+            .await
+            .unwrap();
         Store::open(path).await.unwrap();
     }
 

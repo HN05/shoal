@@ -6,7 +6,7 @@ use std::{
     sync::Arc,
 };
 
-use crate::{paths::Paths, workspace::Manager};
+use crate::{daemon::workspace::Manager, paths::Paths};
 
 pub fn git(repo: &Path, args: &[&str]) -> String {
     let output = Command::new("git")

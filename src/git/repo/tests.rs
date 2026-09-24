@@ -1,11 +1,10 @@
 use std::{fs, path::PathBuf, sync::Arc};
 
 use crate::{
+    daemon::{scope, workspace::Manager},
     paths::Paths,
     protocol::Method,
-    scope,
     test_support::{commit, git, manager, repository},
-    workspace::Manager,
 };
 
 struct Fixture {
@@ -888,7 +887,7 @@ async fn land_fast_forwards_merges_and_aborts_conflicts_without_a_remote() {
 
 #[tokio::test]
 async fn land_execution_holds_git_gate_through_completion_and_releases_on_failure() {
-    use crate::workspace::ExecutionKind;
+    use crate::daemon::workspace::ExecutionKind;
 
     let f = Fixture::new().await;
     let workspace = f.add("worker").await;
@@ -968,7 +967,7 @@ async fn land_refuses_dirty_checkouts_other_branches_and_scoped_callers() {
         )
         .await;
     let mut denied = Method::Execute {
-        kind: crate::workspace::ExecutionKind::Land,
+        kind: crate::daemon::workspace::ExecutionKind::Land,
         agent: None,
         workspace: workspace.id.clone(),
         wrapper: crate::process::identity::capture(std::process::id())

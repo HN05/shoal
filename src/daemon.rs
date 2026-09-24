@@ -1,5 +1,17 @@
 //! The per-user daemon: owns shared state, serves protocol requests over a
 //! Unix socket, and runs background cleanup.
+pub mod access;
+pub mod allocation;
+mod cleanup;
+pub mod doctor;
+pub mod notifications;
+pub mod ports;
+pub mod recovery;
+pub mod resources;
+pub mod scope;
+pub mod store;
+pub mod workspace;
+
 use std::{
     fs::{self, File, OpenOptions},
     os::unix::fs::{FileTypeExt, OpenOptionsExt, PermissionsExt},
@@ -17,16 +29,17 @@ use tokio::{
     time::timeout,
 };
 
+use notifications::NotificationKind;
+use ports::Acquisition;
+use scope::Caller;
+use workspace::{ExecutionKind, Manager, StartedExecution};
+
 use crate::{
-    notifications::NotificationKind,
     paths::Paths,
-    ports::Acquisition,
     process::identity::Identity,
     protocol::{
         self, Body, Control, DaemonStatus, ExecutionEvent, Method, Request, Response, timing,
     },
-    scope::Caller,
-    workspace::{ExecutionKind, Manager, StartedExecution},
 };
 
 const MAX_CLIENTS: usize = 128;
@@ -86,7 +99,7 @@ pub async fn run(paths: Paths, managed: bool) -> Result<()> {
     };
     eprintln!("shoal daemon listening on {}", paths.socket.display());
     let mut background = JoinSet::new();
-    background.spawn(crate::cleanup::run(manager.clone()));
+    background.spawn(cleanup::run(manager.clone()));
     background.spawn(expire_simulators(manager.clone()));
     let mut clients = JoinSet::new();
     loop {
@@ -152,7 +165,7 @@ async fn serve(mut stream: UnixStream, server: Server) -> Result<()> {
         );
         return protocol::write(&mut stream, &Response::new(request.id, body)).await;
     }
-    let caller = match crate::scope::authorize(
+    let caller = match scope::authorize(
         &server.manager,
         request.scope.as_deref(),
         &mut request.method,

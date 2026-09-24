@@ -1,5 +1,5 @@
 //! Shared outcomes of daemon-owned resource allocation.
-use crate::{access::AccessRequest, notifications::NotificationKind, workspace::Manager};
+use crate::daemon::{access::AccessRequest, notifications::NotificationKind, workspace::Manager};
 
 pub enum Allocation<T> {
     Granted(T),
@@ -33,7 +33,7 @@ impl Manager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::access::{DecisionStatus, Lifetime};
+    use crate::daemon::access::{DecisionStatus, Lifetime};
 
     #[tokio::test]
     async fn notifications_preserve_busy_wording_and_only_announce_pending_approvals() {

@@ -12,7 +12,9 @@ use std::{
 use tokio::time::{Instant, sleep};
 
 use crate::{
-    model::Workspace, notifications::NotificationKind, state::WorkspaceState, workspace::Manager,
+    daemon::{notifications::NotificationKind, workspace::Manager},
+    model::Workspace,
+    state::WorkspaceState,
 };
 
 const SWEEP_INTERVAL: Duration = Duration::from_secs(30);
@@ -207,9 +209,8 @@ mod tests {
     #[tokio::test]
     async fn cleanup_preserves_work_and_rechecks_activity_before_deleting() {
         use crate::{
+            daemon::{ports::PortRequest, resources::ResourceRequest},
             git,
-            ports::PortRequest,
-            resources::ResourceRequest,
             test_support::{commit, git as git_in, manager, repository},
         };
         let (temp, mut manager) = manager().await;
@@ -222,7 +223,7 @@ mod tests {
             .resources
             .insert(
                 "test-lock".into(),
-                crate::resources::ResourceConfig::default(),
+                crate::daemon::resources::ResourceConfig::default(),
             );
         let repo = manager
             .register_repository(repository_dir.to_str().unwrap().into(), None, None)
@@ -237,13 +238,14 @@ mod tests {
             let id = workspace.id.clone();
             async move { manager.cleanup_snapshot(&id).await.unwrap() }
         };
-        let lease = |pool: &str, mode: Option<crate::resources::LockMode>| ResourceRequest {
-            mode,
-            pool: pool.into(),
-            name: "default".into(),
-            resource: None,
-            reason: None,
-        };
+        let lease =
+            |pool: &str, mode: Option<crate::daemon::resources::LockMode>| ResourceRequest {
+                mode,
+                pool: pool.into(),
+                name: "default".into(),
+                resource: None,
+                reason: None,
+            };
         fs::write(workspace.path.join("work"), "landed later\n").unwrap();
         commit(&workspace.path, "work");
         assert!(
@@ -267,8 +269,8 @@ mod tests {
         let rwlock_config = workspace.path.join(".shoal.toml");
         fs::write(&rwlock_config, "[resources.cache]\nkind='rwlock'\n").unwrap();
         for mode in [
-            crate::resources::LockMode::Read,
-            crate::resources::LockMode::Write,
+            crate::daemon::resources::LockMode::Read,
+            crate::daemon::resources::LockMode::Write,
         ] {
             manager
                 .acquire_resource(&workspace.id, lease("cache", Some(mode)), false)
@@ -306,7 +308,7 @@ mod tests {
             .begin_execution(
                 &workspace.id,
                 None,
-                crate::workspace::ExecutionKind::Command,
+                crate::daemon::workspace::ExecutionKind::Command,
                 None,
             )
             .await
@@ -315,7 +317,7 @@ mod tests {
         manager
             .finish_execution(
                 started.plan.id,
-                crate::workspace::ExecutionKind::Command,
+                crate::daemon::workspace::ExecutionKind::Command,
                 Some(0),
             )
             .await

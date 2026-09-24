@@ -1,6 +1,6 @@
 //! Repository registration and lookup; independent of worktree lifecycle.
 use super::{Manager, paths::canonical_with_missing_tail};
-use crate::{forge::repository, git, model::Repository, store, subprocess, validate};
+use crate::{daemon::store, forge::repository, git, model::Repository, subprocess, validate};
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::params;
 use std::{

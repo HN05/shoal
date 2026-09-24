@@ -5,9 +5,9 @@ use anyhow::{Context, Result, bail, ensure};
 use uuid::Uuid;
 
 use crate::{
+    daemon::workspace::Manager,
     git::{self, run_isolated as git_run, worktrunk},
     model::{LandPlan, LandedBranch, PulledBranch, Repository},
-    workspace::Manager,
 };
 
 impl Manager {

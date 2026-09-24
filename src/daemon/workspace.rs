@@ -15,12 +15,14 @@ pub(crate) use executions::StartedExecution;
 
 use crate::{
     config::Config,
+    daemon::{
+        scope::Caller,
+        store::{self, Store},
+    },
     git::{self, worktrunk},
     model::{Inspection, Workspace},
     paths::Paths,
-    scope::Caller,
     state::WorkspaceState,
-    store::{self, Store},
 };
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{OptionalExtension, TransactionBehavior, params};
@@ -176,7 +178,7 @@ impl Manager {
                     pr_cleanup,
                     executions: store::executions(db, &workspace.id)?,
                     ports: store::ports(db, Some(&workspace.id))?,
-                    resources: crate::resources::leases(db, Some(&workspace.id))?,
+                    resources: crate::daemon::resources::leases(db, Some(&workspace.id))?,
                     simulators,
                     workspace,
                 })

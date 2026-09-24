@@ -4,7 +4,7 @@ use std::{collections::HashSet, ffi::OsStr, os::unix::fs::PermissionsExt, path::
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-use crate::{git, state::states, workspace::Manager};
+use crate::{daemon::workspace::Manager, git, state::states};
 
 states!(CheckStatus {
     Ok => "ok",

@@ -16,11 +16,10 @@ use audit::{CleanAction, CleanRequest, CleanRequestStatus, EvictedDevice};
 use simctl::Inventory;
 
 use crate::{
-    allocation::Allocation,
+    daemon::{allocation::Allocation, workspace::Manager},
     model::Workspace,
     state::{WorkspaceState, states},
     validate,
-    workspace::Manager,
 };
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -29,7 +28,7 @@ pub struct Profile {
     #[serde(default)]
     pub requires_approval: bool,
     #[serde(default)]
-    pub approval_lifetime: crate::access::Lifetime,
+    pub approval_lifetime: crate::daemon::access::Lifetime,
     pub device: String,
     pub runtime: String,
 }
@@ -38,7 +37,7 @@ pub struct Profile {
 #[serde(default, deny_unknown_fields)]
 pub struct SimConfig {
     pub requires_approval: bool,
-    pub approval_lifetime: crate::access::Lifetime,
+    pub approval_lifetime: crate::daemon::access::Lifetime,
     pub max_booted: usize,
     pub max_devices: usize,
     pub idle_seconds: u64,
@@ -52,7 +51,7 @@ impl Default for SimConfig {
     fn default() -> Self {
         Self {
             requires_approval: false,
-            approval_lifetime: crate::access::Lifetime::Lease,
+            approval_lifetime: crate::daemon::access::Lifetime::Lease,
             max_booted: 2,
             max_devices: 4,
             idle_seconds: 120,
@@ -339,11 +338,12 @@ impl Manager {
                     audit.error = Some(message.clone());
                 }
                 Ok(Allocation::Approval(request)) => {
-                    audit.status = if request.status == crate::access::DecisionStatus::Denied {
-                        CleanRequestStatus::Failed
-                    } else {
-                        CleanRequestStatus::Busy
-                    };
+                    audit.status =
+                        if request.status == crate::daemon::access::DecisionStatus::Denied {
+                            CleanRequestStatus::Failed
+                        } else {
+                            CleanRequestStatus::Busy
+                        };
                     audit.error = Some(format!(
                         "access approval {} ({})",
                         request.status, request.id
@@ -422,7 +422,7 @@ impl Manager {
         }
         let profile = profile.unwrap();
         if scoped && profile.requires_approval {
-            let approval = crate::access::AccessRequest::new(
+            let approval = crate::daemon::access::AccessRequest::new(
                 &workspace.id,
                 "simulator".into(),
                 &request.name,
@@ -435,7 +435,7 @@ impl Manager {
                 .run(move |db| {
                     let tx =
                         db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                    let pending = crate::access::check(&tx, approval)?;
+                    let pending = crate::daemon::access::check(&tx, approval)?;
                     tx.commit()?;
                     Ok(pending)
                 })
@@ -649,7 +649,7 @@ impl Manager {
             };
             Profile {
                 requires_approval: false,
-                approval_lifetime: crate::access::Lifetime::Lease,
+                approval_lifetime: crate::daemon::access::Lifetime::Lease,
                 device: device.clone(),
                 runtime: runtime.clone(),
             }
@@ -718,10 +718,10 @@ impl Manager {
             );
         }
         profile.requires_approval = !lifetimes.is_empty();
-        profile.approval_lifetime = if lifetimes.contains(&crate::access::Lifetime::Lease) {
-            crate::access::Lifetime::Lease
+        profile.approval_lifetime = if lifetimes.contains(&crate::daemon::access::Lifetime::Lease) {
+            crate::daemon::access::Lifetime::Lease
         } else {
-            crate::access::Lifetime::Workspace
+            crate::daemon::access::Lifetime::Workspace
         };
         ensure!(
             allowed || config.allow_any,
@@ -776,7 +776,7 @@ impl Manager {
         self.store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                let released = crate::access::release(&tx, &owner, "simulator", &name)?;
+                let released = crate::daemon::access::release(&tx, &owner, "simulator", &name)?;
                 tx.commit()?;
                 Ok(released)
             })

@@ -9,6 +9,7 @@ use crate::{
     client::{self, request},
     config::{repo::Hooks, templates},
     context::Context,
+    daemon::recovery::{ReconcileOptions, Report},
     env, execution,
     git::{
         self,
@@ -19,7 +20,6 @@ use crate::{
     model::{DiffBase, Workspace, WorkspaceStatus},
     output::{Palette, Style},
     protocol::{ConfigTarget, Method},
-    recovery::{ReconcileOptions, Report},
     removal::{BranchChoice, RemovalCheck, RemovalResult},
     shell,
     state::WorkspaceState,

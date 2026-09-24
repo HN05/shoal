@@ -4,11 +4,11 @@ use super::{
     paths::{canonical_parent_only, contains_protected_directory, real_directory_identity},
 };
 use crate::{
+    daemon::store,
     git,
     model::{Repository, RepositoryRemoval, Workspace},
     removal::BranchChoice,
     state::WorkspaceState,
-    store,
 };
 use anyhow::{Context, Result, ensure};
 use rusqlite::{OptionalExtension, params};

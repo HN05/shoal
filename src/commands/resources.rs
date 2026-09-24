@@ -7,9 +7,11 @@ use crate::{
     cli::ResourceCommand,
     client::{self, request},
     context::{Context, optional},
+    daemon::resources::{
+        Overview, ResourceKind, ResourceLease, ResourceRequest, WorkspaceOverview,
+    },
     output::{Palette, Style},
     protocol::{Body, Method},
-    resources::{Overview, ResourceKind, ResourceLease, ResourceRequest, WorkspaceOverview},
     ui::{self, Fallback},
 };
 
