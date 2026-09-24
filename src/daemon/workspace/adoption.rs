@@ -27,7 +27,7 @@ impl Manager {
         let branch = tree
             .branch
             .as_deref()
-            .and_then(|reference| reference.strip_prefix("refs/heads/"))
+            .and_then(git::strip_local)
             .context("cannot adopt a detached worktree; check out a branch first")?;
         if let Some(workspace) = self
             .list_workspaces()

@@ -19,17 +19,16 @@ impl Manager {
             &[
                 "for-each-ref",
                 "--format=%(refname)",
-                "refs/heads/",
-                "refs/remotes/",
+                git::LOCAL_REFS,
+                git::REMOTE_REFS,
             ],
         )
         .await?;
         let mut taken: Vec<String> = refs
             .lines()
             .filter_map(|reference| {
-                reference.strip_prefix("refs/heads/").or_else(|| {
-                    reference
-                        .strip_prefix("refs/remotes/")?
+                git::strip_local(reference).or_else(|| {
+                    git::strip_remote(reference)?
                         .split_once('/')
                         .map(|(_, branch)| branch)
                 })
@@ -73,7 +72,7 @@ impl Manager {
             &[
                 "rev-parse",
                 "--verify",
-                &format!("refs/heads/{branch}^{{commit}}"),
+                &format!("{}^{{commit}}", git::local_ref(branch)),
             ],
         )
         .await?
@@ -84,7 +83,7 @@ impl Manager {
                 "{default} is checked out in workspace {checkout}; land needs it outside managed workspaces"
             );
         }
-        let default_ref = format!("refs/heads/{default}");
+        let default_ref = git::local_ref(&default);
         let default_refresh = if upstream(&repo, &default_ref).await?.is_none() {
             let commit = git_run(&repo.path, &["rev-parse", "--verify", &default_ref])
                 .await
@@ -152,7 +151,7 @@ impl Manager {
         let repo = self.repository(&workspace.repository_id).await?;
         let gate = self.git_gate(&repo.id).await;
         let _guard = gate.lock().await;
-        let local_ref = format!("refs/heads/{branch}");
+        let local_ref = git::local_ref(branch);
         git_run(&repo.path, &["check-ref-format", &local_ref])
             .await
             .context("invalid source branch name")?;
@@ -209,7 +208,7 @@ impl Manager {
         branch: &str,
         allow_local_only: bool,
     ) -> Result<PulledBranch> {
-        let local_ref = format!("refs/heads/{branch}");
+        let local_ref = git::local_ref(branch);
         let previous_commit = git_run(&repo.path, &["rev-parse", "--verify", &local_ref])
             .await
             .with_context(|| format!("repository has no local {branch} branch"))?
@@ -362,8 +361,10 @@ async fn upstream(repo: &Repository, local_ref: &str) -> Result<Option<(String, 
         .trim_end_matches('\n')
         .split_once('\0')
         .context("invalid Git upstream")?;
-    Ok((!remote.is_empty() && reference.starts_with("refs/heads/"))
-        .then(|| (remote.to_owned(), reference.to_owned())))
+    Ok(
+        (!remote.is_empty() && git::strip_local(reference).is_some())
+            .then(|| (remote.to_owned(), reference.to_owned())),
+    )
 }
 
 /// Suffix conflicting components with `-2`, `-3`, ... A branch at an ancestor
@@ -416,7 +417,7 @@ async fn clean_branch(path: &Path, branch: &str) -> Result<()> {
         .await
         .unwrap_or_default();
     ensure!(
-        head == format!("refs/heads/{branch}\n"),
+        head == format!("{}\n", git::local_ref(branch)),
         "checkout at {} is not on {branch}",
         path.display()
     );
@@ -449,7 +450,7 @@ pub async fn finish_land(plan: LandPlan) -> Result<LandedBranch> {
     } = plan;
     let branch = workspace.branch.as_str();
     let default = default_refresh.branch.clone();
-    let default_ref = format!("refs/heads/{default}");
+    let default_ref = git::local_ref(&default);
     clean_branch(&workspace.path, branch).await?;
     ensure!(
         git_run(&workspace.path, &["rev-parse", "HEAD"])
@@ -550,7 +551,7 @@ pub async fn rollback_land(plan: &LandPlan) -> Result<()> {
     let branch = &plan.default_refresh.branch;
     ensure!(
         git_run(checkout, &["symbolic-ref", "--quiet", "HEAD"]).await?
-            == format!("refs/heads/{branch}\n"),
+            == format!("{}\n", git::local_ref(branch)),
         "landing checkout changed branches; recover it manually"
     );
     let head = git_run(checkout, &["rev-parse", "HEAD"]).await?;

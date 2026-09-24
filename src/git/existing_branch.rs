@@ -18,8 +18,8 @@ pub struct Branch {
 impl Branch {
     pub fn selector(&self) -> String {
         match &self.remote {
-            Some(remote) => format!("refs/remotes/{remote}/{}", self.name),
-            None => format!("refs/heads/{}", self.name),
+            Some(remote) => git::remote_ref(remote, &self.name),
+            None => git::local_ref(&self.name),
         }
     }
 }
@@ -37,7 +37,11 @@ impl Manager {
         self.ensure_repository_available(&repo.id).await?;
         let mut branches: Vec<_> = git::run_isolated(
             &repo.path,
-            &["for-each-ref", "--format=%(refname:strip=2)", "refs/heads/"],
+            &[
+                "for-each-ref",
+                "--format=%(refname:strip=2)",
+                git::LOCAL_REFS,
+            ],
         )
         .await?
         .lines()
@@ -52,7 +56,7 @@ impl Manager {
             branches.extend(heads.lines().filter_map(|line| {
                 let (_, reference) = line.split_once('\t')?;
                 Some(Branch {
-                    name: reference.strip_prefix("refs/heads/")?.into(),
+                    name: git::strip_local(reference)?.into(),
                     remote: Some(remote.into()),
                 })
             }));
@@ -73,9 +77,9 @@ impl Manager {
         let _guard = gate.lock().await;
         self.repository(&repo.id).await?;
         self.ensure_repository_available(&repo.id).await?;
-        let local = selector.strip_prefix("refs/heads/").unwrap_or(selector);
-        let local_ref = format!("refs/heads/{local}");
-        let branch = if !selector.starts_with("refs/remotes/")
+        let local = git::strip_local(selector).unwrap_or(selector);
+        let local_ref = git::local_ref(local);
+        let branch = if git::strip_remote(selector).is_none()
             && git::run_isolated(&repo.path, &["show-ref", "--verify", "--", &local_ref])
                 .await
                 .is_ok()
@@ -112,7 +116,7 @@ impl Manager {
         if let Some(remote) = &branch.remote {
             let local_exists = git::run_isolated(
                 &repo.path,
-                &["show-ref", "--verify", "--", &format!("refs/heads/{name}")],
+                &["show-ref", "--verify", "--", &git::local_ref(name)],
             )
             .await
             .is_ok();
@@ -122,12 +126,12 @@ impl Manager {
                     &[
                         "for-each-ref",
                         "--format=%(upstream)",
-                        &format!("refs/heads/{name}"),
+                        &git::local_ref(name),
                     ],
                 )
                 .await?;
                 ensure!(
-                    upstream.trim() == format!("refs/remotes/{remote}/{name}"),
+                    upstream.trim() == git::remote_ref(remote, name),
                     "local branch {name} already exists and does not track {remote}/{name}; select the local branch explicitly"
                 );
             }
@@ -164,7 +168,7 @@ impl Manager {
             self.verify_worktree(&workspace).await?;
             let actual = git::run_isolated(&workspace.path, &["symbolic-ref", "HEAD"]).await?;
             ensure!(
-                actual.trim() == format!("refs/heads/{name}"),
+                actual.trim() == git::local_ref(name),
                 "workspace {} is no longer on its recorded branch",
                 workspace.name
             );
@@ -205,7 +209,7 @@ impl Manager {
         branch: &Branch,
     ) -> Result<()> {
         if let Some(remote) = &branch.remote {
-            let tracking = format!("refs/remotes/{remote}/{}", branch.name);
+            let tracking = git::remote_ref(remote, &branch.name);
             git::run_isolated(
                 &repo.path,
                 &[
@@ -218,11 +222,11 @@ impl Manager {
                     "--refmap=",
                     "--",
                     remote,
-                    &format!("+refs/heads/{}:{tracking}", branch.name),
+                    &format!("+{}:{tracking}", git::local_ref(&branch.name)),
                 ],
             )
             .await?;
-            let local = format!("refs/heads/{}", branch.name);
+            let local = git::local_ref(&branch.name);
             if git::run_isolated(&repo.path, &["show-ref", "--verify", "--", &local])
                 .await
                 .is_ok()

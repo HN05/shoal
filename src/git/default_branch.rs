@@ -14,9 +14,7 @@ pub async fn resolve(repo: &Path, discover: bool) -> Result<String> {
         let head = git::run(repo, &["symbolic-ref", "--quiet", "HEAD"])
             .await
             .context("local repository has no default branch; select a starting ref with --base")?;
-        return Ok(head
-            .trim_end_matches('\n')
-            .strip_prefix("refs/heads/")
+        return Ok(git::strip_local(head.trim_end_matches('\n'))
             .context("repository HEAD does not name a local branch")?
             .to_owned());
     }
@@ -29,8 +27,8 @@ pub async fn resolve(repo: &Path, discover: bool) -> Result<String> {
         );
         remotes[0]
     };
-    let head = format!("refs/remotes/{remote}/HEAD");
-    let prefix = format!("refs/remotes/{remote}/");
+    let head = git::remote_ref(remote, "HEAD");
+    let prefix = git::remote_ref(remote, "");
     if let Ok(target) = git::run(repo, &["symbolic-ref", "--quiet", &head]).await {
         if let Some(branch) = target.trim_end_matches('\n').strip_prefix(&prefix) {
             return Ok(branch.to_owned());
@@ -49,13 +47,14 @@ pub async fn resolve(repo: &Path, discover: bool) -> Result<String> {
         })?;
     let branch = advertised
         .lines()
-        .find_map(|line| {
-            line.strip_prefix("ref: refs/heads/")?
-                .strip_suffix("\tHEAD")
-        })
+        .find_map(|line| git::strip_local(line.strip_prefix("ref: ")?)?.strip_suffix("\tHEAD"))
         .context(
             "remote HEAD does not advertise a default branch; select a starting ref with --base",
         )?;
-    git::run(repo, &["symbolic-ref", &head, &format!("{prefix}{branch}")]).await?;
+    git::run(
+        repo,
+        &["symbolic-ref", &head, &git::remote_ref(remote, branch)],
+    )
+    .await?;
     Ok(branch.to_owned())
 }

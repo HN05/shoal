@@ -86,7 +86,7 @@ pub(super) async fn pull_request(
                 .with_context(|| format!("PR base {:?} is not a branch name", pull.base))?;
             // The base is compared through its remote-tracking ref, so bring it
             // up to date without touching local branches.
-            let tracking = format!("refs/remotes/origin/{}", pull.base);
+            let tracking = git::remote_ref("origin", &pull.base);
             git::run(
                 &repo.path,
                 &[
@@ -97,7 +97,7 @@ pub(super) async fn pull_request(
                     "--refmap=",
                     "--",
                     "origin",
-                    &format!("+refs/heads/{}:{tracking}", pull.base),
+                    &format!("+{}:{tracking}", git::local_ref(&pull.base)),
                 ],
             )
             .await
@@ -105,7 +105,7 @@ pub(super) async fn pull_request(
             let creation = super::workspaces::Creation {
                 path: None,
                 branch: None,
-                existing: Some(format!("refs/remotes/origin/{}", pull.head)),
+                existing: Some(git::remote_ref("origin", &pull.head)),
                 base: Some(tracking),
                 git_profile: None,
             };

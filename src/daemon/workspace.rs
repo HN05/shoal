@@ -357,7 +357,7 @@ impl Manager {
         } else {
             default.ok()
         };
-        let default_ref = default.as_ref().map(|name| format!("refs/heads/{name}"));
+        let default_ref = default.as_deref().map(git::local_ref);
         let base = base
             .as_deref()
             .or(default_ref.as_deref())
@@ -543,16 +543,16 @@ async fn existing_base(repo: &crate::model::Repository, branch: &str) -> Result<
                 if name != branch
                     && git::run_isolated(
                         &repo.path,
-                        &["show-ref", "--verify", "--", &format!("refs/heads/{name}")],
+                        &["show-ref", "--verify", "--", &git::local_ref(&name)],
                     )
                     .await
                     .is_ok() =>
             {
-                format!("refs/heads/{name}")
+                git::local_ref(&name)
             }
             _ => git::run_isolated(
                 &repo.path,
-                &["rev-parse", "--verify", &format!("refs/heads/{}", branch)],
+                &["rev-parse", "--verify", &git::local_ref(branch)],
             )
             .await?
             .trim()

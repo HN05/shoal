@@ -13,6 +13,28 @@ use tokio::process::Command;
 
 use crate::subprocess;
 
+pub const LOCAL_REFS: &str = "refs/heads/";
+pub const REMOTE_REFS: &str = "refs/remotes/";
+
+/// Spell a literal local branch as a full ref, without validating its name.
+pub fn local_ref(name: &str) -> String {
+    format!("{LOCAL_REFS}{name}")
+}
+
+pub fn strip_local(reference: &str) -> Option<&str> {
+    reference.strip_prefix(LOCAL_REFS)
+}
+
+/// An empty name gives the remote's ref prefix, including its trailing slash.
+pub fn remote_ref(remote: &str, name: &str) -> String {
+    format!("{REMOTE_REFS}{remote}/{name}")
+}
+
+/// Keep the remote qualification intact: remote names may contain slashes.
+pub fn strip_remote(reference: &str) -> Option<&str> {
+    reference.strip_prefix(REMOTE_REFS)
+}
+
 /// `git -C <repo>` with the caller's normal configuration and hooks.
 pub fn command(repo: &Path) -> Command {
     let mut command = Command::new("git");
@@ -78,7 +100,7 @@ pub struct Worktree {
 
 impl Worktree {
     pub fn is_branch(&self, name: &str) -> bool {
-        self.branch.as_deref() == Some(&format!("refs/heads/{name}"))
+        self.branch.as_deref() == Some(&local_ref(name))
     }
 }
 

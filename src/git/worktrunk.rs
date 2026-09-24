@@ -56,7 +56,7 @@ pub async fn create(
         // Worktrunk otherwise routes the default branch to the main checkout,
         // ignoring worktree-path. Use a full ref for this invocation only:
         // it still resolves, but cannot equal a literal branch name.
-        default_branch_override(&mut command, &format!("refs/heads/{branch}"))?;
+        default_branch_override(&mut command, &crate::git::local_ref(branch))?;
     }
     command.args([branch, "--no-cd", "--no-hooks", "--format=json"]);
     let result: Value = serde_json::from_str(&subprocess::output(command).await?)

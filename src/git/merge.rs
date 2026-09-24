@@ -134,16 +134,13 @@ async fn refresh_source(
     workspace: &str,
     branch: &str,
 ) -> Result<Option<PulledBranch>> {
-    if branch.starts_with("refs/remotes/") {
+    if git::strip_remote(branch).is_some() {
         return Ok(None);
     }
-    let name = branch.strip_prefix("refs/heads/").unwrap_or(branch);
-    if git_run(
-        path,
-        &["rev-parse", "--verify", &format!("refs/heads/{name}")],
-    )
-    .await
-    .is_err()
+    let name = git::strip_local(branch).unwrap_or(branch);
+    if git_run(path, &["rev-parse", "--verify", &git::local_ref(name)])
+        .await
+        .is_err()
     {
         return Ok(None);
     }
@@ -177,7 +174,7 @@ fn refresh_summary(refresh: &PulledBranch) -> String {
 async fn own_branch(path: &Path, branch: &str) -> Result<()> {
     ensure!(
         git_run(path, &["symbolic-ref", "--quiet", "HEAD"]).await?
-            == format!("refs/heads/{branch}\n"),
+            == format!("{}\n", git::local_ref(branch)),
         "workspace must be on its own recorded branch ({branch}) before merging"
     );
     Ok(())
@@ -186,17 +183,17 @@ async fn own_branch(path: &Path, branch: &str) -> Result<()> {
 /// Resolve the source branch to a commit, fetching it into `fetched` when it
 /// only exists on a remote.
 async fn source(path: &Path, branch: &str, remote: Option<&str>, fetched: &str) -> Result<String> {
-    let name = branch.strip_prefix("refs/heads/").unwrap_or(branch);
-    git_run(path, &["check-ref-format", &format!("refs/heads/{name}")])
+    let name = git::strip_local(branch).unwrap_or(branch);
+    git_run(path, &["check-ref-format", &git::local_ref(name)])
         .await
         .context("invalid source branch name")?;
-    if remote.is_none() && !branch.starts_with("refs/remotes/") {
+    if remote.is_none() && git::strip_remote(branch).is_none() {
         if let Ok(commit) = git_run(
             path,
             &[
                 "rev-parse",
                 "--verify",
-                &format!("refs/heads/{name}^{{commit}}"),
+                &format!("{}^{{commit}}", git::local_ref(name)),
             ],
         )
         .await
@@ -204,7 +201,7 @@ async fn source(path: &Path, branch: &str, remote: Option<&str>, fetched: &str) 
             return Ok(commit.trim().into());
         }
         ensure!(
-            !branch.starts_with("refs/heads/"),
+            git::strip_local(branch).is_none(),
             "local source branch does not exist: {branch}"
         );
     }
@@ -212,7 +209,7 @@ async fn source(path: &Path, branch: &str, remote: Option<&str>, fetched: &str) 
     let mut remotes: Vec<&str> = remotes.lines().collect();
     // Longest match also handles remote names containing slashes.
     remotes.sort_by_key(|remote| std::cmp::Reverse(remote.len()));
-    let qualified = branch.strip_prefix("refs/remotes/").unwrap_or(branch);
+    let qualified = git::strip_remote(branch).unwrap_or(branch);
     let selected = if let Some(remote) = remote {
         ensure!(
             remotes.contains(&remote),
@@ -230,13 +227,13 @@ async fn source(path: &Path, branch: &str, remote: Option<&str>, fetched: &str) 
         Some(selected) => selected,
         None => {
             ensure!(
-                !branch.starts_with("refs/remotes/"),
+                git::strip_remote(branch).is_none(),
                 "unknown remote in source branch: {branch}"
             );
             (find_remote_with_branch(path, &remotes, name).await?, name)
         }
     };
-    let reference = format!("refs/heads/{name}");
+    let reference = git::local_ref(name);
     git_run(path, &["check-ref-format", &reference])
         .await
         .context("invalid remote branch name")?;
@@ -269,7 +266,7 @@ async fn find_remote_with_branch<'a>(
     remotes: &[&'a str],
     name: &str,
 ) -> Result<&'a str> {
-    let reference = format!("refs/heads/{name}");
+    let reference = git::local_ref(name);
     let mut matches = Vec::new();
     for remote in remotes {
         let refs = git_run(path, &["ls-remote", "--heads", "--", remote, &reference])

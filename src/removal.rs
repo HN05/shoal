@@ -105,7 +105,7 @@ pub async fn inspect(
     // The default branch may be absent locally (workspaces created from another ref).
     let default_ref = match default_branch {
         Some(name) => {
-            let reference = format!("refs/heads/{name}");
+            let reference = git::local_ref(name);
             git::run(path, &["rev-parse", "--verify", &reference])
                 .await
                 .is_ok()
