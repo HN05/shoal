@@ -1,3 +1,6 @@
+#[path = "support/pty.rs"]
+mod pty;
+
 #[path = "support/daemon.rs"]
 mod daemon_fixture;
 use daemon_fixture::DaemonGuard;
@@ -112,27 +115,8 @@ impl Fixture {
     }
 
     fn interactive(&self, args: &[&str], answer: &str) -> (Output, String) {
-        use std::{io::Read, os::fd::FromRawFd, os::unix::process::CommandExt};
-        let (mut master, mut slave) = (-1, -1);
-        assert_eq!(
-            unsafe {
-                libc::openpty(
-                    &mut master,
-                    &mut slave,
-                    std::ptr::null_mut(),
-                    std::ptr::null_mut(),
-                    std::ptr::null_mut(),
-                )
-            },
-            0
-        );
-        let mut master = unsafe { fs::File::from_raw_fd(master) };
-        let slave = unsafe { fs::File::from_raw_fd(slave) };
-        use std::os::fd::AsRawFd;
-        assert_ne!(
-            unsafe { libc::fcntl(master.as_raw_fd(), libc::F_SETFL, libc::O_NONBLOCK) },
-            -1
-        );
+        use std::{io::Read, os::unix::process::CommandExt};
+        let (mut master, slave) = pty::open();
         let mut command = self.command();
         // A tracked command needs a controlling terminal to transfer foreground
         // ownership to its child, not just file descriptors that pass isatty.
@@ -147,7 +131,7 @@ impl Fixture {
         let mut child = command
             .args(args)
             .stdin(slave.try_clone().unwrap())
-            .stderr(slave)
+            .stderr(slave.try_clone().unwrap())
             .stdout(Stdio::piped())
             .spawn()
             .unwrap();
@@ -4795,7 +4779,6 @@ head -n 1 "$HOME/picker-input"
 
 #[test]
 fn cd_always_picks_even_inside_a_workspace_and_cancel_does_not_navigate() {
-    use std::os::fd::FromRawFd;
     let fixture = Fixture::new();
     let first = fixture.add("first");
     let second = fixture.add("second");
@@ -4820,22 +4803,7 @@ fn cd_always_picks_even_inside_a_workspace_and_cancel_does_not_navigate() {
     let input = fixture.root.path().join("picker-input");
     for choice in [second["id"].as_str().unwrap(), "cancel"] {
         fs::write(&directive, "").unwrap();
-        let (mut master, mut slave) = (-1, -1);
-        // Give the CLI real terminal handles so its normal interactive path runs.
-        assert_eq!(
-            unsafe {
-                libc::openpty(
-                    &mut master,
-                    &mut slave,
-                    std::ptr::null_mut(),
-                    std::ptr::null_mut(),
-                    std::ptr::null_mut(),
-                )
-            },
-            0
-        );
-        let _master = unsafe { fs::File::from_raw_fd(master) };
-        let slave = unsafe { fs::File::from_raw_fd(slave) };
+        let (_master, slave) = pty::open();
         let output = fixture
             .command()
             .current_dir(first["path"].as_str().unwrap())
@@ -7528,7 +7496,6 @@ fn add_existing_branch_runs_setup_once_and_denies_scoped_creation() {
 
 #[test]
 fn interactive_add_picks_existing_branch_and_reopens_workspace() {
-    use std::os::fd::FromRawFd;
     let fixture = Fixture::new();
     git(&fixture.repo, &["branch", "coworker/topic"]);
     let bin = fixture.root.path().join("bin");
@@ -7538,21 +7505,7 @@ fn interactive_add_picks_existing_branch_and_reopens_workspace() {
     fs::set_permissions(&picker, fs::Permissions::from_mode(0o755)).unwrap();
     let directive = fixture.root.path().join("destination");
     for _ in 0..2 {
-        let (mut master, mut slave) = (-1, -1);
-        assert_eq!(
-            unsafe {
-                libc::openpty(
-                    &mut master,
-                    &mut slave,
-                    std::ptr::null_mut(),
-                    std::ptr::null_mut(),
-                    std::ptr::null_mut(),
-                )
-            },
-            0
-        );
-        let _master = unsafe { fs::File::from_raw_fd(master) };
-        let slave = unsafe { fs::File::from_raw_fd(slave) };
+        let (_master, slave) = pty::open();
         let output = fixture
             .command()
             .env("SHOAL_SHELL_DIRECTIVE", &directive)

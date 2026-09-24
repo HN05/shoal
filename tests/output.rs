@@ -1,9 +1,10 @@
+#[path = "support/pty.rs"]
+mod pty;
+
 mod support;
 
 use std::{
-    fs::File,
     io::{BufRead, BufReader, Read, Write},
-    os::fd::{AsRawFd, FromRawFd},
     os::unix::net::UnixListener,
     process::{Output, Stdio},
     thread,
@@ -47,31 +48,12 @@ fn run_with_reply(
         .envs(env.iter().copied())
         .stdin(Stdio::null());
     let mut master = terminal.map(|stdout| {
-        let (mut master, mut slave) = (-1, -1);
-        // SAFETY: openpty initializes both descriptors; File owns them below.
-        assert_eq!(
-            unsafe {
-                libc::openpty(
-                    &mut master,
-                    &mut slave,
-                    std::ptr::null_mut(),
-                    std::ptr::null_mut(),
-                    std::ptr::null_mut(),
-                )
-            },
-            0
-        );
-        let slave = unsafe { File::from_raw_fd(slave) };
+        let (master, slave) = pty::open();
         if stdout {
             command.stdout(slave);
         } else {
             command.stderr(slave);
         }
-        let master = unsafe { File::from_raw_fd(master) };
-        assert_ne!(
-            unsafe { libc::fcntl(master.as_raw_fd(), libc::F_SETFL, libc::O_NONBLOCK) },
-            -1
-        );
         master
     });
     let output = command.output().unwrap();
