@@ -4,7 +4,7 @@ use super::{
     paths::{canonical_parent_only, contains_protected_directory, real_directory_identity},
 };
 use crate::{
-    daemon::store,
+    daemon::{resources::Scope, store},
     git,
     model::{Repository, RepositoryRemoval, Workspace},
     removal::BranchChoice,
@@ -103,7 +103,7 @@ impl Manager {
                 );
                 tx.execute(
                     "DELETE FROM resource_pools WHERE scope=?1",
-                    [format!("repo/{id}")],
+                    [Scope::Repo(id.clone())],
                 )?;
                 ensure!(
                     tx.execute("DELETE FROM repositories WHERE id=?1", [&id])? == 1,

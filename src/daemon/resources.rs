@@ -2,14 +2,48 @@
 use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, params};
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fmt,
+    str::FromStr,
+};
 use uuid::Uuid;
 
 use crate::{
     daemon::{allocation::Allocation, store, workspace::Manager},
-    state::states,
+    state::{states, text_key},
     validate,
 };
+
+/// Where a pool's leases are shared: across every repository or within one.
+/// Spelled `global` or `repo/<repository id>` in the database and JSON.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Scope {
+    Global,
+    Repo(String),
+}
+
+impl fmt::Display for Scope {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Global => f.write_str("global"),
+            Self::Repo(id) => write!(f, "repo/{id}"),
+        }
+    }
+}
+
+impl FromStr for Scope {
+    type Err = anyhow::Error;
+
+    fn from_str(text: &str) -> Result<Self> {
+        match (text, text.strip_prefix("repo/")) {
+            ("global", _) => Ok(Self::Global),
+            (_, Some(id)) if !id.is_empty() => Ok(Self::Repo(id.into())),
+            _ => anyhow::bail!("invalid resource scope: {text}"),
+        }
+    }
+}
+text_key!(Scope);
 
 states!(
     #[derive(Default)]
@@ -133,8 +167,7 @@ pub struct ResourceLease {
     pub mode: LockMode,
     pub id: String,
     pub workspace_id: String,
-    /// `global` or `repo/<repository id>`.
-    pub scope: String,
+    pub scope: Scope,
     pub pool: String,
     /// Caller-chosen lease name; one workspace may hold several per pool.
     pub name: String,
@@ -172,7 +205,7 @@ pub struct ResourceStatus {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PoolStatus {
     pub name: String,
-    pub scope: String,
+    pub scope: Scope,
     pub capacity: u32,
     pub used: u32,
     pub available: u32,
@@ -241,7 +274,11 @@ pub fn leases(db: &Connection, owner: Option<&str>) -> Result<Vec<ResourceLease>
 }
 
 /// The definition recorded when a pool's leases were granted, if any.
-fn stored_definition(tx: &Transaction<'_>, scope: &str, pool: &str) -> Result<Option<Definition>> {
+fn stored_definition(
+    tx: &Transaction<'_>,
+    scope: &Scope,
+    pool: &str,
+) -> Result<Option<Definition>> {
     let stored: Option<String> = tx
         .query_row(
             "SELECT definition FROM resource_pools WHERE scope=?1 AND name=?2",
@@ -362,13 +399,13 @@ impl Manager {
     async fn resource_definitions(
         &self,
         workspace: &crate::model::Workspace,
-    ) -> Result<BTreeMap<String, (String, Definition)>> {
+    ) -> Result<BTreeMap<String, (Scope, Definition)>> {
         let repo = self.workspace_config(workspace).await?;
         let global = definitions(&self.config.resources, &self.config.resource_pools)?;
         let local = definitions(&repo.resources, &repo.resource_pools)?;
         let mut result: BTreeMap<_, _> = global
             .into_iter()
-            .map(|(name, definition)| (name, ("global".into(), definition)))
+            .map(|(name, definition)| (name, (Scope::Global, definition)))
             .collect();
         for (name, definition) in local {
             if let Some((_, machine)) = result.get(&name) {
@@ -379,7 +416,7 @@ impl Manager {
             } else {
                 result.insert(
                     name,
-                    (format!("repo/{}", workspace.repository_id), definition),
+                    (Scope::Repo(workspace.repository_id.clone()), definition),
                 );
             }
         }
@@ -648,11 +685,11 @@ impl Manager {
 fn renew_lease(
     tx: Transaction<'_>,
     existing: &ResourceLease,
-    scope: &str,
+    scope: &Scope,
     request: ResourceRequest,
 ) -> Result<Allocation<ResourceLease>> {
     ensure!(
-        existing.scope == scope
+        existing.scope == *scope
             && request.mode.is_none_or(|m| m == existing.mode)
             && request
                 .resource
@@ -674,7 +711,7 @@ fn renew_lease(
 
 fn pool_status(
     name: String,
-    scope: String,
+    scope: Scope,
     definition: &Definition,
     active: &[&ResourceLease],
     matches: bool,
@@ -722,6 +759,35 @@ fn pool_status(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn scopes_keep_their_stored_spelling() -> Result<()> {
+        let db = Connection::open_in_memory()?;
+        for (scope, text) in [
+            (Scope::Global, "global"),
+            (Scope::Repo("repo-id".into()), "repo/repo-id"),
+        ] {
+            assert_eq!(scope.to_string(), text);
+            assert_eq!(text.parse::<Scope>()?, scope);
+            assert_eq!(serde_json::to_value(&scope)?, text);
+            assert_eq!(serde_json::from_value::<Scope>(text.into())?, scope);
+            let stored: Scope = db.query_row("SELECT ?1", [&scope], |row| row.get(0))?;
+            assert_eq!(stored, scope);
+            assert_eq!(
+                db.query_row("SELECT ?1", [&scope], |row| row.get::<_, String>(0))?,
+                text
+            );
+        }
+        for text in ["", "repo", "repo/", "local", "Global"] {
+            assert!(text.parse::<Scope>().is_err(), "{text}");
+            assert!(
+                db.query_row("SELECT ?1", [text], |row| row.get::<_, Scope>(0))
+                    .is_err(),
+                "{text}"
+            );
+        }
+        Ok(())
+    }
 
     #[test]
     fn leases_use_named_columns() -> Result<()> {

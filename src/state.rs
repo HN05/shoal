@@ -54,6 +54,42 @@ macro_rules! states {
 }
 pub(crate) use states;
 
+/// Serde and SQLite text conversions for a key type spelled by `Display` and
+/// parsed by `FromStr` with an `anyhow::Error`; the spelling is the stored key.
+macro_rules! text_key {
+    ($name:ty) => {
+        impl ::serde::Serialize for $name {
+            fn serialize<S: ::serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+                serializer.collect_str(self)
+            }
+        }
+        impl<'de> ::serde::Deserialize<'de> for $name {
+            fn deserialize<D: ::serde::Deserializer<'de>>(
+                deserializer: D,
+            ) -> Result<Self, D::Error> {
+                <String as ::serde::Deserialize>::deserialize(deserializer)?
+                    .parse()
+                    .map_err(::serde::de::Error::custom)
+            }
+        }
+        impl ::rusqlite::types::ToSql for $name {
+            fn to_sql(&self) -> ::rusqlite::Result<::rusqlite::types::ToSqlOutput<'_>> {
+                Ok(::rusqlite::types::ToSqlOutput::from(self.to_string()))
+            }
+        }
+        impl ::rusqlite::types::FromSql for $name {
+            fn column_result(
+                value: ::rusqlite::types::ValueRef<'_>,
+            ) -> ::rusqlite::types::FromSqlResult<Self> {
+                value.as_str()?.parse().map_err(|error: ::anyhow::Error| {
+                    ::rusqlite::types::FromSqlError::Other(error.into())
+                })
+            }
+        }
+    };
+}
+pub(crate) use text_key;
+
 states!(WorkspaceState {
     Preparing => "preparing",
     Ready => "ready",
