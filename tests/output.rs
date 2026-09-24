@@ -1,4 +1,4 @@
-mod common;
+mod support;
 
 use std::{
     fs::File,
@@ -23,7 +23,8 @@ fn run_with_reply(
 ) -> (Output, String) {
     let root = tempfile::tempdir_in("/tmp").unwrap();
     let server = reply.map(|(delay, mut reply)| {
-        let listener = UnixListener::bind(root.path().join("daemon.sock")).unwrap();
+        std::fs::create_dir(root.path().join("state")).unwrap();
+        let listener = UnixListener::bind(root.path().join("state/daemon.sock")).unwrap();
         thread::spawn(move || {
             let (mut stream, _) = listener.accept().unwrap();
             stream
@@ -38,12 +39,9 @@ fn run_with_reply(
             writeln!(stream, "{reply}").unwrap();
         })
     });
-    let mut command = common::isolated(env!("CARGO_BIN_EXE_shoal"));
+    let mut command = support::cli(root.path());
     command
-        .args(["--state-dir", root.path().to_str().unwrap()])
         .args(args)
-        .env_remove("SHOAL_SCOPE_TOKEN")
-        .env_remove("SHOAL_COMPLETE")
         .env_remove("NO_COLOR")
         .env("TERM", "xterm-256color")
         .envs(env.iter().copied())

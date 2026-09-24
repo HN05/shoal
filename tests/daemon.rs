@@ -1,4 +1,4 @@
-mod common;
+mod support;
 
 use std::{
     fs,
@@ -16,6 +16,8 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
+
+use support::cli as command;
 
 use serde_json::{Value, json};
 use tempfile::TempDir;
@@ -90,18 +92,6 @@ impl Drop for Daemon {
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
-}
-
-fn command(root: &Path) -> Command {
-    let mut command = common::isolated(env!("CARGO_BIN_EXE_shoal"));
-    command
-        .arg("--state-dir")
-        .arg(root.join("state"))
-        .env("HOME", root)
-        .env_remove("XDG_CONFIG_HOME")
-        .env_remove("SHOAL_SCOPE_TOKEN")
-        .env_remove("SHOAL_EXECUTION_ID");
-    command
 }
 
 #[test]

@@ -1,15 +1,10 @@
-mod common;
+mod support;
 
 use std::{fs, path::Path, process::Command};
 
 fn command(home: &Path) -> Command {
-    let mut command = common::isolated(env!("CARGO_BIN_EXE_shoal"));
-    command
-        .current_dir(home)
-        .env("HOME", home)
-        .env("XDG_CONFIG_HOME", home.join("xdg"))
-        .env("SHOAL_STATE_DIR", home.join("state"))
-        .env_remove("SHOAL_SCOPE_TOKEN");
+    let mut command = support::cli(home);
+    command.env("XDG_CONFIG_HOME", home.join("xdg"));
     command
 }
 

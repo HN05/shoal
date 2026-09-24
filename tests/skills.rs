@@ -1,4 +1,4 @@
-mod common;
+mod support;
 
 use std::{
     fs,
@@ -8,15 +8,11 @@ use std::{
 };
 
 fn cli(home: &Path) -> Command {
-    let mut command = common::isolated(env!("CARGO_BIN_EXE_shoal"));
+    let mut command = support::cli(home);
     command
-        .current_dir(home)
-        .env("HOME", home)
         .env("XDG_CONFIG_HOME", home.join(".config"))
         // Skill delivery must not depend on socket path length or daemon setup.
-        .env("SHOAL_STATE_DIR", home.join("x".repeat(150)))
-        .env_remove("SHOAL_SCOPE_TOKEN")
-        .env_remove("CLAUDE_CONFIG_DIR");
+        .env("SHOAL_STATE_DIR", home.join("x".repeat(150)));
     command
 }
 

@@ -1,14 +1,9 @@
-mod common;
+mod support;
 
 use std::{fs, path::Path};
 
 fn generate(home: &Path, args: &[&str]) -> Vec<u8> {
-    let output = common::isolated(env!("CARGO_BIN_EXE_shoal"))
-        .args(args)
-        .env("HOME", home)
-        .env("SHOAL_STATE_DIR", home.join("state"))
-        .output()
-        .unwrap();
+    let output = support::cli(home).args(args).output().unwrap();
     assert!(
         output.status.success(),
         "{}",
@@ -22,7 +17,7 @@ fn bash_completes_commands_and_flags_without_a_daemon() {
     let home = tempfile::tempdir().unwrap();
     let script = home.path().join("completions.bash");
     fs::write(&script, generate(home.path(), &["completions", "bash"])).unwrap();
-    let output = common::isolated("bash").args(["--noprofile", "--norc", "-c", r#"
+    let output = support::isolated(home.path(), "bash").args(["--noprofile", "--norc", "-c", r#"
 source "$1"
 COMP_TYPE=9
 COMP_WORDS=(shoal co); COMP_CWORD=1; COMP_LINE='shoal co'; COMP_POINT=${#COMP_LINE}
@@ -34,7 +29,7 @@ _clap_complete_shoal "${COMP_WORDS[0]}" "${COMP_WORDS[COMP_CWORD]}" "${COMP_WORD
 COMP_WORDS=(shoal doctor --re); COMP_CWORD=2; COMP_LINE='shoal doctor --re'; COMP_POINT=${#COMP_LINE}
 _clap_complete_shoal "${COMP_WORDS[0]}" "${COMP_WORDS[COMP_CWORD]}" "${COMP_WORDS[COMP_CWORD-1]}"; printf '%s\n' "${COMPREPLY[@]}"
 "#, "completion-test"])
-        .arg(&script).env("HOME", home.path()).output().unwrap();
+        .arg(&script).output().unwrap();
     assert!(
         output.status.success(),
         "{}",
@@ -66,11 +61,9 @@ fn shell_init_registers_completions_for_bash_and_zsh() {
             "[[ ${_comps[shoal]} == _clap_dynamic_completer_shoal ]] && (( $+functions[_clap_dynamic_completer_shoal] ))",
         ),
     ] {
-        let output = common::isolated(shell)
+        let output = support::isolated(home.path(), shell)
             .args(["-f", "-c", &format!("source \"$1\"; {check}"), "init-test"])
             .arg(&script)
-            .env("HOME", home.path())
-            .env("ZDOTDIR", home.path())
             .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
             .output()
             .unwrap();
@@ -122,13 +115,11 @@ fn dynamic_completion_covers_nested_commands_flags_and_paths_without_daemon() {
         (vec!["shoal", "skill", "install", "pi"], "pi"),
     ] {
         for shell in ["bash", "zsh"] {
-            let output = common::isolated(env!("CARGO_BIN_EXE_shoal"))
+            let output = support::cli(home.path())
                 .arg("--")
                 .args(&words)
                 .env("SHOAL_COMPLETE", shell)
                 .env("_CLAP_COMPLETE_INDEX", (words.len() - 1).to_string())
-                .env("HOME", home.path())
-                .env("SHOAL_STATE_DIR", home.path().join("state"))
                 .output()
                 .unwrap();
             assert!(
@@ -152,7 +143,7 @@ fn zsh_completion_function_invokes_current_binary() {
     let home = tempfile::tempdir().unwrap();
     let script = home.path().join("completion.zsh");
     fs::write(&script, generate(home.path(), &["completions", "zsh"])).unwrap();
-    let output = common::isolated("zsh")
+    let output = support::isolated(home.path(), "zsh")
         .args([
             "-f",
             "-c",
@@ -170,8 +161,6 @@ _clap_dynamic_completer_shoal
             "completion-test",
         ])
         .arg(script)
-        .env("HOME", home.path())
-        .env("ZDOTDIR", home.path())
         .output()
         .unwrap();
     assert!(
@@ -200,14 +189,9 @@ fn doctor_detects_integration_in_the_calling_shell_without_a_daemon() {
             } else {
                 "shoal --json doctor --all"
             };
-            let output = common::isolated(shell)
+            let output = support::isolated(home.path(), shell)
                 .args(["-f", "-c", command, "doctor-test"])
                 .arg(&script)
-                .env("HOME", home.path())
-                .env("ZDOTDIR", home.path())
-                .env("SHOAL_STATE_DIR", home.path().join("state"))
-                .env_remove("SHOAL_SHELL_DIRECTIVE")
-                .env_remove("SHOAL_SCOPE_TOKEN")
                 .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
                 .output()
                 .unwrap();

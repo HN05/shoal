@@ -1,4 +1,6 @@
-mod common;
+mod support;
+
+use support::cli;
 
 use serde_json::Value;
 use std::{
@@ -209,35 +211,6 @@ impl Drop for Fixture {
         let _ = self.daemon.kill();
         let _ = self.daemon.wait();
     }
-}
-
-fn cli(root: &Path) -> Command {
-    let mut command = common::isolated(env!("CARGO_BIN_EXE_shoal"));
-    command
-        .arg("--state-dir")
-        .arg(root.join("state"))
-        .env("HOME", root)
-        .env(
-            "PATH",
-            format!(
-                "{}:{}",
-                root.join("bin").display(),
-                std::env::var("PATH").unwrap()
-            ),
-        )
-        .env_remove("SHOAL_SHELL_DIRECTIVE")
-        // Tests may themselves run inside a Shoal execution.
-        .env_remove("SHOAL_SCOPE_TOKEN")
-        .env_remove("SHOAL_EXECUTION_ID")
-        .env_remove("XDG_CONFIG_HOME")
-        .env_remove("CLAUDE_CONFIG_DIR")
-        .env_remove("CODEX_HOME")
-        // Happy tests must never see the developer's login or server.
-        .env_remove("HAPPY_HOME_DIR")
-        .env_remove("HAPPY_SERVER_URL")
-        .env("GIT_CONFIG_GLOBAL", "/dev/null")
-        .env("GIT_CONFIG_NOSYSTEM", "1");
-    command
 }
 
 fn git(repo: &Path, args: &[&str]) -> String {
@@ -2643,13 +2616,11 @@ until ! shoal inspect acknowledged >/dev/null 2>&1; do sleep 0.1; done
 printf 'navigation-ok\n'
 "#;
     for shell in ["bash", "zsh"] {
-        let output = common::isolated(shell)
+        let output = support::isolated(fixture.root.path(), shell)
             .arg("-c")
             .arg(script)
             .env("INTEGRATION", &integration)
             .env("REPO", &fixture.repo)
-            .env("SHOAL_STATE_DIR", fixture.root.path().join("state"))
-            .env("HOME", fixture.root.path())
             .env(
                 "PATH",
                 format!(
