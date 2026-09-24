@@ -11,7 +11,10 @@ use clap::{Command, CommandFactory};
 use clap_complete::engine::{ArgValueCompleter, CompletionCandidate};
 
 use crate::{
-    cli::client,
+    cli::{
+        client,
+        workspace_context::{ScopeOrder, WorkspaceContext},
+    },
     config::{Config, repo::ConfigLayers},
     daemon::{access::AccessRequest, resources::Overview},
     env,
@@ -200,13 +203,17 @@ impl Typed {
             let layer = runtime.block_on(async {
                 tokio::time::timeout(Duration::from_millis(500), async {
                     let workspaces = client::workspaces(&paths).await?;
-                    let workspace = self
-                        .workspace(&workspaces)
-                        .or_else(|| {
-                            std::env::current_dir()
-                                .ok()
-                                .and_then(|cwd| Workspace::innermost(&workspaces, &cwd))
-                        })
+                    let cwd = std::env::current_dir().ok();
+                    let context = WorkspaceContext::from_directory(&workspaces, cwd.as_deref());
+                    let workspace = context
+                        .resolve(
+                            self.workspace.as_deref(),
+                            env::is_scoped(),
+                            ScopeOrder::AfterDirectory,
+                        )
+                        // Command names remain available from cwd while a typed
+                        // workspace is incomplete or unknown.
+                        .or_else(|| context.resolve(None, false, ScopeOrder::AfterDirectory))
                         .context("no current workspace")?;
                     client::request::<Box<ConfigLayers>>(
                         &paths,
@@ -350,15 +357,12 @@ impl Typed {
     /// The explicitly typed workspace, else the one containing the current
     /// directory, else the scoped execution's own workspace.
     fn workspace<'a>(&self, workspaces: &'a [Workspace]) -> Option<&'a Workspace> {
-        if let Some(selector) = &self.workspace {
-            return workspaces
-                .iter()
-                .find(|w| &w.name == selector || &w.id == selector);
-        }
-        std::env::current_dir()
-            .ok()
-            .and_then(|cwd| Workspace::innermost(workspaces, &cwd))
-            .or_else(|| env::is_scoped().then(|| workspaces.first()).flatten())
+        let cwd = std::env::current_dir().ok();
+        WorkspaceContext::from_directory(workspaces, cwd.as_deref()).resolve(
+            self.workspace.as_deref(),
+            env::is_scoped(),
+            ScopeOrder::AfterDirectory,
+        )
     }
 }
 

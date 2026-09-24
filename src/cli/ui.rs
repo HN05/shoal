@@ -14,6 +14,7 @@ use crate::{
         client,
         context::Context,
         output::{Palette, Style},
+        workspace_context::{ScopeOrder, WorkspaceContext},
     },
     model::{Repository, Workspace},
     removal::{BranchChoice, RemovalCheck},
@@ -339,20 +340,17 @@ pub async fn select_workspace(
         return Ok(selector);
     }
     let workspaces = client::workspaces(&ctx.paths).await?;
-    if crate::env::is_scoped() {
-        // The daemon filters and authorizes the list, so this stays bound to
-        // the execution even when the process changes its working directory.
-        return workspaces
-            .first()
-            .map(|w| w.id.clone())
-            .context("scoped workspace is unavailable");
+    let scoped = crate::env::is_scoped();
+    let cwd = if !scoped && !matches!(fallback, Fallback::Picker) {
+        Some(std::fs::canonicalize(std::env::current_dir()?)?)
+    } else {
+        None
+    };
+    let context = WorkspaceContext::from_directory(&workspaces, cwd.as_deref());
+    if let Some(workspace) = context.resolve(None, scoped, ScopeOrder::First) {
+        return Ok(workspace.id.clone());
     }
-    if !matches!(fallback, Fallback::Picker) {
-        let cwd = std::fs::canonicalize(std::env::current_dir()?)?;
-        if let Some(workspace) = Workspace::innermost(&workspaces, &cwd) {
-            return Ok(workspace.id.clone());
-        }
-    }
+    ensure!(!scoped, "scoped workspace is unavailable");
     ensure!(
         !matches!(fallback, Fallback::CurrentDirectoryOnly),
         "no current workspace; pass an explicit workspace"

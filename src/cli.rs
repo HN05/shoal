@@ -5,6 +5,7 @@ pub mod context;
 pub mod output;
 mod progress;
 pub mod ui;
+pub mod workspace_context;
 
 use std::{ffi::OsString, path::PathBuf};
 
