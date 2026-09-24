@@ -3,7 +3,8 @@
 # tag, so a run can say which toolchain it used.
 #
 # Build with ./build.sh on the runner host, then bump ARG RUST below and the
-# `image:` tags in every workflow that uses this image. A change here that keeps
+# `image:` tags in every workflow that uses this image, and package.rust-version
+# in Cargo.toml. A change here that keeps
 # the Rust version still needs a rebuild with the same tag. See AGENTS.md "CI".
 
 ARG RUST=1.98

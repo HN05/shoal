@@ -126,7 +126,8 @@ and the Python release-script tests; a PR whose only `area/` label is
 `.forgejo/ci-image/Containerfile` (`git.henriknordvik.com/hn05/ci-shoal:<rust
 version>`), so a run installs nothing: new CI tooling goes into the
 Containerfile, and only the owner rebuilds it with `.forgejo/ci-image/build.sh`
-on the runner host, then bumps the `image:` tag in every workflow. Cargo builds
+on the runner host, then updates `package.rust-version` in `Cargo.toml`, the
+Containerfile's `ARG RUST`, and the `image:` tag in every workflow. Cargo builds
 share the runner-mounted `/ci-target`; every step that runs cargo there sources
 `.forgejo/scripts/lock-target-dir.sh` first, which takes a free slot directory
 instead of waiting, and runs `cargo clean -p shoal`.

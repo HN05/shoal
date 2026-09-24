@@ -38,7 +38,7 @@ for wf in ../workflows/*.yml; do
   [ "$tag" = "$RUST" ] || STALE="${STALE:+$STALE, }$(basename "$wf") ($tag)"
 done
 if [ -n "$STALE" ]; then
-  echo "still asking for an older tag: $STALE; bump each to $RUST (and ARG RUST in the Containerfile) in a PR, fixing any new clippy lints there."
+  echo "still asking for an older tag: $STALE; bump each to $RUST (and ARG RUST in the Containerfile and package.rust-version in Cargo.toml) in a PR, fixing any new clippy lints there."
 else
   echo "every workflow using this image already asks for this tag; the next run picks the image up."
 fi
