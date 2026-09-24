@@ -1,19 +1,19 @@
 //! Daemon-side execution registration and stopping. Terminal I/O stays in
 //! crate::execution, in the invoking CLI process.
-use super::Manager;
+use super::{Manager, ResourceGuard};
 use crate::{
     execution_processes::Processes,
-    model::{Execution, ExecutionPlan},
+    model::{Execution, ExecutionPlan, Workspace},
     process_identity::{self as process, Identity},
     scope::Caller,
     state::{ExecutionState, WorkspaceState},
     store,
 };
 use anyhow::{Context, Result, bail, ensure};
-use rusqlite::{OptionalExtension, TransactionBehavior, params};
-use std::{collections::HashSet, time::Duration};
+use rusqlite::{OptionalExtension, Transaction, TransactionBehavior, params};
+use std::{collections::HashSet, path::PathBuf, time::Duration};
 use tokio::{
-    sync::watch,
+    sync::{OwnedMutexGuard, watch},
     time::{Instant, sleep},
 };
 use uuid::Uuid;
@@ -28,6 +28,51 @@ pub enum ExecutionKind {
     /// The repository's setup command; exclusive apart from the execution that
     /// requested it, and its exit decides whether the workspace becomes ready.
     Setup,
+}
+
+#[derive(Default)]
+struct PreparedExecution {
+    setup_cmd: Option<PathBuf>,
+    pre_setup: Option<PathBuf>,
+    git_guard: Option<OwnedMutexGuard<()>>,
+    _resources: Option<ResourceGuard>,
+}
+
+impl ExecutionKind {
+    /// Apply the kind's lifecycle checks in the registration transaction.
+    fn reserve(
+        self,
+        tx: &Transaction<'_>,
+        workspace_id: &str,
+        parent_execution: Option<&str>,
+    ) -> Result<()> {
+        match self {
+            Self::Command | Self::Land => store::require_ready(tx, workspace_id)?,
+            Self::Setup => {
+                let blocking: Option<String> = tx.query_row(
+                    "SELECT id FROM executions WHERE workspace_id=?1 AND (?2 IS NULL OR id != ?2) LIMIT 1",
+                    params![workspace_id, parent_execution],
+                    |r| r.get(0),
+                ).optional()?;
+                if let Some(blocking) = blocking {
+                    bail!(
+                        "workspace has active or unknown execution {blocking}; setup is unavailable until it finishes or is cleared"
+                    );
+                }
+                let reserved = tx.execute(
+                    "UPDATE workspaces SET state=?2,error=NULL,setup_finished=0 WHERE id=?1 AND state IN (?3,?4,?2)",
+                    params![
+                        workspace_id,
+                        WorkspaceState::Preparing,
+                        WorkspaceState::Ready,
+                        WorkspaceState::Failed
+                    ],
+                )?;
+                ensure!(reserved == 1, "workspace is busy");
+            }
+        }
+        Ok(())
+    }
 }
 
 impl Manager {
@@ -47,38 +92,16 @@ impl Manager {
                 "execution wrapper is no longer alive"
             );
         }
-        let setup = kind == ExecutionKind::Setup;
+        let workspace = self.workspace(selector).await?;
+        let preparation = self.prepare_execution(&workspace, kind).await?;
+        let PreparedExecution {
+            setup_cmd,
+            pre_setup,
+            git_guard,
+            _resources,
+        } = preparation;
         // Coordinate registration and stop notification without holding the map
         // during any external command or lifetime of the agent.
-        let workspace = self.workspace(selector).await?;
-        let gate = self.git_gate(&workspace.repository_id).await;
-        let _guard = if setup { Some(gate.lock().await) } else { None };
-        let (setup_cmd, pre_setup) = if setup {
-            let config = self.workspace_config(&workspace).await?;
-            let pre_setup = config
-                .pre_setup_cmd
-                .as_ref()
-                .or(self.config.pre_setup_cmd.as_ref())
-                .map(|command| workspace.path.join(command));
-            ensure!(
-                config.setup_cmd.is_some() || pre_setup.is_some(),
-                "no setup_cmd configured"
-            );
-            (
-                config.setup_cmd.map(|command| workspace.path.join(command)),
-                pre_setup,
-            )
-        } else {
-            (None, None)
-        };
-        let _resources = if setup {
-            Some(
-                self.resource_guard(&workspace.id, pre_setup.is_some())
-                    .await?,
-            )
-        } else {
-            None
-        };
         let mut connections = self.connections.lock().await;
         let workspace = self.workspace(&workspace.id).await?;
         ensure!(workspace.path.is_dir(), "workspace directory is missing");
@@ -90,30 +113,7 @@ impl Manager {
             .store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
-                if setup {
-                    let blocking: Option<String> = tx.query_row(
-                        "SELECT id FROM executions WHERE workspace_id=?1 AND (?2 IS NULL OR id != ?2) LIMIT 1",
-                        params![workspace_id, parent_execution],
-                        |r| r.get(0),
-                    ).optional()?;
-                    if let Some(blocking) = blocking {
-                        bail!(
-                            "workspace has active or unknown execution {blocking}; setup is unavailable until it finishes or is cleared"
-                        );
-                    }
-                    let reserved = tx.execute(
-                        "UPDATE workspaces SET state=?2,error=NULL,setup_finished=0 WHERE id=?1 AND state IN (?3,?4,?2)",
-                        params![
-                            workspace_id,
-                            WorkspaceState::Preparing,
-                            WorkspaceState::Ready,
-                            WorkspaceState::Failed
-                        ],
-                    )?;
-                    ensure!(reserved == 1, "workspace is busy");
-                } else {
-                    store::require_ready(&tx, &workspace_id)?;
-                }
+                kind.reserve(&tx, &workspace_id, parent_execution.as_deref())?;
                 tx.execute(
                     "INSERT INTO executions(id,workspace_id,state,wrapper) VALUES (?1,?2,?3,?4)",
                     params![
@@ -136,13 +136,13 @@ impl Manager {
             Caller {
                 execution_id: id.clone(),
                 landing: kind == ExecutionKind::Land,
-                setup,
+                setup: kind == ExecutionKind::Setup,
                 workspace_id: workspace.id.clone(),
             },
         )
         .await;
         drop(connections);
-        drop(_guard);
+        drop(git_guard);
         if let Some(command) = pre_setup
             && let Err(error) = async {
                 crate::hooks::run_detached(
@@ -176,6 +176,42 @@ impl Manager {
             },
             receiver,
         ))
+    }
+
+    async fn prepare_execution(
+        &self,
+        workspace: &Workspace,
+        kind: ExecutionKind,
+    ) -> Result<PreparedExecution> {
+        match kind {
+            ExecutionKind::Command | ExecutionKind::Land => Ok(PreparedExecution::default()),
+            ExecutionKind::Setup => {
+                let git_guard = self
+                    .git_gate(&workspace.repository_id)
+                    .await
+                    .lock_owned()
+                    .await;
+                let config = self.workspace_config(workspace).await?;
+                let pre_setup = config
+                    .pre_setup_cmd
+                    .as_ref()
+                    .or(self.config.pre_setup_cmd.as_ref())
+                    .map(|command| workspace.path.join(command));
+                ensure!(
+                    config.setup_cmd.is_some() || pre_setup.is_some(),
+                    "no setup_cmd configured"
+                );
+                let resources = self
+                    .resource_guard(&workspace.id, pre_setup.is_some())
+                    .await?;
+                Ok(PreparedExecution {
+                    setup_cmd: config.setup_cmd.map(|command| workspace.path.join(command)),
+                    pre_setup,
+                    git_guard: Some(git_guard),
+                    _resources: Some(resources),
+                })
+            }
+        }
     }
 
     pub async fn record_execution_child(
