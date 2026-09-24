@@ -1,3 +1,6 @@
+#[path = "support/git.rs"]
+mod git_fixture;
+
 mod support;
 
 use std::{
@@ -8,7 +11,7 @@ use std::{
         net::{UnixListener, UnixStream},
     },
     path::Path,
-    process::{Child, Command, Output, Stdio},
+    process::{Child, Output, Stdio},
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -435,31 +438,7 @@ esac
 
     // A changed executable path must update the definition without breaking an
     // existing execution's daemon connection.
-    let repo = root.path().join("repo");
-    fs::create_dir(&repo).unwrap();
-    for args in [
-        vec!["init", "-b", "main"],
-        vec![
-            "-c",
-            "user.name=Shoal Test",
-            "-c",
-            "user.email=shoal@example.invalid",
-            "commit",
-            "--allow-empty",
-            "-m",
-            "initial",
-        ],
-    ] {
-        assert!(
-            Command::new("git")
-                .current_dir(&repo)
-                .args(args)
-                .output()
-                .unwrap()
-                .status
-                .success()
-        );
-    }
+    let repo = git_fixture::init_repo(root.path(), "repo", &[]);
     run(&["repo", "add", repo.to_str().unwrap()]);
     run(&["add", repo.to_str().unwrap(), "keep-running"]);
     let marker = root.path().join("started");

@@ -1,3 +1,7 @@
+#[path = "support/git.rs"]
+mod git_fixture;
+use git_fixture::{git, init_repo};
+
 mod support;
 
 use support::cli;
@@ -45,24 +49,10 @@ impl Fixture {
             fs::write(&script, include_str!("fixtures/simctl.py")).unwrap();
             fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
         }
-        let repo = root.path().join("repo with ' quotes & $literal");
-        fs::create_dir(&repo).unwrap();
-        let repo = fs::canonicalize(repo).unwrap();
-        git(&repo, &["init", "-b", "main"]);
-        fs::write(repo.join("tracked"), "committed\n").unwrap();
-        fs::write(repo.join(".gitignore"), "ignored/\n").unwrap();
-        git(&repo, &["add", "."]);
-        git(
-            &repo,
-            &[
-                "-c",
-                "user.name=Shoal Test",
-                "-c",
-                "user.email=shoal@example.invalid",
-                "commit",
-                "-m",
-                "initial",
-            ],
+        let repo = init_repo(
+            root.path(),
+            "repo with ' quotes & $literal",
+            &[("tracked", "committed\n"), (".gitignore", "ignored/\n")],
         );
         // Model a starting commit already present on a remote, without network I/O.
         git(&repo, &["update-ref", "refs/remotes/origin/main", "HEAD"]);
@@ -211,23 +201,6 @@ impl Drop for Fixture {
         let _ = self.daemon.kill();
         let _ = self.daemon.wait();
     }
-}
-
-fn git(repo: &Path, args: &[&str]) -> String {
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(repo)
-        .args(args)
-        .env("GIT_CONFIG_GLOBAL", "/dev/null")
-        .env("GIT_CONFIG_NOSYSTEM", "1")
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "git {args:?}: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    String::from_utf8(output.stdout).unwrap()
 }
 
 #[test]
