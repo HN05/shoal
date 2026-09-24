@@ -31,6 +31,8 @@ One Rust binary provides the CLI, execution wrapper, and daemon. Each state
 directory has one daemon shared across repositories, with a private Unix
 socket and a versioned JSON protocol; the ordinary installation is per user.
 The daemon owns SQLite state, allocation, lifecycle transitions, and recovery.
+Clients extract typed response payloads, report expected and received variants
+on mismatches, and retain daemon error codes and messages as structured errors.
 
 The execution wrapper owns terminal I/O, environment delivery, exit codes, and
 command process groups, registers through one request carrying its execution kind,

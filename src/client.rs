@@ -2,7 +2,7 @@
 //! helpers for the queries every command shares.
 use std::{io, time::Duration};
 
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Context, Result, ensure};
 use tokio::{
     net::UnixStream,
     time::{Instant, sleep, timeout},
@@ -54,27 +54,32 @@ pub async fn call(paths: &Paths, method: Method) -> Result<Body> {
     let (_stream, body) = timeout(Duration::from_secs(seconds), open(paths, method))
         .await
         .context("daemon request timed out")??;
-    match body {
-        Body::Error { code, message } => bail!("{code}: {message}"),
-        body => Ok(body),
-    }
+    body.into_result()
 }
 
-/// Call the daemon and unwrap the expected [`Body`] variant.
-///
-/// `request!(paths, Method::InspectWorkspace { workspace }, Inspection)`
-macro_rules! request {
-    ($paths:expr, $method:expr, $variant:ident) => {
-        match $crate::client::call($paths, $method).await? {
-            $crate::protocol::Body::$variant(value) => value,
-            _ => ::anyhow::bail!(
-                "unexpected daemon response; expected {}",
-                stringify!($variant)
-            ),
-        }
-    };
+/// Send a request and extract its expected response payload.
+pub async fn request<T>(paths: &Paths, method: Method) -> Result<T>
+where
+    T: TryFrom<Body, Error = anyhow::Error>,
+{
+    T::try_from(call(paths, method).await?)
 }
-pub(crate) use request;
+
+mod legacy {
+    /// Call the daemon and unwrap the expected [`Body`] variant.
+    ///
+    /// `request!(paths, Method::InspectWorkspace { workspace }, Inspection)`
+    macro_rules! request {
+        ($paths:expr, $method:expr, $variant:ident) => {
+            match $crate::client::call($paths, $method).await? {
+                $crate::protocol::Body::$variant(value) => value,
+                body => return Err(body.unexpected(stringify!($variant))),
+            }
+        };
+    }
+    pub(crate) use request;
+}
+pub(crate) use legacy::request;
 
 /// The settings that apply to `target` after every layer. The global config
 /// is read now, so launch defaults follow it without a daemon restart.
@@ -120,9 +125,8 @@ pub async fn repositories(paths: &Paths) -> Result<Vec<Repository>> {
 
 /// `None` when no daemon is listening on the socket.
 pub async fn status(paths: &Paths) -> Result<Option<Status>> {
-    match call(paths, Method::Status).await {
-        Ok(Body::Status(status)) => Ok(Some(status)),
-        Ok(_) => bail!("unexpected status response"),
+    match request(paths, Method::Status).await {
+        Ok(status) => Ok(Some(status)),
         Err(error) if is_unreachable(&error) => Ok(None),
         Err(error) => Err(error),
     }
@@ -156,5 +160,71 @@ pub async fn wait(paths: &Paths, running: bool) -> Result<()> {
             last_error.map(|e| format!(": {e:#}")).unwrap_or_default()
         );
         sleep(Duration::from_millis(100)).await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::protocol::RemoteError;
+    use tokio::net::UnixListener;
+
+    async fn reply<T>(mut response: Response) -> Result<T>
+    where
+        T: TryFrom<Body, Error = anyhow::Error>,
+    {
+        let temp = tempfile::tempdir()?;
+        let paths = Paths::new(Some(temp.path().to_owned()))?;
+        let listener = UnixListener::bind(&paths.socket)?;
+        let daemon = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let request: Request = protocol::read(&mut stream).await.unwrap();
+            response.id = request.id;
+            protocol::write(&mut stream, &response).await.unwrap();
+        });
+        let result = request(&paths, Method::Status).await;
+        daemon.await?;
+        result
+    }
+
+    #[tokio::test]
+    async fn typed_requests_extract_payloads_and_acknowledgements() {
+        let status = Status {
+            pid: 42,
+            version: "test".into(),
+            uptime_secs: 12,
+            managed: false,
+            unread_notifications: 3,
+        };
+        let status: Status = reply(Response::new(1, Body::Status(status))).await.unwrap();
+        assert_eq!(status.pid, 42);
+        assert_eq!(status.unread_notifications, 3);
+        reply::<()>(Response::new(1, Body::Ok)).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn typed_requests_report_variants_and_preserve_remote_errors() {
+        let error = reply::<Status>(Response::new(1, Body::Ok))
+            .await
+            .unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "unexpected daemon response; expected Status, received Ok"
+        );
+        let error = reply::<()>(Response::new(1, Body::error("scope_denied", "denied")))
+            .await
+            .unwrap_err();
+        let remote = error.downcast_ref::<RemoteError>().unwrap();
+        assert_eq!(remote.code, "scope_denied");
+        assert_eq!(remote.message, "denied");
+        assert_eq!(error.to_string(), "scope_denied: denied");
+    }
+
+    #[tokio::test]
+    async fn protocol_mismatch_precedes_payload_extraction() {
+        let mut response = Response::new(1, Body::error("protocol_mismatch", "old daemon"));
+        response.protocol += 1;
+        let error = reply::<Status>(response).await.unwrap_err();
+        assert!(error.is::<ProtocolMismatch>());
     }
 }

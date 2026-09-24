@@ -255,11 +255,45 @@ pub enum ConfigTarget {
     Repository(String),
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(tag = "type", content = "data", rename_all = "snake_case")]
-pub enum Body {
-    Ok,
-    Error { code: String, message: String },
+// Keep payload conversions and variant names tied to the wire enum.
+macro_rules! response_bodies {
+    ($($variant:ident($payload:ty),)*) => {
+        #[derive(Debug, Serialize, Deserialize)]
+        #[serde(tag = "type", content = "data", rename_all = "snake_case")]
+        pub enum Body {
+            Ok,
+            Error { code: String, message: String },
+            ResourceBusy { message: String },
+            SimBusy { message: String },
+            $($variant($payload),)*
+        }
+
+        impl Body {
+            pub fn variant_name(&self) -> &'static str {
+                match self {
+                    Self::Ok => "Ok",
+                    Self::Error { .. } => "Error",
+                    Self::ResourceBusy { .. } => "ResourceBusy",
+                    Self::SimBusy { .. } => "SimBusy",
+                    $(Self::$variant(_) => stringify!($variant),)*
+                }
+            }
+        }
+
+        $(impl TryFrom<Body> for $payload {
+            type Error = anyhow::Error;
+
+            fn try_from(body: Body) -> Result<Self> {
+                match body {
+                    Body::$variant(value) => Ok(value),
+                    body => Err(body.unexpected(stringify!($variant))),
+                }
+            }
+        })*
+    };
+}
+
+response_bodies! {
     Status(Status),
     Repositories(Vec<Repository>),
     Repository(Repository),
@@ -290,16 +324,58 @@ pub enum Body {
     AccessRequests(Vec<crate::access::AccessRequest>),
     ResourceLease(ResourceLease),
     ResourceOverview(Overview),
-    ResourceBusy { message: String },
     Simulator(Simulator),
     Simulators(Vec<Simulator>),
-    SimBusy { message: String },
     SimCatalog(SimulatorCatalog),
     SimOverview(crate::simulators::SimulatorOverview),
     SimHistory(Vec<AuditEntry>),
 }
 
+impl TryFrom<Body> for () {
+    type Error = anyhow::Error;
+
+    fn try_from(body: Body) -> Result<Self> {
+        match body {
+            Body::Ok => Ok(()),
+            body => Err(body.unexpected("Ok")),
+        }
+    }
+}
+
+/// A daemon failure, retaining its wire code and message for callers to inspect.
+#[derive(Debug)]
+pub struct RemoteError {
+    pub code: String,
+    pub message: String,
+}
+
+impl std::fmt::Display for RemoteError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {}", self.code, self.message)
+    }
+}
+
+impl std::error::Error for RemoteError {}
+
 impl Body {
+    /// Preserve remote errors even when the caller expected a different variant.
+    pub fn unexpected(self, expected: &str) -> anyhow::Error {
+        match self {
+            Self::Error { code, message } => RemoteError { code, message }.into(),
+            body => anyhow::anyhow!(
+                "unexpected daemon response; expected {expected}, received {}",
+                body.variant_name()
+            ),
+        }
+    }
+
+    pub fn into_result(self) -> Result<Self> {
+        match self {
+            Self::Error { code, message } => Err(RemoteError { code, message }.into()),
+            body => Ok(body),
+        }
+    }
+
     pub fn error(code: &str, error: impl std::fmt::Display) -> Self {
         Self::Error {
             code: code.into(),
@@ -410,5 +486,71 @@ mod tests {
                 .is_err()
             );
         }
+    }
+
+    #[test]
+    fn extraction_preserves_wire_shapes() {
+        for (wire, expected) in [
+            (json!({"type": "ok"}), "Ok"),
+            (json!({"type": "workspaces", "data": []}), "Workspaces"),
+            (
+                json!({"type": "layered_config", "data": {"worktree_file": {}, "saved_repository_config": {}}}),
+                "LayeredConfig",
+            ),
+            (
+                json!({"type": "resource_busy", "data": {"message": "busy"}}),
+                "ResourceBusy",
+            ),
+            (
+                json!({"type": "sim_busy", "data": {"message": "busy"}}),
+                "SimBusy",
+            ),
+            (
+                json!({"type": "error", "data": {"code": "future_code", "message": "failed"}}),
+                "Error",
+            ),
+        ] {
+            let body: Body = serde_json::from_value(wire.clone()).unwrap();
+            assert_eq!(body.variant_name(), expected);
+            // Config layers serialize defaults; other bodies round-trip exactly.
+            if expected != "LayeredConfig" {
+                assert_eq!(serde_json::to_value(&body).unwrap(), wire);
+            }
+            match expected {
+                "Ok" => <()>::try_from(body).unwrap(),
+                "Workspaces" => assert!(Vec::<Workspace>::try_from(body).unwrap().is_empty()),
+                "LayeredConfig" => {
+                    Box::<ConfigLayers>::try_from(body).unwrap();
+                }
+                "Error" => {
+                    let error = Status::try_from(body).unwrap_err();
+                    let remote = error.downcast_ref::<RemoteError>().unwrap();
+                    assert_eq!(remote.code, "future_code");
+                    assert_eq!(remote.message, "failed");
+                }
+                _ => assert_eq!(
+                    Status::try_from(body).unwrap_err().to_string(),
+                    format!("unexpected daemon response; expected Status, received {expected}")
+                ),
+            }
+        }
+    }
+
+    #[test]
+    fn stream_payloads_and_acknowledgements_preserve_remote_errors() {
+        for error in [
+            ExecutionPlan::try_from(Body::error("scope_denied", "denied")).unwrap_err(),
+            Notification::try_from(Body::error("scope_denied", "denied")).unwrap_err(),
+            <()>::try_from(Body::error("scope_denied", "denied")).unwrap_err(),
+        ] {
+            let remote = error.downcast_ref::<RemoteError>().unwrap();
+            assert_eq!(remote.code, "scope_denied");
+            assert_eq!(remote.message, "denied");
+        }
+        let error = <()>::try_from(Body::Workspaces(vec![])).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "unexpected daemon response; expected Ok, received Workspaces"
+        );
     }
 }
