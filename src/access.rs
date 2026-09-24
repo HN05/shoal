@@ -128,7 +128,7 @@ impl AccessRequest {
             lifetime,
             reason: reason.unwrap_or_default().into(),
             status: DecisionStatus::Pending,
-            created_at: crate::simulators::now(),
+            created_at: crate::sim::now(),
             decided_at: None,
             active: true,
         }
@@ -180,7 +180,7 @@ impl Manager {
                 );
                 if request.status == DecisionStatus::Pending {
                     request.status = status;
-                    request.decided_at = Some(crate::simulators::now());
+                    request.decided_at = Some(crate::sim::now());
                     tx.execute(
                         "UPDATE access_requests SET record=?2 WHERE id=?1",
                         params![id, serde_json::to_string(&request)?],

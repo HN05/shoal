@@ -6,7 +6,7 @@ use crate::{
     config::repo::{ConflictPolicy, PortDefinition},
     process::identity::Identity,
     resources::ResourceLease,
-    simulators::Simulator,
+    sim::Simulator,
     state::{ExecutionState, WorkspaceState},
 };
 

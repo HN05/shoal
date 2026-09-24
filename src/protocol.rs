@@ -20,8 +20,8 @@ use crate::{
     recovery::{ReconcileOptions, Report},
     removal::{BranchChoice, RemovalCheck, RemovalResult},
     resources::{Overview, ResourceLease, ResourceRequest},
-    sim_audit::AuditEntry,
-    simulators::{SimRequest, Simulator, SimulatorCatalog},
+    sim::audit::AuditEntry,
+    sim::{SimRequest, Simulator, SimulatorCatalog},
     workspace::ExecutionKind,
 };
 
@@ -385,7 +385,7 @@ response_bodies! {
     Simulator(Simulator),
     Simulators(Vec<Simulator>),
     SimCatalog(SimulatorCatalog),
-    SimOverview(crate::simulators::SimulatorOverview),
+    SimOverview(crate::sim::SimulatorOverview),
     SimHistory(Vec<AuditEntry>),
 }
 

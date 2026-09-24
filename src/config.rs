@@ -97,7 +97,7 @@ pub struct Config {
     pub ports: Ports,
     pub resources: std::collections::BTreeMap<String, crate::resources::ResourceConfig>,
     pub resource_pools: std::collections::BTreeMap<String, crate::resources::PoolConfig>,
-    pub simulators: crate::simulators::SimConfig,
+    pub simulators: crate::sim::SimConfig,
 }
 
 #[derive(Debug, Default, Deserialize)]

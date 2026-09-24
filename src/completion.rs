@@ -19,7 +19,7 @@ use crate::{
     paths::Paths,
     protocol::{ConfigTarget, Method},
     resources::Overview,
-    simulators::Simulator,
+    sim::Simulator,
 };
 
 /// What was already typed on the command line when completion was requested.

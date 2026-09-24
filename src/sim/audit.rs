@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     model::Workspace,
-    simulators::{SimRequest, now},
+    sim::{SimRequest, now},
     state::states,
     workspace::Manager,
 };

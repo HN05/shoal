@@ -1,5 +1,8 @@
 //! Exclusive, worktree-owned Xcode simulator leases. Claims are persisted
 //! before every simctl mutation so interrupted work can be reconciled.
+pub mod audit;
+mod simctl;
+
 use anyhow::{Result, bail, ensure};
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
@@ -9,11 +12,12 @@ use std::{
 };
 use uuid::Uuid;
 
+use audit::{CleanAction, CleanRequest, CleanRequestStatus, EvictedDevice};
+use simctl::Inventory;
+
 use crate::{
     allocation::Allocation,
     model::Workspace,
-    sim_audit::{CleanAction, CleanRequest, CleanRequestStatus, EvictedDevice},
-    simctl::{self, Inventory},
     state::{WorkspaceState, states},
     validate,
     workspace::Manager,

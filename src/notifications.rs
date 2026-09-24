@@ -92,7 +92,7 @@ impl Manager {
                 tx.execute(
                     "INSERT INTO notifications(created_at,workspace,kind,message) VALUES (?1,?2,?3,?4)",
                     params![
-                        i64::try_from(crate::simulators::now())?,
+                        i64::try_from(crate::sim::now())?,
                         workspace,
                         kind,
                         message

@@ -7,7 +7,7 @@ use std::{
 };
 
 use crate::{
-    simulators::SimulatorState,
+    sim::SimulatorState,
     state::{ExecutionState, WorkspaceState},
 };
 
