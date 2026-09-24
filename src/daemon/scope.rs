@@ -12,8 +12,7 @@ use anyhow::{Result, bail, ensure};
 pub struct Caller {
     pub execution_id: String,
     pub workspace_id: String,
-    pub landing: bool,
-    pub setup: bool,
+    pub kind: ExecutionKind,
 }
 
 /// Resolve `token` and confine `method` to the caller's own workspace. Optional
@@ -34,7 +33,7 @@ pub async fn authorize(
     let target = match method {
         Method::CheckLanding => {
             ensure!(
-                caller.landing,
+                caller.kind == ExecutionKind::Land,
                 "only an authorized landing execution may run the land worker"
             );
             None
@@ -77,7 +76,7 @@ pub async fn authorize(
             ..
         } => {
             ensure!(
-                !caller.setup,
+                caller.kind != ExecutionKind::Setup,
                 "a setup command cannot recursively run setup"
             );
             Some(workspace)

@@ -158,8 +158,7 @@ impl Manager {
             scope_token.clone(),
             Caller {
                 execution_id: id.clone(),
-                landing: kind == ExecutionKind::Land,
-                setup: kind == ExecutionKind::Setup,
+                kind,
                 workspace_id: workspace.id.clone(),
             },
         )

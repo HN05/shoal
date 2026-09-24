@@ -333,7 +333,7 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         ),
         Method::CheckLanding => {
             ensure!(
-                caller.is_some_and(|caller| caller.landing),
+                caller.is_some_and(|caller| caller.kind == ExecutionKind::Land),
                 "landing execution required"
             );
             Body::Ok

@@ -1,7 +1,10 @@
 use std::{fs, path::PathBuf, sync::Arc};
 
 use crate::{
-    daemon::{scope, workspace::Manager},
+    daemon::{
+        scope,
+        workspace::{ExecutionKind, Manager},
+    },
     paths::Paths,
     protocol::Method,
     test_support::{commit, git, manager, repository},
@@ -886,9 +889,99 @@ async fn land_fast_forwards_merges_and_aborts_conflicts_without_a_remote() {
 }
 
 #[tokio::test]
-async fn land_execution_holds_git_gate_through_completion_and_releases_on_failure() {
-    use crate::daemon::workspace::ExecutionKind;
+async fn execution_scope_preserves_role_authorization_and_expires() {
+    let f = Fixture::new().await;
+    let workspace = f.add("worker").await;
+    let other = f.add("other").await;
+    let wrapper = crate::process::identity::capture(std::process::id())
+        .unwrap()
+        .unwrap();
+    for kind in [
+        ExecutionKind::Command,
+        ExecutionKind::Land,
+        ExecutionKind::Setup,
+    ] {
+        if kind == ExecutionKind::Setup {
+            fs::write(
+                workspace.path.join(".shoal.toml"),
+                "setup_cmd = 'setup.sh'\n",
+            )
+            .unwrap();
+        }
+        let started = f
+            .manager
+            .begin_execution(&workspace.id, None, kind, None)
+            .await
+            .unwrap();
+        let token = started.plan.scope_token.as_str();
+        let caller = f.manager.caller(token).await.unwrap();
+        assert_eq!(caller.kind, kind);
+        assert_eq!(caller.execution_id, started.plan.id);
+        assert_eq!(caller.workspace_id, workspace.id);
 
+        for (mut method, allowed) in [
+            (Method::Status, true),
+            (Method::CheckLanding, kind == ExecutionKind::Land),
+            (Method::Shutdown, false),
+            (
+                Method::StopWorkspace {
+                    workspace: workspace.id.clone(),
+                },
+                false,
+            ),
+        ] {
+            let result = scope::authorize(&f.manager, Some(token), &mut method).await;
+            assert_eq!(result.is_ok(), allowed, "{kind:?}: {method:?}: {result:?}");
+        }
+        for requested in [
+            ExecutionKind::Command,
+            ExecutionKind::Setup,
+            ExecutionKind::Land,
+        ] {
+            for target in [&workspace, &other] {
+                let mut method = Method::Execute {
+                    workspace: target.name.clone(),
+                    kind: requested,
+                    agent: None,
+                    wrapper: wrapper.clone(),
+                };
+                let allowed = target.id == workspace.id
+                    && match requested {
+                        ExecutionKind::Command => true,
+                        ExecutionKind::Setup => kind != ExecutionKind::Setup,
+                        ExecutionKind::Land => false,
+                    };
+                let result = scope::authorize(&f.manager, Some(token), &mut method).await;
+                assert_eq!(result.is_ok(), allowed, "{kind:?}: {method:?}: {result:?}");
+                if allowed {
+                    assert_eq!(result.unwrap().unwrap().kind, kind);
+                    let Method::Execute {
+                        workspace: target, ..
+                    } = method
+                    else {
+                        unreachable!()
+                    };
+                    assert_eq!(target, workspace.id);
+                }
+            }
+        }
+        f.manager
+            .finish_execution(started.plan.id.clone(), kind, Some(0))
+            .await
+            .unwrap();
+        assert!(f.manager.caller(token).await.is_none());
+        assert!(
+            scope::authorize(&f.manager, Some(token), &mut Method::Status)
+                .await
+                .unwrap_err()
+                .to_string()
+                .contains("expired or unknown")
+        );
+    }
+}
+
+#[tokio::test]
+async fn land_execution_holds_git_gate_through_completion_and_releases_on_failure() {
     let f = Fixture::new().await;
     let workspace = f.add("worker").await;
     let gate = f.manager.git_gate(&workspace.repository_id).await;
@@ -900,12 +993,13 @@ async fn land_execution_holds_git_gate_through_completion_and_releases_on_failur
             .unwrap();
         assert!(started.plan.land.is_some());
         assert!(gate.try_lock().is_err());
-        assert!(
+        assert_eq!(
             f.manager
                 .caller(&started.plan.scope_token)
                 .await
                 .unwrap()
-                .landing
+                .kind,
+            ExecutionKind::Land
         );
         f.manager
             .finish_execution(started.plan.id.clone(), ExecutionKind::Land, exit)
@@ -959,8 +1053,7 @@ async fn land_refuses_dirty_checkouts_other_branches_and_scoped_callers() {
         .issue_scope(
             "token".into(),
             scope::Caller {
-                landing: false,
-                setup: false,
+                kind: ExecutionKind::Command,
                 execution_id: "execution".into(),
                 workspace_id: workspace.id.clone(),
             },
@@ -1098,8 +1191,7 @@ async fn adoption_preserves_dirty_worktree_and_persists_identity_and_readiness()
             scope::Caller {
                 execution_id: "test".into(),
                 workspace_id: w.id,
-                landing: false,
-                setup: false,
+                kind: ExecutionKind::Command,
             },
         )
         .await;
