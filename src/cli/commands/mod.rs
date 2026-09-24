@@ -24,7 +24,9 @@ use serde_json::json;
 use tokio::time::{Instant, sleep};
 
 use crate::{
-    cli::{Cli, CodexMode, Command, ConfigCommand, PrCommand, ShellCommand, context::Context},
+    cli::{
+        Cli, CodexMode, Command, ConfigCommand, PrCommand, ShellCommand, agents, context::Context,
+    },
     env,
     forge::pr::Action,
     paths::Paths,
@@ -78,8 +80,8 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             workspace,
             args,
         } => match name {
-            Some(name) if name == "claude" => workspaces::claude(&ctx, workspace, args).await,
-            Some(name) if name == "codex" => workspaces::codex(&ctx, None, workspace, args).await,
+            Some(name) if name == "claude" => agents::claude(&ctx, workspace, args).await,
+            Some(name) if name == "codex" => agents::codex(&ctx, None, workspace, args).await,
             Some(name) => crate::config::named_commands::run(&ctx, &name, workspace, args).await,
             None => crate::config::named_commands::list(&ctx).await,
         },
@@ -228,7 +230,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             .await
         }
         Command::Exec { workspace, command } => workspaces::exec(&ctx, workspace, command).await,
-        Command::Claude { workspace, args } => workspaces::claude(&ctx, workspace, args).await,
+        Command::Claude { workspace, args } => agents::claude(&ctx, workspace, args).await,
         Command::Codex {
             workspace,
             cli,
@@ -242,15 +244,15 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             } else {
                 None
             };
-            workspaces::codex(&ctx, mode, workspace, args).await
+            agents::codex(&ctx, mode, workspace, args).await
         }
-        Command::T3 { workspace, args } => workspaces::open_app(&ctx, workspace, "t3", args).await,
+        Command::T3 { workspace, args } => agents::open_app(&ctx, workspace, "t3", args).await,
         Command::Happy {
             agent,
             workspace,
             prompt,
             args,
-        } => workspaces::happy(&ctx, agent, workspace, prompt, args).await,
+        } => agents::happy(&ctx, agent, workspace, prompt, args).await,
         Command::DetachedInternal {
             workspace,
             log,

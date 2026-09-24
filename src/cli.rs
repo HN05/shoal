@@ -1,3 +1,4 @@
+mod agents;
 pub mod client;
 pub mod commands;
 pub mod completion;

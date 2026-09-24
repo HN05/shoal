@@ -162,7 +162,7 @@ pub(super) async fn run(
     };
     match reviewer {
         Reviewer::Agent(agent) => {
-            let agent = super::workspaces::default_agent(
+            let agent = crate::cli::agents::default_agent(
                 ctx,
                 ConfigTarget::Workspace(workspace.clone()),
                 agent,
@@ -171,7 +171,7 @@ pub(super) async fn run(
             let workspace = client::inspect(&ctx.paths, workspace).await?.workspace;
             let prompt = prompt(&workspace, pull.as_ref());
             // Desktop apps cannot receive the prompt.
-            super::workspaces::launch_agent(
+            crate::cli::agents::launch_agent(
                 ctx,
                 agent,
                 Some(CodexMode::Cli),
