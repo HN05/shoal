@@ -13,13 +13,14 @@ pub fn command(repo: &Path) -> Command {
     command
 }
 
-/// Git for daemon-driven ref updates: repository hooks are disabled and no
-/// credential prompt can block the daemon.
+/// Git for daemon-driven ref updates with repository hooks, Git credential
+/// prompts, and SSH askpass disabled.
 pub fn isolated_command(repo: &Path) -> Command {
     let mut command = command(repo);
     command
         .args(["-c", "core.hooksPath=/dev/null"])
-        .env("GIT_TERMINAL_PROMPT", "0");
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .env("SSH_ASKPASS_REQUIRE", "never");
     command
 }
 
@@ -105,6 +106,61 @@ fn parse_worktrees(listing: &str) -> Vec<Worktree> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn background_ssh_disables_prompts_and_preserves_transport_selection() {
+        let root = tempfile::tempdir().unwrap();
+        let ssh = root.path().join("fake-ssh");
+        std::fs::write(
+            &ssh,
+            r#"#!/bin/sh
+printf 'transport=%s askpass=%s terminal=%s\n' "$1" "$SSH_ASKPASS_REQUIRE" "$GIT_TERMINAL_PROMPT" >&2
+exit 1
+"#,
+        )
+        .unwrap();
+        for isolated in [false, true] {
+            for override_transport in [false, true] {
+                let mut command = if isolated {
+                    isolated_command(root.path())
+                } else {
+                    let mut command = command(root.path());
+                    command
+                        .env("SSH_ASKPASS_REQUIRE", "force")
+                        .env("GIT_TERMINAL_PROMPT", "1");
+                    command
+                };
+                command
+                    .env("GIT_CONFIG_GLOBAL", "/dev/null")
+                    .env("GIT_CONFIG_NOSYSTEM", "1")
+                    .env("GIT_SSH_VARIANT", "ssh")
+                    .env("SHOAL_TEST_SSH", &ssh)
+                    .env_remove("GIT_SSH_COMMAND")
+                    .args([
+                        "-c",
+                        "core.sshCommand=sh \"$SHOAL_TEST_SSH\" config",
+                        "ls-remote",
+                        "git@example.invalid:team/project.git",
+                    ]);
+                if override_transport {
+                    command.env("GIT_SSH_COMMAND", "sh \"$SHOAL_TEST_SSH\" env");
+                }
+                let error = subprocess::output(command).await.unwrap_err();
+                let transport = if override_transport { "env" } else { "config" };
+                let prompts = if isolated {
+                    "askpass=never terminal=0"
+                } else {
+                    "askpass=force terminal=1"
+                };
+                assert!(
+                    error
+                        .to_string()
+                        .contains(&format!("transport={transport} {prompts}")),
+                    "{error:#}"
+                );
+            }
+        }
+    }
 
     #[test]
     fn parses_porcelain_worktree_records() {

@@ -43,6 +43,8 @@ removal, check it against the rule those files state before judging it.
   and approval never bypasses capacity or simulator cleanup rules.
 - Explicit creation bases resolve locally and are recorded for diff; only a base
   naming the local default branch is refreshed.
+- Daemon ref updates disable Git credential and SSH askpass prompts without
+  overriding the user's SSH transport; interactive Git retains normal prompting.
 - Explicit workspace paths override only that creation; reject overlaps with state,
   checkouts, workspaces, and other repository directories; never delete their parents.
 - Existing branches use unsuffixed worktrees; reopen verified owned workspaces,

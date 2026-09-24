@@ -90,7 +90,9 @@ preserving an ahead branch and refusing divergence, dirty or managed checkouts, 
 failed fetches. `--base REF` starts from any locally resolvable
 commit ref without refreshing, except when it names the local default branch.
 Creation, default-branch refresh, setup, repository removal, and recovery share
-a per-repository Git gate.
+a per-repository Git gate. Daemon ref updates disable hooks, Git credential prompts,
+and SSH askpass while preserving the user's SSH transport configuration;
+interactive Git commands retain normal prompting.
 
 New-branch creation accepts literal Git branch names and derives a portable,
 globally unique workspace name and directory from them; a normalization collision
