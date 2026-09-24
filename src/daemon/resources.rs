@@ -608,15 +608,12 @@ impl Manager {
                 let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
                 store::require_ready(&tx, &workspace.id)?;
                 let mut released = false;
-                for approval in access::list(&tx, Some(&workspace.id))?
-                    .into_iter()
-                    .filter(|r| {
-                        r.active
-                            && r.name == name
-                            && matches!(&r.target, Target::Resource { pool: p, .. } if *p == pool)
-                    })
-                {
-                    released |= access::release(&tx, &workspace.id, &approval.target, &name)?;
+                for scope in [Scope::Global, Scope::Repo(workspace.repository_id.clone())] {
+                    let target = Target::Resource {
+                        scope,
+                        pool: pool.clone(),
+                    };
+                    released |= access::release(&tx, &workspace.id, &target, &name)?;
                 }
                 ensure!(
                     tx.execute(

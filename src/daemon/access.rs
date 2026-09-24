@@ -474,6 +474,63 @@ mod tests {
         Ok(())
     }
 
+    #[tokio::test]
+    async fn resource_release_targets_both_scopes_and_rolls_back_invalid_candidates() -> Result<()>
+    {
+        let (root, manager) = crate::test_support::manager().await;
+        let path = root.path().to_owned();
+        manager.store.run(move |db| {
+            owners(db)?;
+            db.execute("UPDATE workspaces SET path=?1 WHERE id='owner'", [path.to_str().unwrap()])?;
+            for (id, scope, status) in [
+                ("global", Scope::Global, DecisionStatus::Denied),
+                ("repo", Scope::Repo("repo".into()), DecisionStatus::Approved),
+            ] {
+                let mut request = sample("owner", Target::Resource { scope, pool: "lock".into() });
+                request.id = id.into();
+                request.status = status;
+                save(db, &request)?;
+            }
+            let Specification::Resource(spec) = resource(LockMode::Read) else { unreachable!() };
+            db.execute("INSERT INTO resource_pools VALUES ('global','lock',?1)", [serde_json::to_string(&spec.definition)?])?;
+            db.execute("INSERT INTO resource_leases(id,workspace_id,scope,pool,name,resource,created_at,mode)
+                VALUES ('lease','owner','global','lock','default','lock',1,'read')", [])?;
+            // Unrelated port history cannot block release, even without configured definitions.
+            db.execute("INSERT INTO access_requests VALUES ('port','owner','port/web','default','invalid',1)", [])?;
+            db.execute("UPDATE access_requests SET record=json_set(record,'$.status','unknown') WHERE id='repo'", [])?;
+            Ok(())
+        }).await?;
+        assert!(
+            manager
+                .release_resource("owner", "lock".into(), "default".into())
+                .await
+                .is_err()
+        );
+        manager.store.run(|db| {
+            assert!(by_id(db, "global")?.is_some());
+            assert_eq!(db.query_row("SELECT COUNT(*) FROM resource_leases", [], |r| r.get::<_, i64>(0))?, 1);
+            db.execute("UPDATE access_requests SET record=json_set(record,'$.status','approved') WHERE id='repo'", [])?;
+            Ok(())
+        }).await?;
+        manager
+            .release_resource("owner", "lock".into(), "default".into())
+            .await?;
+        manager
+            .store
+            .run(|db| {
+                assert!(by_id(db, "global")?.is_none());
+                assert!(!by_id(db, "repo")?.unwrap().active);
+                assert_eq!(
+                    db.query_row("SELECT COUNT(*) FROM resource_leases", [], |r| r
+                        .get::<_, i64>(0))?,
+                    0
+                );
+                assert!(list(db, Some("owner")).is_err());
+                Ok(())
+            })
+            .await
+    }
+
     fn unrelated_history(db: &Connection, count: i64) -> Result<()> {
         db.execute(
             "WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<?1)
