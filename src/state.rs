@@ -109,9 +109,9 @@ mod tests {
     #[test]
     fn migrated_enums_preserve_spellings_and_defaults() {
         use crate::{
-            access::{Lifetime, Status},
+            access::{DecisionStatus, Lifetime},
             cli::CodexMode,
-            doctor::Status as DoctorStatus,
+            doctor::CheckStatus,
             happy::HappyAgent,
             recovery::DirectoryState,
             repo_config::ConflictPolicy,
@@ -123,9 +123,9 @@ mod tests {
             (Lifetime::Workspace, "workspace"),
         ]);
         assert_spellings(&[
-            (Status::Pending, "pending"),
-            (Status::Approved, "approved"),
-            (Status::Denied, "denied"),
+            (DecisionStatus::Pending, "pending"),
+            (DecisionStatus::Approved, "approved"),
+            (DecisionStatus::Denied, "denied"),
         ]);
         assert_spellings(&[
             (ResourceKind::Semaphore, "semaphore"),
@@ -147,10 +147,10 @@ mod tests {
             (DirectoryState::Unverified, "unverified"),
         ]);
         assert_spellings(&[
-            (DoctorStatus::Ok, "ok"),
-            (DoctorStatus::Warning, "warning"),
-            (DoctorStatus::Error, "error"),
-            (DoctorStatus::Skipped, "skipped"),
+            (CheckStatus::Ok, "ok"),
+            (CheckStatus::Warning, "warning"),
+            (CheckStatus::Error, "error"),
+            (CheckStatus::Skipped, "skipped"),
         ]);
         assert_spellings(&[(CodexMode::Cli, "cli"), (CodexMode::App, "app")]);
         assert_spellings(&[

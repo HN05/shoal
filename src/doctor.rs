@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{git, state::states, workspace::Manager};
 
-states!(Status {
+states!(CheckStatus {
     Ok => "ok",
     Warning => "warning",
     Error => "error",
@@ -16,12 +16,12 @@ states!(Status {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Check {
     pub name: String,
-    pub status: Status,
+    pub status: CheckStatus,
     pub message: String,
 }
 
 impl Check {
-    pub fn new(name: impl Into<String>, status: Status, message: impl Into<String>) -> Self {
+    pub fn new(name: impl Into<String>, status: CheckStatus, message: impl Into<String>) -> Self {
         Self {
             name: name.into(),
             status,
@@ -44,9 +44,9 @@ fn dependencies(path: Option<&OsStr>) -> Vec<Check> {
                     })
             });
             let (status, message) = match executable {
-                Some(path) => (Status::Ok, format!("{} on the daemon's PATH", path.display())),
+                Some(path) => (CheckStatus::Ok, format!("{} on the daemon's PATH", path.display())),
                 None => (
-                    if tool == "fzf" { Status::Warning } else { Status::Error },
+                    if tool == "fzf" { CheckStatus::Warning } else { CheckStatus::Error },
                     format!(
                         "{tool} is missing or not executable on the daemon's PATH{}; install it and restart the daemon with the updated PATH",
                         if tool == "fzf" { " (needed for interactive pickers)" } else { "" }
@@ -86,7 +86,7 @@ impl Manager {
                             untracked = true;
                             checks.push(Check::new(
                                 &name,
-                                Status::Warning,
+                                CheckStatus::Warning,
                                 format!(
                                     "Git worktree is not tracked by Shoal: {}",
                                     tree.path.display()
@@ -97,14 +97,14 @@ impl Manager {
                     if !untracked {
                         checks.push(Check::new(
                             name,
-                            Status::Ok,
+                            CheckStatus::Ok,
                             format!("No untracked Git worktrees under {}", root.display()),
                         ));
                     }
                 }
                 Err(error) => checks.push(Check::new(
                     name,
-                    Status::Error,
+                    CheckStatus::Error,
                     format!(
                         "Could not check worktrees under {}: {error:#}",
                         root.display()
@@ -129,10 +129,14 @@ mod tests {
         fs::write(root.path().join("wt"), "not executable").unwrap();
         fs::create_dir(root.path().join("lsof")).unwrap();
         let checks = dependencies(Some(root.path().as_os_str()));
-        assert_eq!(checks[0].status, Status::Ok);
-        assert_eq!(checks[1].status, Status::Error);
-        assert_eq!(checks[2].status, Status::Error);
-        assert_eq!(checks[3].status, Status::Warning);
-        assert!(dependencies(None).iter().all(|c| c.status != Status::Ok));
+        assert_eq!(checks[0].status, CheckStatus::Ok);
+        assert_eq!(checks[1].status, CheckStatus::Error);
+        assert_eq!(checks[2].status, CheckStatus::Error);
+        assert_eq!(checks[3].status, CheckStatus::Warning);
+        assert!(
+            dependencies(None)
+                .iter()
+                .all(|c| c.status != CheckStatus::Ok)
+        );
     }
 }

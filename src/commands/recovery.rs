@@ -5,7 +5,7 @@ use serde::Serialize;
 use crate::{
     client::{self, request},
     context::Context,
-    doctor::{Check, Status},
+    doctor::{Check, CheckStatus},
     output::{Palette, Style},
     protocol::Method,
     recovery::{ReconcileOptions, Report},
@@ -29,7 +29,7 @@ pub(super) async fn run(
             Ok(checks) => report.checks.extend(checks),
             Err(error) => report.checks.push(Check::new(
                 "environment",
-                Status::Error,
+                CheckStatus::Error,
                 format!("Could not check daemon environment: {error:#}"),
             )),
         }
@@ -37,7 +37,7 @@ pub(super) async fn run(
             Ok(workspaces) => report.workspaces = workspaces,
             Err(error) => report.checks.push(Check::new(
                 "workspaces",
-                Status::Error,
+                CheckStatus::Error,
                 format!("Could not check workspaces: {error:#}"),
             )),
         }
@@ -45,7 +45,7 @@ pub(super) async fn run(
         for name in ["dependencies", "untracked_worktrees", "workspaces"] {
             report.checks.push(Check::new(
                 name,
-                Status::Skipped,
+                CheckStatus::Skipped,
                 "Not checked: a reachable, matching daemon is required",
             ));
         }
@@ -54,7 +54,7 @@ pub(super) async fn run(
         std::env::var_os(crate::env::SHELL_DIRECTIVE).is_some_and(|value| !value.is_empty());
     report.checks.push(Check::new(
         "shell_integration",
-        if shell_loaded { Status::Ok } else { Status::Warning },
+        if shell_loaded { CheckStatus::Ok } else { CheckStatus::Warning },
         if shell_loaded {
             "Shell integration is loaded in the calling shell".to_owned()
         } else {
@@ -64,16 +64,16 @@ pub(super) async fn run(
             )
         },
     ));
-    let unresolved = report.checks.iter().any(|c| c.status != Status::Ok)
+    let unresolved = report.checks.iter().any(|c| c.status != CheckStatus::Ok)
         || report.workspaces.iter().any(|r| !r.issues.is_empty());
     ctx.show(&report, |report| {
         let palette = Palette::stdout(ctx.json);
         for check in &report.checks {
             let (label, style) = match check.status {
-                Status::Ok => ("ok", Style::Success),
-                Status::Warning => ("warning", Style::Warning),
-                Status::Error => ("error", Style::Error),
-                Status::Skipped => ("not checked", Style::Warning),
+                CheckStatus::Ok => ("ok", Style::Success),
+                CheckStatus::Warning => ("warning", Style::Warning),
+                CheckStatus::Error => ("error", Style::Error),
+                CheckStatus::Skipped => ("not checked", Style::Warning),
             };
             println!(
                 "{} {}: {}",
@@ -112,12 +112,12 @@ async fn daemon_check(ctx: &Context) -> (Check, bool) {
     let version = env!("CARGO_PKG_VERSION");
     let (status, message, available) = match client::status(&ctx.paths).await {
         Ok(Some(daemon)) if daemon.version == version => (
-            Status::Ok,
+            CheckStatus::Ok,
             format!("Daemon running (PID {}, version {version})", daemon.pid),
             true,
         ),
         Ok(Some(daemon)) => (
-            Status::Error,
+            CheckStatus::Error,
             format!(
                 "Daemon version {} differs from CLI {version}; restart the daemon with the installed CLI version",
                 daemon.version
@@ -125,7 +125,7 @@ async fn daemon_check(ctx: &Context) -> (Check, bool) {
             false,
         ),
         Ok(None) => (
-            Status::Error,
+            CheckStatus::Error,
             format!(
                 "Daemon is stopped or unreachable at {}; run `shoal daemon start` or `shoal install`",
                 ctx.paths.socket.display()
@@ -133,7 +133,7 @@ async fn daemon_check(ctx: &Context) -> (Check, bool) {
             false,
         ),
         Err(error) => (
-            Status::Error,
+            CheckStatus::Error,
             format!("Daemon is unreachable or incompatible: {error:#}"),
             false,
         ),

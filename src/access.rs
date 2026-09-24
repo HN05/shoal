@@ -15,7 +15,7 @@ states!(
     }
 );
 
-states!(Status {
+states!(DecisionStatus {
     Pending => "pending",
     Approved => "approved",
     Denied => "denied",
@@ -32,7 +32,7 @@ pub struct AccessRequest {
     pub specification: Value,
     pub lifetime: Lifetime,
     pub reason: String,
-    pub status: Status,
+    pub status: DecisionStatus,
     pub created_at: u64,
     pub decided_at: Option<u64>,
     /// False for workspace grants retained after release.
@@ -82,10 +82,10 @@ pub fn check(tx: &Transaction<'_>, mut request: AccessRequest) -> Result<Option<
             request.reason.is_empty() || request.reason == existing.reason,
             "access request reason changed; release the resource name before retrying"
         );
-        return Ok((existing.status != Status::Approved).then(|| existing.clone()));
+        return Ok((existing.status != DecisionStatus::Approved).then(|| existing.clone()));
     }
     if records.iter().any(|r| {
-        r.status == Status::Approved
+        r.status == DecisionStatus::Approved
             && r.lifetime == Lifetime::Workspace
             && r.target == request.target
             && r.specification == request.specification
@@ -127,7 +127,7 @@ impl AccessRequest {
             specification,
             lifetime,
             reason: reason.unwrap_or_default().into(),
-            status: Status::Pending,
+            status: DecisionStatus::Pending,
             created_at: crate::simulators::now(),
             decided_at: None,
             active: true,
@@ -140,7 +140,7 @@ pub fn release(tx: &Transaction<'_>, owner: &str, target: &str, name: &str) -> R
     let Some(request) = current(tx, owner, target, name)? else {
         return Ok(false);
     };
-    if request.status == Status::Approved && request.lifetime == Lifetime::Workspace {
+    if request.status == DecisionStatus::Approved && request.lifetime == Lifetime::Workspace {
         tx.execute(
             "UPDATE access_requests SET active=0 WHERE id=?1",
             [&request.id],
@@ -170,15 +170,15 @@ impl Manager {
                     .ok_or_else(|| anyhow::anyhow!("unknown access request"))?;
                 store::require_ready(&tx, &request.workspace_id)?;
                 let status = if approve {
-                    Status::Approved
+                    DecisionStatus::Approved
                 } else {
-                    Status::Denied
+                    DecisionStatus::Denied
                 };
                 ensure!(
-                    request.status == Status::Pending || request.status == status,
+                    request.status == DecisionStatus::Pending || request.status == status,
                     "access request already decided"
                 );
-                if request.status == Status::Pending {
+                if request.status == DecisionStatus::Pending {
                     request.status = status;
                     request.decided_at = Some(crate::simulators::now());
                     tx.execute(
@@ -193,7 +193,7 @@ impl Manager {
     }
 
     pub async fn notify_access(&self, workspace: &str, request: &AccessRequest) {
-        if request.status == Status::Pending {
+        if request.status == DecisionStatus::Pending {
             self.notify(
                 Some(workspace),
                 crate::notifications::NotificationKind::AccessRequested,
@@ -232,10 +232,10 @@ mod tests {
                 changed.specification["mode"] = serde_json::json!("write");
                 assert!(check(&tx, changed).is_err());
                 let mut decision = pending.clone();
-                decision.status = Status::Denied;
+                decision.status = DecisionStatus::Denied;
                 tx.execute("UPDATE access_requests SET record=?2 WHERE id=?1", params![decision.id,serde_json::to_string(&decision)?])?;
-                assert_eq!(check(&tx, request.clone())?.unwrap().status, Status::Denied);
-                decision.status = Status::Approved;
+                assert_eq!(check(&tx, request.clone())?.unwrap().status, DecisionStatus::Denied);
+                decision.status = DecisionStatus::Approved;
                 tx.execute("UPDATE access_requests SET record=?2 WHERE id=?1", params![decision.id,serde_json::to_string(&decision)?])?;
                 assert!(check(&tx, request.clone())?.is_none());
                 assert!(release(&tx, "owner", &request.target, "default")?);
@@ -250,7 +250,7 @@ mod tests {
                 }
                 tx.rollback()?;
             }
-            assert!(serde_json::from_str::<Status>("\"unknown\"").is_err());
+            assert!(serde_json::from_str::<DecisionStatus>("\"unknown\"").is_err());
             assert!(serde_json::from_str::<Lifetime>("\"forever\"").is_err());
             Ok(())
         }).await.unwrap();

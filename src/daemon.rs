@@ -22,7 +22,9 @@ use crate::{
     paths::Paths,
     ports::Acquisition,
     process_identity::Identity,
-    protocol::{self, Body, Control, ExecutionEvent, Method, Request, Response, Status, timing},
+    protocol::{
+        self, Body, Control, DaemonStatus, ExecutionEvent, Method, Request, Response, timing,
+    },
     scope::Caller,
     workspace::{ExecutionKind, Manager, StartedExecution},
 };
@@ -187,7 +189,7 @@ async fn serve(mut stream: UnixStream, server: Server) -> Result<()> {
         Method::WatchNotifications => {
             return watch_notifications(stream, request.id, server.manager).await;
         }
-        Method::Status => Body::Status(Status {
+        Method::Status => Body::Status(DaemonStatus {
             pid: std::process::id(),
             version: env!("CARGO_PKG_VERSION").into(),
             uptime_secs: server.started.elapsed().as_secs(),

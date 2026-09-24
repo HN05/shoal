@@ -341,7 +341,7 @@ macro_rules! response_bodies {
 }
 
 response_bodies! {
-    Status(Status),
+    Status(DaemonStatus),
     Repositories(Vec<Repository>),
     Repository(Repository),
     RepositoryConfig(LocalConfig),
@@ -432,7 +432,7 @@ impl Body {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Status {
+pub struct DaemonStatus {
     pub pid: u32,
     pub version: String,
     pub uptime_secs: u64,
@@ -570,13 +570,13 @@ mod tests {
                     Box::<ConfigLayers>::try_from(body).unwrap();
                 }
                 "Error" => {
-                    let error = Status::try_from(body).unwrap_err();
+                    let error = DaemonStatus::try_from(body).unwrap_err();
                     let remote = error.downcast_ref::<RemoteError>().unwrap();
                     assert_eq!(remote.code, "future_code");
                     assert_eq!(remote.message, "failed");
                 }
                 _ => assert_eq!(
-                    Status::try_from(body).unwrap_err().to_string(),
+                    DaemonStatus::try_from(body).unwrap_err().to_string(),
                     format!("unexpected daemon response; expected Status, received {expected}")
                 ),
             }

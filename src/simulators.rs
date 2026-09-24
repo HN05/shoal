@@ -347,7 +347,7 @@ impl Manager {
                     audit.error = Some(message.clone());
                 }
                 Ok(Acquisition::Approval(request)) => {
-                    audit.status = if request.status == crate::access::Status::Denied {
+                    audit.status = if request.status == crate::access::DecisionStatus::Denied {
                         CleanRequestStatus::Failed
                     } else {
                         CleanRequestStatus::Busy

@@ -4,7 +4,7 @@ use serde_json::json;
 
 use super::{Attempt, EXIT_BUSY};
 use crate::{
-    access::{AccessRequest, Status},
+    access::{AccessRequest, DecisionStatus},
     cli::AccessCommand,
     client::request,
     context::Context,
@@ -62,7 +62,7 @@ pub(super) fn attempt<T>(
     last: &mut Option<Box<AccessRequest>>,
     request: Box<AccessRequest>,
 ) -> Attempt<Result<T, Box<AccessRequest>>> {
-    if request.status == Status::Denied {
+    if request.status == DecisionStatus::Denied {
         Attempt::Ready(Err(request))
     } else {
         let message = describe(&request);
@@ -72,7 +72,7 @@ pub(super) fn attempt<T>(
 }
 
 pub(super) fn declined(ctx: &Context, request: &AccessRequest) -> Result<i32> {
-    let code = if request.status == Status::Denied {
+    let code = if request.status == DecisionStatus::Denied {
         "approval_denied"
     } else {
         "approval_pending"

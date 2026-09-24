@@ -285,7 +285,7 @@ impl Typed {
             .await?;
             return Ok(requests
                 .into_iter()
-                .filter(|r| r.status == crate::access::Status::Pending)
+                .filter(|r| r.status == crate::access::DecisionStatus::Pending)
                 .map(|r| CompletionCandidate::new(r.id))
                 .collect());
         }

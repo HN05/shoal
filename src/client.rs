@@ -11,7 +11,7 @@ use tokio::{
 use crate::{
     model::{Inspection, Repository, Workspace},
     paths::Paths,
-    protocol::{self, Body, Method, Request, Response, Status, timing},
+    protocol::{self, Body, DaemonStatus, Method, Request, Response, timing},
     repo_config::ConfigLayers,
 };
 
@@ -105,7 +105,7 @@ pub async fn repositories(paths: &Paths) -> Result<Vec<Repository>> {
 }
 
 /// `None` when no daemon is listening on the socket.
-pub async fn status(paths: &Paths) -> Result<Option<Status>> {
+pub async fn status(paths: &Paths) -> Result<Option<DaemonStatus>> {
     match request(paths, Method::Status).await {
         Ok(status) => Ok(Some(status)),
         Err(error) if is_unreachable(&error) => Ok(None),
@@ -171,14 +171,14 @@ mod tests {
 
     #[tokio::test]
     async fn typed_requests_extract_payloads_and_acknowledgements() {
-        let status = Status {
+        let status = DaemonStatus {
             pid: 42,
             version: "test".into(),
             uptime_secs: 12,
             managed: false,
             unread_notifications: 3,
         };
-        let status: Status = reply(Response::new(1, Body::Status(status))).await.unwrap();
+        let status: DaemonStatus = reply(Response::new(1, Body::Status(status))).await.unwrap();
         assert_eq!(status.pid, 42);
         assert_eq!(status.unread_notifications, 3);
         reply::<()>(Response::new(1, Body::Ok)).await.unwrap();
@@ -186,7 +186,7 @@ mod tests {
 
     #[tokio::test]
     async fn typed_requests_report_variants_and_preserve_remote_errors() {
-        let error = reply::<Status>(Response::new(1, Body::Ok))
+        let error = reply::<DaemonStatus>(Response::new(1, Body::Ok))
             .await
             .unwrap_err();
         assert_eq!(
@@ -206,7 +206,7 @@ mod tests {
     async fn protocol_mismatch_precedes_payload_extraction() {
         let mut response = Response::new(1, Body::error("protocol_mismatch", "old daemon"));
         response.protocol += 1;
-        let error = reply::<Status>(response).await.unwrap_err();
+        let error = reply::<DaemonStatus>(response).await.unwrap_err();
         assert!(error.is::<ProtocolMismatch>());
     }
 }
