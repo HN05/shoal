@@ -10674,3 +10674,87 @@ fn releasing_resource_names_clears_requests_from_previous_pool_scopes() {
         current["id"]
     );
 }
+
+// Fail one Git operation while leaving fixture setup and verification on real Git.
+fn install_failing_git(fixture: &Fixture) {
+    let bin = fixture.root.path().join("bin");
+    fs::create_dir_all(&bin).unwrap();
+    let real_git = std::env::split_paths(&std::env::var_os("PATH").unwrap())
+        .map(|dir| dir.join("git"))
+        .find(|path| path.is_file() && path.metadata().unwrap().permissions().mode() & 0o111 != 0)
+        .unwrap()
+        .canonicalize()
+        .unwrap();
+    std::os::unix::fs::symlink(real_git, bin.join("real-git")).unwrap();
+    fs::write(
+        bin.join("git"),
+        r#"#!/bin/sh
+if [ -f "$HOME/git-failure" ]; then
+    failure=$(cat "$HOME/git-failure")
+    for arg; do
+        if [ "$arg" = "$failure" ]; then
+            echo "injected Git predicate failure" >&2
+            exit 128
+        fi
+    done
+fi
+exec "$HOME/bin/real-git" "$@"
+"#,
+    )
+    .unwrap();
+    fs::set_permissions(bin.join("git"), fs::Permissions::from_mode(0o755)).unwrap();
+}
+
+#[test]
+fn daemon_git_predicate_failures_preserve_branches_and_workspaces() {
+    let fixture = Fixture::new();
+    let worker = fixture.add("worker");
+    let path = Path::new(worker["path"].as_str().unwrap());
+    upstream_remote(&fixture);
+    // Make the default's tree differ so removal must check ancestry.
+    fs::write(path.join("tracked"), "preserved work\n").unwrap();
+    git(path, &["add", "tracked"]);
+    git(
+        path,
+        &[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "-m",
+            "work",
+        ],
+    );
+    let before = git(&fixture.repo, &["rev-parse", "main"]);
+    install_failing_git(&fixture);
+    for (failure, args) in [
+        ("--is-ancestor", vec!["land", "worker"]),
+        (
+            "show-ref",
+            vec!["add", fixture.repo.to_str().unwrap(), "--existing", "main"],
+        ),
+        (
+            "--is-ancestor",
+            vec!["rm", "worker", "--yes", "--delete-branch"],
+        ),
+        ("show-ref", vec!["rm", "worker", "--yes", "--delete-branch"]),
+    ] {
+        fs::write(fixture.root.path().join("git-failure"), failure).unwrap();
+        let output = fixture.run(&args);
+        assert!(!output.status.success(), "{args:?}: {output:?}");
+        let error = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            error.contains("injected Git predicate failure"),
+            "{args:?}: {error}"
+        );
+        assert!(!error.contains("diverged"), "{error}");
+        assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), before);
+        assert!(path.is_dir());
+        assert_eq!(
+            fs::read_to_string(path.join("tracked")).unwrap(),
+            "preserved work\n"
+        );
+        assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
+    }
+}

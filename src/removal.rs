@@ -238,9 +238,8 @@ pub async fn inspect(
     let default_ref = match default_branch {
         Some(name) => {
             let reference = git::local_ref(name);
-            git::run(path, &["rev-parse", "--verify", &reference])
-                .await
-                .is_ok()
+            git::ref_exists(path, &reference, git::command)
+                .await?
                 .then_some(reference)
         }
         None => None,
@@ -254,9 +253,7 @@ pub async fn inspect(
         )
         .await
         .is_ok_and(|other| other == tree)
-            || git::run(path, &["merge-base", "--is-ancestor", "HEAD", default_ref])
-                .await
-                .is_ok();
+            || git::is_ancestor(path, "HEAD", default_ref, git::command).await?;
     }
     check.unpushed_commits = git::run(path, &retained).await?.trim().parse()?;
     check.matches_upstream = git::run(path, &["rev-parse", "--verify", "@{upstream}^{tree}"])

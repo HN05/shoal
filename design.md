@@ -108,7 +108,9 @@ commit ref without refreshing, except when it names the local default branch.
 Creation, default-branch refresh, setup, repository removal, and recovery share
 a per-repository Git gate. Daemon ref updates disable hooks, Git credential prompts,
 and SSH askpass while preserving the user's SSH transport configuration;
-interactive Git commands retain normal prompting.
+interactive Git commands retain normal prompting. Ancestry and exact-ref checks
+distinguish negative answers from command failures; failed checks stop branch
+selection, refresh, and removal with the Git diagnostic.
 
 New-branch creation accepts literal Git branch names and derives a portable,
 globally unique workspace name and directory from them; a normalization collision

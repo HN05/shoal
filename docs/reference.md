@@ -626,7 +626,9 @@ skips the picker; add `--yes` to skip confirmation. `--yes` alone cannot choose 
 
 Manual removal stops tracked commands and verified survivors, leaving unrelated
 processes alone. Ignored files go; shared caches stay; Worktrunk hooks are disabled.
-Git protects other checkouts. Shell integration returns to `<root_dir>/<repo>`.
+Git protects other checkouts. Failed ancestry or exact-ref checks stop removal
+with the Git diagnostic, as they do branch selection and refresh; a missing ref
+is a negative answer. Shell integration returns to `<root_dir>/<repo>`.
 
 ### PR cleanup
 

@@ -258,25 +258,15 @@ impl Manager {
                 "{branch} changed during fetch; retry"
             );
             // Like pull --ff-only, an already-ahead default branch stays untouched.
-            if git_run(
-                &repo.path,
-                &["merge-base", "--is-ancestor", commit, &previous_commit],
-            )
-            .await
-            .is_ok()
+            if git::is_ancestor(&repo.path, commit, &previous_commit, git::isolated_command).await?
             {
                 return Ok(previous_commit.clone());
             }
-            git_run(
-                &repo.path,
-                &["merge-base", "--is-ancestor", &previous_commit, commit],
-            )
-            .await
-            .with_context(|| {
-                format!(
-                    "{branch} and its upstream have diverged; resolve this manually before refreshing"
-                )
-            })?;
+            ensure!(
+                git::is_ancestor(&repo.path, &previous_commit, commit, git::isolated_command)
+                    .await?,
+                "{branch} and its upstream have diverged; resolve this manually before refreshing"
+            );
             if let Some(checkout) = &checkout {
                 clean_branch(checkout, branch).await?;
                 git::run_without_submodules(
