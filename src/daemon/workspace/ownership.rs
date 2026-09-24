@@ -84,13 +84,13 @@ impl Manager {
                 .find(|tree| tree.is_branch(&workspace.branch) && tree.path.is_dir())
                 .map(|tree| tree.path));
         };
-        if directory.try_exists()? {
-            if let Some(identity) = &workspace.git_dir_id {
-                ensure!(
-                    directory_device_inode(directory)? == *identity,
-                    "Git worktree metadata was replaced; ownership cannot be verified"
-                );
-            }
+        if directory.try_exists()?
+            && let Some(identity) = &workspace.git_dir_id
+        {
+            ensure!(
+                directory_device_inode(directory)? == *identity,
+                "Git worktree metadata was replaced; ownership cannot be verified"
+            );
         }
         match fs::read_to_string(directory.join("gitdir")) {
             Ok(destination) => {

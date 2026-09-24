@@ -30,6 +30,8 @@ no authentication override because they may reuse an existing process.
 One Rust binary provides the CLI, execution wrapper, and daemon. Each state
 directory has one daemon shared across repositories, with a private Unix
 socket and a versioned JSON protocol; the ordinary installation is per user.
+The minimum Rust version follows current stable so the code can use its newest
+features; the manifest and CI toolchain advance together, with locked dependencies.
 Resource protocol methods use domain-then-verb names matching the CLI operations.
 The daemon owns SQLite state, allocation, lifecycle transitions, and recovery.
 Daemon errors retain typed codes and messages on the client without changing the

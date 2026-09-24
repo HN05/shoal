@@ -33,10 +33,10 @@ pub async fn resolve(repo: &Path, lookup: DefaultBranchLookup) -> Result<String>
     };
     let head = git::remote_ref(remote, "HEAD");
     let prefix = git::remote_ref(remote, "");
-    if let Ok(target) = git::run(repo, &["symbolic-ref", "--quiet", &head]).await {
-        if let Some(branch) = target.trim_end_matches('\n').strip_prefix(&prefix) {
-            return Ok(branch.to_owned());
-        }
+    if let Ok(target) = git::run(repo, &["symbolic-ref", "--quiet", &head]).await
+        && let Some(branch) = target.trim_end_matches('\n').strip_prefix(&prefix)
+    {
+        return Ok(branch.to_owned());
     }
     ensure!(
         matches!(lookup, DefaultBranchLookup::Discover),

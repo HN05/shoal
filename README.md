@@ -230,7 +230,8 @@ links update automatically; reload `source <(shoal shell init)` in open terminal
 See [design.md](design.md) for decisions and the [command reference](docs/reference.md) for behavior.
 Create releases through **Actions → release** ([setup](docs/releases.md)).
 
-Requires Rust and the [runtime dependencies](#runtime-dependencies).
+Requires Rust at least as new as `package.rust-version` in [Cargo.toml](Cargo.toml)
+and the [runtime dependencies](#runtime-dependencies).
 Integration tests also use Bash, Zsh, and Python 3.
 
 ```sh

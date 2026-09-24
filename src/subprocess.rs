@@ -60,12 +60,12 @@ impl Run {
             let stdin = child.stdin.take();
             // Drain output while writing input: either pipe may exceed its buffer.
             let write = async move {
-                if let (Some(mut stdin), Some(input)) = (stdin, self.input) {
-                    if let Err(error) = stdin.write_all(&input).await {
-                        // A child may reject input early; retain its status and stderr.
-                        if error.kind() != io::ErrorKind::BrokenPipe {
-                            return Err(error);
-                        }
+                if let (Some(mut stdin), Some(input)) = (stdin, self.input)
+                    && let Err(error) = stdin.write_all(&input).await
+                {
+                    // A child may reject input early; retain its status and stderr.
+                    if error.kind() != io::ErrorKind::BrokenPipe {
+                        return Err(error);
                     }
                 }
                 Ok::<_, io::Error>(())

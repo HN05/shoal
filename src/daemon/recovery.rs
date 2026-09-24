@@ -137,10 +137,11 @@ impl Manager {
                 workspace.state,
                 WorkspaceState::Ready | WorkspaceState::Failed
             );
-            if running && quiescent {
-                if let Err(error) = self.stop_workspace(&workspace.id).await {
-                    report.issues.push(format!("connected stop: {error:#}"));
-                }
+            if running
+                && quiescent
+                && let Err(error) = self.stop_workspace(&workspace.id).await
+            {
+                report.issues.push(format!("connected stop: {error:#}"));
             }
         }
         if options.repair {

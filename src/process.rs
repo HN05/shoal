@@ -38,10 +38,11 @@ pub async fn in_directory(root: &Path) -> Result<Vec<String>> {
             pid = value.parse().context("invalid lsof PID")?;
         } else if let Some(value) = line.strip_prefix('c') {
             name = value.to_owned();
-        } else if let Some(value) = line.strip_prefix('n') {
-            if !excluded.contains(&pid) && Path::new(value).starts_with(&root) {
-                found.push(format!("{name} (PID {pid})"));
-            }
+        } else if let Some(value) = line.strip_prefix('n')
+            && !excluded.contains(&pid)
+            && Path::new(value).starts_with(&root)
+        {
+            found.push(format!("{name} (PID {pid})"));
         }
     }
     Ok(found)

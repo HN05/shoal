@@ -88,13 +88,12 @@ pub async fn scan(ids: HashSet<String>) -> Result<Scan> {
                         .find_map(|entry| entry.strip_prefix(marker.as_slice()))
                         .and_then(|id| std::str::from_utf8(id).ok())
                         .filter(|id| ids.contains(*id))
+                        && alive(&identity)?
                     {
-                        if alive(&identity)? {
-                            scan.processes.push(OwnedProcess {
-                                execution_id: id.into(),
-                                identity,
-                            });
-                        }
+                        scan.processes.push(OwnedProcess {
+                            execution_id: id.into(),
+                            identity,
+                        });
                     }
                 }
                 Ok(_) | Err(_) if alive(&identity)? => scan.unreadable.push(identity),

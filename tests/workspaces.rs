@@ -5406,10 +5406,10 @@ fn wait_registered_execution(fixture: &Fixture, workspace: &str) -> Value {
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {
         let inspection = fixture.ok(&["inspect", workspace]);
-        if let Some(execution) = inspection["executions"].as_array().unwrap().first() {
-            if !execution["child"].is_null() {
-                return execution.clone();
-            }
+        if let Some(execution) = inspection["executions"].as_array().unwrap().first()
+            && !execution["child"].is_null()
+        {
+            return execution.clone();
         }
         assert!(Instant::now() < deadline, "execution not registered");
         thread::sleep(Duration::from_millis(20));

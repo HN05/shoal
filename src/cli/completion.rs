@@ -57,39 +57,38 @@ pub fn command() -> Command {
         .skip(1)
         .collect();
     let mut typed = Typed::default();
-    if !words.is_empty() {
-        if let Ok(matches) = command
+    if !words.is_empty()
+        && let Ok(matches) = command
             .clone()
             .ignore_errors(true)
             .try_get_matches_from(words.clone())
-        {
-            typed.state = matches
-                .try_get_one::<PathBuf>("state_dir")
+    {
+        typed.state = matches
+            .try_get_one::<PathBuf>("state_dir")
+            .ok()
+            .flatten()
+            .cloned();
+        let mut leaf = &matches;
+        while let Some((name, child)) = leaf.subcommand() {
+            if child
+                .try_get_many::<OsString>("")
                 .ok()
                 .flatten()
-                .cloned();
-            let mut leaf = &matches;
-            while let Some((name, child)) = leaf.subcommand() {
-                if child
-                    .try_get_many::<OsString>("")
-                    .ok()
-                    .flatten()
-                    .is_some_and(|args| args.len() > 0)
-                {
-                    typed.custom = Some(name.to_owned());
-                }
-                leaf = child;
+                .is_some_and(|args| args.len() > 0)
+            {
+                typed.custom = Some(name.to_owned());
             }
-            typed.workspace = value(leaf, "workspace").or_else(|| {
-                leaf.try_get_many::<OsString>("")
-                    .ok()
-                    .flatten()
-                    .and_then(|mut args| args.next())
-                    .filter(|arg| !arg.to_string_lossy().starts_with('-'))
-                    .and_then(|arg| arg.to_str().map(str::to_owned))
-            });
-            typed.pool = value(leaf, "pool");
+            leaf = child;
         }
+        typed.workspace = value(leaf, "workspace").or_else(|| {
+            leaf.try_get_many::<OsString>("")
+                .ok()
+                .flatten()
+                .and_then(|mut args| args.next())
+                .filter(|arg| !arg.to_string_lossy().starts_with('-'))
+                .and_then(|arg| arg.to_str().map(str::to_owned))
+        });
+        typed.pool = value(leaf, "pool");
     }
     for name in typed.command_names() {
         if command
@@ -158,10 +157,10 @@ fn decorate(command: Command, parent: &str, typed: Arc<Typed>) -> Command {
                         .chain(crate::ai::BUILT_INS)
                         .map(str::to_owned)
                         .collect();
-                    if let Ok(home) = crate::fsutil::home_dir() {
-                        if let Ok(agents) = crate::ai::load(&home) {
-                            names.extend(agents.into_keys());
-                        }
+                    if let Ok(home) = crate::fsutil::home_dir()
+                        && let Ok(agents) = crate::ai::load(&home)
+                    {
+                        names.extend(agents.into_keys());
                     }
                     names
                         .into_iter()

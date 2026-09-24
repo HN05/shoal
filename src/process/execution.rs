@@ -29,10 +29,10 @@ impl Processes {
         let (related, group_candidates) =
             process::related(execution.child.as_ref(), execution.group_id).await?;
         owned.extend(related);
-        if let Some(child) = &execution.child {
-            if process::alive(child)? {
-                owned.push(child.clone());
-            }
+        if let Some(child) = &execution.child
+            && process::alive(child)?
+        {
+            owned.push(child.clone());
         }
         owned.sort_by(|a, b| a.pid.cmp(&b.pid).then(a.birth.cmp(&b.birth)));
         owned.dedup();

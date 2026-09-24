@@ -739,10 +739,10 @@ pub(super) async fn remove(
         },
     )
     .await;
-    if let Some(destination) = escape {
-        if result.is_ok() || !std::env::current_dir().is_ok_and(|cwd| cwd.exists()) {
-            shell::navigate(&destination, ctx.json)?;
-        }
+    if let Some(destination) = escape
+        && (result.is_ok() || !std::env::current_dir().is_ok_and(|cwd| cwd.exists()))
+    {
+        shell::navigate(&destination, ctx.json)?;
     }
     let result = result?;
     if let Some(error) = &result.hook_error {

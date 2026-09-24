@@ -199,22 +199,22 @@ impl Manager {
                                 range.end
                             );
                         };
-                        if let Some(requested_port) = preferred {
-                            if matches!(policy, ConflictPolicy::Suggest) {
-                                let conflict =
-                                    format!("port {name}: {requested_port} is in use; suggested {port}");
-                                return Ok((
-                                    Acquisition::Suggested(PortSuggestion {
-                                        workspace_id: workspace.id,
-                                        name,
-                                        requested_port,
-                                        suggested_port: port,
-                                        env_var,
-                                        reason,
-                                    }),
-                                    Some(conflict),
-                                ));
-                            }
+                        if let Some(requested_port) = preferred
+                            && matches!(policy, ConflictPolicy::Suggest)
+                        {
+                            let conflict =
+                                format!("port {name}: {requested_port} is in use; suggested {port}");
+                            return Ok((
+                                Acquisition::Suggested(PortSuggestion {
+                                    workspace_id: workspace.id,
+                                    name,
+                                    requested_port,
+                                    suggested_port: port,
+                                    env_var,
+                                    reason,
+                                }),
+                                Some(conflict),
+                            ));
                         }
                         port
                     }
