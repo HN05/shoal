@@ -7659,11 +7659,12 @@ fn land_interruptions_stop_merge_drivers_and_restore_the_default_checkout() {
                 "echo $$ > .git/land-driver.pid; exec sleep 60",
             ],
         );
+        let stderr_path = fixture.root.path().join("land.stderr");
         let mut land = fixture
             .command()
             .args(["land", "worker"])
             .stdout(Stdio::null())
-            .stderr(Stdio::null())
+            .stderr(fs::File::create(&stderr_path).unwrap())
             .spawn()
             .unwrap();
         let deadline = Instant::now() + Duration::from_secs(10);
@@ -7717,7 +7718,12 @@ fn land_interruptions_stop_merge_drivers_and_restore_the_default_checkout() {
             thread::sleep(Duration::from_millis(20));
         }
         assert_eq!(git(&fixture.repo, &["rev-parse", "HEAD"]), before);
-        assert_eq!(git(&fixture.repo, &["status", "--porcelain"]), "");
+        assert_eq!(
+            git(&fixture.repo, &["status", "--porcelain"]),
+            "",
+            "{interruption}: {}",
+            fs::read_to_string(&stderr_path).unwrap()
+        );
         assert_eq!(
             git(&fixture.repo, &["write-tree"]),
             git(&fixture.repo, &["rev-parse", "HEAD^{tree}"])
