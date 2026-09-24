@@ -58,8 +58,8 @@ pub async fn authorize(
             ..
         }
         | Method::WorkspaceHooks { workspace }
-        | Method::ReservePort { workspace, .. }
-        | Method::ReleasePort { workspace, .. }
+        | Method::PortAcquire { workspace, .. }
+        | Method::PortRelease { workspace, .. }
         | Method::PortOverview { workspace }
         | Method::CommandLayers { workspace }
         | Method::LayeredConfig {

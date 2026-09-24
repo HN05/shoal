@@ -22,7 +22,7 @@ use crate::{
     workspace::ExecutionKind,
 };
 
-pub const VERSION: u32 = 38;
+pub const VERSION: u32 = 39;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -219,12 +219,12 @@ pub enum Method {
     /// each as a [`Body::Notification`] response and marked read on delivery.
     WatchNotifications,
     // Ports.
-    ReservePort {
+    PortAcquire {
         workspace: String,
         name: String,
         request: PortRequest,
     },
-    ReleasePort {
+    PortRelease {
         workspace: String,
         name: String,
     },
@@ -256,6 +256,7 @@ pub enum Method {
     SimOverview {
         workspace: Option<String>,
     },
+    /// Lease records for completion, without loading repository configuration.
     SimList {
         workspace: Option<String>,
     },

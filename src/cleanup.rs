@@ -286,7 +286,7 @@ mod tests {
         fs::remove_file(&rwlock_config).unwrap();
         let original = snapshot(&manager).await.unwrap();
         manager
-            .reserve_port(
+            .acquire_port(
                 &workspace.id,
                 "web".into(),
                 PortRequest {

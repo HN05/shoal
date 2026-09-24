@@ -38,13 +38,13 @@ pub(super) async fn run(
                 reason,
                 on_conflict,
             };
-            reserve(ctx, workspace, name, request).await
+            acquire(ctx, workspace, name, request).await
         }
         Some(PortCommand::List { workspace, all }) => overview(ctx, workspace, all).await,
         Some(PortCommand::Release { name, workspace }) => {
             let workspace =
                 ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-            client::request::<()>(&ctx.paths, Method::ReleasePort { workspace, name }).await?;
+            client::request::<()>(&ctx.paths, Method::PortRelease { workspace, name }).await?;
             ctx.emit_styled(
                 Style::Success,
                 "Port reservation released",
@@ -56,16 +56,16 @@ pub(super) async fn run(
     }
 }
 
-/// Reserve a port, offering the daemon's suggestion when the preferred port
+/// Acquire a port, offering the daemon's suggestion when the preferred port
 /// is taken. Exit 2 means nothing was reserved.
-async fn reserve(
+async fn acquire(
     ctx: &Context,
     workspace: String,
     name: String,
     mut request: PortRequest,
 ) -> Result<i32> {
     loop {
-        let method = Method::ReservePort {
+        let method = Method::PortAcquire {
             workspace: workspace.clone(),
             name: name.clone(),
             request: request.clone(),

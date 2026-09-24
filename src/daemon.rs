@@ -20,7 +20,7 @@ use tokio::{
 use crate::{
     notifications::NotificationKind,
     paths::Paths,
-    ports::ReserveOutcome,
+    ports::Acquisition,
     process_identity::Identity,
     protocol::{self, Body, Control, ExecutionEvent, Method, Request, Response, Status, timing},
     scope::Caller,
@@ -346,19 +346,19 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             manager.mark_notifications_read(ids).await?;
             Body::Ok
         }
-        Method::ReservePort {
+        Method::PortAcquire {
             workspace,
             name,
             request,
         } => match manager
-            .reserve_port(&workspace, name, request, caller.is_some())
+            .acquire_port(&workspace, name, request, caller.is_some())
             .await?
         {
-            ReserveOutcome::Reserved(port) => Body::Port(port),
-            ReserveOutcome::Suggested(proposal) => Body::PortSuggestion(proposal),
-            ReserveOutcome::Approval(request) => Body::AccessRequest(request),
+            Acquisition::Acquired(port) => Body::Port(port),
+            Acquisition::Suggested(proposal) => Body::PortSuggestion(proposal),
+            Acquisition::Approval(request) => Body::AccessRequest(request),
         },
-        Method::ReleasePort { workspace, name } => {
+        Method::PortRelease { workspace, name } => {
             manager.release_port(&workspace, name).await?;
             Body::Ok
         }

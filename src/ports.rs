@@ -26,8 +26,8 @@ pub struct PortRequest {
     pub on_conflict: Option<ConflictPolicy>,
 }
 
-pub enum ReserveOutcome {
-    Reserved(PortReservation),
+pub enum Acquisition {
+    Acquired(PortReservation),
     Approval(Box<crate::access::AccessRequest>),
     /// The preferred port is taken and policy asks the caller to confirm.
     Suggested(PortSuggestion),
@@ -105,13 +105,13 @@ fn validate_env_var(env_var: &str, default: &str) -> Result<()> {
 }
 
 impl Manager {
-    pub async fn reserve_port(
+    pub async fn acquire_port(
         &self,
         selector: &str,
         name: String,
         request: PortRequest,
         scoped: bool,
-    ) -> Result<ReserveOutcome> {
+    ) -> Result<Acquisition> {
         let workspace = self.workspace(selector).await?;
         let config = self.workspace_config(&workspace).await?;
         let range = self.config.effective(&config)?.ports;
@@ -162,7 +162,7 @@ impl Manager {
                         reservation.reason = Some(reason);
                     }
                     tx.commit()?;
-                    return Ok((ReserveOutcome::Reserved(reservation), None));
+                    return Ok((Acquisition::Acquired(reservation), None));
                 }
                 let env_var = env_var.unwrap_or(default_env);
                 ensure!(
@@ -175,7 +175,7 @@ impl Manager {
                             "range": [range.start, range.end]}), definition.approval_lifetime, request.reason.as_deref());
                     if let Some(approval) = crate::access::check(&tx, approval)? {
                         tx.commit()?;
-                        return Ok((ReserveOutcome::Approval(Box::new(approval)), None));
+                        return Ok((Acquisition::Approval(Box::new(approval)), None));
                     }
                 }
                 let reserved = store::ports(&tx, None)?;
@@ -204,7 +204,7 @@ impl Manager {
                                 let conflict =
                                     format!("port {name}: {requested_port} is in use; suggested {port}");
                                 return Ok((
-                                    ReserveOutcome::Suggested(PortSuggestion {
+                                    Acquisition::Suggested(PortSuggestion {
                                         workspace_id: workspace.id,
                                         name,
                                         requested_port,
@@ -228,7 +228,7 @@ impl Manager {
                 )?;
                 tx.commit()?;
                 Ok((
-                    ReserveOutcome::Reserved(PortReservation {
+                    Acquisition::Acquired(PortReservation {
                         workspace_id: workspace.id,
                         name,
                         port,
@@ -247,7 +247,7 @@ impl Manager {
             )
             .await;
         }
-        if let ReserveOutcome::Approval(request) = &outcome {
+        if let Acquisition::Approval(request) = &outcome {
             self.notify_access(&workspace_name, request).await;
         }
         Ok(outcome)

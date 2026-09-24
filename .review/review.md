@@ -98,6 +98,7 @@ removal, check it against the rule those files state before judging it.
   redirected stderr and dumb terminals.
 - Client response extraction reports expected and received variants and preserves
   daemon error codes and messages as structured errors without changing the wire format.
+  Resource protocol methods use domain-then-verb names matching the CLI operations.
 - Persistence: Shoal lifecycle enums keep their lowercase SQLite/JSON spelling and
   reject unknown values. Opening persistence only migrates schema; daemon startup
   quarantines interrupted operations atomically after migration and before ownership
