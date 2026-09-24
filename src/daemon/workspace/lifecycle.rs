@@ -1,7 +1,10 @@
 //! One removal path for explicit removal and automatic cleanup.
 use super::Manager;
 use crate::{
-    git::{default_branch::DefaultBranchLookup, worktrunk},
+    git::{
+        default_branch::DefaultBranchLookup,
+        worktrunk::{self, BranchRemoval, FileRemoval},
+    },
     hooks::{self, Hook, HookKind},
     removal::{self, BranchChoice, BranchOutcome, RemovalCheck, RemovalResult},
     state::WorkspaceState,
@@ -292,12 +295,19 @@ impl Manager {
             crate::git::default_branch::resolve(&repo.path, DefaultBranchLookup::Cached)
                 .await
                 .ok();
-        let delete_branch = match choice {
-            BranchChoice::Auto => {
-                check.can_delete_branch() && check.branch.as_deref() != default_branch.as_deref()
+        let branch = match choice {
+            BranchChoice::Auto
+                if check.can_delete_branch()
+                    && check.branch.as_deref() != default_branch.as_deref() =>
+            {
+                BranchRemoval::Delete
             }
-            BranchChoice::KeepBranch => false,
-            BranchChoice::DeleteBranch => true,
+            BranchChoice::Auto | BranchChoice::KeepBranch => BranchRemoval::Keep,
+            BranchChoice::DeleteBranch => BranchRemoval::Delete,
+        };
+        let files = match choice {
+            BranchChoice::Auto => FileRemoval::CleanOnly,
+            BranchChoice::KeepBranch | BranchChoice::DeleteBranch => FileRemoval::Force,
         };
         ensure!(
             !matches!(choice, BranchChoice::KeepBranch)
@@ -333,8 +343,8 @@ impl Manager {
             &repo.path,
             &self.paths.worktrunk_config(),
             &workspace.path,
-            !matches!(choice, BranchChoice::Auto),
-            delete_branch,
+            files,
+            branch,
         )
         .await
     }
@@ -374,8 +384,8 @@ impl Manager {
                 &repo.path,
                 &self.paths.worktrunk_config(),
                 &workspace.path,
-                true,
-                false,
+                FileRemoval::Force,
+                BranchRemoval::Keep,
             )
             .await
         } else {

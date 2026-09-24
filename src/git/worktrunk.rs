@@ -145,24 +145,35 @@ fn default_branch_override(command: &mut Command, reference: &str) -> Result<()>
     Ok(())
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum FileRemoval {
+    CleanOnly,
+    Force,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum BranchRemoval {
+    Keep,
+    Delete,
+}
+
 pub async fn remove(
     repository_dir: &Path,
     worktrunk_config: &Path,
     workspace_dir: &Path,
-    force_files: bool,
-    delete_branch: bool,
+    files: FileRemoval,
+    branch: BranchRemoval,
 ) -> Result<RemovalResult> {
     let mut command = command(repository_dir, worktrunk_config);
     // Shoal has verified ownership and made the branch-retention decision.
     // Worktrunk otherwise refuses even --no-delete-branch for the default branch.
     default_branch_override(&mut command, "HEAD")?;
     command.args(["remove", "--foreground", "--no-hooks", "--format=json"]);
-    command.arg(if delete_branch {
-        "--force-delete"
-    } else {
-        "--no-delete-branch"
+    command.arg(match branch {
+        BranchRemoval::Delete => "--force-delete",
+        BranchRemoval::Keep => "--no-delete-branch",
     });
-    if force_files {
+    if matches!(files, FileRemoval::Force) {
         command.arg("--force");
     }
     command.arg("--").arg(workspace_dir);
