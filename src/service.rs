@@ -1,3 +1,4 @@
+use crate::tools::Tool;
 use std::{
     fs,
     os::unix::fs::PermissionsExt,
@@ -164,7 +165,8 @@ pub fn definition(paths: &Paths, executable: &Path, platform: Platform) -> Resul
     })
 }
 
-async fn command(program: &str, args: &[&str], check: bool) -> Result<bool> {
+async fn command(tool: Tool, args: &[&str], check: bool) -> Result<bool> {
+    let program = tool.program();
     let mut command = Command::new(program);
     command.args(args);
     let output = crate::subprocess::Run::new(command)
@@ -211,16 +213,16 @@ pub async fn setup(paths: &Paths, executable: &Path, preserve_running: bool) -> 
             let target = format!("{}/{LABEL}", domain());
             if changed
                 && !preserve_running
-                && command("launchctl", &["print", &target], false).await?
+                && command(Tool::Launchctl, &["print", &target], false).await?
             {
-                command("launchctl", &["bootout", &target], true).await?;
+                command(Tool::Launchctl, &["bootout", &target], true).await?;
             }
         }
         Platform::Linux => {
-            command("systemctl", &["--user", "daemon-reload"], true).await?;
-            command("systemctl", &["--user", "enable", UNIT], true).await?;
+            command(Tool::Systemctl, &["--user", "daemon-reload"], true).await?;
+            command(Tool::Systemctl, &["--user", "enable", UNIT], true).await?;
             if changed && !preserve_running {
-                command("systemctl", &["--user", "restart", UNIT], true).await?;
+                command(Tool::Systemctl, &["--user", "restart", UNIT], true).await?;
             }
         }
     }
@@ -239,14 +241,14 @@ pub async fn start(paths: &Paths) -> Result<()> {
         Platform::Mac => {
             let domain = domain();
             let target = format!("{domain}/{LABEL}");
-            command("launchctl", &["enable", &target], true).await?;
-            if !command("launchctl", &["print", &target], false).await? {
-                command("launchctl", &["bootstrap", &domain, text(&path)?], true).await?;
+            command(Tool::Launchctl, &["enable", &target], true).await?;
+            if !command(Tool::Launchctl, &["print", &target], false).await? {
+                command(Tool::Launchctl, &["bootstrap", &domain, text(&path)?], true).await?;
             }
-            command("launchctl", &["kickstart", &target], true).await?;
+            command(Tool::Launchctl, &["kickstart", &target], true).await?;
         }
         Platform::Linux => {
-            command("systemctl", &["--user", "start", UNIT], true).await?;
+            command(Tool::Systemctl, &["--user", "start", UNIT], true).await?;
         }
     }
     Ok(())
@@ -262,13 +264,13 @@ pub async fn stop(paths: &Paths) -> Result<()> {
     match platform {
         Platform::Mac => {
             let target = format!("{}/{LABEL}", domain());
-            if command("launchctl", &["print", &target], false).await? {
-                command("launchctl", &["bootout", &target], true).await?;
+            if command(Tool::Launchctl, &["print", &target], false).await? {
+                command(Tool::Launchctl, &["bootout", &target], true).await?;
             }
         }
         Platform::Linux => {
             if file(paths, Platform::Linux).exists() {
-                command("systemctl", &["--user", "stop", UNIT], true).await?;
+                command(Tool::Systemctl, &["--user", "stop", UNIT], true).await?;
             }
         }
     }

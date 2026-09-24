@@ -1,6 +1,7 @@
 pub mod execution;
 pub mod identity;
 
+use crate::tools::Tool;
 use anyhow::{Context, Result};
 use std::{path::Path, time::Duration};
 use tokio::process::Command;
@@ -8,7 +9,7 @@ use tokio::process::Command;
 /// Automatic cleanup treats every process using the directory as activity.
 pub async fn in_directory(root: &Path) -> Result<Vec<String>> {
     let excluded = [std::process::id()];
-    let mut command = Command::new("lsof");
+    let mut command = Command::new(Tool::Lsof.program());
     command
         .args([
             "-n",

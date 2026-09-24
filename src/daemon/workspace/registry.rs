@@ -1,5 +1,6 @@
 //! Repository registration and lookup; independent of worktree lifecycle.
 use super::{Manager, paths::canonical_with_missing_tail};
+use crate::tools::Tool;
 use crate::{daemon::store, forge::repository, git, model::Repository, subprocess, validate};
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::params;
@@ -256,7 +257,7 @@ async fn find_existing<'a>(
 }
 
 async fn clone(source: &str, destination: &Path) -> Result<PathBuf> {
-    let mut command = Command::new("git");
+    let mut command = Command::new(Tool::Git.program());
     command.args(["clone", "--"]).arg(source).arg(destination);
     if let Err(error) = subprocess::output(command).await {
         // This directory belongs exclusively to this attempt.

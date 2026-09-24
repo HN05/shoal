@@ -1,6 +1,7 @@
 //! Same-user process ownership for cooperative recovery. Never expose process
 //! arguments/environment; only the explicit execution marker leaves this module.
 use crate::protocol::timing;
+use crate::tools::Tool;
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, time::Duration};
@@ -55,7 +56,7 @@ pub async fn scan(ids: HashSet<String>) -> Result<Scan> {
     if ids.is_empty() {
         return Ok(Scan::default());
     }
-    let mut command = tokio::process::Command::new("ps");
+    let mut command = tokio::process::Command::new(Tool::Ps.program());
     command.args(["-ax", "-o", "pid=,uid="]).env("LC_ALL", "C");
     let output = crate::subprocess::Run::new(command)
         .timeout(timing::PROCESS_INVENTORY_TIMEOUT)
@@ -272,7 +273,7 @@ pub async fn related(
     let Some(group) = group else {
         return Ok((vec![], vec![]));
     };
-    let mut command = tokio::process::Command::new("ps");
+    let mut command = tokio::process::Command::new(Tool::Ps.program());
     command
         .args(["-ax", "-o", "pid=,uid=,pgid=,ppid="])
         .env("LC_ALL", "C");

@@ -7,6 +7,7 @@
 //! variables its daemon uses for resume-in-place, waits for the session to
 //! report alive, and posts the prompt. HTTP goes through `curl` with the
 //! token on stdin, never on the command line.
+use crate::tools::Tool;
 use std::{
     path::{Path, PathBuf},
     time::{Duration, SystemTime, UNIX_EPOCH},
@@ -122,7 +123,7 @@ struct Server {
 
 impl Server {
     async fn request(&self, method: &str, path: &str, body: Option<&Value>) -> Result<Value> {
-        let mut curl = Command::new("curl");
+        let mut curl = Command::new(Tool::Curl.program());
         curl.args([
             "-sS",
             "-f",

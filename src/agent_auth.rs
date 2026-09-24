@@ -1,4 +1,5 @@
 //! User-owned forge authentication wrappers, selected only for agent launches.
+use crate::tools::Tool;
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use std::{ffi::OsString, os::unix::fs::PermissionsExt, path::PathBuf};
@@ -19,7 +20,10 @@ impl Config {
         }
         self.validate()?;
         let directory = paths.agent_auth_directory()?;
-        for (name, path) in [("fj", &self.fj), ("gh", &self.gh)] {
+        for (name, path) in [
+            (Tool::Forgejo.program(), &self.fj),
+            (Tool::GitHub.program(), &self.gh),
+        ] {
             let Some(path) = path else { continue };
             let path = match path.strip_prefix("~/") {
                 Ok(relative) => paths.home.join(relative),
@@ -45,7 +49,10 @@ impl Config {
     }
 
     pub fn validate(&self) -> Result<()> {
-        for (name, path) in [("fj", &self.fj), ("gh", &self.gh)] {
+        for (name, path) in [
+            (Tool::Forgejo.program(), &self.fj),
+            (Tool::GitHub.program(), &self.gh),
+        ] {
             if let Some(path) = path {
                 ensure!(
                     (path.is_absolute() || path.starts_with("~/"))

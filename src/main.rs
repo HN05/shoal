@@ -22,6 +22,7 @@ mod state;
 mod subprocess;
 #[cfg(test)]
 mod test_support;
+mod tools;
 mod validate;
 
 use clap::Parser;

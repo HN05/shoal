@@ -1,4 +1,5 @@
 //! Worktree creation and removal through Worktrunk (`wt`).
+use crate::tools::Tool;
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, de::DeserializeOwned};
 use serde_json::Value;
@@ -87,7 +88,7 @@ pub fn is_reserved_branch_name(name: &str) -> bool {
 }
 
 fn command(repository_dir: &Path, worktrunk_config: &Path) -> Command {
-    let mut command = Command::new("wt");
+    let mut command = Command::new(Tool::Worktrunk.program());
     command.arg("--config").arg(worktrunk_config);
     command.arg("-C").arg(repository_dir);
     command
@@ -108,7 +109,7 @@ pub async fn create(
     // Worktrunk renders this setting as a template. Emit the entire path as
     // one string expression so template syntax in a literal directory stays inert.
     let template = serde_json::to_string(&format!("{{{{ {literal} }}}}"))?;
-    let mut command = Command::new("wt");
+    let mut command = Command::new(Tool::Worktrunk.program());
     command
         .arg("--config")
         .arg(worktrunk_config)

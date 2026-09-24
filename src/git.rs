@@ -6,6 +6,7 @@ pub mod merge;
 pub mod repo;
 pub mod worktrunk;
 
+use crate::tools::Tool;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, ensure};
@@ -37,7 +38,7 @@ pub fn strip_remote(reference: &str) -> Option<&str> {
 
 /// `git -C <repo>` with the caller's normal configuration and hooks.
 pub fn command(repo: &Path) -> Command {
-    let mut command = Command::new("git");
+    let mut command = Command::new(Tool::Git.program());
     command.arg("-C").arg(repo);
     command
 }
@@ -107,7 +108,7 @@ pub async fn check_branch_name(repo: Option<&Path>, name: &str) -> Result<()> {
     let checked = if name == "HEAD" { "HEAD-2" } else { name };
     let mut command = match repo {
         Some(repo) => self::command(repo),
-        None => Command::new("git"),
+        None => Command::new(Tool::Git.program()),
     };
     command.args(["check-ref-format", "--branch", checked]);
     let validated = subprocess::output(command)

@@ -46,13 +46,9 @@ pub(super) async fn run(
             )),
         }
     } else {
-        for name in ["dependencies", "untracked_worktrees", "workspaces"] {
-            report.checks.push(Check::new(
-                name,
-                CheckStatus::Skipped,
-                "Not checked: a reachable, matching daemon is required",
-            ));
-        }
+        report
+            .checks
+            .extend(crate::daemon::doctor::unavailable_checks());
     }
     let shell_loaded =
         std::env::var_os(crate::env::SHELL_DIRECTIVE).is_some_and(|value| !value.is_empty());

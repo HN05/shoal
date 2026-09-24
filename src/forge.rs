@@ -3,6 +3,7 @@ pub mod pr;
 mod remote_url;
 pub mod repository;
 
+use crate::tools::Tool;
 use anyhow::{Context, Result, ensure};
 
 use remote_url::{RemoteUrl, Transport};
@@ -53,8 +54,8 @@ impl ForgeKind {
 
     fn tool(self) -> &'static str {
         match self {
-            Self::GitHub => "gh",
-            Self::Forgejo => "fj",
+            Self::GitHub => Tool::GitHub.program(),
+            Self::Forgejo => Tool::Forgejo.program(),
         }
     }
 

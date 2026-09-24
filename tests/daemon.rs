@@ -533,6 +533,24 @@ fn doctor_reports_a_stopped_daemon_without_creating_state() {
             .unwrap()
             .contains("stopped or unreachable")
     );
+    let skipped: Vec<_> = report["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|check| check["status"] == "skipped")
+        .map(|check| check["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        skipped,
+        [
+            "dependency:git",
+            "dependency:wt",
+            "dependency:lsof",
+            "dependency:fzf",
+            "worktrees:*",
+            "workspaces"
+        ]
+    );
     assert_eq!(report["checks"][1]["status"], "skipped");
     assert_eq!(report["workspaces"], json!([]));
     assert!(!root.path().join("state").exists());

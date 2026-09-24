@@ -1,3 +1,4 @@
+use crate::tools::Tool;
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, time::Duration};
@@ -96,7 +97,7 @@ impl Inventory {
 
 pub async fn run(args: &[&str]) -> Result<String> {
     ensure!(cfg!(target_os = "macos"), "Xcode simulators require macOS");
-    let mut command = Command::new("xcrun");
+    let mut command = Command::new(Tool::Xcrun.program());
     command.arg("simctl").args(args);
     let output = crate::subprocess::Run::new(command)
         .timeout(Duration::from_secs(180))
@@ -114,7 +115,7 @@ pub async fn inventory() -> Result<Inventory> {
 /// release so allocation need not boot an idle device just to estimate cost.
 pub async fn user_app_count(udid: &str) -> Result<usize> {
     let apps = run(&["listapps", udid]).await?;
-    let mut convert = Command::new("/usr/bin/plutil");
+    let mut convert = Command::new(Tool::Plutil.program());
     convert.args(["-convert", "json", "-o", "-", "--", "-"]);
     let output = crate::subprocess::Run::new(convert)
         .input(apps.into_bytes())

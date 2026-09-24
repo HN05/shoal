@@ -4,7 +4,12 @@ use std::{collections::HashSet, ffi::OsStr, os::unix::fs::PermissionsExt, path::
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-use crate::{daemon::workspace::Manager, git, state::states};
+use crate::{
+    daemon::workspace::Manager,
+    git,
+    state::states,
+    tools::{Dependency, Tool},
+};
 
 states!(CheckStatus {
     Ok => "ok",
@@ -31,12 +36,12 @@ impl Check {
 }
 
 fn dependencies(path: Option<&OsStr>) -> Vec<Check> {
-    ["git", "wt", "lsof", "fzf"]
-        .into_iter()
-        .map(|tool| {
+    Tool::dependencies()
+        .map(|(tool, dependency)| {
+            let program = tool.program();
             let executable = path.and_then(|path| {
                 std::env::split_paths(path)
-                    .map(|dir| dir.join(tool))
+                    .map(|dir| dir.join(program))
                     .find(|candidate| {
                         candidate.metadata().is_ok_and(|meta| {
                             meta.is_file() && meta.permissions().mode() & 0o111 != 0
@@ -46,14 +51,33 @@ fn dependencies(path: Option<&OsStr>) -> Vec<Check> {
             let (status, message) = match executable {
                 Some(path) => (CheckStatus::Ok, format!("{} on the daemon's PATH", path.display())),
                 None => (
-                    if tool == "fzf" { CheckStatus::Warning } else { CheckStatus::Error },
+                    match dependency { Dependency::Required => CheckStatus::Error, Dependency::Optional(_) => CheckStatus::Warning },
                     format!(
-                        "{tool} is missing or not executable on the daemon's PATH{}; install it and restart the daemon with the updated PATH",
-                        if tool == "fzf" { " (needed for interactive pickers)" } else { "" }
+                        "{program} is missing or not executable on the daemon's PATH{}; install it and restart the daemon with the updated PATH",
+                        match dependency { Dependency::Required => String::new(), Dependency::Optional(reason) => format!(" ({reason})") }
                     ),
                 ),
             };
-            Check::new(format!("dependency:{tool}"), status, message)
+            Check::new(tool.check_name(), status, message)
+        })
+        .collect()
+}
+
+pub fn worktrees_check_name(repository: &str) -> String {
+    format!("worktrees:{repository}")
+}
+
+/// Repository names belong to the daemon and are unknown when it is unavailable.
+pub fn unavailable_checks() -> Vec<Check> {
+    Tool::dependencies()
+        .map(|(tool, _)| tool.check_name())
+        .chain([worktrees_check_name("*"), "workspaces".to_owned()])
+        .map(|name| {
+            Check::new(
+                name,
+                CheckStatus::Skipped,
+                "Not checked: a reachable, matching daemon is required",
+            )
         })
         .collect()
 }
@@ -65,7 +89,7 @@ impl Manager {
             let Some(root) = &repo.workspaces_dir else {
                 continue;
             };
-            let name = format!("worktrees:{}", crate::forge::repository::name(&repo));
+            let name = worktrees_check_name(&crate::forge::repository::name(&repo));
             // Take the same gate as creation/removal before reading ownership.
             let gate = self.git_gate(&repo.id).await;
             let _guard = gate.lock().await;
@@ -120,6 +144,20 @@ impl Manager {
 mod tests {
     use super::*;
     use std::fs;
+
+    #[test]
+    fn unavailable_dependencies_have_the_same_names_as_daemon_checks() {
+        let checked: Vec<_> = dependencies(None)
+            .into_iter()
+            .map(|check| check.name)
+            .collect();
+        let skipped: Vec<_> = unavailable_checks()
+            .into_iter()
+            .filter(|check| check.name.starts_with("dependency:"))
+            .map(|check| check.name)
+            .collect();
+        assert_eq!(skipped, checked);
+    }
 
     #[test]
     fn dependencies_require_executable_files_on_the_supplied_path() {

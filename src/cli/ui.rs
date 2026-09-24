@@ -1,6 +1,7 @@
 //! Interactive input: confirmations, free-text prompts, fzf pickers, and the
 //! labels shown in them. Every prompt requires a terminal and can be canceled
 //! with Ctrl-C; non-interactive callers must pass explicit flags instead.
+use crate::tools::Tool;
 use std::{
     io::{self, Write},
     path::Path,
@@ -264,7 +265,7 @@ fn run_picker(
         !entries.is_empty(),
         "nothing to select; register a repository with `shoal repo add <path-or-url>` or create a workspace with `shoal add`"
     );
-    let mut command = Command::new("fzf");
+    let mut command = Command::new(Tool::Fzf.program());
     command
         .args([
             "--no-sort",
