@@ -166,9 +166,9 @@ impl Manager {
                 );
             }
             self.verify_worktree(&workspace).await?;
-            let actual = git::run_isolated(&workspace.path, &["symbolic-ref", "HEAD"]).await?;
+            let actual = git::head_branch(&workspace.path, false, git::run_isolated).await?;
             ensure!(
-                actual.trim() == git::local_ref(name),
+                actual.as_deref() == Some(name),
                 "workspace {} is no longer on its recorded branch",
                 workspace.name
             );
@@ -177,11 +177,7 @@ impl Manager {
                 reused: true,
             });
         }
-        if let Some(tree) = git::worktrees(&repo.path)
-            .await?
-            .into_iter()
-            .find(|tree| tree.is_branch(name))
-        {
+        if let Some(tree) = git::checkout_of(&repo.path, name, git::run).await? {
             anyhow::bail!(
                 "branch {name} is already checked out at {}; Shoal cannot create another worktree for it; use shoal adopt for an unmanaged linked worktree",
                 tree.path.display()

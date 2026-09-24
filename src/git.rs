@@ -65,6 +65,39 @@ pub async fn run_isolated(repo: &Path, args: &[&str]) -> Result<String> {
     subprocess::output(command).await
 }
 
+/// The local branch named by HEAD. Detached HEAD remains a Git error; a
+/// symbolic HEAD outside the local namespace returns `None`. Pass `run` or
+/// `run_isolated` (or the caller's runner) to keep invocation policy explicit.
+pub async fn head_branch(
+    repo: &Path,
+    quiet: bool,
+    run: impl AsyncFn(&Path, &[&str]) -> Result<String>,
+) -> Result<Option<String>> {
+    let args: &[&str] = if quiet {
+        &["symbolic-ref", "--quiet", "HEAD"]
+    } else {
+        &["symbolic-ref", "HEAD"]
+    };
+    let head = run(repo, args).await?;
+    Ok(strip_local(head.trim_end_matches('\n')).map(str::to_owned))
+}
+
+/// Resolve and peel a revision to a commit, using the caller's Git runner.
+/// Plain ref/object queries must not use this: `^{commit}` changes their meaning.
+pub async fn resolve_commit(
+    repo: &Path,
+    reference: &str,
+    run: impl AsyncFn(&Path, &[&str]) -> Result<String>,
+) -> Result<String> {
+    Ok(run(
+        repo,
+        &["rev-parse", "--verify", &format!("{reference}^{{commit}}")],
+    )
+    .await?
+    .trim()
+    .to_owned())
+}
+
 /// Ask Git whether `name` is acceptable branch syntax, independently of the
 /// derived directory name. `repo` is the directory to ask from; `None` uses
 /// the current one. Previous-checkout syntax such as `@{-1}` is rejected
@@ -104,9 +137,25 @@ impl Worktree {
     }
 }
 
-pub async fn worktrees(repo: &Path) -> Result<Vec<Worktree>> {
+pub async fn worktrees(
+    repo: &Path,
+    run: impl AsyncFn(&Path, &[&str]) -> Result<String>,
+) -> Result<Vec<Worktree>> {
     let listing = run(repo, &["worktree", "list", "--porcelain", "-z"]).await?;
     Ok(parse_worktrees(&listing))
+}
+
+/// The first worktree registered on this literal local branch, including
+/// locked or prunable entries. The caller decides whether it is usable.
+pub async fn checkout_of(
+    repo: &Path,
+    branch: &str,
+    run: impl AsyncFn(&Path, &[&str]) -> Result<String>,
+) -> Result<Option<Worktree>> {
+    Ok(worktrees(repo, run)
+        .await?
+        .into_iter()
+        .find(|tree| tree.is_branch(branch)))
 }
 
 fn parse_worktrees(listing: &str) -> Vec<Worktree> {
@@ -135,6 +184,130 @@ fn parse_worktrees(listing: &str) -> Vec<Worktree> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn value_queries_keep_arguments_and_runner_errors() {
+        let repo = Path::new("/repo");
+        for quiet in [false, true] {
+            let branch = head_branch(repo, quiet, async |path, args| {
+                assert_eq!(path, repo);
+                let expected = if quiet {
+                    vec!["symbolic-ref", "--quiet", "HEAD"]
+                } else {
+                    vec!["symbolic-ref", "HEAD"]
+                };
+                assert_eq!(args, expected);
+                Ok("refs/heads/feature/nested\n".into())
+            })
+            .await
+            .unwrap();
+            assert_eq!(branch.as_deref(), Some("feature/nested"));
+        }
+        let commit = resolve_commit(repo, "refs/tags/v1", async |path, args| {
+            assert_eq!(path, repo);
+            assert_eq!(args, ["rev-parse", "--verify", "refs/tags/v1^{commit}"]);
+            Ok("abc\n".into())
+        })
+        .await
+        .unwrap();
+        assert_eq!(commit, "abc");
+        let tree = checkout_of(repo, "feature/nested", async |path, args| {
+            assert_eq!(path, repo);
+            assert_eq!(args, ["worktree", "list", "--porcelain", "-z"]);
+            Ok("worktree /detached\0detached\0\0worktree /feature\0branch refs/heads/feature/nested\0locked\0prunable\0\0".into())
+        })
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(tree.path, Path::new("/feature"));
+        assert!(tree.locked && tree.prunable);
+
+        async fn failed(_: &Path, _: &[&str]) -> Result<String> {
+            anyhow::bail!("runner failed")
+        }
+        assert_eq!(
+            head_branch(repo, true, failed)
+                .await
+                .unwrap_err()
+                .to_string(),
+            "runner failed"
+        );
+        assert_eq!(
+            resolve_commit(repo, "HEAD", failed)
+                .await
+                .unwrap_err()
+                .to_string(),
+            "runner failed"
+        );
+        assert_eq!(
+            checkout_of(repo, "main", failed)
+                .await
+                .unwrap_err()
+                .to_string(),
+            "runner failed"
+        );
+    }
+
+    #[tokio::test]
+    async fn value_queries_distinguish_branches_tags_and_detached_head() {
+        use crate::test_support::{git, repository};
+        let root = tempfile::tempdir().unwrap();
+        let repo = repository(root.path(), "repo");
+        git(&repo, &["branch", "-m", "feature/nested"]);
+        git(&repo, &["tag", "-a", "v1", "-m", "annotated"]);
+        let expected = git(&repo, &["rev-parse", "HEAD"]).trim().to_owned();
+        assert_eq!(
+            resolve_commit(&repo, "refs/tags/v1", run).await.unwrap(),
+            expected
+        );
+        assert_eq!(
+            resolve_commit(&repo, &local_ref("feature/nested"), run_isolated)
+                .await
+                .unwrap(),
+            expected
+        );
+        assert!(resolve_commit(&repo, "HEAD^{tree}", run).await.is_err());
+        assert!(
+            resolve_commit(&repo, "missing", run_isolated)
+                .await
+                .is_err()
+        );
+        assert_eq!(
+            head_branch(&repo, true, run).await.unwrap().as_deref(),
+            Some("feature/nested")
+        );
+        assert_eq!(
+            head_branch(&repo, false, run_isolated)
+                .await
+                .unwrap()
+                .as_deref(),
+            Some("feature/nested")
+        );
+        assert_eq!(
+            checkout_of(&repo, "feature/nested", run)
+                .await
+                .unwrap()
+                .unwrap()
+                .path,
+            repo
+        );
+        assert!(checkout_of(&repo, "feature", run).await.unwrap().is_none());
+        git(&repo, &["checkout", "--detach"]);
+        assert!(head_branch(&repo, true, run).await.is_err());
+        assert!(
+            checkout_of(&repo, "feature/nested", run)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        git(&repo, &["symbolic-ref", "HEAD", "refs/heads/unborn"]);
+        assert_eq!(
+            head_branch(&repo, true, run).await.unwrap().as_deref(),
+            Some("unborn")
+        );
+        git(&repo, &["symbolic-ref", "HEAD", "refs/tags/v1"]);
+        assert_eq!(head_branch(&repo, true, run).await.unwrap(), None);
+    }
 
     #[tokio::test]
     async fn background_ssh_disables_prompts_and_preserves_transport_selection() {

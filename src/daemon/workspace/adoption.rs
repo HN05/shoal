@@ -15,7 +15,7 @@ impl Manager {
         self.repository(&repo.id).await?;
         self.ensure_repository_available(&repo.id).await?;
         let path = self.workspace_location(&repo, path).await?;
-        let trees = git::worktrees(&repo.path).await?;
+        let trees = git::worktrees(&repo.path, git::run).await?;
         let tree = trees
             .iter()
             .find(|tree| tree.path == path)
@@ -51,11 +51,7 @@ impl Manager {
         let git_dir = ownership::git_dir(&path).await?;
         let identity = directory_device_inode(&git_dir)?;
         let base = existing_base(&repo, branch).await?;
-        let commit = git::run_isolated(
-            &repo.path,
-            &["rev-parse", "--verify", &format!("{base}^{{commit}}")],
-        )
-        .await?;
+        let commit = git::resolve_commit(&repo.path, &base, git::run_isolated).await?;
         let workspace = Workspace {
             id: Uuid::new_v4().to_string(),
             repository_id: repo.id,
@@ -64,7 +60,7 @@ impl Manager {
             branch: branch.into(),
             state: WorkspaceState::Ready,
             error: None,
-            base_commit: Some(commit.trim().into()),
+            base_commit: Some(commit),
             base_ref: base.starts_with("refs/").then_some(base),
             git_dir: Some(git_dir),
             git_dir_id: Some(identity),

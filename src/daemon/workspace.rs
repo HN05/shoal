@@ -374,13 +374,7 @@ impl Manager {
         } else {
             base
         };
-        let commit = git::run(
-            &repo.path,
-            &["rev-parse", "--verify", &format!("{base}^{{commit}}")],
-        )
-        .await?
-        .trim()
-        .to_owned();
+        let commit = git::resolve_commit(&repo.path, base, git::run).await?;
         let reference = git::run(&repo.path, &["rev-parse", "--symbolic-full-name", base]).await?;
         let reference = reference.trim_end_matches('\n');
         let reference = reference.starts_with("refs/").then(|| reference.to_owned());

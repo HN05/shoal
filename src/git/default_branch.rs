@@ -11,12 +11,10 @@ pub async fn resolve(repo: &Path, discover: bool) -> Result<String> {
     let remotes = git::run(repo, &["remote"]).await?;
     let remotes: Vec<_> = remotes.lines().collect();
     if remotes.is_empty() {
-        let head = git::run(repo, &["symbolic-ref", "--quiet", "HEAD"])
+        let head = git::head_branch(repo, true, git::run)
             .await
             .context("local repository has no default branch; select a starting ref with --base")?;
-        return Ok(git::strip_local(head.trim_end_matches('\n'))
-            .context("repository HEAD does not name a local branch")?
-            .to_owned());
+        return head.context("repository HEAD does not name a local branch");
     }
     let remote = if remotes.contains(&"origin") {
         "origin"

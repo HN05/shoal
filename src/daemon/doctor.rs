@@ -75,7 +75,7 @@ impl Manager {
                 .into_iter()
                 .map(|w| w.path)
                 .collect();
-            match git::worktrees(&repo.path).await {
+            match git::worktrees(&repo.path, git::run).await {
                 Ok(trees) => {
                     let mut untracked = false;
                     for tree in trees {

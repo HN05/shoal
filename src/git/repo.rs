@@ -67,17 +67,7 @@ impl Manager {
         clean_branch(&workspace.path, branch)
             .await
             .with_context(|| format!("workspace {} is not ready to land", workspace.name))?;
-        let source = git_run(
-            &workspace.path,
-            &[
-                "rev-parse",
-                "--verify",
-                &format!("{}^{{commit}}", git::local_ref(branch)),
-            ],
-        )
-        .await?
-        .trim()
-        .to_owned();
+        let source = git::resolve_commit(&workspace.path, &git::local_ref(branch), git_run).await?;
         if let Some(checkout) = self.managed_checkout(&repo, &default).await? {
             bail!(
                 "{default} is checked out in workspace {checkout}; land needs it outside managed workspaces"
@@ -105,10 +95,8 @@ impl Manager {
                 .await
                 .with_context(|| format!("could not refresh {default} before landing"))?
         };
-        let checkout = git::worktrees(&repo.path)
+        let checkout = git::checkout_of(&repo.path, &default, git::run)
             .await?
-            .into_iter()
-            .find(|tree| tree.is_branch(&default))
             .map(|tree| tree.path);
         if let Some(checkout) = &checkout {
             clean_branch(checkout, &default).await?;
@@ -182,11 +170,7 @@ impl Manager {
 
     /// The managed workspace that has `branch` checked out, if any.
     async fn managed_checkout(&self, repo: &Repository, branch: &str) -> Result<Option<String>> {
-        let Some(checkout) = git::worktrees(&repo.path)
-            .await?
-            .into_iter()
-            .find(|tree| tree.is_branch(branch))
-        else {
+        let Some(checkout) = git::checkout_of(&repo.path, branch, git::run).await? else {
             return Ok(None);
         };
         let Ok(path) = std::fs::canonicalize(&checkout.path) else {
@@ -236,10 +220,8 @@ impl Manager {
             )
         })?;
         let (remote, reference) = (remote.as_str(), reference.as_str());
-        let checkout = git::worktrees(&repo.path)
+        let checkout = git::checkout_of(&repo.path, branch, git::run)
             .await?
-            .into_iter()
-            .find(|tree| tree.is_branch(branch))
             .map(|tree| tree.path);
         if let Some(checkout) = &checkout {
             let path = std::fs::canonicalize(checkout)?;
@@ -413,11 +395,11 @@ async fn is_ancestor(repo: &Path, ancestor: &str, descendant: &str) -> Result<bo
 /// moves it.
 async fn clean_branch(path: &Path, branch: &str) -> Result<()> {
     // A detached HEAD has no symbolic ref; that is the same refusal.
-    let head = git_run(path, &["symbolic-ref", "--quiet", "HEAD"])
+    let head = git::head_branch(path, true, git_run)
         .await
         .unwrap_or_default();
     ensure!(
-        head == format!("{}\n", git::local_ref(branch)),
+        head.as_deref() == Some(branch),
         "checkout at {} is not on {branch}",
         path.display()
     );
@@ -550,8 +532,7 @@ pub async fn rollback_land(plan: &LandPlan) -> Result<()> {
     };
     let branch = &plan.default_refresh.branch;
     ensure!(
-        git_run(checkout, &["symbolic-ref", "--quiet", "HEAD"]).await?
-            == format!("{}\n", git::local_ref(branch)),
+        git::head_branch(checkout, true, git_run).await?.as_deref() == Some(branch),
         "landing checkout changed branches; recover it manually"
     );
     let head = git_run(checkout, &["rev-parse", "HEAD"]).await?;

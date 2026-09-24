@@ -173,8 +173,7 @@ fn refresh_summary(refresh: &PulledBranch) -> String {
 
 async fn own_branch(path: &Path, branch: &str) -> Result<()> {
     ensure!(
-        git_run(path, &["symbolic-ref", "--quiet", "HEAD"]).await?
-            == format!("{}\n", git::local_ref(branch)),
+        git::head_branch(path, true, git_run).await?.as_deref() == Some(branch),
         "workspace must be on its own recorded branch ({branch}) before merging"
     );
     Ok(())
@@ -188,17 +187,8 @@ async fn source(path: &Path, branch: &str, remote: Option<&str>, fetched: &str) 
         .await
         .context("invalid source branch name")?;
     if remote.is_none() && git::strip_remote(branch).is_none() {
-        if let Ok(commit) = git_run(
-            path,
-            &[
-                "rev-parse",
-                "--verify",
-                &format!("{}^{{commit}}", git::local_ref(name)),
-            ],
-        )
-        .await
-        {
-            return Ok(commit.trim().into());
+        if let Ok(commit) = git::resolve_commit(path, &git::local_ref(name), git_run).await {
+            return Ok(commit);
         }
         ensure!(
             git::strip_local(branch).is_none(),
@@ -251,13 +241,7 @@ async fn source(path: &Path, branch: &str, remote: Option<&str>, fetched: &str) 
         ],
     )
     .await?;
-    Ok(git_run(
-        path,
-        &["rev-parse", "--verify", &format!("{fetched}^{{commit}}")],
-    )
-    .await?
-    .trim()
-    .into())
+    git::resolve_commit(path, fetched, git_run).await
 }
 
 /// The single configured remote advertising `refs/heads/<name>`.

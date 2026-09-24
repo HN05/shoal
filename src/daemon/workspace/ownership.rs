@@ -65,7 +65,7 @@ impl Manager {
     pub(crate) async fn is_registered_worktree(&self, workspace: &Workspace) -> Result<bool> {
         let repo = self.repository(&workspace.repository_id).await?;
         let recorded = canonical_parent_only(&workspace.path)?;
-        Ok(git::worktrees(&repo.path)
+        Ok(git::worktrees(&repo.path, git::run)
             .await?
             .iter()
             .any(|tree| tree.path == recorded || tree.path == workspace.path))
@@ -78,7 +78,7 @@ impl Manager {
         let Some(directory) = &workspace.git_dir else {
             // Older records cannot prove identity after a move; a branch match at
             // another existing path is enough to block forgetting the workspace.
-            return Ok(git::worktrees(&repo.path)
+            return Ok(git::worktrees(&repo.path, git::run)
                 .await?
                 .into_iter()
                 .find(|tree| tree.is_branch(&workspace.branch) && tree.path.is_dir())
