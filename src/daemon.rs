@@ -316,11 +316,16 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::CheckRemoval {
             workspace,
             caller_pid,
-        } => Body::RemovalCheck(
-            manager
+            include_changes,
+        } => {
+            let mut check = manager
                 .check_removal(&workspace, removal_inspection(caller_pid))
-                .await?,
-        ),
+                .await?;
+            if include_changes && check.dirty {
+                check.load_changed_files().await?;
+            }
+            Body::RemovalCheck(check)
+        }
         Method::RemoveWorkspace {
             workspace,
             choice,

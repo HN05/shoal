@@ -620,6 +620,7 @@ Removal retains the default branch unless `--delete-branch`; other clean branche
 matching default/upstream or merged into the default are deleted. Otherwise fzf
 offers Cancel (default), Keep branch, or Delete branch, then lists uncommitted
 changes and untracked files with Git status codes before `Are you sure? [y/N]`.
+Large previews show an omitted-entry count; use `git status` for the full list.
 Both choices discard uncommitted and untracked files. `--keep-branch`/`--delete-branch`
 skips the picker; add `--yes` to skip confirmation. `--yes` alone cannot choose for dirty/differing work.
 

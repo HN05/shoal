@@ -708,6 +708,7 @@ pub(super) async fn remove(
         Method::CheckRemoval {
             workspace: workspace.clone(),
             caller_pid,
+            include_changes: ctx.interactive() && !yes,
         },
     )
     .await?;
@@ -762,11 +763,17 @@ fn confirm_removal(ctx: &Context, check: &RemovalCheck, choice: BranchChoice) ->
         check.workspace.name,
         check.branch.as_deref().unwrap_or("none")
     );
-    if !check.changed_files.is_empty() {
+    if ctx.interactive() && (!check.changed_files.is_empty() || check.changed_files_omitted > 0) {
         action.push_str("\nUncommitted changes and untracked files (Git status):");
         for file in &check.changed_files {
             action.push_str("\n  ");
             action.push_str(file);
+        }
+        if check.changed_files_omitted > 0 {
+            action.push_str(&format!(
+                "\n  ... {} more entries omitted; run git status in the workspace for the full list",
+                check.changed_files_omitted
+            ));
         }
     }
     ensure!(
@@ -824,6 +831,7 @@ pub(super) async fn pr(ctx: &Context, workspace: Option<String>, action: Action)
             Method::CheckRemoval {
                 workspace: workspace.clone(),
                 caller_pid: std::process::id(),
+                include_changes: false,
             },
         )
         .await?;

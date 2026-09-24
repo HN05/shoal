@@ -208,7 +208,8 @@ Confirmations show the action and ask `[y/N]`, cancel on Enter, `n`, EOF or
 Ctrl-C (also after a tracked execution), and are bypassed only by
 explicit flags such as `-y`/`--yes`. Removal's branch choice stays separate from
 its confirmation, which lists uncommitted changes and untracked files with Git
-status codes; explicit branch flags skip the choice only. Interactive
+status codes and reports omitted entries when the preview reaches its size limit;
+explicit branch flags skip the choice only. Interactive
 navigation without the shell wrapper reports how to load it without changing
 redirected or JSON output.
 

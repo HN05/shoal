@@ -166,6 +166,8 @@ pub enum Method {
     CheckRemoval {
         workspace: String,
         caller_pid: u32,
+        #[serde(default)]
+        include_changes: bool,
     },
     RemoveWorkspace {
         workspace: String,

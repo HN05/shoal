@@ -6384,6 +6384,34 @@ fn removal_confirmation_lists_git_changes_before_asking() {
 }
 
 #[test]
+fn removal_preview_limits_large_untracked_directories() {
+    let fixture = Fixture::new();
+    let workspace = fixture.add("large-preview");
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    fs::create_dir(path.join("untracked")).unwrap();
+    for index in 0..500 {
+        fs::write(
+            path.join(format!("untracked/{index:03}-{}", "x".repeat(140))),
+            "keep until approved",
+        )
+        .unwrap();
+    }
+    let (no, prompt) = fixture.interactive(&["rm", "large-preview", "--keep-branch"], "n\n");
+    assert!(!no.status.success(), "{prompt}");
+    assert_eq!(prompt.matches("?? untracked/").count(), 50, "{prompt}");
+    assert!(prompt.contains("450 more entries omitted"), "{prompt}");
+    assert!(prompt.contains("Are you sure? [y/N]"), "{prompt}");
+    assert_eq!(fs::read_dir(path.join("untracked")).unwrap().count(), 500);
+    let piped = fixture.run(&["rm", "large-preview", "--keep-branch"]);
+    assert!(!piped.status.success());
+    let error = String::from_utf8_lossy(&piped.stderr);
+    assert!(error.contains("pass --yes"), "{error}");
+    assert!(!error.contains("?? untracked/"), "{error}");
+    fixture.ok(&["rm", "large-preview", "--keep-branch", "--yes"]);
+    assert!(!path.exists());
+}
+
+#[test]
 fn repository_removal_retries_partial_file_deletion_after_restart_but_rejects_replacement() {
     use std::os::unix::fs::MetadataExt;
     let mut fixture = Fixture::new();

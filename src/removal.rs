@@ -17,6 +17,8 @@ pub struct RemovalCheck {
     /// Git porcelain status lines, with quoted paths and individual untracked files.
     #[serde(default)]
     pub changed_files: Vec<String>,
+    #[serde(default)]
+    pub changed_files_omitted: usize,
     /// Commits reachable from neither a remote-tracking branch nor the local
     /// default branch, so removing the worktree could lose them.
     pub unpushed_commits: u64,
@@ -126,6 +128,22 @@ impl Serialize for RemovalResult {
 }
 
 impl RemovalCheck {
+    pub async fn load_changed_files(&mut self) -> Result<()> {
+        let status = git::run(
+            &self.workspace.path,
+            &[
+                "-c",
+                "core.quotePath=true",
+                "status",
+                "--porcelain=v1",
+                "--untracked-files=all",
+            ],
+        )
+        .await?;
+        (self.changed_files, self.changed_files_omitted) = changed_files_preview(&status);
+        Ok(())
+    }
+
     pub fn warnings(&self) -> Vec<String> {
         let mut warnings = Vec::new();
         if self.dirty {
@@ -157,6 +175,28 @@ impl RemovalCheck {
     }
 }
 
+fn changed_files_preview(status: &str) -> (Vec<String>, usize) {
+    // Leave room for the rest of RemovalCheck in the 64 KiB protocol frame.
+    const MAX_BYTES: usize = 16 * 1024;
+    const MAX_ENTRIES: usize = 50;
+    let mut files = Vec::new();
+    let mut bytes = 0;
+    let mut omitted = 0;
+    for line in status.lines() {
+        let encoded_len = serde_json::to_string(line)
+            .expect("strings serialize")
+            .len()
+            + 1;
+        if omitted > 0 || files.len() == MAX_ENTRIES || bytes + encoded_len > MAX_BYTES {
+            omitted += 1;
+        } else {
+            bytes += encoded_len;
+            files.push(line.to_owned());
+        }
+    }
+    (files, omitted)
+}
+
 /// Whether a removal inspection includes processes using the directory.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InspectionPolicy {
@@ -177,6 +217,7 @@ pub async fn inspect(
         processes: vec![],
         dirty: false,
         changed_files: vec![],
+        changed_files_omitted: 0,
         unpushed_commits: 0,
         branch: None,
         matches_default_branch: false,
@@ -186,21 +227,9 @@ pub async fn inspect(
         return Ok(check);
     }
     let path = &check.workspace.path;
-    check.changed_files = git::run(
-        path,
-        &[
-            "-c",
-            "core.quotePath=true",
-            "status",
-            "--porcelain=v1",
-            "--untracked-files=all",
-        ],
-    )
-    .await?
-    .lines()
-    .map(str::to_owned)
-    .collect();
-    check.dirty = !check.changed_files.is_empty();
+    check.dirty = !git::run(path, &["status", "--porcelain", "--untracked-files=normal"])
+        .await?
+        .is_empty();
     let branch = git::run(path, &["branch", "--show-current"]).await?;
     let branch = branch.trim_end_matches('\n');
     check.branch = (!branch.is_empty()).then(|| branch.to_owned());
