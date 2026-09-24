@@ -637,7 +637,7 @@ fn doctor_checks_the_daemon_path_even_when_the_cli_has_dependencies() {
 }
 
 #[test]
-fn cli_typed_response_errors_cover_progress_and_notification_setup() {
+fn cli_typed_response_errors_preserve_output_and_exit_contracts() {
     for (args, body, expected) in [
         (
             vec!["repo", "add", "/unused-repository"],
@@ -658,6 +658,21 @@ fn cli_typed_response_errors_cover_progress_and_notification_setup() {
             vec!["notifications", "--follow"],
             json!({"type": "error", "data": {"code": "scope_denied", "message": "denied"}}),
             "scope_denied: denied",
+        ),
+        (
+            vec!["--json", "repo", "list"],
+            json!({"type": "error", "data": {"code": "operation_failed", "message": "failed: detail"}}),
+            "operation_failed: failed: detail",
+        ),
+        (
+            vec!["exec", "worker", "--", "true"],
+            json!({"type": "error", "data": {"code": "execution_failed", "message": "failed: detail"}}),
+            "execution_failed: failed: detail",
+        ),
+        (
+            vec!["--json", "exec", "worker", "--", "true"],
+            json!({"type": "error", "data": {"code": "future_code", "message": "failed: detail"}}),
+            "future_code: failed: detail",
         ),
     ] {
         let root = tempfile::tempdir_in("/tmp").unwrap();
@@ -693,6 +708,14 @@ fn cli_typed_response_errors_cover_progress_and_notification_setup() {
         daemon.join().unwrap();
         assert_eq!(output.status.code(), Some(1), "{args:?}");
         let stderr = String::from_utf8(output.stderr).unwrap();
-        assert!(stderr.contains(expected), "{args:?}: {stderr}");
+        assert!(output.stdout.is_empty(), "{args:?}");
+        if args.contains(&"--json") {
+            assert_eq!(
+                serde_json::from_str::<Value>(&stderr).unwrap(),
+                json!({"error": {"code": "command_failed", "message": expected}})
+            );
+        } else {
+            assert!(stderr.contains(expected), "{args:?}: {stderr}");
+        }
     }
 }

@@ -151,12 +151,20 @@ mod tests {
     use crate::protocol::{ErrorCode, RemoteError};
     use tokio::net::UnixListener;
 
-    async fn reply<T>(mut response: Response) -> Result<T>
+    async fn reply<T>(response: Response) -> Result<T>
     where
         T: TryFrom<Body, Error = anyhow::Error>,
     {
-        let temp = tempfile::tempdir()?;
-        let paths = Paths::new(Some(temp.path().to_owned()))?;
+        reply_with(response, async |paths| request(paths, Method::Status).await).await
+    }
+
+    async fn reply_with<T>(
+        mut response: Response,
+        client: impl AsyncFnOnce(&Paths) -> Result<T>,
+    ) -> Result<T> {
+        let temp = tempfile::tempdir_in("/tmp")?;
+        let paths = Paths::for_test(temp.path());
+        paths.prepare()?;
         let listener = UnixListener::bind(&paths.socket)?;
         let daemon = tokio::spawn(async move {
             let (mut stream, _) = listener.accept().await.unwrap();
@@ -164,7 +172,7 @@ mod tests {
             response.id = request.id;
             protocol::write(&mut stream, &response).await.unwrap();
         });
-        let result = request(&paths, Method::Status).await;
+        let result = client(&paths).await;
         daemon.await?;
         result
     }
@@ -185,7 +193,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn typed_requests_report_variants_and_preserve_remote_errors() {
+    async fn typed_requests_report_unexpected_variants() {
         let error = reply::<DaemonStatus>(Response::new(1, Body::Ok))
             .await
             .unwrap_err();
@@ -193,23 +201,63 @@ mod tests {
             error.to_string(),
             "unexpected daemon response; expected Status, received Ok"
         );
-        let error = reply::<()>(Response::new(
-            1,
-            Body::error(ErrorCode::ScopeDenied, "denied"),
-        ))
-        .await
-        .unwrap_err();
-        let remote = error.downcast_ref::<RemoteError>().unwrap();
-        assert_eq!(remote.code, ErrorCode::ScopeDenied);
-        assert_eq!(remote.message, "denied");
-        assert_eq!(error.to_string(), "scope_denied: denied");
+    }
+
+    #[tokio::test]
+    async fn requests_and_execution_setup_preserve_inspectable_codes() {
+        for code in [
+            ErrorCode::ScopeDenied,
+            ErrorCode::OperationFailed,
+            ErrorCode::ExecutionFailed,
+            ErrorCode::ProtocolMismatch,
+            ErrorCode::Unknown("future_code".into()),
+        ] {
+            let response = || Response::new(1, Body::error(code.clone(), "failed: detail"));
+            for error in [
+                reply::<DaemonStatus>(response()).await.unwrap_err(),
+                reply_with(response(), async |paths| {
+                    crate::execution::setup(paths, "worker".into(), false).await
+                })
+                .await
+                .unwrap_err(),
+            ] {
+                assert!(!error.is::<ProtocolMismatch>());
+                assert_eq!(error.to_string(), format!("{code}: failed: detail"));
+                let error = error.context("caller context");
+                let remote = error.downcast_ref::<RemoteError>().unwrap();
+                assert_eq!(remote.code, code);
+                assert_eq!(remote.message, "failed: detail");
+                assert_eq!(
+                    format!("{error:#}"),
+                    format!("caller context: {code}: failed: detail")
+                );
+            }
+        }
     }
 
     #[tokio::test]
     async fn protocol_mismatch_precedes_payload_extraction() {
-        let mut response = Response::new(1, Body::error(ErrorCode::ProtocolMismatch, "old daemon"));
-        response.protocol += 1;
-        let error = reply::<DaemonStatus>(response).await.unwrap_err();
-        assert!(error.is::<ProtocolMismatch>());
+        for code in [
+            ErrorCode::ProtocolMismatch,
+            ErrorCode::Unknown("future_code".into()),
+        ] {
+            let response = || {
+                let mut response = Response::new(1, Body::error(code.clone(), "old daemon"));
+                response.protocol += 1;
+                response
+            };
+            for error in [
+                reply::<DaemonStatus>(response()).await.unwrap_err(),
+                reply_with(response(), async |paths| {
+                    crate::execution::setup(paths, "worker".into(), false).await
+                })
+                .await
+                .unwrap_err(),
+            ] {
+                assert!(error.is::<ProtocolMismatch>());
+                assert!(!error.is::<RemoteError>());
+                assert!(error.to_string().contains("shoal install"));
+            }
+        }
     }
 }
