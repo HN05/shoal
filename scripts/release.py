@@ -12,7 +12,7 @@ import tomllib
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 import release_notes
-from release_metadata import commit_id, version_parts as parts, version_tag
+from release_metadata import commit_id, pull_branch, tag_version, version_parts as parts, version_tag
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -192,14 +192,10 @@ def merged_release(pr, repository, number):
             or pr.get("base", {}).get("repo", {}).get("full_name") != repository
             or pr.get("head", {}).get("repo", {}).get("full_name") != repository):
         raise ValueError("expected a merged release PR from this repository into main")
-    head = pr["head"]
-    branch = head.get("ref", "")
-    if branch == f"refs/pull/{number}/head":
-        branch = head.get("label", "")
+    branch = pull_branch(pr, repository, number)
     if not branch.startswith("release/v"):
         raise ValueError("expected a release/vMAJOR.MINOR.PATCH branch")
-    version = branch.removeprefix("release/v")
-    parts(version)
+    version = tag_version(branch.removeprefix("release/"))
     sha = commit_id(pr.get("merge_commit_sha", ""))
     return version, sha
 

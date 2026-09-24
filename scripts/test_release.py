@@ -40,6 +40,8 @@ class ReleaseTests(unittest.TestCase):
             lambda p: p.update(merge_commit_sha="not-a-commit"),
             lambda p: p["base"].update(ref="other"),
             lambda p: p["head"]["repo"].update(full_name="fork/shoal"),
+            lambda p: p["base"]["repo"].update(full_name="fork/shoal"),
+            lambda p: p["head"].update(ref="refs/pull/8/head"),
             lambda p: p["head"].update(ref="feature", label="release/v0.1.1"),
         ]
         for mutate in mutations:

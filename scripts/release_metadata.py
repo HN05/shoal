@@ -44,3 +44,15 @@ def verified_tag_commit(refs, tag, revision):
         if found != revision:
             raise ValueError(f"tag {tag} points at {found}, not the released {revision}")
     return found
+
+
+def pull_branch(pr, repository, number):
+    """Recover a deleted branch label only for this repository's exact PR."""
+    head = pr.get("head", {})
+    branch = head.get("ref", "")
+    if (number > 0 and pr.get("number") == number
+            and branch == f"refs/pull/{number}/head"
+            and pr.get("base", {}).get("repo", {}).get("full_name") == repository
+            and head.get("repo", {}).get("full_name") == repository):
+        return head.get("label", "")
+    return branch

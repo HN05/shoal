@@ -67,7 +67,8 @@ removal, check it against the rule those files state before judging it.
   Idle cleanup accepts commits retained on the local default branch as well as
   remote-tracking branches.
 - Releases are pinned to the merged version commit; changelogs use published
-  ancestor releases and merged PRs excluding release preparation, and GitHub
+  ancestor releases and merged PRs excluding release preparation; deleted branch
+  labels require matching repository and exact PR identity. GitHub
   keeps change descriptions with a GitHub comparison link, omitting unmirrored
   Forgejo PR and issue references. Runtime dependency links target the tagged
   README on each host; reruns synchronize notes without replacing

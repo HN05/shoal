@@ -2,14 +2,11 @@
 import re
 from urllib.error import HTTPError
 
-from release_metadata import STABLE_TAG, tag_version, version_parts
+from release_metadata import STABLE_TAG, pull_branch, tag_version, version_parts
 
 
-def is_release_pr(pr):
-    head = pr.get("head", {})
-    branch = head.get("ref", "")
-    if branch == f"refs/pull/{pr['number']}/head":
-        branch = head.get("label", "")
+def is_release_pr(pr, repository):
+    branch = pull_branch(pr, repository, pr["number"])
     return branch.startswith("release/") and STABLE_TAG.fullmatch(branch[8:]) is not None
 
 
@@ -56,9 +53,10 @@ def generate(tag, git, get, url):
         if count < distance:
             previous, distance = candidate, count
     commits = set(git("rev-list", f"{previous}..{target}").splitlines()) if previous else history
+    repository = "/".join(url.rstrip("/").split("/")[-2:])
     pulls = sorted((pr for pr in pages("/pulls?state=closed")
                     if pr.get("merged") and pr["base"]["ref"] == "main"
-                    and pr.get("merge_commit_sha") in commits and not is_release_pr(pr)),
+                    and pr.get("merge_commit_sha") in commits and not is_release_pr(pr, repository)),
                    key=lambda pr: pr["number"])
     lines = [f"Shoal {tag_version(tag)}.", "", "Install or upgrade through the "
              "[HN05 Homebrew tap](https://github.com/HN05/homebrew-tap), or download a "

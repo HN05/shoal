@@ -54,3 +54,21 @@ class ReleaseMetadataTests(unittest.TestCase):
                                     ("short\trefs/tags/v1.2.3", "v1.2.3", "a" * 40)):
             with self.subTest(refs=refs, tag=tag, revision=revision), self.assertRaises(ValueError):
                 metadata.verified_tag_commit(refs, tag, revision)
+
+    def test_deleted_branch_fallback_requires_repository_and_exact_pr(self):
+        pr = {"number": 7,
+              "base": {"repo": {"full_name": "HN05/shoal"}},
+              "head": {"ref": "refs/pull/7/head", "label": "release/v1.2.3",
+                       "repo": {"full_name": "HN05/shoal"}}}
+        self.assertEqual(metadata.pull_branch(pr, "HN05/shoal", 7), "release/v1.2.3")
+        for number in (0, 8):
+            self.assertEqual(metadata.pull_branch(pr, "HN05/shoal", number), "refs/pull/7/head")
+        self.assertEqual(metadata.pull_branch(pr, "fork/shoal", 7), "refs/pull/7/head")
+        for side in ("base", "head"):
+            for repo in ({}, {"full_name": "fork/shoal"}):
+                invalid = pr | {side: pr[side] | {"repo": repo}}
+                with self.subTest(side=side, repo=repo):
+                    self.assertEqual(metadata.pull_branch(invalid, "HN05/shoal", 7), "refs/pull/7/head")
+        for branch in ("feature", "release/v1.2.3", "refs/pull/8/head"):
+            changed = pr | {"head": pr["head"] | {"ref": branch}}
+            self.assertEqual(metadata.pull_branch(changed, "HN05/shoal", 7), branch)

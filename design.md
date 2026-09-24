@@ -79,7 +79,8 @@ respective host's published checksums. Release notes link to the runtime
 dependencies in the tagged README on each host. Reruns synchronize those notes while
 preserving complete asset sets. It never tags a later commit, downgrades, or force merges;
 explicitly selecting the current tagged version resumes from that tag, and tap
-updates retry against the tap's latest main without force pushes.
+updates retry against the tap's latest main without force pushes. Deleted release
+branch labels are accepted only for matching repository and exact PR identity.
 
 ## Workspaces and Git
 
