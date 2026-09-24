@@ -129,6 +129,7 @@ class ReleaseTests(unittest.TestCase):
             self.assertFalse(payload["prerelease"])
             self.assertEqual(payload["body"], "Changelog")
             self.assertEqual(notes.call_args.args[0], "v0.2.0")
+            self.assertEqual(notes.call_args.args[4], "HN05/shoal")
             notes.call_args.args[2]("/releases?limit=50&page=1")
             self.assertEqual(api.call_args.args, ("/repos/HN05/shoal/releases?limit=50&page=1",))
             self.assertEqual(api.call_args.kwargs, {"authenticated": False})

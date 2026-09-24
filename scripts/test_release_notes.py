@@ -91,7 +91,7 @@ class ReleaseNotesTests(unittest.TestCase):
             api = Mock(side_effect=get)
 
             def generate():
-                return release_notes.generate("v0.2.0", git, api, "https://forge.test/owner/repo")
+                return release_notes.generate("v0.2.0", git, api, "https://forge.test/owner/repo", "owner/repo")
 
             notes = generate()
             self.assertIn("[runtime dependencies](https://forge.test/owner/repo/src/tag/v0.2.0/"

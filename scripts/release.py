@@ -173,7 +173,7 @@ def create_release(version):
         return
     body = release_notes.generate(
         tag, git,
-        lambda path: api(f"/repos/{repository}{path}", authenticated=False), url)
+        lambda path: api(f"/repos/{repository}{path}", authenticated=False), url, repository)
     # CI calls repository endpoints directly; no user-profile/login API is needed.
     if os.environ.get("RELEASE_AUTOMATION_TOKEN"):
         api(f"/repos/{repository}/releases", {

@@ -22,7 +22,7 @@ def for_github(body, source_url, repository):
                             f"https://github.com/{repository}/blob/")
 
 
-def generate(tag, git, get, url):
+def generate(tag, git, get, url, repository):
     def pages(path):
         page = 1
         while True:
@@ -53,7 +53,6 @@ def generate(tag, git, get, url):
         if count < distance:
             previous, distance = candidate, count
     commits = set(git("rev-list", f"{previous}..{target}").splitlines()) if previous else history
-    repository = "/".join(url.rstrip("/").split("/")[-2:])
     pulls = sorted((pr for pr in pages("/pulls?state=closed")
                     if pr.get("merged") and pr["base"]["ref"] == "main"
                     and pr.get("merge_commit_sha") in commits and not is_release_pr(pr, repository)),
