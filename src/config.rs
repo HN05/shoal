@@ -561,18 +561,25 @@ impl Config {
         }
     }
 
-    /// The global file as one snapshot, with the prompt-template files beside
-    /// it standing in for omitted inline templates.
+    /// The global file as one snapshot: machine policy, without the prompt
+    /// template files only agent launches need.
     pub fn load(paths: &Paths) -> Result<Self> {
         let path = Self::path(paths);
-        let mut config = match fs::read_to_string(&path) {
+        match fs::read_to_string(&path) {
             Ok(text) => {
-                Self::parse(&text, paths).with_context(|| format!("parse {}", path.display()))?
+                Self::parse(&text, paths).with_context(|| format!("parse {}", path.display()))
             }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Self::default(),
-            Err(error) => return Err(error).with_context(|| format!("read {}", path.display())),
-        };
-        let directory = path.parent().context("config has no directory")?;
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Self::default()),
+            Err(error) => Err(error).with_context(|| format!("read {}", path.display())),
+        }
+    }
+
+    /// [`Self::load`] with the template files beside the config standing in
+    /// for omitted inline templates, as the CLI reads it for a launch.
+    pub fn load_with_templates(paths: &Paths) -> Result<Self> {
+        let mut config = Self::load(paths)?;
+        let directory = Self::path(paths);
+        let directory = directory.parent().context("config has no directory")?;
         if config.issue_template.is_none() {
             config.issue_template = templates::read(directory, templates::ISSUE_FILE)?;
         }
