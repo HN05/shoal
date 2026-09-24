@@ -154,8 +154,8 @@ pub enum Method {
     ListWorkspaces,
     SetPr {
         workspace: String,
-        url: Option<String>,
-        clear: bool,
+        #[serde(flatten)]
+        action: crate::forge::pr::Action,
     },
     InspectWorkspace {
         workspace: String,
@@ -509,6 +509,63 @@ mod tests {
             serde_json::from_value::<Method>(serde_json::json!({
                 "workspace_hook": {"workspace": "worker", "kind": "unknown"}
             }))
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn pr_actions_preserve_existing_wire_fields() {
+        use crate::forge::pr::Action;
+        for (action, url, clear) in [
+            (
+                Action::Watch {
+                    url: "https://forge.example/team/repo/pulls/7".into(),
+                },
+                Some("https://forge.example/team/repo/pulls/7"),
+                false,
+            ),
+            (Action::Acknowledge, None, false),
+            (Action::Clear, None, true),
+        ] {
+            let wire = json!({"set_pr": {"workspace": "worker", "url": url, "clear": clear}});
+            let decoded: Method = serde_json::from_value(wire.clone()).unwrap();
+            let Method::SetPr {
+                workspace,
+                action: decoded_action,
+            } = &decoded
+            else {
+                panic!("wrong method")
+            };
+            assert_eq!(workspace, "worker");
+            assert_eq!(decoded_action, &action);
+            assert_eq!(serde_json::to_value(decoded).unwrap(), wire);
+        }
+        let decoded: Method =
+            serde_json::from_value(json!({"set_pr": {"workspace": "worker", "clear": false}}))
+                .unwrap();
+        assert!(matches!(
+            decoded,
+            Method::SetPr {
+                action: Action::Acknowledge,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn pr_actions_reject_conflicting_wire_fields() {
+        let error = serde_json::from_value::<Method>(
+            json!({"set_pr": {"workspace": "worker", "url": "7", "clear": true}}),
+        )
+        .unwrap_err();
+        assert!(
+            error.to_string().contains("clear cannot include a URL"),
+            "{error}"
+        );
+        assert!(
+            serde_json::from_value::<Method>(
+                json!({"set_pr": {"workspace": "worker", "url": "7"}})
+            )
             .is_err()
         );
     }

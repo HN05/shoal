@@ -7793,6 +7793,85 @@ fn pr_cleanup_can_be_disabled_independently() {
 }
 
 #[test]
+fn legacy_pr_registrations_survive_disabled_cleanup_and_clear_after_restart() {
+    let mut fixture = Fixture::with_config(Some(
+        "[pr_cleanup]\nenabled=false\n[auto_cleanup]\nenabled=false\n",
+    ));
+    for name in ["watch", "acknowledged"] {
+        let workspace = fixture.add(name);
+        let head = git(
+            Path::new(workspace["path"].as_str().unwrap()),
+            &["rev-parse", "HEAD"],
+        );
+        let record = if name == "watch" {
+            serde_json::json!({"url": "https://forge.example/team/repo/pulls/7", "head": null, "error": "previous lookup failure"})
+        } else {
+            serde_json::json!({"url": null, "head": head.trim(), "error": null})
+        };
+        let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+        db.execute(
+            "INSERT INTO pr_cleanup(workspace_id,record) VALUES (?1,?2)",
+            rusqlite::params![workspace["id"].as_str().unwrap(), record.to_string()],
+        )
+        .unwrap();
+        fixture.restart();
+        assert_eq!(fixture.ok(&["inspect", name])["pr_cleanup"], record);
+        for command in ["merged", "7"] {
+            let output = fixture.run(&["pr", command, name]);
+            assert!(!output.status.success());
+            assert!(String::from_utf8_lossy(&output.stderr).contains("PR cleanup is disabled"));
+        }
+        assert_eq!(fixture.ok(&["inspect", name])["pr_cleanup"], record);
+        // Clear remains allowed while disabled, including for a scoped caller.
+        assert_eq!(
+            fixture.ok(&[
+                "exec",
+                name,
+                "--",
+                env!("CARGO_BIN_EXE_shoal"),
+                "--json",
+                "pr",
+                "clear"
+            ]),
+            serde_json::json!({"registered": false})
+        );
+        fixture.restart();
+        assert!(fixture.ok(&["inspect", name])["pr_cleanup"].is_null());
+        assert_eq!(
+            fixture.ok(&["pr", "clear", name]),
+            serde_json::json!({"registered": false})
+        );
+        assert!(Path::new(workspace["path"].as_str().unwrap()).exists());
+    }
+}
+
+#[test]
+fn invalid_persisted_pr_registration_retains_workspace_and_can_be_cleared() {
+    let mut fixture = Fixture::with_config(Some("[auto_cleanup]\nenabled=false\n"));
+    let workspace = fixture.add("invalid");
+    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+    for record in [
+        serde_json::json!({"url": null, "head": null, "error": null}),
+        serde_json::json!({"url": "https://forge.example/team/repo/pulls/7", "head": "abc123", "error": null}),
+    ] {
+        db.execute(
+            "INSERT INTO pr_cleanup(workspace_id,record) VALUES (?1,?2)",
+            rusqlite::params![workspace["id"].as_str().unwrap(), record.to_string()],
+        )
+        .unwrap();
+        fixture.restart();
+        let output = fixture.run(&["inspect", "invalid"]);
+        assert!(!output.status.success());
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains("expected exactly one of url or head")
+        );
+        assert!(Path::new(workspace["path"].as_str().unwrap()).exists());
+        fixture.ok(&["pr", "clear", "invalid"]);
+        assert!(fixture.ok(&["inspect", "invalid"])["pr_cleanup"].is_null());
+    }
+}
+
+#[test]
 fn repository_config_sets_pr_cleanup_over_the_global_default() {
     let fixture = Fixture::with_config(Some("[pr_cleanup]\nenabled=false\n"));
     fs::write(

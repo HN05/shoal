@@ -303,12 +303,8 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::WorkspaceStatus { workspace } => {
             Body::WorkspaceStatus(manager.workspace_status(&workspace).await?)
         }
-        Method::SetPr {
-            workspace,
-            url,
-            clear,
-        } => {
-            manager.set_pr(&workspace, url, clear).await?;
+        Method::SetPr { workspace, action } => {
+            manager.set_pr(&workspace, action).await?;
             Body::Ok
         }
         Method::StopWorkspace { workspace } => {

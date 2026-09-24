@@ -15,6 +15,7 @@ use crate::{
     config::templates,
     daemon::recovery::{ReconcileOptions, Report},
     env, execution,
+    forge::pr::{Action, RegistrationKind},
     git::{
         self,
         existing_branch::{Branch, OpenedWorkspace},
@@ -650,8 +651,8 @@ fn render_status(status: &WorkspaceStatus, json: bool) {
     match &status.pr_cleanup {
         Some(registration) => {
             let target = match &registration.kind {
-                crate::forge::pr::RegistrationKind::Watch { url } => url,
-                crate::forge::pr::RegistrationKind::Acknowledgement { head } => head,
+                RegistrationKind::Watch { url } => url,
+                RegistrationKind::Acknowledgement { head } => head,
             };
             println!("PR watch:      {target}");
             if let Some(error) = &registration.error {
@@ -1178,17 +1179,13 @@ fn lock_trust_config(config: &std::path::Path) -> Result<std::fs::File> {
     Ok(lock)
 }
 
-pub(super) async fn pr(
-    ctx: &Context,
-    workspace: Option<String>,
-    url: Option<String>,
-    clear: bool,
-) -> Result<i32> {
+pub(super) async fn pr(ctx: &Context, workspace: Option<String>, action: Action) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    let clear = matches!(action, Action::Clear);
     // An acknowledged worktree disappears shortly after the call returns, so
     // leave it now, unless the sweep will retain it as dirty. A watched PR
     // keeps the shell where it is until it merges.
-    let escape = if url.is_none() && !clear && !env::is_scoped() {
+    let escape = if matches!(action, Action::Acknowledge) && !env::is_scoped() {
         let check = request::<RemovalCheck>(
             &ctx.paths,
             Method::CheckRemoval {
@@ -1205,15 +1202,7 @@ pub(super) async fn pr(
     } else {
         None
     };
-    request::<()>(
-        &ctx.paths,
-        Method::SetPr {
-            workspace,
-            url,
-            clear,
-        },
-    )
-    .await?;
+    request::<()>(&ctx.paths, Method::SetPr { workspace, action }).await?;
     if let Some(destination) = escape {
         shell::navigate(&destination, ctx.json)?;
     }

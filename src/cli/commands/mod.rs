@@ -17,7 +17,7 @@ mod workspaces;
 
 use std::time::Duration;
 
-use anyhow::{Result, ensure};
+use anyhow::{Context as _, Result, ensure};
 use clap::CommandFactory;
 use serde::Serialize;
 use serde_json::json;
@@ -26,6 +26,7 @@ use tokio::time::{Instant, sleep};
 use crate::{
     cli::{Cli, CodexMode, Command, ConfigCommand, PrCommand, ShellCommand, context::Context},
     env,
+    forge::pr::Action,
     paths::Paths,
     shell,
 };
@@ -179,12 +180,21 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             url,
             command,
         } => match command {
-            None => workspaces::pr(&ctx, workspace, url, false).await,
+            None => {
+                workspaces::pr(
+                    &ctx,
+                    workspace,
+                    Action::Watch {
+                        url: url.context("PR watch requires a number or URL")?,
+                    },
+                )
+                .await
+            }
             Some(PrCommand::Merged { workspace }) => {
-                workspaces::pr(&ctx, workspace, None, false).await
+                workspaces::pr(&ctx, workspace, Action::Acknowledge).await
             }
             Some(PrCommand::Clear { workspace }) => {
-                workspaces::pr(&ctx, workspace, None, true).await
+                workspaces::pr(&ctx, workspace, Action::Clear).await
             }
             Some(PrCommand::Review {
                 url,

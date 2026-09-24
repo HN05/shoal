@@ -358,7 +358,8 @@ user's gh/fj login, resolve numbers against the workspace's origin into stored
 URLs bound to that repository, and require a merged PR containing HEAD; manual acknowledgement
 binds to exactly the recorded HEAD. Registrations distinguish watches from
 acknowledgements while preserving their stored and JSON representation; ambiguous
-records are rejected. Both stop tracked agents immediately through shared removal,
+records and conflicting actions are rejected without changing the wire format.
+Both stop tracked agents immediately through shared removal,
 rechecking clean files and HEAD after stopping. Failures retain work and leases;
 registered workspaces are excluded from idle cleanup until cleared or removed.
 

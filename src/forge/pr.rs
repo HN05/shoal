@@ -68,6 +68,47 @@ impl From<Registration> for RegistrationRecord {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "ActionFields", into = "ActionFields")]
+pub enum Action {
+    Watch { url: String },
+    Acknowledge,
+    Clear,
+}
+
+/// The existing SetPr fields remain flattened on the wire.
+#[derive(Serialize, Deserialize)]
+struct ActionFields {
+    url: Option<String>,
+    clear: bool,
+}
+
+impl TryFrom<ActionFields> for Action {
+    type Error = anyhow::Error;
+
+    fn try_from(fields: ActionFields) -> Result<Self> {
+        match (fields.url, fields.clear) {
+            (Some(url), false) => Ok(Self::Watch { url }),
+            (None, false) => Ok(Self::Acknowledge),
+            (None, true) => Ok(Self::Clear),
+            (Some(_), true) => {
+                anyhow::bail!("invalid PR cleanup action: clear cannot include a URL")
+            }
+        }
+    }
+}
+
+impl From<Action> for ActionFields {
+    fn from(action: Action) -> Self {
+        let (url, clear) = match action {
+            Action::Watch { url } => (Some(url), false),
+            Action::Acknowledge => (None, false),
+            Action::Clear => (None, true),
+        };
+        Self { url, clear }
+    }
+}
+
 impl Manager {
     pub async fn pr_registration(&self, id: &str) -> Result<Option<Registration>> {
         let id = id.to_owned();
@@ -87,11 +128,11 @@ impl Manager {
             .await
     }
 
-    pub async fn set_pr(&self, selector: &str, url: Option<String>, clear: bool) -> Result<()> {
+    pub async fn set_pr(&self, selector: &str, action: Action) -> Result<()> {
         let _guard = self.pr_gate.lock().await;
         let workspace = self.workspace(selector).await?;
         ensure!(
-            clear
+            matches!(action, Action::Clear)
                 || self
                     .workspace_settings(&workspace)
                     .await?
@@ -99,27 +140,25 @@ impl Manager {
                     .enabled,
             "PR cleanup is disabled by [pr_cleanup] enabled = false"
         );
-        let registration = if clear {
-            None
-        } else {
+        if !matches!(action, Action::Clear) {
             self.verify_worktree(&workspace).await?;
-            let head = current_head(&workspace).await?;
-            let url = if let Some(input) = &url {
-                let (forge, number, url) = self.pr_forge(&workspace, input).await?;
+        }
+        let kind = match action {
+            Action::Clear => None,
+            Action::Watch { url: input } => {
+                current_head(&workspace).await?;
+                let (forge, number, url) = self.pr_forge(&workspace, &input).await?;
                 // Detect missing tools/login, wrong branches and invalid PRs now.
                 forge
                     .merged_commits(&workspace.path, number, &workspace.branch)
                     .await?;
-                Some(url)
-            } else {
-                None
-            };
-            let kind = match url {
-                Some(url) => RegistrationKind::Watch { url },
-                None => RegistrationKind::Acknowledgement { head },
-            };
-            Some(Registration { kind, error: None })
+                Some(RegistrationKind::Watch { url })
+            }
+            Action::Acknowledge => Some(RegistrationKind::Acknowledgement {
+                head: current_head(&workspace).await?,
+            }),
         };
+        let registration = kind.map(|kind| Registration { kind, error: None });
         let id = workspace.id;
         self.store.run(move |db| {
             let tx = db.transaction()?;
