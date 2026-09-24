@@ -4,6 +4,111 @@ use anyhow::{Result, bail, ensure};
 use super::{Profile, SimConfig, SimRequest, Simulator, SimulatorState, simctl::Inventory};
 use crate::config::repo::RepoConfig;
 
+/// A proposal over recorded devices, valid only while the simulator gate is held.
+/// The executor rechecks ownership and live capacity before applying it.
+pub(super) struct Plan<'a> {
+    pub reusable: Option<&'a Simulator>,
+    pub idle: Vec<&'a Simulator>,
+    pub evictions: Vec<&'a Simulator>,
+    pub has_device_capacity: bool,
+}
+
+pub(super) fn plan<'a>(
+    records: &'a [Simulator],
+    inventory: &Inventory,
+    limits: &SimConfig,
+    profile: &Profile,
+    clean: bool,
+) -> Plan<'a> {
+    let mut records: Vec<_> = records.iter().collect();
+    if clean && records.len() >= limits.max_devices {
+        records.sort_by_key(|s| (s.app_cost(), s.last_used));
+    } else {
+        records.sort_by_key(|s| std::cmp::Reverse(s.last_used));
+    }
+    let mut reusable = records
+        .iter()
+        .find(|s| {
+            s.workspace_id.is_none()
+                && s.state == SimulatorState::Idle
+                && s.device == profile.device
+                && s.runtime == profile.runtime
+                && s.device(inventory).is_some_and(|d| d.is_available)
+        })
+        .copied();
+    if clean {
+        // Spare capacity costs zero reinstalls. At capacity, replacing an
+        // incompatible empty device can cost less than erasing a useful one.
+        let evictions_needed = records.len().saturating_sub(limits.max_devices) + 1;
+        let eviction_candidates: Vec<_> = records
+            .iter()
+            .filter(|s| s.workspace_id.is_none())
+            .take(evictions_needed)
+            .collect();
+        let eviction_cost = eviction_candidates
+            .iter()
+            .fold(0usize, |cost, s| cost.saturating_add(s.app_cost()));
+        let cheaper_eviction = eviction_candidates.len() == evictions_needed
+            && reusable
+                .as_ref()
+                .is_some_and(|r| eviction_cost < r.app_cost());
+        if records.len() < limits.max_devices || cheaper_eviction {
+            reusable = None;
+        }
+    }
+    let mut idle: Vec<_> = records
+        .iter()
+        .filter(|s| s.workspace_id.is_none() && reusable.as_ref().is_none_or(|r| r.id != s.id))
+        .copied()
+        .collect();
+    if clean {
+        idle.sort_by_key(|s| (s.app_cost(), s.last_used));
+    } else {
+        idle.sort_by_key(|s| s.last_used);
+    }
+
+    let needed = if reusable.is_none() && records.len() >= limits.max_devices {
+        records.len() - limits.max_devices + 1
+    } else {
+        0
+    };
+    let evictions: Vec<_> = idle.iter().copied().take(needed).collect();
+    let has_device_capacity = evictions.len() == needed;
+    Plan {
+        reusable,
+        idle,
+        evictions,
+        has_device_capacity,
+    }
+}
+
+/// Count external and transitional devices too; only a confirmed booted reuse
+/// can occupy the last slot without requiring another one.
+pub(super) fn has_running_capacity(
+    inventory: &Inventory,
+    max_booted: usize,
+    reusable: Option<&Simulator>,
+) -> bool {
+    inventory.running_count() < max_booted
+        || (inventory.running_count() == max_booted
+            && reusable.is_some_and(|s| s.is_booted(inventory)))
+}
+
+/// A plan is not ownership evidence. Match its targets against current records.
+pub(super) fn check_idle_record(expected: &Simulator, records: &[Simulator]) -> Result<()> {
+    ensure!(
+        records.iter().any(|s| s.id == expected.id
+            && s.udid == expected.udid
+            && s.workspace_id.is_none()
+            && s.state == expected.state
+            && s.device == expected.device
+            && s.runtime == expected.runtime),
+        "planned simulator is no longer recorded and idle: {}",
+        expected.id
+    );
+    Ok(())
+}
+
 pub(super) fn check_existing_request(
     sim: &Simulator,
     request: &SimRequest,
@@ -241,6 +346,158 @@ mod tests {
                 state,
                 is_available: true,
             });
+    }
+
+    fn planned<'a>(records: &'a [Simulator], clean: bool, max_devices: usize) -> Plan<'a> {
+        let mut inventory = inventory();
+        for sim in records {
+            add_device(&mut inventory, sim, DeviceState::Booted);
+        }
+        plan(
+            records,
+            &inventory,
+            &SimConfig {
+                max_devices,
+                ..Default::default()
+            },
+            &profile(),
+            clean,
+        )
+    }
+
+    #[test]
+    fn normal_handoff_reuses_most_recent_compatible_idle_device() {
+        let mut records = vec![record("old", Some(0), 1), record("recent", Some(8), 2)];
+        let selected = planned(&records, false, 2);
+        assert_eq!(selected.reusable.unwrap().id, "recent");
+        assert!(selected.evictions.is_empty());
+        records[1].workspace_id = Some("other".into());
+        assert_eq!(planned(&records, false, 2).reusable.unwrap().id, "old");
+        records[0].runtime = "other".into();
+        let selected = planned(&records, false, 2);
+        assert!(selected.reusable.is_none());
+        assert_eq!(selected.evictions[0].id, "old");
+        let mut inventory = inventory();
+        add_device(&mut inventory, &records[0], DeviceState::Booted);
+        records[0].runtime = "ios".into();
+        inventory.devices.get_mut("ios").unwrap()[0].is_available = false;
+        assert!(
+            plan(
+                &records,
+                &inventory,
+                &SimConfig::default(),
+                &profile(),
+                false
+            )
+            .reusable
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn clean_allocation_uses_spare_capacity_then_lowest_app_cost() {
+        let records = vec![record("useful", Some(5), 1), record("cheap", Some(1), 2)];
+        let spare = planned(&records, true, 3);
+        assert!(spare.reusable.is_none());
+        assert!(spare.evictions.is_empty());
+        let full = planned(&records, true, 2);
+        assert_eq!(full.reusable.unwrap().id, "cheap");
+        assert!(full.evictions.is_empty());
+        let mut records = records;
+        records[1].device = "tablet".into();
+        let cheaper_eviction = planned(&records, true, 2);
+        assert!(cheaper_eviction.reusable.is_none());
+        assert_eq!(cheaper_eviction.evictions[0].id, "cheap");
+        records[1].installed_apps = Some(5);
+        assert_eq!(planned(&records, true, 2).reusable.unwrap().id, "useful");
+        records[1].installed_apps = None;
+        assert_eq!(planned(&records, true, 2).reusable.unwrap().id, "useful");
+    }
+
+    #[test]
+    fn eviction_sums_costs_when_limits_shrink_and_unknown_costs_sort_last() {
+        let mut records = vec![
+            record("useful", Some(5), 4),
+            record("empty", Some(0), 1),
+            record("small", Some(2), 2),
+            record("unknown", None, 3),
+        ];
+        for sim in &mut records[1..] {
+            sim.device = "tablet".into();
+        }
+        let selected = planned(&records, true, 3);
+        assert!(selected.reusable.is_none());
+        assert_eq!(
+            selected
+                .evictions
+                .iter()
+                .map(|s| s.id.as_str())
+                .collect::<Vec<_>>(),
+            ["empty", "small"]
+        );
+        records[2].installed_apps = Some(6);
+        assert_eq!(planned(&records, true, 3).reusable.unwrap().id, "useful");
+        // With no compatible reuse, unknown cost follows all known counts.
+        records[0].device = "tablet".into();
+        let selected = planned(&records, true, 1);
+        assert_eq!(
+            selected
+                .evictions
+                .iter()
+                .map(|s| s.id.as_str())
+                .collect::<Vec<_>>(),
+            ["empty", "useful", "small", "unknown"]
+        );
+    }
+
+    #[test]
+    fn full_capacity_never_selects_owned_devices_for_eviction() {
+        let mut records = vec![record("owned", Some(0), 1), record("idle", Some(3), 2)];
+        records[0].workspace_id = Some("owner".into());
+        records[1].device = "tablet".into();
+        let selected = planned(&records, true, 1);
+        assert!(!selected.has_device_capacity);
+        assert_eq!(selected.evictions.len(), 1);
+        assert_eq!(selected.evictions[0].id, "idle");
+        records[1].workspace_id = Some("other".into());
+        let selected = planned(&records, false, 2);
+        assert!(!selected.has_device_capacity);
+        assert!(selected.idle.is_empty());
+        assert!(selected.evictions.is_empty());
+    }
+
+    #[test]
+    fn running_capacity_uses_live_native_states_including_external_devices() {
+        let mut inventory = inventory();
+        let sim = record("reusable", Some(0), 1);
+        add_device(&mut inventory, &sim, DeviceState::Booted);
+        assert!(has_running_capacity(&inventory, 1, Some(&sim)));
+        assert!(!has_running_capacity(&inventory, 1, None));
+        add_device(
+            &mut inventory,
+            &record("external", None, 0),
+            DeviceState::Unknown("future".into()),
+        );
+        assert!(!has_running_capacity(&inventory, 1, Some(&sim)));
+        inventory.devices.get_mut("ios").unwrap()[1].state = DeviceState::Shutdown;
+        assert!(has_running_capacity(&inventory, 1, Some(&sim)));
+        inventory.devices.get_mut("ios").unwrap()[0].state = DeviceState::ShuttingDown;
+        assert!(!has_running_capacity(&inventory, 1, Some(&sim)));
+        inventory.devices.get_mut("ios").unwrap()[0].state = DeviceState::Shutdown;
+        assert!(has_running_capacity(&inventory, 1, None));
+    }
+
+    #[test]
+    fn plan_targets_require_current_unowned_records_with_matching_identity() {
+        let sim = record("idle", Some(1), 1);
+        assert!(check_idle_record(&sim, &[]).is_err());
+        assert!(check_idle_record(&sim, std::slice::from_ref(&sim)).is_ok());
+        let mut changed = sim.clone();
+        changed.workspace_id = Some("new-owner".into());
+        assert!(check_idle_record(&sim, &[changed]).is_err());
+        let mut changed = sim.clone();
+        changed.udid = Some("external".into());
+        assert!(check_idle_record(&sim, &[changed]).is_err());
     }
 
     #[test]

@@ -321,8 +321,10 @@ Shoal-created devices only: persist claims before mutating, keep them after
 failure, never preempt active leases, count external devices toward capacity,
 preserve device state on handoff, require `--clean --reason` for erasure with
 an audit record written before the destructive step, and delete devices on
-removal or idle expiry. Generic permits consume pool and member capacity in
-one transaction; rwlock members allow unlimited readers sharing one slot or one
+removal or idle expiry. Allocation planning is pure over recorded devices and
+inventory; its executor revalidates ownership and live capacity under the simulator
+gate before ordered audit, claim and simctl operations. Generic permits consume
+pool and member capacity in one transaction; rwlock members allow unlimited readers sharing one slot or one
 writer, default to write, and require release to change mode. Definition drift
 blocks new claims but never revokes permits. Optional daemon hooks run after a
 permit is persisted and before it is released; failure retains ownership.

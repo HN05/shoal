@@ -382,7 +382,7 @@ impl Manager {
         self.touch(&workspace.id).await;
         let limits = &self.config.simulators;
         let mut records = self.list_simulators(None).await?;
-        let mut inventory = simctl::inventory().await?;
+        let inventory = simctl::inventory().await?;
         let explicit =
             request.profile.is_some() || request.device.is_some() || request.runtime.is_some();
         let existing = records
@@ -439,91 +439,66 @@ impl Manager {
                         .ok();
                 }
             }
-            records.sort_by_key(|s| (s.app_cost(), s.last_used));
-        } else {
-            records.sort_by_key(|s| std::cmp::Reverse(s.last_used));
         }
-        let mut reusable = records
-            .iter()
-            .find(|s| {
-                s.workspace_id.is_none()
-                    && s.state == SimulatorState::Idle
-                    && s.device == profile.device
-                    && s.runtime == profile.runtime
-                    && s.device(&inventory).is_some_and(|d| d.is_available)
-            })
-            .cloned();
-        if request.clean {
-            // Spare capacity costs zero reinstalls. At capacity, replacing an
-            // incompatible empty device can cost less than erasing a useful one.
-            let evictions_needed = records.len().saturating_sub(limits.max_devices) + 1;
-            let eviction_candidates: Vec<_> = records
-                .iter()
-                .filter(|s| s.workspace_id.is_none())
-                .take(evictions_needed)
-                .collect();
-            let eviction_cost = eviction_candidates
-                .iter()
-                .fold(0usize, |cost, s| cost.saturating_add(s.app_cost()));
-            let cheaper_eviction = eviction_candidates.len() == evictions_needed
-                && reusable
-                    .as_ref()
-                    .is_some_and(|r| eviction_cost < r.app_cost());
-            if records.len() < limits.max_devices || cheaper_eviction {
-                reusable = None;
-            }
+        let plan = planning::plan(&records, &inventory, limits, &profile, request.clean);
+        self.execute_simulator_plan(workspace, request, profile, plan, audit)
+            .await
+    }
+
+    /// Called only after approval, under the allocation caller's simulator gate.
+    /// Audits precede destructive actions; claims survive every failed boot step.
+    async fn execute_simulator_plan(
+        &self,
+        workspace: Workspace,
+        request: SimRequest,
+        profile: Profile,
+        plan: planning::Plan<'_>,
+        audit: &mut Option<CleanRequest>,
+    ) -> Result<Allocation<Box<Simulator>>> {
+        let limits = &self.config.simulators;
+        let records = self.list_simulators(None).await?;
+        for sim in plan.idle.iter().copied().chain(plan.reusable) {
+            planning::check_idle_record(sim, &records)?;
         }
-        let reuse_running = reusable.as_ref().is_some_and(|s| s.is_booted(&inventory));
-        let mut idle: Vec<_> = records
-            .iter()
-            .filter(|s| s.workspace_id.is_none() && reusable.as_ref().is_none_or(|r| r.id != s.id))
-            .cloned()
-            .collect();
-        if request.clean {
-            idle.sort_by_key(|s| (s.app_cost(), s.last_used));
-        } else {
-            idle.sort_by_key(|s| s.last_used);
+        let mut inventory = simctl::inventory().await?;
+        if let Some(sim) = plan.reusable {
+            ensure!(
+                sim.device(&inventory).is_some_and(|d| d.is_available),
+                "planned simulator is no longer available"
+            );
         }
         // External devices count toward the budget but are never shut down.
-        for sim in &idle {
-            if inventory.running_count() < limits.max_booted
-                || (reuse_running && inventory.running_count() <= limits.max_booted)
-            {
+        for sim in &plan.idle {
+            if planning::has_running_capacity(&inventory, limits.max_booted, plan.reusable) {
                 break;
             }
             self.shutdown_sim(sim).await?;
             inventory = simctl::inventory().await?;
         }
-        if inventory.running_count() >= limits.max_booted
-            && !(reuse_running && inventory.running_count() == limits.max_booted)
-        {
+        if !planning::has_running_capacity(&inventory, limits.max_booted, plan.reusable) {
             return Ok(Allocation::Busy(
                 "simulator running limit reached; active leases or external simulators occupy all slots".into(),
             ));
         }
-        if reusable.is_none() {
-            let mut count = records.len();
-            let mut candidates = idle.iter().cloned();
-            while count >= limits.max_devices {
-                let Some(mut oldest) = candidates.next() else {
-                    return Ok(Allocation::Busy(
-                        "all managed simulator devices are allocated".into(),
-                    ));
-                };
-                if let Some(audit) = audit.as_mut() {
-                    audit.evicted.push(EvictedDevice {
-                        id: oldest.id.clone(),
-                        udid: oldest.udid.clone(),
-                        installed_apps: oldest.installed_apps,
-                    });
-                    audit.action = Some(CleanAction::CreateAfterEviction);
-                    self.save_clean_request(audit).await?;
-                }
-                self.delete_sim(&mut oldest).await?;
-                count -= 1;
+        for candidate in &plan.evictions {
+            let mut evicted = (*candidate).clone();
+            if let Some(audit) = audit.as_mut() {
+                audit.evicted.push(EvictedDevice {
+                    id: evicted.id.clone(),
+                    udid: evicted.udid.clone(),
+                    installed_apps: evicted.installed_apps,
+                });
+                audit.action = Some(CleanAction::CreateAfterEviction);
+                self.save_clean_request(audit).await?;
             }
+            self.delete_sim(&mut evicted).await?;
         }
-        let mut sim = reusable.unwrap_or_else(|| Simulator {
+        if !plan.has_device_capacity {
+            return Ok(Allocation::Busy(
+                "all managed simulator devices are allocated".into(),
+            ));
+        }
+        let mut sim = plan.reusable.cloned().unwrap_or_else(|| Simulator {
             id: Uuid::new_v4().to_string(),
             udid: None,
             device: profile.device,
