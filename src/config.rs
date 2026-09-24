@@ -353,6 +353,30 @@ mod tests {
     }
 
     #[test]
+    fn global_edits_must_leave_a_valid_range_with_the_defaults() {
+        let home = tempfile::tempdir().unwrap();
+        let paths = Paths::for_test(home.path());
+        let error = Config::edit(&paths, "ports.end", Some("4000"))
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("invalid edited config"), "{error}");
+        assert!(Config::edit(&paths, "ports.end", Some("0")).is_err());
+        Config::edit(&paths, "ports.start", Some("3000")).unwrap();
+        Config::edit(&paths, "ports.end", Some("4000")).unwrap();
+        let ports = Config::load(&paths)
+            .unwrap()
+            .resolve(&ConfigLayers::default())
+            .unwrap()
+            .ports;
+        assert_eq!((ports.start, ports.end), (3000, 4000));
+        // Removing the start leaves the default start above the saved end.
+        assert!(Config::edit(&paths, "ports.start", None).is_err());
+        Config::edit(&paths, "ports.end", None).unwrap();
+        Config::edit(&paths, "ports.start", None).unwrap();
+        assert!(Config::parse("[ports]\nstart = 60000\n", &paths).is_ok());
+    }
+
+    #[test]
     fn port_range_layers_per_bound_and_must_stay_nonempty() {
         let global: Config = toml::from_str("[ports]\nstart = 3000\nend = 3100\n").unwrap();
         let repo = repo::parse("[ports]\nstart = 3050\n[ports.web]\nport = 8080\n").unwrap();
@@ -629,7 +653,6 @@ impl Config {
         if let Some(minutes) = config.auto_cleanup.idle_minutes {
             validate_idle_minutes(minutes)?;
         }
-        validate_port_range(config.ports.start, config.ports.end)?;
         config.simulators.validate()?;
         config.git.validate()?;
         config.agent_auth.validate()?;
@@ -643,6 +666,10 @@ impl Config {
             config.git.profile(name)?;
         }
         crate::daemon::resources::definitions(&config.resources, &config.resource_pools)?;
+        // A global file is complete on its own: its bounds must combine with
+        // the built-in defaults, so `config set ports.end 4000` is refused
+        // rather than failing every later command.
+        config.resolve(&ConfigLayers::default())?;
         Ok(config)
     }
 
