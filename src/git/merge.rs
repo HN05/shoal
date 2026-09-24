@@ -4,7 +4,6 @@ use std::path::Path;
 
 use anyhow::{Context as _, Result, ensure};
 use serde_json::json;
-use uuid::Uuid;
 
 use crate::{
     cli::{
@@ -14,7 +13,11 @@ use crate::{
         ui::{self, Fallback},
     },
     env, execution,
-    git::{self, run_without_submodules},
+    git::{
+        self,
+        fetch::{self, FetchPolicy},
+        run_without_submodules,
+    },
     model::PulledBranch,
     protocol::Method,
 };
@@ -57,8 +60,7 @@ pub async fn worker(
     let path = &workspace.path;
     own_branch(path, &workspace.branch).await?;
     let previous = run_without_submodules(path, &["rev-parse", "HEAD"]).await?;
-    let fetched = format!("refs/shoal/merge/{}", Uuid::new_v4());
-    let result = async {
+    fetch::with_temporary_ref(path, "merge", run_without_submodules, async |fetched| {
         let refresh = if local || remote.is_some() {
             None
         } else {
@@ -69,7 +71,7 @@ pub async fn worker(
         {
             eprintln!("{}", refresh_summary(refresh));
         }
-        let commit = source(path, &branch, remote.as_deref(), &fetched).await?;
+        let commit = source(path, &branch, remote.as_deref(), fetched).await?;
         own_branch(path, &workspace.branch).await?;
         ensure!(
             run_without_submodules(path, &["rev-parse", "HEAD"]).await? == previous,
@@ -101,13 +103,8 @@ pub async fn worker(
             std::io::stderr().write_all(&output.stderr)?;
         }
         Ok(exit_code)
-    }
-    .await;
-    // Never depend on shared FETCH_HEAD or leave a local source branch behind.
-    let cleanup = run_without_submodules(path, &["update-ref", "-d", &fetched]).await;
-    let code = result?;
-    cleanup.context("could not remove temporary merge ref")?;
-    Ok(code)
+    })
+    .await
 }
 
 /// Ask the daemon to fast-forward an existing local source branch from its
@@ -218,16 +215,15 @@ async fn source(path: &Path, branch: &str, remote: Option<&str>, fetched: &str) 
     run_without_submodules(path, &["check-ref-format", &reference])
         .await
         .context("invalid remote branch name")?;
-    run_without_submodules(
+    fetch::fetch_commit(
         path,
-        &[
-            git::FETCH_SAFE_ARGS,
-            &["--refmap=", "--", remote, &format!("{reference}:{fetched}")],
-        ]
-        .concat(),
+        remote,
+        &reference,
+        fetched,
+        FetchPolicy::PrivateOnly,
+        run_without_submodules,
     )
-    .await?;
-    git::resolve_commit(path, fetched, run_without_submodules).await
+    .await
 }
 
 /// The single configured remote advertising `refs/heads/<name>`.

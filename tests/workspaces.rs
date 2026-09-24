@@ -5881,6 +5881,10 @@ fn merge_fetches_remote_only_branch_and_refreshes_qualified_sources() {
             .status
             .success()
     );
+    assert_eq!(
+        git(&fixture.repo, &["for-each-ref", "refs/shoal/merge/"]),
+        ""
+    );
 }
 
 #[test]
