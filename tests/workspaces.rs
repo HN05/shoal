@@ -3529,6 +3529,101 @@ fn clean_simulator_daemon_requires_reason_and_records_erase_failures() {
     assert!(entry["error"].as_str().unwrap().contains("injected"));
 }
 
+#[test]
+#[cfg(target_os = "macos")]
+fn simulator_mutations_observe_persisted_audits_and_failure_retains_ownership() {
+    let config = SIM_CONFIG.replace("max_devices = 2", "max_devices = 1");
+    for failure in ["create", "shutdown", "erase", "bootstatus", "delete"] {
+        let mut fixture = Fixture::with_tools(Some(&config), true);
+        let workspace = fixture.add("worker");
+        let previous = if failure == "create" {
+            None
+        } else {
+            let sim = fixture.ok(&["sim", "acquire", "worker"]);
+            fixture.ok(&["sim", "release", "default", "worker"]);
+            Some(sim)
+        };
+        fs::write(fixture.root.path().join("sim-observe-db"), "").unwrap();
+        fs::write(fixture.root.path().join("sim-fail"), failure).unwrap();
+        let profile = if failure == "delete" {
+            "tablet"
+        } else {
+            "phone"
+        };
+        let output = fixture.run(&[
+            "sim",
+            "acquire",
+            "worker",
+            "--profile",
+            profile,
+            "--clean",
+            "--reason",
+            "Test persistent mutation ordering",
+        ]);
+        assert!(!output.status.success(), "{failure}: {output:?}");
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains("injected"),
+            "{output:?}"
+        );
+        let events =
+            fs::read_to_string(fixture.root.path().join("sim-persistence-events")).unwrap();
+        let events: Vec<Value> = events
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect();
+        let event = events
+            .iter()
+            .find(|event| event["command"] == failure)
+            .unwrap();
+        let saved = &event["simulators"][0];
+        let audit = &event["simulator_clean_requests"][0];
+        assert_eq!(audit["status"], "requested");
+        assert_eq!(audit["workspace_id"], workspace["id"]);
+        if failure == "delete" {
+            assert_eq!(saved["id"], previous.as_ref().unwrap()["id"]);
+            assert_eq!(saved["state"], "idle");
+            assert_eq!(audit["action"], "create_after_eviction");
+            assert_eq!(audit["evicted"][0]["id"], saved["id"]);
+            assert_eq!(audit["evicted"][0]["udid"], event["args"][0]);
+        } else {
+            assert_eq!(saved["state"], "booting");
+            assert_eq!(saved["workspace_id"], workspace["id"]);
+            assert_eq!(saved["lease_name"], "default");
+            assert_eq!(audit["simulator_id"], saved["id"]);
+            assert_eq!(audit["udid"], saved["udid"]);
+            if failure == "create" {
+                assert!(saved["udid"].is_null());
+                assert_eq!(audit["action"], "create");
+                assert_eq!(
+                    event["args"][0],
+                    format!("shoal-{}", saved["id"].as_str().unwrap())
+                );
+            } else {
+                assert_eq!(saved["udid"], event["args"][0]);
+                assert_eq!(audit["action"], "erase");
+                assert_eq!(audit["erase_completed"], failure == "bootstatus");
+            }
+        }
+        let retained = fixture.ok(&["sim", "--all"])["simulators"][0].clone();
+        assert_eq!(retained["id"], saved["id"]);
+        assert_eq!(retained["workspace_id"], saved["workspace_id"]);
+        assert_eq!(
+            retained["state"],
+            if failure == "delete" {
+                "idle"
+            } else {
+                "failed"
+            }
+        );
+        assert_eq!(
+            fixture.ok(&["sim", "history", "--all"])[0]["status"],
+            "failed"
+        );
+        fixture.restart();
+        assert_eq!(fixture.ok(&["sim", "--all"])["simulators"][0], retained);
+    }
+}
+
 const RESOURCE_CONFIG: &str = r#"
 [resources.signing]
 capacity = 1

@@ -3,6 +3,7 @@
 import json
 import os
 import plistlib
+import sqlite3
 from pathlib import Path
 import sys
 import uuid
@@ -13,6 +14,18 @@ assert args.pop(0) == 'simctl'
 command = args.pop(0)
 with (root / 'sim-events').open('a') as log:
     log.write(json.dumps([command] + args) + '\n')
+# Observe committed daemon state at the mutation boundary, including failures.
+# Opt-in keeps standalone adapter tests independent of the daemon database.
+if (root / 'sim-observe-db').exists() and command in {
+        'create', 'shutdown', 'erase', 'delete', 'bootstatus'}:
+    with sqlite3.connect(f"file:{root / 'state/state.db'}?mode=ro", uri=True) as db:
+        snapshot = {'command': command, 'args': args}
+        for table in ['simulators', 'simulator_clean_requests']:
+            snapshot[table] = [
+                json.loads(row[0]) for row in db.execute(f'SELECT record FROM {table}')
+            ]
+    with (root / 'sim-persistence-events').open('a') as log:
+        log.write(json.dumps(snapshot) + '\n')
 failure = root / 'sim-fail'
 if failure.exists() and failure.read_text().strip() == command:
     print('injected simulator failure', file=sys.stderr)
