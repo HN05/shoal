@@ -186,18 +186,7 @@ impl Manager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::paths::Paths;
-
-    async fn manager() -> (tempfile::TempDir, std::sync::Arc<Manager>) {
-        let temp = tempfile::tempdir_in("/tmp").unwrap();
-        let paths = Paths {
-            home: temp.path().into(),
-            state: temp.path().join("state"),
-            socket: temp.path().join("state/daemon.sock"),
-        };
-        let manager = Manager::open(paths).await.unwrap();
-        (temp, manager)
-    }
+    use crate::test_support::manager;
 
     #[tokio::test]
     async fn repeated_conflicts_collapse_until_read_and_completed_events_never_do() {

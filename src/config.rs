@@ -149,11 +149,7 @@ mod tests {
 
     #[test]
     fn additional_hook_paths_are_validated_in_global_config() {
-        let paths = Paths {
-            home: "/home/test".into(),
-            state: "/separate/state".into(),
-            socket: "/separate/state/daemon.sock".into(),
-        };
+        let paths = Paths::for_test("/home/test");
         for key in [
             "pre_setup_cmd",
             "post_remove_cmd",
@@ -168,11 +164,7 @@ mod tests {
 
     #[test]
     fn template_states_the_defaults_and_its_examples_are_valid() {
-        let paths = Paths {
-            home: "/home/test".into(),
-            state: "/separate/state".into(),
-            socket: "/separate/state/daemon.sock".into(),
-        };
+        let paths = Paths::for_test("/home/test");
         assert!(PACKAGED.contains(&("default", TEMPLATE)));
         for (name, text) in PACKAGED {
             Config::parse(text, &paths)
@@ -231,11 +223,7 @@ mod tests {
     #[test]
     fn install_writes_the_template_once_and_keeps_edits() {
         let home = tempfile::tempdir().unwrap();
-        let paths = Paths {
-            home: home.path().to_owned(),
-            state: home.path().join("state"),
-            socket: home.path().join("state/daemon.sock"),
-        };
+        let paths = Paths::for_test(home.path());
         let expected = home.path().join(".config/shoal/config.toml");
         let (path, created) = Config::install_at(expected.clone()).unwrap();
         assert!(created && path == expected);
@@ -372,11 +360,7 @@ mod tests {
 
     #[test]
     fn root_directory_defaults_and_validates_explicit_paths() {
-        let paths = Paths {
-            home: "/home/test".into(),
-            state: "/separate/state".into(),
-            socket: "/separate/state/daemon.sock".into(),
-        };
+        let paths = Paths::for_test("/home/test");
         assert_eq!(
             Config::default().root_dir(&paths).unwrap(),
             PathBuf::from("/home/test/shoal")

@@ -295,11 +295,7 @@ mod tests {
     use super::*;
 
     fn paths() -> Paths {
-        Paths {
-            home: "/tmp/shoal-test".into(),
-            state: "/tmp/a & b/%name/$data".into(),
-            socket: "/tmp/test.sock".into(),
-        }
+        Paths::for_test("/tmp/a & b/%name/$data")
     }
 
     #[test]
@@ -311,7 +307,7 @@ mod tests {
             .as_array()
             .unwrap();
         assert_eq!(args[0].as_string(), Some("/tmp/a & b/shoal"));
-        assert_eq!(args[2].as_string(), Some("/tmp/a & b/%name/$data"));
+        assert_eq!(args[2].as_string(), Some("/tmp/a & b/%name/$data/state"));
     }
 
     #[test]

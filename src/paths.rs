@@ -15,6 +15,18 @@ pub struct Paths {
 }
 
 impl Paths {
+    #[cfg(test)]
+    pub fn for_test(root: impl AsRef<std::path::Path>) -> Self {
+        let home = root.as_ref().to_path_buf();
+        let state = home.join("state");
+        let socket = state.join("daemon.sock");
+        Self {
+            home,
+            state,
+            socket,
+        }
+    }
+
     pub fn new(state: Option<PathBuf>) -> Result<Self> {
         let home = PathBuf::from(std::env::var_os("HOME").context("HOME is not set")?);
         ensure!(home.is_absolute(), "HOME must be an absolute path");

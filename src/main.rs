@@ -51,6 +51,8 @@ mod state;
 mod store;
 mod subprocess;
 mod templates;
+#[cfg(test)]
+mod test_support;
 mod ui;
 mod validate;
 mod workspace;

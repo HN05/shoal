@@ -1,10 +1,12 @@
-use std::{
-    fs,
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use std::{fs, path::PathBuf, sync::Arc};
 
-use crate::{paths::Paths, protocol::Method, scope, workspace::Manager};
+use crate::{
+    paths::Paths,
+    protocol::Method,
+    scope,
+    test_support::{commit, git, manager, repository},
+    workspace::Manager,
+};
 
 struct Fixture {
     root: tempfile::TempDir,
@@ -13,56 +15,10 @@ struct Fixture {
     repo_id: String,
 }
 
-fn git(repo: &Path, args: &[&str]) -> String {
-    let output = std::process::Command::new("git")
-        .arg("-C")
-        .arg(repo)
-        .args(args)
-        .env("GIT_CONFIG_GLOBAL", "/dev/null")
-        .env("GIT_CONFIG_NOSYSTEM", "1")
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "{args:?}: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    String::from_utf8(output.stdout).unwrap()
-}
-
-fn commit(repo: &Path, file: &str) {
-    git(repo, &["add", file]);
-    git(
-        repo,
-        &[
-            "-c",
-            "user.name=Test",
-            "-c",
-            "user.email=test@example.invalid",
-            "commit",
-            "-m",
-            file,
-        ],
-    );
-}
-
 impl Fixture {
     async fn new() -> Self {
-        let root = tempfile::tempdir_in("/tmp").unwrap();
-        let repo = root.path().join("repo with ' quotes & $literal");
-        fs::create_dir(&repo).unwrap();
-        git(&repo, &["init", "-b", "main"]);
-        git(&repo, &["config", "user.name", "Test"]);
-        git(&repo, &["config", "user.email", "test@example.invalid"]);
-        fs::write(repo.join("tracked"), "initial\n").unwrap();
-        commit(&repo, "tracked");
-        let manager = Manager::open(Paths {
-            home: root.path().into(),
-            state: root.path().join("state"),
-            socket: root.path().join("unused.sock"),
-        })
-        .await
-        .unwrap();
+        let (root, manager) = manager().await;
+        let repo = repository(root.path(), "repo with ' quotes & $literal");
         let repo_id = manager
             .register_repository(repo.to_str().unwrap().into(), None, None)
             .await
@@ -1023,13 +979,7 @@ async fn adoption_preserves_dirty_worktree_and_persists_identity_and_readiness()
             .id,
         w.id
     );
-    let restored = Manager::open(Paths {
-        home: f.root.path().into(),
-        state: f.root.path().join("state"),
-        socket: f.root.path().join("unused.sock"),
-    })
-    .await
-    .unwrap();
+    let restored = Manager::open(Paths::for_test(f.root.path())).await.unwrap();
     assert_eq!(
         restored.workspace(&w.id).await.unwrap().git_dir_id,
         w.git_dir_id
