@@ -76,6 +76,9 @@ async fn registration_rolls_back_setup_reservation_when_insertion_fails() {
 async fn registration_publishes_atomically_and_preserves_stop_during_pre_setup() {
     let (_root, manager, workspace) =
         fixture(": > hook-started\nwhile [ ! -f hook-release ]; do sleep 0.01; done").await;
+    let guard = manager.lock_repository_git(&workspace.repository_id).await;
+    let git_gate = tokio::sync::OwnedMutexGuard::mutex(&guard).clone();
+    drop(guard);
     // Pause publication after persistence, with registration still in flight.
     let scopes = manager.scopes.lock().await;
     let starting = {
@@ -103,7 +106,6 @@ async fn registration_publishes_atomically_and_preserves_stop_during_pre_setup()
     })
     .await;
     assert!(manager.connections.try_lock().is_err());
-    let git_gate = manager.git_gate(&workspace.repository_id).await;
     assert!(git_gate.try_lock().is_err());
     assert!(
         manager
