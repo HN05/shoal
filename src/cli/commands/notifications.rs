@@ -146,8 +146,8 @@ mod tests {
     }
 
     #[test]
-    fn local_time_formats_the_epoch_in_the_process_time_zone() {
-        // Only the shape is stable across zones; the value is checked at UTC.
+    fn local_time_uses_a_fixed_width_date_and_time() {
+        // Check the shape without assuming the process time zone.
         let text = super::local_time(1_700_000_000);
         assert_eq!(text.len(), 16, "{text}");
         assert_eq!(&text[4..5], "-");
