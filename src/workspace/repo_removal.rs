@@ -1,5 +1,8 @@
 //! Explicit repository deletion, retaining ownership and progress for retries.
-use super::{Manager, ownership::device_inode};
+use super::{
+    Manager,
+    paths::{canonical_parent_only, contains_protected_directory, real_directory_identity},
+};
 use crate::{
     git,
     model::{Repository, RepositoryRemoval, Workspace},
@@ -55,7 +58,7 @@ impl Manager {
         let progress = match self.removal_progress(&repo.id).await? {
             Some(progress) => progress,
             None => Progress {
-                directory_id: directory_identity(&repo.path)?,
+                directory_id: real_directory_identity(&repo.path)?,
                 deleting_files: false,
             },
         };
@@ -225,13 +228,10 @@ impl Manager {
         repo: &Repository,
         workspaces: &[Workspace],
     ) -> Result<()> {
-        for protected in [&self.paths.home, &self.paths.state] {
-            let protected = fs::canonicalize(protected)?;
-            ensure!(
-                !protected.starts_with(&repo.path),
-                "repository directory contains Shoal state or the home directory; refusing deletion"
-            );
-        }
+        ensure!(
+            !contains_protected_directory(&repo.path, &self.paths)?,
+            "repository directory contains Shoal state or the home directory; refusing deletion"
+        );
         for other in self.repositories().await? {
             ensure!(
                 other.id == repo.id || !other.path.starts_with(&repo.path),
@@ -259,7 +259,7 @@ async fn delete_checkout(path: std::path::PathBuf) -> Result<()> {
                 .with_context(|| format!("delete {}; retry shoal repo rm --yes", path.display())),
         }?;
         ensure!(
-            directory_identity(&path)?.is_none(),
+            real_directory_identity(&path)?.is_none(),
             "repository directory still exists; retry shoal repo rm --yes"
         );
         Ok(())
@@ -267,26 +267,8 @@ async fn delete_checkout(path: std::path::PathBuf) -> Result<()> {
     .await?
 }
 
-/// `device:inode` of a real, non-redirected directory; `None` when missing.
-fn directory_identity(path: &Path) -> Result<Option<String>> {
-    let metadata = match fs::symlink_metadata(path) {
-        Ok(metadata) => metadata,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => return Err(error).context("inspect repository directory"),
-    };
-    ensure!(
-        metadata.is_dir() && !metadata.file_type().is_symlink(),
-        "repository path is not a directory or was replaced by a symlink"
-    );
-    ensure!(
-        fs::canonicalize(path)? == path,
-        "repository path was redirected; refusing deletion"
-    );
-    Ok(Some(device_inode(&metadata)))
-}
-
 fn verify_directory(path: &Path, expected: Option<&str>, allow_missing: bool) -> Result<()> {
-    let actual = directory_identity(path)?;
+    let actual = real_directory_identity(path)?;
     ensure!(
         actual.as_deref() == expected || (allow_missing && actual.is_none()),
         "repository directory was replaced during removal; refusing deletion"
@@ -304,7 +286,7 @@ async fn check_checkout(repo: &Repository, workspaces: &[Workspace]) -> Result<(
     );
     let git_dir = repo.path.join(".git");
     ensure!(
-        directory_identity(&git_dir)?.is_some(),
+        real_directory_identity(&git_dir)?.is_some(),
         "repository Git directory is missing"
     );
     let common = git::run(
@@ -329,8 +311,7 @@ async fn check_checkout(repo: &Repository, workspaces: &[Workspace]) -> Result<(
             }
         }
         let owned = workspaces.iter().any(|w| {
-            w.path == tree.path
-                || super::ownership::canonical_parent(&w.path).is_ok_and(|p| p == tree.path)
+            w.path == tree.path || canonical_parent_only(&w.path).is_ok_and(|p| p == tree.path)
         });
         ensure!(
             tree.path == repo.path || owned,

@@ -1,5 +1,5 @@
 //! Validate explicit worktree locations before claiming ownership.
-use super::Manager;
+use super::{Manager, paths::contains_protected_directory};
 use crate::{git, model::Repository};
 use anyhow::{Result, ensure};
 use std::{
@@ -15,13 +15,10 @@ impl Manager {
     ) -> Result<PathBuf> {
         ensure!(path.is_absolute(), "workspace path must be absolute");
         let path = canonical_location(path)?;
-        for protected in [&self.paths.home, &self.paths.state] {
-            let protected = fs::canonicalize(protected)?;
-            ensure!(
-                !protected.starts_with(&path),
-                "workspace path contains home or Shoal state"
-            );
-        }
+        ensure!(
+            !contains_protected_directory(&path, &self.paths)?,
+            "workspace path contains home or Shoal state"
+        );
         ensure!(
             !path.starts_with(fs::canonicalize(&self.paths.state)?),
             "workspace path is inside Shoal state"

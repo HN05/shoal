@@ -1,5 +1,7 @@
 //! Explicitly transfer a linked worktree into Shoal's normal lifecycle.
-use super::{Manager, derive_workspace_name, existing_base, ownership};
+use super::{
+    Manager, derive_workspace_name, existing_base, ownership, paths::directory_device_inode,
+};
 use crate::{git, model::Workspace, state::WorkspaceState};
 use anyhow::{Context, Result, ensure};
 use std::path::Path;
@@ -47,7 +49,7 @@ impl Manager {
             return Ok(workspace);
         }
         let git_dir = ownership::git_dir(&path).await?;
-        let identity = ownership::directory_identity(&git_dir)?;
+        let identity = directory_device_inode(&git_dir)?;
         let base = existing_base(&repo, branch).await?;
         let commit = git::run_isolated(
             &repo.path,

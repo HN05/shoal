@@ -4,6 +4,7 @@ mod executions;
 mod lifecycle;
 mod location;
 mod ownership;
+mod paths;
 mod registry;
 mod repo_configuration;
 mod repo_removal;

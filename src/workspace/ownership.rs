@@ -1,5 +1,8 @@
 //! Verify the recorded Git worktree before execution, recovery, or removal.
-use super::Manager;
+use super::{
+    Manager,
+    paths::{canonical_parent_only, directory_device_inode},
+};
 use crate::{git, model::Workspace};
 use anyhow::{Context, Result, ensure};
 use rusqlite::params;
@@ -30,7 +33,7 @@ impl Manager {
         );
         if let Some(identity) = &workspace.git_dir_id {
             ensure!(
-                directory_identity(&actual_git_dir)? == *identity,
+                directory_device_inode(&actual_git_dir)? == *identity,
                 "Git worktree metadata was replaced; ownership cannot be verified"
             );
         }
@@ -45,7 +48,7 @@ impl Manager {
 
     pub(crate) async fn record_worktree_identity(&self, workspace: &Workspace) -> Result<()> {
         let git_dir = git_dir(&workspace.path).await?;
-        let identity = directory_identity(&git_dir)?;
+        let identity = directory_device_inode(&git_dir)?;
         let id = workspace.id.clone();
         self.store
             .run(move |db| {
@@ -61,7 +64,7 @@ impl Manager {
     /// Whether Git still lists the (possibly missing) worktree at its recorded path.
     pub(crate) async fn is_registered_worktree(&self, workspace: &Workspace) -> Result<bool> {
         let repo = self.repository(&workspace.repository_id).await?;
-        let recorded = canonical_parent(&workspace.path)?;
+        let recorded = canonical_parent_only(&workspace.path)?;
         Ok(git::worktrees(&repo.path)
             .await?
             .iter()
@@ -84,7 +87,7 @@ impl Manager {
         if directory.try_exists()? {
             if let Some(identity) = &workspace.git_dir_id {
                 ensure!(
-                    directory_identity(directory)? == *identity,
+                    directory_device_inode(directory)? == *identity,
                     "Git worktree metadata was replaced; ownership cannot be verified"
                 );
             }
@@ -116,23 +119,4 @@ async fn git_common_dir(path: &Path) -> Result<PathBuf> {
 pub(super) async fn git_dir(path: &Path) -> Result<PathBuf> {
     let dir = git::run(path, &["rev-parse", "--path-format=absolute", "--git-dir"]).await?;
     Ok(fs::canonicalize(dir.trim())?)
-}
-
-/// The path with its parent canonicalized, so a missing leaf still compares
-/// against Git's absolute worktree records.
-pub(super) fn canonical_parent(path: &Path) -> Result<PathBuf> {
-    let parent = fs::canonicalize(path.parent().context("missing workspace parent")?)?;
-    Ok(parent.join(path.file_name().context("missing workspace name")?))
-}
-
-/// `device:inode` of a directory, stable across renames but not replacement.
-pub(super) fn device_inode(metadata: &fs::Metadata) -> String {
-    use std::os::unix::fs::MetadataExt;
-    format!("{}:{}", metadata.dev(), metadata.ino())
-}
-
-pub(super) fn directory_identity(path: &Path) -> Result<String> {
-    let metadata = fs::metadata(path)?;
-    ensure!(metadata.is_dir(), "Git metadata is not a directory");
-    Ok(device_inode(&metadata))
 }
