@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     daemon::workspace::Manager,
-    git::{self, worktrunk},
+    git::{self, repo::UpstreamPolicy, worktrunk},
     model::{Repository, Workspace},
     state::WorkspaceState,
 };
@@ -223,7 +223,8 @@ impl Manager {
                 .await
                 .is_ok()
             {
-                self.refresh_branch(repo, &branch.name, false).await?;
+                self.refresh_branch(repo, &branch.name, UpstreamPolicy::Required)
+                    .await?;
             } else {
                 git::run_isolated(
                     &repo.path,

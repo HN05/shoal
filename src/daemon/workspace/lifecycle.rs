@@ -1,7 +1,7 @@
 //! One removal path for explicit removal and automatic cleanup.
 use super::Manager;
 use crate::{
-    git::worktrunk,
+    git::{default_branch::DefaultBranchLookup, worktrunk},
     hooks::{self, Hook, HookKind},
     removal::{self, BranchChoice, BranchOutcome, RemovalCheck, RemovalResult},
     state::WorkspaceState,
@@ -103,9 +103,10 @@ impl Manager {
             self.verify_worktree(&inspection.workspace).await?;
         }
         let repo = self.repository(&inspection.workspace.repository_id).await?;
-        let default_branch = crate::git::default_branch::resolve(&repo.path, false)
-            .await
-            .ok();
+        let default_branch =
+            crate::git::default_branch::resolve(&repo.path, DefaultBranchLookup::Cached)
+                .await
+                .ok();
         removal::inspect(
             inspection.workspace,
             inspection.executions.len(),
@@ -287,9 +288,10 @@ impl Manager {
             );
         }
         let choice = removal.choice();
-        let default_branch = crate::git::default_branch::resolve(&repo.path, false)
-            .await
-            .ok();
+        let default_branch =
+            crate::git::default_branch::resolve(&repo.path, DefaultBranchLookup::Cached)
+                .await
+                .ok();
         let delete_branch = match choice {
             BranchChoice::Auto => {
                 check.can_delete_branch() && check.branch.as_deref() != default_branch.as_deref()

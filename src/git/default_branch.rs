@@ -5,9 +5,15 @@ use anyhow::{Context, Result, ensure};
 
 use crate::git;
 
+#[derive(Debug, Clone, Copy)]
+pub enum DefaultBranchLookup {
+    Cached,
+    Discover,
+}
+
 /// Read cached remote HEAD. Branch refresh may discover and cache a missing one;
 /// cleanup only reads local metadata and never contacts a remote.
-pub async fn resolve(repo: &Path, discover: bool) -> Result<String> {
+pub async fn resolve(repo: &Path, lookup: DefaultBranchLookup) -> Result<String> {
     let remotes = git::run(repo, &["remote"]).await?;
     let remotes: Vec<_> = remotes.lines().collect();
     if remotes.is_empty() {
@@ -33,7 +39,7 @@ pub async fn resolve(repo: &Path, discover: bool) -> Result<String> {
         }
     }
     ensure!(
-        discover,
+        matches!(lookup, DefaultBranchLookup::Discover),
         "repository default branch is unknown; refresh {remote}/HEAD with git remote set-head"
     );
     let advertised = git::run_isolated(repo, &["ls-remote", "--symref", "--", remote, "HEAD"])

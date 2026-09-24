@@ -19,7 +19,7 @@ use crate::{
         scope::Caller,
         store::{self, Store},
     },
-    git::{self, worktrunk},
+    git::{self, default_branch::DefaultBranchLookup, repo::UpstreamPolicy, worktrunk},
     hooks::HookKind,
     model::{Inspection, Repository, Workspace},
     paths::Paths,
@@ -363,7 +363,12 @@ impl Manager {
         } else {
             base
         };
-        let default = crate::git::default_branch::resolve(&repo.path, base.is_none()).await;
+        let lookup = if base.is_none() {
+            DefaultBranchLookup::Discover
+        } else {
+            DefaultBranchLookup::Cached
+        };
+        let default = crate::git::default_branch::resolve(&repo.path, lookup).await;
         // An explicit ref remains an escape hatch when remote default-branch
         // discovery is unavailable. It does not implicitly refresh another ref.
         let default = if base.is_none() {
@@ -379,9 +384,13 @@ impl Manager {
         let refresh = existing.is_none()
             && (default.as_deref() == Some(base) || default_ref.as_deref() == Some(base));
         if refresh {
-            self.refresh_branch(repo, default.as_deref().unwrap(), true)
-                .await
-                .context("could not refresh the default branch before creating workspace")?;
+            self.refresh_branch(
+                repo,
+                default.as_deref().unwrap(),
+                UpstreamPolicy::AllowLocalOnly,
+            )
+            .await
+            .context("could not refresh the default branch before creating workspace")?;
         }
         let base = if refresh {
             default_ref.as_deref().unwrap()
@@ -546,7 +555,7 @@ fn derive_workspace_name(branch: &str) -> String {
 /// Existing worktrees use a live local default ref, or their opening commit.
 async fn existing_base(repo: &crate::model::Repository, branch: &str) -> Result<String> {
     Ok(
-        match crate::git::default_branch::resolve(&repo.path, false).await {
+        match crate::git::default_branch::resolve(&repo.path, DefaultBranchLookup::Cached).await {
             Ok(name)
                 if name != branch
                     && git::run_isolated(

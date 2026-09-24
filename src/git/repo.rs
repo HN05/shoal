@@ -6,9 +6,16 @@ use uuid::Uuid;
 
 use crate::{
     daemon::workspace::Manager,
-    git::{self, run_isolated as git_run, worktrunk},
+    git::{self, default_branch::DefaultBranchLookup, run_isolated as git_run, worktrunk},
     model::{LandPlan, LandedBranch, PulledBranch, Repository},
 };
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum UpstreamPolicy {
+    Required,
+    /// A repository without remotes may use the local branch unchanged.
+    AllowLocalOnly,
+}
 
 impl Manager {
     /// The requested branch name, or the nearest free `-2`, `-3`, ... variant.
@@ -57,7 +64,8 @@ impl Manager {
             workspace.path.display()
         );
         self.verify_worktree(&workspace).await?;
-        let default = crate::git::default_branch::resolve(&repo.path, true).await?;
+        let default =
+            crate::git::default_branch::resolve(&repo.path, DefaultBranchLookup::Discover).await?;
         let branch = workspace.branch.as_str();
         ensure!(
             branch != default,
@@ -91,7 +99,7 @@ impl Manager {
                 )),
             }
         } else {
-            self.refresh_branch(&repo, &default, false)
+            self.refresh_branch(&repo, &default, UpstreamPolicy::Required)
                 .await
                 .with_context(|| format!("could not refresh {default} before landing"))?
         };
@@ -164,7 +172,10 @@ impl Manager {
                 commit,
                 skipped: Some(skipped),
             }),
-            None => self.refresh_branch(&repo, branch, false).await,
+            None => {
+                self.refresh_branch(&repo, branch, UpstreamPolicy::Required)
+                    .await
+            }
         }
     }
 
@@ -195,7 +206,7 @@ impl Manager {
         &self,
         repo: &Repository,
         branch: &str,
-        allow_local_only: bool,
+        policy: UpstreamPolicy,
     ) -> Result<PulledBranch> {
         let local_ref = git::local_ref(branch);
         let previous_commit = git_run(&repo.path, &["rev-parse", "--verify", &local_ref])
@@ -204,7 +215,7 @@ impl Manager {
             .trim()
             .to_owned();
         let upstream = upstream(repo, &local_ref).await?;
-        if allow_local_only
+        if matches!(policy, UpstreamPolicy::AllowLocalOnly)
             && upstream.is_none()
             && git_run(&repo.path, &["remote"]).await?.trim().is_empty()
         {
