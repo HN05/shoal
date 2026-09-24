@@ -34,6 +34,17 @@ states!(
     }
 );
 
+/// The proof required after stopping a disconnected execution. Both policies
+/// signal only native identity-verified processes and reject owned survivors.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum StopPolicy {
+    /// Retain uncertain records; only clear executions proven fully stopped.
+    RequireCompleteProof,
+    /// Stop verified processes, leaving records for successful workspace removal.
+    /// Unrelated or unverifiable processes do not block that removal.
+    ForRemoval,
+}
+
 /// The connection must retain the Git guard through execution completion.
 #[derive(Debug)]
 pub(crate) struct StartedExecution {
@@ -347,7 +358,9 @@ impl Manager {
         let workspace = self.workspace(selector).await?;
         self.reserve_lifecycle(&workspace.id, WorkspaceState::Stopping)
             .await?;
-        let result = self.stop_executions(&workspace.id, false).await;
+        let result = self
+            .stop_executions(&workspace.id, StopPolicy::RequireCompleteProof)
+            .await;
         self.set_state(
             &workspace.id,
             workspace.state,
@@ -361,7 +374,7 @@ impl Manager {
         result
     }
 
-    async fn stop_disconnected(&self, execution: &Execution, manual_removal: bool) -> Result<()> {
+    async fn stop_disconnected(&self, execution: &Execution, policy: StopPolicy) -> Result<()> {
         let scan = process::scan(HashSet::from([execution.id.clone()])).await?;
         let processes = Processes::inspect(execution, &scan).await?;
         processes.stop().await?;
@@ -370,32 +383,32 @@ impl Manager {
             after.processes.is_empty(),
             "owned processes survived stopping; retry after shoal doctor"
         );
-        // Manual removal retains its policy: unrelated/unverifiable processes do
-        // not block deletion. A plain stop must not claim those processes stopped.
-        if !manual_removal {
-            ensure!(
-                processes.launch_recorded && processes.group_candidates.is_empty(),
-                "execution ownership is incomplete; use shoal doctor to inspect it"
-            );
-            let after = Processes::inspect(execution, &after).await?;
-            ensure!(
-                !after.has_survivors() && after.visibility_complete(),
-                "process state remains uncertain; use shoal doctor to inspect it"
-            );
-            let id = execution.id.clone();
-            self.store
-                .run(move |db| {
-                    db.execute("DELETE FROM executions WHERE id=?1", [id])?;
-                    Ok(())
-                })
-                .await?;
+        match policy {
+            StopPolicy::ForRemoval => {}
+            StopPolicy::RequireCompleteProof => {
+                ensure!(
+                    processes.launch_recorded && processes.group_candidates.is_empty(),
+                    "execution ownership is incomplete; use shoal doctor to inspect it"
+                );
+                let after = Processes::inspect(execution, &after).await?;
+                ensure!(
+                    !after.has_survivors() && after.visibility_complete(),
+                    "process state remains uncertain; use shoal doctor to inspect it"
+                );
+                let id = execution.id.clone();
+                self.store
+                    .run(move |db| {
+                        db.execute("DELETE FROM executions WHERE id=?1", [id])?;
+                        Ok(())
+                    })
+                    .await?;
+            }
         }
         Ok(())
     }
 
     /// Ask connected wrappers to stop and signal disconnected survivors.
-    /// `allow_disconnected` relaxes the ownership proof for manual removal.
-    pub(super) async fn stop_executions(&self, id: &str, allow_disconnected: bool) -> Result<()> {
+    pub(super) async fn stop_executions(&self, id: &str, policy: StopPolicy) -> Result<()> {
         let id = id.to_owned();
         let deadline = Instant::now() + timing::WORKSPACE_STOP_TIMEOUT;
         loop {
@@ -430,8 +443,7 @@ impl Manager {
             // reservation already prevents new executions here.
             drop(connections);
             for execution in disconnected {
-                self.stop_disconnected(&execution, allow_disconnected)
-                    .await?;
+                self.stop_disconnected(&execution, policy).await?;
             }
             if connected == 0 {
                 return Ok(());

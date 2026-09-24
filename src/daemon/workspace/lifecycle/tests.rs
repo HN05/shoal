@@ -114,8 +114,24 @@ async fn unknown_execution_blocks_stop_and_unattended_removal_even_when_missing(
                 error.to_string().contains("ownership is incomplete"),
                 "{error:#}"
             );
-            let result = manager.remove(&workspace.id, removal).await;
             let retained = matches!(removal, Removal::Automatic { .. } | Removal::Deleted);
+            // Exercise the stop policy even when an earlier lifecycle check
+            // would reject this removal. Stopping for removal must leave the
+            // record intact until the workspace itself is successfully removed.
+            let stopped = manager
+                .stop_executions(&workspace.id, removal.stop_policy())
+                .await;
+            assert_eq!(stopped.is_err(), retained);
+            assert_eq!(
+                manager
+                    .inspect_workspace(&workspace.id)
+                    .await
+                    .unwrap()
+                    .executions
+                    .len(),
+                1
+            );
+            let result = manager.remove(&workspace.id, removal).await;
             assert_eq!(result.is_err(), retained);
             assert_eq!(manager.workspace(&workspace.id).await.is_ok(), retained);
             if retained {

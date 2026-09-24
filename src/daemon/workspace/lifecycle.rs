@@ -1,5 +1,5 @@
 //! One removal path for explicit removal and automatic cleanup.
-use super::Manager;
+use super::{Manager, executions::StopPolicy};
 use crate::{
     git::{
         default_branch::DefaultBranchLookup,
@@ -50,9 +50,11 @@ impl Removal<'_> {
         }
     }
 
-    /// Unattended removals never signal processes Shoal cannot verify.
-    fn is_automatic(self) -> bool {
-        !matches!(self, Removal::Manual { .. } | Removal::Merged { .. })
+    fn stop_policy(self) -> StopPolicy {
+        match self {
+            Removal::Manual { .. } | Removal::Merged { .. } => StopPolicy::ForRemoval,
+            Removal::Automatic { .. } | Removal::Deleted => StopPolicy::RequireCompleteProof,
+        }
     }
 
     /// Automatic removal needs a safe workspace; manual removal with `Auto`
@@ -283,7 +285,7 @@ impl Manager {
                 "HEAD changed before PR cleanup"
             );
         }
-        self.stop_executions(&workspace.id, !removal.is_automatic())
+        self.stop_executions(&workspace.id, removal.stop_policy())
             .await?;
         if let Removal::Automatic { snapshot } = removal {
             ensure!(
@@ -387,7 +389,7 @@ impl Manager {
                 "commands are recorded; stop them with shoal stop or shoal rm"
             );
         }
-        self.stop_executions(&workspace.id, !removal.is_automatic())
+        self.stop_executions(&workspace.id, removal.stop_policy())
             .await?;
         self.remove_simulators(&workspace.id).await?;
         if self.is_registered_worktree(workspace).await? {
