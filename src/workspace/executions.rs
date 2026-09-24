@@ -7,12 +7,11 @@ use crate::{
     process_identity::{self as process, Identity},
     protocol::timing,
     scope::Caller,
-    state::{ExecutionState, WorkspaceState},
+    state::{ExecutionState, WorkspaceState, states},
     store,
 };
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{OptionalExtension, Transaction, TransactionBehavior, params};
-use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, path::PathBuf, time::Duration};
 use tokio::{
     sync::{OwnedMutexGuard, watch},
@@ -20,18 +19,18 @@ use tokio::{
 };
 use uuid::Uuid;
 
-/// What a tracked execution runs, which decides its lifecycle rules.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ExecutionKind {
-    /// A caller-chosen command in a ready workspace.
-    Command,
-    /// A landing authorized by an unscoped caller; the daemon holds its Git gate.
-    Land,
-    /// The repository's setup command; exclusive apart from the execution that
-    /// requested it, and its exit decides whether the workspace becomes ready.
-    Setup,
-}
+states!(
+    /// What a tracked execution runs, which decides its lifecycle rules.
+    ExecutionKind {
+        /// A caller-chosen command in a ready workspace.
+        Command => "command",
+        /// A landing authorized by an unscoped caller; the daemon holds its Git gate.
+        Land => "land",
+        /// The repository's setup command; exclusive apart from the execution that
+        /// requested it, and its exit decides whether the workspace becomes ready.
+        Setup => "setup",
+    }
+);
 
 /// The connection must retain the Git guard through execution completion.
 #[derive(Debug)]

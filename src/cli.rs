@@ -2,7 +2,7 @@ use std::{ffi::OsString, path::PathBuf};
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
-use crate::happy::HappyAgent;
+use crate::{happy::HappyAgent, state::states};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -375,13 +375,14 @@ impl Command {
     }
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum CodexMode {
-    #[default]
-    Cli,
-    App,
-}
+states!(
+    #[derive(Default)]
+    CodexMode {
+        #[default]
+        Cli => "cli",
+        App => "app",
+    }
+);
 
 /// What `add --agent` starts: a terminal agent, or a detached Happy session
 /// running one of Happy's agents, or a user-configured command.

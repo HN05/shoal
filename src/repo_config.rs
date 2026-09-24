@@ -1,6 +1,6 @@
 use crate::cli::{Agent, CodexMode};
+use crate::state::states;
 use anyhow::{Context, Result, ensure};
-use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
@@ -22,6 +22,7 @@ pub struct ConfigLayers {
     pub saved_repository_config: RepoConfig,
 }
 
+/// Display uses human-readable layer labels rather than the snake_case JSON names.
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ConfigLayer {
@@ -48,13 +49,14 @@ impl ConfigLayers {
     }
 }
 
-#[derive(Debug, Default, Clone, Copy, Deserialize, Serialize, ValueEnum)]
-#[serde(rename_all = "snake_case")]
-pub enum ConflictPolicy {
-    Auto,
-    #[default]
-    Suggest,
-}
+states!(
+    #[derive(Default)]
+    ConflictPolicy: ValueEnum {
+        Auto => "auto",
+        #[default]
+        Suggest => "suggest",
+    }
+);
 
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]

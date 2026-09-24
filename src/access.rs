@@ -6,22 +6,14 @@ use serde_json::Value;
 
 use crate::{state::states, store, workspace::Manager};
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Lifetime {
-    #[default]
-    Lease,
-    Workspace,
-}
-
-impl std::fmt::Display for Lifetime {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(match self {
-            Self::Lease => "lease",
-            Self::Workspace => "workspace",
-        })
+states!(
+    #[derive(Default)]
+    Lifetime {
+        #[default]
+        Lease => "lease",
+        Workspace => "workspace",
     }
-}
+);
 
 states!(Status {
     Pending => "pending",

@@ -7,7 +7,7 @@ use crate::{
     execution_processes::Processes,
     model::Workspace,
     process_identity as process,
-    state::{ExecutionState, WorkspaceState},
+    state::{ExecutionState, WorkspaceState, states},
     workspace::Manager,
 };
 
@@ -21,14 +21,12 @@ pub struct ReconcileOptions {
     pub acknowledge_stopped: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum DirectoryState {
-    Valid,
-    Missing,
-    Moved,
-    Unverified,
-}
+states!(DirectoryState {
+    Valid => "valid",
+    Missing => "missing",
+    Moved => "moved",
+    Unverified => "unverified",
+});
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ExecutionReport {

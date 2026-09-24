@@ -7,29 +7,20 @@ use uuid::Uuid;
 
 use crate::{notifications::NotificationKind, state::states, store, validate, workspace::Manager};
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ResourceKind {
-    #[default]
-    Semaphore,
-    Rwlock,
-}
+states!(
+    #[derive(Default)]
+    ResourceKind {
+        #[default]
+        Semaphore => "semaphore",
+        Rwlock => "rwlock",
+    }
+);
 
-states!(LockMode {
+states!(LockMode: ValueEnum {
     Permit => "permit",
     Read => "read",
     Write => "write",
 });
-
-impl clap::ValueEnum for LockMode {
-    fn value_variants<'a>() -> &'a [Self] {
-        &[Self::Permit, Self::Read, Self::Write]
-    }
-
-    fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
-        Some(clap::builder::PossibleValue::new(self.as_str()))
-    }
-}
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]

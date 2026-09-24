@@ -4,16 +4,14 @@ use std::{collections::HashSet, ffi::OsStr, os::unix::fs::PermissionsExt, path::
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-use crate::{git, workspace::Manager};
+use crate::{git, state::states, workspace::Manager};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Status {
-    Ok,
-    Warning,
-    Error,
-    Skipped,
-}
+states!(Status {
+    Ok => "ok",
+    Warning => "warning",
+    Error => "error",
+    Skipped => "skipped",
+});
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Check {

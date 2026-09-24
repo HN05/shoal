@@ -11,7 +11,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use clap::ValueEnum;
+use crate::state::states;
 
 /// Happy's home directory override and the daemon state file inside it.
 pub const HOME_ENV: &str = "HAPPY_HOME_DIR";
@@ -25,19 +25,14 @@ pub fn home(user_home: &Path) -> PathBuf {
         .unwrap_or_else(|| user_home.join(".happy"))
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum, serde::Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum HappyAgent {
-    Claude,
-    Codex,
-}
+states!(HappyAgent: ValueEnum {
+    Claude => "claude",
+    Codex => "codex",
+});
 
 impl HappyAgent {
     pub fn name(self) -> &'static str {
-        match self {
-            HappyAgent::Claude => "claude",
-            HappyAgent::Codex => "codex",
-        }
+        self.as_str()
     }
 
     /// `happy claude` forwards unknown arguments to Claude Code, so a
