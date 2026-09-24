@@ -16,13 +16,13 @@ use audit::{CleanAction, CleanRequest, CleanRequestStatus, EvictedDevice};
 use simctl::Inventory;
 
 use crate::{
-    daemon::{allocation::Allocation, workspace::Manager},
+    daemon::{access, allocation::Allocation, workspace::Manager},
     model::Workspace,
     state::{WorkspaceState, states},
     validate,
 };
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Profile {
     #[serde(default)]
@@ -422,11 +422,14 @@ impl Manager {
         }
         let profile = profile.unwrap();
         if scoped && profile.requires_approval {
-            let approval = crate::daemon::access::AccessRequest::new(
+            let approval = access::AccessRequest::new(
                 &workspace.id,
-                "simulator".into(),
+                access::Target::Simulator,
                 &request.name,
-                serde_json::json!({"profile": profile, "clean": request.clean}),
+                access::Specification::Simulator(access::SimulatorSpecification {
+                    clean: request.clean,
+                    profile: profile.clone(),
+                }),
                 profile.approval_lifetime,
                 request.reason.as_deref(),
             );
@@ -776,7 +779,7 @@ impl Manager {
         self.store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                let released = crate::daemon::access::release(&tx, &owner, "simulator", &name)?;
+                let released = access::release(&tx, &owner, &access::Target::Simulator, &name)?;
                 tx.commit()?;
                 Ok(released)
             })

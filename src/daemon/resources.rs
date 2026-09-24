@@ -1,5 +1,5 @@
 //! Cooperative semaphores and reader/writer locks; only Shoal bookkeeping is enforced.
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, params};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -10,7 +10,12 @@ use std::{
 use uuid::Uuid;
 
 use crate::{
-    daemon::{allocation::Allocation, store, workspace::Manager},
+    daemon::{
+        access::{self, AccessRequest, ResourceSpecification, Specification, Target},
+        allocation::Allocation,
+        store,
+        workspace::Manager,
+    },
     state::{states, text_key},
     validate,
 };
@@ -484,11 +489,13 @@ impl Manager {
                     "INSERT INTO resource_pools(scope,name,definition) VALUES (?1,?2,?3) ON CONFLICT(scope,name) DO UPDATE SET definition=excluded.definition",
                     params![scope, request.pool, serde_json::to_string(&definition)?],
                 )?;
-                let target = format!("resource/{scope}/{}", request.pool);
-                if scoped && let Some(pending) = crate::daemon::access::current(&tx, &workspace.id, &target, &request.name)? {
-                    let member = pending.specification["member"].as_str().unwrap_or_default();
-                    ensure!(request.resource.as_deref().is_none_or(|r| r == member), "access request member changed; release it first");
-                    request.resource = Some(member.into());
+                let target = Target::Resource { scope: scope.clone(), pool: request.pool.clone() };
+                if scoped && let Some(pending) = access::current(&tx, &workspace.id, &target, &request.name)? {
+                    let Specification::Resource(bound) = &pending.specification else {
+                        bail!("access request {} for {target} does not select a pool member; release the name and request again", pending.id);
+                    };
+                    ensure!(request.resource.as_deref().is_none_or(|r| r == bound.member), "access request member changed; release it first");
+                    request.resource = Some(bound.member.clone());
                 }
                 let pool_available = definition.capacity.saturating_sub(pool_used(&active));
                 let selected = match select_member(&definition, &request, &active, pool_available)? {
@@ -508,10 +515,10 @@ impl Manager {
                     return busy();
                 };
                 if scoped && settings.requires_approval {
-                    let approval = crate::daemon::access::AccessRequest::new(&workspace.id, target, &request.name,
-                        serde_json::json!({"definition": definition, "member": resource, "mode": mode}),
-                        settings.approval_lifetime, request.reason.as_deref());
-                    if let Some(approval) = crate::daemon::access::check(&tx, approval)? {
+                    let bound = ResourceSpecification { definition: definition.clone(), member: resource.clone(), mode };
+                    let approval = AccessRequest::new(&workspace.id, target, &request.name,
+                        Specification::Resource(bound), settings.approval_lifetime, request.reason.as_deref());
+                    if let Some(approval) = access::check(&tx, approval)? {
                         tx.commit()?;
                         return Ok(Allocation::Approval(Box::new(approval)));
                     }
@@ -601,21 +608,15 @@ impl Manager {
                 let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
                 store::require_ready(&tx, &workspace.id)?;
                 let mut released = false;
-                for approval in crate::daemon::access::list(&tx, Some(&workspace.id))?
+                for approval in access::list(&tx, Some(&workspace.id))?
                     .into_iter()
                     .filter(|r| {
                         r.active
                             && r.name == name
-                            && r.target.ends_with(&format!("/{pool}"))
-                            && r.target.starts_with("resource/")
+                            && matches!(&r.target, Target::Resource { pool: p, .. } if *p == pool)
                     })
                 {
-                    released |= crate::daemon::access::release(
-                        &tx,
-                        &workspace.id,
-                        &approval.target,
-                        &name,
-                    )?;
+                    released |= access::release(&tx, &workspace.id, &approval.target, &name)?;
                 }
                 ensure!(
                     tx.execute(

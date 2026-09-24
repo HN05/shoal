@@ -9,7 +9,13 @@ use std::{
 
 use crate::{
     config::repo::ConflictPolicy,
-    daemon::{allocation::Allocation, notifications::NotificationKind, store, workspace::Manager},
+    daemon::{
+        access::{self, AccessRequest, PortSpecification, Specification, Target},
+        allocation::Allocation,
+        notifications::NotificationKind,
+        store,
+        workspace::Manager,
+    },
     env,
     model::{PortOverview, PortReservation, PortSuggestion},
     validate,
@@ -168,10 +174,11 @@ impl Manager {
                     "environment variable already assigned to another port"
                 );
                 if scoped && definition.requires_approval {
-                    let approval = crate::daemon::access::AccessRequest::new(&workspace.id, format!("port/{name}"), &name,
-                        serde_json::json!({"preferred": preferred, "env": env_var, "on_conflict": policy,
-                            "range": [range.start, range.end]}), definition.approval_lifetime, request.reason.as_deref());
-                    if let Some(approval) = crate::daemon::access::check(&tx, approval)? {
+                    let bound = PortSpecification { env: env_var.clone(), on_conflict: policy, preferred,
+                        range: [range.start, range.end] };
+                    let approval = AccessRequest::new(&workspace.id, Target::Port(name.clone()), &name,
+                        Specification::Port(bound), definition.approval_lifetime, request.reason.as_deref());
+                    if let Some(approval) = access::check(&tx, approval)? {
                         tx.commit()?;
                         return Ok((Acquisition::Allocation(Allocation::Approval(Box::new(approval))), None));
                     }
@@ -278,12 +285,8 @@ impl Manager {
             .run(move |db| {
                 let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
                 store::require_ready(&tx, &workspace.id)?;
-                let released = crate::daemon::access::release(
-                    &tx,
-                    &workspace.id,
-                    &format!("port/{name}"),
-                    &name,
-                )?;
+                let released =
+                    access::release(&tx, &workspace.id, &Target::Port(name.clone()), &name)?;
                 ensure!(
                     tx.execute(
                         "DELETE FROM ports WHERE workspace_id=?1 AND name=?2",

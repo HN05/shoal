@@ -33,7 +33,9 @@ impl Manager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::daemon::access::{DecisionStatus, Lifetime};
+    use crate::daemon::access::{
+        DecisionStatus, Lifetime, PortSpecification, Specification, Target,
+    };
 
     #[tokio::test]
     async fn notifications_preserve_busy_wording_and_only_announce_pending_approvals() {
@@ -43,9 +45,14 @@ mod tests {
             .await;
         let mut request = AccessRequest::new(
             "owner",
-            "port/web".into(),
+            Target::Port("web".into()),
             "web",
-            serde_json::json!({}),
+            Specification::Port(PortSpecification {
+                env: "PORT_WEB".into(),
+                on_conflict: Default::default(),
+                preferred: None,
+                range: [3000, 3100],
+            }),
             Lifetime::Lease,
             Some("serve the app"),
         );

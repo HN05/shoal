@@ -72,8 +72,9 @@ when behavior changes, distinguishing decisions from proposals.
   their own access; only unscoped callers approve or deny. Grants bind effective
   allocation settings, consume no capacity, and last until release or workspace
   removal according to configuration. Never bypass existing allocation rules.
-- Workspace and execution lifecycle states are typed enums; preserve their
-  existing lowercase SQLite/JSON representation and reject unknown values.
+- Lifecycle states, resource scopes, approval targets and approval
+  specifications are typed; preserve their existing SQLite/JSON representation
+  and reject unknown values.
 - `doctor` reports by default; repair preserves work and resource leases.
   Startup audits ownership but never clears unknown executions or deletes work.
   Verify native PID birth identity before signaling survivors; unknown ownership

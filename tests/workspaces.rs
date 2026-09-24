@@ -10243,6 +10243,50 @@ fn simulator_approval_defaults_layer_per_option_and_release_expires_lease_grants
 }
 
 #[test]
+fn tampered_resource_approvals_fail_instead_of_selecting_a_member() {
+    let fixture = Fixture::with_config(Some("[resources.signing]\nrequires_approval=true\n"));
+    fixture.add("agent");
+    let args = ["resource", "acquire", "signing", "--reason", "sign build"];
+    let pending = pending_access(scoped_command(&fixture, "agent", &args));
+    fixture.ok(&["access", "approve", pending["id"].as_str().unwrap()]);
+    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+    let mut record = pending.clone();
+    record["status"] = "approved".into();
+    record["specification"] = serde_json::json!({
+        "preferred": null, "env": "PORT_WEB", "on_conflict": "suggest", "range": [3000, 3100]
+    });
+    let tamper = |record: &Value| {
+        db.execute(
+            "UPDATE access_requests SET record=?2 WHERE id=?1",
+            rusqlite::params![pending["id"].as_str().unwrap(), record.to_string()],
+        )
+        .unwrap();
+    };
+    tamper(&record);
+    let output = scoped_command(&fixture, "agent", &args);
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("does not select a pool member"),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    record["specification"] = serde_json::json!({"member": "signing"});
+    tamper(&record);
+    let output = scoped_command(&fixture, "agent", &args);
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("has an invalid record"),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        fixture.ok(&["resource", "agent"])["leases"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
 fn releasing_resource_names_clears_requests_from_previous_pool_scopes() {
     let config = "[resources.signing]\nrequires_approval=true\n";
     let mut fixture = Fixture::with_config(Some(config));
