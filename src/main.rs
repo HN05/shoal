@@ -6,6 +6,7 @@ mod daemon;
 mod env;
 mod execution;
 mod forge;
+mod fsutil;
 mod git;
 mod git_profile;
 mod happy;

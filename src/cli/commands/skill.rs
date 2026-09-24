@@ -26,7 +26,7 @@ pub(super) fn run(command: Option<&SkillCommand>, json_output: bool) -> Result<i
         !crate::env::is_scoped(),
         "workspace processes cannot install user-level skills; run shoal skill install outside the scoped execution"
     );
-    let home = PathBuf::from(std::env::var_os("HOME").context("HOME is not set")?);
+    let home = crate::fsutil::home_dir()?;
     ensure!(home.is_absolute(), "HOME must be an absolute path");
     let configured = crate::ai::load(&home)?;
     let mut names = std::collections::BTreeSet::from(crate::ai::BUILT_INS);

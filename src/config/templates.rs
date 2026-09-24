@@ -14,11 +14,7 @@ pub const AGENT_DEFAULT: &str = include_str!("../../agent-template.md");
 
 pub fn read(directory: &Path, name: &str) -> Result<Option<String>> {
     let path = directory.join(name);
-    match fs::read_to_string(&path) {
-        Ok(text) => Ok(Some(text)),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(error) => Err(error).with_context(|| format!("read {}", path.display())),
-    }
+    crate::fsutil::read_optional(&path).with_context(|| format!("read {}", path.display()))
 }
 
 pub fn install(paths: &Paths) -> Result<()> {

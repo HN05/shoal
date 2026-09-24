@@ -142,10 +142,7 @@ pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
 
 /// Expand `~` and resolve relative paths against the caller's directory.
 pub(super) fn absolute(ctx: &Context, path: PathBuf) -> Result<PathBuf> {
-    let path = match path.strip_prefix("~") {
-        Ok(relative) => ctx.paths.home.join(relative),
-        Err(_) => path,
-    };
+    let path = crate::fsutil::expand_home(&path, &ctx.paths.home);
     Ok(if path.is_absolute() {
         path
     } else {

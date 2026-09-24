@@ -158,8 +158,8 @@ fn decorate(command: Command, parent: &str, typed: Arc<Typed>) -> Command {
                         .chain(crate::ai::BUILT_INS)
                         .map(str::to_owned)
                         .collect();
-                    if let Some(home) = std::env::var_os("HOME") {
-                        if let Ok(agents) = crate::ai::load(&PathBuf::from(home)) {
+                    if let Ok(home) = crate::fsutil::home_dir() {
+                        if let Ok(agents) = crate::ai::load(&home) {
                             names.extend(agents.into_keys());
                         }
                     }

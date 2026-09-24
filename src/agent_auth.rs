@@ -2,7 +2,7 @@
 use crate::tools::Tool;
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
-use std::{ffi::OsString, os::unix::fs::PermissionsExt, path::PathBuf};
+use std::{ffi::OsString, path::PathBuf};
 
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
@@ -25,14 +25,11 @@ impl Config {
             (Tool::GitHub.program(), &self.gh),
         ] {
             let Some(path) = path else { continue };
-            let path = match path.strip_prefix("~/") {
-                Ok(relative) => paths.home.join(relative),
-                Err(_) => path.clone(),
-            };
-            let metadata = std::fs::metadata(&path)
+            let path = crate::fsutil::expand_home(path, &paths.home);
+            let executable = crate::fsutil::is_executable(&path)
                 .with_context(|| format!("agent_auth.{name}: inspect {}", path.display()))?;
             ensure!(
-                metadata.is_file() && metadata.permissions().mode() & 0o111 != 0,
+                executable,
                 "agent_auth.{name}: {} is not an executable file",
                 path.display()
             );

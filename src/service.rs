@@ -1,7 +1,6 @@
 use crate::tools::Tool;
 use std::{
     fs,
-    os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
     time::Duration,
 };
@@ -65,10 +64,11 @@ pub fn executable(explicit: Option<PathBuf>) -> Result<PathBuf> {
             if arg.components().count() > 1 {
                 arg
             } else {
-                std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
-                    .map(|dir| dir.join(&arg))
-                    .find(|path| is_executable(path))
-                    .unwrap_or(std::env::current_exe()?)
+                crate::fsutil::find_executable(
+                    arg.as_os_str(),
+                    &std::env::var_os("PATH").unwrap_or_default(),
+                )
+                .unwrap_or(std::env::current_exe()?)
             }
         }
     };
@@ -78,16 +78,12 @@ pub fn executable(explicit: Option<PathBuf>) -> Result<PathBuf> {
         std::env::current_dir()?.join(path)
     };
     ensure!(
-        is_executable(&path),
+        crate::fsutil::is_executable(&path).unwrap_or(false),
         "not an executable file: {}",
         path.display()
     );
     // Preserve an installation symlink rather than resolving into a versioned keg.
     Ok(path)
-}
-
-fn is_executable(path: &Path) -> bool {
-    fs::metadata(path).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
 }
 
 fn text(path: &Path) -> Result<&str> {

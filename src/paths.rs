@@ -28,7 +28,7 @@ impl Paths {
     }
 
     pub fn new(state: Option<PathBuf>) -> Result<Self> {
-        let home = PathBuf::from(std::env::var_os("HOME").context("HOME is not set")?);
+        let home = crate::fsutil::home_dir()?;
         ensure!(home.is_absolute(), "HOME must be an absolute path");
         let state = state.unwrap_or_else(|| home.join(".local/state/shoal"));
         let state = if state.is_absolute() {

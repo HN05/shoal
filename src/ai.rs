@@ -1,7 +1,6 @@
 //! Machine-local settings for user-configured AI tools.
 use std::{
     collections::BTreeMap,
-    fs,
     path::{Path, PathBuf},
 };
 
@@ -31,10 +30,7 @@ pub fn validate(agents: &Agents, home: &Path) -> Result<()> {
 }
 
 pub fn skill_dir(agent: &Agent, home: &Path) -> Result<PathBuf> {
-    let path = match agent.skill_dir.strip_prefix("~") {
-        Ok(relative) => home.join(relative),
-        Err(_) => agent.skill_dir.clone(),
-    };
+    let path = crate::fsutil::expand_home(&agent.skill_dir, home);
     ensure!(
         path.is_absolute(),
         "skill_dir must be an absolute path or start with ~/"
@@ -49,10 +45,10 @@ pub fn skill_dir(agent: &Agent, home: &Path) -> Result<PathBuf> {
 /// Skill delivery reads machine config without constructing daemon paths.
 pub fn load(home: &Path) -> Result<Agents> {
     let path = crate::config::Config::path_for_home(home);
-    let text = match fs::read_to_string(&path) {
-        Ok(text) => text,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Agents::new()),
-        Err(error) => return Err(error).with_context(|| format!("read {}", path.display())),
+    let Some(text) =
+        crate::fsutil::read_optional(&path).with_context(|| format!("read {}", path.display()))?
+    else {
+        return Ok(Agents::new());
     };
     let config: crate::config::Config =
         toml::from_str(&text).with_context(|| format!("parse {}", path.display()))?;

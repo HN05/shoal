@@ -461,10 +461,7 @@ impl Config {
         let Some(path) = self.root_dir.as_ref().or(self.repositories_dir.as_ref()) else {
             return Ok(paths.home.join("shoal"));
         };
-        let path = match path.strip_prefix("~") {
-            Ok(relative) => paths.home.join(relative),
-            Err(_) => path.clone(),
-        };
+        let path = crate::fsutil::expand_home(path, &paths.home);
         ensure!(
             path.is_absolute(),
             "root_dir must be an absolute path or start with ~/"
@@ -505,11 +502,9 @@ impl Config {
     ) -> Result<(PathBuf, Option<PathBuf>)> {
         let path = Self::path(paths);
         let _lock = Self::lock_file(&path)?;
-        let text = match fs::read_to_string(&path) {
-            Ok(text) => text,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
-            Err(error) => return Err(error).with_context(|| format!("read {}", path.display())),
-        };
+        let text = crate::fsutil::read_optional(&path)
+            .with_context(|| format!("read {}", path.display()))?
+            .unwrap_or_default();
         let edited = edit::edit(&text, key, value)?;
         Self::parse(&edited, paths).context("invalid edited config")?;
         Self::replace_at(path, &edited)
@@ -589,13 +584,12 @@ impl Config {
     /// template files only agent launches need.
     pub fn load(paths: &Paths) -> Result<Self> {
         let path = Self::path(paths);
-        match fs::read_to_string(&path) {
-            Ok(text) => {
-                Self::parse(&text, paths).with_context(|| format!("parse {}", path.display()))
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Self::default()),
-            Err(error) => Err(error).with_context(|| format!("read {}", path.display())),
-        }
+        let Some(text) = crate::fsutil::read_optional(&path)
+            .with_context(|| format!("read {}", path.display()))?
+        else {
+            return Ok(Self::default());
+        };
+        Self::parse(&text, paths).with_context(|| format!("parse {}", path.display()))
     }
 
     /// [`Self::load`] with the template files beside the config standing in

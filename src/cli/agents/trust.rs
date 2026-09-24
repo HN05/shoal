@@ -41,11 +41,9 @@ fn trust_claude_workspace(config: &std::path::Path, workspace: &std::path::Path)
         .context("workspace path is not UTF-8")?
         .to_owned();
     let _lock = lock_trust_config(config)?;
-    let text = match std::fs::read_to_string(config) {
-        Ok(text) => text,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => "{}".into(),
-        Err(error) => return Err(error).with_context(|| format!("read {}", config.display())),
-    };
+    let text = crate::fsutil::read_optional(config)
+        .with_context(|| format!("read {}", config.display()))?
+        .unwrap_or_else(|| "{}".into());
     let mut root: Value =
         serde_json::from_str(&text).with_context(|| format!("parse {}", config.display()))?;
     let project = root
@@ -92,11 +90,9 @@ fn trust_codex_workspace(config: &std::path::Path, workspace: &std::path::Path) 
     };
     let directory = config.parent().context("Codex config has no parent")?;
     let _lock = lock_trust_config(&config)?;
-    let text = match std::fs::read_to_string(&config) {
-        Ok(text) => text,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
-        Err(error) => return Err(error).with_context(|| format!("read {}", config.display())),
-    };
+    let text = crate::fsutil::read_optional(&config)
+        .with_context(|| format!("read {}", config.display()))?
+        .unwrap_or_default();
     let mut root: DocumentMut = text
         .parse()
         .with_context(|| format!("parse {}", config.display()))?;

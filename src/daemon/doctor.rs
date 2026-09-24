@@ -1,5 +1,5 @@
 //! Read-only daemon diagnostics, separate from workspace recovery mutations.
-use std::{collections::HashSet, ffi::OsStr, os::unix::fs::PermissionsExt, path::PathBuf};
+use std::{collections::HashSet, ffi::OsStr, path::PathBuf};
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -39,15 +39,7 @@ fn dependencies(path: Option<&OsStr>) -> Vec<Check> {
     Tool::dependencies()
         .map(|(tool, dependency)| {
             let program = tool.program();
-            let executable = path.and_then(|path| {
-                std::env::split_paths(path)
-                    .map(|dir| dir.join(program))
-                    .find(|candidate| {
-                        candidate.metadata().is_ok_and(|meta| {
-                            meta.is_file() && meta.permissions().mode() & 0o111 != 0
-                        })
-                    })
-            });
+            let executable = path.and_then(|path| crate::fsutil::find_executable(OsStr::new(program), path));
             let (status, message) = match executable {
                 Some(path) => (CheckStatus::Ok, format!("{} on the daemon's PATH", path.display())),
                 None => (
@@ -143,7 +135,7 @@ impl Manager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
+    use std::{fs, os::unix::fs::PermissionsExt};
 
     #[test]
     fn unavailable_dependencies_have_the_same_names_as_daemon_checks() {
