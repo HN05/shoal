@@ -7244,6 +7244,14 @@ fn issue_lookup_errors_never_create_a_workspace() {
     );
     let bin = fixture.root.path().join("issue-bin");
     fs::create_dir(&bin).unwrap();
+    // Keep the missing-tool case independent of any installed forge clients.
+    let git = std::env::split_paths(&std::env::var_os("PATH").unwrap())
+        .map(|dir| dir.join("git"))
+        .find(|path| path.is_file() && path.metadata().unwrap().permissions().mode() & 0o111 != 0)
+        .unwrap()
+        .canonicalize()
+        .unwrap();
+    std::os::unix::fs::symlink(git, bin.join("git")).unwrap();
     let tool = bin.join("gh");
     for (input, script, diagnostic) in [
         ("4", None, "install it"),
@@ -7279,7 +7287,7 @@ fn issue_lookup_errors_never_create_a_workspace() {
                 "--issue",
                 input,
             ])
-            .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+            .env("PATH", &bin)
             .output()
             .unwrap();
         assert!(!output.status.success());
@@ -7352,7 +7360,7 @@ fn issue_lookup_errors_never_create_a_workspace() {
         let output = fixture
             .command()
             .args(&args)
-            .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+            .env("PATH", &bin)
             .output()
             .unwrap();
         assert!(!output.status.success(), "{args:?}");

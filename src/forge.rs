@@ -1,4 +1,4 @@
-//! Forge identity and read-only PR queries using the user's gh/fj login.
+//! Forge identity and read-only issue/PR queries using the user's gh/fj login.
 use anyhow::{Context, Result, ensure};
 
 #[derive(Debug)]
@@ -97,6 +97,14 @@ impl ForgeRepo {
                 "https"
             },
         })
+    }
+
+    pub async fn issue_details(
+        &self,
+        path: &std::path::Path,
+        number: u64,
+    ) -> Result<(String, String)> {
+        self.kind.issue_details(self, path, number).await
     }
 
     /// The repository an issue URL belongs to.
@@ -209,7 +217,7 @@ impl ForgeKind {
                         "--json",
                         "number,state,headRefName,commits",
                     ],
-                    MERGED_HINT,
+                    Query::Pull(MERGED_HINT),
                 )
                 .await?;
             #[derive(serde::Deserialize)]
@@ -238,13 +246,13 @@ impl ForgeKind {
             let args = [
                 "--style", "minimal", "pr", "view", &number, "--host", &repo.host,
             ];
-            let output = self.query(path, &args, MERGED_HINT).await?;
+            let output = self.query(path, &args, Query::Pull(MERGED_HINT)).await?;
             if !fj_merged(&output, &number, branch)? {
                 return Ok(None);
             }
             let mut args = args.to_vec();
             args.push("commits");
-            let output = self.query(path, &args, MERGED_HINT).await?;
+            let output = self.query(path, &args, Query::Pull(MERGED_HINT)).await?;
             Ok(Some(
                 output
                     .lines()
@@ -257,6 +265,65 @@ impl ForgeKind {
             ))
         }
     }
+}
+
+impl ForgeKind {
+    async fn issue_details(
+        self,
+        repo: &ForgeRepo,
+        path: &std::path::Path,
+        number: u64,
+    ) -> Result<(String, String)> {
+        let id = number.to_string();
+        let (title, details) = if self == Self::GitHub {
+            let repo = format!("{}/{}", repo.host, repo.path);
+            let args = [
+                "issue",
+                "view",
+                &id,
+                "--repo",
+                &repo,
+                "--json",
+                "number,title,body",
+            ];
+            let text = self.query(path, &args, Query::Issue).await?;
+            #[derive(serde::Deserialize)]
+            struct GitHubIssue {
+                number: u64,
+                title: String,
+                body: Option<String>,
+            }
+            let issue: GitHubIssue =
+                serde_json::from_str(&text).context("invalid gh issue response")?;
+            ensure!(issue.number == number, "gh returned a different issue");
+            (issue.title, issue.body.unwrap_or_default())
+        } else {
+            let args = [
+                "--style", "minimal", "issue", "view", &id, "--host", &repo.host, "--remote",
+                "origin",
+            ];
+            forgejo_details(&self.query(path, &args, Query::Issue).await?, number)?
+        };
+        ensure!(!title.trim().is_empty(), "issue title is empty");
+        Ok((title, details))
+    }
+}
+
+// fj currently has no JSON mode. Minimal output starts with `<title> #<id>`
+// (some versions append a quote), with bidi isolates even when stdout is piped.
+fn forgejo_details(text: &str, number: u64) -> Result<(String, String)> {
+    let text = strip_bidi_isolates(text);
+    let text = text.trim();
+    let (header, details) = text
+        .split_once('\n')
+        .context("unrecognized fj issue output")?;
+    let suffix = format!(" #{number}");
+    let title = header
+        .trim_end()
+        .trim_end_matches('"')
+        .strip_suffix(&suffix)
+        .context("unrecognized fj issue title; expected title and issue number")?;
+    Ok((title.to_owned(), details.trim().to_owned()))
 }
 
 /// A PR's branches, for checking it out locally.
@@ -319,7 +386,7 @@ impl ForgeKind {
                 base_ref_name: String,
                 is_cross_repository: bool,
             }
-            let pull: Pull = serde_json::from_str(&self.query(path, &args, "").await?)
+            let pull: Pull = serde_json::from_str(&self.query(path, &args, Query::Pull("")).await?)
                 .context("invalid gh PR response")?;
             ensure!(pull.number == number, "gh returned a different PR");
             ensure!(
@@ -331,7 +398,7 @@ impl ForgeKind {
             let args = [
                 "--style", "minimal", "pr", "view", &id, "--host", &repo.host,
             ];
-            fj_pull(&self.query(path, &args, "").await?, &id)
+            fj_pull(&self.query(path, &args, Query::Pull("")).await?, &id)
         }
     }
 }
@@ -394,24 +461,138 @@ fn strip_bidi_isolates(text: &str) -> String {
 
 const MERGED_HINT: &str = "; otherwise confirm the merge yourself and run `shoal pr merged`";
 
+#[derive(Clone, Copy)]
+enum Query {
+    Issue,
+    Pull(&'static str),
+}
+
 impl ForgeKind {
-    async fn query(self, path: &std::path::Path, args: &[&str], hint: &str) -> Result<String> {
+    async fn query(self, path: &std::path::Path, args: &[&str], query: Query) -> Result<String> {
         let tool = self.tool();
         let mut command = tokio::process::Command::new(tool);
-        command.current_dir(path).args(args).env("NO_COLOR", "1");
-        tokio::time::timeout(
-            std::time::Duration::from_secs(20),
-            crate::subprocess::output(command),
+        command.current_dir(path).args(args);
+        let (seconds, timed_out) = match query {
+            Query::Issue => (30, "issue lookup timed out"),
+            Query::Pull(_) => {
+                command.env("NO_COLOR", "1");
+                (20, "PR lookup timed out")
+            }
+        };
+        let output = tokio::time::timeout(
+            std::time::Duration::from_secs(seconds),
+            command
+                .stdin(std::process::Stdio::null())
+                .kill_on_drop(true)
+                .output(),
         )
         .await
-        .context("PR lookup timed out")?
-        .with_context(|| format!("PR lookup requires {tool} and its existing login{hint}"))
+        .context(timed_out)?;
+        query.response(tool, output)
     }
+}
+
+impl Query {
+    fn response(self, tool: &str, output: std::io::Result<std::process::Output>) -> Result<String> {
+        match self {
+            Self::Issue => {
+                let output = output.with_context(|| {
+                    format!(
+                        "run {tool}; install it and run `{tool} auth login` before using --issue"
+                    )
+                })?;
+                ensure!(
+                    output.status.success(),
+                    "{tool} issue lookup failed; check `{tool} auth login` and repository access: {}",
+                    diagnostic(&output.stderr, 2048)
+                );
+                String::from_utf8(output.stdout).context("issue output is not UTF-8")
+            }
+            Self::Pull(hint) => (|| {
+                let output = output.with_context(|| {
+                    format!("run {tool}; ensure it is installed and on the daemon's PATH")
+                })?;
+                ensure!(
+                    output.status.success(),
+                    "{tool} failed ({}): {}",
+                    output.status,
+                    diagnostic(&output.stderr, 8192)
+                );
+                String::from_utf8(output.stdout).context("tool output is not UTF-8")
+            })()
+            .with_context(|| format!("PR lookup requires {tool} and its existing login{hint}")),
+        }
+    }
+}
+
+fn diagnostic(stderr: &[u8], limit: usize) -> String {
+    String::from_utf8_lossy(stderr)
+        .chars()
+        .take(limit)
+        .collect()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn query_errors_preserve_login_guidance_and_diagnostic_limits() {
+        use std::{io, os::unix::process::ExitStatusExt, process::Output};
+
+        for tool in ["gh", "fj"] {
+            for (query, limit, hint) in [
+                (Query::Issue, 2048, "auth login"),
+                (Query::Pull(MERGED_HINT), 8192, "shoal pr merged"),
+                (Query::Pull(""), 8192, "existing login"),
+            ] {
+                let missing = query
+                    .response(tool, Err(io::Error::from(io::ErrorKind::NotFound)))
+                    .unwrap_err();
+                let missing = format!("{missing:#}");
+                assert!(missing.contains(tool), "{missing}");
+                assert!(missing.contains(hint), "{missing}");
+
+                let failed = query
+                    .response(
+                        tool,
+                        Ok(Output {
+                            status: std::process::ExitStatus::from_raw(256),
+                            stdout: b"ignored".to_vec(),
+                            stderr: format!("{}END", "é".repeat(limit)).into_bytes(),
+                        }),
+                    )
+                    .unwrap_err();
+                let failed = format!("{failed:#}");
+                assert!(failed.contains(tool), "{failed}");
+                assert!(failed.contains(hint), "{failed}");
+                assert!(failed.ends_with(&"é".repeat(limit)));
+                assert!(!failed.contains("END"));
+
+                let invalid = query
+                    .response(
+                        tool,
+                        Ok(Output {
+                            status: std::process::ExitStatus::from_raw(0),
+                            stdout: vec![0xff],
+                            stderr: Vec::new(),
+                        }),
+                    )
+                    .unwrap_err();
+                assert!(format!("{invalid:#}").contains("output is not UTF-8"));
+            }
+        }
+    }
+
+    #[test]
+    fn fj_minimal_output_preserves_issue_details() {
+        let text = "\u{2068}Add issue workspaces\u{2069} #\u{2068}34\u{2069}\"\nBy user — Open\n\n> Needs fj and gh\n\n0 comments\n";
+        let (title, details) = forgejo_details(text, 34).unwrap();
+        assert_eq!(title, "Add issue workspaces");
+        assert!(details.contains("Needs fj and gh"));
+        assert!(forgejo_details(text, 35).is_err());
+        assert!(forgejo_details("changed output", 34).is_err());
+    }
+
     #[test]
     fn backend_is_selected_from_the_normalized_remote_host() {
         for (remote, kind, tool) in [

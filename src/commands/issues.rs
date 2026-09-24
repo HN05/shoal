@@ -1,9 +1,5 @@
 //! Forge issue lookup belongs to the CLI; the daemon only creates workspaces.
-use std::{process::Stdio, time::Duration};
-
 use anyhow::{Context as _, Result, bail, ensure};
-use serde::Deserialize;
-use tokio::{process::Command, time::timeout};
 
 use crate::{
     client, context::Context, forge::ForgeRepo, git, model::Repository, repository, ui,
@@ -121,92 +117,13 @@ pub(super) async fn load(repo: &Repository, input: &str) -> Result<Issue> {
             .context("issue lookup needs an origin remote")?;
     let forge = ForgeRepo::parse(&remote)?;
     let (number, url) = forge.issue(input)?;
-    let github = forge.host == "github.com";
-    let tool = if github { "gh" } else { "fj" };
-    let mut command = Command::new(tool);
-    command.current_dir(&repo.path);
-    if github {
-        command.args([
-            "issue",
-            "view",
-            &number.to_string(),
-            "--repo",
-            &format!("{}/{}", forge.host, forge.path),
-            "--json",
-            "number,title,body",
-        ]);
-    } else {
-        command.args([
-            "--style",
-            "minimal",
-            "issue",
-            "view",
-            &number.to_string(),
-            "--host",
-            &forge.host,
-            "--remote",
-            "origin",
-        ]);
-    }
-    let output = timeout(
-        Duration::from_secs(30),
-        command.stdin(Stdio::null()).kill_on_drop(true).output(),
-    )
-    .await
-    .context("issue lookup timed out")?
-    .with_context(|| {
-        format!("run {tool}; install it and run `{tool} auth login` before using --issue")
-    })?;
-    ensure!(
-        output.status.success(),
-        "{tool} issue lookup failed; check `{tool} auth login` and repository access: {}",
-        String::from_utf8_lossy(&output.stderr)
-            .chars()
-            .take(2048)
-            .collect::<String>()
-    );
-    let text = String::from_utf8(output.stdout).context("issue output is not UTF-8")?;
-    let (title, details) = if github {
-        #[derive(Deserialize)]
-        struct GitHubIssue {
-            number: u64,
-            title: String,
-            body: Option<String>,
-        }
-        let issue: GitHubIssue =
-            serde_json::from_str(&text).context("invalid gh issue response")?;
-        ensure!(issue.number == number, "gh returned a different issue");
-        (issue.title, issue.body.unwrap_or_default())
-    } else {
-        forgejo_details(&text, number)?
-    };
-    ensure!(!title.trim().is_empty(), "issue title is empty");
+    let (title, details) = forge.issue_details(&repo.path, number).await?;
     Ok(Issue {
         number,
         title,
         url,
         details,
     })
-}
-
-// fj currently has no JSON mode. Minimal output starts with `<title> #<id>`
-// (some versions append a quote), with bidi isolates even when stdout is piped.
-fn forgejo_details(text: &str, number: u64) -> Result<(String, String)> {
-    let text: String = text
-        .chars()
-        .filter(|c| !matches!(c, '\u{2066}'..='\u{2069}'))
-        .collect();
-    let text = text.trim();
-    let (header, details) = text
-        .split_once('\n')
-        .context("unrecognized fj issue output")?;
-    let suffix = format!(" #{number}");
-    let title = header
-        .trim_end()
-        .trim_end_matches('"')
-        .strip_suffix(&suffix)
-        .context("unrecognized fj issue title; expected title and issue number")?;
-    Ok((title.to_owned(), details.trim().to_owned()))
 }
 
 #[cfg(test)]
@@ -272,16 +189,6 @@ mod tests {
                 .await
                 .is_err()
         );
-    }
-
-    #[test]
-    fn fj_minimal_output_preserves_issue_details() {
-        let text = "\u{2068}Add issue workspaces\u{2069} #\u{2068}34\u{2069}\"\nBy user — Open\n\n> Needs fj and gh\n\n0 comments\n";
-        let (title, details) = forgejo_details(text, 34).unwrap();
-        assert_eq!(title, "Add issue workspaces");
-        assert!(details.contains("Needs fj and gh"));
-        assert!(forgejo_details(text, 35).is_err());
-        assert!(forgejo_details("changed output", 34).is_err());
     }
 
     #[test]
