@@ -8,7 +8,8 @@ use crate::config::Simulators;
 /// The executor rechecks ownership and live capacity before applying it.
 pub(super) struct Plan<'a> {
     pub reusable: Option<&'a Simulator>,
-    pub idle: Vec<&'a Simulator>,
+    /// Unowned records eligible for shutdown or eviction, excluding reuse.
+    pub unowned_candidates: Vec<&'a Simulator>,
     pub evictions: Vec<&'a Simulator>,
     pub has_device_capacity: bool,
 }
@@ -56,15 +57,15 @@ pub(super) fn plan<'a>(
             reusable = None;
         }
     }
-    let mut idle: Vec<_> = records
+    let mut unowned_candidates: Vec<_> = records
         .iter()
         .filter(|s| s.workspace_id.is_none() && reusable.as_ref().is_none_or(|r| r.id != s.id))
         .copied()
         .collect();
     if clean {
-        idle.sort_by_key(|s| (s.app_cost(), s.last_used));
+        unowned_candidates.sort_by_key(|s| (s.app_cost(), s.last_used));
     } else {
-        idle.sort_by_key(|s| s.last_used);
+        unowned_candidates.sort_by_key(|s| s.last_used);
     }
 
     let needed = if reusable.is_none() && records.len() >= limits.max_devices {
@@ -72,11 +73,11 @@ pub(super) fn plan<'a>(
     } else {
         0
     };
-    let evictions: Vec<_> = idle.iter().copied().take(needed).collect();
+    let evictions: Vec<_> = unowned_candidates.iter().copied().take(needed).collect();
     let has_device_capacity = evictions.len() == needed;
     Plan {
         reusable,
-        idle,
+        unowned_candidates,
         evictions,
         has_device_capacity,
     }
@@ -95,7 +96,7 @@ pub(super) fn has_running_capacity(
 }
 
 /// A plan is not ownership evidence. Match its targets against current records.
-pub(super) fn check_idle_record(expected: &Simulator, records: &[Simulator]) -> Result<()> {
+pub(super) fn check_unowned_record(expected: &Simulator, records: &[Simulator]) -> Result<()> {
     ensure!(
         records.iter().any(|s| s.id == expected.id
             && s.udid == expected.udid
@@ -103,7 +104,7 @@ pub(super) fn check_idle_record(expected: &Simulator, records: &[Simulator]) -> 
             && s.state == expected.state
             && s.device == expected.device
             && s.runtime == expected.runtime),
-        "planned simulator is no longer recorded and idle: {}",
+        "planned simulator record changed or is now owned: {}",
         expected.id
     );
     Ok(())
@@ -454,7 +455,7 @@ mod tests {
         records[1].workspace_id = Some("other".into());
         let selected = planned(&records, false, 2);
         assert!(!selected.has_device_capacity);
-        assert!(selected.idle.is_empty());
+        assert!(selected.unowned_candidates.is_empty());
         assert!(selected.evictions.is_empty());
     }
 
@@ -482,14 +483,14 @@ mod tests {
     #[test]
     fn plan_targets_require_current_unowned_records_with_matching_identity() {
         let sim = record("idle", Some(1), 1);
-        assert!(check_idle_record(&sim, &[]).is_err());
-        assert!(check_idle_record(&sim, std::slice::from_ref(&sim)).is_ok());
+        assert!(check_unowned_record(&sim, &[]).is_err());
+        assert!(check_unowned_record(&sim, std::slice::from_ref(&sim)).is_ok());
         let mut changed = sim.clone();
         changed.workspace_id = Some("new-owner".into());
-        assert!(check_idle_record(&sim, &[changed]).is_err());
+        assert!(check_unowned_record(&sim, &[changed]).is_err());
         let mut changed = sim.clone();
         changed.udid = Some("external".into());
-        assert!(check_idle_record(&sim, &[changed]).is_err());
+        assert!(check_unowned_record(&sim, &[changed]).is_err());
     }
 
     #[test]

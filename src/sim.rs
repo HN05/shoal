@@ -449,8 +449,8 @@ impl Manager {
     ) -> Result<Allocation<Box<Simulator>>> {
         let limits = &self.config.simulators;
         let records = self.list_simulators(None).await?;
-        for sim in plan.idle.iter().copied().chain(plan.reusable) {
-            planning::check_idle_record(sim, &records)?;
+        for sim in plan.unowned_candidates.iter().copied().chain(plan.reusable) {
+            planning::check_unowned_record(sim, &records)?;
         }
         let mut inventory = simctl::inventory().await?;
         if let Some(sim) = plan.reusable {
@@ -460,7 +460,7 @@ impl Manager {
             );
         }
         // External devices count toward the budget but are never shut down.
-        for sim in &plan.idle {
+        for sim in &plan.unowned_candidates {
             if planning::has_running_capacity(&inventory, limits.max_booted, plan.reusable) {
                 break;
             }
