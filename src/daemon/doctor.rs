@@ -89,7 +89,7 @@ impl Manager {
             let Some(root) = &repo.workspaces_dir else {
                 continue;
             };
-            let name = worktrees_check_name(&crate::forge::repository::name(&repo));
+            let name = worktrees_check_name(crate::forge::repository::name(&repo));
             // Take the same gate as creation/removal before reading ownership.
             let gate = self.git_gate(&repo.id).await;
             let _guard = gate.lock().await;
