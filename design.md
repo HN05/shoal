@@ -359,9 +359,10 @@ URLs bound to that repository, and require a merged PR containing HEAD; manual a
 binds to exactly the recorded HEAD. Registrations distinguish watches from
 acknowledgements while preserving their stored and JSON representation; ambiguous
 records and conflicting actions are rejected without changing the wire format.
-Both stop tracked agents immediately through shared removal,
+Confirmed merges stop tracked agents immediately through shared removal,
 rechecking clean files and HEAD after stopping. Failures retain work and leases;
 registered workspaces are excluded from idle cleanup until cleared or removed.
+An invalid record retains its workspace without blocking cleanup of others.
 
 `doctor` reports current issues by default, falling back to the recorded
 failure and repair guidance; repair restores verified worktrees and clears

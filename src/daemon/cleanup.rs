@@ -207,6 +207,94 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn invalid_pr_record_does_not_block_other_workspace_cleanup() {
+        use crate::{
+            forge::pr::Action,
+            test_support::{manager, repository},
+        };
+        let (temp, manager) = manager().await;
+        let repository_dir = repository(temp.path(), "repo");
+        let repo = manager
+            .register_repository(repository_dir.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        // Names put the invalid record first in the sweep.
+        let invalid = manager
+            .create_workspace(&repo.id, "a-invalid".into(), None, None, None)
+            .await
+            .unwrap();
+        let merged = manager
+            .create_workspace(&repo.id, "b-merged".into(), None, None, None)
+            .await
+            .unwrap();
+        let idle = manager
+            .create_workspace(&repo.id, "c-idle".into(), None, None, None)
+            .await
+            .unwrap();
+        manager
+            .set_pr(&merged.id, Action::Acknowledge)
+            .await
+            .unwrap();
+        let id = invalid.id.clone();
+        let record = r#"{"url":null,"head":null,"error":null}"#;
+        manager
+            .store
+            .run(move |db| {
+                db.execute(
+                    "INSERT INTO pr_cleanup(workspace_id,record) VALUES (?1,?2)",
+                    rusqlite::params![id, record],
+                )?;
+                Ok(())
+            })
+            .await
+            .unwrap();
+        let mut timers = Timers::default();
+        timers.idle.insert(
+            idle.id.clone(),
+            Idle {
+                snapshot: manager.cleanup_snapshot(&idle.id).await.unwrap().unwrap(),
+                since: Instant::now() - Duration::from_secs(3600),
+            },
+        );
+        sweep(&manager, &mut timers).await.unwrap();
+        assert!(invalid.path.exists());
+        assert!(!merged.path.exists());
+        assert!(!idle.path.exists());
+        assert_eq!(manager.list_workspaces().await.unwrap().len(), 1);
+        // Keep the invalid bytes for diagnosis and explicit clear.
+        let id = invalid.id.clone();
+        let stored: String = manager
+            .store
+            .run(move |db| {
+                Ok(db.query_row(
+                    "SELECT record FROM pr_cleanup WHERE workspace_id=?1",
+                    [id],
+                    |row| row.get(0),
+                )?)
+            })
+            .await
+            .unwrap();
+        assert_eq!(stored, record);
+        sweep(&manager, &mut timers).await.unwrap();
+        let notifications = manager.notifications(true, 100).await.unwrap();
+        let failures: Vec<_> = notifications
+            .iter()
+            .filter(|notification| notification.workspace.as_deref() == Some(&invalid.name))
+            .collect();
+        assert_eq!(
+            failures.len(),
+            1,
+            "repeated invalid records collapse until read"
+        );
+        assert_eq!(failures[0].kind, NotificationKind::CleanupFailed);
+        assert!(
+            failures[0]
+                .message
+                .contains("expected exactly one of url or head")
+        );
+    }
+
+    #[tokio::test]
     async fn cleanup_preserves_work_and_rechecks_activity_before_deleting() {
         use crate::{
             daemon::{ports::PortRequest, resources::ResourceRequest},

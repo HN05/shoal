@@ -199,8 +199,18 @@ impl Manager {
             if workspace.state != crate::state::WorkspaceState::Ready {
                 continue;
             }
-            let Some(mut registration) = self.pr_registration(&workspace.id).await? else {
-                continue;
+            let mut registration = match self.pr_registration(&workspace.id).await {
+                Ok(Some(registration)) => registration,
+                Ok(None) => continue,
+                Err(error) => {
+                    self.notify(
+                        Some(&workspace.name),
+                        NotificationKind::CleanupFailed,
+                        format!("PR cleanup retained the workspace: {error:#}"),
+                    )
+                    .await;
+                    continue;
+                }
             };
             // A repository that disabled PR cleanup keeps its watches waiting;
             // unreadable config is recorded like a failed lookup.
