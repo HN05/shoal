@@ -2,7 +2,7 @@
 //! processes in the CLI wrapper. The daemon authorizes the destination workspace.
 use std::path::Path;
 
-use anyhow::{Context as _, Result, bail, ensure};
+use anyhow::{Context as _, Result, ensure};
 use serde_json::json;
 use tokio::process::Command;
 use uuid::Uuid;
@@ -12,7 +12,7 @@ use crate::{
     context::Context,
     env, execution, git,
     model::PulledBranch,
-    protocol::{Body, Method},
+    protocol::Method,
     ui::{self, Fallback},
 };
 
@@ -145,7 +145,7 @@ async fn refresh_source(
     {
         return Ok(None);
     }
-    let body = client::call(
+    let refresh = client::request::<PulledBranch>(
         &ctx.paths,
         Method::RefreshMergeSource {
             workspace: workspace.to_owned(),
@@ -158,10 +158,7 @@ async fn refresh_source(
             "could not refresh {name} from its upstream; pass --local to merge the local branch as it is"
         )
     })?;
-    match body {
-        Body::PulledBranch(refresh) => Ok(Some(refresh)),
-        _ => bail!("unexpected daemon response; expected PulledBranch"),
-    }
+    Ok(Some(refresh))
 }
 
 fn refresh_summary(refresh: &PulledBranch) -> String {

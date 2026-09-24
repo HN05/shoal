@@ -633,3 +633,64 @@ fn doctor_checks_the_daemon_path_even_when_the_cli_has_dependencies() {
         );
     }
 }
+
+#[test]
+fn cli_typed_response_errors_cover_progress_and_notification_setup() {
+    for (args, body, expected) in [
+        (
+            vec!["repo", "add", "/unused-repository"],
+            json!({"type": "ok"}),
+            "expected Repository, received Ok",
+        ),
+        (
+            vec!["repo", "list"],
+            json!({"type": "ok"}),
+            "expected Repositories, received Ok",
+        ),
+        (
+            vec!["notifications", "--follow"],
+            json!({"type": "workspaces", "data": []}),
+            "expected Ok, received Workspaces",
+        ),
+        (
+            vec!["notifications", "--follow"],
+            json!({"type": "error", "data": {"code": "scope_denied", "message": "denied"}}),
+            "scope_denied: denied",
+        ),
+    ] {
+        let root = tempfile::tempdir_in("/tmp").unwrap();
+        fs::create_dir(root.path().join("state")).unwrap();
+        let listener = UnixListener::bind(root.path().join("state/daemon.sock")).unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let daemon = thread::spawn(move || {
+            let deadline = Instant::now() + Duration::from_secs(5);
+            let mut stream = loop {
+                match listener.accept() {
+                    Ok((stream, _)) => break stream,
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        assert!(Instant::now() < deadline, "client did not connect");
+                        thread::sleep(Duration::from_millis(10));
+                    }
+                    Err(error) => panic!("{error}"),
+                }
+            };
+            stream
+                .set_read_timeout(Some(Duration::from_secs(3)))
+                .unwrap();
+            let mut line = String::new();
+            BufReader::new(&stream).read_line(&mut line).unwrap();
+            let request: Value = serde_json::from_str(&line).unwrap();
+            let mut body = body;
+            body["protocol"] = request["protocol"].clone();
+            body["id"] = request["id"].clone();
+            let mut bytes = serde_json::to_vec(&body).unwrap();
+            bytes.push(b'\n');
+            stream.write_all(&bytes).unwrap();
+        });
+        let output = command(root.path()).args(&args).output().unwrap();
+        daemon.join().unwrap();
+        assert_eq!(output.status.code(), Some(1), "{args:?}");
+        let stderr = String::from_utf8(output.stderr).unwrap();
+        assert!(stderr.contains(expected), "{args:?}: {stderr}");
+    }
+}

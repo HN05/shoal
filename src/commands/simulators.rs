@@ -1,5 +1,5 @@
 //! CLI simulator requests, retry policy, and audit rendering.
-use anyhow::{Result, bail};
+use anyhow::Result;
 use serde_json::json;
 
 use super::{Attempt, EXIT_BUSY, retry_while_busy};
@@ -64,7 +64,7 @@ pub(super) async fn run(
                     Body::Simulator(sim) => Attempt::Ready(Ok(sim)),
                     Body::AccessRequest(request) => super::access::attempt(&mut approval, request),
                     Body::SimBusy { message } => Attempt::Busy(message),
-                    _ => bail!("unexpected simulator acquisition response"),
+                    body => return Err(body.unexpected("Simulator, AccessRequest or SimBusy")),
                 })
             })
             .await?;
@@ -114,7 +114,7 @@ pub(super) async fn run(
         Some(SimCommand::Release { name, workspace }) => {
             let workspace =
                 ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-            client::call(&ctx.paths, Method::SimRelease { workspace, name }).await?;
+            client::request::<()>(&ctx.paths, Method::SimRelease { workspace, name }).await?;
             ctx.emit_styled(
                 Style::Success,
                 "Simulator released",

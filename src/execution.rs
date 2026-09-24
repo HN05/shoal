@@ -26,7 +26,7 @@ use crate::{
     model::{ExecutionPlan, Workspace},
     paths::Paths,
     process_identity,
-    protocol::{self, Body, Control, ExecutionEvent, Method},
+    protocol::{self, Control, ExecutionEvent, Method},
     workspace::ExecutionKind,
 };
 
@@ -241,11 +241,7 @@ async fn run_tracked(
     let (mut stream, body) = timeout(kind.start_timeout(), client::open(paths, method))
         .await
         .context("daemon did not start the execution in time")??;
-    let plan = match body {
-        Body::Execution(plan) => plan,
-        Body::Error { message, .. } => bail!("{message}"),
-        _ => bail!("unexpected execution response"),
-    };
+    let plan = ExecutionPlan::try_from(body)?;
     let command = if let Some(land) = &plan.land {
         let mut command = vec![std::env::current_exe()?.into_os_string()];
         if matches!(mode, Mode::Land { json: true }) {

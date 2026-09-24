@@ -3,14 +3,14 @@
 //! raises each entry as a terminal notification.
 use std::io::{IsTerminal, Write};
 
-use anyhow::{Context as _, Result, bail};
+use anyhow::{Context as _, Result};
 
 use crate::{
     client::{self, request},
     context::Context,
     notifications::Notification,
     output::{Palette, Style},
-    protocol::{self, Body, Method, Response},
+    protocol::{self, Method, Response},
 };
 
 pub(super) async fn run(ctx: &Context, all: bool, follow: bool, limit: u32) -> Result<i32> {
@@ -34,7 +34,7 @@ pub(super) async fn run(ctx: &Context, all: bool, follow: bool, limit: u32) -> R
     // Shown once: exactly what this listing printed does not come back as new.
     if !notifications.is_empty() {
         let ids = notifications.iter().map(|n| n.id).collect();
-        client::call(&ctx.paths, Method::MarkNotificationsRead { ids }).await?;
+        request::<()>(&ctx.paths, Method::MarkNotificationsRead { ids }).await?;
     }
     if !all
         && let Some(status) = client::status(&ctx.paths).await?
@@ -58,29 +58,21 @@ pub(super) async fn run(ctx: &Context, all: bool, follow: bool, limit: u32) -> R
 /// it while another window has focus.
 async fn follow_stream(ctx: &Context) -> Result<i32> {
     let (mut stream, body) = client::open(&ctx.paths, Method::WatchNotifications).await?;
-    match body {
-        Body::Ok => {}
-        Body::Error { code, message } => bail!("{code}: {message}"),
-        _ => bail!("unexpected daemon response"),
-    }
+    <()>::try_from(body)?;
     let palette = Palette::stdout(ctx.json);
     let raise = !ctx.json && std::io::stdout().is_terminal();
     loop {
         let response: Response = protocol::read(&mut stream)
             .await
             .context("daemon closed the notification stream")?;
-        match response.body {
-            Body::Notification(notification) => {
-                ctx.show(&notification, |notification| {
-                    println!("{}", render(notification, palette));
-                })?;
-                if raise {
-                    let mut stdout = std::io::stdout().lock();
-                    stdout.write_all(terminal_notification(&notification).as_bytes())?;
-                    stdout.flush()?;
-                }
-            }
-            _ => bail!("unexpected daemon response"),
+        let notification = Notification::try_from(response.body)?;
+        ctx.show(&notification, |notification| {
+            println!("{}", render(notification, palette));
+        })?;
+        if raise {
+            let mut stdout = std::io::stdout().lock();
+            stdout.write_all(terminal_notification(&notification).as_bytes())?;
+            stdout.flush()?;
         }
     }
 }

@@ -15,7 +15,7 @@ use crate::{
     hooks::{self, Hook},
     model::{DiffBase, Workspace, WorkspaceStatus},
     output::{Palette, Style},
-    protocol::{Body, ConfigTarget, Method},
+    protocol::{ConfigTarget, Method},
     recovery::{ReconcileOptions, Report},
     removal::{BranchChoice, RemovalCheck, RemovalResult},
     repo_config::Hooks,
@@ -32,7 +32,7 @@ pub(super) async fn land(ctx: &Context, workspace: Option<String>) -> Result<i32
 
 pub(super) async fn land_worker(ctx: &Context, plan: String) -> Result<i32> {
     anyhow::ensure!(env::is_scoped(), "land worker requires a tracked execution");
-    client::call(&ctx.paths, Method::CheckLanding).await?;
+    request::<()>(&ctx.paths, Method::CheckLanding).await?;
     let plan: crate::model::LandPlan = serde_json::from_str(&plan)?;
     anyhow::ensure!(
         std::env::var(env::WORKSPACE_ID)? == plan.workspace.id,
@@ -490,7 +490,7 @@ async fn delete_failed_workspace(ctx: &Context, workspace: &Workspace) -> Result
         "--yes",
     )?;
     if confirmed {
-        client::call(
+        request::<RemovalResult>(
             &ctx.paths,
             Method::RemoveWorkspace {
                 workspace: workspace.id.clone(),
@@ -669,7 +669,7 @@ pub(super) async fn inspect(ctx: &Context, workspace: Option<String>) -> Result<
 
 pub(super) async fn stop(ctx: &Context, workspace: Option<String>) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::Picker).await?;
-    client::call(&ctx.paths, Method::StopWorkspace { workspace }).await?;
+    request::<()>(&ctx.paths, Method::StopWorkspace { workspace }).await?;
     ctx.emit_styled(
         Style::Success,
         "Workspace processes stopped",
@@ -713,7 +713,7 @@ pub(super) async fn remove(
     }
     // Leave the directory before it disappears under the shell.
     let escape = escape_destination(ctx, &check.workspace).await?;
-    let result = client::call(
+    let result = request::<RemovalResult>(
         &ctx.paths,
         Method::RemoveWorkspace {
             workspace,
@@ -727,9 +727,7 @@ pub(super) async fn remove(
             shell::navigate(&destination, ctx.json)?;
         }
     }
-    let Body::RemovalResult(result) = result? else {
-        bail!("unexpected removal response");
-    };
+    let result = result?;
     if let Some(error) = &result.hook_error {
         eprintln!("warning: {error}");
     }
@@ -1199,7 +1197,7 @@ pub(super) async fn pr(
     } else {
         None
     };
-    let body = client::call(
+    request::<()>(
         &ctx.paths,
         Method::SetPr {
             workspace,
@@ -1208,10 +1206,6 @@ pub(super) async fn pr(
         },
     )
     .await?;
-    ensure!(
-        matches!(body, Body::Ok),
-        "unexpected PR cleanup response: {body:?}"
-    );
     if let Some(destination) = escape {
         shell::navigate(&destination, ctx.json)?;
     }

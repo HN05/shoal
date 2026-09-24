@@ -1,5 +1,5 @@
 //! CLI port reservations and interactive conflict suggestions.
-use anyhow::{Result, bail};
+use anyhow::Result;
 use serde_json::json;
 
 use crate::{
@@ -44,7 +44,7 @@ pub(super) async fn run(
         Some(PortCommand::Release { name, workspace }) => {
             let workspace =
                 ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-            client::call(&ctx.paths, Method::ReleasePort { workspace, name }).await?;
+            client::request::<()>(&ctx.paths, Method::ReleasePort { workspace, name }).await?;
             ctx.emit_styled(
                 Style::Success,
                 "Port reservation released",
@@ -118,7 +118,7 @@ async fn reserve(
                     on_conflict: request.on_conflict,
                 };
             }
-            _ => bail!("unexpected port response"),
+            body => return Err(body.unexpected("Port, AccessRequest or PortSuggestion")),
         }
     }
 }
@@ -140,12 +140,8 @@ async fn overview(ctx: &Context, workspace: Option<String>, all: bool) -> Result
             let method = Method::PortOverview {
                 workspace: workspace.id.clone(),
             };
-            overviews.push(match client::call(&ctx.paths, method).await {
-                Ok(Body::PortOverview(overview)) => WorkspaceOverviewResult::Ready(overview),
-                Ok(_) => WorkspaceOverviewResult::failed(
-                    workspace,
-                    "unexpected daemon response; expected PortOverview",
-                ),
+            overviews.push(match request::<PortOverview>(&ctx.paths, method).await {
+                Ok(overview) => WorkspaceOverviewResult::Ready(overview),
                 Err(error) => WorkspaceOverviewResult::failed(workspace, format!("{error:#}")),
             });
         }

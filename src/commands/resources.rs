@@ -1,5 +1,5 @@
 //! CLI requests and rendering for cooperative resources.
-use anyhow::{Result, bail};
+use anyhow::Result;
 use serde_json::json;
 
 use super::{Attempt, EXIT_BUSY, WorkspaceOverviewResult, retry_while_busy};
@@ -49,7 +49,9 @@ pub(super) async fn run(
                     Body::ResourceLease(lease) => Attempt::Ready(Ok(lease)),
                     Body::AccessRequest(request) => super::access::attempt(&mut approval, request),
                     Body::ResourceBusy { message } => Attempt::Busy(message),
-                    _ => bail!("unexpected resource acquisition response"),
+                    body => {
+                        return Err(body.unexpected("ResourceLease, AccessRequest or ResourceBusy"));
+                    }
                 })
             })
             .await?;
@@ -88,7 +90,7 @@ pub(super) async fn run(
                 pool,
                 name,
             };
-            client::call(&ctx.paths, method).await?;
+            client::request::<()>(&ctx.paths, method).await?;
             ctx.emit_styled(
                 Style::Success,
                 "Resource released",
@@ -130,17 +132,11 @@ async fn overview(ctx: &Context, workspace: Option<String>, all: bool) -> Result
             let method = Method::ResourceOverview {
                 workspace: workspace.id.clone(),
             };
-            overviews.push(match client::call(&ctx.paths, method).await {
-                Ok(Body::ResourceOverview(overview)) => {
-                    WorkspaceOverviewResult::Ready(WorkspaceOverview {
-                        workspace,
-                        overview,
-                    })
-                }
-                Ok(_) => WorkspaceOverviewResult::failed(
+            overviews.push(match request::<Overview>(&ctx.paths, method).await {
+                Ok(overview) => WorkspaceOverviewResult::Ready(WorkspaceOverview {
                     workspace,
-                    "unexpected daemon response; expected ResourceOverview",
-                ),
+                    overview,
+                }),
                 Err(error) => WorkspaceOverviewResult::failed(workspace, format!("{error:#}")),
             });
         }

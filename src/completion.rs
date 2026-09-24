@@ -11,12 +11,16 @@ use clap::{Command, CommandFactory};
 use clap_complete::engine::{ArgValueCompleter, CompletionCandidate};
 
 use crate::{
+    access::AccessRequest,
     client,
     config::Config,
     env,
-    model::Workspace,
+    model::{PortOverview, Workspace},
     paths::Paths,
-    protocol::{Body, ConfigTarget, Method},
+    protocol::{ConfigTarget, Method},
+    repo_config::ConfigLayers,
+    resources::Overview,
+    simulators::Simulator,
 };
 
 /// What was already typed on the command line when completion was requested.
@@ -206,7 +210,7 @@ impl Typed {
                                 .and_then(|cwd| Workspace::innermost(&workspaces, &cwd))
                         })
                         .context("no current workspace")?;
-                    client::call(
+                    client::request::<Box<ConfigLayers>>(
                         &paths,
                         Method::LayeredConfig {
                             target: ConfigTarget::Workspace(workspace.id.clone()),
@@ -216,7 +220,7 @@ impl Typed {
                 })
                 .await
             });
-            if let Ok(Ok(Body::LayeredConfig(layers))) = layer {
+            if let Ok(Ok(layers)) = layer {
                 commands.extend(layers.resolve().commands);
             }
         }
@@ -274,16 +278,16 @@ impl Typed {
             ));
         }
         if matches!(target, Target::AccessRequests) {
-            if let Body::AccessRequests(requests) =
-                client::call(&paths, Method::ListAccess { workspace: None }).await?
-            {
-                return Ok(requests
-                    .into_iter()
-                    .filter(|r| r.status == crate::access::Status::Pending)
-                    .map(|r| CompletionCandidate::new(r.id))
-                    .collect());
-            }
-            return Ok(Vec::new());
+            let requests = client::request::<Vec<AccessRequest>>(
+                &paths,
+                Method::ListAccess { workspace: None },
+            )
+            .await?;
+            return Ok(requests
+                .into_iter()
+                .filter(|r| r.status == crate::access::Status::Pending)
+                .map(|r| CompletionCandidate::new(r.id))
+                .collect());
         }
         let workspaces = client::workspaces(&paths).await?;
         if matches!(target, Target::Workspaces) {
@@ -300,45 +304,42 @@ impl Typed {
         let mut names = vec![];
         match target {
             Target::Pools | Target::Members | Target::ResourceNames => {
-                if let Body::ResourceOverview(overview) =
-                    client::call(&paths, Method::ResourceOverview { workspace }).await?
-                {
-                    match target {
-                        Target::Pools => names.extend(overview.pools.into_iter().map(|p| p.name)),
-                        Target::Members => names.extend(
-                            overview
-                                .pools
-                                .into_iter()
-                                .filter(|p| Some(&p.name) == self.pool.as_ref())
-                                .flat_map(|p| p.resources.into_iter().map(|r| r.name)),
-                        ),
-                        _ => names.extend(
-                            overview
-                                .leases
-                                .into_iter()
-                                .filter(|l| Some(&l.pool) == self.pool.as_ref())
-                                .map(|l| l.name),
-                        ),
-                    }
+                let overview =
+                    client::request::<Overview>(&paths, Method::ResourceOverview { workspace })
+                        .await?;
+                match target {
+                    Target::Pools => names.extend(overview.pools.into_iter().map(|p| p.name)),
+                    Target::Members => names.extend(
+                        overview
+                            .pools
+                            .into_iter()
+                            .filter(|p| Some(&p.name) == self.pool.as_ref())
+                            .flat_map(|p| p.resources.into_iter().map(|r| r.name)),
+                    ),
+                    _ => names.extend(
+                        overview
+                            .leases
+                            .into_iter()
+                            .filter(|l| Some(&l.pool) == self.pool.as_ref())
+                            .map(|l| l.name),
+                    ),
                 }
             }
             Target::Ports | Target::ReservedPorts => {
-                if let Body::PortOverview(overview) =
-                    client::call(&paths, Method::PortOverview { workspace }).await?
-                {
-                    if matches!(target, Target::Ports) {
-                        names.extend(overview.configured.into_keys());
-                    }
-                    names.extend(overview.reserved.into_iter().map(|p| p.name));
+                let overview =
+                    client::request::<PortOverview>(&paths, Method::PortOverview { workspace })
+                        .await?;
+                if matches!(target, Target::Ports) {
+                    names.extend(overview.configured.into_keys());
                 }
+                names.extend(overview.reserved.into_iter().map(|p| p.name));
             }
             Target::SimNames => {
                 let method = Method::SimList {
                     workspace: Some(workspace),
                 };
-                if let Body::Simulators(simulators) = client::call(&paths, method).await? {
-                    names.extend(simulators.into_iter().filter_map(|s| s.lease_name));
-                }
+                let simulators = client::request::<Vec<Simulator>>(&paths, method).await?;
+                names.extend(simulators.into_iter().filter_map(|s| s.lease_name));
             }
             Target::Commands
             | Target::Repositories
