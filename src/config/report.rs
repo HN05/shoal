@@ -24,11 +24,11 @@ pub struct Entry {
 
 pub async fn load(paths: &Paths, target: ConfigTarget) -> Result<Vec<Entry>> {
     let layers = request::<Box<ConfigLayers>>(paths, Method::LayeredConfig { target }).await?;
-    let (global_config, global) = Config::load_with_repository_layer(paths)?;
+    let global_config = Config::load(paths)?;
     // Retain the same cross-layer validation used by commands that consume the
     // configuration, especially a port range split across two layers.
     global_config.effective(&layers.clone().resolve())?;
-    entries(defaults(), global, *layers)
+    entries(defaults(), global_config.repository_layer(), *layers)
 }
 
 fn entries(defaults: RepoConfig, global: RepoConfig, layers: ConfigLayers) -> Result<Vec<Entry>> {
@@ -181,7 +181,7 @@ fn defaults() -> RepoConfig {
         },
         simulators: config::repo::SimulatorPreferences {
             requires_approval: Some(false),
-            approval_lifetime: Some(crate::daemon::access::Lifetime::Lease),
+            approval_lifetime: Some(crate::daemon::access::Lifetime::default()),
             ..Default::default()
         },
         auto_cleanup: config::repo::AutoCleanup {

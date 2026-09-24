@@ -12,52 +12,6 @@ use std::{fs, path::PathBuf, time::Duration};
 use crate::paths::Paths;
 use repo::RepoConfig;
 
-/// The global file's repository-overridable scalars as written, so an omitted
-/// one stays distinguishable from its built-in default. Unknown fields are
-/// the full parse's concern, so global-only settings never break this view.
-#[derive(Debug, Default, Deserialize)]
-#[serde(default)]
-struct RepositoryPresence {
-    codex: CodexPresence,
-    auto_cleanup: AutoCleanupPresence,
-    pr_cleanup: PrCleanupPresence,
-    ports: PortsPresence,
-    simulators: SimulatorPresence,
-}
-
-#[derive(Debug, Default, Deserialize)]
-#[serde(default)]
-struct SimulatorPresence {
-    requires_approval: Option<bool>,
-    approval_lifetime: Option<crate::daemon::access::Lifetime>,
-}
-
-#[derive(Debug, Default, Deserialize)]
-#[serde(default)]
-struct CodexPresence {
-    default_mode: Option<crate::cli::CodexMode>,
-}
-
-#[derive(Debug, Default, Deserialize)]
-#[serde(default)]
-struct AutoCleanupPresence {
-    enabled: Option<bool>,
-    idle_minutes: Option<u64>,
-}
-
-#[derive(Debug, Default, Deserialize)]
-#[serde(default)]
-struct PrCleanupPresence {
-    enabled: Option<bool>,
-}
-
-#[derive(Debug, Default, Deserialize)]
-#[serde(default)]
-struct PortsPresence {
-    start: Option<u16>,
-    end: Option<u16>,
-}
-
 /// Settings a repository may set, after every layer: a repository value
 /// wins, an omitted one keeps the global value or the built-in default.
 #[derive(Debug)]
@@ -92,23 +46,30 @@ pub struct Config {
     pub repositories_dir: Option<PathBuf>,
     /// Agent `shoal issue` starts when `--agent` is omitted.
     pub default_agent: Option<crate::cli::Agent>,
-    pub codex: Codex,
-    pub auto_cleanup: AutoCleanup,
-    pub pr_cleanup: PrCleanup,
-    pub ports: Ports,
+    pub codex: repo::Codex,
+    pub auto_cleanup: repo::AutoCleanup,
+    pub pr_cleanup: repo::PrCleanup,
+    pub ports: PortRange,
     pub resources: std::collections::BTreeMap<String, crate::daemon::resources::ResourceConfig>,
     pub resource_pools: std::collections::BTreeMap<String, crate::daemon::resources::PoolConfig>,
     pub simulators: crate::sim::SimConfig,
 }
 
-#[derive(Debug, Default, Deserialize)]
-#[serde(default, deny_unknown_fields)]
+#[derive(Debug, Default)]
 pub struct Codex {
     pub default_mode: crate::cli::CodexMode,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize)]
+/// The global `[ports]` range as written, so an omitted bound stays
+/// distinguishable from its built-in default.
+#[derive(Debug, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
+pub struct PortRange {
+    pub start: Option<u16>,
+    pub end: Option<u16>,
+}
+
+#[derive(Debug, Clone, Copy)]
 pub struct Ports {
     pub start: u16,
     pub end: u16,
@@ -125,12 +86,21 @@ impl Default for Ports {
 
 impl Ports {
     pub fn validate(&self) -> Result<()> {
-        ensure!(
-            self.start > 0 && self.start <= self.end,
-            "ports.start/end must specify a nonempty range between 1 and 65535"
-        );
-        Ok(())
+        validate_port_range(Some(self.start), Some(self.end))
     }
+}
+
+/// The bounds one layer states; a range split across layers is checked
+/// again once they combine.
+pub fn validate_port_range(start: Option<u16>, end: Option<u16>) -> Result<()> {
+    ensure!(start != Some(0), "ports.start must be between 1 and 65535");
+    if let (Some(start), Some(end)) = (start, end) {
+        ensure!(
+            start <= end,
+            "ports.start/end must specify a nonempty range"
+        );
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -141,12 +111,14 @@ mod tests {
     fn codex_mode_defaults_to_cli_and_rejects_invalid_settings() {
         use crate::cli::CodexMode;
 
-        for text in ["", "[codex]", "[codex]\ndefault_mode = 'cli'"] {
+        for text in ["", "[codex]"] {
             let config: Config = toml::from_str(text).unwrap();
-            assert_eq!(config.codex.default_mode, CodexMode::Cli);
+            assert_eq!(config.codex.default_mode, None);
+            let effective = config.effective(&RepoConfig::default()).unwrap();
+            assert_eq!(effective.codex.default_mode, CodexMode::Cli);
         }
         let config: Config = toml::from_str("[codex]\ndefault_mode = 'app'").unwrap();
-        assert_eq!(config.codex.default_mode, CodexMode::App);
+        assert_eq!(config.codex.default_mode, Some(CodexMode::App));
         for text in [
             "[codex]\ndefault_mode = 'desktop'",
             "[codex]\ndefaut_mode = 'app'",
@@ -185,16 +157,35 @@ mod tests {
             defaults.root_dir(&paths).unwrap()
         );
         assert_eq!(written.default_agent, None);
-        assert_eq!(written.codex.default_mode, defaults.codex.default_mode);
-        assert_eq!(written.auto_cleanup.enabled, defaults.auto_cleanup.enabled);
+        // The template writes the built-in defaults out explicitly.
+        let written_effective = written.effective(&RepoConfig::default()).unwrap();
+        let default_effective = defaults.effective(&RepoConfig::default()).unwrap();
+        assert_eq!(
+            written.codex.default_mode,
+            Some(default_effective.codex.default_mode)
+        );
+        assert_eq!(
+            written.auto_cleanup.enabled,
+            Some(default_effective.auto_cleanup.enabled)
+        );
         assert_eq!(
             written.auto_cleanup.idle_minutes,
-            defaults.auto_cleanup.idle_minutes
+            Some(default_effective.auto_cleanup.idle_minutes)
         );
-        assert_eq!(written.pr_cleanup.enabled, defaults.pr_cleanup.enabled);
+        assert_eq!(
+            written.pr_cleanup.enabled,
+            Some(default_effective.pr_cleanup.enabled)
+        );
         assert_eq!(
             (written.ports.start, written.ports.end),
-            (defaults.ports.start, defaults.ports.end)
+            (
+                Some(default_effective.ports.start),
+                Some(default_effective.ports.end)
+            )
+        );
+        assert_eq!(
+            written_effective.auto_cleanup.delay(),
+            default_effective.auto_cleanup.delay()
         );
         assert_eq!(
             (
@@ -286,20 +277,23 @@ mod tests {
     #[test]
     fn cleanup_defaults_can_be_disabled_and_typos_are_rejected() {
         let config: Config = toml::from_str("").unwrap();
-        assert!(config.auto_cleanup.enabled);
-        assert!(config.pr_cleanup.enabled);
-        assert!(
-            !toml::from_str::<Config>("[pr_cleanup]\nenabled=false")
+        assert_eq!(config.auto_cleanup.enabled, None);
+        let effective = config.effective(&RepoConfig::default()).unwrap();
+        assert!(effective.auto_cleanup.enabled);
+        assert!(effective.pr_cleanup.enabled);
+        assert_eq!(effective.auto_cleanup.idle_minutes, 10);
+        assert_eq!(
+            toml::from_str::<Config>("[pr_cleanup]\nenabled=false")
                 .unwrap()
                 .pr_cleanup
-                .enabled
+                .enabled,
+            Some(false)
         );
         assert!(toml::from_str::<Config>("[pr_cleanup]\nenabld=false").is_err());
-        assert_eq!(config.auto_cleanup.idle_minutes, 10);
         let config: Config =
             toml::from_str("[auto_cleanup]\nenabled = false\nidle_minutes = 30\n").unwrap();
-        assert!(!config.auto_cleanup.enabled);
-        assert_eq!(config.auto_cleanup.idle_minutes, 30);
+        assert_eq!(config.auto_cleanup.enabled, Some(false));
+        assert_eq!(config.auto_cleanup.idle_minutes, Some(30));
         assert!(toml::from_str::<Config>("[auto_cleanpu]\nenabled = false").is_err());
     }
 
@@ -395,8 +389,7 @@ mod tests {
     }
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(default, deny_unknown_fields)]
+#[derive(Debug)]
 pub struct AutoCleanup {
     pub enabled: bool,
     pub idle_minutes: u64,
@@ -558,83 +551,68 @@ impl Config {
         }
     }
 
+    /// The global file as one snapshot, with the prompt-template files beside
+    /// it standing in for omitted inline templates.
     pub fn load(paths: &Paths) -> Result<Self> {
         let path = Self::path(paths);
-        let text = match fs::read_to_string(&path) {
-            Ok(text) => text,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                return Ok(Self::default());
+        let mut config = match fs::read_to_string(&path) {
+            Ok(text) => {
+                Self::parse(&text, paths).with_context(|| format!("parse {}", path.display()))?
             }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Self::default(),
             Err(error) => return Err(error).with_context(|| format!("read {}", path.display())),
         };
-        Self::parse(&text, paths).with_context(|| format!("parse {}", path.display()))
+        let directory = path.parent().context("config has no directory")?;
+        if config.issue_template.is_none() {
+            config.issue_template = templates::read(directory, templates::ISSUE_FILE)?;
+        }
+        if config.agent_template.is_none() {
+            config.agent_template = templates::read(directory, templates::AGENT_FILE)?;
+        }
+        Ok(config)
     }
 
-    /// Read the global config and project its repository-overridable values
-    /// into a layer whose omitted scalar fields remain distinguishable from
-    /// built-in defaults. The file is parsed twice: once fully, once for
-    /// presence.
-    pub fn load_with_repository_layer(paths: &Paths) -> Result<(Self, RepoConfig)> {
-        let path = Self::path(paths);
-        let config = Self::load(paths)?;
-        let text = match fs::read_to_string(&path) {
-            Ok(text) => text,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
-            Err(error) => return Err(error).with_context(|| format!("read {}", path.display())),
-        };
-        let presence: RepositoryPresence =
-            toml::from_str(&text).with_context(|| format!("parse {}", path.display()))?;
-        let directory = path.parent().context("config has no directory")?;
-        let repository_layer = RepoConfig {
-            commands: config.commands.clone(),
-            issue_template: config
-                .issue_template
-                .clone()
-                .or(templates::read(directory, templates::ISSUE_FILE)?),
-            agent_template: config
-                .agent_template
-                .clone()
-                .or(templates::read(directory, templates::AGENT_FILE)?),
-            agent_auth: config.agent_auth.clone(),
-            git_profile: config.git_profile.clone(),
-            pre_setup_cmd: config.pre_setup_cmd.clone(),
-            post_remove_cmd: config.post_remove_cmd.clone(),
-            post_resource_acquire_cmd: config.post_resource_acquire_cmd.clone(),
-            pre_resource_release_cmd: config.pre_resource_release_cmd.clone(),
-            default_agent: config.default_agent.clone(),
-            codex: repo::Codex {
-                default_mode: presence.codex.default_mode,
-            },
+    /// This machine's repository-overridable settings as the layer below the
+    /// repository's own; machine-only settings stay out of it.
+    pub fn repository_layer(&self) -> RepoConfig {
+        RepoConfig {
+            commands: self.commands.clone(),
+            issue_template: self.issue_template.clone(),
+            agent_template: self.agent_template.clone(),
+            agent_auth: self.agent_auth.clone(),
+            git_profile: self.git_profile.clone(),
+            default_agent: self.default_agent.clone(),
+            codex: self.codex,
+            pre_setup_cmd: self.pre_setup_cmd.clone(),
+            post_remove_cmd: self.post_remove_cmd.clone(),
+            post_resource_acquire_cmd: self.post_resource_acquire_cmd.clone(),
+            pre_resource_release_cmd: self.pre_resource_release_cmd.clone(),
             ports: repo::PortDefaults {
-                start: presence.ports.start,
-                end: presence.ports.end,
+                start: self.ports.start,
+                end: self.ports.end,
                 ..Default::default()
             },
+            resources: self.resources.clone(),
+            resource_pools: self.resource_pools.clone(),
             simulators: repo::SimulatorPreferences {
-                requires_approval: presence.simulators.requires_approval,
-                approval_lifetime: presence.simulators.approval_lifetime,
+                requires_approval: self.simulators.requires_approval,
+                approval_lifetime: self.simulators.approval_lifetime,
                 ..Default::default()
             },
-            resources: config.resources.clone(),
-            resource_pools: config.resource_pools.clone(),
-            auto_cleanup: repo::AutoCleanup {
-                enabled: presence.auto_cleanup.enabled,
-                idle_minutes: presence.auto_cleanup.idle_minutes,
-            },
-            pr_cleanup: repo::PrCleanup {
-                enabled: presence.pr_cleanup.enabled,
-            },
+            auto_cleanup: self.auto_cleanup,
+            pr_cleanup: self.pr_cleanup,
             ..Default::default()
-        };
-        Ok((config, repository_layer))
+        }
     }
 
     fn parse(text: &str, paths: &Paths) -> Result<Self> {
         let config: Self = toml::from_str(text)?;
         crate::ai::validate(&config.ai, &paths.home)?;
         config.root_dir(paths)?;
-        validate_idle_minutes(config.auto_cleanup.idle_minutes)?;
-        config.ports.validate()?;
+        if let Some(minutes) = config.auto_cleanup.idle_minutes {
+            validate_idle_minutes(minutes)?;
+        }
+        validate_port_range(config.ports.start, config.ports.end)?;
         config.simulators.validate()?;
         config.git.validate()?;
         config.agent_auth.validate()?;
@@ -651,47 +629,42 @@ impl Config {
         Ok(config)
     }
 
-    /// Fails when the layers combine into an invalid setting, such as a
-    /// repository `ports.start` above the global `ports.end`.
+    /// The repository's layers over this machine's, then the built-in
+    /// defaults. Fails when the layers combine into an invalid setting, such
+    /// as a repository `ports.start` above the global `ports.end`.
     pub fn effective(&self, repo: &RepoConfig) -> Result<Effective> {
+        let merged = repo.clone().over(self.repository_layer());
         let ports = Ports {
-            start: repo.ports.start.unwrap_or(self.ports.start),
-            end: repo.ports.end.unwrap_or(self.ports.end),
+            start: merged.ports.start.unwrap_or(Ports::default().start),
+            end: merged.ports.end.unwrap_or(Ports::default().end),
         };
         ports.validate()?;
         let mut commands = named_commands::defaults();
-        commands.extend(self.commands.clone());
-        commands.extend(repo.commands.clone());
+        commands.extend(merged.commands);
         Ok(Effective {
             commands,
-            issue_template: repo
-                .issue_template
-                .clone()
-                .or_else(|| self.issue_template.clone()),
-            agent_template: repo
-                .agent_template
-                .clone()
-                .or_else(|| self.agent_template.clone()),
-            agent_auth: repo.agent_auth.clone().over(self.agent_auth.clone()),
-            default_agent: repo
-                .default_agent
-                .clone()
-                .or_else(|| self.default_agent.clone()),
+            issue_template: merged.issue_template,
+            agent_template: merged.agent_template,
+            agent_auth: merged.agent_auth,
+            default_agent: merged.default_agent,
             codex: Codex {
-                default_mode: repo.codex.default_mode.unwrap_or(self.codex.default_mode),
+                default_mode: merged.codex.default_mode.unwrap_or_default(),
             },
             auto_cleanup: AutoCleanup {
-                enabled: repo
+                enabled: merged
                     .auto_cleanup
                     .enabled
-                    .unwrap_or(self.auto_cleanup.enabled),
-                idle_minutes: repo
+                    .unwrap_or(AutoCleanup::default().enabled),
+                idle_minutes: merged
                     .auto_cleanup
                     .idle_minutes
-                    .unwrap_or(self.auto_cleanup.idle_minutes),
+                    .unwrap_or(AutoCleanup::default().idle_minutes),
             },
             pr_cleanup: PrCleanup {
-                enabled: repo.pr_cleanup.enabled.unwrap_or(self.pr_cleanup.enabled),
+                enabled: merged
+                    .pr_cleanup
+                    .enabled
+                    .unwrap_or(PrCleanup::default().enabled),
             },
             ports,
         })
@@ -713,8 +686,7 @@ fn default_template() -> &'static str {
 /// Named templates shipped in this binary, independent of the source checkout.
 pub const PACKAGED: &[(&str, &str)] = include!(concat!(env!("OUT_DIR"), "/packaged_configs.rs"));
 
-#[derive(Debug, Deserialize)]
-#[serde(default, deny_unknown_fields)]
+#[derive(Debug)]
 pub struct PrCleanup {
     pub enabled: bool,
 }

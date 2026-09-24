@@ -216,12 +216,14 @@ pub(super) fn resolve_request(
     if repo
         .simulators
         .requires_approval
-        .unwrap_or(config.requires_approval)
+        .or(config.requires_approval)
+        .unwrap_or_default()
     {
         lifetimes.push(
             repo.simulators
                 .approval_lifetime
-                .unwrap_or(config.approval_lifetime),
+                .or(config.approval_lifetime)
+                .unwrap_or_default(),
         );
     }
     profile.requires_approval = !lifetimes.is_empty();

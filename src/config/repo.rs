@@ -146,16 +146,7 @@ pub fn parse(text: &str) -> Result<RepoConfig> {
     if let Some(minutes) = config.auto_cleanup.idle_minutes {
         crate::config::validate_idle_minutes(minutes)?;
     }
-    ensure!(
-        config.ports.start != Some(0),
-        "ports.start must be between 1 and 65535"
-    );
-    if let (Some(start), Some(end)) = (config.ports.start, config.ports.end) {
-        ensure!(
-            start <= end,
-            "ports.start/end must specify a nonempty range"
-        );
-    }
+    crate::config::validate_port_range(config.ports.start, config.ports.end)?;
     for (name, definition) in &config.ports.definitions {
         crate::validate::lowercase_name("port", name)
             .with_context(|| format!("invalid configured port name: {name}"))?;

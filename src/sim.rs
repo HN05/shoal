@@ -35,8 +35,9 @@ pub struct Profile {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct SimConfig {
-    pub requires_approval: bool,
-    pub approval_lifetime: crate::daemon::access::Lifetime,
+    /// Repository-overridable approval policy, as written.
+    pub requires_approval: Option<bool>,
+    pub approval_lifetime: Option<crate::daemon::access::Lifetime>,
     pub max_booted: usize,
     pub max_devices: usize,
     pub idle_seconds: u64,
@@ -49,8 +50,8 @@ pub struct SimConfig {
 impl Default for SimConfig {
     fn default() -> Self {
         Self {
-            requires_approval: false,
-            approval_lifetime: crate::daemon::access::Lifetime::Lease,
+            requires_approval: None,
+            approval_lifetime: None,
             max_booted: 2,
             max_devices: 4,
             idle_seconds: 120,
