@@ -705,61 +705,136 @@ mod tests {
     }
 
     #[test]
-    fn pr_numbers_resolve_against_the_forge_remote() {
-        for (remote, url) in [
+    fn item_locators_share_validation_and_preserve_links() {
+        for (remote, base, pull_route) in [
             (
-                "git@github.com:team/repo.git",
-                "https://github.com/team/repo/pull/56",
+                "git@github.com:team/Repo.git",
+                "https://github.com/team/Repo",
+                "pull",
             ),
             (
-                "ssh://git@forge.example:2222/team/repo.git",
-                "https://forge.example/team/repo/pulls/56",
+                "ssh://git@forge.example:2222/team/Repo.git",
+                "https://forge.example/team/Repo",
+                "pulls",
             ),
             (
-                "http://forge.example:3000/team/repo.git",
-                "http://forge.example:3000/team/repo/pulls/56",
+                "http://forge.example:3000/team/Repo.git",
+                "http://forge.example:3000/team/Repo",
+                "pulls",
             ),
         ] {
             let repo = ForgeRepo::parse(remote).unwrap();
-            assert_eq!(repo.pull("56").unwrap(), (56, url.into()));
-            assert_eq!(repo.pull(url).unwrap(), (56, url.into()));
-            assert_eq!(
-                repo.pull(&format!("{url}/?tab=files#diff")).unwrap(),
-                (56, url.into())
-            );
-            for input in [
-                "",
-                "0",
-                "-1",
-                "+56",
-                "#56",
-                "56/",
-                "56?x",
-                "56#x",
-                "abc",
-                "18446744073709551616",
+            for (route, lookup) in [
+                (
+                    "issues",
+                    ForgeRepo::issue as fn(&ForgeRepo, &str) -> Result<(u64, String)>,
+                ),
+                (pull_route, ForgeRepo::pull),
             ] {
-                assert!(repo.pull(input).is_err(), "{input}");
+                for (digits, number) in
+                    [("56", 56), ("0056", 56), ("18446744073709551615", u64::MAX)]
+                {
+                    let url = format!("{base}/{route}/{digits}");
+                    assert_eq!(lookup(&repo, digits).unwrap(), (number, url.clone()));
+                    for suffix in [
+                        "",
+                        "/",
+                        "///",
+                        "?tab=files",
+                        "#comment",
+                        "/?tab=files#comment",
+                        "#comment?query",
+                    ] {
+                        let input = format!("{url}{suffix}");
+                        assert_eq!(
+                            lookup(&repo, &input).unwrap(),
+                            (number, url.clone()),
+                            "{input}"
+                        );
+                    }
+                    // Supplied links retain their scheme, host case, .git and leading zeroes.
+                    let spelled = format!(
+                        "https://{}/team/Repo.git/{route}/{digits}",
+                        repo.host.to_uppercase()
+                    );
+                    assert_eq!(lookup(&repo, &spelled).unwrap(), (number, spelled));
+                }
+                for invalid in [
+                    "",
+                    "0",
+                    "-1",
+                    "+56",
+                    "#56",
+                    "56/",
+                    "56?x",
+                    "56#x",
+                    " 56",
+                    "56 ",
+                    "１２",
+                    "HEAD",
+                    "main~1",
+                    "team/Repo#56",
+                    "18446744073709551616",
+                ] {
+                    assert!(lookup(&repo, invalid).is_err(), "{route}: {invalid}");
+                    let url = format!("{base}/{route}/{invalid}");
+                    // URL suffixes are stripped, but bare-number suffixes are invalid.
+                    if !["56/", "56?x", "56#x"].contains(&invalid) {
+                        assert!(lookup(&repo, &url).is_err(), "{url}");
+                    }
+                }
+                for url in [
+                    format!("https://other.example/team/Repo/{route}/56"),
+                    format!("{base}-other/{route}/56"),
+                    format!("{base}/{route}/56/files"),
+                    format!("{base}/{route}/%35%36"),
+                    format!("ssh://git@{}/{}/{route}/56", repo.host, repo.path),
+                    format!("git@{}:{}/{route}/56", repo.host, repo.path),
+                    format!("//{}/{}/{route}/56", repo.host, repo.path),
+                    format!("HTTPS://{}/{}/{route}/56", repo.host, repo.path),
+                ] {
+                    assert!(lookup(&repo, &url).is_err(), "{url}");
+                }
+                for wrong_route in ["issues", "pull", "pulls", "commits"] {
+                    if wrong_route != route {
+                        let url = format!("{base}/{wrong_route}/56");
+                        assert!(lookup(&repo, &url).is_err(), "{url}");
+                    }
+                }
             }
         }
     }
 
     #[test]
-    fn forge_link_scheme_does_not_change_repository_identity() {
-        let repo = ForgeRepo::parse("http://forge.example/team/repo.git").unwrap();
+    fn item_repository_discovery_defers_number_validation() {
+        for (route, discover, lookup) in [
+            (
+                "issues",
+                ForgeRepo::from_issue_url as fn(&str) -> Result<ForgeRepo>,
+                ForgeRepo::issue as fn(&ForgeRepo, &str) -> Result<(u64, String)>,
+            ),
+            ("pull", ForgeRepo::from_pull_url, ForgeRepo::pull),
+        ] {
+            for tail in [
+                "56/?query#fragment",
+                "0",
+                "18446744073709551616",
+                "56/files",
+            ] {
+                let url = format!("http://GitHub.com/team/Repo/{route}/{tail}");
+                let repo = discover(&url).unwrap();
+                assert_eq!(
+                    repo,
+                    ForgeRepo::parse("git@github.com:team/Repo.git").unwrap()
+                );
+                assert_eq!(repo.web_scheme, "http");
+                assert_eq!(lookup(&repo, &url).is_ok(), tail == "56/?query#fragment");
+            }
+        }
+        let url = "https://forge.example/team/Repo/pulls/56/?query#fragment";
         assert_eq!(
-            repo,
-            ForgeRepo::parse("git@forge.example:team/repo.git").unwrap()
-        );
-        assert_eq!(
-            repo.issue("56").unwrap().1,
-            "http://forge.example/team/repo/issues/56"
-        );
-        assert_eq!(
-            repo.pull("https://forge.example/team/repo/pulls/56")
-                .unwrap()
-                .1,
-            "https://forge.example/team/repo/pulls/56"
+            ForgeRepo::from_pull_url(url).unwrap(),
+            ForgeRepo::parse("git@forge.example:team/Repo.git").unwrap()
         );
     }
 }
