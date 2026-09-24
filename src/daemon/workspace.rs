@@ -341,8 +341,7 @@ impl Manager {
             .await
     }
 
-    /// Resolve the base ref, record it, and create the worktree. Returns
-    /// whether a setup command still has to run.
+    /// Create and configure the worktree, returning whether setup is still needed.
     async fn materialize_worktree(
         &self,
         repo: &crate::model::Repository,
@@ -354,7 +353,34 @@ impl Manager {
         if let Some(branch) = &existing {
             self.materialize_branch(repo, branch).await?;
         }
-        let base = if existing.is_some() && base.is_none() {
+        let base = self
+            .resolve_worktree_base(repo, workspace, base, existing.is_some())
+            .await?;
+        let commit = self.record_worktree_base(repo, workspace, &base).await?;
+        worktrunk::create(
+            &repo.path,
+            &self.paths.worktrunk_config(),
+            &workspace.path,
+            &workspace.branch,
+            existing.is_none().then_some(commit.as_str()),
+        )
+        .await?;
+        self.record_worktree_identity(workspace).await?;
+        let settings = self.workspace_settings(workspace).await?;
+        self.apply_workspace_git_profile(workspace, &settings, git_profile)
+            .await?;
+        Ok(settings.setup_cmd.is_some() || settings.pre_setup_cmd.is_some())
+    }
+
+    /// Select the effective base and refresh the local default only for new branches.
+    async fn resolve_worktree_base(
+        &self,
+        repo: &Repository,
+        workspace: &Workspace,
+        base: Option<String>,
+        existing: bool,
+    ) -> Result<String> {
+        let base = if existing && base.is_none() {
             Some(existing_base(repo, &workspace.branch).await?)
         } else {
             base
@@ -377,8 +403,8 @@ impl Manager {
             .as_deref()
             .or(default_ref.as_deref())
             .context("workspace base is unknown")?;
-        let refresh = existing.is_none()
-            && (default.as_deref() == Some(base) || default_ref.as_deref() == Some(base));
+        let refresh =
+            !existing && (default.as_deref() == Some(base) || default_ref.as_deref() == Some(base));
         if refresh {
             self.refresh_branch(
                 repo,
@@ -393,6 +419,16 @@ impl Manager {
         } else {
             base
         };
+        Ok(base.to_owned())
+    }
+
+    /// Record the base after refresh and before Worktrunk creates the worktree.
+    async fn record_worktree_base(
+        &self,
+        repo: &Repository,
+        workspace: &Workspace,
+        base: &str,
+    ) -> Result<String> {
         let commit = git::resolve_commit(&repo.path, base, git::run).await?;
         let reference = git::run(&repo.path, &["rev-parse", "--symbolic-full-name", base]).await?;
         let reference = reference.trim_end_matches('\n');
@@ -407,22 +443,21 @@ impl Manager {
                 Ok(())
             })
             .await?;
-        worktrunk::create(
-            &repo.path,
-            &self.paths.worktrunk_config(),
-            &workspace.path,
-            &workspace.branch,
-            existing.is_none().then_some(commit.as_str()),
-        )
-        .await?;
-        self.record_worktree_identity(workspace).await?;
-        let settings = self.workspace_settings(workspace).await?;
+        Ok(commit)
+    }
+
+    async fn apply_workspace_git_profile(
+        &self,
+        workspace: &Workspace,
+        settings: &crate::config::Effective,
+        git_profile: Option<&str>,
+    ) -> Result<()> {
         if let Some(name) = git_profile.or(settings.git_profile.as_deref()) {
             crate::git_profile::apply(&workspace.path, self.config.git.profile(name)?)
                 .await
                 .with_context(|| format!("apply git profile {name}"))?;
         }
-        Ok(settings.setup_cmd.is_some() || settings.pre_setup_cmd.is_some())
+        Ok(())
     }
 
     pub(crate) async fn set_state(
