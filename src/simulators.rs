@@ -10,6 +10,7 @@ use std::{
 use uuid::Uuid;
 
 use crate::{
+    allocation::Allocation,
     model::Workspace,
     sim_audit::{CleanAction, CleanRequest, CleanRequestStatus, EvictedDevice},
     simctl::{self, Inventory},
@@ -166,12 +167,6 @@ pub struct SimulatorOverview {
     pub simulators: Vec<Simulator>,
 }
 
-pub enum Acquisition {
-    Acquired(Box<Simulator>),
-    Busy(String),
-    Approval(Box<crate::access::AccessRequest>),
-}
-
 pub(crate) fn now() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -307,7 +302,7 @@ impl Manager {
         selector: &str,
         request: SimRequest,
         execution_id: Option<String>,
-    ) -> Result<Acquisition> {
+    ) -> Result<Allocation<Box<Simulator>>> {
         let _guard = self.simulator_gate.lock().await;
         let workspace = self.workspace(selector).await?;
         let scoped = execution_id.is_some();
@@ -323,30 +318,23 @@ impl Manager {
         let result = self
             .allocate_simulator(workspace, request, &mut audit, scoped)
             .await;
-        if let Ok(Acquisition::Busy(message)) = &result {
-            self.notify(
-                Some(&workspace_name),
-                crate::notifications::NotificationKind::ResourceBusy,
-                format!("simulator: {message}"),
-            )
-            .await;
-        }
-        if let Ok(Acquisition::Approval(request)) = &result {
-            self.notify_access(&workspace_name, request).await;
+        if let Ok(outcome) = &result {
+            self.notify_allocation(&workspace_name, outcome, "simulator: ")
+                .await;
         }
         if let Some(mut audit) = audit {
             audit.updated_at = now();
             match &result {
-                Ok(Acquisition::Acquired(sim)) => {
+                Ok(Allocation::Granted(sim)) => {
                     audit.status = CleanRequestStatus::Acquired;
                     audit.simulator_id = Some(sim.id.clone());
                     audit.udid = sim.udid.clone();
                 }
-                Ok(Acquisition::Busy(message)) => {
+                Ok(Allocation::Busy(message)) => {
                     audit.status = CleanRequestStatus::Busy;
                     audit.error = Some(message.clone());
                 }
-                Ok(Acquisition::Approval(request)) => {
+                Ok(Allocation::Approval(request)) => {
                     audit.status = if request.status == crate::access::DecisionStatus::Denied {
                         CleanRequestStatus::Failed
                     } else {
@@ -375,7 +363,7 @@ impl Manager {
         request: SimRequest,
         audit: &mut Option<CleanRequest>,
         scoped: bool,
-    ) -> Result<Acquisition> {
+    ) -> Result<Allocation<Box<Simulator>>> {
         validate::name("simulator lease", &request.name)?;
         validate::reason("simulator", request.reason.as_deref())?;
         ensure!(
@@ -426,7 +414,7 @@ impl Manager {
                     .is_some_and(|d| d.is_available && d.state.is_booted()),
                 "leased simulator is no longer booted/available; release it and acquire again"
             );
-            return Ok(Acquisition::Acquired(Box::new(sim.clone())));
+            return Ok(Allocation::Granted(Box::new(sim.clone())));
         }
         let profile = profile.unwrap();
         if scoped && profile.requires_approval {
@@ -449,7 +437,7 @@ impl Manager {
                 })
                 .await?;
             if let Some(pending) = pending {
-                return Ok(Acquisition::Approval(Box::new(pending)));
+                return Ok(Allocation::Approval(Box::new(pending)));
             }
         }
         // Cache live counts without booting stopped devices just to inspect them.
@@ -519,7 +507,7 @@ impl Manager {
         if inventory.running_count() >= limits.max_booted
             && !(reuse_running && inventory.running_count() == limits.max_booted)
         {
-            return Ok(Acquisition::Busy(
+            return Ok(Allocation::Busy(
                 "simulator running limit reached; active leases or external simulators occupy all slots".into(),
             ));
         }
@@ -528,7 +516,7 @@ impl Manager {
             let mut candidates = idle.iter().cloned();
             while count >= limits.max_devices {
                 let Some(mut oldest) = candidates.next() else {
-                    return Ok(Acquisition::Busy(
+                    return Ok(Allocation::Busy(
                         "all managed simulator devices are allocated".into(),
                     ));
                 };
@@ -590,7 +578,7 @@ impl Manager {
         }
         sim.state = SimulatorState::Leased;
         self.save_sim(&sim).await?;
-        Ok(Acquisition::Acquired(Box::new(sim)))
+        Ok(Allocation::Granted(Box::new(sim)))
     }
 
     /// Create the device if needed, optionally erase it, and boot it.

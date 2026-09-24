@@ -8,6 +8,7 @@ use std::{
 };
 
 use crate::{
+    allocation::Allocation,
     env,
     model::{PortOverview, PortReservation, PortSuggestion},
     notifications::NotificationKind,
@@ -27,8 +28,7 @@ pub struct PortRequest {
 }
 
 pub enum Acquisition {
-    Acquired(PortReservation),
-    Approval(Box<crate::access::AccessRequest>),
+    Allocation(Allocation<PortReservation>),
     /// The preferred port is taken and policy asks the caller to confirm.
     Suggested(PortSuggestion),
 }
@@ -162,7 +162,7 @@ impl Manager {
                         reservation.reason = Some(reason);
                     }
                     tx.commit()?;
-                    return Ok((Acquisition::Acquired(reservation), None));
+                    return Ok((Acquisition::Allocation(Allocation::Granted(reservation)), None));
                 }
                 let env_var = env_var.unwrap_or(default_env);
                 ensure!(
@@ -175,7 +175,7 @@ impl Manager {
                             "range": [range.start, range.end]}), definition.approval_lifetime, request.reason.as_deref());
                     if let Some(approval) = crate::access::check(&tx, approval)? {
                         tx.commit()?;
-                        return Ok((Acquisition::Approval(Box::new(approval)), None));
+                        return Ok((Acquisition::Allocation(Allocation::Approval(Box::new(approval))), None));
                     }
                 }
                 let reserved = store::ports(&tx, None)?;
@@ -228,13 +228,13 @@ impl Manager {
                 )?;
                 tx.commit()?;
                 Ok((
-                    Acquisition::Acquired(PortReservation {
+                    Acquisition::Allocation(Allocation::Granted(PortReservation {
                         workspace_id: workspace.id,
                         name,
                         port,
                         env_var,
                         reason,
-                    }),
+                    })),
                     conflict,
                 ))
             })
@@ -247,8 +247,9 @@ impl Manager {
             )
             .await;
         }
-        if let Acquisition::Approval(request) = &outcome {
-            self.notify_access(&workspace_name, request).await;
+        if let Acquisition::Allocation(allocation) = &outcome {
+            self.notify_allocation(&workspace_name, allocation, "")
+                .await;
         }
         Ok(outcome)
     }

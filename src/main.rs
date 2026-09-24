@@ -1,6 +1,7 @@
 mod access;
 mod agent_auth;
 mod ai;
+mod allocation;
 mod cleanup;
 mod cli;
 mod client;

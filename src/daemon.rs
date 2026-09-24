@@ -18,6 +18,7 @@ use tokio::{
 };
 
 use crate::{
+    allocation::Allocation,
     notifications::NotificationKind,
     paths::Paths,
     ports::Acquisition,
@@ -356,9 +357,12 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             .acquire_port(&workspace, name, request, caller.is_some())
             .await?
         {
-            Acquisition::Acquired(port) => Body::Port(port),
+            Acquisition::Allocation(allocation) => match allocation {
+                Allocation::Granted(port) => Body::Port(port),
+                Allocation::Busy(message) => Body::ResourceBusy { message },
+                Allocation::Approval(request) => Body::AccessRequest(request),
+            },
             Acquisition::Suggested(proposal) => Body::PortSuggestion(proposal),
-            Acquisition::Approval(request) => Body::AccessRequest(request),
         },
         Method::PortRelease { workspace, name } => {
             manager.release_port(&workspace, name).await?;
@@ -378,9 +382,9 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
                 .acquire_resource(&workspace, request, caller.is_some())
                 .await?
             {
-                crate::resources::Acquisition::Acquired(lease) => Body::ResourceLease(lease),
-                crate::resources::Acquisition::Busy(message) => Body::ResourceBusy { message },
-                crate::resources::Acquisition::Approval(request) => Body::AccessRequest(request),
+                Allocation::Granted(lease) => Body::ResourceLease(lease),
+                Allocation::Busy(message) => Body::ResourceBusy { message },
+                Allocation::Approval(request) => Body::AccessRequest(request),
             }
         }
         Method::ResourceRelease {
@@ -408,9 +412,9 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
                 .acquire_simulator(&workspace, request, execution_id)
                 .await?
             {
-                crate::simulators::Acquisition::Acquired(sim) => Body::Simulator(*sim),
-                crate::simulators::Acquisition::Busy(message) => Body::SimBusy { message },
-                crate::simulators::Acquisition::Approval(request) => Body::AccessRequest(request),
+                Allocation::Granted(sim) => Body::Simulator(*sim),
+                Allocation::Busy(message) => Body::SimBusy { message },
+                Allocation::Approval(request) => Body::AccessRequest(request),
             }
         }
         Method::SimRelease { workspace, name } => {

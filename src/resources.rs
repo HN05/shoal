@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use uuid::Uuid;
 
-use crate::{notifications::NotificationKind, state::states, store, validate, workspace::Manager};
+use crate::{allocation::Allocation, state::states, store, validate, workspace::Manager};
 
 states!(
     #[derive(Default)]
@@ -148,12 +148,6 @@ pub struct ResourceRequest {
     pub name: String,
     pub resource: Option<String>,
     pub reason: Option<String>,
-}
-
-pub enum Acquisition {
-    Acquired(ResourceLease),
-    Busy(String),
-    Approval(Box<crate::access::AccessRequest>),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -393,7 +387,7 @@ impl Manager {
         selector: &str,
         mut request: ResourceRequest,
         scoped: bool,
-    ) -> Result<Acquisition> {
+    ) -> Result<Allocation<ResourceLease>> {
         validate::lowercase_name("resource", &request.pool)?;
         validate::lowercase_name("resource", &request.name)?;
         if let Some(resource) = &request.resource {
@@ -459,13 +453,16 @@ impl Manager {
                     // A busy pool still selects the member an approval request binds.
                     None => select_member(&definition, &request, &[], definition.capacity)?,
                 };
-                let Some((resource, settings, mode)) = selected else {
-                    return Ok(Acquisition::Busy(format!(
+                let busy = || -> Result<Allocation<ResourceLease>> {
+                    Ok(Allocation::Busy(format!(
                         "no compatible capacity for {} in pool {}{}",
                         request.resource.as_deref().unwrap_or("any resource"),
                         request.pool,
                         holders(&tx, &active)?
-                    )));
+                    )))
+                };
+                let Some((resource, settings, mode)) = selected else {
+                    return busy();
                 };
                 if scoped && settings.requires_approval {
                     let approval = crate::access::AccessRequest::new(&workspace.id, target, &request.name,
@@ -473,11 +470,11 @@ impl Manager {
                         settings.approval_lifetime, request.reason.as_deref());
                     if let Some(approval) = crate::access::check(&tx, approval)? {
                         tx.commit()?;
-                        return Ok(Acquisition::Approval(Box::new(approval)));
+                        return Ok(Allocation::Approval(Box::new(approval)));
                     }
                 }
                 if !settings.can_acquire(mode, usage(&active, resource), pool_available) {
-                    return Ok(Acquisition::Busy(format!("no compatible capacity for {} in pool {}{}", request.resource.as_deref().unwrap_or("any resource"), request.pool, holders(&tx, &active)?)));
+                    return busy();
                 }
                 let lease = ResourceLease {
                     mode,
@@ -508,10 +505,10 @@ impl Manager {
                     ],
                 )?;
                 tx.commit()?;
-                Ok(Acquisition::Acquired(lease))
+                Ok(Allocation::Granted(lease))
             })
             .await?;
-        if let Acquisition::Acquired(lease) = &acquisition
+        if let Allocation::Granted(lease) = &acquisition
             && let Some(command) = hook
         {
             crate::hooks::run_detached(
@@ -523,17 +520,8 @@ impl Manager {
             .await
             .context("resource lease retained; repeat acquire to retry the hook, or release it")?;
         }
-        if let Acquisition::Busy(message) = &acquisition {
-            self.notify(
-                Some(&workspace_name),
-                NotificationKind::ResourceBusy,
-                message.clone(),
-            )
+        self.notify_allocation(&workspace_name, &acquisition, "")
             .await;
-        }
-        if let Acquisition::Approval(request) = &acquisition {
-            self.notify_access(&workspace_name, request).await;
-        }
         Ok(acquisition)
     }
 
@@ -670,7 +658,7 @@ fn renew_lease(
     existing: &ResourceLease,
     scope: &str,
     request: ResourceRequest,
-) -> Result<Acquisition> {
+) -> Result<Allocation<ResourceLease>> {
     ensure!(
         existing.scope == scope
             && request.mode.is_none_or(|m| m == existing.mode)
@@ -689,7 +677,7 @@ fn renew_lease(
         lease.reason = Some(reason);
     }
     tx.commit()?;
-    Ok(Acquisition::Acquired(lease))
+    Ok(Allocation::Granted(lease))
 }
 
 fn pool_status(
