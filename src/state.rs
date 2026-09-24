@@ -1,9 +1,30 @@
-//! Typed lifecycle states; persisted and wire spellings remain stable.
+//! Closed Shoal enums; persisted and wire spellings remain stable.
 
 /// A closed set of lowercase state names with matching serde, `Display`, and
 /// SQLite conversions. Unknown values are rejected everywhere.
+/// Add `#[derive(Default)]` with a `#[default]` variant for a default, or
+/// `: ValueEnum` after the type name to expose the wire names to clap.
 macro_rules! states {
-    ($name:ident { $($(#[$meta:meta])* $variant:ident => $wire:literal),+ $(,)? }) => {
+    ($(#[$enum_meta:meta])* $name:ident: ValueEnum {
+        $($(#[$meta:meta])* $variant:ident => $wire:literal),+ $(,)?
+    }) => {
+        $crate::state::states!($(#[$enum_meta])* $name {
+            $($(#[$meta])* $variant => $wire),+
+        });
+        impl ::clap::ValueEnum for $name {
+            fn value_variants<'a>() -> &'a [Self] {
+                &[$(Self::$variant),+]
+            }
+
+            fn to_possible_value(&self) -> Option<::clap::builder::PossibleValue> {
+                Some(::clap::builder::PossibleValue::new(self.as_str()))
+            }
+        }
+    };
+    ($(#[$enum_meta:meta])* $name:ident {
+        $($(#[$meta:meta])* $variant:ident => $wire:literal),+ $(,)?
+    }) => {
+        $(#[$enum_meta])*
         #[derive(Debug, Clone, Copy, PartialEq, Eq, ::serde::Serialize, ::serde::Deserialize)]
         pub enum $name { $($(#[$meta])* #[serde(rename = $wire)] $variant),+ }
 
@@ -49,6 +70,55 @@ states!(ExecutionState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use clap::ValueEnum;
+
+    states!(
+        /// Test spellings that clap cannot infer from the Rust names.
+        #[derive(Default)]
+        Example: ValueEnum {
+            First => "first_value",
+            #[default]
+            Second => "other",
+        }
+    );
+
+    #[test]
+    fn optional_default_and_clap_values_share_wire_spellings() {
+        assert_eq!(Example::default(), Example::Second);
+        assert_eq!(
+            Example::value_variants(),
+            &[Example::First, Example::Second]
+        );
+        let db = rusqlite::Connection::open_in_memory().unwrap();
+        for (value, wire) in [(Example::First, "first_value"), (Example::Second, "other")] {
+            assert_eq!(value.to_string(), wire);
+            assert_eq!(serde_json::to_value(value).unwrap(), wire);
+            assert_eq!(
+                serde_json::from_value::<Example>(wire.into()).unwrap(),
+                value
+            );
+            assert_eq!(value.to_possible_value().unwrap().get_name(), wire);
+            assert_eq!(Example::from_str(wire, false).unwrap(), value);
+            assert_eq!(
+                db.query_row("SELECT ?1", [value], |row| row.get::<_, String>(0))
+                    .unwrap(),
+                wire
+            );
+            assert_eq!(
+                db.query_row("SELECT ?1", [wire], |row| row.get::<_, Example>(0))
+                    .unwrap(),
+                value
+            );
+        }
+        for invalid in ["First", "first-value", "second", "unknown"] {
+            assert!(Example::from_str(invalid, false).is_err());
+            assert!(serde_json::from_value::<Example>(invalid.into()).is_err());
+            assert!(
+                db.query_row("SELECT ?1", [invalid], |row| row.get::<_, Example>(0))
+                    .is_err()
+            );
+        }
+    }
 
     #[test]
     fn persisted_and_wire_states_are_compatible_and_reject_unknown_values() {
