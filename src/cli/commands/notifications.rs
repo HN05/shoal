@@ -6,10 +6,12 @@ use std::io::{IsTerminal, Write};
 use anyhow::{Context as _, Result};
 
 use crate::{
-    client::{self, request},
-    context::Context,
+    cli::{
+        client::{self, request},
+        context::Context,
+        output::{Palette, Style},
+    },
     daemon::notifications::Notification,
-    output::{Palette, Style},
     protocol::{self, Method, Response},
 };
 

@@ -11,7 +11,7 @@ use clap::{Command, CommandFactory};
 use clap_complete::engine::{ArgValueCompleter, CompletionCandidate};
 
 use crate::{
-    client,
+    cli::client,
     config::{Config, repo::ConfigLayers},
     daemon::{access::AccessRequest, resources::Overview},
     env,

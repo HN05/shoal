@@ -9,14 +9,16 @@ use clap::{CommandFactory, Parser};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    client::{self, request},
+    cli::{
+        client::{self, request},
+        context::Context,
+        ui::{self, Fallback},
+    },
     config::{Config, repo::ConfigLayer},
-    context::Context,
     execution,
     model::{DiffBase, Workspace},
     paths::Paths,
     protocol::{ConfigTarget, Method},
-    ui::{self, Fallback},
 };
 
 pub type Commands = BTreeMap<String, Vec<String>>;

@@ -1,12 +1,14 @@
 use anyhow::{Context as _, Result, ensure};
 
 use crate::{
-    client,
+    cli::{
+        client,
+        context::Context,
+        output::{Palette, Style},
+    },
     config::{self, repo::LocalConfig},
-    context::Context,
     env,
     model::Workspace,
-    output::{Palette, Style},
     protocol::ConfigTarget,
 };
 
@@ -17,8 +19,8 @@ pub(super) async fn edit(
     repository: Option<String>,
 ) -> Result<i32> {
     if let Some(repository) = repository {
-        let repository = crate::ui::repository_selector(repository)?;
-        let config = crate::client::request::<LocalConfig>(
+        let repository = crate::cli::ui::repository_selector(repository)?;
+        let config = crate::cli::client::request::<LocalConfig>(
             &ctx.paths,
             crate::protocol::Method::EditRepositoryConfig {
                 repository,

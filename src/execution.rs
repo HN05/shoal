@@ -21,7 +21,7 @@ use tokio::{
 };
 
 use crate::{
-    client,
+    cli::client,
     daemon::workspace::ExecutionKind,
     env,
     model::{ExecutionPlan, Workspace},

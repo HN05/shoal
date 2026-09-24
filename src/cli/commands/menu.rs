@@ -3,12 +3,13 @@
 use anyhow::{Result, ensure};
 
 use crate::{
-    cli::{CodexMode, Command, ConfirmationArgs},
-    client,
-    context::Context,
+    cli::{
+        CodexMode, Command, ConfirmationArgs, client,
+        context::Context,
+        ui::{self, KeyBindings},
+    },
     env,
     happy::HappyAgent,
-    ui::{self, KeyBindings},
 };
 
 const ADD_ENTRY: &str = "add-workspace";

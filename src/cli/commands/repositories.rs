@@ -4,14 +4,16 @@ use std::path::PathBuf;
 use anyhow::{Context as _, Result, ensure};
 
 use crate::{
-    cli::RepoCommand,
-    client::{self, request},
+    cli::{
+        RepoCommand,
+        client::{self, request},
+        context::Context,
+        output::{Palette, Style},
+        ui,
+    },
     config::repo::LocalConfig,
-    context::Context,
     model::{Repository, RepositoryRemoval},
-    output::{Palette, Style},
     protocol::Method,
-    ui,
 };
 
 pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {

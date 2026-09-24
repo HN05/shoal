@@ -3,14 +3,16 @@ use anyhow::Result;
 use serde_json::json;
 
 use crate::{
-    cli::PortCommand,
-    client::{self, request},
-    context::{Context, optional},
+    cli::{
+        PortCommand,
+        client::{self, request},
+        context::{Context, optional},
+        output::{Palette, Style},
+        ui::{self, Fallback},
+    },
     daemon::ports::PortRequest,
     model::{PortOverview, PortReservation},
-    output::{Palette, Style},
     protocol::{Body, Method},
-    ui::{self, Fallback},
 };
 
 use super::WorkspaceOverviewResult;

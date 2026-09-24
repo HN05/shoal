@@ -1,3 +1,11 @@
+pub mod client;
+pub mod commands;
+pub mod completion;
+pub mod context;
+pub mod output;
+mod progress;
+pub mod ui;
+
 use std::{ffi::OsString, path::PathBuf};
 
 use clap::{Args, Parser, Subcommand, ValueEnum};

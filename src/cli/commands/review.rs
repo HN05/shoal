@@ -4,14 +4,15 @@ use std::ffi::OsString;
 use anyhow::{Context as _, Result, bail};
 
 use crate::{
-    cli::{Agent, CodexMode},
-    client,
-    context::Context,
+    cli::{
+        Agent, CodexMode, client,
+        context::Context,
+        ui::{self, Fallback},
+    },
     forge::{ForgeRepo, PullRequest},
     git,
     model::Workspace,
     protocol::ConfigTarget,
-    ui::{self, Fallback},
 };
 
 /// The configured command a manual review runs.

@@ -5,10 +5,14 @@ use anyhow::{Context as _, Result, bail, ensure};
 use serde_json::json;
 
 use crate::{
-    cli::{Agent, CodexMode},
-    client::{self, request},
+    cli::{
+        Agent, CodexMode,
+        client::{self, request},
+        context::Context,
+        output::{Palette, Style},
+        ui::{self, Fallback},
+    },
     config::{repo::Hooks, templates},
-    context::Context,
     daemon::recovery::{ReconcileOptions, Report},
     env, execution,
     git::{
@@ -18,12 +22,10 @@ use crate::{
     happy::{self, HappyAgent},
     hooks::{self, Hook},
     model::{DiffBase, Workspace, WorkspaceStatus},
-    output::{Palette, Style},
     protocol::{ConfigTarget, Method},
     removal::{BranchChoice, RemovalCheck, RemovalResult},
     shell,
     state::WorkspaceState,
-    ui::{self, Fallback},
 };
 
 pub(super) async fn land(ctx: &Context, workspace: Option<String>) -> Result<i32> {

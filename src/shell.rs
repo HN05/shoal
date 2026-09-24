@@ -1,7 +1,7 @@
 use anyhow::{Context, Result, ensure};
 use std::path::{Path, PathBuf};
 
-use crate::{
+use crate::cli::{
     context::Context as CliContext,
     output::{Palette, Style},
 };

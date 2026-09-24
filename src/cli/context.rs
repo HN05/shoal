@@ -5,7 +5,7 @@ use anyhow::Result;
 use serde::Serialize;
 
 use crate::{
-    output::{Palette, Style},
+    cli::output::{Palette, Style},
     paths::Paths,
 };
 
@@ -22,7 +22,7 @@ impl Context {
         message: &str,
         work: impl std::future::Future<Output = T>,
     ) -> T {
-        crate::progress::run(self.json, message, work).await
+        crate::cli::progress::run(self.json, message, work).await
     }
 
     pub fn new(paths: Paths, json: bool) -> Self {

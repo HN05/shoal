@@ -4,13 +4,15 @@ use serde_json::json;
 
 use super::{Attempt, EXIT_BUSY, retry_while_busy};
 use crate::{
-    cli::SimCommand,
-    client::{self, request},
-    context::{Context, optional},
-    output::{Palette, Style},
+    cli::{
+        SimCommand,
+        client::{self, request},
+        context::{Context, optional},
+        output::{Palette, Style},
+        ui::{self, Fallback},
+    },
     protocol::{Body, Method},
     sim::{SimRequest, Simulator, SimulatorCatalog, SimulatorOverview, audit::AuditEntry},
-    ui::{self, Fallback},
 };
 
 pub(super) async fn run(

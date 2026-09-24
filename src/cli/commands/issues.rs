@@ -2,12 +2,10 @@
 use anyhow::{Context as _, Result, bail, ensure};
 
 use crate::{
-    client,
-    context::Context,
+    cli::{client, context::Context, ui},
     forge::{ForgeRepo, repository},
     git,
     model::Repository,
-    ui,
     validate::MAX_NAME_LEN,
 };
 

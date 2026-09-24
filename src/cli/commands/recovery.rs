@@ -3,15 +3,17 @@ use anyhow::Result;
 use serde::Serialize;
 
 use crate::{
-    client::{self, request},
-    context::Context,
+    cli::{
+        client::{self, request},
+        context::Context,
+        output::{Palette, Style},
+        ui,
+    },
     daemon::{
         doctor::{Check, CheckStatus},
         recovery::{ReconcileOptions, Report},
     },
-    output::{Palette, Style},
     protocol::Method,
-    ui,
 };
 
 pub(super) async fn run(

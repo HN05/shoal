@@ -8,12 +8,14 @@ use tokio::process::Command;
 use uuid::Uuid;
 
 use crate::{
-    client,
-    context::Context,
+    cli::{
+        client,
+        context::Context,
+        ui::{self, Fallback},
+    },
     env, execution, git,
     model::PulledBranch,
     protocol::Method,
-    ui::{self, Fallback},
 };
 
 /// Re-invoke this binary as `merge-internal` through the execution wrapper.

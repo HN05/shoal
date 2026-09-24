@@ -24,8 +24,7 @@ use serde_json::json;
 use tokio::time::{Instant, sleep};
 
 use crate::{
-    cli::{Cli, CodexMode, Command, ConfigCommand, PrCommand, ShellCommand},
-    context::Context,
+    cli::{Cli, CodexMode, Command, ConfigCommand, PrCommand, ShellCommand, context::Context},
     env,
     paths::Paths,
     shell,

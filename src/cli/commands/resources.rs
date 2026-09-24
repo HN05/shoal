@@ -4,15 +4,17 @@ use serde_json::json;
 
 use super::{Attempt, EXIT_BUSY, WorkspaceOverviewResult, retry_while_busy};
 use crate::{
-    cli::ResourceCommand,
-    client::{self, request},
-    context::{Context, optional},
+    cli::{
+        ResourceCommand,
+        client::{self, request},
+        context::{Context, optional},
+        output::{Palette, Style},
+        ui::{self, Fallback},
+    },
     daemon::resources::{
         Overview, ResourceKind, ResourceLease, ResourceRequest, WorkspaceOverview,
     },
-    output::{Palette, Style},
     protocol::{Body, Method},
-    ui::{self, Fallback},
 };
 
 pub(super) async fn run(

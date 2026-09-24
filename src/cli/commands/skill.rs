@@ -11,7 +11,7 @@ use serde_json::json;
 
 use crate::cli::SkillCommand;
 
-const SKILL: &str = include_str!("../../SKILL.md");
+const SKILL: &str = include_str!("../../../SKILL.md");
 
 pub(super) fn run(command: Option<&SkillCommand>, json_output: bool) -> Result<i32> {
     let Some(SkillCommand::Install { agent }) = command else {

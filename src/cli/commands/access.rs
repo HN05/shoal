@@ -4,11 +4,8 @@ use serde_json::json;
 
 use super::{Attempt, EXIT_BUSY};
 use crate::{
-    cli::AccessCommand,
-    client::request,
-    context::Context,
+    cli::{AccessCommand, client::request, context::Context, output::Style},
     daemon::access::{AccessRequest, DecisionStatus},
-    output::Style,
     protocol::Method,
 };
 

@@ -6,8 +6,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::{
-    cli::CodexMode,
-    client::request,
+    cli::{CodexMode, client::request},
     config::{
         self, Config, named_commands,
         repo::{ConfigLayer as Layer, ConfigLayers, RepoConfig},

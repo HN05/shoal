@@ -10,10 +10,12 @@ use std::{
 use anyhow::{Context as _, Result, ensure};
 
 use crate::{
-    client,
-    context::Context,
+    cli::{
+        client,
+        context::Context,
+        output::{Palette, Style},
+    },
     model::{Repository, Workspace},
-    output::{Palette, Style},
     removal::{BranchChoice, RemovalCheck},
 };
 
