@@ -31,7 +31,6 @@ One Rust binary provides the CLI, execution wrapper, and daemon. Each state
 directory has one daemon shared across repositories, with a private Unix
 socket and a versioned JSON protocol; the ordinary installation is per user.
 Resource protocol methods use domain-then-verb names matching the CLI operations.
-Busy allocation outcomes share one protocol response.
 The daemon owns SQLite state, allocation, lifecycle transitions, and recovery.
 Daemon errors stay structured on the client without changing the wire format.
 
