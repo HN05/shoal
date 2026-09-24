@@ -5,7 +5,38 @@ use anyhow::{Context, Result, ensure};
 pub(crate) struct ForgeRepo {
     pub host: String,
     pub path: String,
+    kind: ForgeKind,
     web_scheme: &'static str,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ForgeKind {
+    GitHub,
+    Forgejo,
+}
+
+impl ForgeKind {
+    fn from_host(host: &str) -> Self {
+        if host == "github.com" {
+            Self::GitHub
+        } else {
+            Self::Forgejo
+        }
+    }
+
+    fn tool(self) -> &'static str {
+        match self {
+            Self::GitHub => "gh",
+            Self::Forgejo => "fj",
+        }
+    }
+
+    fn pull_marker(self) -> &'static str {
+        match self {
+            Self::GitHub => "/pull/",
+            Self::Forgejo => "/pulls/",
+        }
+    }
 }
 
 impl PartialEq for ForgeRepo {
@@ -55,8 +86,10 @@ impl ForgeRepo {
                         .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_'))),
             "issue lookup needs a remote with host/owner/repository"
         );
+        let host = host.to_ascii_lowercase();
         Ok(Self {
-            host: host.to_ascii_lowercase(),
+            kind: ForgeKind::from_host(&host),
+            host,
             path: path.into(),
             web_scheme: if remote.starts_with("http://") {
                 "http"
@@ -111,11 +144,7 @@ impl ForgeRepo {
 
 impl ForgeRepo {
     pub fn pull(&self, input: &str) -> Result<(u64, String)> {
-        let marker = if self.host == "github.com" {
-            "/pull/"
-        } else {
-            "/pulls/"
-        };
+        let marker = self.kind.pull_marker();
         let (number, url) = if input.starts_with("https://") || input.starts_with("http://") {
             let input = input
                 .split(['?', '#'])
@@ -154,23 +183,35 @@ impl ForgeRepo {
         number: u64,
         branch: &str,
     ) -> Result<Option<Vec<String>>> {
+        self.kind.merged_commits(self, path, number, branch).await
+    }
+}
+
+impl ForgeKind {
+    async fn merged_commits(
+        self,
+        repo: &ForgeRepo,
+        path: &std::path::Path,
+        number: u64,
+        branch: &str,
+    ) -> Result<Option<Vec<String>>> {
         let number = number.to_string();
-        if self.host == "github.com" {
-            let output = query(
-                path,
-                "gh",
-                &[
-                    "pr",
-                    "view",
-                    &number,
-                    "--repo",
-                    &format!("{}/{}", self.host, self.path),
-                    "--json",
-                    "number,state,headRefName,commits",
-                ],
-                MERGED_HINT,
-            )
-            .await?;
+        if self == Self::GitHub {
+            let output = self
+                .query(
+                    path,
+                    &[
+                        "pr",
+                        "view",
+                        &number,
+                        "--repo",
+                        &format!("{}/{}", repo.host, repo.path),
+                        "--json",
+                        "number,state,headRefName,commits",
+                    ],
+                    MERGED_HINT,
+                )
+                .await?;
             #[derive(serde::Deserialize)]
             struct Commit {
                 oid: String,
@@ -195,15 +236,15 @@ impl ForgeRepo {
             Ok((pull.state == "MERGED").then(|| pull.commits.into_iter().map(|c| c.oid).collect()))
         } else {
             let args = [
-                "--style", "minimal", "pr", "view", &number, "--host", &self.host,
+                "--style", "minimal", "pr", "view", &number, "--host", &repo.host,
             ];
-            let output = query(path, "fj", &args, MERGED_HINT).await?;
+            let output = self.query(path, &args, MERGED_HINT).await?;
             if !fj_merged(&output, &number, branch)? {
                 return Ok(None);
             }
             let mut args = args.to_vec();
             args.push("commits");
-            let output = query(path, "fj", &args, MERGED_HINT).await?;
+            let output = self.query(path, &args, MERGED_HINT).await?;
             Ok(Some(
                 output
                     .lines()
@@ -242,34 +283,7 @@ impl ForgeRepo {
     /// Only PRs whose head branch lives in this repository can be checked out.
     pub async fn pull_request(&self, path: &std::path::Path, input: &str) -> Result<PullRequest> {
         let (number, url) = self.pull(input)?;
-        let id = number.to_string();
-        let (title, head, base) = if self.host == "github.com" {
-            let repo = format!("{}/{}", self.host, self.path);
-            let fields = "number,title,headRefName,baseRefName,isCrossRepository";
-            let args = ["pr", "view", &id, "--repo", &repo, "--json", fields];
-            #[derive(serde::Deserialize)]
-            #[serde(rename_all = "camelCase")]
-            struct Pull {
-                number: u64,
-                title: String,
-                head_ref_name: String,
-                base_ref_name: String,
-                is_cross_repository: bool,
-            }
-            let pull: Pull = serde_json::from_str(&query(path, "gh", &args, "").await?)
-                .context("invalid gh PR response")?;
-            ensure!(pull.number == number, "gh returned a different PR");
-            ensure!(
-                !pull.is_cross_repository,
-                "PR #{number} comes from a fork; only branches in this repository can be opened"
-            );
-            (pull.title, pull.head_ref_name, pull.base_ref_name)
-        } else {
-            let args = [
-                "--style", "minimal", "pr", "view", &id, "--host", &self.host,
-            ];
-            fj_pull(&query(path, "fj", &args, "").await?, &id)?
-        };
+        let (title, head, base) = self.kind.pull_details(self, path, number).await?;
         ensure!(
             !head.is_empty() && !base.is_empty(),
             "PR #{number} has no head or base branch"
@@ -284,12 +298,47 @@ impl ForgeRepo {
     }
 }
 
+impl ForgeKind {
+    async fn pull_details(
+        self,
+        repo: &ForgeRepo,
+        path: &std::path::Path,
+        number: u64,
+    ) -> Result<(String, String, String)> {
+        let id = number.to_string();
+        if self == Self::GitHub {
+            let repo = format!("{}/{}", repo.host, repo.path);
+            let fields = "number,title,headRefName,baseRefName,isCrossRepository";
+            let args = ["pr", "view", &id, "--repo", &repo, "--json", fields];
+            #[derive(serde::Deserialize)]
+            #[serde(rename_all = "camelCase")]
+            struct Pull {
+                number: u64,
+                title: String,
+                head_ref_name: String,
+                base_ref_name: String,
+                is_cross_repository: bool,
+            }
+            let pull: Pull = serde_json::from_str(&self.query(path, &args, "").await?)
+                .context("invalid gh PR response")?;
+            ensure!(pull.number == number, "gh returned a different PR");
+            ensure!(
+                !pull.is_cross_repository,
+                "PR #{number} comes from a fork; only branches in this repository can be opened"
+            );
+            Ok((pull.title, pull.head_ref_name, pull.base_ref_name))
+        } else {
+            let args = [
+                "--style", "minimal", "pr", "view", &id, "--host", &repo.host,
+            ];
+            fj_pull(&self.query(path, &args, "").await?, &id)
+        }
+    }
+}
+
 /// Title, head and base from fj's minimal `pr view`.
 fn fj_pull(text: &str, number: &str) -> Result<(String, String, String)> {
-    let text: String = text
-        .chars()
-        .filter(|c| !matches!(c, '\u{2066}'..='\u{2069}'))
-        .collect();
+    let text = strip_bidi_isolates(text);
     let mut lines = text.lines();
     let title = lines
         .next()
@@ -312,10 +361,7 @@ fn fj_pull(text: &str, number: &str) -> Result<(String, String, String)> {
 }
 
 fn fj_merged(text: &str, number: &str, branch: &str) -> Result<bool> {
-    let text: String = text
-        .chars()
-        .filter(|c| !matches!(c, '\u{2066}'..='\u{2069}'))
-        .collect();
+    let text = strip_bidi_isolates(text);
     let mut lines = text.lines();
     ensure!(
         lines
@@ -340,23 +386,58 @@ fn fj_merged(text: &str, number: &str, branch: &str) -> Result<bool> {
     Ok(state == "Merged")
 }
 
+fn strip_bidi_isolates(text: &str) -> String {
+    text.chars()
+        .filter(|c| !matches!(c, '\u{2066}'..='\u{2069}'))
+        .collect()
+}
+
 const MERGED_HINT: &str = "; otherwise confirm the merge yourself and run `shoal pr merged`";
 
-async fn query(path: &std::path::Path, tool: &str, args: &[&str], hint: &str) -> Result<String> {
-    let mut command = tokio::process::Command::new(tool);
-    command.current_dir(path).args(args).env("NO_COLOR", "1");
-    tokio::time::timeout(
-        std::time::Duration::from_secs(20),
-        crate::subprocess::output(command),
-    )
-    .await
-    .context("PR lookup timed out")?
-    .with_context(|| format!("PR lookup requires {tool} and its existing login{hint}"))
+impl ForgeKind {
+    async fn query(self, path: &std::path::Path, args: &[&str], hint: &str) -> Result<String> {
+        let tool = self.tool();
+        let mut command = tokio::process::Command::new(tool);
+        command.current_dir(path).args(args).env("NO_COLOR", "1");
+        tokio::time::timeout(
+            std::time::Duration::from_secs(20),
+            crate::subprocess::output(command),
+        )
+        .await
+        .context("PR lookup timed out")?
+        .with_context(|| format!("PR lookup requires {tool} and its existing login{hint}"))
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn backend_is_selected_from_the_normalized_remote_host() {
+        for (remote, kind, tool) in [
+            ("git@GitHub.COM:team/repo.git", ForgeKind::GitHub, "gh"),
+            (
+                "ssh://git@github.com:2222/team/repo",
+                ForgeKind::GitHub,
+                "gh",
+            ),
+            (
+                "https://forge.example/team/repo.git",
+                ForgeKind::Forgejo,
+                "fj",
+            ),
+            (
+                "http://forge.example:3000/team/repo",
+                ForgeKind::Forgejo,
+                "fj",
+            ),
+        ] {
+            let repo = ForgeRepo::parse(remote).unwrap();
+            assert_eq!(repo.kind, kind);
+            assert_eq!(repo.kind.tool(), tool);
+        }
+    }
+
     #[test]
     fn pr_identity_and_state_are_strict() {
         let repo = ForgeRepo::parse("git@example.com:team/repo.git").unwrap();
