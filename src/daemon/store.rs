@@ -12,7 +12,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 18;
+const SCHEMA_VERSION: i64 = 19;
 
 #[derive(Clone)]
 pub struct Store {
@@ -212,6 +212,11 @@ const MIGRATIONS: &[(i64, &str)] = &[
         "CREATE INDEX IF NOT EXISTS executions_workspace ON executions(workspace_id);
         CREATE INDEX IF NOT EXISTS workspaces_repository ON workspaces(repository_id);",
     ),
+    (
+        19,
+        "CREATE INDEX IF NOT EXISTS access_request_target
+            ON access_requests(workspace_id,target_key);",
+    ),
 ];
 
 fn migrate(db: &mut Connection) -> Result<()> {
@@ -393,6 +398,12 @@ mod tests {
                 CREATE INDEX workspaces_repository ON workspaces(repository_id);",
             )?;
         }
+        if version >= 19 {
+            db.execute_batch(
+                "CREATE INDEX IF NOT EXISTS access_request_target
+                ON access_requests(workspace_id,target_key);",
+            )?;
+        }
         if version < 4 {
             db.execute_batch("DROP INDEX repository_names;")?;
         }
@@ -450,7 +461,7 @@ mod tests {
 
     #[test]
     fn migrates_every_recorded_version_to_the_same_schema() -> Result<()> {
-        let expected = schema_snapshot(&historical_database(18)?)?;
+        let expected = schema_snapshot(&historical_database(SCHEMA_VERSION)?)?;
         assert_eq!(MIGRATIONS.last().unwrap().0, SCHEMA_VERSION);
         for version in 0..=SCHEMA_VERSION {
             let mut db = historical_database(version)?;

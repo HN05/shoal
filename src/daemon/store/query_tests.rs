@@ -244,7 +244,7 @@ async fn v17_upgrade_and_reopen_preserve_ownership_leases_and_executions() -> Re
             .run(|db| {
                 assert_eq!(
                     db.query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))?,
-                    18
+                    SCHEMA_VERSION
                 );
                 for (index, column) in [
                     ("executions_workspace", "workspace_id"),

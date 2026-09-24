@@ -142,6 +142,9 @@ const BY_ID: &str = "SELECT id,record,active FROM access_requests WHERE id=?1";
 const CURRENT: &str = "SELECT id,record,active FROM access_requests
     WHERE workspace_id=?1 AND target_key=?2 AND name=?3 AND active=1";
 
+const CANDIDATES: &str = "SELECT id,record,active FROM access_requests
+    WHERE workspace_id=?1 AND target_key=?2 ORDER BY rowid";
+
 fn decode_record((id, record, active): (String, String, bool)) -> Result<AccessRequest> {
     let mut request: AccessRequest = serde_json::from_str(&record)
         .with_context(|| format!("access request {id} has an invalid record"))?;
@@ -196,13 +199,7 @@ pub fn check(tx: &Transaction<'_>, mut request: AccessRequest) -> Result<Option<
         );
         return Ok((existing.status != DecisionStatus::Approved).then_some(existing));
     }
-    if list(tx, Some(&request.workspace_id))?.iter().any(|r| {
-        r.status == DecisionStatus::Approved
-            && r.lifetime == Lifetime::Workspace
-            && r.target == request.target
-            && r.specification == request.specification
-            && r.lifetime == request.lifetime
-    }) {
+    if reusable_grant(tx, &request)? {
         return Ok(None);
     }
     ensure!(
@@ -219,6 +216,23 @@ pub fn check(tx: &Transaction<'_>, mut request: AccessRequest) -> Result<Option<
     tx.execute("INSERT INTO access_requests(id,workspace_id,target_key,name,record) VALUES (?1,?2,?3,?4,?5)",
         params![request.id,request.workspace_id,request.target,request.name,serde_json::to_string(&request)?])?;
     Ok(Some(request))
+}
+
+fn reusable_grant(db: &Connection, request: &AccessRequest) -> Result<bool> {
+    // Decode every candidate before matching: even a later malformed record must
+    // fail the check. Released workspace grants remain candidates.
+    let candidates = db
+        .prepare(CANDIDATES)?
+        .query_map(params![request.workspace_id, request.target], record_row)?
+        .map(|row| decode_record(row?))
+        .collect::<Result<Vec<_>>>()?;
+    Ok(candidates.iter().any(|r| {
+        r.status == DecisionStatus::Approved
+            && r.lifetime == Lifetime::Workspace
+            && r.target == request.target
+            && r.specification == request.specification
+            && r.lifetime == request.lifetime
+    }))
 }
 
 impl AccessRequest {
@@ -458,6 +472,156 @@ mod tests {
             .await?;
         assert!(manager.decide_access("approve".into(), true).await.is_err());
         Ok(())
+    }
+
+    fn unrelated_history(db: &Connection, count: i64) -> Result<()> {
+        db.execute(
+            "WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<?1)
+            INSERT INTO access_requests
+            SELECT 'history-'||x, CASE WHEN x%2=0 THEN 'owner' ELSE 'other' END,
+                CASE WHEN x%2=0 THEN 'port/other' ELSE 'resource/global/lock' END,
+                'default', 'invalid', 0 FROM n",
+            [count],
+        )?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn reuse_validates_all_candidates_but_not_unrelated_history() -> Result<()> {
+        let (_root, manager) = crate::test_support::manager().await;
+        manager
+            .store
+            .run(|db| {
+                owners(db)?;
+                unrelated_history(db, 10_000)?;
+                let tx = db.transaction()?;
+                let target = Target::Resource {
+                    scope: Scope::Global,
+                    pool: "lock".into(),
+                };
+                let request = sample("owner", target.clone());
+                let mut grant = check(&tx, request.clone())?.unwrap();
+                grant.status = DecisionStatus::Approved;
+                save(&tx, &grant)?;
+                assert!(release(&tx, "owner", &target, "default")?);
+                assert!(!by_id(&tx, &grant.id)?.unwrap().active);
+                assert!(check(&tx, request.clone())?.is_none());
+                let mut another = request.clone();
+                another.name = "another".into();
+                assert!(check(&tx, another.clone())?.is_none());
+                another.specification = resource(LockMode::Write);
+                assert!(check(&tx, another)?.is_some());
+
+                // Neither a different workspace nor target can authorize this request.
+                for (owner, target) in [
+                    ("other", target.clone()),
+                    ("owner", Target::Port("other".into())),
+                ] {
+                    let mut unrelated = grant.clone();
+                    unrelated.id = format!("unrelated-{owner}");
+                    unrelated.workspace_id = owner.into();
+                    unrelated.target = target;
+                    save(&tx, &unrelated)?;
+                }
+                grant.status = DecisionStatus::Denied;
+                grant.active = false;
+                save(&tx, &grant)?;
+                assert!(check(&tx, request.clone())?.is_some());
+                assert!(release(&tx, "owner", &target, "default")?);
+                grant.status = DecisionStatus::Approved;
+                save(&tx, &grant)?;
+
+                let mut broken = grant.clone();
+                broken.id = "broken".into();
+                // Put corruption after a reusable grant: a match must not short-circuit decoding.
+                for (field, value) in [
+                    ("status", serde_json::json!("unknown")),
+                    ("lifetime", serde_json::json!("forever")),
+                    ("target", serde_json::json!("resource/lock")),
+                    ("specification", serde_json::json!({"member": "lock"})),
+                ] {
+                    save(&tx, &broken)?;
+                    let mut record = serde_json::to_value(&broken)?;
+                    record[field] = value;
+                    tx.execute(
+                        "UPDATE access_requests SET record=?1 WHERE id='broken'",
+                        [record.to_string()],
+                    )?;
+                    assert!(
+                        check(&tx, request.clone())
+                            .unwrap_err()
+                            .to_string()
+                            .contains("access request broken has an invalid record")
+                    );
+                    assert!(by_id(&tx, "broken").is_err());
+                }
+                assert!(list(&tx, None).is_err());
+                assert!(list(&tx, Some("owner")).is_err());
+                assert!(list(&tx, Some("missing"))?.is_empty());
+                Ok(())
+            })
+            .await
+    }
+
+    fn plan(db: &Connection, sql: &str, params: impl Params) -> Result<String> {
+        Ok(db
+            .prepare(&format!("EXPLAIN QUERY PLAN {sql}"))?
+            .query_map(params, |row| row.get::<_, String>(3))?
+            .collect::<rusqlite::Result<Vec<_>>>()?
+            .join("; "))
+    }
+
+    fn query_work(db: &Connection, sql: &str, params: impl Params) -> Result<(usize, i32)> {
+        let mut statement = db.prepare(sql)?;
+        let records = statement
+            .query_map(params, record_row)?
+            .map(|row| decode_record(row?))
+            .collect::<Result<Vec<_>>>()?;
+        assert_eq!(
+            statement.get_status(rusqlite::StatementStatus::FullscanStep),
+            0
+        );
+        Ok((
+            records.len(),
+            statement.get_status(rusqlite::StatementStatus::VmStep),
+        ))
+    }
+
+    #[tokio::test]
+    async fn bundled_planner_bounds_lookups_and_limits_candidate_decoding() -> Result<()> {
+        let (_root, manager) = crate::test_support::manager().await;
+        manager.store.run(|db| {
+            owners(db)?;
+            let target = Target::Resource { scope: Scope::Global, pool: "lock".into() };
+            let mut request = sample("owner", target.clone());
+            request.id = "wanted".into();
+            save(db, &request)?;
+            request.id = "released".into();
+            request.active = false;
+            request.status = DecisionStatus::Approved;
+            save(db, &request)?;
+            let id_work = query_work(db, BY_ID, ["wanted"])?;
+            let current_work = query_work(db, CURRENT, params!["owner", target, "default"])?;
+            let candidate_work = query_work(db, CANDIDATES, params!["owner", target])?;
+            assert_eq!((id_work.0, current_work.0, candidate_work.0), (1, 1, 2));
+            unrelated_history(db, 10_000)?;
+            assert_eq!(query_work(db, BY_ID, ["wanted"])?, id_work);
+            assert_eq!(query_work(db, CURRENT, params!["owner", target, "default"])?, current_work);
+            assert_eq!(query_work(db, CANDIDATES, params!["owner", target])?, candidate_work);
+            let id_plan = plan(db, BY_ID, ["wanted"])?;
+            let current_plan = plan(db, CURRENT, params!["owner", target, "default"])?;
+            let candidate_plan = plan(db, CANDIDATES, params!["owner", target])?;
+            assert!(id_plan.contains("SEARCH access_requests USING INDEX sqlite_autoindex_access_requests_1 (id=?)"), "{id_plan}");
+            assert!(current_plan.contains("SEARCH access_requests USING INDEX access_request_name (workspace_id=? AND target_key=? AND name=?)"), "{current_plan}");
+            assert!(candidate_plan.contains("SEARCH access_requests USING INDEX access_request_target (workspace_id=? AND target_key=?)"), "{candidate_plan}");
+            db.execute_batch("SAVEPOINT without_index; DROP INDEX access_request_target;")?;
+            let old_plan = plan(db, CANDIDATES, params!["owner", target])?;
+            assert!(old_plan.contains("SCAN access_requests"), "{old_plan}");
+            db.execute_batch("ROLLBACK TO without_index; RELEASE without_index;")?;
+            eprintln!("SQLite {}: ID: {id_plan}; current: {current_plan}; candidates: {candidate_plan}; without target index: {old_plan}", rusqlite::version());
+            eprintln!("Before/after 10,000 unrelated records, (decoded rows, VM steps): ID {id_work:?}, current {current_work:?}, candidates {candidate_work:?}; no full-scan steps");
+            Ok(())
+        }).await
     }
 
     #[test]

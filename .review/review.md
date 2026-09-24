@@ -53,8 +53,9 @@ removal, check it against the rule those files state before judging it.
 - Resource approvals bind effective allocation settings and require an unscoped
   decision. Pending requests reserve nothing; grant lifetime follows configuration
   and approval never bypasses capacity or simulator cleanup rules. Approval lookups
-  validate their selected ID or active workspace/target/name record; listings reject
-  invalid selected records, while malformed unrelated history does not block lookups.
+  validate their selected ID or active workspace/target/name record; grant reuse
+  validates every workspace/target candidate, including released grants. Listings
+  reject invalid selected records; malformed history outside a query does not block it.
 - Explicit creation bases resolve locally and are recorded for diff; only a base
   naming the local default branch is refreshed.
 - Daemon ref updates disable Git credential and SSH askpass prompts without
