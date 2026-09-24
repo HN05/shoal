@@ -370,11 +370,11 @@ fn repository_candidates(
 ) -> Vec<CompletionCandidate> {
     let mut candidates = vec![];
     for repo in repos {
-        let name = crate::repository::name(repo);
+        let name = crate::forge::repository::name(repo);
         let unique = repo.name.is_some()
             || repos
                 .iter()
-                .filter(|r| crate::repository::name(r) == name)
+                .filter(|r| crate::forge::repository::name(r) == name)
                 .count()
                 == 1;
         let target = if unique {

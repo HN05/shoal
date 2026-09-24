@@ -187,7 +187,7 @@ pub(super) async fn add(
     let issue = match issue {
         Some(input) => {
             let repos = client::repositories(&ctx.paths).await?;
-            let repo = crate::repository::select(&repos, &repository).await?;
+            let repo = crate::forge::repository::select(&repos, &repository).await?;
             Some(super::issues::load(repo, &input).await?)
         }
         None => None,
@@ -217,7 +217,7 @@ pub(super) async fn add(
             .await?;
             let workspaces = client::workspaces(&ctx.paths).await?;
             let repos = client::repositories(&ctx.paths).await?;
-            let repo = crate::repository::select(&repos, &repository).await?;
+            let repo = crate::forge::repository::select(&repos, &repository).await?;
             let entries = branches
                 .into_iter()
                 .map(|b| {

@@ -20,8 +20,7 @@ use crate::{
     recovery::{ReconcileOptions, Report},
     removal::{BranchChoice, RemovalCheck, RemovalResult},
     resources::{Overview, ResourceLease, ResourceRequest},
-    sim::audit::AuditEntry,
-    sim::{SimRequest, Simulator, SimulatorCatalog},
+    sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
     workspace::ExecutionKind,
 };
 

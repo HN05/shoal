@@ -1,4 +1,7 @@
 //! Forge identity and read-only issue/PR queries using the user's gh/fj login.
+pub mod pr;
+pub mod repository;
+
 use anyhow::{Context, Result, ensure};
 
 #[derive(Debug)]

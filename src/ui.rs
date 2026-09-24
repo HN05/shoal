@@ -407,7 +407,7 @@ pub fn workspace_label(workspace: &Workspace, palette: Palette) -> String {
 pub fn repository_label(repo: &Repository, palette: Palette) -> String {
     format!(
         "{}  {}",
-        palette.paint(Style::Heading, crate::repository::name(repo)),
+        palette.paint(Style::Heading, crate::forge::repository::name(repo)),
         palette.paint(Style::Muted, &repo.source)
     )
 }
@@ -415,23 +415,23 @@ pub fn repository_label(repo: &Repository, palette: Palette) -> String {
 /// Picker entries that stay unambiguous when repositories share a name.
 pub async fn repository_choices(mut repos: Vec<Repository>) -> Result<Entries> {
     for repo in &mut repos {
-        if let Some(url) = crate::repository::remote_url(&repo.source).await? {
+        if let Some(url) = crate::forge::repository::remote_url(&repo.source).await? {
             repo.source = url;
         }
     }
     let labels: Vec<_> = repos
         .iter()
         .map(|repo| {
-            let name = crate::repository::name(repo);
+            let name = crate::forge::repository::name(repo);
             let shared = repos
                 .iter()
-                .filter(|r| crate::repository::name(r) == name)
+                .filter(|r| crate::forge::repository::name(r) == name)
                 .count()
                 > 1;
             if !shared {
                 return name.to_owned();
             }
-            match crate::repository::host(&repo.source) {
+            match crate::forge::repository::host(&repo.source) {
                 Some(host) => format!("{name} ({host})"),
                 None => format!("{name} (local)"),
             }

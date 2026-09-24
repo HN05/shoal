@@ -58,11 +58,12 @@ pub(super) async fn pull_request(
         }
         None => super::issues::repository_for_number(ctx, repos.clone()).await?,
     };
-    let repo = crate::repository::select(&repos, &repository).await?;
-    let remote =
-        crate::repository::remote_url(repo.path.to_str().context("repository path is not UTF-8")?)
-            .await?
-            .context("PR review needs an origin remote")?;
+    let repo = crate::forge::repository::select(&repos, &repository).await?;
+    let remote = crate::forge::repository::remote_url(
+        repo.path.to_str().context("repository path is not UTF-8")?,
+    )
+    .await?
+    .context("PR review needs an origin remote")?;
     let pull = ForgeRepo::parse(&remote)?
         .pull_request(&repo.path, &input)
         .await?;

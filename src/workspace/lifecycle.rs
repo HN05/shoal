@@ -266,7 +266,7 @@ impl Manager {
         removal.verify(&check, Stage::Initial)?;
         if let Removal::Merged { head } = removal {
             ensure!(
-                crate::pr::current_head(workspace).await? == head,
+                crate::forge::pr::current_head(workspace).await? == head,
                 "HEAD changed before PR cleanup"
             );
         }
@@ -284,7 +284,7 @@ impl Manager {
         removal.verify(&check, Stage::AfterStop)?;
         if let Removal::Merged { head } = removal {
             ensure!(
-                crate::pr::current_head(workspace).await? == head,
+                crate::forge::pr::current_head(workspace).await? == head,
                 "HEAD changed while stopping commands"
             );
         }
@@ -321,7 +321,7 @@ impl Manager {
         }
         if let Removal::Merged { head } = removal {
             ensure!(
-                crate::pr::current_head(workspace).await? == head,
+                crate::forge::pr::current_head(workspace).await? == head,
                 "HEAD changed during removal hooks"
             );
             removal.verify(

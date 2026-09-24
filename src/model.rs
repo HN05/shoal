@@ -75,7 +75,7 @@ pub struct Execution {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Inspection {
-    pub pr_cleanup: Option<crate::pr::Registration>,
+    pub pr_cleanup: Option<crate::forge::pr::Registration>,
     pub workspace: Workspace,
     pub executions: Vec<Execution>,
     pub ports: Vec<PortReservation>,
@@ -100,7 +100,7 @@ pub struct WorkspaceStatus {
     pub ports: Vec<PortReservation>,
     pub resources: Vec<ResourceLease>,
     pub simulators: Vec<Simulator>,
-    pub pr_cleanup: Option<crate::pr::Registration>,
+    pub pr_cleanup: Option<crate::forge::pr::Registration>,
     pub unread_notifications: u64,
 }
 

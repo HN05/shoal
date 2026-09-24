@@ -9,8 +9,7 @@ use crate::{
     context::{Context, optional},
     output::{Palette, Style},
     protocol::{Body, Method},
-    sim::audit::AuditEntry,
-    sim::{SimRequest, Simulator, SimulatorCatalog, SimulatorOverview},
+    sim::{SimRequest, Simulator, SimulatorCatalog, SimulatorOverview, audit::AuditEntry},
     ui::{self, Fallback},
 };
 
