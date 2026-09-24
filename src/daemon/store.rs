@@ -12,7 +12,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 19;
+const SCHEMA_VERSION: i64 = 20;
 
 #[cfg(test)]
 mod benchmark;
@@ -237,13 +237,14 @@ const MIGRATIONS: &[(i64, &str, Option<Precondition>)] = &[
     ),
     (
         19,
-        include_str!("store/simulator_owner.sql"),
-        Some(validate_simulator_records),
-    ),
-    (
-        19,
         "CREATE INDEX IF NOT EXISTS access_request_target
             ON access_requests(workspace_id,target_key);",
+        None,
+    ),
+    (
+        20,
+        include_str!("store/simulator_owner.sql"),
+        Some(validate_simulator_records),
     ),
 ];
 
@@ -478,7 +479,7 @@ mod tests {
                 db.execute_batch(&format!("DROP TABLE {table};"))?;
             }
         }
-        if version >= 19 {
+        if version >= 20 {
             db.execute_batch(include_str!("store/simulator_owner.sql"))?;
         }
         db.pragma_update(None, "user_version", version)?;
