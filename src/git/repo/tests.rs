@@ -1006,10 +1006,86 @@ async fn execution_scope_preserves_role_authorization_and_expires() {
 }
 
 #[tokio::test]
+async fn setup_releases_git_gate_after_registration_and_on_preparation_failure() {
+    let f = Fixture::new().await;
+    let workspace = f.add("worker").await;
+    let guard = f
+        .manager
+        .lock_repository_git(&workspace.repository_id)
+        .await;
+    let gate = tokio::sync::OwnedMutexGuard::mutex(&guard).clone();
+    drop(guard);
+    assert!(
+        f.manager
+            .begin_execution(&workspace.id, None, ExecutionKind::Setup, None)
+            .await
+            .is_err()
+    );
+    assert!(gate.try_lock().is_ok());
+    fs::write(
+        workspace.path.join(".shoal.toml"),
+        "setup_cmd = 'setup.sh'\n",
+    )
+    .unwrap();
+    let started = f
+        .manager
+        .begin_execution(&workspace.id, None, ExecutionKind::Setup, None)
+        .await
+        .unwrap();
+    assert!(gate.try_lock().is_ok(), "setup only locks registration");
+    f.manager
+        .finish_execution(started.plan.id.clone(), ExecutionKind::Setup, Some(0))
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn incomplete_removal_allows_refresh_recovery_and_diagnosis() {
+    let f = Fixture::new().await;
+    let workspace = f.add("worker").await;
+    let id = f.repo_id.clone();
+    f.manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO repository_removals(repository_id) VALUES (?1)",
+                [id],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let error = f.manager.lock_repository(&f.repo_id).await.unwrap_err();
+    assert!(error.to_string().contains("removal is incomplete"));
+    f.manager
+        .refresh_merge_source(&workspace.id, "main")
+        .await
+        .unwrap();
+    let report = f
+        .manager
+        .reconcile(
+            &workspace.id,
+            crate::daemon::recovery::ReconcileOptions {
+                repair: true,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert!(report.issues.is_empty(), "{:?}", report.issues);
+    f.manager.diagnose().await.unwrap();
+}
+
+#[tokio::test]
 async fn land_execution_holds_git_gate_through_completion_and_releases_on_failure() {
     let f = Fixture::new().await;
     let workspace = f.add("worker").await;
-    let gate = f.manager.git_gate(&workspace.repository_id).await;
+    let guard = f
+        .manager
+        .lock_repository_git(&workspace.repository_id)
+        .await;
+    let gate = tokio::sync::OwnedMutexGuard::mutex(&guard).clone();
+    drop(guard);
     for exit in [Some(0), None] {
         let started = f
             .manager
@@ -1158,8 +1234,7 @@ async fn land_refreshes_the_default_branch_and_needs_it_outside_workspaces() {
 impl Manager {
     async fn land_workspace(&self, selector: &str) -> anyhow::Result<crate::model::LandedBranch> {
         let workspace = self.workspace(selector).await?;
-        let gate = self.git_gate(&workspace.repository_id).await;
-        let _guard = gate.lock().await;
+        let _guard = self.lock_repository_git(&workspace.repository_id).await;
         super::finish_land(self.prepare_land(selector).await?).await
     }
 }

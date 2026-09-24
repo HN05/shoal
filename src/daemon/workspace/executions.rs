@@ -220,11 +220,7 @@ impl Manager {
         match kind {
             ExecutionKind::Command => Ok(PreparedExecution::default()),
             ExecutionKind::Land => {
-                let guard = self
-                    .git_gate(&workspace.repository_id)
-                    .await
-                    .lock_owned()
-                    .await;
+                let guard = self.lock_repository_git(&workspace.repository_id).await;
                 let land = self.prepare_land(&workspace.id).await?;
                 Ok(PreparedExecution {
                     land: Some(Box::new(land)),
@@ -233,11 +229,7 @@ impl Manager {
                 })
             }
             ExecutionKind::Setup => {
-                let git_guard = self
-                    .git_gate(&workspace.repository_id)
-                    .await
-                    .lock_owned()
-                    .await;
+                let git_guard = self.lock_repository_git(&workspace.repository_id).await;
                 let setup_cmd = self.workspace_hook(workspace, HookKind::Setup).await?;
                 let pre_setup = self.workspace_hook(workspace, HookKind::PreSetup).await?;
                 ensure!(

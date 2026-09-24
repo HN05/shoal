@@ -46,8 +46,7 @@ impl Manager {
         // gate also serializes with workspace creation, branch refresh, and reconciliation.
         let _registry = self.registry_gate.lock().await;
         let repo = self.repository(selector).await?;
-        let gate = self.git_gate(&repo.id).await;
-        let _git = gate.lock().await;
+        let _git = self.lock_repository_git(&repo.id).await;
         let workspaces: Vec<_> = self
             .list_workspaces()
             .await?

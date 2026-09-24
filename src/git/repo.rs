@@ -145,8 +145,7 @@ impl Manager {
     pub async fn refresh_merge_source(&self, selector: &str, branch: &str) -> Result<PulledBranch> {
         let workspace = self.workspace(selector).await?;
         let repo = self.repository(&workspace.repository_id).await?;
-        let gate = self.git_gate(&repo.id).await;
-        let _guard = gate.lock().await;
+        let _guard = self.lock_repository_git(&repo.id).await;
         let local_ref = git::local_ref(branch);
         git_run(&repo.path, &["check-ref-format", &local_ref])
             .await

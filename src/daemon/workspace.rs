@@ -96,13 +96,17 @@ impl Manager {
         }))
     }
 
-    pub(crate) async fn git_gate(&self, repository: &str) -> Arc<Mutex<()>> {
-        self.git_gates
+    /// Acquire the Git gate by recorded ID without checking repository availability.
+    /// Callers must not already hold this repository's gate.
+    pub(crate) async fn lock_repository_git(&self, repository_id: &str) -> OwnedMutexGuard<()> {
+        let gate = self
+            .git_gates
             .lock()
             .await
-            .entry(repository.to_owned())
+            .entry(repository_id.to_owned())
             .or_default()
-            .clone()
+            .clone();
+        gate.lock_owned().await
     }
 
     pub(crate) async fn lock_repository(
@@ -110,7 +114,7 @@ impl Manager {
         selector: &str,
     ) -> Result<(Repository, OwnedMutexGuard<()>)> {
         let repo = self.repository(selector).await?;
-        let guard = self.git_gate(&repo.id).await.lock_owned().await;
+        let guard = self.lock_repository_git(&repo.id).await;
         // Removal may have completed or failed while this request waited.
         let repo = self.repository(&repo.id).await?;
         self.ensure_repository_available(&repo.id).await?;

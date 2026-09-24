@@ -122,8 +122,7 @@ impl Manager {
         let workspace = self.workspace(selector).await?;
         // Serializes with branch creation and main updates; state reservation below
         // prevents new executions, removal, stop, and resource claims during repair.
-        let gate = self.git_gate(&workspace.repository_id).await;
-        let _guard = gate.lock().await;
+        let _guard = self.lock_repository_git(&workspace.repository_id).await;
         let mut report = Report::new(workspace.clone());
         if options.stop {
             // Connected wrappers handle their own foreground process groups.
