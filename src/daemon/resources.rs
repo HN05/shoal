@@ -3,7 +3,7 @@ use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, params};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, HashMap},
     fmt,
     str::FromStr,
 };
@@ -252,7 +252,7 @@ fn row_lease(row: &rusqlite::Row<'_>) -> rusqlite::Result<ResourceLease> {
 
 /// `; held by a, b` naming the workspaces with leases in the pool, for the
 /// busy message and the notification the user sees.
-fn holders(db: &Connection, active: &[&ResourceLease]) -> Result<String> {
+fn holders(db: &Connection, active: &[ResourceLease]) -> Result<String> {
     let ids: BTreeSet<&str> = active.iter().map(|l| l.workspace_id.as_str()).collect();
     let mut names = Vec::with_capacity(ids.len());
     for id in ids {
@@ -375,26 +375,51 @@ impl Usage {
     }
 }
 
-fn usage(leases: &[&ResourceLease], resource: &str) -> Usage {
-    let mut used = Usage::default();
-    for lease in leases.iter().filter(|l| l.resource == resource) {
+/// Request-local totals, including members removed from the current definition.
+#[derive(Default)]
+struct PoolUsage<'a> {
+    members: HashMap<&'a str, Usage>,
+    slots: u32,
+}
+
+impl<'a> PoolUsage<'a> {
+    fn record(&mut self, lease: &'a ResourceLease) {
+        let used = self.members.entry(&lease.resource).or_default();
+        let before = used.slots();
         match lease.mode {
             LockMode::Permit => used.permits += 1,
             LockMode::Read => used.readers += 1,
             LockMode::Write => used.writers += 1,
         }
+        self.slots += used.slots() - before;
     }
-    used
+
+    fn member(&self, name: &str) -> Usage {
+        self.members.get(name).copied().unwrap_or_default()
+    }
 }
 
-fn pool_used(leases: &[&ResourceLease]) -> u32 {
-    let permits = leases.iter().filter(|l| l.mode == LockMode::Permit).count();
-    let locks: BTreeSet<_> = leases
-        .iter()
-        .filter(|l| l.mode != LockMode::Permit)
-        .map(|l| &l.resource)
-        .collect();
-    (permits + locks.len()) as u32
+impl<'a> FromIterator<&'a ResourceLease> for PoolUsage<'a> {
+    fn from_iter<T: IntoIterator<Item = &'a ResourceLease>>(leases: T) -> Self {
+        let mut usage = Self::default();
+        for lease in leases {
+            usage.record(lease);
+        }
+        usage
+    }
+}
+
+fn grouped_usage<'a>(
+    leases: impl IntoIterator<Item = &'a ResourceLease>,
+) -> BTreeMap<(&'a Scope, &'a str), PoolUsage<'a>> {
+    let mut pools = BTreeMap::<_, PoolUsage<'_>>::new();
+    for lease in leases {
+        pools
+            .entry((&lease.scope, lease.pool.as_str()))
+            .or_default()
+            .record(lease);
+    }
+    pools
 }
 
 impl ResourceConfig {
@@ -428,7 +453,7 @@ impl ResourceConfig {
 fn select_member<'a>(
     definition: &'a Definition,
     request: &ResourceRequest,
-    active: &[&ResourceLease],
+    usage: &PoolUsage<'_>,
     pool_available: u32,
 ) -> Result<Option<(&'a String, &'a ResourceConfig, LockMode)>> {
     let eligible: Vec<_> = definition
@@ -442,7 +467,7 @@ fn select_member<'a>(
         })
         .filter_map(|(name, settings)| {
             let mode = settings.mode(request.mode)?;
-            Some((name, settings, mode, usage(active, name)))
+            Some((name, settings, mode, usage.member(name)))
         })
         .collect();
     ensure!(
@@ -634,15 +659,19 @@ impl Manager {
             .run(move |db| {
                 let tx = db.transaction()?;
                 let all = leases(&tx, None)?;
+                let mut grouped = grouped_usage(&all);
                 let mut pools = Vec::new();
-                for (name, (scope, definition)) in definitions {
-                    let active: Vec<_> = all
-                        .iter()
-                        .filter(|l| l.scope == scope && l.pool == name)
-                        .collect();
-                    let matches = active.is_empty()
-                        || stored_definition(&tx, &scope, &name)?.as_ref() == Some(&definition);
-                    pools.push(pool_status(name, scope, &definition, &active, matches));
+                for (name, (scope, definition)) in &definitions {
+                    let usage = grouped.remove(&(scope, name.as_str())).unwrap_or_default();
+                    let matches = usage.slots == 0
+                        || stored_definition(&tx, scope, name)?.as_ref() == Some(definition);
+                    pools.push(pool_status(
+                        name.clone(),
+                        scope.clone(),
+                        definition,
+                        &usage,
+                        matches,
+                    ));
                 }
                 Ok(Overview {
                     pools,
@@ -678,8 +707,7 @@ fn acquire_lease(
             request.pool
         );
     }
-    let candidates = pool_leases(&tx, &scope, &request.pool)?;
-    let active: Vec<_> = candidates.iter().collect();
+    let active = pool_leases(&tx, &scope, &request.pool)?;
     if let Some(stored) = stored_definition(&tx, &scope, &request.pool)? {
         ensure!(
             active.is_empty() || stored == definition,
@@ -707,11 +735,17 @@ fn acquire_lease(
         );
         request.resource = Some(bound.member.clone());
     }
-    let pool_available = definition.capacity.saturating_sub(pool_used(&active));
-    let selected = match select_member(&definition, &request, &active, pool_available)? {
+    let usage: PoolUsage<'_> = active.iter().collect();
+    let pool_available = definition.capacity.saturating_sub(usage.slots);
+    let selected = match select_member(&definition, &request, &usage, pool_available)? {
         Some(selected) => Some(selected),
         // A busy pool still selects the member an approval request binds.
-        None => select_member(&definition, &request, &[], definition.capacity)?,
+        None => select_member(
+            &definition,
+            &request,
+            &PoolUsage::default(),
+            definition.capacity,
+        )?,
     };
     let busy = || -> Result<Allocation<ResourceLease>> {
         Ok(Allocation::Busy(format!(
@@ -743,7 +777,7 @@ fn acquire_lease(
             return Ok(Allocation::Approval(Box::new(approval)));
         }
     }
-    if !settings.can_acquire(mode, usage(&active, resource), pool_available) {
+    if !settings.can_acquire(mode, usage.member(resource), pool_available) {
         return busy();
     }
     let lease = ResourceLease {
@@ -798,10 +832,10 @@ fn pool_status(
     name: String,
     scope: Scope,
     definition: &Definition,
-    active: &[&ResourceLease],
+    usage: &PoolUsage<'_>,
     matches: bool,
 ) -> PoolStatus {
-    let used = pool_used(active);
+    let used = usage.slots;
     let pool_available = if matches {
         definition.capacity.saturating_sub(used)
     } else {
@@ -811,7 +845,7 @@ fn pool_status(
         .resources
         .iter()
         .map(|(name, r)| {
-            let occupancy = usage(active, name);
+            let occupancy = usage.member(name);
             let used = occupancy.slots();
             ResourceStatus {
                 requires_approval: r.requires_approval,
@@ -840,6 +874,10 @@ fn pool_status(
         resources,
     }
 }
+
+#[cfg(test)]
+#[path = "resources/accounting_tests.rs"]
+mod accounting_tests;
 
 #[cfg(test)]
 mod tests {
