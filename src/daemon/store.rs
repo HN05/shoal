@@ -79,8 +79,11 @@ impl Store {
     }
 }
 
+/// Checks existing rows before a migration's SQL runs; failure aborts the upgrade.
+type Precondition = fn(&Connection) -> Result<()>;
+
 // Append schema changes in version order; startup recovery belongs in quarantine.
-const MIGRATIONS: &[(i64, &str)] = &[
+const MIGRATIONS: &[(i64, &str, Option<Precondition>)] = &[
     (
         1,
         "CREATE TABLE IF NOT EXISTS repositories (
@@ -94,11 +97,13 @@ const MIGRATIONS: &[(i64, &str)] = &[
         CREATE TABLE IF NOT EXISTS executions (
             id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id), state TEXT NOT NULL
         );",
+        None,
     ),
     (
         2,
         "ALTER TABLE workspaces ADD COLUMN base_commit TEXT;
         ALTER TABLE workspaces ADD COLUMN base_ref TEXT;",
+        None,
     ),
     (
         3,
@@ -107,19 +112,23 @@ const MIGRATIONS: &[(i64, &str)] = &[
             name TEXT NOT NULL, port INTEGER NOT NULL UNIQUE CHECK(port BETWEEN 1 AND 65535),
             env_var TEXT NOT NULL, PRIMARY KEY(workspace_id, name), UNIQUE(workspace_id, env_var)
         );",
+        None,
     ),
     (
         4,
         "ALTER TABLE repositories ADD COLUMN name TEXT;
         CREATE UNIQUE INDEX IF NOT EXISTS repository_names ON repositories(name) WHERE name IS NOT NULL;",
+        None,
     ),
     (
         5,
         "ALTER TABLE ports ADD COLUMN reason TEXT;",
+        None,
     ),
     (
         6,
         "CREATE TABLE IF NOT EXISTS simulators(id TEXT PRIMARY KEY, record TEXT NOT NULL);",
+        None,
     ),
     (
         7,
@@ -128,6 +137,7 @@ const MIGRATIONS: &[(i64, &str)] = &[
             workspace_id TEXT NOT NULL, record TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS clean_requests_workspace ON simulator_clean_requests(workspace_id,id);",
+        None,
     ),
     (
         8,
@@ -141,10 +151,12 @@ const MIGRATIONS: &[(i64, &str)] = &[
             FOREIGN KEY(scope,pool) REFERENCES resource_pools(scope,name)
         );
         CREATE INDEX IF NOT EXISTS resource_lease_pool ON resource_leases(scope,pool);",
+        None,
     ),
     (
         9,
         "ALTER TABLE resource_leases ADD COLUMN mode TEXT NOT NULL DEFAULT 'permit' CHECK(mode IN ('permit','read','write'));",
+        None,
     ),
     (
         10,
@@ -153,6 +165,7 @@ const MIGRATIONS: &[(i64, &str)] = &[
         ALTER TABLE executions ADD COLUMN wrapper TEXT;
         ALTER TABLE executions ADD COLUMN child TEXT;
         ALTER TABLE executions ADD COLUMN group_id INTEGER;",
+        None,
     ),
     (
         11,
@@ -161,6 +174,7 @@ const MIGRATIONS: &[(i64, &str)] = &[
             directory_id TEXT,
             deleting_files INTEGER NOT NULL DEFAULT 0 CHECK(deleting_files IN (0,1))
         );",
+        None,
     ),
     (
         12,
@@ -168,10 +182,12 @@ const MIGRATIONS: &[(i64, &str)] = &[
             repository_id TEXT PRIMARY KEY REFERENCES repositories(id) ON DELETE CASCADE,
             toml TEXT NOT NULL
         );",
+        None,
     ),
     (
         13,
         "ALTER TABLE repositories ADD COLUMN workspaces_dir TEXT;",
+        None,
     ),
     (
         14,
@@ -179,6 +195,7 @@ const MIGRATIONS: &[(i64, &str)] = &[
             workspace_id TEXT PRIMARY KEY REFERENCES workspaces(id) ON DELETE CASCADE,
             record TEXT NOT NULL
         );",
+        None,
     ),
     (
         15,
@@ -187,6 +204,7 @@ const MIGRATIONS: &[(i64, &str)] = &[
             kind TEXT NOT NULL, message TEXT NOT NULL, read INTEGER NOT NULL DEFAULT 0 CHECK(read IN (0,1))
         );
         CREATE INDEX IF NOT EXISTS notifications_unread ON notifications(read,id);",
+        None,
     ),
     (
         16,
@@ -195,6 +213,7 @@ const MIGRATIONS: &[(i64, &str)] = &[
                 WHEN state='preparing' OR error LIKE 'setup failed (%' THEN 0
                 ELSE 1
             END;",
+        None,
     ),
     (
         17,
@@ -206,11 +225,18 @@ const MIGRATIONS: &[(i64, &str)] = &[
         );
         CREATE UNIQUE INDEX IF NOT EXISTS access_request_name
             ON access_requests(workspace_id,target_key,name) WHERE active=1;",
+        None,
     ),
     (
         18,
         "CREATE INDEX IF NOT EXISTS executions_workspace ON executions(workspace_id);
         CREATE INDEX IF NOT EXISTS workspaces_repository ON workspaces(repository_id);",
+        None,
+    ),
+    (
+        19,
+        include_str!("store/simulator_owner.sql"),
+        Some(validate_simulator_records),
     ),
     (
         19,
@@ -229,14 +255,23 @@ fn migrate(db: &mut Connection) -> Result<()> {
         return Ok(());
     }
     let tx = db.transaction()?;
-    for &(target, sql) in MIGRATIONS {
+    for &(target, sql, precondition) in MIGRATIONS {
         if target > version {
+            if let Some(precondition) = precondition {
+                precondition(&tx)?;
+            }
             tx.execute_batch(sql)
                 .with_context(|| format!("apply schema migration {target}"))?;
             tx.pragma_update(None, "user_version", target)?;
         }
     }
     tx.commit()?;
+    Ok(())
+}
+
+fn validate_simulator_records(db: &Connection) -> Result<()> {
+    crate::sim::records::list(db, None)
+        .context("validate simulator records before indexing ownership")?;
     Ok(())
 }
 
@@ -440,6 +475,9 @@ mod tests {
             if version < introduced {
                 db.execute_batch(&format!("DROP TABLE {table};"))?;
             }
+        }
+        if version >= 19 {
+            db.execute_batch(include_str!("store/simulator_owner.sql"))?;
         }
         db.pragma_update(None, "user_version", version)?;
         db.execute_batch(

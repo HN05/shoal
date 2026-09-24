@@ -42,7 +42,9 @@ removal, check it against the rule those files state before judging it.
   manual acknowledgements bind to exactly the recorded HEAD. This is cooperative,
   not a security boundary, so judge it as such.
 - Simulator plans never authorize mutations by themselves: the executor rechecks
-  recorded ownership and live capacity under the simulator gate.
+  recorded ownership and live capacity under the simulator gate. Indexed workspace
+  lookups use current ownership, falling back to last ownership only when unclaimed;
+  malformed ownership must not disappear from filtered results.
 - Allocation is atomic and persisted before the external mutation (simctl,
   Worktrunk). Leases survive restart and failed removal and are released only
   with successful removal. Active permits block automatic cleanup. Permit hooks

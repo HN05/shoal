@@ -2,6 +2,7 @@
 //! before every simctl mutation so interrupted work can be reconciled.
 pub mod audit;
 mod planning;
+pub(crate) mod records;
 mod simctl;
 
 use anyhow::{Result, ensure};
@@ -200,26 +201,11 @@ impl Manager {
         })
     }
 
-    /// Managed simulators, optionally those currently or last owned by a workspace.
+    /// Managed simulators; current ownership takes precedence over last ownership.
     pub async fn list_simulators(&self, owner: Option<&str>) -> Result<Vec<Simulator>> {
         let owner = owner.map(str::to_owned);
         self.store
-            .run(move |db| {
-                let records = db
-                    .prepare("SELECT record FROM simulators ORDER BY id")?
-                    .query_map([], |r| r.get::<_, String>(0))?
-                    .collect::<rusqlite::Result<Vec<_>>>()?;
-                let mut records = records
-                    .into_iter()
-                    .map(|r| serde_json::from_str::<Simulator>(&r))
-                    .collect::<serde_json::Result<Vec<_>>>()?;
-                if let Some(owner) = owner {
-                    records.retain(|s| {
-                        s.workspace_id.as_ref().or(s.last_workspace_id.as_ref()) == Some(&owner)
-                    });
-                }
-                Ok(records)
-            })
+            .run(move |db| records::list(db, owner.as_deref()))
             .await
     }
 
