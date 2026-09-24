@@ -118,22 +118,15 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<Acquisition> {
         let workspace = self.workspace(selector).await?;
-        let config = self.workspace_config(&workspace).await?;
         let range = self.workspace_settings(&workspace).await?.ports;
-        let definition = config
-            .ports
-            .definitions
-            .get(&name)
-            .cloned()
-            .unwrap_or_default();
+        let definition = range.definitions.get(&name).cloned().unwrap_or_default();
         let preferred = request.port.or(definition.port);
         let env_var = request.env_var.clone().or(definition.env);
         let reason = request.reason.clone().or(definition.reason);
         let policy = request
             .on_conflict
             .or(definition.on_conflict)
-            .or(config.ports.on_conflict)
-            .unwrap_or_default();
+            .unwrap_or(range.on_conflict);
         validate::lowercase_name("port", &name)?;
         ensure!(preferred != Some(0), "port zero cannot be reserved");
         validate::reason("port", reason.as_deref())?;
@@ -263,13 +256,13 @@ impl Manager {
 
     pub async fn port_overview(&self, selector: &str) -> Result<PortOverview> {
         let workspace = self.workspace(selector).await?;
-        let config = self.workspace_config(&workspace).await?;
+        let ports = self.workspace_settings(&workspace).await?.ports;
         let reserved = self.list_ports(Some(&workspace.id)).await?;
         Ok(PortOverview {
             workspace,
             reserved,
-            configured: config.ports.definitions,
-            on_conflict: config.ports.on_conflict.unwrap_or_default(),
+            configured: ports.definitions,
+            on_conflict: ports.on_conflict,
         })
     }
 

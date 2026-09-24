@@ -117,18 +117,15 @@ impl Manager {
             .await
     }
 
-    /// Resolve a hook through saved repository config, worktree config, then
-    /// its permitted global default. Paths use the same directory as execution.
+    /// A hook's executable from the resolved settings, in the directory it
+    /// runs from.
     pub(crate) async fn workspace_hook(
         &self,
         workspace: &Workspace,
         kind: HookKind,
     ) -> Result<Option<std::path::PathBuf>> {
-        let config = self.workspace_config(workspace).await?;
-        let Some(command) = kind
-            .repository_command(&config)
-            .or_else(|| kind.global_command(&self.config))
-        else {
+        let settings = self.workspace_settings(workspace).await?;
+        let Some(command) = kind.command(&settings) else {
             return Ok(None);
         };
         let checkout = match kind.directory() {
@@ -140,12 +137,6 @@ impl Manager {
                 .path(&workspace.path, &checkout)
                 .join(command),
         ))
-    }
-
-    /// The workspace's repository config: the saved local config layered per
-    /// option over the worktree's own `.shoal.toml`.
-    pub(crate) async fn workspace_config(&self, workspace: &Workspace) -> Result<RepoConfig> {
-        Ok(self.workspace_layers(workspace).await?.repository())
     }
 
     async fn workspace_layers(&self, workspace: &Workspace) -> Result<ConfigLayers> {

@@ -5,7 +5,7 @@ use anyhow::{Context, Result, ensure};
 use tokio::process::Command;
 
 use crate::{
-    config::{Config, repo::RepoConfig},
+    config::{Config, Effective, repo::RepoConfig},
     daemon::resources::ResourceLease,
     env,
     model::Workspace,
@@ -58,6 +58,10 @@ macro_rules! hook_kinds {
 
             pub fn repository_command_mut(self, config: &mut RepoConfig) -> &mut Option<String> {
                 match self { $(Self::$kind => &mut config.$field),+ }
+            }
+
+            pub fn command(self, settings: &Effective) -> Option<&String> {
+                match self { $(Self::$kind => settings.$field.as_ref()),+ }
             }
 
             pub fn global_command(self, config: &Config) -> Option<&String> {

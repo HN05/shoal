@@ -20,7 +20,6 @@ use crate::{
         store::{self, Store},
     },
     git::{self, default_branch::DefaultBranchLookup, repo::UpstreamPolicy, worktrunk},
-    hooks::HookKind,
     model::{Inspection, Repository, Workspace},
     paths::Paths,
     state::WorkspaceState,
@@ -413,23 +412,13 @@ impl Manager {
         )
         .await?;
         self.record_worktree_identity(workspace).await?;
-        let config = self.workspace_config(workspace).await?;
-        if let Some(name) = git_profile
-            .or(config.git_profile.as_deref())
-            .or(self.config.git_profile.as_deref())
-        {
+        let settings = self.workspace_settings(workspace).await?;
+        if let Some(name) = git_profile.or(settings.git_profile.as_deref()) {
             crate::git_profile::apply(&workspace.path, self.config.git.profile(name)?)
                 .await
                 .with_context(|| format!("apply git profile {name}"))?;
         }
-        Ok(self
-            .workspace_hook(workspace, HookKind::Setup)
-            .await?
-            .is_some()
-            || self
-                .workspace_hook(workspace, HookKind::PreSetup)
-                .await?
-                .is_some())
+        Ok(settings.setup_cmd.is_some() || settings.pre_setup_cmd.is_some())
     }
 
     pub(crate) async fn set_state(

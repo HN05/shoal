@@ -188,8 +188,8 @@ impl Manager {
         let (owner, preferred) = match selector {
             Some(selector) => {
                 let workspace = self.workspace(selector).await?;
-                let config = self.workspace_config(&workspace).await?;
-                (Some(workspace.id), config.simulators.preferred)
+                let settings = self.workspace_settings(&workspace).await?;
+                (Some(workspace.id), settings.simulators.preferred)
             }
             None => (None, Vec::new()),
         };
@@ -590,8 +590,13 @@ impl Manager {
         request: &SimRequest,
         inventory: &Inventory,
     ) -> Result<Profile> {
-        let repo = self.workspace_config(workspace).await?;
-        planning::resolve_request(&self.config.simulators, &repo, request, inventory)
+        let settings = self.workspace_settings(workspace).await?;
+        planning::resolve_request(
+            &self.config.simulators,
+            &settings.simulators,
+            request,
+            inventory,
+        )
     }
 
     pub async fn release_simulator(&self, selector: &str, name: String) -> Result<()> {

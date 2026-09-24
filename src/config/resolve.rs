@@ -625,6 +625,31 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
     }
 
     #[test]
+    fn hooks_resolve_by_kind_through_the_settings() {
+        let settings = stack(
+            "pre_setup_cmd = 'global/pre'\npost_remove_cmd = 'global/remove'\n",
+            "post_setup_cmd = 'scripts/attach.sh'\npre_setup_cmd = 'file/pre'\n",
+            "pre_remove_cmd = '/opt/detach'\n",
+        )
+        .resolve()
+        .unwrap();
+        for (kind, expected) in [
+            (HookKind::Setup, None),
+            (HookKind::PreSetup, Some("file/pre")),
+            (HookKind::PostSetup, Some("scripts/attach.sh")),
+            (HookKind::PreRemove, Some("/opt/detach")),
+            (HookKind::PostRemove, Some("global/remove")),
+            (HookKind::PostResourceAcquire, None),
+        ] {
+            assert_eq!(
+                kind.command(&settings).map(String::as_str),
+                expected,
+                "{kind:?}"
+            );
+        }
+    }
+
+    #[test]
     fn named_tables_report_replacement_by_name() {
         let stack = stack(
             "[commands]\nreview = ['global']\ncheck = ['check']\n",

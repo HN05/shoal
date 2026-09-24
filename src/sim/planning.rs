@@ -2,7 +2,7 @@
 use anyhow::{Result, bail, ensure};
 
 use super::{Profile, SimConfig, SimRequest, Simulator, SimulatorState, simctl::Inventory};
-use crate::config::repo::RepoConfig;
+use crate::config::Simulators;
 
 /// A proposal over recorded devices, valid only while the simulator gate is held.
 /// The executor rechecks ownership and live capacity before applying it.
@@ -143,7 +143,7 @@ pub(super) fn check_existing_device(sim: &Simulator, inventory: &Inventory) -> R
 
 pub(super) fn resolve_request(
     config: &SimConfig,
-    repo: &RepoConfig,
+    repo: &Simulators,
     request: &SimRequest,
     inventory: &Inventory,
 ) -> Result<Profile> {
@@ -165,8 +165,8 @@ pub(super) fn resolve_request(
     } else {
         let names = if let Some(name) = &request.profile {
             vec![name.clone()]
-        } else if !repo.simulators.preferred.is_empty() {
-            repo.simulators.preferred.clone()
+        } else if !repo.preferred.is_empty() {
+            repo.preferred.clone()
         } else {
             config.default.iter().cloned().collect()
         };
@@ -213,18 +213,8 @@ pub(super) fn resolve_request(
         .filter(|p| p.requires_approval)
         .map(|p| p.approval_lifetime)
         .collect();
-    if repo
-        .simulators
-        .requires_approval
-        .or(config.requires_approval)
-        .unwrap_or_default()
-    {
-        lifetimes.push(
-            repo.simulators
-                .approval_lifetime
-                .or(config.approval_lifetime)
-                .unwrap_or_default(),
-        );
+    if repo.requires_approval {
+        lifetimes.push(repo.approval_lifetime);
     }
     profile.requires_approval = !lifetimes.is_empty();
     profile.approval_lifetime = if lifetimes.contains(&crate::daemon::access::Lifetime::Lease) {
@@ -550,13 +540,15 @@ mod tests {
                 ..profile()
             },
         );
-        let mut repo = RepoConfig::default();
-        repo.simulators.requires_approval = Some(false);
+        let mut repo = Simulators {
+            requires_approval: false,
+            ..Default::default()
+        };
         let resolved = resolve_request(&config, &repo, &request(), &inventory).unwrap();
         assert!(resolved.requires_approval);
         assert_eq!(resolved.approval_lifetime, Lifetime::Workspace);
-        repo.simulators.requires_approval = Some(true);
-        repo.simulators.approval_lifetime = Some(Lifetime::Lease);
+        repo.requires_approval = true;
+        repo.approval_lifetime = Lifetime::Lease;
         let mut explicit = request();
         explicit.device = Some("Phone".into());
         explicit.runtime = Some("iOS".into());
