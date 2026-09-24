@@ -10,6 +10,8 @@ when behavior changes, distinguishing decisions from proposals.
 - Implement incrementally: CLI/daemon, workspaces, ports, simulators, lifecycle
   polish, then filesystem restrictions.
 - The daemon owns shared state. Keep terminal I/O in the execution wrapper.
+- Keep each function at one abstraction level: orchestration calls named domain
+  operations, and their helpers own lower-level implementation details.
 - Invoke external tools with argument arrays. Use Worktrunk for worktree
   operations and preserve Shoal's ownership records and cleanup policy.
 - Repository TOML lives at `.shoal.toml` or `.shoal/config.toml`; reject both

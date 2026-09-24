@@ -10,6 +10,8 @@ removal, check it against the rule those files state before judging it.
 
 - The minimum Rust version follows current stable; keep the manifest and CI
   toolchain aligned and validate with locked dependencies.
+- Check function abstraction levels against AGENTS.md. Judge responsibility
+  boundaries rather than function length or the number of helpers.
 - Safety of user work: removal goes through the one shared path, preserves
   work and leases on failure, never adopts moved or replaced worktrees, and
   never signals a process whose recorded identity was not verified. Any new
