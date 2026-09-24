@@ -15,13 +15,12 @@ pub(crate) use executions::StartedExecution;
 
 use crate::{
     config::Config,
-    git,
+    git::{self, worktrunk},
     model::{Inspection, Workspace},
     paths::Paths,
     scope::Caller,
     state::WorkspaceState,
     store::{self, Store},
-    worktrunk,
 };
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{OptionalExtension, TransactionBehavior, params};
@@ -32,7 +31,7 @@ use uuid::Uuid;
 pub(crate) enum WorkspaceSource {
     New(Option<String>),
     /// An existing branch, with an optional base ref overriding the default branch.
-    Existing(crate::existing_branch::Branch, Option<String>),
+    Existing(crate::git::existing_branch::Branch, Option<String>),
 }
 
 pub(crate) enum ResourceGuard {
@@ -336,7 +335,7 @@ impl Manager {
         repo: &crate::model::Repository,
         workspace: &Workspace,
         base: Option<String>,
-        existing: Option<crate::existing_branch::Branch>,
+        existing: Option<crate::git::existing_branch::Branch>,
         git_profile: Option<&str>,
     ) -> Result<bool> {
         if let Some(branch) = &existing {
@@ -347,7 +346,7 @@ impl Manager {
         } else {
             base
         };
-        let default = crate::default_branch::resolve(&repo.path, base.is_none()).await;
+        let default = crate::git::default_branch::resolve(&repo.path, base.is_none()).await;
         // An explicit ref remains an escape hatch when remote default-branch
         // discovery is unavailable. It does not implicitly refresh another ref.
         let default = if base.is_none() {
@@ -531,7 +530,7 @@ fn derive_workspace_name(branch: &str) -> String {
 /// Existing worktrees use a live local default ref, or their opening commit.
 async fn existing_base(repo: &crate::model::Repository, branch: &str) -> Result<String> {
     Ok(
-        match crate::default_branch::resolve(&repo.path, false).await {
+        match crate::git::default_branch::resolve(&repo.path, false).await {
             Ok(name)
                 if name != branch
                     && git::run_isolated(

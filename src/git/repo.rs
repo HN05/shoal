@@ -5,10 +5,9 @@ use anyhow::{Context, Result, bail, ensure};
 use uuid::Uuid;
 
 use crate::{
-    git::{self, run_isolated as git_run},
+    git::{self, run_isolated as git_run, worktrunk},
     model::{LandPlan, LandedBranch, PulledBranch, Repository},
     workspace::Manager,
-    worktrunk,
 };
 
 impl Manager {
@@ -59,7 +58,7 @@ impl Manager {
             workspace.path.display()
         );
         self.verify_worktree(&workspace).await?;
-        let default = crate::default_branch::resolve(&repo.path, true).await?;
+        let default = crate::git::default_branch::resolve(&repo.path, true).await?;
         let branch = workspace.branch.as_str();
         ensure!(
             branch != default,

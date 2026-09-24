@@ -1,4 +1,11 @@
 //! Git invocations shared by workspace creation, removal, branch refreshes, and merges.
+pub mod default_branch;
+mod diff;
+pub mod existing_branch;
+pub mod merge;
+pub mod repo;
+pub mod worktrunk;
+
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, ensure};

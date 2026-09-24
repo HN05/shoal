@@ -261,7 +261,7 @@ async fn run_tracked(
     };
     if !matches!(result, Ok(0))
         && let Some(land) = &plan.land
-        && let Err(error) = crate::repo_git::rollback_land(land).await
+        && let Err(error) = crate::git::repo::rollback_land(land).await
     {
         result = Err(error);
     }

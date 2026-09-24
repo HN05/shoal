@@ -3,11 +3,10 @@ use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    git,
+    git::{self, worktrunk},
     model::{Repository, Workspace},
     state::WorkspaceState,
     workspace::Manager,
-    worktrunk,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -9,8 +9,10 @@ use crate::{
     client::{self, request},
     context::Context,
     env, execution,
-    existing_branch::{Branch, OpenedWorkspace},
-    git,
+    git::{
+        self,
+        existing_branch::{Branch, OpenedWorkspace},
+    },
     happy::{self, HappyAgent},
     hooks::{self, Hook},
     model::{DiffBase, Workspace, WorkspaceStatus},
@@ -38,7 +40,7 @@ pub(super) async fn land_worker(ctx: &Context, plan: String) -> Result<i32> {
         std::env::var(env::WORKSPACE_ID)? == plan.workspace.id,
         "land worker requires its authorized workspace"
     );
-    let result = crate::repo_git::finish_land(plan).await?;
+    let result = crate::git::repo::finish_land(plan).await?;
     ctx.show(&result, |result| {
         let refresh = &result.default_refresh;
         if refresh.updated {
