@@ -1,7 +1,7 @@
 //! Boolean Git queries whose negative answers have documented exit statuses.
 use std::path::Path;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use tokio::process::Command;
 
 use crate::subprocess;
@@ -29,7 +29,9 @@ pub async fn ref_exists(
 ) -> Result<bool> {
     let mut command = command(repo);
     command.args(["show-ref", "--exists", "--", reference]);
-    predicate(command, 2).await
+    predicate(command, 2)
+        .await
+        .context("check reference existence; Git 2.43 or newer is required")
 }
 
 async fn predicate(command: Command, negative: i32) -> Result<bool> {
@@ -60,6 +62,7 @@ mod tests {
                 ("exit 1", ancestry.then_some(false)),
                 ("exit 2", (!ancestry).then_some(false)),
                 ("echo broken >&2; exit 128", None),
+                ("echo unknown option exists >&2; exit 129", None),
                 ("kill -TERM $$", None),
                 ("missing executable", None),
             ] {
@@ -85,6 +88,11 @@ mod tests {
                             assert!(error.contains("broken") && error.contains("128"));
                         } else if script == "missing executable" {
                             assert!(error.contains("missing-git"));
+                        } else if script.contains("unknown option") {
+                            assert!(error.contains("unknown option exists"));
+                            if !ancestry {
+                                assert!(error.contains("Git 2.43 or newer is required"));
+                            }
                         }
                     }
                 }
