@@ -318,6 +318,48 @@ impl<T> Allocation<T> {
     }
 }
 
+// Error codes are open on receipt so newer daemons can still explain failures.
+// Keep the known vocabulary and its wire/display spellings in one place.
+macro_rules! error_codes {
+    ($($variant:ident => $wire:literal),+ $(,)?) => {
+        #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+        #[serde(from = "String")]
+        pub enum ErrorCode {
+            $(#[serde(rename = $wire)] $variant,)+
+            /// An unfamiliar daemon code, preserved verbatim for compatibility.
+            #[serde(untagged)]
+            Unknown(String),
+        }
+
+        impl From<String> for ErrorCode {
+            fn from(value: String) -> Self {
+                match value.as_str() {
+                    $($wire => Self::$variant,)+
+                    _ => Self::Unknown(value),
+                }
+            }
+        }
+
+        impl std::fmt::Display for ErrorCode {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str(match self {
+                    $(Self::$variant => $wire,)+
+                    Self::Unknown(value) => value,
+                })
+            }
+        }
+    };
+}
+
+error_codes! {
+    InvalidRequest => "invalid_request",
+    ProtocolMismatch => "protocol_mismatch",
+    ScopeDenied => "scope_denied",
+    ManagedService => "managed_service",
+    OperationFailed => "operation_failed",
+    ExecutionFailed => "execution_failed",
+}
+
 // Keep payload conversions and variant names tied to the wire enum.
 macro_rules! response_bodies {
     ($($variant:ident($payload:ty),)*) => {
@@ -325,7 +367,7 @@ macro_rules! response_bodies {
         #[serde(tag = "type", content = "data", rename_all = "snake_case")]
         pub enum Body {
             Ok,
-            Error { code: String, message: String },
+            Error { code: ErrorCode, message: String },
             Busy { message: String },
             $($variant($payload),)*
         }
@@ -406,7 +448,7 @@ impl TryFrom<Body> for () {
 /// A daemon failure, retaining its wire code and message for callers to inspect.
 #[derive(Debug)]
 pub struct RemoteError {
-    pub code: String,
+    pub code: ErrorCode,
     pub message: String,
 }
 
@@ -421,9 +463,9 @@ impl std::error::Error for RemoteError {}
 impl Body {
     /// Preserve remote errors even when the caller expected a different variant.
     pub fn unexpected(self, expected: &str) -> anyhow::Error {
-        match self {
-            Self::Error { code, message } => RemoteError { code, message }.into(),
-            body => anyhow::anyhow!(
+        match self.into_result() {
+            Err(error) => error,
+            Ok(body) => anyhow::anyhow!(
                 "unexpected daemon response; expected {expected}, received {}",
                 body.variant_name()
             ),
@@ -437,9 +479,9 @@ impl Body {
         }
     }
 
-    pub fn error(code: &str, error: impl std::fmt::Display) -> Self {
+    pub fn error(code: ErrorCode, error: impl std::fmt::Display) -> Self {
         Self::Error {
-            code: code.into(),
+            code,
             message: error.to_string(),
         }
     }
@@ -502,6 +544,33 @@ pub async fn write<T: Serialize>(stream: &mut (impl AsyncWrite + Unpin), value: 
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn daemon_error_codes_preserve_wire_spellings() {
+        for (code, spelling) in [
+            (ErrorCode::InvalidRequest, "invalid_request"),
+            (ErrorCode::ProtocolMismatch, "protocol_mismatch"),
+            (ErrorCode::ScopeDenied, "scope_denied"),
+            (ErrorCode::ManagedService, "managed_service"),
+            (ErrorCode::OperationFailed, "operation_failed"),
+            (ErrorCode::ExecutionFailed, "execution_failed"),
+            (ErrorCode::Unknown("future_code".into()), "future_code"),
+        ] {
+            let wire = json!({"protocol": VERSION, "id": 7, "type": "error",
+                "data": {"code": spelling, "message": "failed"}});
+            let response = Response::new(7, Body::error(code.clone(), "failed"));
+            assert_eq!(serde_json::to_value(response).unwrap(), wire);
+            let response: Response = serde_json::from_value(wire).unwrap();
+            let error = response.body.into_result().unwrap_err();
+            let remote = error.downcast_ref::<RemoteError>().unwrap();
+            assert_eq!(remote.code, code);
+            assert_eq!(remote.message, "failed");
+            assert_eq!(error.to_string(), format!("{spelling}: failed"));
+        }
+        for code in [json!(null), json!(42), json!({"unknown": "future_code"})] {
+            assert!(serde_json::from_value::<ErrorCode>(code).is_err());
+        }
+    }
 
     #[test]
     fn workspace_hook_rejects_unknown_kinds() {
@@ -646,7 +715,7 @@ mod tests {
                 "Error" => {
                     let error = DaemonStatus::try_from(body).unwrap_err();
                     let remote = error.downcast_ref::<RemoteError>().unwrap();
-                    assert_eq!(remote.code, "future_code");
+                    assert_eq!(remote.code, ErrorCode::Unknown("future_code".into()));
                     assert_eq!(remote.message, "failed");
                 }
                 _ => assert_eq!(
@@ -660,12 +729,12 @@ mod tests {
     #[test]
     fn stream_payloads_and_acknowledgements_preserve_remote_errors() {
         for error in [
-            ExecutionPlan::try_from(Body::error("scope_denied", "denied")).unwrap_err(),
-            Notification::try_from(Body::error("scope_denied", "denied")).unwrap_err(),
-            <()>::try_from(Body::error("scope_denied", "denied")).unwrap_err(),
+            ExecutionPlan::try_from(Body::error(ErrorCode::ScopeDenied, "denied")).unwrap_err(),
+            Notification::try_from(Body::error(ErrorCode::ScopeDenied, "denied")).unwrap_err(),
+            <()>::try_from(Body::error(ErrorCode::ScopeDenied, "denied")).unwrap_err(),
         ] {
             let remote = error.downcast_ref::<RemoteError>().unwrap();
-            assert_eq!(remote.code, "scope_denied");
+            assert_eq!(remote.code, ErrorCode::ScopeDenied);
             assert_eq!(remote.message, "denied");
         }
         let error = <()>::try_from(Body::Workspaces(vec![])).unwrap_err();

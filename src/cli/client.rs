@@ -148,7 +148,7 @@ pub async fn wait(paths: &Paths, running: bool) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocol::RemoteError;
+    use crate::protocol::{ErrorCode, RemoteError};
     use tokio::net::UnixListener;
 
     async fn reply<T>(mut response: Response) -> Result<T>
@@ -193,18 +193,21 @@ mod tests {
             error.to_string(),
             "unexpected daemon response; expected Status, received Ok"
         );
-        let error = reply::<()>(Response::new(1, Body::error("scope_denied", "denied")))
-            .await
-            .unwrap_err();
+        let error = reply::<()>(Response::new(
+            1,
+            Body::error(ErrorCode::ScopeDenied, "denied"),
+        ))
+        .await
+        .unwrap_err();
         let remote = error.downcast_ref::<RemoteError>().unwrap();
-        assert_eq!(remote.code, "scope_denied");
+        assert_eq!(remote.code, ErrorCode::ScopeDenied);
         assert_eq!(remote.message, "denied");
         assert_eq!(error.to_string(), "scope_denied: denied");
     }
 
     #[tokio::test]
     async fn protocol_mismatch_precedes_payload_extraction() {
-        let mut response = Response::new(1, Body::error("protocol_mismatch", "old daemon"));
+        let mut response = Response::new(1, Body::error(ErrorCode::ProtocolMismatch, "old daemon"));
         response.protocol += 1;
         let error = reply::<DaemonStatus>(response).await.unwrap_err();
         assert!(error.is::<ProtocolMismatch>());

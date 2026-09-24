@@ -102,7 +102,8 @@ removal, check it against the rule those files state before judging it.
   sites; machine output and stored values stay plain. Progress clears before results and stays off for JSON,
   redirected stderr and dumb terminals.
 - Client response extraction reports expected and received variants and preserves
-  daemon error codes and messages as structured errors without changing the wire format.
+  typed daemon error codes and messages without changing the wire format; unfamiliar
+  codes survive verbatim for version compatibility.
   Resource protocol methods use domain-then-verb names matching the CLI operations.
 - Persistence: closed Shoal enums with matching display and wire names share
   explicit spellings through one macro and reject unknown values. Opening persistence

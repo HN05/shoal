@@ -32,7 +32,8 @@ directory has one daemon shared across repositories, with a private Unix
 socket and a versioned JSON protocol; the ordinary installation is per user.
 Resource protocol methods use domain-then-verb names matching the CLI operations.
 The daemon owns SQLite state, allocation, lifecycle transitions, and recovery.
-Daemon errors stay structured on the client without changing the wire format.
+Daemon errors retain typed codes and messages on the client without changing the
+wire format; unfamiliar codes are preserved verbatim for version compatibility.
 
 Internal CLI workers are built through one typed argument builder that explicitly
 passes the resolved state directory and output mode.

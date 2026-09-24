@@ -38,7 +38,8 @@ use crate::{
     paths::Paths,
     process::identity::Identity,
     protocol::{
-        self, Body, Control, DaemonStatus, ExecutionEvent, Method, Request, Response, timing,
+        self, Body, Control, DaemonStatus, ErrorCode, ExecutionEvent, Method, Request, Response,
+        timing,
     },
 };
 
@@ -154,13 +155,13 @@ async fn serve(mut stream: UnixStream, server: Server) -> Result<()> {
         match timeout(timing::REQUEST_READ_TIMEOUT, protocol::read(&mut stream)).await? {
             Ok(request) => request,
             Err(error) => {
-                let response = Response::new(0, Body::error("invalid_request", error));
+                let response = Response::new(0, Body::error(ErrorCode::InvalidRequest, error));
                 return protocol::write(&mut stream, &response).await;
             }
         };
     if request.protocol != protocol::VERSION {
         let body = Body::error(
-            "protocol_mismatch",
+            ErrorCode::ProtocolMismatch,
             "restart the daemon with the installed version",
         );
         return protocol::write(&mut stream, &Response::new(request.id, body)).await;
@@ -174,7 +175,7 @@ async fn serve(mut stream: UnixStream, server: Server) -> Result<()> {
     {
         Ok(caller) => caller,
         Err(error) => {
-            let body = Body::error("scope_denied", format!("{error:#}"));
+            let body = Body::error(ErrorCode::ScopeDenied, format!("{error:#}"));
             return protocol::write(&mut stream, &Response::new(request.id, body)).await;
         }
     };
@@ -210,7 +211,7 @@ async fn serve(mut stream: UnixStream, server: Server) -> Result<()> {
             unread_notifications: server.manager.unread_notifications().await?,
         }),
         Method::Shutdown if server.managed => Body::error(
-            "managed_service",
+            ErrorCode::ManagedService,
             "stop the daemon through the OS service manager",
         ),
         Method::Shutdown => {
@@ -220,7 +221,7 @@ async fn serve(mut stream: UnixStream, server: Server) -> Result<()> {
         }
         method => match operation(&server.manager, method, caller.as_ref()).await {
             Ok(body) => body,
-            Err(error) => Body::error("operation_failed", format!("{error:#}")),
+            Err(error) => Body::error(ErrorCode::OperationFailed, format!("{error:#}")),
         },
     };
     protocol::write(&mut stream, &Response::new(request.id, body)).await
@@ -488,7 +489,7 @@ async fn execute(
     {
         Ok(begun) => begun,
         Err(error) => {
-            let body = Body::error("execution_failed", format!("{error:#}"));
+            let body = Body::error(ErrorCode::ExecutionFailed, format!("{error:#}"));
             return protocol::write(&mut stream, &Response::new(request_id, body)).await;
         }
     };
