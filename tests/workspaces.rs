@@ -10905,3 +10905,75 @@ fn merge_ref_lookup_failures_do_not_fall_back_to_remote_discovery() {
         assert_eq!(git(path, &["rev-parse", "HEAD"]), before);
     }
 }
+
+#[test]
+#[ignore = "manual release-mode measurement"]
+fn benchmark_daemon_reads() {
+    use std::{
+        io::{BufRead, BufReader},
+        os::unix::net::UnixStream,
+    };
+
+    fn request(socket: &Path, protocol: u64, method: Value) -> Value {
+        let mut stream = UnixStream::connect(socket).unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(30)))
+            .unwrap();
+        writeln!(
+            stream,
+            "{}",
+            serde_json::json!({"protocol": protocol, "id": 1, "method": method})
+        )
+        .unwrap();
+        let mut line = String::new();
+        BufReader::new(stream).read_line(&mut line).unwrap();
+        serde_json::from_str(&line).unwrap()
+    }
+
+    let fixture = Fixture::new();
+    for name in ["bench0", "bench1", "bench2", "bench3"] {
+        fixture.add(name);
+    }
+    let socket = fixture.root.path().join("state/daemon.sock");
+    let protocol = request(&socket, 0, serde_json::json!("status"))["protocol"]
+        .as_u64()
+        .unwrap();
+    println!("method,clients,requests_per_s,p50_us,p95_us,p99_us");
+    for method in ["inspect_workspace", "workspace_status"] {
+        for clients in [1, 16] {
+            let start = Instant::now();
+            let mut latencies = thread::scope(|scope| {
+                let mut tasks = Vec::new();
+                for client in 0..clients {
+                    let socket = &socket;
+                    tasks.push(scope.spawn(move || {
+                        let mut samples = Vec::new();
+                        for _ in 0..100 {
+                            let start = Instant::now();
+                            let response = request(socket, protocol, serde_json::json!({method: {"workspace": format!("bench{}", client % 4)}}));
+                            assert_eq!(response["type"], if method == "workspace_status" { "workspace_status" } else { "inspection" }, "{response}");
+                            if method == "workspace_status" {
+                                assert!(response["data"]["diff_error"].is_null(), "{response}");
+                            }
+                            samples.push(start.elapsed().as_micros());
+                        }
+                        samples
+                    }));
+                }
+                tasks
+                    .into_iter()
+                    .flat_map(|task| task.join().unwrap())
+                    .collect::<Vec<_>>()
+            });
+            let elapsed = start.elapsed().as_secs_f64();
+            latencies.sort_unstable();
+            println!(
+                "{method},{clients},{:.0},{},{},{}",
+                latencies.len() as f64 / elapsed,
+                latencies[latencies.len() / 2],
+                latencies[latencies.len() * 95 / 100],
+                latencies[latencies.len() * 99 / 100]
+            );
+        }
+    }
+}
