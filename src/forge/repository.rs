@@ -4,17 +4,13 @@ use std::path::Path;
 
 use crate::{git, model::Repository};
 
+use super::remote_url::{RemoteUrl, source_name};
+
 /// The explicit name, or the last path component of the source.
 pub fn name(repo: &crate::model::Repository) -> &str {
     repo.name
         .as_deref()
         .unwrap_or_else(|| source_name(&repo.source))
-}
-
-pub fn source_name(source: &str) -> &str {
-    let source = source.trim_end_matches('/');
-    let name = source.rsplit(['/', ':']).next().unwrap_or(source);
-    name.strip_suffix(".git").unwrap_or(name)
 }
 
 /// A filesystem-safe clone directory name derived from the source.
@@ -41,12 +37,7 @@ pub fn directory_name(source: &str) -> String {
 /// The host part of a remote URL (`https://user@host/...` or `user@host:...`),
 /// without credentials.
 pub fn host(source: &str) -> Option<&str> {
-    let authority = source
-        .split_once("://")
-        .map(|(_, rest)| rest.split('/').next().unwrap_or(rest))
-        .or_else(|| source.split_once(':').map(|(host, _)| host))
-        .filter(|host| !host.is_empty())?;
-    Some(authority.rsplit('@').next().unwrap_or(authority))
+    RemoteUrl::parse(source).and_then(|remote| remote.host)
 }
 
 /// Local checkouts use origin; clones retain their original source URL even
@@ -73,21 +64,9 @@ pub async fn remote_url(source: &str) -> Result<Option<String>> {
 
 /// Normalize equivalent transports of one remote to a comparable key.
 fn url_key(url: &str) -> String {
-    let remote = if let Some((scheme, rest)) = url.split_once("://") {
-        if !matches!(scheme, "http" | "https" | "ssh" | "git") {
-            return url.to_owned();
-        }
-        rest.split_once('/')
-    } else {
-        url.split_once(':')
-    };
-    let Some((authority, path)) = remote else {
-        return url.to_owned();
-    };
-    let host = authority.rsplit('@').next().unwrap_or(authority);
-    let path = path.trim_end_matches('/');
-    let path = path.strip_suffix(".git").unwrap_or(path);
-    format!("remote:{}/{path}", host.to_ascii_lowercase())
+    RemoteUrl::parse(url)
+        .map(|remote| remote.registration_key())
+        .unwrap_or_else(|| url.to_owned())
 }
 
 /// Resolve the same repository selectors in the CLI and daemon.

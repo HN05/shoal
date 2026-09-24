@@ -1,8 +1,11 @@
 //! Forge identity and read-only issue/PR queries using the user's gh/fj login.
 pub mod pr;
+mod remote_url;
 pub mod repository;
 
 use anyhow::{Context, Result, ensure};
+
+use remote_url::{RemoteUrl, Transport};
 
 #[derive(Debug)]
 pub(crate) struct ForgeRepo {
@@ -51,29 +54,27 @@ impl PartialEq for ForgeRepo {
 
 impl ForgeRepo {
     pub fn parse(remote: &str) -> Result<Self> {
-        let (authority, path, ssh) = if let Some((scheme, rest)) = remote.split_once("://") {
-            ensure!(
-                matches!(scheme, "https" | "http" | "ssh"),
-                "issue lookup needs a GitHub or Forgejo remote"
-            );
-            let (authority, path) = rest
-                .split_once('/')
-                .context("remote is missing owner/repository")?;
-            (authority, path, scheme == "ssh")
-        } else {
-            let (authority, path) = remote
-                .split_once(':')
-                .context("issue lookup needs a GitHub or Forgejo remote")?;
-            (authority, path, true)
-        };
-        let host = authority.rsplit('@').next().unwrap_or(authority);
-        let host = if ssh {
+        let remote =
+            RemoteUrl::parse(remote).context("issue lookup needs a GitHub or Forgejo remote")?;
+        Self::from_remote(&remote)
+    }
+
+    fn from_remote(remote: &RemoteUrl<'_>) -> Result<Self> {
+        ensure!(
+            matches!(
+                remote.transport,
+                Transport::Http | Transport::Https | Transport::Ssh | Transport::Scp
+            ),
+            "issue lookup needs a GitHub or Forgejo remote"
+        );
+        let path = remote.path.context("remote is missing owner/repository")?;
+        let host = remote.host.unwrap_or_default();
+        // SSH ports affect registration identity, but not the forge's web host.
+        let host = if matches!(remote.transport, Transport::Ssh | Transport::Scp) {
             host.split(':').next().unwrap_or(host)
         } else {
             host
         };
-        let path = path.trim_end_matches('/');
-        let path = path.strip_suffix(".git").unwrap_or(path);
         ensure!(
             !host.is_empty()
                 && !host.starts_with('-')
@@ -94,7 +95,7 @@ impl ForgeRepo {
             kind: ForgeKind::from_host(&host),
             host,
             path: path.into(),
-            web_scheme: if remote.starts_with("http://") {
+            web_scheme: if remote.transport == Transport::Http {
                 "http"
             } else {
                 "https"
