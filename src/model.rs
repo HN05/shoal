@@ -161,6 +161,19 @@ pub struct PulledBranch {
     pub skipped: Option<String>,
 }
 
+impl PulledBranch {
+    pub fn unchanged(repo: &Repository, branch: &str, commit: String, skipped: String) -> Self {
+        Self {
+            branch: branch.to_owned(),
+            repository_id: repo.id.clone(),
+            previous_commit: commit.clone(),
+            commit,
+            updated: false,
+            skipped: Some(skipped),
+        }
+    }
+}
+
 /// A workspace branch merged into its repository's default branch.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LandedBranch {

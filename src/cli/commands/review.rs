@@ -88,15 +88,15 @@ pub(super) async fn pull_request(
             git::run(
                 &repo.path,
                 &[
-                    "fetch",
-                    "--no-tags",
-                    "--no-recurse-submodules",
-                    "--no-write-fetch-head",
-                    "--refmap=",
-                    "--",
-                    "origin",
-                    &format!("+{}:{tracking}", git::local_ref(&pull.base)),
-                ],
+                    git::FETCH_SAFE_ARGS,
+                    &[
+                        "--refmap=",
+                        "--",
+                        "origin",
+                        &format!("+{}:{tracking}", git::local_ref(&pull.base)),
+                    ],
+                ]
+                .concat(),
             )
             .await
             .with_context(|| format!("could not fetch the PR base {}", pull.base))?;

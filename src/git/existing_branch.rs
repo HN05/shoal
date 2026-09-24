@@ -205,17 +205,16 @@ impl Manager {
             git::run_isolated(
                 &repo.path,
                 &[
-                    "-c",
-                    "fetch.prune=false",
-                    "fetch",
-                    "--no-tags",
-                    "--no-recurse-submodules",
-                    "--no-write-fetch-head",
-                    "--refmap=",
-                    "--",
-                    remote,
-                    &format!("+{}:{tracking}", git::local_ref(&branch.name)),
-                ],
+                    &["-c", "fetch.prune=false"][..],
+                    git::FETCH_SAFE_ARGS,
+                    &[
+                        "--refmap=",
+                        "--",
+                        remote,
+                        &format!("+{}:{tracking}", git::local_ref(&branch.name)),
+                    ],
+                ]
+                .concat(),
             )
             .await?;
             let local = git::local_ref(&branch.name);

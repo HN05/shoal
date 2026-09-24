@@ -88,16 +88,12 @@ impl Manager {
                 .with_context(|| format!("repository has no local {default} branch"))?
                 .trim()
                 .to_owned();
-            PulledBranch {
-                branch: default.clone(),
-                repository_id: repo.id.clone(),
-                updated: false,
-                previous_commit: commit.clone(),
+            PulledBranch::unchanged(
+                &repo,
+                &default,
                 commit,
-                skipped: Some(format!(
-                    "{default} has no upstream; landing on its local state"
-                )),
-            }
+                format!("{default} has no upstream; landing on its local state"),
+            )
         } else {
             self.refresh_branch(&repo, &default, UpstreamPolicy::Required)
                 .await
@@ -164,14 +160,7 @@ impl Manager {
             })
         };
         match skipped {
-            Some(skipped) => Ok(PulledBranch {
-                branch: branch.into(),
-                repository_id: repo.id.clone(),
-                updated: false,
-                previous_commit: commit.clone(),
-                commit,
-                skipped: Some(skipped),
-            }),
+            Some(skipped) => Ok(PulledBranch::unchanged(&repo, branch, commit, skipped)),
             None => {
                 self.refresh_branch(&repo, branch, UpstreamPolicy::Required)
                     .await
@@ -219,16 +208,14 @@ impl Manager {
             && upstream.is_none()
             && git_run(&repo.path, &["remote"]).await?.trim().is_empty()
         {
-            return Ok(PulledBranch {
-                branch: branch.into(),
-                repository_id: repo.id.clone(),
-                updated: false,
-                commit: previous_commit.clone(),
+            return Ok(PulledBranch::unchanged(
+                repo,
+                branch,
                 previous_commit,
-                skipped: Some(format!(
+                format!(
                     "{branch} has no upstream and the repository has no remotes; nothing to refresh"
-                )),
-            });
+                ),
+            ));
         }
         let (remote, reference) = upstream.with_context(|| {
             format!(
@@ -254,14 +241,10 @@ impl Manager {
             git_run(
                 &repo.path,
                 &[
-                    "fetch",
-                    "--no-tags",
-                    "--no-recurse-submodules",
-                    "--no-write-fetch-head",
-                    "--",
-                    remote,
-                    &format!("{reference}:{fetched}"),
-                ],
+                    git::FETCH_SAFE_ARGS,
+                    &["--", remote, &format!("{reference}:{fetched}")],
+                ]
+                .concat(),
             )
             .await?;
             let commit = git_run(&repo.path, &["rev-parse", "--verify", &fetched]).await?;
@@ -295,11 +278,9 @@ impl Manager {
             })?;
             if let Some(checkout) = &checkout {
                 clean_branch(checkout, branch).await?;
-                git_run(
+                git::run_without_submodules(
                     checkout,
                     &[
-                        "-c",
-                        "submodule.recurse=false",
                         "merge",
                         "--ff-only",
                         "--no-edit",
@@ -310,20 +291,7 @@ impl Manager {
                 )
                 .await?;
             } else {
-                // Native fetch refuses a checked-out destination and a non-fast-forward.
-                // This also guards against the default branch becoming checked out since discovery.
-                git_run(
-                    &repo.path,
-                    &[
-                        "fetch",
-                        "--no-tags",
-                        "--no-recurse-submodules",
-                        "--no-write-fetch-head",
-                        ".",
-                        &format!("{commit}:{local_ref}"),
-                    ],
-                )
-                .await?;
+                git::fast_forward_local(&repo.path, commit, &local_ref).await?;
             }
             Ok(commit.to_owned())
         }
@@ -481,23 +449,7 @@ pub async fn finish_land(plan: LandPlan) -> Result<LandedBranch> {
     match checkout {
         Some(checkout) => {
             clean_branch(&checkout, &default).await?;
-            let mut command = git::isolated_command(&checkout);
-            command.args([
-                "-c",
-                "submodule.recurse=false",
-                "merge",
-                "--ff",
-                "--no-squash",
-                "--no-edit",
-                "--no-stat",
-                "--no-autostash",
-                "--no-overwrite-ignore",
-                "-m",
-                &format!("Merge branch '{branch}'"),
-                "--",
-                &source,
-            ]);
-            let output = command
+            let output = git::merge_commit(&checkout, branch, &source)
                 .output()
                 .await
                 .context("merge into default branch")?;
@@ -516,19 +468,7 @@ pub async fn finish_land(plan: LandPlan) -> Result<LandedBranch> {
                 fast_forward,
                 "{default} is not checked out and {branch} does not fast-forward it; run shoal merge {default} in the workspace, then retry"
             );
-            // Native fetch refuses a checked-out destination and a non-fast-forward.
-            git_run(
-                &repo.path,
-                &[
-                    "fetch",
-                    "--no-tags",
-                    "--no-recurse-submodules",
-                    "--no-write-fetch-head",
-                    ".",
-                    &format!("{source}:{default_ref}"),
-                ],
-            )
-            .await?;
+            git::fast_forward_local(&repo.path, &source, &default_ref).await?;
         }
     }
     let commit = git_run(&repo.path, &["rev-parse", "--verify", &default_ref])

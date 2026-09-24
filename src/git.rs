@@ -17,6 +17,13 @@ use crate::subprocess;
 pub const LOCAL_REFS: &str = "refs/heads/";
 pub const REMOTE_REFS: &str = "refs/remotes/";
 
+pub const FETCH_SAFE_ARGS: &[&str] = &[
+    "fetch",
+    "--no-tags",
+    "--no-recurse-submodules",
+    "--no-write-fetch-head",
+];
+
 /// Spell a literal local branch as a full ref, without validating its name.
 pub fn local_ref(name: &str) -> String {
     format!("{LOCAL_REFS}{name}")
@@ -52,6 +59,48 @@ pub fn isolated_command(repo: &Path) -> Command {
         .env("GIT_TERMINAL_PROMPT", "0")
         .env("SSH_ASKPASS_REQUIRE", "never");
     command
+}
+
+/// Isolated Git with recursive submodule operations disabled.
+pub fn isolated_command_without_submodules(repo: &Path) -> Command {
+    let mut command = isolated_command(repo);
+    command.args(["-c", "submodule.recurse=false"]);
+    command
+}
+
+pub async fn run_without_submodules(repo: &Path, args: &[&str]) -> Result<String> {
+    let mut command = isolated_command_without_submodules(repo);
+    command.args(args);
+    subprocess::output(command).await
+}
+
+/// Merge a resolved source, allowing a fast-forward or a named merge commit.
+pub fn merge_commit(repo: &Path, branch: &str, commit: &str) -> Command {
+    let mut command = isolated_command_without_submodules(repo);
+    command.args([
+        "merge",
+        "--ff",
+        "--no-squash",
+        "--no-edit",
+        "--no-stat",
+        "--no-autostash",
+        "--no-overwrite-ignore",
+        "-m",
+        &format!("Merge branch '{branch}'"),
+        "--",
+        commit,
+    ]);
+    command
+}
+
+/// Native fetch refuses a checked-out destination and a non-fast-forward,
+/// including a branch that became checked out since discovery.
+pub async fn fast_forward_local(repo: &Path, commit: &str, reference: &str) -> Result<String> {
+    run_isolated(
+        repo,
+        &[FETCH_SAFE_ARGS, &[".", &format!("{commit}:{reference}")]].concat(),
+    )
+    .await
 }
 
 pub async fn run(repo: &Path, args: &[&str]) -> Result<String> {

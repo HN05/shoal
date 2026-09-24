@@ -4,7 +4,6 @@ use std::path::Path;
 
 use anyhow::{Context as _, Result, ensure};
 use serde_json::json;
-use tokio::process::Command;
 use uuid::Uuid;
 
 use crate::{
@@ -14,7 +13,8 @@ use crate::{
         internal::{InternalCommand, internal_command},
         ui::{self, Fallback},
     },
-    env, execution, git,
+    env, execution,
+    git::{self, run_without_submodules},
     model::PulledBranch,
     protocol::Method,
 };
@@ -56,7 +56,7 @@ pub async fn worker(
     );
     let path = &workspace.path;
     own_branch(path, &workspace.branch).await?;
-    let previous = git_run(path, &["rev-parse", "HEAD"]).await?;
+    let previous = run_without_submodules(path, &["rev-parse", "HEAD"]).await?;
     let fetched = format!("refs/shoal/merge/{}", Uuid::new_v4());
     let result = async {
         let refresh = if local || remote.is_some() {
@@ -72,23 +72,10 @@ pub async fn worker(
         let commit = source(path, &branch, remote.as_deref(), &fetched).await?;
         own_branch(path, &workspace.branch).await?;
         ensure!(
-            git_run(path, &["rev-parse", "HEAD"]).await? == previous,
+            run_without_submodules(path, &["rev-parse", "HEAD"]).await? == previous,
             "workspace HEAD changed during fetch; retry shoal merge"
         );
-        let output = git_command(path)
-            .args([
-                "merge",
-                "--ff",
-                "--no-squash",
-                "--no-edit",
-                "--no-stat",
-                "--no-autostash",
-                "--no-overwrite-ignore",
-                "-m",
-                &format!("Merge branch '{branch}'"),
-                "--",
-                &commit,
-            ])
+        let output = git::merge_commit(path, &branch, &commit)
             .output()
             .await
             .context("merge branch")?;
@@ -101,7 +88,7 @@ pub async fn worker(
                     "source_refresh": refresh,
                     "source_commit": commit,
                     "previous_commit": previous.trim(),
-                    "commit": git_run(path, &["rev-parse", "HEAD"]).await?.trim(),
+                    "commit": run_without_submodules(path, &["rev-parse", "HEAD"]).await?.trim(),
                     "success": output.status.success(),
                     "exit_code": exit_code,
                     "stdout": String::from_utf8_lossy(&output.stdout),
@@ -117,7 +104,7 @@ pub async fn worker(
     }
     .await;
     // Never depend on shared FETCH_HEAD or leave a local source branch behind.
-    let cleanup = git_run(path, &["update-ref", "-d", &fetched]).await;
+    let cleanup = run_without_submodules(path, &["update-ref", "-d", &fetched]).await;
     let code = result?;
     cleanup.context("could not remove temporary merge ref")?;
     Ok(code)
@@ -137,7 +124,7 @@ async fn refresh_source(
         return Ok(None);
     }
     let name = git::strip_local(branch).unwrap_or(branch);
-    if git_run(path, &["rev-parse", "--verify", &git::local_ref(name)])
+    if run_without_submodules(path, &["rev-parse", "--verify", &git::local_ref(name)])
         .await
         .is_err()
     {
@@ -172,7 +159,10 @@ fn refresh_summary(refresh: &PulledBranch) -> String {
 
 async fn own_branch(path: &Path, branch: &str) -> Result<()> {
     ensure!(
-        git::head_branch(path, true, git_run).await?.as_deref() == Some(branch),
+        git::head_branch(path, true, run_without_submodules)
+            .await?
+            .as_deref()
+            == Some(branch),
         "workspace must be on its own recorded branch ({branch}) before merging"
     );
     Ok(())
@@ -182,11 +172,13 @@ async fn own_branch(path: &Path, branch: &str) -> Result<()> {
 /// only exists on a remote.
 async fn source(path: &Path, branch: &str, remote: Option<&str>, fetched: &str) -> Result<String> {
     let name = git::strip_local(branch).unwrap_or(branch);
-    git_run(path, &["check-ref-format", &git::local_ref(name)])
+    run_without_submodules(path, &["check-ref-format", &git::local_ref(name)])
         .await
         .context("invalid source branch name")?;
     if remote.is_none() && git::strip_remote(branch).is_none() {
-        if let Ok(commit) = git::resolve_commit(path, &git::local_ref(name), git_run).await {
+        if let Ok(commit) =
+            git::resolve_commit(path, &git::local_ref(name), run_without_submodules).await
+        {
             return Ok(commit);
         }
         ensure!(
@@ -194,7 +186,7 @@ async fn source(path: &Path, branch: &str, remote: Option<&str>, fetched: &str) 
             "local source branch does not exist: {branch}"
         );
     }
-    let remotes = git_run(path, &["remote"]).await?;
+    let remotes = run_without_submodules(path, &["remote"]).await?;
     let mut remotes: Vec<&str> = remotes.lines().collect();
     // Longest match also handles remote names containing slashes.
     remotes.sort_by_key(|remote| std::cmp::Reverse(remote.len()));
@@ -223,24 +215,19 @@ async fn source(path: &Path, branch: &str, remote: Option<&str>, fetched: &str) 
         }
     };
     let reference = git::local_ref(name);
-    git_run(path, &["check-ref-format", &reference])
+    run_without_submodules(path, &["check-ref-format", &reference])
         .await
         .context("invalid remote branch name")?;
-    git_run(
+    run_without_submodules(
         path,
         &[
-            "fetch",
-            "--no-tags",
-            "--no-recurse-submodules",
-            "--no-write-fetch-head",
-            "--refmap=",
-            "--",
-            remote,
-            &format!("{reference}:{fetched}"),
-        ],
+            git::FETCH_SAFE_ARGS,
+            &["--refmap=", "--", remote, &format!("{reference}:{fetched}")],
+        ]
+        .concat(),
     )
     .await?;
-    git::resolve_commit(path, fetched, git_run).await
+    git::resolve_commit(path, fetched, run_without_submodules).await
 }
 
 /// The single configured remote advertising `refs/heads/<name>`.
@@ -252,13 +239,16 @@ async fn find_remote_with_branch<'a>(
     let reference = git::local_ref(name);
     let mut matches = Vec::new();
     for remote in remotes {
-        let refs = git_run(path, &["ls-remote", "--heads", "--", remote, &reference])
-            .await
-            .with_context(|| {
-                format!(
-                    "could not inspect remote {remote}; use --remote to select the source explicitly"
-                )
-            })?;
+        let refs = run_without_submodules(
+            path,
+            &["ls-remote", "--heads", "--", remote, &reference],
+        )
+        .await
+        .with_context(|| {
+            format!(
+                "could not inspect remote {remote}; use --remote to select the source explicitly"
+            )
+        })?;
         if refs.lines().any(|line| {
             line.split_once('\t')
                 .is_some_and(|(_, found)| found == reference)
@@ -276,16 +266,4 @@ async fn find_remote_with_branch<'a>(
         matches.join(", ")
     );
     Ok(matches[0])
-}
-
-fn git_command(path: &Path) -> Command {
-    let mut command = git::isolated_command(path);
-    command.args(["-c", "submodule.recurse=false"]);
-    command
-}
-
-async fn git_run(path: &Path, args: &[&str]) -> Result<String> {
-    let mut command = git_command(path);
-    command.args(args);
-    crate::subprocess::output(command).await
 }
