@@ -1,6 +1,7 @@
 //! CLI dispatch. Domain handlers own requests, prompts, and rendering;
 //! daemon modules own lifecycle and allocation policy.
 mod access;
+mod acquisition;
 mod configuration;
 mod issues;
 mod menu;
@@ -15,13 +16,10 @@ mod simulators;
 mod skill;
 mod workspaces;
 
-use std::time::Duration;
-
 use anyhow::{Context as _, Result, ensure};
 use clap::CommandFactory;
 use serde::Serialize;
 use serde_json::json;
-use tokio::time::{Instant, sleep};
 
 use crate::{
     agent::CodexMode,
@@ -339,28 +337,3 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
 
 /// Exit status for a request the daemon declined because capacity is busy.
 pub(crate) const EXIT_BUSY: i32 = 2;
-
-/// One attempt at an operation the daemon may report as temporarily busy.
-pub(crate) enum Attempt<T> {
-    Ready(T),
-    Busy(String),
-}
-
-/// Retry `attempt` about once a second until it succeeds or `wait_seconds`
-/// pass. Returns the last busy message on timeout.
-pub(crate) async fn retry_while_busy<T>(
-    wait_seconds: u64,
-    mut attempt: impl AsyncFnMut() -> Result<Attempt<T>>,
-) -> Result<Result<T, String>> {
-    let deadline = Instant::now() + Duration::from_secs(wait_seconds);
-    loop {
-        match attempt().await? {
-            Attempt::Ready(value) => return Ok(Ok(value)),
-            Attempt::Busy(message) if Instant::now() >= deadline => return Ok(Err(message)),
-            Attempt::Busy(_) => {
-                let remaining = deadline.saturating_duration_since(Instant::now());
-                sleep(Duration::from_secs(1).min(remaining)).await;
-            }
-        }
-    }
-}

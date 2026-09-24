@@ -2,7 +2,11 @@
 use anyhow::Result;
 use serde_json::json;
 
-use super::{Attempt, EXIT_BUSY, retry_while_busy, workspace_overviews};
+use super::{
+    EXIT_BUSY,
+    acquisition::{Acquisition, retry},
+    workspace_overviews,
+};
 use crate::{
     cli::{
         ResourceCommand, WorkspaceScope,
@@ -41,17 +45,15 @@ pub(super) async fn run(
                 name,
                 reason,
             };
-            let mut approval = None;
-            let outcome = retry_while_busy(wait, async || {
+            let outcome = retry(wait, async || {
                 let method = Method::ResourceAcquire {
                     workspace: workspace.clone(),
                     request: request.clone(),
                 };
-                approval = None;
                 Ok(match client::call(&ctx.paths, method).await? {
-                    Body::ResourceLease(lease) => Attempt::Ready(Ok(lease)),
-                    Body::AccessRequest(request) => super::access::attempt(&mut approval, request),
-                    Body::Busy { message } => Attempt::Busy(message),
+                    Body::ResourceLease(lease) => Acquisition::Acquired(lease),
+                    Body::AccessRequest(request) => Acquisition::approval(request),
+                    Body::Busy { message } => Acquisition::Busy(message),
                     body => {
                         return Err(body.unexpected("ResourceLease, AccessRequest or Busy"));
                     }
@@ -59,13 +61,14 @@ pub(super) async fn run(
             })
             .await?;
             match outcome {
-                Ok(Ok(lease)) => {
+                Acquisition::Acquired(lease) => {
                     ctx.emit(&describe(&lease, Palette::stdout(ctx.json)), &lease)?;
                     Ok(0)
                 }
-                Ok(Err(request)) => super::access::declined(ctx, &request),
-                Err(_) if approval.is_some() => super::access::declined(ctx, &approval.unwrap()),
-                Err(message) => {
+                Acquisition::ApprovalPending(request) | Acquisition::ApprovalDenied(request) => {
+                    super::access::declined(ctx, &request)
+                }
+                Acquisition::Busy(message) => {
                     ctx.emit_styled(
                         Style::Warning,
                         &message,

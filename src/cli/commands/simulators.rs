@@ -2,7 +2,10 @@
 use anyhow::Result;
 use serde_json::json;
 
-use super::{Attempt, EXIT_BUSY, retry_while_busy};
+use super::{
+    EXIT_BUSY,
+    acquisition::{Acquisition, retry},
+};
 use crate::{
     cli::{
         SimCommand, WorkspaceScope,
@@ -53,29 +56,28 @@ pub(super) async fn run(
                 runtime,
                 reason,
             };
-            let mut approval = None;
-            let outcome = retry_while_busy(wait, async || {
+            let outcome = retry(wait, async || {
                 let method = Method::SimAcquire {
                     workspace: workspace.clone(),
                     request: request.clone(),
                 };
-                approval = None;
                 Ok(match client::call(&ctx.paths, method).await? {
-                    Body::Simulator(sim) => Attempt::Ready(Ok(sim)),
-                    Body::AccessRequest(request) => super::access::attempt(&mut approval, request),
-                    Body::Busy { message } => Attempt::Busy(message),
+                    Body::Simulator(sim) => Acquisition::Acquired(sim),
+                    Body::AccessRequest(request) => Acquisition::approval(request),
+                    Body::Busy { message } => Acquisition::Busy(message),
                     body => return Err(body.unexpected("Simulator, AccessRequest or Busy")),
                 })
             })
             .await?;
             match outcome {
-                Ok(Ok(sim)) => {
+                Acquisition::Acquired(sim) => {
                     ctx.emit_styled(Style::Success, &describe(&sim), &sim)?;
                     Ok(0)
                 }
-                Ok(Err(request)) => super::access::declined(ctx, &request),
-                Err(_) if approval.is_some() => super::access::declined(ctx, &approval.unwrap()),
-                Err(message) => {
+                Acquisition::ApprovalPending(request) | Acquisition::ApprovalDenied(request) => {
+                    super::access::declined(ctx, &request)
+                }
+                Acquisition::Busy(message) => {
                     ctx.emit_styled(
                         Style::Warning,
                         &message,

@@ -2,7 +2,7 @@
 use anyhow::Result;
 use serde_json::json;
 
-use super::{Attempt, EXIT_BUSY};
+use super::EXIT_BUSY;
 use crate::{
     cli::{AccessCommand, client::request, context::Context, output::Style},
     daemon::access::{AccessRequest, DecisionStatus},
@@ -53,19 +53,6 @@ fn describe(request: &AccessRequest) -> String {
         request.lifetime,
         request.reason
     )
-}
-
-pub(super) fn attempt<T>(
-    last: &mut Option<Box<AccessRequest>>,
-    request: Box<AccessRequest>,
-) -> Attempt<Result<T, Box<AccessRequest>>> {
-    if request.status == DecisionStatus::Denied {
-        Attempt::Ready(Err(request))
-    } else {
-        let message = describe(&request);
-        *last = Some(request);
-        Attempt::Busy(message)
-    }
 }
 
 pub(super) fn declined(ctx: &Context, request: &AccessRequest) -> Result<i32> {
