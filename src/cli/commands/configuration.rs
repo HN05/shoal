@@ -5,10 +5,10 @@ use crate::{
         client,
         context::Context,
         output::{Palette, Style},
+        workspace_context::{ScopeOrder, WorkspaceContext},
     },
     config::{self, repo::LocalConfig},
     env,
-    model::Workspace,
     protocol::ConfigTarget,
 };
 
@@ -63,16 +63,17 @@ async fn target(ctx: &Context, explicit: Option<String>) -> Result<ConfigTarget>
         return Ok(ConfigTarget::Workspace(workspace));
     }
     let workspaces = client::workspaces(&ctx.paths).await?;
-    if env::is_scoped() {
-        return workspaces
-            .first()
-            .map(|workspace| ConfigTarget::Workspace(workspace.id.clone()))
-            .context("scoped workspace is unavailable");
-    }
-    let cwd = std::fs::canonicalize(std::env::current_dir()?)?;
-    if let Some(workspace) = Workspace::innermost(&workspaces, &cwd) {
+    let scoped = env::is_scoped();
+    let cwd = if scoped {
+        None
+    } else {
+        Some(std::fs::canonicalize(std::env::current_dir()?)?)
+    };
+    let context = WorkspaceContext::from_directory(&workspaces, cwd.as_deref());
+    if let Some(workspace) = context.resolve(None, scoped, ScopeOrder::First) {
         return Ok(ConfigTarget::Workspace(workspace.id.clone()));
     }
+    let cwd = cwd.context("scoped workspace is unavailable")?;
     let repositories = client::repositories(&ctx.paths).await?;
     let repository = repositories
         .iter()

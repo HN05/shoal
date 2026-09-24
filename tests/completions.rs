@@ -232,3 +232,24 @@ fn doctor_detects_integration_in_the_calling_shell_without_a_daemon() {
     }
     assert!(!home.path().join("state").exists());
 }
+
+#[test]
+fn command_listing_keeps_global_commands_without_starting_a_daemon() {
+    let home = tempfile::tempdir().unwrap();
+    fs::create_dir_all(home.path().join(".config/shoal")).unwrap();
+    fs::write(
+        home.path().join(".config/shoal/config.toml"),
+        "[commands]\nglobal-only = ['true']\n",
+    )
+    .unwrap();
+    let output = generate(home.path(), &["--json", "run"]);
+    let commands: serde_json::Value = serde_json::from_slice(&output).unwrap();
+    assert!(
+        commands
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|command| command["name"] == "global-only")
+    );
+    assert!(!home.path().join("state").exists());
+}

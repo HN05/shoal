@@ -13,6 +13,7 @@ use crate::{
         client::{self, request},
         context::Context,
         ui::{self, Fallback},
+        workspace_context::{ScopeOrder, WorkspaceContext},
     },
     config::{Config, repo::ConfigLayer},
     execution,
@@ -99,14 +100,8 @@ pub async fn list(ctx: &Context) -> Result<i32> {
     if client::status(&ctx.paths).await?.is_some() {
         let workspaces = client::workspaces(&ctx.paths).await?;
         let current = std::env::current_dir().ok();
-        let workspace = current
-            .as_deref()
-            .and_then(|cwd| Workspace::innermost(&workspaces, cwd))
-            .or_else(|| {
-                crate::env::is_scoped()
-                    .then(|| workspaces.first())
-                    .flatten()
-            });
+        let context = WorkspaceContext::from_directory(&workspaces, current.as_deref());
+        let workspace = context.resolve(None, crate::env::is_scoped(), ScopeOrder::AfterDirectory);
         if let Some(workspace) = workspace {
             let layers = request::<CommandLayers>(
                 &ctx.paths,

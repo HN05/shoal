@@ -441,6 +441,22 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
     );
     let cwd = Path::new(first["path"].as_str().unwrap());
     fs::write(cwd.join(".shoal.toml"), "[commands]\nreview = ['tuicr']\n").unwrap();
+    // Complete the command name with an unknown workspace already on the line.
+    let names = fixture
+        .command()
+        .env("SHOAL_STATE_DIR", fixture.root.path().join("state"))
+        .args(["--", "shoal", "run", "rev", "unknown"])
+        .env("SHOAL_COMPLETE", "bash")
+        .env("_CLAP_COMPLETE_INDEX", "2")
+        .current_dir(cwd)
+        .output()
+        .unwrap();
+    assert!(names.status.success(), "{names:?}");
+    assert!(
+        String::from_utf8_lossy(&names.stdout)
+            .lines()
+            .any(|line| line == "review")
+    );
     assert!(complete(&["rev"], cwd).contains(&"review".into()));
     assert!(complete(&["review", "fi"], cwd).contains(&"first".into()));
     assert!(complete(&["review", "fi"], fixture.root.path()).contains(&"first".into()));
@@ -459,6 +475,34 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
             fixture.root.path()
         )
         .contains(&"tests".into())
+    );
+    assert!(
+        complete(
+            &[
+                "resource",
+                "acquire",
+                "devices",
+                first["id"].as_str().unwrap(),
+                "--resource",
+                "b"
+            ],
+            fixture.root.path(),
+        )
+        .contains(&"beta".into())
+    );
+    assert!(
+        !complete(
+            &[
+                "resource",
+                "acquire",
+                "devices",
+                "unknown",
+                "--resource",
+                "b"
+            ],
+            cwd,
+        )
+        .contains(&"beta".into())
     );
     fixture.ok(&["rm", "second"]);
     assert!(!complete(&["rm", ""], cwd).contains(&"second".into()));
@@ -485,6 +529,126 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
     assert!(text.lines().any(|line| line == "first"), "{text}");
     assert!(!text.lines().any(|line| line == "second"), "{text}");
     assert!(!fixture.root.path().join("wrong-state").exists());
+}
+
+#[test]
+fn workspace_context_adapters_preserve_directory_scope_and_picker_policy() {
+    let fixture = Fixture::new();
+    let own = fixture.add("context-own");
+    let other = fixture.add("context-other");
+    let own_path = Path::new(own["path"].as_str().unwrap());
+    let other_path = Path::new(other["path"].as_str().unwrap());
+    for (path, name) in [(own_path, "own-only"), (other_path, "other-only")] {
+        fs::write(
+            path.join(".shoal.toml"),
+            format!("[commands]\n{name} = ['true']\n"),
+        )
+        .unwrap();
+    }
+    let nested = own_path.join("nested/deep");
+    fs::create_dir_all(&nested).unwrap();
+    let alias = fixture.root.path().join("alias");
+    std::os::unix::fs::symlink(&nested, &alias).unwrap();
+
+    let command = |cwd: &Path, scoped: bool, completion: bool| {
+        if scoped {
+            let mut command = fixture.command();
+            command
+                .args([
+                    "exec",
+                    "context-own",
+                    "--",
+                    "sh",
+                    "-c",
+                    "cd \"$1\"; shift; exec \"$@\"",
+                    "context-test",
+                ])
+                .arg(cwd)
+                .arg("env");
+            // Completion variables belong to the inner process, after scope delivery.
+            if completion {
+                command.args(["SHOAL_COMPLETE=bash", "_CLAP_COMPLETE_INDEX=2"]);
+            }
+            command.arg(env!("CARGO_BIN_EXE_shoal"));
+            command
+        } else {
+            let mut command = fixture.command();
+            command.current_dir(cwd);
+            if completion {
+                command
+                    .env("SHOAL_COMPLETE", "bash")
+                    .env("_CLAP_COMPLETE_INDEX", "2")
+                    .env("SHOAL_STATE_DIR", fixture.root.path().join("state"));
+            }
+            command
+        }
+    };
+    for (cwd, scoped) in [
+        (nested.as_path(), false),
+        (alias.as_path(), false),
+        (fixture.root.path(), true),
+        (other_path, true),
+    ] {
+        for args in [vec!["--json", "run"], vec!["--json", "config", "show"]] {
+            let output = command(cwd, scoped, false).args(&args).output().unwrap();
+            assert!(output.status.success(), "{args:?}: {output:?}");
+            let text = String::from_utf8(output.stdout).unwrap();
+            assert!(text.contains("own-only"), "{text}");
+            assert!(!text.contains("other-only"), "{text}");
+        }
+        let output = command(cwd, scoped, false)
+            .args(["--json", "status"])
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+        let status: Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert_eq!(status["workspace"]["id"], own["id"]);
+
+        let output = command(cwd, scoped, true)
+            .args(["--", "shoal", "run", "own"])
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+        assert!(
+            String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .any(|line| line == "own-only")
+        );
+    }
+    for args in [
+        vec!["status", "context-other"],
+        vec!["config", "show", "context-other"],
+    ] {
+        let output = command(other_path, true, false)
+            .args(&args)
+            .output()
+            .unwrap();
+        assert!(!output.status.success(), "{args:?}");
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains("scope"),
+            "{output:?}"
+        );
+    }
+    for args in [vec!["inspect"], vec!["cd"]] {
+        let output = command(&nested, false, false).args(&args).output().unwrap();
+        assert!(!output.status.success(), "{args:?}");
+        assert!(String::from_utf8_lossy(&output.stderr).contains("non-interactive"));
+    }
+    let output = command(fixture.root.path(), false, false)
+        .args(["--json", "run"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    assert!(!String::from_utf8_lossy(&output.stdout).contains("own-only"));
+    let output = command(fixture.root.path(), false, false)
+        .args(["config", "show"])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("no current workspace or registered checkout")
+    );
 }
 
 #[test]
