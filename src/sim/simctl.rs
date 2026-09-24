@@ -103,7 +103,7 @@ pub async fn run(args: &[&str]) -> Result<String> {
         .timeout(Duration::from_secs(180))
         .output()
         .await
-        .context("simctl failed; allocation retained for reconciliation")?;
+        .with_context(|| format!("simctl {}", args.join(" ")))?;
     Ok(output.trim().to_owned())
 }
 
