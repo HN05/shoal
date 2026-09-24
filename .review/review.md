@@ -54,7 +54,8 @@ removal, check it against the rule those files state before judging it.
 - Daemon ref updates disable Git credential and SSH askpass prompts without
   overriding the user's SSH transport; interactive Git retains normal prompting.
   Ancestry and exact-ref failures stop branch selection, refresh, and removal;
-  only a documented negative exit status is a negative answer.
+  only a documented negative exit status is a negative answer. Merge sources
+  fall back to remote discovery only for a missing local ref.
 - Explicit workspace paths override only that creation; reject overlaps with state,
   checkouts, workspaces, and other repository directories; never delete their parents.
   Resolve existing symlinks and lexical `..` before checking and creating repository

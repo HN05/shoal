@@ -10758,3 +10758,31 @@ fn daemon_git_predicate_failures_preserve_branches_and_workspaces() {
         assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
     }
 }
+
+#[test]
+fn merge_ref_lookup_failures_do_not_fall_back_to_remote_discovery() {
+    let fixture = Fixture::new();
+    let worker = fixture.add("worker");
+    let path = Path::new(worker["path"].as_str().unwrap());
+    let before = git(path, &["rev-parse", "HEAD"]);
+    install_failing_git(&fixture);
+    fs::write(fixture.root.path().join("git-failure"), "show-ref").unwrap();
+    for local in [false, true] {
+        let mut args = vec![
+            "exec",
+            "worker",
+            "--",
+            env!("CARGO_BIN_EXE_shoal"),
+            "merge",
+            "main",
+        ];
+        if local {
+            args.push("--local");
+        }
+        let output = fixture.run(&args);
+        assert!(!output.status.success());
+        let error = String::from_utf8_lossy(&output.stderr);
+        assert!(error.contains("injected Git predicate failure"), "{error}");
+        assert_eq!(git(path, &["rev-parse", "HEAD"]), before);
+    }
+}

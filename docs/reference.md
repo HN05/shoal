@@ -523,7 +523,8 @@ precedence. Unless `--local`, a local branch with an upstream is fetched and
 fast-forwarded first; a dirty checkout, divergence, or failed fetch blocks the
 merge, while an ahead branch is preserved. A local branch without an upstream,
 or checked out in a managed workspace, is merged as it is. Otherwise Shoal
-queries configured remotes and fetches the branch.
+queries configured remotes and fetches the branch only when the local ref is
+absent; a failed ref or commit lookup stops the merge.
 Several matches or an unreachable remote require `--remote`. Qualified remote
 sources and full `refs/…` names always fetch fresh data. Git fast-forwards or
 creates a merge commit; conflicts stay in the worktree for `git commit` or `git

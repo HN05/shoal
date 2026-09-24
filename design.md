@@ -172,7 +172,8 @@ as work. `merge` imports any local or remote branch into the workspace's own bra
 preferring local sources, which it first fast-forwards from their upstream while
 preserving ahead branches and refusing dirty or diverged checkouts and failed fetches,
 unless `--local`, they lack an upstream, or a managed workspace has them checked out;
-remote discovery must be unambiguous, and conflicts are left for ordinary Git. `land`,
+implicit remote discovery requires a missing local ref and must be unambiguous; failed
+local lookups stop the merge, and conflicts are left for ordinary Git. `land`,
 the local substitute for a pull request, merges the workspace branch into the default
 branch, first refreshing a configured upstream while preserving an ahead branch and
 refusing divergence or fetch failure, without pushing. The default branch cannot be

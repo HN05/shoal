@@ -121,9 +121,12 @@ async fn refresh_source(
         return Ok(None);
     }
     let name = git::strip_local(branch).unwrap_or(branch);
-    if run_without_submodules(path, &["rev-parse", "--verify", &git::local_ref(name)])
-        .await
-        .is_err()
+    if !git::ref_exists(
+        path,
+        &git::local_ref(name),
+        git::isolated_command_without_submodules,
+    )
+    .await?
     {
         return Ok(None);
     }
@@ -173,10 +176,14 @@ async fn source(path: &Path, branch: &str, remote: Option<&str>, fetched: &str) 
         .await
         .context("invalid source branch name")?;
     if remote.is_none() && git::strip_remote(branch).is_none() {
-        if let Ok(commit) =
-            git::resolve_commit(path, &git::local_ref(name), run_without_submodules).await
+        if git::ref_exists(
+            path,
+            &git::local_ref(name),
+            git::isolated_command_without_submodules,
+        )
+        .await?
         {
-            return Ok(commit);
+            return git::resolve_commit(path, &git::local_ref(name), run_without_submodules).await;
         }
         ensure!(
             git::strip_local(branch).is_none(),
