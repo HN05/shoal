@@ -782,7 +782,7 @@ async fn escape_destination(ctx: &Context, workspace: &Workspace) -> Result<Opti
 }
 
 fn removal_message(result: &RemovalResult) -> String {
-    match (&result.branch, result.branch_deleted) {
+    match (&result.branch, result.branch_outcome.is_deleted()) {
         (Some(branch), true) => format!("Workspace and Git branch {branch} removed"),
         (Some(branch), false) => format!(
             "Workspace removed; Git branch {branch} retained ({})",

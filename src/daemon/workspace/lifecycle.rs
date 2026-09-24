@@ -3,7 +3,7 @@ use super::Manager;
 use crate::{
     git::worktrunk,
     hooks::{self, Hook, HookKind},
-    removal::{self, BranchChoice, RemovalCheck, RemovalResult},
+    removal::{self, BranchChoice, BranchOutcome, RemovalCheck, RemovalResult},
     state::WorkspaceState,
 };
 use anyhow::{Result, bail, ensure};
@@ -380,8 +380,7 @@ impl Manager {
             Ok(RemovalResult {
                 removed: true,
                 branch: Some(workspace.branch.clone()),
-                branch_deleted: false,
-                branch_outcome: "retained".into(),
+                branch_outcome: BranchOutcome::Retained,
                 hook_error: None,
             })
         }

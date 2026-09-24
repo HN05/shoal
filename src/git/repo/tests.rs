@@ -814,7 +814,7 @@ async fn existing_default_branch_survives_normal_workspace_removal() {
         .remove_workspace(&opened.workspace.id, crate::removal::BranchChoice::Auto, 0)
         .await
         .unwrap();
-    assert!(!removed.branch_deleted);
+    assert!(!removed.branch_outcome.is_deleted());
     assert!(!opened.workspace.path.exists());
     assert_eq!(git(&f.repo, &["rev-parse", "main"]), before);
     assert!(

@@ -4,6 +4,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::{git, model::Workspace, process};
 
+#[cfg(test)]
+mod tests;
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RemovalCheck {
     pub workspace: Workspace,
@@ -31,14 +34,92 @@ pub enum BranchChoice {
     DeleteBranch,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+/// Worktrunk 0.78.0's `BranchFate::json_outcome` vocabulary, plus Shoal's
+/// synthetic outcome for an already-missing worktree registration.
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", from = "String")]
+pub enum BranchOutcome {
+    Deleted,
+    NotAttempted,
+    Deferred,
+    RetainedUnmerged,
+    RetainedCheckedOut,
+    RetainedRaced,
+    RetainedFailed,
+    Retained,
+    /// Preserve future Worktrunk values without claiming confirmed deletion.
+    #[serde(untagged)]
+    Unknown(String),
+}
+
+impl From<String> for BranchOutcome {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "deleted" => Self::Deleted,
+            "not_attempted" => Self::NotAttempted,
+            "deferred" => Self::Deferred,
+            "retained_unmerged" => Self::RetainedUnmerged,
+            "retained_checked_out" => Self::RetainedCheckedOut,
+            "retained_raced" => Self::RetainedRaced,
+            "retained_failed" => Self::RetainedFailed,
+            "retained" => Self::Retained,
+            _ => Self::Unknown(value),
+        }
+    }
+}
+
+impl BranchOutcome {
+    pub fn is_deleted(&self) -> bool {
+        matches!(self, Self::Deleted)
+    }
+}
+
+impl std::fmt::Display for BranchOutcome {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Deleted => "deleted",
+            Self::NotAttempted => "not_attempted",
+            Self::Deferred => "deferred",
+            Self::RetainedUnmerged => "retained_unmerged",
+            Self::RetainedCheckedOut => "retained_checked_out",
+            Self::RetainedRaced => "retained_raced",
+            Self::RetainedFailed => "retained_failed",
+            Self::Retained => "retained",
+            Self::Unknown(value) => value,
+        })
+    }
+}
+
+#[derive(Debug, Deserialize)]
 pub struct RemovalResult {
     pub removed: bool,
     pub branch: Option<String>,
-    pub branch_deleted: bool,
-    pub branch_outcome: String,
+    pub branch_outcome: BranchOutcome,
     /// Removal succeeded, but its best-effort post hook failed.
     pub hook_error: Option<String>,
+}
+
+impl Serialize for RemovalResult {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        // Keep the existing response shape, but never store a second source of
+        // truth for deletion. Deserialization likewise uses only the outcome.
+        #[derive(Serialize)]
+        struct Response<'a> {
+            removed: bool,
+            branch: &'a Option<String>,
+            branch_deleted: bool,
+            branch_outcome: &'a BranchOutcome,
+            hook_error: &'a Option<String>,
+        }
+        Response {
+            removed: self.removed,
+            branch: &self.branch,
+            branch_deleted: self.branch_outcome.is_deleted(),
+            branch_outcome: &self.branch_outcome,
+            hook_error: &self.hook_error,
+        }
+        .serialize(serializer)
+    }
 }
 
 impl RemovalCheck {

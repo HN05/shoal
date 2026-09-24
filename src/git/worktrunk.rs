@@ -127,14 +127,11 @@ pub async fn remove(
         !workspace_dir.exists(),
         "Worktrunk returned before workspace removal completed"
     );
-    let branch_outcome = result["branch_outcome"]
-        .as_str()
-        .context("Worktrunk omitted branch outcome")?
-        .to_owned();
+    let branch_outcome = serde_json::from_value(result["branch_outcome"].clone())
+        .context("invalid Worktrunk branch outcome")?;
     Ok(RemovalResult {
         removed: true,
         branch: result["branch"].as_str().map(str::to_owned),
-        branch_deleted: branch_outcome == "deleted",
         branch_outcome,
         hook_error: None,
     })

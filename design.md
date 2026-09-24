@@ -50,10 +50,12 @@ commands, deferring service changes until restart; incompatible daemons are
 verified stopped before replacing their service.
 
 Worktrunk creates and removes worktrees through Shoal's adapter with isolated
-configuration and hooks disabled. Invoke external tools with argument arrays. Keep
-writable state outside the binary's directory. Service setup manages one per-user
-launchd/systemd service; foreground mode covers environments without a service
-manager. The service captures the installing shell's `PATH`.
+configuration and hooks disabled. Typed adapter outcomes preserve unfamiliar strings;
+only confirmed branch deletion sets the response deletion flag. Invoke external
+tools with argument arrays. Keep writable state outside the binary's directory.
+Service setup manages one per-user launchd/systemd service; foreground mode covers
+environments without a service manager. The service captures the installing shell's
+`PATH`.
 
 Distribution is a Homebrew formula in the shared HN05 tap: releases install
 checksummed prebuilt Linux and macOS binaries on x86_64 and arm64; `--HEAD`

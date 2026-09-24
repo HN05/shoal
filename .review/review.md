@@ -54,7 +54,8 @@ removal, check it against the rule those files state before judging it.
   roots or explicit workspace paths, including when trailing components are missing.
 - Worktrunk compatibility is shared across creation and existing-branch selection:
   reserved names get a leaf suffix on creation and an error on opening; suffixes
-  never change derived workspace names or directories.
+  never change derived workspace names or directories. Adapter outcomes preserve
+  unfamiliar strings without treating them as confirmed branch deletion.
 - Existing branches use unsuffixed worktrees; reopen verified owned workspaces,
   require explicit adoption for other linked checkouts, never adopt the main checkout,
   and keep the default branch on removal unless deletion was explicit. Adoption records
