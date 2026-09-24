@@ -26,12 +26,19 @@ pub(crate) fn list(db: &Connection, owner: Option<&str>) -> Result<Vec<Simulator
             record.trim_start().starts_with('{'),
             "decode simulator record {id}: expected a JSON object"
         );
+        #[cfg(test)]
+        DECODED_RECORDS.with(|count| count.set(count.get() + 1));
         records.push(
             serde_json::from_str(&record)
                 .with_context(|| format!("decode simulator record {id}"))?,
         );
     }
     Ok(records)
+}
+
+#[cfg(test)]
+thread_local! {
+    static DECODED_RECORDS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 #[cfg(test)]
