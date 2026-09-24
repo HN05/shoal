@@ -6,7 +6,7 @@ use std::{
 
 use anyhow::{Context as _, Result, ensure};
 use clap::{CommandFactory, Parser};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 use crate::{
     cli::{
@@ -15,7 +15,12 @@ use crate::{
         ui::{self, Fallback},
         workspace_context::{ScopeOrder, WorkspaceContext},
     },
-    config::{Config, placeholders::render_os as render, repo::ConfigLayer},
+    config::{
+        Config,
+        placeholders::render_os as render,
+        repo::{ConfigLayer, ConfigLayers},
+        resolve::Stack,
+    },
     execution,
     model::{DiffBase, Workspace},
     paths::Paths,
@@ -23,12 +28,6 @@ use crate::{
 };
 
 pub type Commands = BTreeMap<String, Vec<String>>;
-
-#[derive(Debug, Default, Serialize, Deserialize)]
-pub struct CommandLayers {
-    pub worktree_file: Commands,
-    pub saved_repository_config: Commands,
-}
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
 pub struct CommandDefinition {
@@ -86,44 +85,23 @@ pub fn validate(commands: &Commands) -> Result<()> {
 
 pub async fn list(ctx: &Context) -> Result<i32> {
     let global = Config::load(&ctx.paths)?;
-    let mut definitions: BTreeMap<String, (Vec<String>, ConfigLayer)> = defaults()
-        .into_iter()
-        .map(|(name, argv)| (name, (argv, ConfigLayer::BuiltInDefault)))
-        .collect();
-    definitions.extend(
-        global
-            .commands
-            .into_iter()
-            .map(|(name, argv)| (name, (argv, ConfigLayer::GlobalConfig))),
-    );
-
+    let mut layers = ConfigLayers::default();
     if client::status(&ctx.paths).await?.is_some() {
         let workspaces = client::workspaces(&ctx.paths).await?;
         let current = std::env::current_dir().ok();
         let context = WorkspaceContext::from_directory(&workspaces, current.as_deref());
         let workspace = context.resolve(None, crate::env::is_scoped(), ScopeOrder::AfterDirectory);
         if let Some(workspace) = workspace {
-            let layers = request::<CommandLayers>(
+            layers = *request::<Box<ConfigLayers>>(
                 &ctx.paths,
-                Method::CommandLayers {
-                    workspace: workspace.id.clone(),
+                Method::LayeredConfig {
+                    target: ConfigTarget::Workspace(workspace.id.clone()),
                 },
             )
             .await?;
-            definitions.extend(
-                layers
-                    .worktree_file
-                    .into_iter()
-                    .map(|(name, argv)| (name, (argv, ConfigLayer::WorktreeFile))),
-            );
-            definitions.extend(
-                layers
-                    .saved_repository_config
-                    .into_iter()
-                    .map(|(name, argv)| (name, (argv, ConfigLayer::SavedRepositoryConfig))),
-            );
         }
     }
+    let definitions = Stack::new(&global, &layers).named(|config| &config.commands);
 
     let built_ins: BTreeSet<_> = crate::cli::Cli::command()
         .get_subcommands()
@@ -192,8 +170,10 @@ pub async fn run(
     workspace: Option<String>,
     args: Vec<OsString>,
 ) -> Result<i32> {
-    let global = Config::load(&ctx.paths)?;
-    let known_globally = global.commands.contains_key(name) || defaults().contains_key(name);
+    let known_globally = Config::load(&ctx.paths)?
+        .resolve(&ConfigLayers::default())?
+        .commands
+        .contains_key(name);
     let fallback = if known_globally {
         Fallback::CurrentDirectory
     } else {

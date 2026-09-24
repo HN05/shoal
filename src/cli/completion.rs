@@ -1,5 +1,6 @@
 //! Completion runs before the normal CLI: read-only, scoped, and time bounded.
 use std::{
+    collections::BTreeSet,
     ffi::{OsStr, OsString},
     path::PathBuf,
     sync::{Arc, OnceLock},
@@ -15,7 +16,7 @@ use crate::{
         client,
         workspace_context::{ScopeOrder, WorkspaceContext},
     },
-    config::{Config, repo::ConfigLayers},
+    config::{Config, repo::ConfigLayers, resolve::Stack},
     daemon::{access::AccessRequest, resources::Overview},
     env,
     model::{PortOverview, Workspace},
@@ -192,10 +193,8 @@ impl Typed {
         let Ok(paths) = Paths::new(state) else {
             return vec![];
         };
-        let mut commands = crate::config::named_commands::defaults();
-        if let Ok(config) = Config::load(&paths) {
-            commands.extend(config.commands);
-        }
+        let global = Config::load(&paths).unwrap_or_default();
+        let mut layers = ConfigLayers::default();
         if let Ok(runtime) = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
@@ -225,14 +224,16 @@ impl Typed {
                 })
                 .await
             });
-            if let Ok(Ok(layers)) = layer {
-                commands.extend(layers.repository().commands);
+            if let Ok(Ok(found)) = layer {
+                layers = *found;
             }
         }
-        if let Some(name) = &self.custom {
-            commands.entry(name.clone()).or_default();
-        }
-        commands.into_keys().collect()
+        let mut names: BTreeSet<String> = Stack::new(&global, &layers)
+            .named(|config| &config.commands)
+            .into_keys()
+            .collect();
+        names.extend(self.custom.clone());
+        names.into_iter().collect()
     }
 
     fn complete(&self, target: Target, current: &OsStr) -> Vec<CompletionCandidate> {

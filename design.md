@@ -305,6 +305,9 @@ registration. Inline repository key edits use the same validation as imports and
 serialize read/modify/write in the daemon; unset restores lower-layer values. Every option
 that does not describe the machine may be set at either level and resolves per
 option: saved config, worktree file, global config, then the built-in default.
+One option table defines both the merge and its provenance, so a reported layer
+is the one whose value is in use; the daemon resolves a workspace's settings
+once per request and every use site reads them rather than layering on its own.
 Prompt templates follow the same precedence, with repository-root Markdown files
 and global files beside `config.toml` below inline TOML values at each level.
 `install` adds missing templates from the bundled repository-root defaults;

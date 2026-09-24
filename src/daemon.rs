@@ -354,9 +354,6 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::LayeredConfig { target } => {
             Body::LayeredConfig(Box::new(manager.config_layers_for(target).await?))
         }
-        Method::CommandLayers { workspace } => {
-            Body::CommandLayers(manager.command_layers(&workspace).await?)
-        }
         Method::ListNotifications { unread_only, limit } => {
             Body::Notifications(manager.notifications(unread_only, limit).await?)
         }

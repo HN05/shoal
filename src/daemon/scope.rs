@@ -60,7 +60,6 @@ pub async fn authorize(
         | Method::PortAcquire { workspace, .. }
         | Method::PortRelease { workspace, .. }
         | Method::PortOverview { workspace }
-        | Method::CommandLayers { workspace }
         | Method::LayeredConfig {
             target: ConfigTarget::Workspace(workspace),
         } => Some(workspace),

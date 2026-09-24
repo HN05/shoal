@@ -5,10 +5,7 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 
 use crate::{
-    config::{
-        named_commands::CommandLayers,
-        repo::{ConfigLayers, LocalConfig},
-    },
+    config::repo::{ConfigLayers, LocalConfig},
     daemon::{
         allocation::Allocation,
         notifications::Notification,
@@ -27,7 +24,7 @@ use crate::{
     sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
 };
 
-pub const VERSION: u32 = 41;
+pub const VERSION: u32 = 42;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -199,10 +196,6 @@ pub enum Method {
     /// against the global config it reads at launch.
     LayeredConfig {
         target: ConfigTarget,
-    },
-    /// The separate repository command maps needed to report provenance.
-    CommandLayers {
-        workspace: String,
     },
     /// Long-lived: the connection stays open for the execution's lifetime.
     /// `agent` names a Shoal agent shortcut whose exit the user is told about.
@@ -416,7 +409,6 @@ response_bodies! {
     DiffBase(DiffBase),
     Hook(Option<std::path::PathBuf>),
     LayeredConfig(Box<ConfigLayers>),
-    CommandLayers(CommandLayers),
     PulledBranch(PulledBranch),
     Notifications(Vec<Notification>),
     Notification(Notification),

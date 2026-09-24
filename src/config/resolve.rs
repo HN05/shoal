@@ -92,6 +92,17 @@ impl Stack {
         Ok(entries)
     }
 
+    /// The entries of one named table with the layer each came from.
+    pub fn named<T: Clone>(
+        &self,
+        table: fn(&RepoConfig) -> &BTreeMap<String, T>,
+    ) -> BTreeMap<String, (T, Layer)> {
+        winners(&self.sources(), table)
+            .into_iter()
+            .map(|(name, (value, layer))| (name.clone(), (value.clone(), layer)))
+            .collect()
+    }
+
     /// Highest layer first, the order provenance is looked up in.
     fn sources(&self) -> Vec<(&RepoConfig, Layer)> {
         self.layers
@@ -671,6 +682,11 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
         assert_eq!(command("check").1, Layer::GlobalConfig);
         assert_eq!(command("lint").1, Layer::WorktreeFile);
         assert_eq!(command("codex").1, Layer::BuiltInDefault);
+        let commands = stack.named(|config| &config.commands);
+        for (name, (value, layer)) in &commands {
+            assert_eq!((json(value), *layer), command(name), "{name}");
+        }
+        assert_eq!(commands.len(), 5);
         let effective = stack.resolve().unwrap();
         assert_eq!(effective.commands["review"], ["saved", "two words"]);
         assert_eq!(effective.commands["check"], ["check"]);
