@@ -11,6 +11,7 @@ use crate::{
     cli::{
         client,
         context::Context,
+        internal::{InternalCommand, internal_command},
         ui::{self, Fallback},
     },
     env, execution, git,
@@ -27,17 +28,15 @@ pub async fn run(
     local: bool,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let mut command = vec![std::env::current_exe()?.into_os_string()];
-    if ctx.json {
-        command.push("--json".into());
-    }
-    command.extend(["merge-internal".into(), branch.into()]);
-    if let Some(remote) = remote {
-        command.extend(["--remote".into(), remote.into()]);
-    }
-    if local {
-        command.push("--local".into());
-    }
+    let command = internal_command(
+        &ctx.paths,
+        ctx.json,
+        InternalCommand::Merge {
+            branch: &branch,
+            remote: remote.as_deref(),
+            local,
+        },
+    )?;
     execution::run(&ctx.paths, workspace, command, None).await
 }
 

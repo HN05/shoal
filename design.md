@@ -34,6 +34,8 @@ Resource protocol methods use domain-then-verb names matching the CLI operations
 The daemon owns SQLite state, allocation, lifecycle transitions, and recovery.
 Daemon errors stay structured on the client without changing the wire format.
 
+Internal CLI workers are built through one typed argument builder that explicitly
+passes the resolved state directory and output mode.
 The execution wrapper owns terminal I/O, environment delivery, exit codes, and
 command process groups, registers through one request carrying its execution kind,
 and handles stop requests. The daemon prepares each kind before shared registration.

@@ -3,6 +3,7 @@ pub mod client;
 pub mod commands;
 pub mod completion;
 pub mod context;
+pub mod internal;
 pub mod output;
 mod progress;
 pub mod ui;
@@ -159,10 +160,10 @@ pub enum Command {
     },
     /// Merge this workspace's branch into the repository default branch locally, without pushing.
     Land { workspace: Option<String> },
-    #[command(hide = true)]
+    #[command(name = internal::LAND, hide = true)]
     LandInternal { plan: String },
     /// Internal worker launched through the tracked execution wrapper.
-    #[command(hide = true)]
+    #[command(name = internal::MERGE, hide = true)]
     MergeInternal {
         branch: String,
         #[arg(long)]
@@ -304,7 +305,7 @@ pub enum Command {
         args: Vec<OsString>,
     },
     /// Internal detached execution wrapper; reports the launch on stdout, then keeps tracking it.
-    #[command(hide = true)]
+    #[command(name = internal::DETACHED, hide = true)]
     DetachedInternal {
         workspace: String,
         #[arg(long)]

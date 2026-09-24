@@ -21,7 +21,10 @@ use tokio::{
 };
 
 use crate::{
-    cli::client,
+    cli::{
+        client,
+        internal::{InternalCommand, internal_command},
+    },
     daemon::workspace::ExecutionKind,
     env,
     model::{ExecutionPlan, Workspace},
@@ -136,20 +139,19 @@ pub async fn launch_detached(
             .join(" "),
         workspace.path.display()
     )?;
-    let mut wrapper = Command::new(std::env::current_exe()?);
+    let command = internal_command(
+        paths,
+        false,
+        InternalCommand::Detached {
+            workspace: &workspace.id,
+            log: &log,
+            agent,
+            command: &command,
+        },
+    )?;
+    let mut wrapper = Command::new(&command[0]);
     wrapper
-        .arg("--state-dir")
-        .arg(&paths.state)
-        .arg("detached-internal")
-        .arg(&workspace.id)
-        .arg("--log")
-        .arg(&log);
-    if let Some(agent) = agent {
-        wrapper.arg("--agent").arg(agent);
-    }
-    wrapper
-        .arg("--")
-        .args(&command)
+        .args(&command[1..])
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::from(file))
@@ -243,12 +245,13 @@ async fn run_tracked(
         .context("daemon did not start the execution in time")??;
     let plan = ExecutionPlan::try_from(body)?;
     let command = if let Some(land) = &plan.land {
-        let mut command = vec![std::env::current_exe()?.into_os_string()];
-        if matches!(mode, Mode::Land { json: true }) {
-            command.push("--json".into());
-        }
-        command.extend(["land-internal".into(), serde_json::to_string(land)?.into()]);
-        command
+        internal_command(
+            paths,
+            matches!(mode, Mode::Land { json: true }),
+            InternalCommand::Land {
+                plan: &serde_json::to_string(land)?,
+            },
+        )?
     } else {
         match &plan.setup_cmd {
             Some(path) => vec![path.as_os_str().to_owned()],
