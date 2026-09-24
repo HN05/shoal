@@ -21,7 +21,7 @@ use crate::{
     notifications::NotificationKind,
     paths::Paths,
     ports::Acquisition,
-    process_identity::Identity,
+    process::identity::Identity,
     protocol::{
         self, Body, Control, DaemonStatus, ExecutionEvent, Method, Request, Response, timing,
     },

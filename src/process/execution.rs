@@ -2,7 +2,7 @@
 //! uncertainty permits repair, ordinary stopping, or explicit manual removal.
 use anyhow::Result;
 
-use crate::{model::Execution, process_identity as process};
+use crate::{model::Execution, process::identity as process};
 
 pub struct Processes {
     pub wrapper: Option<process::Identity>,

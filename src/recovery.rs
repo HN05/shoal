@@ -4,9 +4,8 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, path::PathBuf};
 
 use crate::{
-    execution_processes::Processes,
     model::Workspace,
-    process_identity as process,
+    process::{execution::Processes, identity as process},
     state::{ExecutionState, WorkspaceState, states},
     workspace::Manager,
 };
@@ -305,7 +304,7 @@ impl Manager {
         if options.repair && safe {
             // Even an explicit acknowledgement cannot ignore visible cwd users.
             let cwd_users = if workspace.path.is_dir() {
-                crate::processes::in_directory(&workspace.path).await?
+                crate::process::in_directory(&workspace.path).await?
             } else {
                 vec![]
             };

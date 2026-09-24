@@ -971,7 +971,7 @@ async fn land_refuses_dirty_checkouts_other_branches_and_scoped_callers() {
         kind: crate::workspace::ExecutionKind::Land,
         agent: None,
         workspace: workspace.id.clone(),
-        wrapper: crate::process_identity::capture(std::process::id())
+        wrapper: crate::process::identity::capture(std::process::id())
             .unwrap()
             .unwrap(),
     };

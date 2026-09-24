@@ -374,7 +374,7 @@ mod tests {
         let mut child = tokio::process::Command::new(std::env::current_exe().unwrap())
             .args([
                 "--exact",
-                "process_identity::tests::marked_child",
+                "process::identity::tests::marked_child",
                 "--ignored",
             ])
             .stdout(std::process::Stdio::null())

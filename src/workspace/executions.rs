@@ -2,9 +2,11 @@
 //! crate::execution, in the invoking CLI process.
 use super::{Manager, ResourceGuard};
 use crate::{
-    execution_processes::Processes,
     model::{Execution, ExecutionPlan, LandPlan, Workspace},
-    process_identity::{self as process, Identity},
+    process::{
+        execution::Processes,
+        identity::{self as process, Identity},
+    },
     protocol::timing,
     scope::Caller,
     state::{ExecutionState, WorkspaceState, states},

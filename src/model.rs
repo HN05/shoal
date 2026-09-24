@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use crate::{
     config::repo::{ConflictPolicy, PortDefinition},
-    process_identity::Identity,
+    process::identity::Identity,
     resources::ResourceLease,
     simulators::Simulator,
     state::{ExecutionState, WorkspaceState},

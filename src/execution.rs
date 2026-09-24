@@ -24,7 +24,7 @@ use crate::{
     client, env,
     model::{ExecutionPlan, Workspace},
     paths::Paths,
-    process_identity,
+    process,
     protocol::{self, Control, ExecutionEvent, Method, timing},
     workspace::ExecutionKind,
 };
@@ -228,7 +228,7 @@ async fn run_tracked(
     } else {
         None
     };
-    let wrapper = process_identity::capture(std::process::id())?
+    let wrapper = process::identity::capture(std::process::id())?
         .context("cannot identify execution wrapper")?;
     let kind = mode.kind();
     let method = Method::Execute {
@@ -295,7 +295,7 @@ async fn supervise(
     protocol::write(
         stream,
         &ExecutionEvent::Started {
-            child: process_identity::capture(group.pid())?,
+            child: process::identity::capture(group.pid())?,
             group_id: group.pid(),
         },
     )

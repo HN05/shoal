@@ -16,7 +16,7 @@ use crate::{
     },
     notifications::Notification,
     ports::PortRequest,
-    process_identity::Identity,
+    process::identity::Identity,
     recovery::{ReconcileOptions, Report},
     removal::{BranchChoice, RemovalCheck, RemovalResult},
     resources::{Overview, ResourceLease, ResourceRequest},
@@ -502,7 +502,7 @@ mod tests {
 
     #[test]
     fn tracked_execution_requests_require_a_known_kind() {
-        let wrapper = crate::process_identity::capture(std::process::id())
+        let wrapper = crate::process::identity::capture(std::process::id())
             .unwrap()
             .unwrap();
         for (kind, spelling) in [

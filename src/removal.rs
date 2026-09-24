@@ -2,7 +2,7 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-use crate::{git, model::Workspace, processes};
+use crate::{git, model::Workspace, process};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RemovalCheck {
@@ -132,7 +132,7 @@ pub async fn inspect(
         .is_ok_and(|other| other == tree);
     // Processes block automatic cleanup, never manual removal.
     if caller_pid == 0 {
-        check.processes = processes::in_directory(path).await?;
+        check.processes = process::in_directory(path).await?;
     }
     Ok(check)
 }
