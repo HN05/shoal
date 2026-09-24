@@ -1,9 +1,10 @@
 //! Exclusive, worktree-owned Xcode simulator leases. Claims are persisted
 //! before every simctl mutation so interrupted work can be reconciled.
 pub mod audit;
+mod planning;
 mod simctl;
 
-use anyhow::{Result, bail, ensure};
+use anyhow::{Result, ensure};
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -396,28 +397,10 @@ impl Manager {
             )
         };
         if let Some(index) = existing {
-            ensure!(
-                !request.clean,
-                "this simulator name is already leased; release it before requesting a clean device, or use another --name"
-            );
             let sim = &mut records[index];
-            if let Some(profile) = &profile {
-                ensure!(
-                    sim.device == profile.device && sim.runtime == profile.runtime,
-                    "simulator name already leased with different settings; release it first"
-                );
-            }
+            planning::check_existing_request(sim, &request, profile.as_ref())?;
             self.reconcile_sim(sim, &inventory).await?;
-            ensure!(
-                sim.state == SimulatorState::Leased,
-                "simulator allocation is {}; release it to clean up and retry",
-                sim.state
-            );
-            ensure!(
-                sim.device(&inventory)
-                    .is_some_and(|d| d.is_available && d.state.is_booted()),
-                "leased simulator is no longer booted/available; release it and acquire again"
-            );
+            planning::check_existing_device(sim, &inventory)?;
             return Ok(Allocation::Granted(Box::new(sim.clone())));
         }
         let profile = profile.unwrap();
@@ -640,101 +623,8 @@ impl Manager {
         request: &SimRequest,
         inventory: &Inventory,
     ) -> Result<Profile> {
-        let config = &self.config.simulators;
-        ensure!(
-            request.profile.is_none() || (request.device.is_none() && request.runtime.is_none()),
-            "use either --profile or --device with --runtime"
-        );
-        let resolve = |profile: &Profile| resolve_profile(inventory, profile);
-        let profile = if request.device.is_some() || request.runtime.is_some() {
-            let (Some(device), Some(runtime)) = (&request.device, &request.runtime) else {
-                bail!("--device and --runtime are required together");
-            };
-            Profile {
-                requires_approval: false,
-                approval_lifetime: crate::daemon::access::Lifetime::Lease,
-                device: device.clone(),
-                runtime: runtime.clone(),
-            }
-        } else {
-            let repo = self.workspace_config(workspace).await?;
-            let names = if let Some(name) = &request.profile {
-                vec![name.clone()]
-            } else if !repo.simulators.preferred.is_empty() {
-                repo.simulators.preferred
-            } else {
-                config.default.iter().cloned().collect()
-            };
-            ensure!(
-                !names.is_empty(),
-                "select --profile or configure simulators.default and simulators.profiles in global config"
-            );
-            let mut candidates = Vec::new();
-            for name in names {
-                candidates.push(
-                    config
-                        .profiles
-                        .get(&name)
-                        .ok_or_else(|| anyhow::anyhow!("unknown simulator profile: {name}"))?,
-                );
-            }
-            let mut failures = Vec::new();
-            let found = candidates
-                .into_iter()
-                .find_map(|candidate| match resolve(candidate) {
-                    Ok(profile) => Some(profile),
-                    Err(error) => {
-                        failures.push(error.to_string());
-                        None
-                    }
-                });
-            found.ok_or_else(|| {
-                anyhow::anyhow!(
-                    "no preferred simulator is available: {}",
-                    failures.join("; ")
-                )
-            })?
-        };
-        let mut profile = resolve(&profile)?;
-        let matching: Vec<_> = config
-            .profiles
-            .values()
-            .filter_map(|p| resolve(p).ok())
-            .filter(|p| p.device == profile.device && p.runtime == profile.runtime)
-            .collect();
-        let allowed = !matching.is_empty();
         let repo = self.workspace_config(workspace).await?;
-        let mut lifetimes: Vec<_> = matching
-            .iter()
-            .filter(|p| p.requires_approval)
-            .map(|p| p.approval_lifetime)
-            .collect();
-        if repo
-            .simulators
-            .requires_approval
-            .unwrap_or(config.requires_approval)
-        {
-            lifetimes.push(
-                repo.simulators
-                    .approval_lifetime
-                    .unwrap_or(config.approval_lifetime),
-            );
-        }
-        profile.requires_approval = !lifetimes.is_empty();
-        profile.approval_lifetime = if lifetimes.contains(&crate::daemon::access::Lifetime::Lease) {
-            crate::daemon::access::Lifetime::Lease
-        } else {
-            crate::daemon::access::Lifetime::Workspace
-        };
-        ensure!(
-            allowed || config.allow_any,
-            "simulator is not in the machine's allowed profiles"
-        );
-        ensure!(
-            allowed || request.reason.is_some(),
-            "requesting a simulator outside configured profiles requires --reason"
-        );
-        Ok(profile)
+        planning::resolve_request(&self.config.simulators, &repo, request, inventory)
     }
 
     pub async fn release_simulator(&self, selector: &str, name: String) -> Result<()> {
@@ -814,45 +704,4 @@ impl Manager {
 /// The simctl device name Shoal gives its own devices.
 fn device_name(sim: &Simulator) -> String {
     format!("shoal-{}", sim.id)
-}
-
-/// Match a profile's device/runtime names or identifiers against what is
-/// installed, returning canonical identifiers.
-fn resolve_profile(inventory: &Inventory, profile: &Profile) -> Result<Profile> {
-    let devices: Vec<_> = inventory
-        .devicetypes
-        .iter()
-        .filter(|d| d.identifier == profile.device || d.name == profile.device)
-        .collect();
-    let runtimes: Vec<_> = inventory
-        .runtimes
-        .iter()
-        .filter(|r| {
-            r.is_available && (r.identifier == profile.runtime || r.name == profile.runtime)
-        })
-        .collect();
-    ensure!(
-        devices.len() == 1,
-        "device type is unavailable or ambiguous: {}",
-        profile.device
-    );
-    ensure!(
-        runtimes.len() == 1,
-        "runtime is not installed/available or is ambiguous: {}; Shoal does not download runtimes",
-        profile.runtime
-    );
-    ensure!(
-        runtimes[0]
-            .supported_device_types
-            .as_ref()
-            .is_none_or(|types| types.iter().any(|d| d.identifier == devices[0].identifier)),
-        "device type {} is incompatible with runtime {}",
-        profile.device,
-        profile.runtime
-    );
-    Ok(Profile {
-        device: devices[0].identifier.clone(),
-        runtime: runtimes[0].identifier.clone(),
-        ..profile.clone()
-    })
 }
