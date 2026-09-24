@@ -279,10 +279,10 @@ pub(super) async fn add(
         )
     };
     if workspace.state == WorkspaceState::Preparing {
-        let Some(prepared) = prepare_workspace(ctx, &workspace).await? else {
+        let Some(ready) = setup_workspace(ctx, &workspace).await? else {
             return Ok(1);
         };
-        workspace = prepared;
+        workspace = ready;
     }
     ctx.emit(
         &format!(
@@ -420,7 +420,7 @@ pub(super) async fn adopt(ctx: &Context, repository: String, path: PathBuf) -> R
 pub(super) async fn setup(ctx: &Context, workspace: Option<String>) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let inspection = client::inspect(&ctx.paths, workspace).await?;
-    let Some(workspace) = prepare_workspace(ctx, &inspection.workspace).await? else {
+    let Some(workspace) = setup_workspace(ctx, &inspection.workspace).await? else {
         return Ok(1);
     };
     run_post_setup(ctx, &workspace).await?;
@@ -450,8 +450,8 @@ async fn run_post_setup(ctx: &Context, workspace: &Workspace) -> Result<()> {
 
 /// Run the setup command, then let an interactive user decide what to do with
 /// a failed workspace. `None` means the workspace was deleted or kept as-is.
-async fn prepare_workspace(ctx: &Context, workspace: &Workspace) -> Result<Option<Workspace>> {
-    let failure = match execution::prepare(&ctx.paths, workspace.id.clone(), ctx.json).await {
+async fn setup_workspace(ctx: &Context, workspace: &Workspace) -> Result<Option<Workspace>> {
+    let failure = match execution::setup(&ctx.paths, workspace.id.clone(), ctx.json).await {
         Ok(0) => None,
         Ok(code) => Some(format!("setup command exited with status {code}")),
         Err(error) => Some(format!("{error:#}")),
