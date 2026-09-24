@@ -7,10 +7,7 @@ mod simctl;
 use anyhow::{Result, ensure};
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::BTreeMap,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::collections::BTreeMap;
 use uuid::Uuid;
 
 use audit::{CleanAction, CleanRequest, CleanRequestStatus, EvictedDevice};
@@ -20,6 +17,7 @@ use crate::{
     daemon::{access, allocation::Allocation, workspace::Manager},
     model::Workspace,
     state::{WorkspaceState, states},
+    time::unix_seconds,
     validate,
 };
 
@@ -171,13 +169,6 @@ pub struct SimulatorOverview {
     pub simulators: Vec<Simulator>,
 }
 
-pub(crate) fn now() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs()
-}
-
 impl Manager {
     pub async fn simulator_catalog(&self) -> Result<SimulatorCatalog> {
         let inventory = simctl::inventory().await?;
@@ -327,7 +318,7 @@ impl Manager {
                 .await;
         }
         if let Some(mut audit) = audit {
-            audit.updated_at = now();
+            audit.updated_at = unix_seconds();
             match &result {
                 Ok(Allocation::Granted(sim)) => {
                     audit.status = CleanRequestStatus::Acquired;
@@ -508,7 +499,7 @@ impl Manager {
             lease_name: None,
             reason: None,
             state: SimulatorState::Creating,
-            last_used: now(),
+            last_used: unix_seconds(),
             error: None,
             installed_apps: Some(0),
         });
@@ -533,7 +524,7 @@ impl Manager {
         sim.error = None;
         self.save_sim(&sim).await?; // ownership precedes every external mutation
         let result = self.boot(&mut sim, &workspace, needs_reset, audit).await;
-        sim.last_used = now();
+        sim.last_used = unix_seconds();
         sim.last_workspace_id = Some(workspace.id);
         if let Err(error) = result {
             sim.state = SimulatorState::Failed;
@@ -634,7 +625,7 @@ impl Manager {
         sim.last_workspace_id = sim.workspace_id.take();
         sim.lease_name = None;
         sim.state = SimulatorState::Idle;
-        sim.last_used = now();
+        sim.last_used = unix_seconds();
         self.save_sim(&sim).await?;
         self.release_simulator_access(workspace.id, name).await?;
         Ok(())
@@ -667,7 +658,8 @@ impl Manager {
         };
         for mut sim in self.list_simulators(None).await? {
             if sim.workspace_id.is_none()
-                && now().saturating_sub(sim.last_used) >= self.config.simulators.idle_seconds
+                && unix_seconds().saturating_sub(sim.last_used)
+                    >= self.config.simulators.idle_seconds
             {
                 self.delete_sim(&mut sim).await?;
             }

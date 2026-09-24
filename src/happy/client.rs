@@ -236,7 +236,7 @@ pub async fn seed(paths: &Paths, workspace: &Workspace, agent: HappyAgent) -> Re
     };
     // Mirrors happy-cli's createSessionMetadata; the CLI replaces it with its
     // own record once it connects.
-    let now = SystemTime::now()
+    let now_millis = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|elapsed| elapsed.as_millis() as u64)
         .unwrap_or_default();
@@ -251,7 +251,7 @@ pub async fn seed(paths: &Paths, workspace: &Workspace, agent: HappyAgent) -> Re
         "startedFromDaemon": true,
         "startedBy": "daemon",
         "lifecycleState": "running",
-        "lifecycleStateSince": now,
+        "lifecycleStateSince": now_millis,
         "flavor": agent.name(),
         "gitBranch": workspace.branch,
     });

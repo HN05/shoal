@@ -5,10 +5,8 @@ use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    daemon::workspace::Manager,
-    model::Workspace,
-    sim::{SimRequest, now},
-    state::states,
+    daemon::workspace::Manager, model::Workspace, sim::SimRequest, state::states,
+    time::unix_seconds,
 };
 
 states!(CleanRequestStatus {
@@ -101,7 +99,7 @@ impl Manager {
                 "clean request already completed or interrupted; inspect its history before retrying with a new request ID"
             );
             audit.status = CleanRequestStatus::Requested;
-            audit.updated_at = now();
+            audit.updated_at = unix_seconds();
             audit.attempts += 1;
             audit.error = None;
             audit
@@ -111,8 +109,8 @@ impl Manager {
                 workspace_name: workspace.name.clone(),
                 repository_id: workspace.repository_id.clone(),
                 execution_id,
-                requested_at: now(),
-                updated_at: now(),
+                requested_at: unix_seconds(),
+                updated_at: unix_seconds(),
                 attempts: 1,
                 request: request.clone(),
                 status: CleanRequestStatus::Requested,

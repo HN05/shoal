@@ -22,6 +22,7 @@ mod state;
 mod subprocess;
 #[cfg(test)]
 mod test_support;
+mod time;
 mod tools;
 mod validate;
 

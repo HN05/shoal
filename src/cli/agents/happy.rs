@@ -56,12 +56,12 @@ pub(in crate::cli) async fn happy(
             daemon_state.display()
         );
     }
-    let stamp = std::time::SystemTime::now()
+    let stamp_millis = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|elapsed| elapsed.as_millis())
         .unwrap_or_default();
     let state_dir = ctx.paths.workspace_state(&workspace.id);
-    let stem = format!("happy-{}-{stamp}", agent.name());
+    let stem = format!("happy-{}-{stamp_millis}", agent.name());
     let log = state_dir.join(format!("{stem}.log"));
     // Happy's Codex mode has no prompt argument: the prompt is kept in a file
     // and, when this machine is logged in to Happy, delivered through Happy's

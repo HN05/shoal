@@ -545,7 +545,7 @@ impl Manager {
                         .reason
                         .or_else(|| settings.reason.clone())
                         .or(definition.reason.clone()),
-                    created_at: i64::try_from(crate::sim::now())?,
+                    created_at: i64::try_from(crate::time::unix_seconds())?,
                 };
                 tx.execute(
                     "INSERT INTO resource_leases(id,workspace_id,scope,pool,name,resource,reason,created_at,mode) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
