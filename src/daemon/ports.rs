@@ -22,6 +22,12 @@ use crate::{
     validate,
 };
 
+mod selection;
+#[cfg(test)]
+mod tests;
+
+use selection::first_available;
+
 /// Caller overrides for a named port; unset fields fall back to the
 /// repository's port definition.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -179,19 +185,10 @@ impl Manager {
                     }
                 }
                 let reserved = store::ports(&tx, None)?;
-                let free = |port| -> Result<bool> {
-                    Ok(!reserved.iter().any(|p| p.port == port) && available(port)?)
-                };
                 let port = match preferred {
-                    Some(port) if free(port)? => port,
+                    Some(port) if !reserved.iter().any(|p| p.port == port) && available(port)? => port,
                     _ => {
-                        let mut selected = None;
-                        for port in range.start..=range.end {
-                            if free(port)? {
-                                selected = Some(port);
-                                break;
-                            }
-                        }
+                        let selected = first_available(&reserved, range.start..=range.end, available)?;
                         let Some(port) = selected else {
                             bail!(
                                 "no available TCP ports in {}..={}",

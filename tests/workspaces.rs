@@ -1395,7 +1395,8 @@ fn ports_avoid_listeners_and_concurrent_allocations_are_unique_and_persistent() 
             .success()
     );
     let mut children = Vec::new();
-    for i in 0..8 {
+    // Cross the small-list membership threshold while claims compete.
+    for i in 0..40 {
         children.push(
             fixture
                 .command()
