@@ -14,11 +14,11 @@
 #   /var/cache/ci/cargo/git      -> /usr/local/cargo/git
 #   /var/cache/ci/target         -> /ci-target
 # Every step that runs cargo in /ci-target (here and in release.yml) first
-# sources .forgejo/scripts/lock-target-dir.sh, which holds a flock on the
-# directory for the rest of the step, and runs `cargo clean -p shoal` before
-# its first build so another branch's build of the crate is never taken as
-# fresh. The directories grow without bound; clear /var/cache/ci/target on the
-# runner host when it gets large.
+# sources .forgejo/scripts/lock-target-dir.sh, which moves CARGO_TARGET_DIR to
+# a free slot directory under it and holds that slot for the rest of the step,
+# and runs `cargo clean -p shoal` before its first build so another branch's
+# build of the crate is never taken as fresh. The directories grow without
+# bound; clear /var/cache/ci/target on the runner host when it gets large.
 
 name: ci
 
@@ -121,8 +121,8 @@ jobs:
         if: env.DOCS_ONLY != 'true'
         run: cargo fmt --all -- --check
 
-      # One step, because the lock lasts as long as the step's shell.
-      - name: cargo clippy and cargo test (holding /ci-target)
+      # One step, because the slot lasts as long as the step's shell.
+      - name: cargo clippy and cargo test (holding a /ci-target slot)
         if: env.DOCS_ONLY != 'true'
         run: |
           . .forgejo/scripts/lock-target-dir.sh

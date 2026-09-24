@@ -65,7 +65,7 @@ jobs:
           export GIT_CONFIG_VALUE_0="Authorization: basic $(printf 'x-access-token:%s' "$TOKEN" | base64 | tr -d '\n')"
           unset TOKEN
           cd source
-          # release.py builds and tests in /ci-target; hold it for the whole step.
+          # release.py builds and tests in /ci-target; hold a slot for the whole step.
           . .forgejo/scripts/lock-target-dir.sh
           cargo clean -p shoal
           if [ -n "$REQUESTED_VERSION" ]; then
@@ -146,8 +146,8 @@ jobs:
             git -C tap reset --hard origin/main
           done
 
-  # One job for every target: builds share /ci-target, whose lock would
-  # serialize a matrix anyway. Push mirrors carry no releases, so the GitHub
+  # One job for every target, so the targets share one slot's host build
+  # scripts and proc macros. Push mirrors carry no releases, so the GitHub
   # release below is created from these files once the tag has been mirrored.
   binaries:
     needs: publish
@@ -172,7 +172,7 @@ jobs:
           git -C source remote add origin "${FORGEJO_SERVER%/}/$REPOSITORY.git"
           git -C source fetch --depth 1 origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
           git -C source checkout --detach "refs/tags/$RELEASE_TAG"
-      - name: Cross-build release binaries (holding /ci-target)
+      - name: Cross-build release binaries (holding a /ci-target slot)
         run: |
           set -euo pipefail
           cd source
