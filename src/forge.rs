@@ -7,6 +7,27 @@ use anyhow::{Context, Result, ensure};
 
 use remote_url::{RemoteUrl, Transport};
 
+/// Classify before resolving a repository; validate identity and number at lookup.
+/// In particular, zero and overflowing numbers still use number-based targeting.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum IssueInput {
+    Number,
+    Url,
+    Invalid,
+}
+
+impl IssueInput {
+    pub fn parse(input: &str) -> Self {
+        if input.starts_with("https://") || input.starts_with("http://") {
+            Self::Url
+        } else if !input.is_empty() && input.bytes().all(|c| c.is_ascii_digit()) {
+            Self::Number
+        } else {
+            Self::Invalid
+        }
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct ForgeRepo {
     pub host: String,
@@ -121,7 +142,7 @@ impl ForgeRepo {
     }
 
     pub fn issue(&self, input: &str) -> Result<(u64, String)> {
-        let (number, url) = if input.starts_with("https://") || input.starts_with("http://") {
+        let (number, url) = if IssueInput::parse(input) == IssueInput::Url {
             let input = input
                 .split(['?', '#'])
                 .next()
@@ -145,7 +166,7 @@ impl ForgeRepo {
             )
         };
         ensure!(
-            !number.is_empty() && number.bytes().all(|c| c.is_ascii_digit()),
+            IssueInput::parse(number) == IssueInput::Number,
             "issue must be a positive number or an issue URL"
         );
         let number = number.parse::<u64>().context("issue number is too large")?;
@@ -525,6 +546,37 @@ fn diagnostic(stderr: &[u8], limit: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn issue_input_classification_defers_validation_until_lookup() {
+        let repo = ForgeRepo::parse("https://forge.example/team/repo").unwrap();
+        for input in ["0", "18446744073709551616"] {
+            assert_eq!(IssueInput::parse(input), IssueInput::Number);
+            assert!(repo.issue(input).is_err());
+        }
+        for input in ["", "-1", "+1", "#1", "1/", "１２", "not-an-issue"] {
+            assert_eq!(IssueInput::parse(input), IssueInput::Invalid);
+            assert!(repo.issue(input).is_err());
+        }
+        for input in [
+            "https://forge.example/team/repo/issues/1?x#comment",
+            "http://forge.example/team/repo/issues/1/",
+        ] {
+            assert_eq!(IssueInput::parse(input), IssueInput::Url);
+            assert_eq!(repo.issue(input).unwrap().0, 1);
+        }
+        for input in [
+            "https://forge.example/team/repo/pulls/1",
+            "https://forge.example/team/repo/issues/0",
+            "https://forge.example/team/other/issues/1",
+        ] {
+            assert_eq!(IssueInput::parse(input), IssueInput::Url);
+            assert!(repo.issue(input).is_err());
+        }
+        assert_eq!(IssueInput::parse("001"), IssueInput::Number);
+        assert_eq!(repo.issue("001").unwrap().0, 1);
+    }
+
     #[test]
     fn query_errors_preserve_login_guidance_and_diagnostic_limits() {
         use std::{io, os::unix::process::ExitStatusExt, process::Output};
