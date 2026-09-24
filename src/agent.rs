@@ -1,14 +1,10 @@
 //! Shared agent identities and launch modes, independent of launch adapters.
 use crate::state::states;
 
-states!(BuiltinAgent {
+states!(BuiltinAgent: Variants {
     Claude => "claude",
     Codex => "codex",
 });
-
-impl BuiltinAgent {
-    pub const ALL: &[Self] = &[Self::Claude, Self::Codex];
-}
 
 impl std::str::FromStr for BuiltinAgent {
     type Err = ();

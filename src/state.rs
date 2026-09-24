@@ -4,21 +4,32 @@
 /// SQLite conversions. Unknown values are rejected everywhere.
 /// Add `#[derive(Default)]` with a `#[default]` variant for a default, or
 /// `: ValueEnum` after the type name to expose the wire names to clap.
+/// Use `: Variants` for an ordered `ALL` list without a clap implementation.
 macro_rules! states {
     ($(#[$enum_meta:meta])* $name:ident: ValueEnum {
         $($(#[$meta:meta])* $variant:ident => $wire:literal),+ $(,)?
     }) => {
-        $crate::state::states!($(#[$enum_meta])* $name {
+        $crate::state::states!($(#[$enum_meta])* $name: Variants {
             $($(#[$meta])* $variant => $wire),+
         });
         impl ::clap::ValueEnum for $name {
             fn value_variants<'a>() -> &'a [Self] {
-                &[$(Self::$variant),+]
+                Self::ALL
             }
 
             fn to_possible_value(&self) -> Option<::clap::builder::PossibleValue> {
                 Some(::clap::builder::PossibleValue::new(self.as_str()))
             }
+        }
+    };
+    ($(#[$enum_meta:meta])* $name:ident: Variants {
+        $($(#[$meta:meta])* $variant:ident => $wire:literal),+ $(,)?
+    }) => {
+        $crate::state::states!($(#[$enum_meta])* $name {
+            $($(#[$meta])* $variant => $wire),+
+        });
+        impl $name {
+            pub const ALL: &'static [Self] = &[$(Self::$variant),+];
         }
     };
     ($(#[$enum_meta:meta])* $name:ident {
