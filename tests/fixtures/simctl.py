@@ -19,6 +19,8 @@ if failure.exists() and failure.read_text().strip() == command:
     sys.exit(1)
 state = root / 'sim-devices.json'
 devices = json.loads(state.read_text()) if state.exists() else []
+overrides = root / 'sim-state-overrides.json'
+states = json.loads(overrides.read_text()) if overrides.exists() else {}
 runtime = 'com.apple.CoreSimulator.SimRuntime.iOS-Test'
 if command == 'list':
     print(json.dumps({
@@ -42,9 +44,9 @@ else:
         print(plistlib.dumps(apps).decode())
         sys.exit(0)
     elif command == 'bootstatus':
-        device['state'] = 'Booted'
+        device['state'] = states.get(command, 'Booted')
     elif command == 'shutdown':
-        device['state'] = 'Shutdown'
+        device['state'] = states.get(command, 'Shutdown')
     elif command == 'erase':
         assert device['state'] == 'Shutdown'
         device['user_apps'] = 0

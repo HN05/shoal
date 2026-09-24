@@ -37,8 +37,10 @@ command process groups, registers with the daemon, and handles stop requests.
 The daemon never proxies terminals, and a lost connection is not proof that an
 execution stopped or that its resources are free.
 
-Use short transactions for atomic claims; typed lifecycle states retain lowercase
-persisted/wire spellings and reject unknown values. Slow operations stay outside
+Use short transactions for atomic claims; typed Shoal lifecycle states retain lowercase
+persisted/wire spellings and reject unknown values. Native simulator states use a
+separate adapter enum that preserves unfamiliar strings and native wire spellings;
+only confirmed shutdown frees running capacity. Slow operations stay outside
 transactions; failures and migrations preserve ownership. `install` preserves compatible daemons and
 commands, deferring service changes until restart; incompatible daemons are
 verified stopped before replacing their service.

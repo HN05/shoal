@@ -823,7 +823,7 @@ Acquisition returns a ready device UDID; use it explicitly with `simctl` or
 returns the same device. Leases belong to worktrees, survive command exit and
 restarts, block automatic removal, and are deleted with the workspace. At capacity,
 idle managed devices shut down first; active leases and personal simulators are
-never touched, external booted devices count toward the limit, and busy requests
+never touched, every device not confirmed shut down counts toward the limit, and busy requests
 exit 2 unless `--wait <seconds>`. Released devices keep apps and settings until the
 idle timer deletes them (checked every 15 seconds). Failed operations retain records
 for retry. Only the default CoreSimulator device set and one daemon are covered.

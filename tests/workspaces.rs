@@ -2915,6 +2915,59 @@ fn simulator_failures_retain_claims_and_restart_never_reassigns_them() {
 
 #[test]
 #[cfg(target_os = "macos")]
+fn simulator_requires_confirmed_native_boot_and_shutdown_states() {
+    let fixture = Fixture::with_tools(Some(SIM_CONFIG), true);
+    fixture.add("worker");
+    let overrides = fixture.root.path().join("sim-state-overrides.json");
+    for native in ["Creating", "Booting", "Shutting Down", "Future State"] {
+        fs::write(
+            &overrides,
+            serde_json::json!({"bootstatus": native}).to_string(),
+        )
+        .unwrap();
+        let output = fixture.run(&["sim", "acquire", "worker"]);
+        assert!(!output.status.success());
+        assert!(String::from_utf8_lossy(&output.stderr).contains("did not finish booting"));
+        let failed = fixture.ok(&["sim", "worker"])["simulators"][0].clone();
+        assert_eq!(failed["state"], "failed");
+
+        fs::write(
+            &overrides,
+            serde_json::json!({"shutdown": native}).to_string(),
+        )
+        .unwrap();
+        let output = fixture.run(&["sim", "release", "default", "worker"]);
+        assert!(!output.status.success());
+        assert!(String::from_utf8_lossy(&output.stderr).contains("has not shut down"));
+        assert_eq!(
+            fixture.ok(&["sim", "worker"])["simulators"][0]["udid"],
+            failed["udid"]
+        );
+        let events = fs::read_to_string(fixture.root.path().join("sim-events")).unwrap();
+        assert!(!events.contains(&format!("[\"delete\", {}]", failed["udid"])));
+        fs::remove_file(&overrides).unwrap();
+        fixture.ok(&["sim", "release", "default", "worker"]);
+    }
+
+    let lease = fixture.ok(&["sim", "acquire", "worker"]);
+    let devices_path = fixture.root.path().join("sim-devices.json");
+    let mut devices: Value =
+        serde_json::from_str(&fs::read_to_string(&devices_path).unwrap()).unwrap();
+    for native in ["Shutdown", "Booting", "Shutting Down", "Future State"] {
+        devices[0]["state"] = serde_json::json!(native);
+        fs::write(&devices_path, devices.to_string()).unwrap();
+        let output = fixture.run(&["sim", "acquire", "worker"]);
+        assert!(!output.status.success());
+        assert!(String::from_utf8_lossy(&output.stderr).contains("no longer booted/available"));
+        assert_eq!(fixture.ok(&["sim", "worker"])["simulators"][0], lease);
+    }
+    devices[0]["state"] = serde_json::json!("Booted");
+    fs::write(&devices_path, devices.to_string()).unwrap();
+    assert_eq!(fixture.ok(&["sim", "acquire", "worker"]), lease);
+}
+
+#[test]
+#[cfg(target_os = "macos")]
 fn simulator_policy_capacity_reclamation_and_external_devices() {
     let fixture = Fixture::with_tools(Some(SIM_CONFIG), true);
     let workspace = fixture.add("worker");
@@ -2959,15 +3012,25 @@ fn simulator_policy_capacity_reclamation_and_external_devices() {
         device["state"] = serde_json::json!("Shutdown");
     }
     devices.push(serde_json::json!({"name":"Personal simulator","udid":"external","state":"Booted","isAvailable":true}));
-    fs::write(
-        fixture.root.path().join("sim-devices.json"),
-        serde_json::to_string(&devices).unwrap(),
-    )
-    .unwrap();
-    assert_eq!(
-        fixture.run(&["sim", "acquire", "worker"]).status.code(),
-        Some(2)
-    );
+    for native in [
+        "Booted",
+        "Creating",
+        "Booting",
+        "Shutting Down",
+        "Future State",
+    ] {
+        devices.last_mut().unwrap()["state"] = serde_json::json!(native);
+        fs::write(
+            fixture.root.path().join("sim-devices.json"),
+            serde_json::to_string(&devices).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            fixture.run(&["sim", "acquire", "worker"]).status.code(),
+            Some(2),
+            "external device in state {native} must occupy capacity"
+        );
+    }
     let events = fs::read_to_string(fixture.root.path().join("sim-events")).unwrap();
     assert!(!events.contains("external"));
     fixture.ok(&["rm", "worker", "--yes", "--delete-branch"]);

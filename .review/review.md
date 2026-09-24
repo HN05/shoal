@@ -90,8 +90,10 @@ removal, check it against the rule those files state before judging it.
   styles and transient progress belong at presentation sites; machine output and
   stored values stay plain. Progress clears before results and stays off for JSON,
   redirected stderr and dumb terminals.
-- Persistence: lifecycle enums keep their lowercase SQLite/JSON spelling and
-  reject unknown values. Schema and state-file changes need a compatibility
+- Persistence: Shoal lifecycle enums keep their lowercase SQLite/JSON spelling and
+  reject unknown values. The separate native simulator state enum preserves
+  unfamiliar strings and native spellings; only confirmed shutdown frees running
+  capacity. Schema and state-file changes need a compatibility
   story for existing daemons. `install` preserves compatible daemons and commands,
   deferring service changes until restart; incompatible daemons restart.
   Config key edits preserve unrelated settings and comments and validate before saving;

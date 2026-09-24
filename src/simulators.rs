@@ -141,7 +141,7 @@ impl Simulator {
     }
 
     fn is_booted(&self, inventory: &Inventory) -> bool {
-        self.device(inventory).is_some_and(|d| d.state == "Booted")
+        self.device(inventory).is_some_and(|d| d.state.is_booted())
     }
 
     /// Eviction cost; unknown counts sort last.
@@ -265,14 +265,14 @@ impl Manager {
     async fn shutdown_sim(&self, sim: &Simulator) -> Result<()> {
         let inventory = simctl::inventory().await?;
         if let Some(device) = sim.device(&inventory) {
-            if device.state != "Shutdown" {
+            if !device.state.is_shutdown() {
                 simctl::run(&["shutdown", &device.udid]).await?;
             }
             let after = simctl::inventory().await?;
             ensure!(
                 after
                     .device(&device.udid)
-                    .is_none_or(|d| d.state == "Shutdown"),
+                    .is_none_or(|d| d.state.is_shutdown()),
                 "simulator {} has not shut down",
                 device.udid
             );
@@ -423,7 +423,7 @@ impl Manager {
             );
             ensure!(
                 sim.device(&inventory)
-                    .is_some_and(|d| d.is_available && d.state == "Booted"),
+                    .is_some_and(|d| d.is_available && d.state.is_booted()),
                 "leased simulator is no longer booted/available; release it and acquire again"
             );
             return Ok(Acquisition::Acquired(Box::new(sim.clone())));
@@ -627,7 +627,7 @@ impl Manager {
             simctl::inventory()
                 .await?
                 .device(&udid)
-                .is_some_and(|d| d.state == "Booted" && d.is_available),
+                .is_some_and(|d| d.state.is_booted() && d.is_available),
             "simulator did not finish booting"
         );
         // Removal may have started while simctl was running. Its cleanup waits
