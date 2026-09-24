@@ -1,6 +1,6 @@
 //! One table of repository-overridable options drives both layering and
 //! provenance, so a reported layer is the one whose value is in effect.
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::LazyLock};
 
 use anyhow::{Context, Result};
 use serde::Serialize;
@@ -381,8 +381,13 @@ macro_rules! list {
 }
 
 /// Every repository-overridable option, in the order `config show` lists them.
-fn fields() -> Vec<Box<dyn Field>> {
-    let mut fields: Vec<Box<dyn Field>> = vec![
+fn fields() -> &'static [Box<dyn Field + Send + Sync>] {
+    static FIELDS: LazyLock<Vec<Box<dyn Field + Send + Sync>>> = LazyLock::new(build_fields);
+    &FIELDS
+}
+
+fn build_fields() -> Vec<Box<dyn Field + Send + Sync>> {
+    let mut fields: Vec<Box<dyn Field + Send + Sync>> = vec![
         named!("commands", commands),
         scalar!(issue_template),
         scalar!(agent_template),
@@ -395,9 +400,9 @@ fn fields() -> Vec<Box<dyn Field>> {
     fields.extend(
         HookKind::ALL
             .iter()
-            .map(|&kind| Box::new(Hook(kind)) as Box<dyn Field>),
+            .map(|&kind| Box::new(Hook(kind)) as Box<dyn Field + Send + Sync>),
     );
-    let rest: Vec<Box<dyn Field>> = vec![
+    let rest: Vec<Box<dyn Field + Send + Sync>> = vec![
         scalar!(ports.on_conflict),
         scalar!(ports.start),
         scalar!(ports.end),
