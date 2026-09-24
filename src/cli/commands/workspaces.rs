@@ -649,11 +649,10 @@ fn render_status(status: &WorkspaceStatus, json: bool) {
 
     match &status.pr_cleanup {
         Some(registration) => {
-            let target = registration
-                .url
-                .as_deref()
-                .or(registration.head.as_deref())
-                .unwrap_or("registered");
+            let target = match &registration.kind {
+                crate::forge::pr::RegistrationKind::Watch { url } => url,
+                crate::forge::pr::RegistrationKind::Acknowledgement { head } => head,
+            };
             println!("PR watch:      {target}");
             if let Some(error) = &registration.error {
                 println!("  {}", palette.paint(Style::Warning, error));

@@ -29,7 +29,9 @@ removal, check it against the rule those files state before judging it.
   notifications are read by the unscoped user only and never fail the
   operation they record. PR cleanup defaults on,
   stops tracked agents, and requires clean files and unchanged merged HEAD. PR
-  numbers resolve against the workspace's origin and persist as repository-bound URLs. This is
+  numbers resolve against the workspace's origin and persist as repository-bound URLs.
+  Registration variants preserve existing stored and JSON shapes and reject ambiguous
+  records; manual acknowledgements bind to exactly the recorded HEAD. This is
   cooperative, not a security boundary, so judge it as such.
 - Allocation is atomic and persisted before the external mutation (simctl,
   Worktrunk). Leases survive restart and failed removal and are released only

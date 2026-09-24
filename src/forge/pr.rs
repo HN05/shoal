@@ -10,12 +10,62 @@ use crate::{
     model::Workspace,
 };
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "RegistrationRecord", into = "RegistrationRecord")]
 pub struct Registration {
-    pub url: Option<String>,
-    /// Manual acknowledgement is tied to exactly this commit.
-    pub head: Option<String>,
+    pub kind: RegistrationKind,
     pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RegistrationKind {
+    Watch {
+        url: String,
+    },
+    /// Manual acknowledgement is tied to exactly this commit.
+    Acknowledgement {
+        head: String,
+    },
+}
+
+/// Keep the persisted record and CLI JSON compatible with existing daemons.
+#[derive(Serialize, Deserialize)]
+struct RegistrationRecord {
+    url: Option<String>,
+    head: Option<String>,
+    error: Option<String>,
+}
+
+impl TryFrom<RegistrationRecord> for Registration {
+    type Error = anyhow::Error;
+
+    fn try_from(record: RegistrationRecord) -> Result<Self> {
+        let kind = match (record.url, record.head) {
+            (Some(url), None) => RegistrationKind::Watch { url },
+            (None, Some(head)) => RegistrationKind::Acknowledgement { head },
+            _ => anyhow::bail!(
+                "invalid PR cleanup registration: expected exactly one of url or head"
+            ),
+        };
+        Ok(Self {
+            kind,
+            error: record.error,
+        })
+    }
+}
+
+impl From<Registration> for RegistrationRecord {
+    fn from(registration: Registration) -> Self {
+        let (url, head) = match registration.kind {
+            RegistrationKind::Watch { url } => (Some(url), None),
+            RegistrationKind::Acknowledgement { head } => (None, Some(head)),
+        };
+        Self {
+            url,
+            head,
+            error: registration.error,
+        }
+    }
 }
 
 impl Manager {
@@ -64,11 +114,11 @@ impl Manager {
             } else {
                 None
             };
-            Some(Registration {
-                head: url.is_none().then_some(head),
-                url,
-                error: None,
-            })
+            let kind = match url {
+                Some(url) => RegistrationKind::Watch { url },
+                None => RegistrationKind::Acknowledgement { head },
+            };
+            Some(Registration { kind, error: None })
         };
         let id = workspace.id;
         self.store.run(move |db| {
@@ -127,12 +177,15 @@ impl Manager {
                 settings?;
                 self.verify_worktree(&workspace).await?;
                 let head = current_head(&workspace).await?;
-                if let Some(url) = &registration.url {
-                    let (forge, number, _) = self.pr_forge(&workspace, url).await?;
-                    let Some(commits) = forge.merged_commits(&workspace.path, number, &workspace.branch).await? else { return Ok(false); };
-                    ensure!(commits.contains(&head), "merged PR does not contain the current workspace commit; retaining workspace");
-                } else {
-                    ensure!(registration.head.as_deref() == Some(&head), "HEAD changed after the merge acknowledgement; retaining workspace");
+                match &registration.kind {
+                    RegistrationKind::Watch { url } => {
+                        let (forge, number, _) = self.pr_forge(&workspace, url).await?;
+                        let Some(commits) = forge.merged_commits(&workspace.path, number, &workspace.branch).await? else { return Ok(false); };
+                        ensure!(commits.contains(&head), "merged PR does not contain the current workspace commit; retaining workspace");
+                    }
+                    RegistrationKind::Acknowledgement { head: acknowledged } => {
+                        ensure!(acknowledged == &head, "HEAD changed after the merge acknowledgement; retaining workspace");
+                    }
                 }
                 self.remove_merged(&workspace.id, &head).await?;
                 eprintln!("PR cleanup removed {}", workspace.name);
@@ -140,10 +193,11 @@ impl Manager {
             }.await;
             match &result {
                 Ok(true) => {
-                    let cause = if registration.url.is_some() {
-                        "removed after its pull request merged"
-                    } else {
-                        "removed after the merge acknowledgement"
+                    let cause = match registration.kind {
+                        RegistrationKind::Watch { .. } => "removed after its pull request merged",
+                        RegistrationKind::Acknowledgement { .. } => {
+                            "removed after the merge acknowledgement"
+                        }
                     };
                     self.notify(
                         Some(&workspace.name),
@@ -190,4 +244,61 @@ pub(crate) async fn current_head(workspace: &Workspace) -> Result<String> {
         .await?
         .trim()
         .to_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn registration_round_trips_legacy_records() {
+        for (kind, url, head) in [
+            (
+                RegistrationKind::Watch {
+                    url: "https://forge.example/team/repo/pulls/7".into(),
+                },
+                Some("https://forge.example/team/repo/pulls/7"),
+                None,
+            ),
+            (
+                RegistrationKind::Acknowledgement {
+                    head: "abc123".into(),
+                },
+                None,
+                Some("abc123"),
+            ),
+        ] {
+            for error in [None, Some("lookup failed")] {
+                let record = json!({"url": url, "head": head, "error": error});
+                let registration: Registration = serde_json::from_value(record.clone()).unwrap();
+                assert_eq!(registration.kind, kind);
+                assert_eq!(registration.error.as_deref(), error);
+                assert_eq!(serde_json::to_value(&registration).unwrap(), record);
+            }
+        }
+        // Optional fields were also allowed to be absent.
+        let registration: Registration = serde_json::from_value(json!({"head": "abc123"})).unwrap();
+        assert_eq!(
+            serde_json::to_value(registration).unwrap(),
+            json!({"url": null, "head": "abc123", "error": null})
+        );
+    }
+
+    #[test]
+    fn registration_rejects_ambiguous_records() {
+        for record in [
+            json!({}),
+            json!({"url": null, "head": null}),
+            json!({"url": "url", "head": "head"}),
+        ] {
+            let error = serde_json::from_value::<Registration>(record).unwrap_err();
+            assert!(
+                error
+                    .to_string()
+                    .contains("expected exactly one of url or head"),
+                "{error}"
+            );
+        }
+    }
 }
