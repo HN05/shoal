@@ -7,7 +7,8 @@ use std::{path::PathBuf, time::Duration};
 
 use crate::{
     model::{Execution, PortReservation, Repository, Workspace},
-    state::WorkspaceState,
+    sim::audit::CleanRequestStatus,
+    state::{ExecutionState, WorkspaceState},
 };
 
 /// Schema version written by this build; older databases are migrated on open.
@@ -34,11 +35,25 @@ impl Store {
     pub async fn quarantine_interrupted_operations(&self) -> Result<()> {
         self.run(|db| {
             let tx = db.transaction()?;
-            tx.execute_batch(
-                "UPDATE simulator_clean_requests SET record=json_set(record, '$.status', 'interrupted') WHERE json_extract(record, '$.status')='requested';
-                UPDATE executions SET state='unknown' WHERE state='running';
-                UPDATE workspaces SET state='failed', error='daemon stopped during workspace operation; inspect before cleanup'
-                    WHERE state IN ('preparing', 'removing', 'stopping', 'reconciling');",
+            tx.execute(
+                "UPDATE simulator_clean_requests SET record=json_set(record, '$.status', ?1)
+                    WHERE json_extract(record, '$.status')=?2",
+                [CleanRequestStatus::Interrupted, CleanRequestStatus::Requested],
+            )?;
+            tx.execute(
+                "UPDATE executions SET state=?1 WHERE state=?2",
+                [ExecutionState::Unknown, ExecutionState::Running],
+            )?;
+            tx.execute(
+                "UPDATE workspaces SET state=?1, error='daemon stopped during workspace operation; inspect before cleanup'
+                    WHERE state IN (?2, ?3, ?4, ?5)",
+                [
+                    WorkspaceState::Failed,
+                    WorkspaceState::Preparing,
+                    WorkspaceState::Removing,
+                    WorkspaceState::Stopping,
+                    WorkspaceState::Reconciling,
+                ],
             )?;
             tx.commit()?;
             Ok(())
