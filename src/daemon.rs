@@ -22,7 +22,7 @@ use crate::{
     paths::Paths,
     ports::ReserveOutcome,
     process_identity::Identity,
-    protocol::{self, Body, Control, ExecutionEvent, Method, Request, Response, Status},
+    protocol::{self, Body, Control, ExecutionEvent, Method, Request, Response, Status, timing},
     scope::Caller,
     workspace::{ExecutionKind, Manager, StartedExecution},
 };
@@ -136,7 +136,7 @@ async fn expire_simulators(manager: Arc<Manager>) {
 
 async fn serve(mut stream: UnixStream, server: Server) -> Result<()> {
     let mut request: Request =
-        match timeout(Duration::from_secs(5), protocol::read(&mut stream)).await? {
+        match timeout(timing::REQUEST_READ_TIMEOUT, protocol::read(&mut stream)).await? {
             Ok(request) => request,
             Err(error) => {
                 let response = Response::new(0, Body::error("invalid_request", error));

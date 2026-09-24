@@ -1,5 +1,6 @@
 //! Same-user process ownership for cooperative recovery. Never expose process
 //! arguments/environment; only the explicit execution marker leaves this module.
+use crate::protocol::timing;
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, time::Duration};
@@ -56,9 +57,12 @@ pub async fn scan(ids: HashSet<String>) -> Result<Scan> {
     }
     let mut command = tokio::process::Command::new("ps");
     command.args(["-ax", "-o", "pid=,uid="]).env("LC_ALL", "C");
-    let output = tokio::time::timeout(Duration::from_secs(10), crate::subprocess::output(command))
-        .await
-        .context("process inventory timed out")??;
+    let output = tokio::time::timeout(
+        timing::PROCESS_INVENTORY_TIMEOUT,
+        crate::subprocess::output(command),
+    )
+    .await
+    .context("process inventory timed out")??;
     let marker = format!("{}=", crate::env::EXECUTION_ID).into_bytes();
     tokio::task::spawn_blocking(move || {
         let mut scan = Scan::default();
@@ -273,8 +277,11 @@ pub async fn related(
     command
         .args(["-ax", "-o", "pid=,uid=,pgid=,ppid="])
         .env("LC_ALL", "C");
-    let output =
-        tokio::time::timeout(Duration::from_secs(10), crate::subprocess::output(command)).await??;
+    let output = tokio::time::timeout(
+        timing::PROCESS_INVENTORY_TIMEOUT,
+        crate::subprocess::output(command),
+    )
+    .await??;
     let mut rows = Vec::new();
     for line in output.lines() {
         // Negative UIDs (nobody) cannot parse and are never ours; see `scan`.

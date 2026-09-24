@@ -1,6 +1,6 @@
 //! CLI side of the daemon protocol: one request per connection, plus typed
 //! helpers for the queries every command shares.
-use std::{io, time::Duration};
+use std::io;
 
 use anyhow::{Context, Result, ensure};
 use tokio::{
@@ -11,7 +11,7 @@ use tokio::{
 use crate::{
     model::{Inspection, Repository, Workspace},
     paths::Paths,
-    protocol::{self, Body, Method, Request, Response, Status},
+    protocol::{self, Body, Method, Request, Response, Status, timing},
     repo_config::ConfigLayers,
 };
 
@@ -47,12 +47,12 @@ pub async fn open(paths: &Paths, method: Method) -> Result<(UnixStream, Body)> {
 
 /// One request; daemon errors become `code: message` failures.
 pub async fn call(paths: &Paths, method: Method) -> Result<Body> {
-    let seconds = if matches!(method, Method::Status | Method::Shutdown) {
-        3
+    let duration = if matches!(method, Method::Status | Method::Shutdown) {
+        timing::ADMIN_REQUEST_TIMEOUT
     } else {
-        3600
+        timing::REQUEST_TIMEOUT
     };
-    let (_stream, body) = timeout(Duration::from_secs(seconds), open(paths, method))
+    let (_stream, body) = timeout(duration, open(paths, method))
         .await
         .context("daemon request timed out")??;
     body.into_result()
@@ -125,9 +125,9 @@ fn is_unreachable(error: &anyhow::Error) -> bool {
         })
 }
 
-/// Wait up to ten seconds for the daemon to be running (or stopped).
+/// Wait for the daemon to be running (or stopped).
 pub async fn wait(paths: &Paths, running: bool) -> Result<()> {
-    let deadline = Instant::now() + Duration::from_secs(10);
+    let deadline = Instant::now() + timing::DAEMON_WAIT_TIMEOUT;
     loop {
         let last_error = match status(paths).await {
             Ok(status) if status.is_some() == running => return Ok(()),
@@ -136,11 +136,12 @@ pub async fn wait(paths: &Paths, running: bool) -> Result<()> {
         };
         ensure!(
             Instant::now() < deadline,
-            "daemon did not {} within 10 seconds{}",
+            "daemon did not {} within {} seconds{}",
             if running { "start" } else { "stop" },
+            timing::DAEMON_WAIT_TIMEOUT.as_secs(),
             last_error.map(|e| format!(": {e:#}")).unwrap_or_default()
         );
-        sleep(Duration::from_millis(100)).await;
+        sleep(timing::DAEMON_POLL_INTERVAL).await;
     }
 }
 

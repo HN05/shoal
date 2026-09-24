@@ -5,6 +5,7 @@ use crate::{
     execution_processes::Processes,
     model::{Execution, ExecutionPlan, LandPlan, Workspace},
     process_identity::{self as process, Identity},
+    protocol::timing,
     scope::Caller,
     state::{ExecutionState, WorkspaceState},
     store,
@@ -52,10 +53,10 @@ struct PreparedExecution {
 
 impl ExecutionKind {
     pub fn start_timeout(self) -> Duration {
-        Duration::from_secs(match self {
-            Self::Command => 5,
-            Self::Land | Self::Setup => 120,
-        })
+        match self {
+            Self::Command => timing::EXECUTION_START_TIMEOUT,
+            Self::Land | Self::Setup => timing::PREPARED_EXECUTION_START_TIMEOUT,
+        }
     }
 
     /// Apply the kind's lifecycle checks in the registration transaction.
@@ -397,7 +398,7 @@ impl Manager {
     /// `allow_disconnected` relaxes the ownership proof for manual removal.
     pub(super) async fn stop_executions(&self, id: &str, allow_disconnected: bool) -> Result<()> {
         let id = id.to_owned();
-        let deadline = Instant::now() + Duration::from_secs(10);
+        let deadline = Instant::now() + timing::WORKSPACE_STOP_TIMEOUT;
         loop {
             let connections = self.connections.lock().await;
             let query_id = id.clone();
@@ -440,7 +441,7 @@ impl Manager {
                 Instant::now() < deadline,
                 "timed out waiting for workspace processes to stop"
             );
-            sleep(Duration::from_millis(50)).await;
+            sleep(timing::WORKSPACE_STOP_POLL_INTERVAL).await;
         }
     }
 

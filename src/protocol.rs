@@ -25,6 +25,43 @@ use crate::{
 pub const VERSION: u32 = 38;
 pub const MAX_FRAME: usize = 64 * 1024;
 
+/// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
+pub mod timing {
+    use std::time::Duration;
+
+    /// Release a daemon connection slot if the client never sends its request.
+    pub const REQUEST_READ_TIMEOUT: Duration = Duration::from_secs(5);
+    /// Status and shutdown should fail promptly when the daemon is unresponsive.
+    pub const ADMIN_REQUEST_TIMEOUT: Duration = Duration::from_secs(3);
+    /// Ordinary requests may include slow Git, simulator, or hook work.
+    pub const REQUEST_TIMEOUT: Duration = Duration::from_secs(3600);
+    /// Allow daemon startup or shutdown to settle across repeated status requests.
+    pub const DAEMON_WAIT_TIMEOUT: Duration = Duration::from_secs(10);
+    /// Observe daemon transitions promptly without busy-polling the socket.
+    pub const DAEMON_POLL_INTERVAL: Duration = Duration::from_millis(100);
+
+    /// Ordinary command registration needs no slow preparation.
+    pub const EXECUTION_START_TIMEOUT: Duration = Duration::from_secs(5);
+    /// Setup and landing can wait for Git gates, hooks, and upstream refreshes.
+    pub const PREPARED_EXECUTION_START_TIMEOUT: Duration = Duration::from_secs(120);
+    /// Wait for the daemon to persist the spawned child's process group.
+    pub const START_ACK_TIMEOUT: Duration = Duration::from_secs(10);
+    /// Leave room beyond PROCESS_INVENTORY_TIMEOUT for ownership checks and persistence.
+    pub const COMPLETION_ACK_TIMEOUT: Duration = Duration::from_secs(20);
+    /// Bound the ps inventory subprocess used by the daemon's completion scan.
+    pub const PROCESS_INVENTORY_TIMEOUT: Duration = Duration::from_secs(10);
+    /// Cover ordinary EXECUTION_START_TIMEOUT plus START_ACK_TIMEOUT and wrapper startup.
+    pub const DETACHED_LAUNCH_TIMEOUT: Duration = Duration::from_secs(60);
+    /// Collect a failed detached wrapper's exit status without waiting indefinitely.
+    pub const DETACHED_EXIT_TIMEOUT: Duration = Duration::from_secs(5);
+    /// Give the child time to handle a stop signal before escalating to SIGKILL.
+    pub const EXECUTION_STOP_GRACE: Duration = Duration::from_secs(2);
+    /// Allow wrappers to stop beyond EXECUTION_STOP_GRACE and report completion.
+    pub const WORKSPACE_STOP_TIMEOUT: Duration = Duration::from_secs(10);
+    /// Notice completed execution records promptly while workspace stopping waits.
+    pub const WORKSPACE_STOP_POLL_INTERVAL: Duration = Duration::from_millis(50);
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Request {
     pub protocol: u32,

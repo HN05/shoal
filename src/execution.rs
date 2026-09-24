@@ -11,7 +11,6 @@ use std::{
     os::unix::process::ExitStatusExt,
     path::{Path, PathBuf},
     process::{ExitStatus, Stdio},
-    time::Duration,
 };
 use tokio::{
     io::{AsyncBufReadExt, BufReader},
@@ -26,7 +25,7 @@ use crate::{
     model::{ExecutionPlan, Workspace},
     paths::Paths,
     process_identity,
-    protocol::{self, Control, ExecutionEvent, Method},
+    protocol::{self, Control, ExecutionEvent, Method, timing},
     workspace::ExecutionKind,
 };
 
@@ -175,7 +174,7 @@ pub async fn launch_detached(
         .context("launch detached execution wrapper")?;
     let stdout = child.stdout.take().context("wrapper stdout unavailable")?;
     let report = timeout(
-        Duration::from_secs(60),
+        timing::DETACHED_LAUNCH_TIMEOUT,
         BufReader::new(stdout).lines().next_line(),
     )
     .await
@@ -183,7 +182,7 @@ pub async fn launch_detached(
     match report {
         Some(line) => serde_json::from_str(&line).context("unexpected detached launch report"),
         None => {
-            let status = match timeout(Duration::from_secs(5), child.wait()).await {
+            let status = match timeout(timing::DETACHED_EXIT_TIMEOUT, child.wait()).await {
                 Ok(Ok(status)) => format!("wrapper exited with {status}"),
                 _ => "wrapper still running".into(),
             };
@@ -302,7 +301,7 @@ async fn supervise(
     )
     .await?;
     let acknowledged =
-        timeout(Duration::from_secs(10), protocol::read::<Control>(stream)).await??;
+        timeout(timing::START_ACK_TIMEOUT, protocol::read::<Control>(stream)).await??;
     ensure!(
         matches!(acknowledged, Control::Started),
         "daemon did not acknowledge process registration"
@@ -424,7 +423,7 @@ async fn report_completion(stream: &mut UnixStream, code: i32, mode: &Mode) -> R
             }
         }
     };
-    timeout(Duration::from_secs(20), exchange)
+    timeout(timing::COMPLETION_ACK_TIMEOUT, exchange)
         .await
         .context("execution completion acknowledgement timed out")?
 }
@@ -453,7 +452,7 @@ impl Drop for ProcessGroup {
 
 async fn stop(child: &mut Child, group: &ProcessGroup, signal: i32) -> Result<ExitStatus> {
     group.send(signal);
-    match timeout(Duration::from_secs(2), child.wait()).await {
+    match timeout(timing::EXECUTION_STOP_GRACE, child.wait()).await {
         Ok(status) => Ok(status?),
         Err(_) => {
             group.send(libc::SIGKILL);
