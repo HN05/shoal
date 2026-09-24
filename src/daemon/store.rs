@@ -14,6 +14,9 @@ use crate::{
 /// Schema version written by this build; older databases are migrated on open.
 const SCHEMA_VERSION: i64 = 19;
 
+#[cfg(test)]
+mod benchmark;
+
 #[derive(Clone)]
 pub struct Store {
     path: PathBuf,
