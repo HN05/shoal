@@ -1,4 +1,5 @@
 //! Forge identity and read-only issue/PR queries using the user's gh/fj login.
+mod locator;
 pub mod pr;
 mod remote_url;
 pub mod repository;
@@ -6,6 +7,7 @@ pub mod repository;
 use crate::tools::Tool;
 use anyhow::{Context, Result, ensure};
 
+use locator::ItemRoute;
 use remote_url::{RemoteUrl, Transport};
 
 /// Classify before resolving a repository; validate identity and number at lookup.
@@ -59,10 +61,10 @@ impl ForgeKind {
         }
     }
 
-    fn pull_marker(self) -> &'static str {
+    fn pull_route(self) -> ItemRoute {
         match self {
-            Self::GitHub => "/pull/",
-            Self::Forgejo => "/pulls/",
+            Self::GitHub => ItemRoute::Pull,
+            Self::Forgejo => ItemRoute::Pulls,
         }
     }
 }
@@ -135,78 +137,17 @@ impl ForgeRepo {
 
     /// The repository an issue URL belongs to.
     pub fn from_issue_url(url: &str) -> Result<Self> {
-        let url = url.split(['?', '#']).next().unwrap().trim_end_matches('/');
-        let (repo, _) = url
-            .rsplit_once("/issues/")
-            .context("expected an issue URL ending in /issues/<number>")?;
-        Self::parse(repo)
+        ItemRoute::Issue.repository(url)
     }
 
     pub fn issue(&self, input: &str) -> Result<(u64, String)> {
-        let (number, url) = if IssueInput::parse(input) == IssueInput::Url {
-            let input = input
-                .split(['?', '#'])
-                .next()
-                .unwrap()
-                .trim_end_matches('/');
-            let (repo, number) = input
-                .rsplit_once("/issues/")
-                .context("expected an issue URL ending in /issues/<number>")?;
-            ensure!(
-                Self::parse(repo)? == *self,
-                "issue URL belongs to a different repository"
-            );
-            (number, input.to_owned())
-        } else {
-            (
-                input,
-                format!(
-                    "{}://{}/{}/issues/{input}",
-                    self.web_scheme, self.host, self.path
-                ),
-            )
-        };
-        ensure!(
-            IssueInput::parse(number) == IssueInput::Number,
-            "issue must be a positive number or an issue URL"
-        );
-        let number = number.parse::<u64>().context("issue number is too large")?;
-        ensure!(number > 0, "issue number must be positive");
-        Ok((number, url))
+        ItemRoute::Issue.resolve(self, input)
     }
 }
 
 impl ForgeRepo {
     pub fn pull(&self, input: &str) -> Result<(u64, String)> {
-        let marker = self.kind.pull_marker();
-        let (number, url) = if input.starts_with("https://") || input.starts_with("http://") {
-            let input = input
-                .split(['?', '#'])
-                .next()
-                .unwrap()
-                .trim_end_matches('/');
-            let (repo, number) = input.rsplit_once(marker).context("invalid PR URL")?;
-            ensure!(
-                Self::parse(repo)? == *self,
-                "PR belongs to a different repository"
-            );
-            (number, input.to_owned())
-        } else {
-            (
-                input,
-                format!(
-                    "{}://{}/{}{marker}{input}",
-                    self.web_scheme, self.host, self.path
-                ),
-            )
-        };
-        ensure!(
-            !number.is_empty() && number.bytes().all(|b| b.is_ascii_digit()),
-            "invalid PR number"
-        );
-        let number = number.parse::<u64>()?;
-        ensure!(number > 0, "invalid PR number");
-        Ok((number, url))
+        self.kind.pull_route().resolve(self, input)
     }
 
     /// Fail closed on changed CLI output. Only commits actually listed in the
@@ -365,12 +306,11 @@ pub(crate) struct PullRequest {
 impl ForgeRepo {
     /// The repository a PR URL belongs to.
     pub fn from_pull_url(url: &str) -> Result<Self> {
-        let url = url.split(['?', '#']).next().unwrap().trim_end_matches('/');
-        let (repo, _) = url
-            .rsplit_once("/pull/")
-            .or_else(|| url.rsplit_once("/pulls/"))
+        let item = ItemRoute::Pull
+            .split_url(url)
+            .or_else(|| ItemRoute::Pulls.split_url(url))
             .context("expected a PR URL ending in /pull/<number> or /pulls/<number>")?;
-        Self::parse(repo)
+        Self::parse(item.repository)
     }
 
     /// Only PRs whose head branch lives in this repository can be checked out.
@@ -802,6 +742,49 @@ mod tests {
                     }
                 }
             }
+        }
+    }
+
+    #[test]
+    fn item_locator_errors_identify_the_item_kind() {
+        let repo = ForgeRepo::parse("https://github.com/team/repo").unwrap();
+        for (input, issue, pull) in [
+            ("0", "issue number must be positive", "invalid PR number"),
+            (
+                "18446744073709551616",
+                "issue number is too large",
+                "PR number is too large",
+            ),
+            (
+                "HEAD",
+                "issue must be a positive number or an issue URL",
+                "invalid PR number",
+            ),
+            (
+                "https://github.com/team/repo",
+                "expected an issue URL ending in /issues/<number>",
+                "invalid PR URL",
+            ),
+        ] {
+            assert_eq!(repo.issue(input).unwrap_err().to_string(), issue);
+            assert_eq!(repo.pull(input).unwrap_err().to_string(), pull);
+        }
+        for (input, expected) in [
+            (
+                "https://github.com/other/repo/issues/1",
+                "issue URL belongs to a different repository",
+            ),
+            (
+                "https://github.com/other/repo/pull/1",
+                "PR belongs to a different repository",
+            ),
+        ] {
+            let error = if input.contains("/issues/") {
+                repo.issue(input)
+            } else {
+                repo.pull(input)
+            };
+            assert_eq!(error.unwrap_err().to_string(), expected);
         }
     }
 
