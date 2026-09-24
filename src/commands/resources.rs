@@ -48,9 +48,9 @@ pub(super) async fn run(
                 Ok(match client::call(&ctx.paths, method).await? {
                     Body::ResourceLease(lease) => Attempt::Ready(Ok(lease)),
                     Body::AccessRequest(request) => super::access::attempt(&mut approval, request),
-                    Body::ResourceBusy { message } => Attempt::Busy(message),
+                    Body::Busy { message } => Attempt::Busy(message),
                     body => {
-                        return Err(body.unexpected("ResourceLease, AccessRequest or ResourceBusy"));
+                        return Err(body.unexpected("ResourceLease, AccessRequest or Busy"));
                     }
                 })
             })

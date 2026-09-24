@@ -18,7 +18,6 @@ use tokio::{
 };
 
 use crate::{
-    allocation::Allocation,
     notifications::NotificationKind,
     paths::Paths,
     ports::Acquisition,
@@ -357,11 +356,7 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             .acquire_port(&workspace, name, request, caller.is_some())
             .await?
         {
-            Acquisition::Allocation(allocation) => match allocation {
-                Allocation::Granted(port) => Body::Port(port),
-                Allocation::Busy(message) => Body::ResourceBusy { message },
-                Allocation::Approval(request) => Body::AccessRequest(request),
-            },
+            Acquisition::Allocation(allocation) => allocation.into_body(Body::Port),
             Acquisition::Suggested(proposal) => Body::PortSuggestion(proposal),
         },
         Method::PortRelease { workspace, name } => {
@@ -377,16 +372,10 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::DecideAccess { id, approve } => {
             Body::AccessRequest(Box::new(manager.decide_access(id, approve).await?))
         }
-        Method::ResourceAcquire { workspace, request } => {
-            match manager
-                .acquire_resource(&workspace, request, caller.is_some())
-                .await?
-            {
-                Allocation::Granted(lease) => Body::ResourceLease(lease),
-                Allocation::Busy(message) => Body::ResourceBusy { message },
-                Allocation::Approval(request) => Body::AccessRequest(request),
-            }
-        }
+        Method::ResourceAcquire { workspace, request } => manager
+            .acquire_resource(&workspace, request, caller.is_some())
+            .await?
+            .into_body(Body::ResourceLease),
         Method::ResourceRelease {
             workspace,
             pool,
@@ -408,14 +397,10 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         }
         Method::SimAcquire { workspace, request } => {
             let execution_id = caller.map(|c| c.execution_id.clone());
-            match manager
+            manager
                 .acquire_simulator(&workspace, request, execution_id)
                 .await?
-            {
-                Allocation::Granted(sim) => Body::Simulator(*sim),
-                Allocation::Busy(message) => Body::SimBusy { message },
-                Allocation::Approval(request) => Body::AccessRequest(request),
-            }
+                .into_body(|sim| Body::Simulator(*sim))
         }
         Method::SimRelease { workspace, name } => {
             manager.release_simulator(&workspace, name).await?;

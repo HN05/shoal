@@ -63,8 +63,8 @@ pub(super) async fn run(
                 Ok(match client::call(&ctx.paths, method).await? {
                     Body::Simulator(sim) => Attempt::Ready(Ok(sim)),
                     Body::AccessRequest(request) => super::access::attempt(&mut approval, request),
-                    Body::SimBusy { message } => Attempt::Busy(message),
-                    body => return Err(body.unexpected("Simulator, AccessRequest or SimBusy")),
+                    Body::Busy { message } => Attempt::Busy(message),
+                    body => return Err(body.unexpected("Simulator, AccessRequest or Busy")),
                 })
             })
             .await?;

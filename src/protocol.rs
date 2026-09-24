@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 
 use crate::{
+    allocation::Allocation,
     model::{
         DiffBase, ExecutionPlan, Inspection, PortOverview, PortReservation, PortSuggestion,
         PulledBranch, Repository, RepositoryRemoval, Workspace, WorkspaceStatus,
@@ -22,7 +23,7 @@ use crate::{
     workspace::ExecutionKind,
 };
 
-pub const VERSION: u32 = 39;
+pub const VERSION: u32 = 40;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -302,6 +303,16 @@ pub enum ConfigTarget {
     Repository(String),
 }
 
+impl<T> Allocation<T> {
+    pub fn into_body(self, granted: impl FnOnce(T) -> Body) -> Body {
+        match self {
+            Self::Granted(value) => granted(value),
+            Self::Busy(message) => Body::Busy { message },
+            Self::Approval(request) => Body::AccessRequest(request),
+        }
+    }
+}
+
 // Keep payload conversions and variant names tied to the wire enum.
 macro_rules! response_bodies {
     ($($variant:ident($payload:ty),)*) => {
@@ -310,8 +321,7 @@ macro_rules! response_bodies {
         pub enum Body {
             Ok,
             Error { code: String, message: String },
-            ResourceBusy { message: String },
-            SimBusy { message: String },
+            Busy { message: String },
             $($variant($payload),)*
         }
 
@@ -320,8 +330,7 @@ macro_rules! response_bodies {
                 match self {
                     Self::Ok => "Ok",
                     Self::Error { .. } => "Error",
-                    Self::ResourceBusy { .. } => "ResourceBusy",
-                    Self::SimBusy { .. } => "SimBusy",
+                    Self::Busy { .. } => "Busy",
                     $(Self::$variant(_) => stringify!($variant),)*
                 }
             }
@@ -544,14 +553,7 @@ mod tests {
                 json!({"type": "layered_config", "data": {"worktree_file": {}, "saved_repository_config": {}}}),
                 "LayeredConfig",
             ),
-            (
-                json!({"type": "resource_busy", "data": {"message": "busy"}}),
-                "ResourceBusy",
-            ),
-            (
-                json!({"type": "sim_busy", "data": {"message": "busy"}}),
-                "SimBusy",
-            ),
+            (json!({"type": "busy", "data": {"message": "busy"}}), "Busy"),
             (
                 json!({"type": "error", "data": {"code": "future_code", "message": "failed"}}),
                 "Error",
