@@ -7,7 +7,7 @@ use crate::{
     daemon::{resources::Scope, store},
     git,
     model::{Repository, RepositoryRemoval, Workspace},
-    removal::BranchChoice,
+    removal::{BranchChoice, InspectionPolicy},
     state::WorkspaceState,
 };
 use anyhow::{Context, Result, ensure};
@@ -196,7 +196,7 @@ impl Manager {
             self.remove_workspace(
                 &workspace.id,
                 BranchChoice::DeleteBranch,
-                std::process::id(),
+                InspectionPolicy::GitOnly,
             )
             .await
             .with_context(|| {

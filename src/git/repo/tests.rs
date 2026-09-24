@@ -7,6 +7,7 @@ use crate::{
     },
     paths::Paths,
     protocol::Method,
+    removal::InspectionPolicy,
     test_support::{commit, git, manager, repository},
 };
 
@@ -96,7 +97,11 @@ async fn names_suffix_only_conflicts_and_serialize_concurrent_adds() {
     assert_eq!(workspace.path.file_name().unwrap(), "feature");
     assert_eq!(f.add("main").await.branch, "main-2");
     f.manager
-        .remove_workspace(&workspace.id, crate::removal::BranchChoice::KeepBranch, 0)
+        .remove_workspace(
+            &workspace.id,
+            crate::removal::BranchChoice::KeepBranch,
+            InspectionPolicy::IncludeDirectoryProcesses,
+        )
         .await
         .unwrap();
     assert_eq!(f.add("feature").await.branch, "feature-6");
@@ -128,7 +133,7 @@ async fn remote_default_controls_creation_diff_and_removal() {
         );
         assert!(
             f.manager
-                .check_removal(&workspace.id, 0)
+                .check_removal(&workspace.id, InspectionPolicy::IncludeDirectoryProcesses)
                 .await
                 .unwrap()
                 .can_delete_branch()
@@ -467,7 +472,11 @@ async fn branch_compatibility_preserves_allocation_and_existing_branch_policies(
             format!("refs/heads/{expected}\n")
         );
         f.manager
-            .remove_workspace(&allocated.id, crate::removal::BranchChoice::DeleteBranch, 0)
+            .remove_workspace(
+                &allocated.id,
+                crate::removal::BranchChoice::DeleteBranch,
+                InspectionPolicy::IncludeDirectoryProcesses,
+            )
             .await
             .unwrap();
 
@@ -636,7 +645,7 @@ async fn existing_branch_refuses_other_checkouts_and_name_collisions() {
         .remove_workspace(
             &main.workspace.id,
             crate::removal::BranchChoice::KeepBranch,
-            0,
+            InspectionPolicy::IncludeDirectoryProcesses,
         )
         .await
         .unwrap();
@@ -814,7 +823,11 @@ async fn existing_default_branch_survives_normal_workspace_removal() {
     let before = git(&f.repo, &["rev-parse", "main"]);
     let removed = f
         .manager
-        .remove_workspace(&opened.workspace.id, crate::removal::BranchChoice::Auto, 0)
+        .remove_workspace(
+            &opened.workspace.id,
+            crate::removal::BranchChoice::Auto,
+            InspectionPolicy::IncludeDirectoryProcesses,
+        )
         .await
         .unwrap();
     assert!(!removed.branch_outcome.is_deleted());
@@ -865,7 +878,11 @@ async fn land_fast_forwards_merges_and_aborts_conflicts_without_a_remote() {
     );
     assert_eq!(git(&f.repo, &["status", "--porcelain"]), "");
     // Landed work counts as retained, and the merged branch is redundant.
-    let check = f.manager.check_removal(&workspace.id, 0).await.unwrap();
+    let check = f
+        .manager
+        .check_removal(&workspace.id, InspectionPolicy::IncludeDirectoryProcesses)
+        .await
+        .unwrap();
     assert_eq!(check.unpushed_commits, 0);
     assert!(check.can_delete_branch());
     // A conflicting merge is aborted and leaves the default checkout untouched.
@@ -883,7 +900,11 @@ async fn land_fast_forwards_merges_and_aborts_conflicts_without_a_remote() {
         fs::read_to_string(f.repo.join("tracked")).unwrap(),
         "main again\n"
     );
-    let check = f.manager.check_removal(&workspace.id, 0).await.unwrap();
+    let check = f
+        .manager
+        .check_removal(&workspace.id, InspectionPolicy::IncludeDirectoryProcesses)
+        .await
+        .unwrap();
     assert_eq!(check.unpushed_commits, 1);
     assert!(!check.can_delete_branch());
 }
@@ -1284,7 +1305,11 @@ async fn adoption_of_default_branch_uses_opening_commit_and_retains_branch() {
         Some(git(&path, &["rev-parse", "HEAD"]).trim())
     );
     f.manager
-        .remove_workspace(&w.id, crate::removal::BranchChoice::Auto, 0)
+        .remove_workspace(
+            &w.id,
+            crate::removal::BranchChoice::Auto,
+            InspectionPolicy::IncludeDirectoryProcesses,
+        )
         .await
         .unwrap();
     assert!(!path.exists());

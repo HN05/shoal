@@ -6,7 +6,7 @@ use crate::{
         worktrunk::{self, BranchRemoval, FileRemoval},
     },
     hooks::{self, Hook, HookKind},
-    removal::{self, BranchChoice, BranchOutcome, RemovalCheck, RemovalResult},
+    removal::{self, BranchChoice, BranchOutcome, InspectionPolicy, RemovalCheck, RemovalResult},
     state::WorkspaceState,
 };
 use anyhow::{Result, bail, ensure};
@@ -22,7 +22,7 @@ enum Removal<'a> {
     /// A user request; dirty or differing work needs an explicit branch choice.
     Manual {
         choice: BranchChoice,
-        caller_pid: u32,
+        inspection: InspectionPolicy,
     },
     /// Idle cleanup; only safe, unchanged workspaces may go.
     Automatic { snapshot: u64 },
@@ -41,10 +41,12 @@ impl Removal<'_> {
         }
     }
 
-    fn caller_pid(self) -> u32 {
+    fn inspection(self) -> InspectionPolicy {
         match self {
-            Removal::Manual { caller_pid, .. } => caller_pid,
-            Removal::Automatic { .. } | Removal::Deleted | Removal::Merged { .. } => 0,
+            Removal::Manual { inspection, .. } => inspection,
+            Removal::Automatic { .. } | Removal::Deleted | Removal::Merged { .. } => {
+                InspectionPolicy::IncludeDirectoryProcesses
+            }
         }
     }
 
@@ -103,7 +105,11 @@ enum Stage {
 }
 
 impl Manager {
-    pub async fn check_removal(&self, selector: &str, caller_pid: u32) -> Result<RemovalCheck> {
+    pub async fn check_removal(
+        &self,
+        selector: &str,
+        policy: InspectionPolicy,
+    ) -> Result<RemovalCheck> {
         let inspection = self.inspect_workspace(selector).await?;
         if inspection.workspace.path.exists() {
             self.verify_worktree(&inspection.workspace).await?;
@@ -116,7 +122,7 @@ impl Manager {
         removal::inspect(
             inspection.workspace,
             inspection.executions.len(),
-            caller_pid,
+            policy,
             default_branch.as_deref(),
         )
         .await
@@ -126,9 +132,9 @@ impl Manager {
         &self,
         selector: &str,
         choice: BranchChoice,
-        caller_pid: u32,
+        inspection: InspectionPolicy,
     ) -> Result<RemovalResult> {
-        self.remove(selector, Removal::Manual { choice, caller_pid })
+        self.remove(selector, Removal::Manual { choice, inspection })
             .await
     }
 
@@ -149,7 +155,9 @@ impl Manager {
         {
             return Ok(None);
         }
-        let check = self.check_removal(id, 0).await?;
+        let check = self
+            .check_removal(id, InspectionPolicy::IncludeDirectoryProcesses)
+            .await?;
         if !check.safe() || !check.workspace.path.is_dir() {
             return Ok(None);
         }
@@ -266,7 +274,7 @@ impl Manager {
     ) -> Result<RemovalResult> {
         let repo = self.repository(&workspace.repository_id).await?;
         let check = self
-            .check_removal(&workspace.id, removal.caller_pid())
+            .check_removal(&workspace.id, removal.inspection())
             .await?;
         removal.verify(&check, Stage::Initial)?;
         if let Removal::Merged { head } = removal {
@@ -284,7 +292,7 @@ impl Manager {
             );
         }
         let check = self
-            .check_removal(&workspace.id, removal.caller_pid())
+            .check_removal(&workspace.id, removal.inspection())
             .await?;
         removal.verify(&check, Stage::AfterStop)?;
         if let Removal::Merged { head } = removal {
@@ -335,7 +343,9 @@ impl Manager {
                 "HEAD changed during removal hooks"
             );
             removal.verify(
-                &self.check_removal(&workspace.id, 0).await?,
+                &self
+                    .check_removal(&workspace.id, removal.inspection())
+                    .await?,
                 Stage::AfterStop,
             )?;
         }

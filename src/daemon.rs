@@ -41,6 +41,7 @@ use crate::{
         self, Body, Control, DaemonStatus, ErrorCode, ExecutionEvent, Method, Request, Response,
         timing,
     },
+    removal::InspectionPolicy,
 };
 
 const MAX_CLIENTS: usize = 128;
@@ -315,14 +316,18 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::CheckRemoval {
             workspace,
             caller_pid,
-        } => Body::RemovalCheck(manager.check_removal(&workspace, caller_pid).await?),
+        } => Body::RemovalCheck(
+            manager
+                .check_removal(&workspace, removal_inspection(caller_pid))
+                .await?,
+        ),
         Method::RemoveWorkspace {
             workspace,
             choice,
             caller_pid,
         } => Body::RemovalResult(
             manager
-                .remove_workspace(&workspace, choice, caller_pid)
+                .remove_workspace(&workspace, choice, removal_inspection(caller_pid))
                 .await?,
         ),
         Method::Diagnose => Body::Diagnostics(manager.diagnose().await?),
@@ -552,4 +557,29 @@ async fn execute(
         protocol::write(&mut writer, &Control::Finished { complete }).await?;
     }
     result.map(|_| ())
+}
+
+/// Preserve the legacy request field at the protocol boundary. Its numeric
+/// value has never been used as a PID by removal inspection.
+fn removal_inspection(caller_pid: u32) -> InspectionPolicy {
+    match caller_pid {
+        0 => InspectionPolicy::IncludeDirectoryProcesses,
+        _ => InspectionPolicy::GitOnly,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn legacy_removal_request_selects_inspection_without_using_a_pid() {
+        assert_eq!(
+            removal_inspection(0),
+            InspectionPolicy::IncludeDirectoryProcesses
+        );
+        for caller_pid in [1, 123, u32::MAX] {
+            assert_eq!(removal_inspection(caller_pid), InspectionPolicy::GitOnly);
+        }
+    }
 }

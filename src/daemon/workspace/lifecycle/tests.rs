@@ -26,14 +26,14 @@ async fn directory_activity_distinguishes_inspection_from_removal_checks() {
         (
             Removal::Manual {
                 choice: BranchChoice::Auto,
-                caller_pid: 123,
+                inspection: InspectionPolicy::GitOnly,
             },
             false,
         ),
         (
             Removal::Manual {
                 choice: BranchChoice::Auto,
-                caller_pid: 0,
+                inspection: InspectionPolicy::IncludeDirectoryProcesses,
             },
             true,
         ),
@@ -49,7 +49,7 @@ async fn directory_activity_distinguishes_inspection_from_removal_checks() {
             .spawn()
             .unwrap();
         let check = manager
-            .check_removal(&workspace.id, removal.caller_pid())
+            .check_removal(&workspace.id, removal.inspection())
             .await
             .unwrap();
         assert_eq!(!check.processes.is_empty(), scans_directory);
@@ -82,7 +82,7 @@ async fn unknown_execution_blocks_stop_and_unattended_removal_even_when_missing(
         for removal in [
             Removal::Manual {
                 choice: BranchChoice::KeepBranch,
-                caller_pid: 123,
+                inspection: InspectionPolicy::GitOnly,
             },
             Removal::Automatic { snapshot: 0 },
             Removal::Merged { head: "" },
@@ -182,7 +182,7 @@ async fn stale_birth_identity_never_authorizes_signaling_a_live_group() {
         } else {
             Removal::Manual {
                 choice: BranchChoice::Auto,
-                caller_pid: 123,
+                inspection: InspectionPolicy::GitOnly,
             }
         };
         manager.remove(&workspace.id, removal).await.unwrap();

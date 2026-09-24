@@ -11,7 +11,7 @@ mod tests;
 pub struct RemovalCheck {
     pub workspace: Workspace,
     pub running_commands: usize,
-    /// Processes using the directory; only gathered for automatic cleanup.
+    /// Processes using the directory, when requested by the inspection policy.
     pub processes: Vec<String>,
     pub dirty: bool,
     /// Commits reachable from neither a remote-tracking branch nor the local
@@ -154,12 +154,18 @@ impl RemovalCheck {
     }
 }
 
-/// Gather Git state for a removal decision. `caller_pid == 0` marks automatic
-/// cleanup, which also treats processes in the directory as activity.
+/// Whether a removal inspection includes processes using the directory.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InspectionPolicy {
+    GitOnly,
+    IncludeDirectoryProcesses,
+}
+
+/// Gather state for a removal decision without deciding whether removal is safe.
 pub async fn inspect(
     workspace: Workspace,
     running_commands: usize,
-    caller_pid: u32,
+    policy: InspectionPolicy,
     default_branch: Option<&str>,
 ) -> Result<RemovalCheck> {
     let mut check = RemovalCheck {
@@ -211,8 +217,7 @@ pub async fn inspect(
     check.matches_upstream = git::run(path, &["rev-parse", "--verify", "@{upstream}^{tree}"])
         .await
         .is_ok_and(|other| other == tree);
-    // Processes block automatic cleanup, never manual removal.
-    if caller_pid == 0 {
+    if policy == InspectionPolicy::IncludeDirectoryProcesses {
         check.processes = process::in_directory(path).await?;
     }
     Ok(check)
