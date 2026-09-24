@@ -74,6 +74,22 @@ impl Fixture {
         fixture
     }
 
+    fn add_github_origin(&self) {
+        git(
+            &self.repo,
+            &["remote", "add", "origin", "git@github.com:team/project.git"],
+        );
+        // Keep forge detection realistic without contacting GitHub for its HEAD.
+        git(
+            &self.repo,
+            &[
+                "symbolic-ref",
+                "refs/remotes/origin/HEAD",
+                "refs/remotes/origin/main",
+            ],
+        );
+    }
+
     fn wait_ready(&mut self) {
         let deadline = Instant::now() + Duration::from_secs(5);
         while !self.run(&["daemon", "status"]).status.success() {
@@ -6620,10 +6636,7 @@ printf '%s' '{"number":44,"title":"Literal {body}","body":"$(false)"}'
         fs::write(&path, script).unwrap();
         fs::set_permissions(path, fs::Permissions::from_mode(0o700)).unwrap();
     }
-    git(
-        &fixture.repo,
-        &["remote", "add", "origin", "git@github.com:team/project.git"],
-    );
+    fixture.add_github_origin();
     for (index, expected) in [
         "global 44: Literal {body} $(false)",
         "repo Literal {body}",
@@ -6709,10 +6722,7 @@ fn issue_command_finds_the_repository_and_starts_the_default_agent() {
         ],
     );
     fixture.ok(&["repo", "add", other.to_str().unwrap()]);
-    git(
-        &fixture.repo,
-        &["remote", "add", "origin", "git@github.com:team/project.git"],
-    );
+    fixture.add_github_origin();
     let bin = fixture.root.path().join("issue-bin");
     fs::create_dir(&bin).unwrap();
     let gh = bin.join("gh");
@@ -6885,10 +6895,7 @@ fn issue_command_finds_the_repository_and_starts_the_default_agent() {
 #[test]
 fn issue_number_picks_a_repository_before_lookup_interactively() {
     let fixture = Fixture::with_config(Some("default_agent = 'claude'\n"));
-    git(
-        &fixture.repo,
-        &["remote", "add", "origin", "git@github.com:team/project.git"],
-    );
+    fixture.add_github_origin();
     let bin = fixture.root.path().join("bin");
     fs::create_dir(&bin).unwrap();
     for (tool, script) in [
@@ -7846,10 +7853,7 @@ fn happy_issue_prompts_reach_claude_and_are_saved_for_codex() {
     )
     .unwrap();
     fs::set_permissions(&gh, fs::Permissions::from_mode(0o700)).unwrap();
-    git(
-        &fixture.repo,
-        &["remote", "add", "origin", "git@github.com:team/project.git"],
-    );
+    fixture.add_github_origin();
     for agent in ["happy-claude", "happy-codex"] {
         let output = fixture
             .command()
@@ -9100,10 +9104,7 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
         fs::write(&path, script).unwrap();
         fs::set_permissions(path, fs::Permissions::from_mode(0o700)).unwrap();
     }
-    git(
-        &fixture.repo,
-        &["remote", "add", "origin", "git@github.com:team/project.git"],
-    );
+    fixture.add_github_origin();
     let saved = fixture.root.path().join("saved.toml");
     fs::write(
         &saved,
