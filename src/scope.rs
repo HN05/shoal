@@ -3,7 +3,7 @@
 //! the OS user.
 use crate::{
     protocol::{ConfigTarget, Method},
-    workspace::Manager,
+    workspace::{ExecutionKind, Manager},
 };
 use anyhow::{Result, bail, ensure};
 
@@ -52,7 +52,11 @@ pub async fn authorize(
         | Method::WorkspaceStatus { workspace }
         | Method::DiffBase { workspace }
         | Method::RefreshMergeSource { workspace, .. }
-        | Method::Execute { workspace, .. }
+        | Method::Execute {
+            workspace,
+            kind: ExecutionKind::Command,
+            ..
+        }
         | Method::WorkspaceHooks { workspace }
         | Method::ReservePort { workspace, .. }
         | Method::ReleasePort { workspace, .. }
@@ -67,14 +71,21 @@ pub async fn authorize(
         | Method::SimHistory { workspace, .. } => {
             Some(workspace.get_or_insert_with(|| owner.clone()))
         }
-        Method::Prepare { workspace, .. } => {
+        Method::Execute {
+            workspace,
+            kind: ExecutionKind::Setup,
+            ..
+        } => {
             ensure!(
                 !caller.setup,
                 "a setup command cannot recursively run setup"
             );
             Some(workspace)
         }
-        Method::LandWorkspace { .. } => bail!(
+        Method::Execute {
+            kind: ExecutionKind::Land,
+            ..
+        } => bail!(
             "workspace processes cannot land into the default branch; an unscoped shoal land does that"
         ),
         _ => bail!(

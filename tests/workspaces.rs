@@ -2692,6 +2692,8 @@ fn execution_scope_limits_management_and_expires() {
         vec!["rm", "worker", "--yes", "--delete-branch"],
         vec!["stop", "worker"],
         vec!["inspect", "other"],
+        vec!["exec", "other", "--", "true"],
+        vec!["setup", "other"],
         vec!["pr", "merged", "other"],
         vec!["pr", "clear", "other"],
         vec!["config", "show", "other"],

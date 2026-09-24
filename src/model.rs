@@ -110,7 +110,7 @@ pub struct ExecutionPlan {
     pub id: String,
     pub workspace: Workspace,
     pub scope_token: String,
-    /// Absolute setup command path for `Method::Prepare`; `None` for commands.
+    /// Absolute setup command path when the execution runs configured setup.
     pub setup_cmd: Option<PathBuf>,
     pub ports: Vec<PortReservation>,
     pub land: Option<Box<LandPlan>>,

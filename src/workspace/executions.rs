@@ -11,6 +11,7 @@ use crate::{
 };
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{OptionalExtension, Transaction, TransactionBehavior, params};
+use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, path::PathBuf, time::Duration};
 use tokio::{
     sync::{OwnedMutexGuard, watch},
@@ -19,7 +20,8 @@ use tokio::{
 use uuid::Uuid;
 
 /// What a tracked execution runs, which decides its lifecycle rules.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ExecutionKind {
     /// A caller-chosen command in a ready workspace.
     Command,
@@ -49,6 +51,13 @@ struct PreparedExecution {
 }
 
 impl ExecutionKind {
+    pub fn start_timeout(self) -> Duration {
+        Duration::from_secs(match self {
+            Self::Command => 5,
+            Self::Land | Self::Setup => 120,
+        })
+    }
+
     /// Apply the kind's lifecycle checks in the registration transaction.
     fn reserve(
         self,

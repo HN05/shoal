@@ -908,7 +908,9 @@ async fn land_refuses_dirty_checkouts_other_branches_and_scoped_callers() {
             },
         )
         .await;
-    let mut denied = Method::LandWorkspace {
+    let mut denied = Method::Execute {
+        kind: crate::workspace::ExecutionKind::Land,
+        agent: None,
         workspace: workspace.id.clone(),
         wrapper: crate::process_identity::capture(std::process::id())
             .unwrap()

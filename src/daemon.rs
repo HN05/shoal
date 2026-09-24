@@ -163,50 +163,22 @@ async fn serve(mut stream: UnixStream, server: Server) -> Result<()> {
         }
     };
     let body = match request.method {
-        Method::LandWorkspace { workspace, wrapper } => {
-            return execute(
-                stream,
-                request.id,
-                workspace,
-                wrapper,
-                server.manager,
-                ExecutionKind::Land,
-                ExecutionContext::default(),
-            )
-            .await;
-        }
         Method::Execute {
             workspace,
             wrapper,
+            kind,
             agent,
         } => {
-            let kind = ExecutionKind::Command;
             return execute(
                 stream,
                 request.id,
-                workspace,
-                wrapper,
                 server.manager,
-                kind,
                 ExecutionContext {
+                    workspace,
+                    wrapper,
+                    kind,
                     agent,
-                    ..Default::default()
-                },
-            )
-            .await;
-        }
-        Method::Prepare { workspace, wrapper } => {
-            let kind = ExecutionKind::Setup;
-            return execute(
-                stream,
-                request.id,
-                workspace,
-                wrapper,
-                server.manager,
-                kind,
-                ExecutionContext {
                     parent_execution: caller.map(|caller| caller.execution_id),
-                    ..Default::default()
                 },
             )
             .await;
@@ -241,12 +213,7 @@ async fn serve(mut stream: UnixStream, server: Server) -> Result<()> {
 /// Request/response operations. Errors become `operation_failed` replies.
 async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -> Result<Body> {
     Ok(match method {
-        Method::Status
-        | Method::Shutdown
-        | Method::Execute { .. }
-        | Method::Prepare { .. }
-        | Method::LandWorkspace { .. }
-        | Method::WatchNotifications => {
+        Method::Status | Method::Shutdown | Method::Execute { .. } | Method::WatchNotifications => {
             anyhow::bail!("unsupported operation")
         }
         Method::ListRepositories => {
@@ -486,8 +453,10 @@ async fn watch_notifications(
     }
 }
 
-#[derive(Default)]
 struct ExecutionContext {
+    workspace: String,
+    wrapper: Identity,
+    kind: ExecutionKind,
     agent: Option<String>,
     parent_execution: Option<String>,
 }
@@ -497,23 +466,22 @@ struct ExecutionContext {
 async fn execute(
     mut stream: UnixStream,
     request_id: u64,
-    workspace: String,
-    wrapper: Identity,
     manager: Arc<Manager>,
-    kind: ExecutionKind,
     context: ExecutionContext,
 ) -> Result<()> {
+    let ExecutionContext {
+        workspace,
+        wrapper,
+        kind,
+        agent,
+        parent_execution,
+    } = context;
     let StartedExecution {
         plan,
         mut stop,
         _git_guard,
     } = match manager
-        .begin_execution(
-            &workspace,
-            Some(wrapper),
-            kind,
-            context.parent_execution.as_deref(),
-        )
+        .begin_execution(&workspace, Some(wrapper), kind, parent_execution.as_deref())
         .await
     {
         Ok(begun) => begun,
@@ -561,7 +529,7 @@ async fn execute(
     let complete = manager
         .finish_execution(execution_id, kind, result.as_ref().ok().copied())
         .await?;
-    if let Some(agent) = context.agent {
+    if let Some(agent) = agent {
         let message = match &result {
             Ok(code) if complete => format!("{agent} exited with code {code}"),
             Ok(code) => format!(

@@ -19,9 +19,10 @@ use crate::{
     resources::{Overview, ResourceLease, ResourceRequest},
     sim_audit::AuditEntry,
     simulators::{SimRequest, Simulator, SimulatorCatalog},
+    workspace::ExecutionKind,
 };
 
-pub const VERSION: u32 = 37;
+pub const VERSION: u32 = 38;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -128,11 +129,6 @@ pub enum Method {
         workspace: Option<String>,
         options: ReconcileOptions,
     },
-    /// Merge the workspace branch into the repository default branch locally.
-    LandWorkspace {
-        workspace: String,
-        wrapper: Identity,
-    },
     /// Verify that this worker belongs to an unscoped caller's landing execution.
     CheckLanding,
     /// Fast-forward a local merge source from its upstream before merging.
@@ -161,13 +157,9 @@ pub enum Method {
     Execute {
         workspace: String,
         wrapper: Identity,
+        kind: ExecutionKind,
         #[serde(default)]
         agent: Option<String>,
-    },
-    /// Like [`Method::Execute`], running the configured setup command.
-    Prepare {
-        workspace: String,
-        wrapper: Identity,
     },
     // Notifications.
     ListNotifications {
@@ -367,4 +359,56 @@ pub async fn write<T: Serialize>(stream: &mut (impl AsyncWrite + Unpin), value: 
     stream.write_all(&bytes).await?;
     stream.flush().await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn tracked_execution_requests_require_a_known_kind() {
+        let wrapper = crate::process_identity::capture(std::process::id())
+            .unwrap()
+            .unwrap();
+        for (kind, spelling) in [
+            (ExecutionKind::Command, "command"),
+            (ExecutionKind::Setup, "setup"),
+            (ExecutionKind::Land, "land"),
+        ] {
+            let method = Method::Execute {
+                workspace: "worker".into(),
+                wrapper: wrapper.clone(),
+                kind,
+                agent: Some("test-agent".into()),
+            };
+            let encoded = serde_json::to_value(method).unwrap();
+            assert_eq!(encoded["execute"]["kind"], spelling);
+            let Method::Execute {
+                kind: decoded,
+                agent,
+                ..
+            } = serde_json::from_value(encoded).unwrap()
+            else {
+                panic!("execution must use the shared request");
+            };
+            assert_eq!(decoded, kind);
+            assert_eq!(agent.as_deref(), Some("test-agent"));
+        }
+        for kind in [None, Some("unknown"), Some("Setup")] {
+            let mut request = json!({"execute": {"workspace": "worker", "wrapper": wrapper}});
+            if let Some(kind) = kind {
+                request["execute"]["kind"] = kind.into();
+            }
+            assert!(serde_json::from_value::<Method>(request).is_err());
+        }
+        for method in ["prepare", "land_workspace"] {
+            assert!(
+                serde_json::from_value::<Method>(json!({
+                    method: {"workspace": "worker", "wrapper": wrapper}
+                }))
+                .is_err()
+            );
+        }
+    }
 }

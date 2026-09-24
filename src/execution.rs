@@ -27,6 +27,7 @@ use crate::{
     paths::Paths,
     process_identity,
     protocol::{self, Body, Control, ExecutionEvent, Method},
+    workspace::ExecutionKind,
 };
 
 /// What a detached wrapper reports on stdout once the daemon has recorded the
@@ -64,6 +65,14 @@ enum Mode {
 }
 
 impl Mode {
+    fn kind(&self) -> ExecutionKind {
+        match self {
+            Self::Command | Self::Detached { .. } => ExecutionKind::Command,
+            Self::Land { .. } => ExecutionKind::Land,
+            Self::Setup { .. } => ExecutionKind::Setup,
+        }
+    }
+
     fn is_setup(&self) -> bool {
         matches!(self, Mode::Setup { .. })
     }
@@ -222,26 +231,16 @@ async fn run_tracked(
     };
     let wrapper = process_identity::capture(std::process::id())?
         .context("cannot identify execution wrapper")?;
-    let method = match mode {
-        Mode::Setup { .. } => Method::Prepare { workspace, wrapper },
-        Mode::Command | Mode::Detached { .. } => Method::Execute {
-            workspace,
-            wrapper,
-            agent,
-        },
-        Mode::Land { .. } => Method::LandWorkspace { workspace, wrapper },
+    let kind = mode.kind();
+    let method = Method::Execute {
+        workspace,
+        wrapper,
+        kind,
+        agent,
     };
-    let start_timeout = if matches!(mode, Mode::Land { .. } | Mode::Setup { .. }) {
-        120
-    } else {
-        5
-    };
-    let (mut stream, body) = timeout(
-        Duration::from_secs(start_timeout),
-        client::open(paths, method),
-    )
-    .await
-    .context("daemon did not start the execution in time")??;
+    let (mut stream, body) = timeout(kind.start_timeout(), client::open(paths, method))
+        .await
+        .context("daemon did not start the execution in time")??;
     let plan = match body {
         Body::Execution(plan) => plan,
         Body::Error { message, .. } => bail!("{message}"),

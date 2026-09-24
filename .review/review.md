@@ -86,7 +86,8 @@ removal, check it against the rule those files state before judging it.
 - AI skill directories are machine-only configuration. Skill installation accepts
   configured tool names, needs no daemon, and remains denied to scoped processes.
 - External tools are invoked with argument arrays, never shell strings.
-  Terminal I/O stays in the execution wrapper; the daemon owns state. CLI
+  Terminal I/O stays in the execution wrapper; the daemon owns state and prepares
+  each execution kind before shared registration through one request. CLI
   styles and transient progress belong at presentation sites; machine output and
   stored values stay plain. Progress clears before results and stays off for JSON,
   redirected stderr and dumb terminals.

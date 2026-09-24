@@ -33,7 +33,8 @@ socket and a versioned JSON protocol; the ordinary installation is per user.
 The daemon owns SQLite state, allocation, lifecycle transitions, and recovery.
 
 The execution wrapper owns terminal I/O, environment delivery, exit codes, and
-command process groups, registers with the daemon, and handles stop requests.
+command process groups, registers through one request carrying its execution kind,
+and handles stop requests. The daemon prepares each kind before shared registration.
 The daemon never proxies terminals, and a lost connection is not proof that an
 execution stopped or that its resources are free.
 
