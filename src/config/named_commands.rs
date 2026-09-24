@@ -10,13 +10,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     client::{self, request},
-    config::Config,
+    config::{Config, repo::ConfigLayer},
     context::Context,
     execution,
     model::{DiffBase, Workspace},
     paths::Paths,
     protocol::{ConfigTarget, Method},
-    repo_config::ConfigLayer,
     ui::{self, Fallback},
 };
 
@@ -305,15 +304,15 @@ fn render(template: &str, fields: &[(&str, &OsStr)]) -> OsString {
 
 #[cfg(test)]
 mod tests {
-    use crate::{config::Config, repo_config};
+    use crate::config::{self, Config};
 
     #[test]
     fn commands_layer_by_name_and_replace_whole_argument_arrays() {
         let global: Config =
             toml::from_str("[commands]\nreview = ['global', '--flag']\ncheck = ['check']\n")
                 .unwrap();
-        let file = repo_config::parse("[commands]\nreview = ['file']\n").unwrap();
-        let saved = repo_config::parse("[commands]\nreview = ['saved', 'two words']\n").unwrap();
+        let file = config::repo::parse("[commands]\nreview = ['file']\n").unwrap();
+        let saved = config::repo::parse("[commands]\nreview = ['saved', 'two words']\n").unwrap();
         let effective = global.effective(&saved.over(file)).unwrap();
         assert_eq!(effective.commands["review"], ["saved", "two words"]);
         assert_eq!(effective.commands["check"], ["check"]);
@@ -331,7 +330,7 @@ mod tests {
             "[commands]\n'bad name' = ['tool']",
             "[commands]\nreview = 'shell command'",
         ] {
-            assert!(repo_config::parse(config).is_err(), "{config}");
+            assert!(config::repo::parse(config).is_err(), "{config}");
         }
     }
 
@@ -339,7 +338,7 @@ mod tests {
     fn built_in_names_are_valid_for_explicit_run() {
         for name in ["run", "list", "help"] {
             let config = format!("[commands]\n{name} = ['tool']\n");
-            assert!(repo_config::parse(&config).is_ok(), "{config}");
+            assert!(config::repo::parse(&config).is_ok(), "{config}");
         }
     }
 }

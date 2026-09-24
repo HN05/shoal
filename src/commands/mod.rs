@@ -80,10 +80,10 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         } => match name {
             Some(name) if name == "claude" => workspaces::claude(&ctx, workspace, args).await,
             Some(name) if name == "codex" => workspaces::codex(&ctx, None, workspace, args).await,
-            Some(name) => crate::named_commands::run(&ctx, &name, workspace, args).await,
-            None => crate::named_commands::list(&ctx).await,
+            Some(name) => crate::config::named_commands::run(&ctx, &name, workspace, args).await,
+            None => crate::config::named_commands::list(&ctx).await,
         },
-        Command::Custom(args) => crate::named_commands::invoke(&ctx, args).await,
+        Command::Custom(args) => crate::config::named_commands::invoke(&ctx, args).await,
         Command::Skill { command } => skill::run(command.as_ref(), ctx.json),
         Command::Completions { shell } => {
             let script = shell::completions(shell)?;

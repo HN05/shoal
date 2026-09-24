@@ -111,10 +111,10 @@ mod tests {
         use crate::{
             access::{DecisionStatus, Lifetime},
             cli::CodexMode,
+            config::repo::ConflictPolicy,
             doctor::CheckStatus,
             happy::HappyAgent,
             recovery::DirectoryState,
-            repo_config::ConflictPolicy,
             resources::{LockMode, ResourceKind},
             workspace::ExecutionKind,
         };

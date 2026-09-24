@@ -9,10 +9,10 @@ use tokio::{
 };
 
 use crate::{
+    config::repo::ConfigLayers,
     model::{Inspection, Repository, Workspace},
     paths::Paths,
     protocol::{self, Body, DaemonStatus, Method, Request, Response, timing},
-    repo_config::ConfigLayers,
 };
 
 #[derive(Debug)]
@@ -76,16 +76,16 @@ pub async fn settings(
     let mut settings = crate::config::Config::load(paths)?.effective(&layers.resolve())?;
     if settings.issue_template.is_none() {
         let config = crate::config::Config::path(paths);
-        settings.issue_template = crate::templates::read(
+        settings.issue_template = crate::config::templates::read(
             config.parent().context("config has no directory")?,
-            crate::templates::ISSUE_FILE,
+            crate::config::templates::ISSUE_FILE,
         )?;
     }
     if settings.agent_template.is_none() {
         let config = crate::config::Config::path(paths);
-        settings.agent_template = crate::templates::read(
+        settings.agent_template = crate::config::templates::read(
             config.parent().context("config has no directory")?,
-            crate::templates::AGENT_FILE,
+            crate::config::templates::AGENT_FILE,
         )?;
     }
     Ok(settings)

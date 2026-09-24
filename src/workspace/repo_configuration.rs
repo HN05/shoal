@@ -1,11 +1,13 @@
 //! Local repository configuration belongs to the registration, not its checkout.
 use super::Manager;
 use crate::{
-    config::Effective,
+    config::{
+        self, Effective,
+        named_commands::CommandLayers,
+        repo::{ConfigLayers, Hooks, LocalConfig, RepoConfig},
+    },
     model::Workspace,
-    named_commands::CommandLayers,
     protocol::ConfigTarget,
-    repo_config::{self, ConfigLayers, Hooks, LocalConfig, RepoConfig},
 };
 use anyhow::{Context, Result};
 use rusqlite::{OptionalExtension, params};
@@ -13,12 +15,12 @@ use rusqlite::{OptionalExtension, params};
 impl Manager {
     pub async fn command_layers(&self, selector: &str) -> Result<CommandLayers> {
         let workspace = self.workspace(selector).await?;
-        let worktree_file = repo_config::load(&workspace.path)?.commands;
+        let worktree_file = config::repo::load(&workspace.path)?.commands;
         let saved_repository_config = self
             .local_repository_config(&workspace.repository_id)
             .await?
             .map(|text| {
-                repo_config::parse(&text)
+                config::repo::parse(&text)
                     .context("parse local repository config")
                     .map(|config| config.commands)
             })
@@ -44,7 +46,7 @@ impl Manager {
         toml: Option<String>,
     ) -> Result<LocalConfig> {
         if let Some(text) = &toml {
-            repo_config::parse(text).context("invalid local repository config")?;
+            config::repo::parse(text).context("invalid local repository config")?;
         }
         // Serialize changes with registration/removal and retain config on failed cleanup.
         let _registry = self.registry_gate.lock().await;
@@ -67,8 +69,8 @@ impl Manager {
             .local_repository_config(&repo.id)
             .await?
             .unwrap_or_default();
-        let edited = crate::config_edit::edit(&text, key, value)?;
-        repo_config::parse(&edited).context("invalid local repository config")?;
+        let edited = crate::config::edit::edit(&text, key, value)?;
+        config::repo::parse(&edited).context("invalid local repository config")?;
         self.save_repository_config(repo.id, Some(edited)).await
     }
 
@@ -125,7 +127,7 @@ impl Manager {
     /// The workspace's repository config: the saved local config layered per
     /// option over the worktree's own `.shoal.toml`.
     pub(crate) async fn workspace_config(&self, workspace: &Workspace) -> Result<RepoConfig> {
-        let file = repo_config::load(&workspace.path)?;
+        let file = config::repo::load(&workspace.path)?;
         Ok(self
             .config_layers(&workspace.repository_id, file)
             .await?
@@ -138,12 +140,12 @@ impl Manager {
         let (repository_id, worktree_file) = match target {
             ConfigTarget::Workspace(selector) => {
                 let workspace = self.workspace(&selector).await?;
-                let file = repo_config::load(&workspace.path)?;
+                let file = config::repo::load(&workspace.path)?;
                 (workspace.repository_id, file)
             }
             ConfigTarget::Repository(selector) => {
                 let repo = self.repository(&selector).await?;
-                let file = repo_config::load(&repo.path)?;
+                let file = config::repo::load(&repo.path)?;
                 (repo.id, file)
             }
         };
@@ -158,7 +160,7 @@ impl Manager {
         let saved_repository_config = self
             .local_repository_config(repository_id)
             .await?
-            .map(|text| repo_config::parse(&text).context("parse local repository config"))
+            .map(|text| config::repo::parse(&text).context("parse local repository config"))
             .transpose()?
             .unwrap_or_default();
         let layers = ConfigLayers {

@@ -6,9 +6,9 @@ use anyhow::{Context, Result};
 use crate::{config::Config, paths::Paths};
 
 pub const ISSUE_FILE: &str = "issue-template.md";
-pub const ISSUE_DEFAULT: &str = include_str!("../issue-template.md");
+pub const ISSUE_DEFAULT: &str = include_str!("../../issue-template.md");
 pub const AGENT_FILE: &str = "agent-template.md";
-pub const AGENT_DEFAULT: &str = include_str!("../agent-template.md");
+pub const AGENT_DEFAULT: &str = include_str!("../../agent-template.md");
 
 pub fn read(directory: &Path, name: &str) -> Result<Option<String>> {
     let path = directory.join(name);

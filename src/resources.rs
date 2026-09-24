@@ -760,7 +760,7 @@ mod tests {
 
     #[test]
     fn config_defaults_sum_member_capacities_and_reject_invalid_definitions() {
-        let config: crate::repo_config::RepoConfig = toml::from_str("[resources.lock]\n[resource_pools.workers.resources.a]\n[resource_pools.workers.resources.b]\ncapacity=2\n").unwrap();
+        let config: crate::config::repo::RepoConfig = toml::from_str("[resources.lock]\n[resource_pools.workers.resources.a]\n[resource_pools.workers.resources.b]\ncapacity=2\n").unwrap();
         let normalized = definitions(&config.resources, &config.resource_pools).unwrap();
         assert_eq!(normalized["lock"].capacity, 1);
         assert_eq!(normalized["workers"].capacity, 3);
@@ -773,17 +773,17 @@ mod tests {
             "[resources.x]\nreason='  '",
             "[resources.cache]\nkind='rwlock'\ncapacity=2",
         ] {
-            let config: crate::repo_config::RepoConfig = toml::from_str(text).unwrap();
+            let config: crate::config::repo::RepoConfig = toml::from_str(text).unwrap();
             assert!(
                 definitions(&config.resources, &config.resource_pools).is_err(),
                 "{text}"
             );
         }
         assert!(
-            toml::from_str::<crate::repo_config::RepoConfig>("[resources.x]\ncapcity=2").is_err()
+            toml::from_str::<crate::config::repo::RepoConfig>("[resources.x]\ncapcity=2").is_err()
         );
         assert!(
-            toml::from_str::<crate::repo_config::RepoConfig>("[resources.x]\nkind='unknown'")
+            toml::from_str::<crate::config::repo::RepoConfig>("[resources.x]\nkind='unknown'")
                 .is_err()
         );
     }

@@ -79,10 +79,10 @@ mod tests {
         let global: crate::config::Config =
             toml::from_str("[agent_auth]\nfj = '~/bin/fj-agent'\ngh = '/global/gh-agent'\n")
                 .unwrap();
-        let layers = crate::repo_config::ConfigLayers {
-            worktree_file: crate::repo_config::parse("[agent_auth]\nfj = '/repo/fj-agent'\n")
+        let layers = crate::config::repo::ConfigLayers {
+            worktree_file: crate::config::repo::parse("[agent_auth]\nfj = '/repo/fj-agent'\n")
                 .unwrap(),
-            saved_repository_config: crate::repo_config::parse(
+            saved_repository_config: crate::config::repo::parse(
                 "[agent_auth]\nfj = '/saved/fj-agent'\n",
             )
             .unwrap(),
@@ -101,7 +101,7 @@ mod tests {
             };
             assert!(config.validate().is_err(), "{path}");
         }
-        assert!(crate::repo_config::parse("[agent_auth]\ngh = 'gh'").is_err());
-        assert!(crate::repo_config::parse("[agent_auth]\nunknown = '/bin/gh'").is_err());
+        assert!(crate::config::repo::parse("[agent_auth]\ngh = 'gh'").is_err());
+        assert!(crate::config::repo::parse("[agent_auth]\nunknown = '/bin/gh'").is_err());
     }
 }

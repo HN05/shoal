@@ -8,11 +8,12 @@ use serde_json::Value;
 use crate::{
     cli::CodexMode,
     client::request,
-    config::{self, Config},
-    named_commands,
+    config::{
+        self, Config, named_commands,
+        repo::{ConfigLayer as Layer, ConfigLayers, RepoConfig},
+    },
     paths::Paths,
     protocol::{ConfigTarget, Method},
-    repo_config::{self, ConfigLayer as Layer, ConfigLayers, RepoConfig},
 };
 
 #[derive(Debug, Serialize)]
@@ -192,25 +193,25 @@ fn named<T: Serialize>(
 fn defaults() -> RepoConfig {
     RepoConfig {
         commands: named_commands::defaults(),
-        codex: repo_config::Codex {
+        codex: config::repo::Codex {
             default_mode: Some(CodexMode::default()),
         },
-        ports: repo_config::PortDefaults {
-            on_conflict: Some(repo_config::ConflictPolicy::default()),
+        ports: config::repo::PortDefaults {
+            on_conflict: Some(config::repo::ConflictPolicy::default()),
             start: Some(config::Ports::default().start),
             end: Some(config::Ports::default().end),
             ..Default::default()
         },
-        simulators: repo_config::SimulatorPreferences {
+        simulators: config::repo::SimulatorPreferences {
             requires_approval: Some(false),
             approval_lifetime: Some(crate::access::Lifetime::Lease),
             ..Default::default()
         },
-        auto_cleanup: repo_config::AutoCleanup {
+        auto_cleanup: config::repo::AutoCleanup {
             enabled: Some(config::AutoCleanup::default().enabled),
             idle_minutes: Some(config::AutoCleanup::default().idle_minutes),
         },
-        pr_cleanup: repo_config::PrCleanup {
+        pr_cleanup: config::repo::PrCleanup {
             enabled: Some(config::PrCleanup::default().enabled),
         },
         ..Default::default()

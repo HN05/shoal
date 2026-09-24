@@ -640,7 +640,7 @@ mod tests {
             assert_eq!(leases[0].created_at, 123);
             let json: String = db.query_row("SELECT definition FROM resource_pools", [], |row| row.get(0))?;
             let stored: crate::resources::Definition = serde_json::from_str(&json)?;
-            let config: crate::repo_config::RepoConfig = toml::from_str("[resources.worker]\ncapacity=2")?;
+            let config: crate::config::repo::RepoConfig = toml::from_str("[resources.worker]\ncapacity=2")?;
             assert_eq!(stored, crate::resources::definitions(&config.resources, &config.resource_pools)?["worker"]);
             assert!(db.execute("UPDATE resource_leases SET mode='invalid'", []).is_err());
             assert!(db.query_row("SELECT 'invalid'", [], |row| row.get::<_, crate::resources::LockMode>(0)).is_err());

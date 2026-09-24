@@ -1,13 +1,13 @@
 use anyhow::{Context as _, Result, ensure};
 
 use crate::{
-    client, config_report,
+    client,
+    config::{self, repo::LocalConfig},
     context::Context,
     env,
     model::Workspace,
     output::{Palette, Style},
     protocol::ConfigTarget,
-    repo_config::LocalConfig,
 };
 
 pub(super) async fn edit(
@@ -40,7 +40,7 @@ pub(super) async fn edit(
 
 pub(super) async fn show(ctx: &Context, workspace: Option<String>) -> Result<i32> {
     let target = target(ctx, workspace).await?;
-    let entries = config_report::load(&ctx.paths, target).await?;
+    let entries = config::report::load(&ctx.paths, target).await?;
     ctx.show(&entries, |entries| {
         let palette = Palette::stdout(ctx.json);
         for entry in entries {

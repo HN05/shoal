@@ -181,7 +181,7 @@ pub(super) async fn run(
             )
             .await
         }
-        _ => crate::named_commands::run(ctx, MANUAL, Some(workspace), args).await,
+        _ => crate::config::named_commands::run(ctx, MANUAL, Some(workspace), args).await,
     }
 }
 

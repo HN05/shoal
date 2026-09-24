@@ -566,7 +566,7 @@ pub enum PortCommand {
         reason: Option<String>,
         /// Override the repo's conflict behavior (default: suggest).
         #[arg(long, value_enum)]
-        on_conflict: Option<crate::repo_config::ConflictPolicy>,
+        on_conflict: Option<crate::config::repo::ConflictPolicy>,
     },
     /// Show configured ports and current reservations.
     List {

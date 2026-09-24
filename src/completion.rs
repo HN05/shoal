@@ -13,12 +13,11 @@ use clap_complete::engine::{ArgValueCompleter, CompletionCandidate};
 use crate::{
     access::AccessRequest,
     client,
-    config::Config,
+    config::{Config, repo::ConfigLayers},
     env,
     model::{PortOverview, Workspace},
     paths::Paths,
     protocol::{ConfigTarget, Method},
-    repo_config::ConfigLayers,
     resources::Overview,
     simulators::Simulator,
 };
@@ -191,7 +190,7 @@ impl Typed {
         let Ok(paths) = Paths::new(state) else {
             return vec![];
         };
-        let mut commands = crate::named_commands::defaults();
+        let mut commands = crate::config::named_commands::defaults();
         if let Ok(config) = Config::load(&paths) {
             commands.extend(config.commands);
         }

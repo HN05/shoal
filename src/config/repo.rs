@@ -61,7 +61,7 @@ states!(
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct RepoConfig {
-    pub commands: crate::named_commands::Commands,
+    pub commands: crate::config::named_commands::Commands,
     pub issue_template: Option<String>,
     pub agent_template: Option<String>,
     pub agent_auth: crate::agent_auth::Config,
@@ -128,18 +128,18 @@ pub fn load(workspace_dir: &Path) -> Result<RepoConfig> {
     };
     if config.issue_template.is_none() {
         config.issue_template =
-            crate::templates::read(workspace_dir, crate::templates::ISSUE_FILE)?;
+            crate::config::templates::read(workspace_dir, crate::config::templates::ISSUE_FILE)?;
     }
     if config.agent_template.is_none() {
         config.agent_template =
-            crate::templates::read(workspace_dir, crate::templates::AGENT_FILE)?;
+            crate::config::templates::read(workspace_dir, crate::config::templates::AGENT_FILE)?;
     }
     Ok(config)
 }
 
 pub fn parse(text: &str) -> Result<RepoConfig> {
     let config: RepoConfig = toml::from_str(text)?;
-    crate::named_commands::validate(&config.commands)?;
+    crate::config::named_commands::validate(&config.commands)?;
     config.agent_auth.validate()?;
     if let Some(name) = &config.git_profile {
         crate::validate::name("git profile", name)?;

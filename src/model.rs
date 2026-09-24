@@ -3,8 +3,8 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
 use crate::{
+    config::repo::{ConflictPolicy, PortDefinition},
     process_identity::Identity,
-    repo_config::{ConflictPolicy, PortDefinition},
     resources::ResourceLease,
     simulators::Simulator,
     state::{ExecutionState, WorkspaceState},

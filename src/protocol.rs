@@ -6,17 +6,19 @@ use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWrite
 
 use crate::{
     allocation::Allocation,
+    config::{
+        named_commands::CommandLayers,
+        repo::{ConfigLayers, Hooks, LocalConfig},
+    },
     model::{
         DiffBase, ExecutionPlan, Inspection, PortOverview, PortReservation, PortSuggestion,
         PulledBranch, Repository, RepositoryRemoval, Workspace, WorkspaceStatus,
     },
-    named_commands::CommandLayers,
     notifications::Notification,
     ports::PortRequest,
     process_identity::Identity,
     recovery::{ReconcileOptions, Report},
     removal::{BranchChoice, RemovalCheck, RemovalResult},
-    repo_config::{ConfigLayers, Hooks, LocalConfig},
     resources::{Overview, ResourceLease, ResourceRequest},
     sim_audit::AuditEntry,
     simulators::{SimRequest, Simulator, SimulatorCatalog},

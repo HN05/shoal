@@ -7,6 +7,7 @@ use serde_json::json;
 use crate::{
     cli::{Agent, CodexMode},
     client::{self, request},
+    config::{repo::Hooks, templates},
     context::Context,
     env, execution,
     git::{
@@ -20,10 +21,8 @@ use crate::{
     protocol::{ConfigTarget, Method},
     recovery::{ReconcileOptions, Report},
     removal::{BranchChoice, RemovalCheck, RemovalResult},
-    repo_config::Hooks,
     shell,
     state::WorkspaceState,
-    templates,
     ui::{self, Fallback},
 };
 
@@ -389,7 +388,7 @@ async fn custom_agent(
     if !prompt.is_empty() && !argv.iter().any(|arg| arg.contains("{prompt}")) {
         args.insert(0, prompt.clone().into());
     }
-    let command = crate::named_commands::expand_with_fields(
+    let command = crate::config::named_commands::expand_with_fields(
         &ctx.paths,
         &settings.commands,
         name,
@@ -818,7 +817,7 @@ pub(super) async fn claude(
         .into_iter()
         .chain(args)
         .collect();
-    let command = crate::named_commands::expand(
+    let command = crate::config::named_commands::expand(
         &ctx.paths,
         &settings.commands,
         "claude",
@@ -884,7 +883,7 @@ pub(super) async fn codex(
         .into_iter()
         .chain(args)
         .collect();
-    let command = crate::named_commands::expand(
+    let command = crate::config::named_commands::expand(
         &ctx.paths,
         &settings.commands,
         "codex",

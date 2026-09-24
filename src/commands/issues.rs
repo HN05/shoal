@@ -98,8 +98,8 @@ impl Issue {
     }
 
     pub fn prompt(&self, template: Option<&str>) -> String {
-        crate::templates::render(
-            template.unwrap_or(crate::templates::ISSUE_DEFAULT),
+        crate::config::templates::render(
+            template.unwrap_or(crate::config::templates::ISSUE_DEFAULT),
             &[
                 ("{number}", &self.number.to_string()),
                 ("{title}", &self.title),

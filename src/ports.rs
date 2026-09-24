@@ -9,10 +9,10 @@ use std::{
 
 use crate::{
     allocation::Allocation,
+    config::repo::ConflictPolicy,
     env,
     model::{PortOverview, PortReservation, PortSuggestion},
     notifications::NotificationKind,
-    repo_config::ConflictPolicy,
     store, validate,
     workspace::Manager,
 };

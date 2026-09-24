@@ -6,11 +6,11 @@ use anyhow::{Context as _, Result, ensure};
 use crate::{
     cli::RepoCommand,
     client::{self, request},
+    config::repo::LocalConfig,
     context::Context,
     model::{Repository, RepositoryRemoval},
     output::{Palette, Style},
     protocol::Method,
-    repo_config::LocalConfig,
     ui,
 };
 

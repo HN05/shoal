@@ -1,8 +1,15 @@
+pub mod edit;
+pub mod named_commands;
+pub mod repo;
+pub mod report;
+pub mod templates;
+
 use anyhow::{Context, Result, ensure};
 use serde::Deserialize;
 use std::{fs, path::PathBuf, time::Duration};
 
-use crate::{paths::Paths, repo_config::RepoConfig};
+use crate::paths::Paths;
+use repo::RepoConfig;
 
 /// The global file's repository-overridable scalars as written, so an omitted
 /// one stays distinguishable from its built-in default. Unknown fields are
@@ -54,7 +61,7 @@ struct PortsPresence {
 /// wins, an omitted one keeps the global value or the built-in default.
 #[derive(Debug)]
 pub struct Effective {
-    pub commands: crate::named_commands::Commands,
+    pub commands: named_commands::Commands,
     pub issue_template: Option<String>,
     pub agent_template: Option<String>,
     pub agent_auth: crate::agent_auth::Config,
@@ -69,7 +76,7 @@ pub struct Effective {
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
     pub ai: crate::ai::Agents,
-    pub commands: crate::named_commands::Commands,
+    pub commands: named_commands::Commands,
     pub issue_template: Option<String>,
     pub agent_template: Option<String>,
     pub agent_auth: crate::agent_auth::Config,
@@ -299,17 +306,15 @@ mod tests {
     fn repository_values_win_over_global_cleanup_policy() {
         let global: Config =
             toml::from_str("[auto_cleanup]\nenabled = false\nidle_minutes = 30\n").unwrap();
-        let repo = crate::repo_config::parse(
-            "[auto_cleanup]\nenabled = true\n[pr_cleanup]\nenabled = false\n",
-        )
-        .unwrap();
+        let repo =
+            repo::parse("[auto_cleanup]\nenabled = true\n[pr_cleanup]\nenabled = false\n").unwrap();
         let effective = global.effective(&repo).unwrap();
         assert_eq!(
             effective.auto_cleanup.delay(),
             Some(Duration::from_secs(1800))
         );
         assert!(!effective.pr_cleanup.enabled);
-        let repo = crate::repo_config::parse("[auto_cleanup]\nidle_minutes = 5\n").unwrap();
+        let repo = repo::parse("[auto_cleanup]\nidle_minutes = 5\n").unwrap();
         let effective = global.effective(&repo).unwrap();
         assert_eq!(effective.auto_cleanup.delay(), None);
         assert_eq!(effective.auto_cleanup.idle_minutes, 5);
@@ -330,11 +335,11 @@ mod tests {
 
         let global: Config =
             toml::from_str("default_agent = 'claude'\n[codex]\ndefault_mode = 'app'\n").unwrap();
-        let repo = crate::repo_config::parse("default_agent = 'codex'\n").unwrap();
+        let repo = repo::parse("default_agent = 'codex'\n").unwrap();
         let effective = global.effective(&repo).unwrap();
         assert_eq!(effective.default_agent, Some(Agent::Codex));
         assert_eq!(effective.codex.default_mode, CodexMode::App);
-        let repo = crate::repo_config::parse("[codex]\ndefault_mode = 'cli'\n").unwrap();
+        let repo = repo::parse("[codex]\ndefault_mode = 'cli'\n").unwrap();
         let effective = global.effective(&repo).unwrap();
         assert_eq!(effective.default_agent, Some(Agent::Claude));
         assert_eq!(effective.codex.default_mode, CodexMode::Cli);
@@ -345,16 +350,15 @@ mod tests {
     #[test]
     fn port_range_layers_per_bound_and_must_stay_nonempty() {
         let global: Config = toml::from_str("[ports]\nstart = 3000\nend = 3100\n").unwrap();
-        let repo =
-            crate::repo_config::parse("[ports]\nstart = 3050\n[ports.web]\nport = 8080\n").unwrap();
+        let repo = repo::parse("[ports]\nstart = 3050\n[ports.web]\nport = 8080\n").unwrap();
         let ports = global.effective(&repo).unwrap().ports;
         assert_eq!((ports.start, ports.end), (3050, 3100));
         let ports = global.effective(&RepoConfig::default()).unwrap().ports;
         assert_eq!((ports.start, ports.end), (3000, 3100));
-        let repo = crate::repo_config::parse("[ports]\nend = 2000\n").unwrap();
+        let repo = repo::parse("[ports]\nend = 2000\n").unwrap();
         assert!(global.effective(&repo).is_err());
         for text in ["[ports]\nstart = 0\n", "[ports]\nstart = 5\nend = 4\n"] {
-            assert!(crate::repo_config::parse(text).is_err(), "{text}");
+            assert!(repo::parse(text).is_err(), "{text}");
         }
     }
 
@@ -478,7 +482,7 @@ impl Config {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
             Err(error) => return Err(error).with_context(|| format!("read {}", path.display())),
         };
-        let edited = crate::config_edit::edit(&text, key, value)?;
+        let edited = edit::edit(&text, key, value)?;
         Self::parse(&edited, paths).context("invalid edited config")?;
         Self::replace_at(path, &edited)
     }
@@ -582,14 +586,14 @@ impl Config {
         let directory = path.parent().context("config has no directory")?;
         let repository_layer = RepoConfig {
             commands: config.commands.clone(),
-            issue_template: config.issue_template.clone().or(crate::templates::read(
-                directory,
-                crate::templates::ISSUE_FILE,
-            )?),
-            agent_template: config.agent_template.clone().or(crate::templates::read(
-                directory,
-                crate::templates::AGENT_FILE,
-            )?),
+            issue_template: config
+                .issue_template
+                .clone()
+                .or(templates::read(directory, templates::ISSUE_FILE)?),
+            agent_template: config
+                .agent_template
+                .clone()
+                .or(templates::read(directory, templates::AGENT_FILE)?),
             agent_auth: config.agent_auth.clone(),
             git_profile: config.git_profile.clone(),
             pre_setup_cmd: config.pre_setup_cmd.clone(),
@@ -597,26 +601,26 @@ impl Config {
             post_resource_acquire_cmd: config.post_resource_acquire_cmd.clone(),
             pre_resource_release_cmd: config.pre_resource_release_cmd.clone(),
             default_agent: config.default_agent.clone(),
-            codex: crate::repo_config::Codex {
+            codex: repo::Codex {
                 default_mode: presence.codex.default_mode,
             },
-            ports: crate::repo_config::PortDefaults {
+            ports: repo::PortDefaults {
                 start: presence.ports.start,
                 end: presence.ports.end,
                 ..Default::default()
             },
-            simulators: crate::repo_config::SimulatorPreferences {
+            simulators: repo::SimulatorPreferences {
                 requires_approval: presence.simulators.requires_approval,
                 approval_lifetime: presence.simulators.approval_lifetime,
                 ..Default::default()
             },
             resources: config.resources.clone(),
             resource_pools: config.resource_pools.clone(),
-            auto_cleanup: crate::repo_config::AutoCleanup {
+            auto_cleanup: repo::AutoCleanup {
                 enabled: presence.auto_cleanup.enabled,
                 idle_minutes: presence.auto_cleanup.idle_minutes,
             },
-            pr_cleanup: crate::repo_config::PrCleanup {
+            pr_cleanup: repo::PrCleanup {
                 enabled: presence.pr_cleanup.enabled,
             },
             ..Default::default()
@@ -649,7 +653,7 @@ impl Config {
                 );
             }
         }
-        crate::named_commands::validate(&config.commands)?;
+        named_commands::validate(&config.commands)?;
         if let Some(name) = &config.git_profile {
             config.git.profile(name)?;
         }
@@ -665,7 +669,7 @@ impl Config {
             end: repo.ports.end.unwrap_or(self.ports.end),
         };
         ports.validate()?;
-        let mut commands = crate::named_commands::defaults();
+        let mut commands = named_commands::defaults();
         commands.extend(self.commands.clone());
         commands.extend(repo.commands.clone());
         Ok(Effective {
