@@ -6,10 +6,12 @@ use crate::{
         worktrunk::{self, BranchRemoval, FileRemoval},
     },
     hooks::{self, Hook, HookKind},
+    model::Workspace,
     removal::{self, BranchChoice, BranchOutcome, InspectionPolicy, RemovalCheck, RemovalResult},
     state::WorkspaceState,
 };
 use anyhow::{Result, bail, ensure};
+use std::path::{Path, PathBuf};
 
 #[cfg(test)]
 mod tests;
@@ -200,16 +202,7 @@ impl Manager {
         let present = workspace.path.try_exists()?;
         let result = async {
             let post_remove = if present {
-                match self
-                    .workspace_hook(&workspace, HookKind::PostRemove)
-                    .await?
-                {
-                    Some(command) => {
-                        let checkout = self.repository(&workspace.repository_id).await?.path;
-                        Some((command, checkout))
-                    }
-                    None => None,
-                }
+                self.prepare_post_remove_hook(&workspace).await?
             } else {
                 None
             };
@@ -219,43 +212,14 @@ impl Manager {
                 _ => self.remove_missing_worktree(&workspace, removal).await?,
             };
             self.remove_simulators(&workspace.id).await?;
-            let id = workspace.id.clone();
-            self.store
-                .run(move |db| {
-                    let tx = db.transaction()?;
-                    tx.execute("DELETE FROM executions WHERE workspace_id=?1", [&id])?;
-                    tx.execute("DELETE FROM workspaces WHERE id=?1", [id])?;
-                    tx.commit()?;
-                    Ok((outcome, post_remove))
-                })
-                .await
+            self.commit_workspace_removal(&workspace.id).await?;
+            Ok((outcome, post_remove))
         }
         .await;
         match result {
-            Ok((mut outcome, post_remove)) => {
-                self.forget_workspace(&workspace.id).await;
-                // Session logs are run data owned by the record just deleted.
-                let _ = std::fs::remove_dir_all(self.paths.workspace_state(&workspace.id));
-                if let Some((command, checkout)) = post_remove
-                    && let Err(error) = hooks::run_detached(
-                        Hook::PostRemove(&checkout),
-                        &workspace,
-                        &command,
-                        &self.paths,
-                    )
-                    .await
-                {
-                    let message = format!("workspace removed; {error:#}");
-                    self.notify(
-                        Some(&workspace.name),
-                        crate::daemon::notifications::NotificationKind::HookFailed,
-                        &message,
-                    )
-                    .await;
-                    outcome.hook_error = Some(message);
-                }
-                Ok(outcome)
-            }
+            Ok((outcome, post_remove)) => Ok(self
+                .complete_workspace_removal(&workspace, outcome, post_remove)
+                .await),
             Err(error) => {
                 // A deleted directory can no longer be ready.
                 let state = match removal {
@@ -267,6 +231,64 @@ impl Manager {
                 Err(error)
             }
         }
+    }
+
+    async fn prepare_post_remove_hook(
+        &self,
+        workspace: &Workspace,
+    ) -> Result<Option<(PathBuf, PathBuf)>> {
+        match self.workspace_hook(workspace, HookKind::PostRemove).await? {
+            Some(command) => {
+                let checkout = self.repository(&workspace.repository_id).await?.path;
+                Ok(Some((command, checkout)))
+            }
+            None => Ok(None),
+        }
+    }
+
+    /// Release ownership and cascading resource leases in one transaction.
+    async fn commit_workspace_removal(&self, id: &str) -> Result<()> {
+        let id = id.to_owned();
+        self.store
+            .run(move |db| {
+                let tx = db.transaction()?;
+                tx.execute("DELETE FROM executions WHERE workspace_id=?1", [&id])?;
+                tx.execute("DELETE FROM workspaces WHERE id=?1", [id])?;
+                tx.commit()?;
+                Ok(())
+            })
+            .await
+    }
+
+    /// Best-effort cleanup after ownership is released cannot fail removal.
+    async fn complete_workspace_removal(
+        &self,
+        workspace: &Workspace,
+        mut outcome: RemovalResult,
+        post_remove: Option<(PathBuf, PathBuf)>,
+    ) -> RemovalResult {
+        self.forget_workspace(&workspace.id).await;
+        // Session logs are run data owned by the record just deleted.
+        let _ = std::fs::remove_dir_all(self.paths.workspace_state(&workspace.id));
+        if let Some((command, checkout)) = post_remove
+            && let Err(error) = hooks::run_detached(
+                Hook::PostRemove(&checkout),
+                workspace,
+                &command,
+                &self.paths,
+            )
+            .await
+        {
+            let message = format!("workspace removed; {error:#}");
+            self.notify(
+                Some(&workspace.name),
+                crate::daemon::notifications::NotificationKind::HookFailed,
+                &message,
+            )
+            .await;
+            outcome.hook_error = Some(message);
+        }
+        outcome
     }
 
     async fn remove_present_worktree(
@@ -303,31 +325,8 @@ impl Manager {
                 "HEAD changed while stopping commands"
             );
         }
-        let choice = removal.choice();
-        let default_branch =
-            crate::git::default_branch::resolve(&repo.path, DefaultBranchLookup::Cached)
-                .await
-                .ok();
-        let branch = match choice {
-            BranchChoice::Auto
-                if check.can_delete_branch()
-                    && check.branch.as_deref() != default_branch.as_deref() =>
-            {
-                BranchRemoval::Delete
-            }
-            BranchChoice::Auto | BranchChoice::KeepBranch => BranchRemoval::Keep,
-            BranchChoice::DeleteBranch => BranchRemoval::Delete,
-        };
-        let files = match choice {
-            BranchChoice::Auto => FileRemoval::CleanOnly,
-            BranchChoice::KeepBranch | BranchChoice::DeleteBranch => FileRemoval::Force,
-        };
-        ensure!(
-            !matches!(choice, BranchChoice::KeepBranch)
-                || check.branch.is_some()
-                || check.unpushed_commits == 0,
-            "detached HEAD has unpushed commits; create a branch before choosing to keep it"
-        );
+        let (files, branch) =
+            worktrunk_removal_options(&repo.path, &check, removal.choice()).await?;
         // The hook sees the worktree intact; a failing hook retains it.
         if let Some(command) = self.workspace_hook(workspace, HookKind::PreRemove).await? {
             hooks::run_detached(Hook::PreRemove, workspace, &command, &self.paths).await?;
@@ -412,4 +411,35 @@ impl Manager {
             })
         }
     }
+}
+
+async fn worktrunk_removal_options(
+    checkout: &Path,
+    check: &RemovalCheck,
+    choice: BranchChoice,
+) -> Result<(FileRemoval, BranchRemoval)> {
+    let default_branch = crate::git::default_branch::resolve(checkout, DefaultBranchLookup::Cached)
+        .await
+        .ok();
+    let branch = match choice {
+        BranchChoice::Auto
+            if check.can_delete_branch()
+                && check.branch.as_deref() != default_branch.as_deref() =>
+        {
+            BranchRemoval::Delete
+        }
+        BranchChoice::Auto | BranchChoice::KeepBranch => BranchRemoval::Keep,
+        BranchChoice::DeleteBranch => BranchRemoval::Delete,
+    };
+    let files = match choice {
+        BranchChoice::Auto => FileRemoval::CleanOnly,
+        BranchChoice::KeepBranch | BranchChoice::DeleteBranch => FileRemoval::Force,
+    };
+    ensure!(
+        !matches!(choice, BranchChoice::KeepBranch)
+            || check.branch.is_some()
+            || check.unpushed_commits == 0,
+        "detached HEAD has unpushed commits; create a branch before choosing to keep it"
+    );
+    Ok((files, branch))
 }

@@ -21,6 +21,36 @@ async fn fixture() -> (tempfile::TempDir, Arc<Manager>, Workspace) {
 }
 
 #[tokio::test]
+async fn removal_retains_session_logs_until_ownership_is_released() {
+    let (_root, manager, workspace) = fixture().await;
+    let state = manager.paths.workspace_state(&workspace.id);
+    fs::create_dir_all(&state).unwrap();
+    let log = state.join("session.log");
+    fs::write(&log, "session output").unwrap();
+    fs::write(workspace.path.join("untracked"), "work to keep").unwrap();
+
+    assert!(
+        manager
+            .remove_workspace(&workspace.id, BranchChoice::Auto, InspectionPolicy::GitOnly,)
+            .await
+            .is_err()
+    );
+    assert!(manager.workspace(&workspace.id).await.is_ok());
+    assert_eq!(fs::read_to_string(&log).unwrap(), "session output");
+
+    manager
+        .remove_workspace(
+            &workspace.id,
+            BranchChoice::KeepBranch,
+            InspectionPolicy::GitOnly,
+        )
+        .await
+        .unwrap();
+    assert!(manager.workspace(&workspace.id).await.is_err());
+    assert!(!state.exists());
+}
+
+#[tokio::test]
 async fn directory_activity_distinguishes_inspection_from_removal_checks() {
     for (removal, scans_directory) in [
         (
