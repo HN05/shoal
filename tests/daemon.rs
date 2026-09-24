@@ -1,3 +1,7 @@
+#[path = "support/daemon.rs"]
+mod daemon_fixture;
+use daemon_fixture::DaemonGuard;
+
 #[path = "support/git.rs"]
 mod git_fixture;
 
@@ -11,7 +15,7 @@ use std::{
         net::{UnixListener, UnixStream},
     },
     path::Path,
-    process::{Child, Output, Stdio},
+    process::{Output, Stdio},
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -26,8 +30,8 @@ use serde_json::{Value, json};
 use tempfile::TempDir;
 
 struct Daemon {
+    guard: DaemonGuard,
     root: TempDir,
-    child: Child,
 }
 
 impl Daemon {
@@ -41,32 +45,8 @@ impl Daemon {
         if let Some(path) = path {
             launch.env("PATH", path);
         }
-        let child = launch
-            .args(["daemon", "run"])
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .unwrap();
-        let mut daemon = Self { root, child };
-        let deadline = Instant::now() + Duration::from_secs(5);
-        loop {
-            if command(daemon.root.path())
-                .args(["daemon", "status"])
-                .output()
-                .unwrap()
-                .status
-                .success()
-            {
-                break;
-            }
-            assert!(
-                daemon.child.try_wait().unwrap().is_none(),
-                "daemon exited during startup"
-            );
-            assert!(Instant::now() < deadline, "daemon startup timed out");
-            thread::sleep(Duration::from_millis(20));
-        }
-        daemon
+        let guard = DaemonGuard::start(root.path(), &mut launch);
+        Self { root, guard }
     }
 
     fn run(&self, args: &[&str]) -> Output {
@@ -90,11 +70,26 @@ impl Daemon {
     }
 }
 
-impl Drop for Daemon {
-    fn drop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
-    }
+#[test]
+fn daemon_guard_reaps_child_when_a_test_panics() {
+    let root = tempfile::tempdir_in("/tmp").unwrap();
+    let pid = std::cell::Cell::new(None);
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let daemon = DaemonGuard::start(root.path(), &mut command(root.path()));
+        pid.set(Some(daemon.child.id()));
+        panic!("simulate a failed test assertion");
+    }));
+    assert!(result.is_err());
+    let mut status = 0;
+    // A reaped child is no longer waitable; a running or zombie child is.
+    assert_eq!(
+        unsafe { libc::waitpid(pid.get().unwrap() as i32, &mut status, libc::WNOHANG) },
+        -1
+    );
+    assert_eq!(
+        std::io::Error::last_os_error().raw_os_error(),
+        Some(libc::ECHILD)
+    );
 }
 
 #[test]
@@ -103,7 +98,7 @@ fn cli_connects_to_daemon_and_stops_it() {
     let output = daemon.run(&["--json", "daemon", "status"]);
     assert!(output.status.success());
     let status: Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(status["daemon"]["pid"], daemon.child.id());
+    assert_eq!(status["daemon"]["pid"], daemon.guard.child.id());
     assert_eq!(status["running"], true);
     assert_eq!(
         fs::metadata(daemon.root.path().join("state/daemon.sock"))
@@ -119,7 +114,7 @@ fn cli_connects_to_daemon_and_stops_it() {
         "{}",
         String::from_utf8_lossy(&stopped.stderr)
     );
-    assert!(daemon.child.wait().unwrap().success());
+    assert!(daemon.guard.child.wait().unwrap().success());
     assert!(!daemon.root.path().join("state/daemon.sock").exists());
     let output = daemon.run(&["--json", "daemon", "status"]);
     assert_eq!(output.status.code(), Some(1));
@@ -163,20 +158,12 @@ fn protocol_rejects_bad_clients_and_remains_available() {
 #[test]
 fn socket_is_recovered_after_abrupt_exit() {
     let mut daemon = Daemon::start();
-    daemon.child.kill().unwrap();
-    daemon.child.wait().unwrap();
+    daemon.guard.child.kill().unwrap();
+    daemon.guard.child.wait().unwrap();
     assert!(daemon.root.path().join("state/daemon.sock").exists());
-    daemon.child = command(daemon.root.path())
-        .args(["daemon", "run"])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .unwrap();
-    let deadline = Instant::now() + Duration::from_secs(5);
-    while !daemon.run(&["daemon", "status"]).status.success() {
-        assert!(Instant::now() < deadline);
-        thread::sleep(Duration::from_millis(20));
-    }
+    daemon
+        .guard
+        .restart(daemon.root.path(), &mut command(daemon.root.path()));
 }
 
 #[test]

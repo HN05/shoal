@@ -1,3 +1,7 @@
+#[path = "support/daemon.rs"]
+mod daemon_fixture;
+use daemon_fixture::DaemonGuard;
+
 #[path = "support/git.rs"]
 mod git_fixture;
 use git_fixture::{git, init_repo};
@@ -19,9 +23,9 @@ use std::{
 use tempfile::TempDir;
 
 struct Fixture {
+    daemon: DaemonGuard,
     root: TempDir,
     repo: PathBuf,
-    daemon: Child,
 }
 
 impl Fixture {
@@ -56,14 +60,8 @@ impl Fixture {
         );
         // Model a starting commit already present on a remote, without network I/O.
         git(&repo, &["update-ref", "refs/remotes/origin/main", "HEAD"]);
-        let daemon = cli(root.path())
-            .args(["daemon", "run"])
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .unwrap();
-        let mut fixture = Self { root, repo, daemon };
-        fixture.wait_ready();
+        let daemon = DaemonGuard::start(root.path(), &mut cli(root.path()));
+        let fixture = Self { root, repo, daemon };
         fixture.ok(&["repo", "add", fixture.repo.to_str().unwrap()]);
         fixture
     }
@@ -84,26 +82,9 @@ impl Fixture {
         );
     }
 
-    fn wait_ready(&mut self) {
-        let deadline = Instant::now() + Duration::from_secs(5);
-        while !self.run(&["daemon", "status"]).status.success() {
-            assert!(self.daemon.try_wait().unwrap().is_none(), "daemon exited");
-            assert!(Instant::now() < deadline, "daemon startup timeout");
-            thread::sleep(Duration::from_millis(20));
-        }
-    }
-
     fn restart(&mut self) {
-        self.daemon.kill().unwrap();
-        self.daemon.wait().unwrap();
-        self.daemon = self
-            .command()
-            .args(["daemon", "run"])
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .unwrap();
-        self.wait_ready();
+        self.daemon
+            .restart(self.root.path(), &mut cli(self.root.path()));
     }
 
     fn command(&self) -> Command {
@@ -193,13 +174,6 @@ impl Fixture {
             child.wait_with_output().unwrap(),
             String::from_utf8(transcript).unwrap(),
         )
-    }
-}
-
-impl Drop for Fixture {
-    fn drop(&mut self) {
-        let _ = self.daemon.kill();
-        let _ = self.daemon.wait();
     }
 }
 
@@ -1460,15 +1434,8 @@ fn ports_avoid_listeners_and_concurrent_allocations_are_unique_and_persistent() 
     }
     let before = fixture.ok(&["port", "ports"]);
     assert!(fixture.run(&["daemon", "stop"]).status.success());
-    fixture.daemon.wait().unwrap();
-    fixture.daemon = fixture
-        .command()
-        .args(["daemon", "run"])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .unwrap();
-    fixture.wait_ready();
+    fixture.daemon.child.wait().unwrap();
+    fixture.restart();
     assert_eq!(fixture.ok(&["port", "ports"]), before);
     fixture.ok(&["rm", "ports"]);
 }
@@ -2511,15 +2478,8 @@ fn registry_survives_daemon_restart() {
     let mut fixture = Fixture::new();
     let workspace = fixture.add("persistent");
     fixture.run(&["daemon", "stop"]);
-    fixture.daemon.wait().unwrap();
-    fixture.daemon = fixture
-        .command()
-        .args(["daemon", "run"])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .unwrap();
-    fixture.wait_ready();
+    fixture.daemon.child.wait().unwrap();
+    fixture.restart();
     assert_eq!(
         fixture.ok(&["inspect", "persistent"])["workspace"]["id"],
         workspace["id"]
@@ -3054,16 +3014,9 @@ fn simulator_failures_retain_claims_and_restart_never_reassigns_them() {
     fs::remove_file(fixture.root.path().join("sim-fail")).unwrap();
     fixture.ok(&["sim", "release", "default", "first"]);
     let lease = fixture.ok(&["sim", "acquire", "first"]);
-    fixture.daemon.kill().unwrap();
-    fixture.daemon.wait().unwrap();
-    fixture.daemon = fixture
-        .command()
-        .args(["daemon", "run"])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .unwrap();
-    fixture.wait_ready();
+    fixture.daemon.child.kill().unwrap();
+    fixture.daemon.child.wait().unwrap();
+    fixture.restart();
     assert_eq!(fixture.ok(&["sim", "acquire", "first"]), lease);
     assert_eq!(
         fixture.run(&["sim", "acquire", "second"]).status.code(),
@@ -3409,16 +3362,9 @@ fn clean_simulator_requires_reason_minimizes_erasure_and_keeps_audit_after_remov
     );
     fixture.ok(&["rm", "third"]);
     assert_eq!(fixture.ok(&["sim", "history", "--all"]), history);
-    fixture.daemon.kill().unwrap();
-    fixture.daemon.wait().unwrap();
-    fixture.daemon = fixture
-        .command()
-        .args(["daemon", "run"])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .unwrap();
-    fixture.wait_ready();
+    fixture.daemon.child.kill().unwrap();
+    fixture.daemon.child.wait().unwrap();
+    fixture.restart();
     assert_eq!(fixture.ok(&["sim", "history", "--all"]), history);
     let devices: Value = serde_json::from_str(
         &fs::read_to_string(fixture.root.path().join("sim-devices.json")).unwrap(),
@@ -3776,16 +3722,9 @@ fn resource_claims_are_atomic_persistent_and_wait_for_release() {
     assert_eq!(successes.len(), 3);
     let leases = fixture.ok(&["resource", "--all"]);
     assert_eq!(leases[0]["leases"].as_array().unwrap().len(), 3);
-    fixture.daemon.kill().unwrap();
-    fixture.daemon.wait().unwrap();
-    fixture.daemon = fixture
-        .command()
-        .args(["daemon", "run"])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .unwrap();
-    fixture.wait_ready();
+    fixture.daemon.child.kill().unwrap();
+    fixture.daemon.child.wait().unwrap();
+    fixture.restart();
     assert_eq!(fixture.ok(&["resource", "--all"]), leases);
     let mut waiter = fixture
         .command()
@@ -4624,16 +4563,9 @@ fn rwlock_modes_survive_restart_wait_and_failed_removal() {
     fixture.add("writer");
     let lease = fixture.ok(&["resource", "acquire", "cache", "reader", "--mode", "read"]);
     let writer = fixture.ok(&["resource", "acquire", "index", "writer", "--mode", "write"]);
-    fixture.daemon.kill().unwrap();
-    fixture.daemon.wait().unwrap();
-    fixture.daemon = fixture
-        .command()
-        .args(["daemon", "run"])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .unwrap();
-    fixture.wait_ready();
+    fixture.daemon.child.kill().unwrap();
+    fixture.daemon.child.wait().unwrap();
+    fixture.restart();
     assert_eq!(
         fixture.ok(&["resource", "acquire", "cache", "reader", "--mode", "read"]),
         lease
@@ -8132,8 +8064,8 @@ fn land_interruptions_stop_merge_drivers_and_restore_the_default_checkout() {
         assert_eq!(during["executions"].as_array().unwrap().len(), 1);
         assert!(during["executions"][0]["child"].is_object());
         if interruption == "daemon" {
-            fixture.daemon.kill().unwrap();
-            fixture.daemon.wait().unwrap();
+            fixture.daemon.child.kill().unwrap();
+            fixture.daemon.child.wait().unwrap();
         } else if interruption == "interrupt" {
             assert_eq!(unsafe { libc::kill(land.id() as i32, libc::SIGINT) }, 0);
         } else {
