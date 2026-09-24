@@ -6272,6 +6272,8 @@ fn removal_picker_keeps_or_deletes_the_selected_branch_and_can_cancel() {
         if label == "Cancel" {
             assert!(transcript.contains("removal canceled"), "{transcript}");
             assert!(path.join("uncommitted").exists());
+        } else {
+            assert!(transcript.contains("?? uncommitted"), "{transcript}");
         }
     }
 }
@@ -6290,6 +6292,7 @@ fn interactive_removal_confirms_and_defaults_to_no_without_affecting_scripts() {
         let (no, prompt) = fixture.interactive(&["rm", "worker", flag], "n\n");
         assert!(!no.status.success());
         assert!(prompt.contains("Are you sure? [y/N]"), "{prompt}");
+        assert!(prompt.contains("?? uncommitted"), "{prompt}");
         assert!(path.join("uncommitted").exists());
         let (yes, prompt) = fixture.interactive(&["rm", "worker", flag], "maybe\ny\n");
         assert!(yes.status.success(), "{prompt}");
@@ -6314,6 +6317,70 @@ fn interactive_removal_confirms_and_defaults_to_no_without_affecting_scripts() {
     let (yes, prompt) = fixture.interactive(&["repo", "rm", "project"], "Y\n");
     assert!(yes.status.success(), "{prompt}");
     assert!(!fixture.repo.exists());
+}
+
+#[test]
+fn removal_confirmation_lists_git_changes_before_asking() {
+    let fixture = Fixture::new();
+    let workspace = fixture.add("preview");
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    let (no, prompt) = fixture.interactive(&["rm", "preview", "--keep-branch"], "n\n");
+    assert!(!no.status.success());
+    assert!(!prompt.contains("(Git status)"), "{prompt}");
+
+    for name in ["modified", "deleted"] {
+        fs::write(path.join(name), "original\n").unwrap();
+    }
+    git(path, &["add", "."]);
+    git(
+        path,
+        &[
+            "-c",
+            "user.name=Shoal Test",
+            "-c",
+            "user.email=shoal@example.invalid",
+            "commit",
+            "-m",
+            "Files for removal preview",
+        ],
+    );
+    git(path, &["mv", "tracked", "renamed file"]);
+    fs::write(path.join("modified"), "changed\n").unwrap();
+    fs::remove_file(path.join("deleted")).unwrap();
+    fs::write(path.join("added"), "staged\n").unwrap();
+    git(path, &["add", "added"]);
+    fs::create_dir(path.join("new directory")).unwrap();
+    fs::write(path.join("new directory/child"), "untracked\n").unwrap();
+    fs::write(path.join("line\nbreak"), "untracked\n").unwrap();
+    fs::create_dir(path.join("ignored")).unwrap();
+    fs::write(path.join("ignored/cache"), "ignored\n").unwrap();
+    git(path, &["config", "status.relativePaths", "true"]);
+    git(path, &["config", "status.showUntrackedFiles", "no"]);
+
+    let (no, prompt) = fixture.interactive(&["rm", "preview", "--delete-branch"], "n\n");
+    assert!(!no.status.success(), "{prompt}");
+    let confirmation = prompt.find("Are you sure? [y/N]").unwrap();
+    for entry in [
+        "A  added",
+        " D deleted",
+        " M modified",
+        "R  tracked -> \"renamed file\"",
+        "?? \"new directory/child\"",
+        "?? \"line\\nbreak\"",
+    ] {
+        let position = prompt.find(entry).unwrap_or_else(|| panic!("{prompt}"));
+        assert!(position < confirmation, "{prompt}");
+    }
+    assert!(!prompt.contains("ignored/cache"), "{prompt}");
+    assert_eq!(
+        fs::read_to_string(path.join("modified")).unwrap(),
+        "changed\n"
+    );
+    assert!(path.join("new directory/child").exists());
+    let removed = fixture.run(&["rm", "preview", "--keep-branch", "--yes"]);
+    assert!(removed.status.success());
+    assert!(!String::from_utf8_lossy(&removed.stderr).contains("(Git status)"));
+    assert!(!path.exists());
 }
 
 #[test]

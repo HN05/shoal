@@ -14,6 +14,9 @@ pub struct RemovalCheck {
     /// Processes using the directory, when requested by the inspection policy.
     pub processes: Vec<String>,
     pub dirty: bool,
+    /// Git porcelain status lines, with quoted paths and individual untracked files.
+    #[serde(default)]
+    pub changed_files: Vec<String>,
     /// Commits reachable from neither a remote-tracking branch nor the local
     /// default branch, so removing the worktree could lose them.
     pub unpushed_commits: u64,
@@ -173,6 +176,7 @@ pub async fn inspect(
         running_commands,
         processes: vec![],
         dirty: false,
+        changed_files: vec![],
         unpushed_commits: 0,
         branch: None,
         matches_default_branch: false,
@@ -182,9 +186,21 @@ pub async fn inspect(
         return Ok(check);
     }
     let path = &check.workspace.path;
-    check.dirty = !git::run(path, &["status", "--porcelain", "--untracked-files=normal"])
-        .await?
-        .is_empty();
+    check.changed_files = git::run(
+        path,
+        &[
+            "-c",
+            "core.quotePath=true",
+            "status",
+            "--porcelain=v1",
+            "--untracked-files=all",
+        ],
+    )
+    .await?
+    .lines()
+    .map(str::to_owned)
+    .collect();
+    check.dirty = !check.changed_files.is_empty();
     let branch = git::run(path, &["branch", "--show-current"]).await?;
     let branch = branch.trim_end_matches('\n');
     check.branch = (!branch.is_empty()).then(|| branch.to_owned());

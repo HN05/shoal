@@ -757,16 +757,20 @@ fn confirm_removal(ctx: &Context, check: &RemovalCheck, choice: BranchChoice) ->
         BranchChoice::DeleteBranch => "delete (including unpushed commits)",
         BranchChoice::Auto => "delete (redundant)",
     };
+    let mut action = format!(
+        "Remove workspace: {}\nFiles:  delete, including uncommitted changes\nBranch: {} — {branch_action}",
+        check.workspace.name,
+        check.branch.as_deref().unwrap_or("none")
+    );
+    if !check.changed_files.is_empty() {
+        action.push_str("\nUncommitted changes and untracked files (Git status):");
+        for file in &check.changed_files {
+            action.push_str("\n  ");
+            action.push_str(file);
+        }
+    }
     ensure!(
-        ui::confirm(
-            ctx,
-            &format!(
-                "Remove workspace: {}\nFiles:  delete, including uncommitted changes\nBranch: {} — {branch_action}",
-                check.workspace.name,
-                check.branch.as_deref().unwrap_or("none")
-            ),
-            "--yes",
-        )?,
+        ui::confirm(ctx, &action, "--yes")?,
         "workspace removal canceled"
     );
     Ok(())

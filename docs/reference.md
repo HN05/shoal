@@ -618,7 +618,8 @@ following a daemon restart. Use a pre-remove hook when failure must retain owner
 
 Removal retains the default branch unless `--delete-branch`; other clean branches
 matching default/upstream or merged into the default are deleted. Otherwise fzf
-offers Cancel (default), Keep branch, or Delete branch, then `Are you sure? [y/N]`.
+offers Cancel (default), Keep branch, or Delete branch, then lists uncommitted
+changes and untracked files with Git status codes before `Are you sure? [y/N]`.
 Both choices discard uncommitted and untracked files. `--keep-branch`/`--delete-branch`
 skips the picker; add `--yes` to skip confirmation. `--yes` alone cannot choose for dirty/differing work.
 

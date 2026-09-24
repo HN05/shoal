@@ -12,7 +12,8 @@ removal, check it against the rule those files state before judging it.
   work and leases on failure, never adopts moved or replaced worktrees, and
   never signals a process whose recorded identity was not verified. Any new
   path that deletes a directory, kills a process or mutates a simulator
-  without those checks is a blocker. Doctor environment and untracked-worktree
+  without those checks is a blocker. Removal confirmations list uncommitted changes
+  and untracked files with Git status codes. Doctor environment and untracked-worktree
   checks diagnose only, including when repair is requested; dependency checks use
   the shared executable catalog.
 - Pre-setup hooks run untracked in the daemon after ownership and execution
