@@ -69,3 +69,8 @@ impl Context {
 pub fn optional(value: Option<&str>, format: impl FnOnce(&str) -> String) -> String {
     value.map(format).unwrap_or_default()
 }
+
+/// Pluralize a regular noun by appending `s` unless the count is one.
+pub fn plural(count: u64, noun: &str) -> String {
+    format!("{noun}{}", if count == 1 { "" } else { "s" })
+}

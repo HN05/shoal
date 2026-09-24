@@ -7,7 +7,7 @@ use serde_json::json;
 use crate::{
     cli::{Agent, CodexMode},
     client::{self, request},
-    context::Context,
+    context::{Context, plural},
     env, execution,
     existing_branch::{Branch, OpenedWorkspace},
     git,
@@ -539,20 +539,8 @@ pub(super) async fn list(ctx: &Context) -> Result<i32> {
         }
     })?;
     // A pointer for humans; agents cannot read notifications and JSON stays clean.
-    if !ctx.json
-        && !env::is_scoped()
-        && let Ok(Some(status)) = client::status(&ctx.paths).await
-        && status.unread_notifications > 0
-    {
-        eprintln!(
-            "{} new notification{}; run shoal notifications",
-            status.unread_notifications,
-            if status.unread_notifications == 1 {
-                ""
-            } else {
-                "s"
-            }
-        );
+    if !ctx.json && !env::is_scoped() {
+        let _ = super::notifications::unread_hint(ctx, false).await;
     }
     Ok(0)
 }
@@ -585,9 +573,9 @@ fn render_status(status: &WorkspaceStatus, json: bool) {
     );
     match &status.diff {
         Some(diff) => println!(
-            "Changes:       {} file{}, +{} -{}",
+            "Changes:       {} {}, +{} -{}",
             diff.files_changed,
-            if diff.files_changed == 1 { "" } else { "s" },
+            plural(diff.files_changed, "file"),
             diff.insertions,
             diff.deletions
         ),

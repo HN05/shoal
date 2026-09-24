@@ -7,7 +7,7 @@ use anyhow::{Context as _, Result};
 
 use crate::{
     client::{self, request},
-    context::Context,
+    context::{Context, plural},
     notifications::Notification,
     output::{Palette, Style},
     protocol::{self, Method, Response},
@@ -36,21 +36,28 @@ pub(super) async fn run(ctx: &Context, all: bool, follow: bool, limit: u32) -> R
         let ids = notifications.iter().map(|n| n.id).collect();
         request::<()>(&ctx.paths, Method::MarkNotificationsRead { ids }).await?;
     }
-    if !all
-        && let Some(status) = client::status(&ctx.paths).await?
-        && status.unread_notifications > 0
-    {
-        eprintln!(
-            "{} more new notification{}; run shoal notifications again",
-            status.unread_notifications,
-            if status.unread_notifications == 1 {
-                ""
-            } else {
-                "s"
-            }
-        );
+    if !all {
+        unread_hint(ctx, true).await?;
     }
     Ok(0)
+}
+
+pub(super) async fn unread_hint(ctx: &Context, more: bool) -> Result<()> {
+    if let Some(status) = client::status(&ctx.paths).await?
+        && status.unread_notifications > 0
+    {
+        let (prefix, suffix) = if more {
+            ("more new", " again")
+        } else {
+            ("new", "")
+        };
+        eprintln!(
+            "{} {prefix} {}; run shoal notifications{suffix}",
+            status.unread_notifications,
+            plural(status.unread_notifications, "notification")
+        );
+    }
+    Ok(())
 }
 
 /// The daemon marks each notification read as it delivers it. On a terminal,
