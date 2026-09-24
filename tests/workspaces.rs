@@ -2365,6 +2365,29 @@ fn codex_default_mode_is_read_at_launch_and_explicit_modes_override_it() {
         String::from_utf8(output.stdout).unwrap(),
         format!("\napp\n{path}\nrepo-default\n")
     );
+    // An explicit desktop handoff does not load terminal prompt templates.
+    fs::write(config_dir.join("agent-template.md"), [0xff]).unwrap();
+    for mode in ["--app", "--cli"] {
+        let output = fixture
+            .command()
+            .args(["codex", mode, "default-mode", "--", "desktop prompt"])
+            .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+            .output()
+            .unwrap();
+        if mode == "--app" {
+            assert_eq!(output.status.code(), Some(7), "{output:?}");
+            assert_eq!(
+                String::from_utf8(output.stdout).unwrap(),
+                format!("\napp\n{path}\ndesktop prompt\n")
+            );
+        } else {
+            assert!(!output.status.success());
+            assert!(
+                String::from_utf8_lossy(&output.stderr).contains("agent-template.md"),
+                "{output:?}"
+            );
+        }
+    }
 }
 
 #[test]
@@ -9243,7 +9266,7 @@ fn cli_agent_command_defaults_can_be_replaced_at_launch() {
     let workspace = fixture.ok(&["add", fixture.repo.to_str().unwrap(), "configured-agent"]);
     let path = Path::new(workspace["path"].as_str().unwrap());
     fs::write(path.join(".shoal.toml"),
-        "[commands]\nclaude = ['printf', '%s\\n', '{workspace}', '{args}', '{branch}', '{path}']\ncodex = ['printf', '%s\\n', '{args}', 'custom default']\n"
+        "[commands]\nclaude = ['printf', '%s\\n', '{workspace}', '{args}', '{branch}', '{path}', 'prompt={prompt}']\ncodex = ['printf', '%s\\n', '{args}', 'custom default', 'prompt={prompt}']\n"
     ).unwrap();
     let output = fixture.run(&["claude", "configured-agent", "--", "{path}", "two words"]);
     assert!(
@@ -9254,7 +9277,7 @@ fn cli_agent_command_defaults_can_be_replaced_at_launch() {
     assert_eq!(
         String::from_utf8(output.stdout).unwrap(),
         format!(
-            "configured-agent\n{{path}}\ntwo words\nconfigured-agent\n{}\n",
+            "configured-agent\n{{path}}\ntwo words\nconfigured-agent\n{}\nprompt=\n",
             path.display()
         )
     );
@@ -9270,7 +9293,7 @@ fn cli_agent_command_defaults_can_be_replaced_at_launch() {
     assert_eq!(
         String::from_utf8(output.stdout).unwrap(),
         format!(
-            "configured-agent\n{{path}}\ntwo words\nconfigured-agent\n{}\n",
+            "configured-agent\n{{path}}\ntwo words\nconfigured-agent\n{}\nprompt=\n",
             path.display()
         )
     );
@@ -9283,7 +9306,10 @@ fn cli_agent_command_defaults_can_be_replaced_at_launch() {
         "example",
     ]);
     assert!(output.status.success());
-    assert_eq!(output.stdout, b"--model\nexample\ncustom default\n");
+    assert_eq!(
+        output.stdout,
+        b"--model\nexample\ncustom default\nprompt=\n"
+    );
     let output = fixture.run(&[
         "run",
         "codex",
@@ -9293,7 +9319,10 @@ fn cli_agent_command_defaults_can_be_replaced_at_launch() {
         "example",
     ]);
     assert!(output.status.success());
-    assert_eq!(output.stdout, b"--model\nexample\ncustom default\n");
+    assert_eq!(
+        output.stdout,
+        b"--model\nexample\ncustom default\nprompt=\n"
+    );
 }
 
 #[test]

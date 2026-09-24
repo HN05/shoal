@@ -1,5 +1,5 @@
 //! Terminal agents run through the tracked execution wrapper.
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 
 use anyhow::{Context as _, Result};
 
@@ -13,7 +13,7 @@ use crate::{
         context::Context,
         ui::{self, Fallback},
     },
-    config::templates,
+    config::{Effective, named_commands, templates},
     execution,
     happy::HappyAgent,
     model::Workspace,
@@ -26,34 +26,13 @@ pub(in crate::cli) async fn claude(
     args: Vec<OsString>,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let inspection = client::inspect(&ctx.paths, workspace).await?;
-    let settings = client::settings(
-        &ctx.paths,
-        ConfigTarget::Workspace(inspection.workspace.id.clone()),
-    )
-    .await?;
-    let instructions =
-        templates::instructions(settings.agent_template.as_deref(), &inspection.workspace);
-    trust_claude(ctx, &inspection.workspace.path);
-    let args = templates::instruction_args(HappyAgent::Claude, instructions)
+    let launch = ResolvedLaunch::inspect(ctx, workspace, None).await?;
+    trust_claude(ctx, &launch.workspace.path);
+    let args = templates::instruction_args(HappyAgent::Claude, launch.instructions())
         .into_iter()
         .chain(args)
         .collect();
-    let command = crate::config::named_commands::expand(
-        &ctx.paths,
-        &settings.commands,
-        "claude",
-        &inspection.workspace,
-        args,
-    )
-    .await?;
-    execution::run(
-        &ctx.paths,
-        inspection.workspace.id,
-        command,
-        Some("claude".into()),
-    )
-    .await
+    launch.run(ctx, "claude", args, "").await
 }
 
 pub(in crate::cli) async fn codex(
@@ -71,23 +50,13 @@ pub(in crate::cli) async fn codex(
     if mode.unwrap_or(settings.codex.default_mode) == CodexMode::App {
         return open_app(ctx, Some(workspace), "codex", args).await;
     }
-    let inspection = client::inspect(&ctx.paths, workspace.clone()).await?;
-    trust_codex(ctx, &inspection.workspace.path);
-    let instructions =
-        templates::instructions(settings.agent_template.as_deref(), &inspection.workspace);
-    let args = templates::instruction_args(HappyAgent::Codex, instructions)
+    let launch = ResolvedLaunch::inspect(ctx, workspace, Some(settings)).await?;
+    trust_codex(ctx, &launch.workspace.path);
+    let args = templates::instruction_args(HappyAgent::Codex, launch.instructions())
         .into_iter()
         .chain(args)
         .collect();
-    let command = crate::config::named_commands::expand(
-        &ctx.paths,
-        &settings.commands,
-        "codex",
-        &inspection.workspace,
-        args,
-    )
-    .await?;
-    execution::run(&ctx.paths, workspace, command, Some("codex".into())).await
+    launch.run(ctx, "codex", args, "").await
 }
 
 pub(super) async fn custom_agent(
@@ -99,27 +68,72 @@ pub(super) async fn custom_agent(
 ) -> Result<i32> {
     let settings =
         client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
-    let instructions = templates::instructions(settings.agent_template.as_deref(), &workspace);
-    let prompt = [instructions, prompt.unwrap_or_default()]
+    let launch = ResolvedLaunch {
+        workspace,
+        settings,
+    };
+    let prompt = [launch.instructions(), prompt.unwrap_or_default()]
         .into_iter()
         .filter(|part| !part.is_empty())
         .collect::<Vec<_>>()
         .join("\n\n");
-    let argv = settings
+    let argv = launch
+        .settings
         .commands
         .get(name)
         .with_context(|| format!("unknown agent {name:?}; define it in [commands]"))?;
     if !prompt.is_empty() && !argv.iter().any(|arg| arg.contains("{prompt}")) {
         args.insert(0, prompt.clone().into());
     }
-    let command = crate::config::named_commands::expand_with_fields(
-        &ctx.paths,
-        &settings.commands,
-        name,
-        &workspace,
-        args,
-        &[("{prompt}", std::ffi::OsStr::new(&prompt))],
-    )
-    .await?;
-    execution::run(&ctx.paths, workspace.id, command, Some(name.into())).await
+    launch.run(ctx, name, args, &prompt).await
+}
+
+/// Resolved for one terminal launch; settings are never cached across launches.
+struct ResolvedLaunch {
+    workspace: Workspace,
+    settings: Effective,
+}
+
+impl ResolvedLaunch {
+    /// Codex supplies the settings it already read to choose CLI or desktop mode.
+    async fn inspect(
+        ctx: &Context,
+        workspace: String,
+        settings: Option<Effective>,
+    ) -> Result<Self> {
+        let workspace = client::inspect(&ctx.paths, workspace).await?.workspace;
+        let settings = match settings {
+            Some(settings) => settings,
+            None => {
+                client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?
+            }
+        };
+        Ok(Self {
+            workspace,
+            settings,
+        })
+    }
+
+    fn instructions(&self) -> String {
+        templates::instructions(self.settings.agent_template.as_deref(), &self.workspace)
+    }
+
+    async fn run(
+        self,
+        ctx: &Context,
+        name: &str,
+        args: Vec<OsString>,
+        prompt: &str,
+    ) -> Result<i32> {
+        let command = named_commands::expand_with_fields(
+            &ctx.paths,
+            &self.settings.commands,
+            name,
+            &self.workspace,
+            args,
+            &[("{prompt}", OsStr::new(prompt))],
+        )
+        .await?;
+        execution::run(&ctx.paths, self.workspace.id, command, Some(name.into())).await
+    }
 }
