@@ -415,7 +415,7 @@ pub fn repository_label(repo: &Repository, palette: Palette) -> String {
 /// Picker entries that stay unambiguous when repositories share a name.
 pub async fn repository_choices(mut repos: Vec<Repository>) -> Result<Entries> {
     for repo in &mut repos {
-        if let Some(url) = crate::forge::repository::remote_url(&repo.source).await? {
+        if let Some(url) = crate::forge::repository::remote_url_from_source(&repo.source).await? {
             repo.source = url;
         }
     }

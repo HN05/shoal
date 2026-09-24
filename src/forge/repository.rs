@@ -43,23 +43,33 @@ pub fn host(source: &str) -> Option<&str> {
 /// Local checkouts use origin; clones retain their original source URL even
 /// when their checkout is temporarily unavailable. No network access is needed.
 pub async fn identity(source: &str) -> Result<Option<String>> {
-    Ok(remote_url(source).await?.map(|url| url_key(&url)))
+    Ok(remote_url_from_source(source)
+        .await?
+        .map(|url| url_key(&url)))
 }
 
-pub async fn remote_url(source: &str) -> Result<Option<String>> {
-    let url = if Path::new(source).exists() {
-        let remotes = git::run(Path::new(source), &["remote"]).await?;
-        if !remotes.lines().any(|remote| remote == "origin") {
-            return Ok(None);
-        }
-        git::run(Path::new(source), &["remote", "get-url", "origin"])
+/// Resolve a source that may be an existing checkout or a clone URL.
+pub async fn remote_url_from_source(source: &str) -> Result<Option<String>> {
+    let path = Path::new(source);
+    if path.exists() {
+        remote_url_from_path(path).await
+    } else {
+        Ok(Some(source.to_owned()))
+    }
+}
+
+/// Read origin from a known checkout without interpreting its path as a URL.
+pub async fn remote_url_from_path(path: &Path) -> Result<Option<String>> {
+    let remotes = git::run(path, &["remote"]).await?;
+    if !remotes.lines().any(|remote| remote == "origin") {
+        return Ok(None);
+    }
+    Ok(Some(
+        git::run(path, &["remote", "get-url", "origin"])
             .await?
             .trim()
-            .to_owned()
-    } else {
-        source.to_owned()
-    };
-    Ok(Some(url))
+            .to_owned(),
+    ))
 }
 
 /// Normalize equivalent transports of one remote to a comparable key.
@@ -120,7 +130,80 @@ pub async fn find_by_identity<'a>(
 
 #[cfg(test)]
 mod tests {
-    use super::{directory_name, host, url_key};
+    use super::*;
+
+    #[tokio::test]
+    async fn source_lookup_keeps_urls_and_reads_only_origin_from_checkouts() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path();
+        git::run(path, &["init", "--quiet", "--template="])
+            .await
+            .unwrap();
+        let source = path.to_str().unwrap();
+        assert_eq!(remote_url_from_source(source).await.unwrap(), None);
+        git::run(
+            path,
+            &["remote", "add", "upstream", "https://other.test/a/b"],
+        )
+        .await
+        .unwrap();
+        assert_eq!(remote_url_from_path(path).await.unwrap(), None);
+
+        let url = "ssh://git@example.com:2222/team/Repo.git";
+        git::run(path, &["remote", "add", "origin", url])
+            .await
+            .unwrap();
+        assert_eq!(
+            remote_url_from_path(path).await.unwrap().as_deref(),
+            Some(url)
+        );
+        assert_eq!(
+            remote_url_from_source(source).await.unwrap().as_deref(),
+            Some(url)
+        );
+        assert_eq!(
+            identity(source).await.unwrap(),
+            identity(url).await.unwrap()
+        );
+        assert_eq!(
+            remote_url_from_source(url).await.unwrap().as_deref(),
+            Some(url)
+        );
+
+        let missing = path.join("missing");
+        assert!(remote_url_from_path(&missing).await.is_err());
+        let missing = missing.to_str().unwrap();
+        assert_eq!(
+            remote_url_from_source(missing).await.unwrap().as_deref(),
+            Some(missing)
+        );
+    }
+
+    #[tokio::test]
+    async fn origin_lookup_accepts_non_utf8_checkout_paths() {
+        use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
+
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join(OsStr::from_bytes(b"repo-\xff"));
+        std::fs::create_dir(&path).unwrap();
+        git::run(&path, &["init", "--quiet", "--template="])
+            .await
+            .unwrap();
+        let url = "git@example.com:team/repo.git";
+        git::run(&path, &["remote", "add", "origin", url])
+            .await
+            .unwrap();
+        let remote = remote_url_from_path(&path).await.unwrap().unwrap();
+        let forge = crate::forge::ForgeRepo::parse(&remote).unwrap();
+        assert_eq!(
+            forge.issue("178").unwrap().1,
+            "https://example.com/team/repo/issues/178"
+        );
+        assert_eq!(
+            forge.pull("178").unwrap().1,
+            "https://example.com/team/repo/pulls/178"
+        );
+    }
 
     #[test]
     fn clone_directory_names_are_readable_single_components() {

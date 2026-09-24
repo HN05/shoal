@@ -53,7 +53,7 @@ pub(super) async fn repository_with_remote<'a>(
 ) -> Result<&'a Repository> {
     let mut matches = Vec::new();
     for repo in repos {
-        let Some(remote) = repository::remote_url(&repo.source).await? else {
+        let Some(remote) = repository::remote_url_from_source(&repo.source).await? else {
             continue;
         };
         if ForgeRepo::parse(&remote).is_ok_and(|remote| remote == forge) {
@@ -114,10 +114,9 @@ impl Issue {
 }
 
 pub(super) async fn load(repo: &Repository, input: &str) -> Result<Issue> {
-    let remote =
-        repository::remote_url(repo.path.to_str().context("repository path is not UTF-8")?)
-            .await?
-            .context("issue lookup needs an origin remote")?;
+    let remote = repository::remote_url_from_path(&repo.path)
+        .await?
+        .context("issue lookup needs an origin remote")?;
     let forge = ForgeRepo::parse(&remote)?;
     let (number, url) = forge.issue(input)?;
     let (title, details) = forge.issue_details(&repo.path, number).await?;

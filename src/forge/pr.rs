@@ -178,14 +178,9 @@ impl Manager {
         workspace: &Workspace,
         input: &str,
     ) -> Result<(ForgeRepo, u64, String)> {
-        let remote = repository::remote_url(
-            workspace
-                .path
-                .to_str()
-                .context("workspace path is not UTF-8")?,
-        )
-        .await?
-        .context("PR lookup needs an origin remote")?;
+        let remote = repository::remote_url_from_path(&workspace.path)
+            .await?
+            .context("PR lookup needs an origin remote")?;
         let forge = ForgeRepo::parse(&remote)?;
         let (number, url) = forge.pull(input)?;
         Ok((forge, number, url))
