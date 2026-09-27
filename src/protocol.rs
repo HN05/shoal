@@ -24,7 +24,7 @@ use crate::{
     sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
 };
 
-pub const VERSION: u32 = 44;
+pub const VERSION: u32 = 45;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -618,6 +618,20 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    #[test]
+    fn selective_unwatch_round_trips_and_rejects_conflicting_actions() {
+        let wire =
+            json!({"set_pr": {"workspace": "worker", "url": null, "clear": false, "unwatch": "7"}});
+        let decoded: Method = serde_json::from_value(wire.clone()).unwrap();
+        assert_eq!(serde_json::to_value(decoded).unwrap(), wire);
+        for action in [
+            json!({"clear": true, "unwatch": "7"}),
+            json!({"clear": false, "url": "8", "unwatch": "7"}),
+        ] {
+            assert!(serde_json::from_value::<crate::forge::pr::Action>(action).is_err());
+        }
     }
 
     #[test]

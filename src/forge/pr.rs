@@ -101,6 +101,7 @@ impl From<Registration> for RegistrationRecord {
 #[serde(try_from = "ActionFields", into = "ActionFields")]
 pub enum Action {
     Watch { url: String },
+    Unwatch { url: String },
     Acknowledge,
     Clear,
 }
@@ -110,31 +111,42 @@ pub enum Action {
 struct ActionFields {
     url: Option<String>,
     clear: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    unwatch: Option<String>,
 }
 
 impl TryFrom<ActionFields> for Action {
     type Error = anyhow::Error;
 
     fn try_from(fields: ActionFields) -> Result<Self> {
-        match (fields.url, fields.clear) {
-            (Some(url), false) => Ok(Self::Watch { url }),
-            (None, false) => Ok(Self::Acknowledge),
-            (None, true) => Ok(Self::Clear),
-            (Some(_), true) => {
+        match (fields.url, fields.clear, fields.unwatch) {
+            (Some(url), false, None) => Ok(Self::Watch { url }),
+            (None, false, None) => Ok(Self::Acknowledge),
+            (None, false, Some(url)) => Ok(Self::Unwatch { url }),
+            (None, true, None) => Ok(Self::Clear),
+            (Some(_), true, None) => {
                 anyhow::bail!("invalid PR cleanup action: clear cannot include a URL")
             }
+            _ => anyhow::bail!(
+                "invalid PR cleanup action: unwatch cannot be combined with another action"
+            ),
         }
     }
 }
 
 impl From<Action> for ActionFields {
     fn from(action: Action) -> Self {
-        let (url, clear) = match action {
-            Action::Watch { url } => (Some(url), false),
-            Action::Acknowledge => (None, false),
-            Action::Clear => (None, true),
+        let (url, clear, unwatch) = match action {
+            Action::Watch { url } => (Some(url), false, None),
+            Action::Unwatch { url } => (None, false, Some(url)),
+            Action::Acknowledge => (None, false, None),
+            Action::Clear => (None, true, None),
         };
-        Self { url, clear }
+        Self {
+            url,
+            clear,
+            unwatch,
+        }
     }
 }
 
@@ -161,7 +173,7 @@ impl Manager {
         let _guard = self.pr_gate.lock().await;
         let workspace = self.workspace(selector).await?;
         ensure!(
-            matches!(action, Action::Clear)
+            matches!(action, Action::Clear | Action::Unwatch { .. })
                 || self
                     .workspace_settings(&workspace)
                     .await?
@@ -169,11 +181,12 @@ impl Manager {
                     .enabled,
             "PR cleanup is disabled by [pr_cleanup] enabled = false"
         );
-        if !matches!(action, Action::Clear) {
+        if !matches!(action, Action::Clear | Action::Unwatch { .. }) {
             self.verify_worktree(&workspace).await?;
         }
         let kind = match action {
             Action::Clear => None,
+            Action::Unwatch { url } => self.without_pr_watch(&workspace, &url).await?,
             Action::Watch { url: input } => {
                 current_head(&workspace).await?;
                 let (forge, number, url) = self.pr_forge(&workspace, &input).await?;
@@ -211,6 +224,28 @@ impl Manager {
         }).await?;
         self.cleanup_notify.notify_one();
         Ok(())
+    }
+
+    async fn without_pr_watch(
+        &self,
+        workspace: &Workspace,
+        input: &str,
+    ) -> Result<Option<RegistrationKind>> {
+        let (_, _, url) = self.pr_forge(workspace, input).await?;
+        let Some(Registration {
+            kind:
+                RegistrationKind::Watch {
+                    mut urls,
+                    merged_head,
+                },
+            ..
+        }) = self.pr_registration(&workspace.id).await?
+        else {
+            anyhow::bail!("PR is not watched: {url}");
+        };
+        ensure!(urls.contains(&url), "PR is not watched: {url}");
+        urls.retain(|watched| watched != &url);
+        Ok((!urls.is_empty()).then_some(RegistrationKind::Watch { urls, merged_head }))
     }
 
     async fn pr_forge(
@@ -401,6 +436,67 @@ pub(crate) async fn current_head(workspace: &Workspace) -> Result<String> {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[tokio::test]
+    async fn unwatch_removes_only_the_selected_pr_even_when_cleanup_is_disabled() {
+        use crate::test_support::{git, manager, repository};
+        let (root, manager) = manager().await;
+        let path = repository(root.path(), "repo");
+        let repo = manager
+            .register_repository(path.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        let workspace = manager
+            .create_workspace(&repo.id, "watch".into(), None, None, None)
+            .await
+            .unwrap();
+        git(
+            &path,
+            &[
+                "remote",
+                "add",
+                "origin",
+                "https://github.com/team/repo.git",
+            ],
+        );
+        manager
+            .set_repository_config(&repo.id, Some("[pr_cleanup]\nenabled=false\n".into()))
+            .await
+            .unwrap();
+        let id = workspace.id.clone();
+        manager.store.run(move |db| {
+            db.execute("INSERT INTO pr_cleanup(workspace_id,record) VALUES (?1,?2)",
+                rusqlite::params![id, json!({"urls":["https://github.com/team/repo/pull/1", "https://github.com/team/repo/pull/2"]}).to_string()])?;
+            Ok(())
+        }).await.unwrap();
+        assert!(
+            manager
+                .set_pr(&workspace.id, Action::Unwatch { url: "3".into() })
+                .await
+                .is_err()
+        );
+        manager
+            .set_pr(&workspace.id, Action::Unwatch { url: "1".into() })
+            .await
+            .unwrap();
+        assert!(
+            matches!(manager.pr_registration(&workspace.id).await.unwrap().unwrap().kind,
+            RegistrationKind::Watch { urls, .. } if urls == ["https://github.com/team/repo/pull/2"])
+        );
+        manager
+            .set_pr(&workspace.id, Action::Unwatch { url: "2".into() })
+            .await
+            .unwrap();
+        assert!(
+            manager
+                .pr_registration(&workspace.id)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        assert!(manager.completion(&workspace.id).await.unwrap().is_none());
+        assert!(workspace.path.exists());
+    }
 
     #[test]
     fn registration_round_trips_legacy_records() {
