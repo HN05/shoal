@@ -775,12 +775,14 @@ false` with exit 2, and `--port <suggested>` or `--on-conflict auto` accepts.
 Add `source <(shoal shell init)` to `.bashrc`/`.zshrc` (or `eval "$(shoal shell
 init)"` for Bash without process substitution) and run it in open terminals,
 including after upgrades. The function lets `add` and `cd` enter workspaces
-and moves you out of a removed one. `shoal cd` always opens fzf, `shoal cd
+and moves you out of a removed one. If cleanup removes your directory while an
+agent runs, the shell returns to the nearest surviving parent after exit or at
+the next prompt, preserving the exit status. `shoal cd` always opens fzf, `shoal cd
 <name>` goes directly, and `shoal cd -` returns to the shell's previous
 directory (`OLDPWD`, per shell), refusing a deleted destination. Scoped agents
 cannot navigate outside their worktree. Without the function, Shoal prints the
 destination and, in an interactive terminal, explains how to load the integration;
-`--json` returns the path and never changes directory.
+`--json` returns the path without requesting navigation.
 
 ### Tab completion
 

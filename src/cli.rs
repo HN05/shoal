@@ -551,6 +551,10 @@ pub enum PortCommand {
 #[derive(Debug, Subcommand)]
 pub enum ShellCommand {
     Init,
+    #[command(hide = true)]
+    Recover {
+        path: PathBuf,
+    },
 }
 
 #[derive(Debug, Subcommand)]

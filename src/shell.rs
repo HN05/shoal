@@ -10,28 +10,76 @@ pub const INIT_COMMAND: &str = "source <(shoal shell init)";
 
 /// Directory changes use a private data file, never shell code evaluated from
 /// a repository path or command output. The wrapper works in Bash and Zsh.
-pub const INIT: &str = r#"shoal() {
+pub const INIT: &str = r#"_shoal_recover_directory() {
+  local shoal_status=$? shoal_recovery
+  if [ -z "${SHOAL_SCOPE_TOKEN+x}" ] && { [ ! -d "$PWD" ] || ! builtin pwd -P >/dev/null 2>&1; }; then
+    shoal_recovery="$(command shoal shell recover -- "$PWD" 2>/dev/null)" &&
+      builtin cd -- "$shoal_recovery"
+  fi
+  return "$shoal_status"
+}
+
+shoal() {
   local shoal_cd_file shoal_destination shoal_exit=0
   shoal_cd_file="$(mktemp "${TMPDIR:-/tmp}/shoal-cd.XXXXXXXX")" || return 1
   SHOAL_PREVIOUS_DIR="${OLDPWD-}" SHOAL_SHELL_DIRECTIVE="$shoal_cd_file" command shoal "$@" || shoal_exit=$?
   IFS= read -r shoal_destination < "$shoal_cd_file" || :
   command rm -f -- "$shoal_cd_file"
   if [ -n "$shoal_destination" ]; then
+    if [ ! -d "$shoal_destination" ]; then
+      shoal_destination="$(command shoal shell recover -- "$shoal_destination")" || return "$?"
+    fi
     builtin cd -- "$shoal_destination" || return 1
   fi
+  _shoal_recover_directory || :
   return "$shoal_exit"
 }
 
 if [ -n "${ZSH_VERSION-}" ]; then
+  typeset -ga precmd_functions
+  if (( ! ${precmd_functions[(Ie)_shoal_recover_directory]} )); then
+    precmd_functions=(_shoal_recover_directory "${precmd_functions[@]}")
+  fi
   if ! typeset -f compdef >/dev/null; then
     autoload -Uz compinit
     compinit
   fi
   source <(command shoal completions zsh)
 elif [ -n "${BASH_VERSION-}" ]; then
+  if [[ "$(declare -p PROMPT_COMMAND 2>/dev/null)" == "declare -a "* ]]; then
+    case " ${PROMPT_COMMAND[*]-} " in
+      *" _shoal_recover_directory "*) ;;
+      *) PROMPT_COMMAND=(_shoal_recover_directory "${PROMPT_COMMAND[@]}") ;;
+    esac
+  else
+    case "${PROMPT_COMMAND-}" in
+      _shoal_recover_directory|"_shoal_recover_directory;"*) ;;
+      *) PROMPT_COMMAND="_shoal_recover_directory${PROMPT_COMMAND:+; $PROMPT_COMMAND}" ;;
+    esac
+  fi
   eval "$(command shoal completions bash)"
 fi
 "#;
+
+/// Cleanup may already have released the workspace record. Recover using only
+/// the shell's last path, without needing a daemon or a usable current directory.
+pub fn recovery_directory(path: &Path) -> Result<PathBuf> {
+    ensure!(
+        !crate::env::is_scoped(),
+        "workspace processes cannot navigate outside their worktree"
+    );
+    ensure!(path.is_absolute(), "recovery path must be absolute");
+    let destination = path
+        .ancestors()
+        .find(|ancestor| ancestor.is_dir())
+        .context("no surviving parent directory")?;
+    let text = destination.to_str().context("recovery path is not UTF-8")?;
+    ensure!(
+        !text.contains(['\n', '\r']),
+        "shell navigation does not support newlines in paths"
+    );
+    Ok(destination.to_owned())
+}
 
 pub fn completions(shell: clap_complete::Shell) -> Result<String> {
     let mut script = Vec::new();

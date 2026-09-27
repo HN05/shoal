@@ -105,6 +105,9 @@ removal, check it against the rule those files state before judging it.
   context. Explicit misses never fall back. Noninteractive and
   JSON calls without a current workspace need a target. Bare `cd` always picks;
   all-workspace operations and checkout-aware `config show` keep their selection.
+- Shell integration recovers deleted current directories and pending destinations
+  to their nearest surviving ancestor without a daemon, preserving exit status and
+  existing prompt hooks. Scoped callers cannot use this recovery.
 - Agent pickers offer “No agent”: issue creation continues without a launch,
   and review returns without starting a reviewer.
 - Claude and Codex launches (including Happy and Codex app handoffs) persist

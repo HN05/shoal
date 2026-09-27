@@ -121,6 +121,19 @@ async fn collect_workspace_overviews<T>(
 }
 
 pub(crate) async fn run(cli: Cli) -> Result<i32> {
+    // Shell recovery must also work after cleanup, without daemon configuration.
+    if let Some(Command::Shell {
+        command: ShellCommand::Recover { path },
+    }) = &cli.command
+    {
+        let destination = shell::recovery_directory(path)?;
+        if cli.json {
+            println!("{}", json!({"path": destination}));
+        } else {
+            println!("{}", destination.display());
+        }
+        return Ok(0);
+    }
     // Skill delivery is independent of daemon state and socket-path limits.
     if let Some(Command::Skill { command }) = &cli.command {
         return skill::run(command.as_ref(), cli.json);
@@ -162,6 +175,9 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             ctx.emit(shell::INIT, json!({"script": shell::INIT}))?;
             Ok(0)
         }
+        Command::Shell {
+            command: ShellCommand::Recover { .. },
+        } => unreachable!("shell recovery is handled before loading paths"),
         Command::Repo { command } => repositories::run(&ctx, command).await,
         Command::Add {
             path,

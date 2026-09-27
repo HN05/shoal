@@ -225,7 +225,10 @@ semantic palette at the CLI presentation layer; machine output and stored values
 stay unstyled. Progress during silent waits belongs to the CLI and shows transient elapsed-time feedback on terminal stderr,
 suppressed for JSON and dumb terminals. Rust chooses paths, including
 `<root_dir>/<repo>` after removal; the Bash/Zsh wrapper changes directory
-without evaluating repository code.
+without evaluating repository code. If cleanup removes the current directory or
+a pending navigation destination, shell integration recovers to its nearest surviving
+ancestor after the command or at the next prompt, preserving the command status.
+Recovery needs no daemon and is disabled for scoped callers.
 Confirmations show the action and ask `[y/N]`, cancel on Enter, `n`, EOF or
 Ctrl-C (also after a tracked execution), and are bypassed only by
 explicit flags such as `-y`/`--yes`. Removal's branch choice stays separate from
