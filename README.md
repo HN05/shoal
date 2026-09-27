@@ -114,8 +114,10 @@ shoal done fix-login          # Mark finished and request safe cleanup
 shoal done --keep fix-login   # Mark finished; keep for review
 shoal done --cleanup fix-login # Override a configured keep default
 shoal rm fix-login            # Remove the workspace
-shoal pr 42                   # Remove when merged (also accepts a PR URL)
-shoal pr merged               # Manually confirm merge and remove
+shoal pr watch 42             # Watch a PR (also accepts a URL)
+shoal pr watch 43             # Add another; all must merge before automatic done
+shoal pr unwatch --pr 43      # Cancel one watch
+shoal pr unwatch              # Cancel all watches
 ```
 
 For workspace actions, omit the name to use your scoped or current workspace;

@@ -410,11 +410,14 @@ worktrees and dangerous paths, persists progress, and blocks new workspaces unti
 an interrupted removal is retried.
 PR cleanup is separately enabled by default: persisted watches use the
 user's gh/fj login, resolve numbers against the workspace's origin into stored
-URLs bound to that repository. Watches accumulate without duplicates and require
+URLs bound to that repository. The command interface uses explicit `pr watch` and
+`pr unwatch` actions; cancellation can select one PR or the entire set. Old bare
+registration, `clear`, and `merged` spellings are removed; `done` signals completion
+without claiming a merge. Watches accumulate without duplicates and require
 every watched PR to merge, with HEAD present in at least one; the existing branch
 checks apply to each PR. Once confirmed, the daemon records completion through
 `done`, honoring its configured default or a prior explicit choice. The confirmed
-HEAD persists so restart cannot complete the same watch set again. Manual
+HEAD persists so restart cannot complete the same watch set again. Persisted manual
 acknowledgement binds to exactly the recorded HEAD. Registrations distinguish watches from
 acknowledgements; legacy single-watch records retain their stored and JSON shape.
 Ambiguous records and conflicting actions are rejected.

@@ -662,20 +662,28 @@ With cleanup requested, shell integration leaves a clean, preserved workspace fo
 
 ### PR cleanup
 
-`shoal pr <number-or-url> [workspace]` watches a GitHub/Forgejo PR using the
-daemon's `gh`/`fj` and existing login. Numbers resolve against the selected
-workspace's origin remote; URLs must match it. Shoal stores no forge credentials.
-Persistent watches poll every ~30 seconds and suppress idle cleanup. Merged PRs
-must name the recorded branch and contain HEAD.
-`shoal pr merged [workspace]` manually acknowledges HEAD without forge tools; unless
-the worktree is dirty, the shell returns to `<root_dir>/<repo>` as after `rm`.
-Both stop tracked agents and remove immediately, retaining dirty/newer work and
-using normal resource cleanup/branch retention. `inspect` shows lookup and removal
-errors in `pr_cleanup`; an invalid registration instead fails inspection and
-retains the workspace until `shoal pr clear` clears it.
-`shoal pr clear [workspace]` cancels. `[pr_cleanup] enabled = false` disables this
-(default true), independently of idle cleanup, globally (restart after changing
-it) or in a repository config (applies at once; existing watches wait).
+`shoal pr watch <number-or-url> [workspace]` adds a GitHub/Forgejo PR to the
+workspace's persistent watch set; registering the same PR again is idempotent.
+The daemon uses its `gh`/`fj` login. Numbers resolve against the workspace's
+origin remote; URLs must match it, and each PR must name the recorded branch.
+Shoal stores no forge credentials. Watches poll every ~30 seconds and suppress
+idle cleanup.
+
+Once every watched PR has merged and at least one contains current HEAD, Shoal
+records `done` automatically. It uses `[done] cleanup`, preserving any previously
+recorded completion choice. A confirmed set survives restart without completing
+again. Cleanup uses normal branch retention and resource release, retaining dirty
+or newer work. `status` lists watched URLs; `inspect` shows lookup and removal
+errors in `pr_cleanup`. Invalid registrations retain the workspace.
+
+`shoal pr unwatch [workspace]` cancels all watches; `--pr <number-or-url>` removes
+only that PR, leaving the remaining watches active. Removing the final watch does
+not mark done. Unwatching does not undo a recorded completion; use `done --keep`
+to cancel its cleanup. `[pr_cleanup] enabled = false` pauses PR-driven completion
+and cleanup independently of idle cleanup, globally (restart after changing it)
+or per repository (applies at once). Cancellation remains available when disabled.
+Bare registration, `pr clear`, and `pr merged` are not compatibility aliases; use
+`done` to finish without a forge watch.
 
 ### Automatic cleanup
 

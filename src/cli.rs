@@ -192,15 +192,10 @@ pub enum Command {
         #[arg(long)]
         local: bool,
     },
-    /// Review PRs or manage workspace cleanup after merge.
-    #[command(arg_required_else_help = true, args_conflicts_with_subcommands = true)]
+    /// Watch PRs for automatic completion, cancel watches, or review a PR.
     Pr {
-        /// GitHub or Forgejo PR number or URL to watch.
-        #[arg(value_name = "NUMBER_OR_URL")]
-        url: Option<String>,
-        workspace: Option<String>,
         #[command(subcommand)]
-        command: Option<PrCommand>,
+        command: PrCommand,
     },
     /// Reserve and release workspace TCP ports.
     #[command(
@@ -362,10 +357,20 @@ pub enum Command {
 
 #[derive(Debug, Subcommand)]
 pub enum PrCommand {
-    /// Confirm this commit was merged; stop tracked commands and remove the workspace.
-    Merged { workspace: Option<String> },
-    /// Cancel PR cleanup for this workspace.
-    Clear { workspace: Option<String> },
+    /// Watch a PR; when all merge, mark done (may stop commands and remove the workspace).
+    Watch {
+        /// GitHub or Forgejo PR number or URL; repeated watches accumulate.
+        #[arg(value_name = "NUMBER_OR_URL")]
+        url: String,
+        workspace: Option<String>,
+    },
+    /// Cancel all PR watches, or only the selected PR with --pr.
+    Unwatch {
+        workspace: Option<String>,
+        /// Cancel only this PR; the remaining watches can still trigger completion.
+        #[arg(long = "pr", value_name = "NUMBER_OR_URL")]
+        url: Option<String>,
+    },
     /// Open a PR's branch in a workspace and review it manually or with an agent.
     Review {
         /// GitHub or Forgejo PR number or URL.
@@ -901,60 +906,35 @@ mod tests {
     }
 
     #[test]
-    fn pr_workspace_names_can_match_action_names() {
-        for workspace_name in ["merged", "clear", "review"] {
-            let cli = Cli::try_parse_from([
-                "shoal",
-                "pr",
-                "https://example.test/owner/repo/pulls/1",
-                workspace_name,
-            ])
-            .unwrap();
-            let Some(Command::Pr {
-                url,
-                workspace,
-                command,
-            }) = cli.command
-            else {
-                panic!("wrong command")
-            };
-            assert_eq!(
-                url.as_deref(),
-                Some("https://example.test/owner/repo/pulls/1")
-            );
-            assert_eq!(workspace.as_deref(), Some(workspace_name));
-            assert!(command.is_none());
+    fn pr_actions_are_explicit_and_workspace_names_remain_literal() {
+        for workspace_name in ["watch", "unwatch", "review", "merged", "clear"] {
+            let cli = Cli::try_parse_from(["shoal", "pr", "watch", "7", workspace_name]).unwrap();
+            assert!(matches!(cli.command,
+                Some(Command::Pr { command: PrCommand::Watch { url, workspace } })
+                if url == "7" && workspace.as_deref() == Some(workspace_name)));
         }
-    }
-
-    #[test]
-    fn pr_actions_remain_subcommands() {
-        let merged = Cli::try_parse_from(["shoal", "pr", "merged", "workspace"]).unwrap();
-        assert!(matches!(
-            merged.command,
-            Some(Command::Pr {
-                command: Some(PrCommand::Merged { workspace }),
-                ..
-            }) if workspace.as_deref() == Some("workspace")
-        ));
-
-        let clear = Cli::try_parse_from(["shoal", "pr", "clear", "workspace"]).unwrap();
-        assert!(matches!(
-            clear.command,
-            Some(Command::Pr {
-                command: Some(PrCommand::Clear { workspace }),
-                ..
-            }) if workspace.as_deref() == Some("workspace")
-        ));
-
+        for args in [
+            vec!["shoal", "pr", "7"],
+            vec!["shoal", "pr", "clear"],
+            vec!["shoal", "pr", "merged"],
+            vec!["shoal", "pr", "watch"],
+        ] {
+            assert!(Cli::try_parse_from(args).is_err());
+        }
+        for (args, expected) in [
+            (vec!["shoal", "pr", "unwatch", "workspace"], None),
+            (
+                vec!["shoal", "pr", "unwatch", "workspace", "--pr", "7"],
+                Some("7"),
+            ),
+        ] {
+            assert!(matches!(Cli::try_parse_from(args).unwrap().command,
+                Some(Command::Pr { command: PrCommand::Unwatch { workspace, url } })
+                if workspace.as_deref() == Some("workspace") && url.as_deref() == expected));
+        }
         let review = Cli::try_parse_from(["shoal", "pr", "review", "7", "--agent", "claude"]);
-        assert!(matches!(
-            review.unwrap().command,
-            Some(Command::Pr {
-                command: Some(PrCommand::Review { url, agent: Some(Agent::Claude), .. }),
-                ..
-            }) if url == "7"
-        ));
+        assert!(matches!(review.unwrap().command,
+            Some(Command::Pr { command: PrCommand::Review { url, agent: Some(Agent::Claude), .. } }) if url == "7"));
         assert!(
             Cli::try_parse_from([
                 "shoal", "pr", "review", "7", "--manual", "--agent", "claude"

@@ -878,39 +878,16 @@ async fn done_destination(ctx: &Context, workspace: &str) -> Result<Option<PathB
 
 pub(super) async fn pr(ctx: &Context, workspace: Option<String>, action: Action) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let clear = matches!(action, Action::Clear);
-    // An acknowledged worktree disappears shortly after the call returns, so
-    // leave it now, unless the sweep will retain it as dirty. A watched PR
-    // keeps the shell where it is until it merges.
-    let escape = if matches!(action, Action::Acknowledge) && !env::is_scoped() {
-        let check = request::<RemovalCheck>(
-            &ctx.paths,
-            Method::CheckRemoval {
-                workspace: workspace.clone(),
-                caller_pid: std::process::id(),
-                include_changes: false,
-            },
-        )
-        .await?;
-        if check.dirty {
-            None
-        } else {
-            escape_destination(ctx, &check.workspace).await?
-        }
-    } else {
-        None
+    let (message, value) = match &action {
+        Action::Watch { .. } => (
+            "PR watch registered; once all merge, automatic done may stop commands and remove the workspace according to its cleanup policy.",
+            json!({"registered": true}),
+        ),
+        Action::Clear => ("All PR watches cancelled", json!({"registered": false})),
+        Action::Unwatch { url } => ("PR watch cancelled", json!({"unwatched": url})),
+        Action::Acknowledge => unreachable!("manual acknowledgement has no CLI spelling"),
     };
     request::<()>(&ctx.paths, Method::SetPr { workspace, action }).await?;
-    if let Some(destination) = escape {
-        shell::navigate(&destination, ctx.json)?;
-    }
-    ctx.emit(
-        if clear {
-            "PR cleanup cancelled"
-        } else {
-            "PR cleanup registered; tracked commands will stop when the merge is confirmed"
-        },
-        serde_json::json!({"registered": !clear}),
-    )?;
+    ctx.emit(message, value)?;
     Ok(0)
 }

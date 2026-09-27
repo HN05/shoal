@@ -27,7 +27,7 @@ pub enum RegistrationKind {
     Acknowledgement { head: String },
 }
 
-/// Keep the persisted record and CLI JSON compatible with existing daemons.
+/// Preserve legacy single-watch records while extending watch sets and completion.
 #[derive(Serialize, Deserialize)]
 struct RegistrationRecord {
     url: Option<String>,

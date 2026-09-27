@@ -19,7 +19,7 @@ mod workspaces;
 #[cfg(test)]
 mod tests;
 
-use anyhow::{Context as _, Result, ensure};
+use anyhow::{Result, ensure};
 use clap::CommandFactory;
 use futures_util::{StreamExt, stream};
 use serde::Serialize;
@@ -241,34 +241,21 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             remote,
             local,
         } => crate::git::merge::worker(&ctx, branch, remote, local).await,
-        Command::Pr {
-            workspace,
-            url,
-            command,
-        } => match command {
-            None => {
-                workspaces::pr(
-                    &ctx,
-                    workspace,
-                    Action::Watch {
-                        url: url.context("PR watch requires a number or URL")?,
-                    },
-                )
-                .await
+        Command::Pr { command } => match command {
+            PrCommand::Watch { workspace, url } => {
+                workspaces::pr(&ctx, workspace, Action::Watch { url }).await
             }
-            Some(PrCommand::Merged { workspace }) => {
-                workspaces::pr(&ctx, workspace, Action::Acknowledge).await
+            PrCommand::Unwatch { workspace, url } => {
+                let action = url.map_or(Action::Clear, |url| Action::Unwatch { url });
+                workspaces::pr(&ctx, workspace, action).await
             }
-            Some(PrCommand::Clear { workspace }) => {
-                workspaces::pr(&ctx, workspace, Action::Clear).await
-            }
-            Some(PrCommand::Review {
+            PrCommand::Review {
                 url,
                 repository,
                 manual,
                 agent,
                 args,
-            }) => {
+            } => {
                 let reviewer = review::Reviewer::new(manual, agent);
                 review::pull_request(&ctx, url, repository, reviewer, args).await
             }

@@ -69,6 +69,38 @@ impl Fixture {
         fixture
     }
 
+    // Exercise persisted/manual acknowledgement compatibility without retaining
+    // the removed CLI spelling.
+    fn acknowledge(&self, workspace: &str) -> Value {
+        use std::{
+            io::{BufRead, BufReader},
+            os::unix::net::UnixStream,
+        };
+        let request = |protocol: u64, method: Value| {
+            let mut stream =
+                UnixStream::connect(self.root.path().join("state/daemon.sock")).unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(15)))
+                .unwrap();
+            writeln!(
+                stream,
+                "{}",
+                serde_json::json!({"protocol":protocol,"id":1,"method":method})
+            )
+            .unwrap();
+            let mut response = String::new();
+            BufReader::new(stream).read_line(&mut response).unwrap();
+            serde_json::from_str::<Value>(&response).unwrap()
+        };
+        let protocol = request(0, serde_json::json!("status"))["protocol"]
+            .as_u64()
+            .unwrap();
+        request(
+            protocol,
+            serde_json::json!({"set_pr":{"workspace":workspace,"clear":false}}),
+        )
+    }
+
     fn add_github_origin(&self) {
         git(
             &self.repo,
@@ -333,6 +365,9 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
             complete(&[command, "fi"], fixture.root.path()).contains(&"first".into()),
             "{command}"
         );
+    }
+    for words in [vec!["pr", "watch", "42", "fi"], vec!["pr", "unwatch", "fi"]] {
+        assert!(complete(&words, fixture.root.path()).contains(&"first".into()));
     }
     let choices = complete(&["repo", "rm", ""], fixture.root.path());
     let target = choices.iter().position(|v| v == "project").unwrap();
@@ -2628,11 +2663,11 @@ test "$PWD" = "$shoal_repo_dir"
 shoal add "$REPO" acknowledged
 test "${PWD##*/}" = acknowledged
 printf 'retained' > untracked
-shoal pr merged
+shoal done
 test "${PWD##*/}" = acknowledged
-shoal pr clear
+shoal done --keep
 rm untracked
-shoal pr merged
+shoal done
 test "$PWD" = "$shoal_repo_dir"
 until ! shoal inspect acknowledged >/dev/null 2>&1; do sleep 0.1; done
 shoal add "$REPO" completed
@@ -2989,8 +3024,8 @@ fn execution_scope_limits_management_and_expires() {
         vec!["inspect", "other"],
         vec!["exec", "other", "--", "true"],
         vec!["setup", "other"],
-        vec!["pr", "merged", "other"],
-        vec!["pr", "clear", "other"],
+        vec!["pr", "watch", "42", "other"],
+        vec!["pr", "unwatch", "other"],
         vec!["done", "other", "--keep"],
         vec!["done", "other", "--cleanup"],
         vec!["config", "show", "other"],
@@ -8085,7 +8120,7 @@ fn merged_stops_agent_and_releases_resources_without_idle_delay() {
         .spawn()
         .unwrap();
     wait_registered_execution(&fixture, "merged");
-    fixture.ok(&["pr", "merged", "merged"]);
+    assert_eq!(fixture.acknowledge("merged")["type"], "ok");
     wait_removed(&fixture, "merged");
     assert!(!wrapper.wait().unwrap().success());
     assert!(!Path::new(workspace["path"].as_str().unwrap()).exists());
@@ -8111,15 +8146,7 @@ fn merged_retains_dirty_work_and_changed_head_across_restart_and_can_be_cancelle
     let workspace = fixture.add("retain");
     let path = Path::new(workspace["path"].as_str().unwrap());
     fs::write(path.join("dirty"), "keep").unwrap();
-    fixture.ok(&[
-        "exec",
-        "retain",
-        "--",
-        env!("CARGO_BIN_EXE_shoal"),
-        "--json",
-        "pr",
-        "merged",
-    ]);
+    assert_eq!(fixture.acknowledge("retain")["type"], "ok");
     wait_pr_error(&fixture, "retain", "uncommitted");
     git(path, &["add", "dirty"]);
     git(
@@ -8137,7 +8164,7 @@ fn merged_retains_dirty_work_and_changed_head_across_restart_and_can_be_cancelle
     fixture.restart();
     wait_pr_error(&fixture, "retain", "HEAD changed");
     assert!(path.join("dirty").exists());
-    fixture.ok(&["pr", "clear", "retain"]);
+    fixture.ok(&["pr", "unwatch", "retain"]);
     assert!(fixture.ok(&["inspect", "retain"])["pr_cleanup"].is_null());
 }
 
@@ -8145,9 +8172,14 @@ fn merged_retains_dirty_work_and_changed_head_across_restart_and_can_be_cancelle
 fn pr_cleanup_can_be_disabled_independently() {
     let fixture = Fixture::with_config(Some("[pr_cleanup]\nenabled=false\n"));
     fixture.add("keep");
-    let output = fixture.run(&["pr", "merged", "keep"]);
-    assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("PR cleanup is disabled"));
+    let output = fixture.acknowledge("keep");
+    assert_eq!(output["type"], "error");
+    assert!(
+        output["data"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("PR cleanup is disabled")
+    );
     assert!(fixture.ok(&["inspect", "keep"])["pr_cleanup"].is_null());
 }
 
@@ -8175,11 +8207,10 @@ fn legacy_pr_registrations_survive_disabled_cleanup_and_clear_after_restart() {
         .unwrap();
         fixture.restart();
         assert_eq!(fixture.ok(&["inspect", name])["pr_cleanup"], record);
-        for command in ["merged", "7"] {
-            let output = fixture.run(&["pr", command, name]);
-            assert!(!output.status.success());
-            assert!(String::from_utf8_lossy(&output.stderr).contains("PR cleanup is disabled"));
-        }
+        let output = fixture.run(&["pr", "watch", "7", name]);
+        assert!(!output.status.success());
+        assert!(String::from_utf8_lossy(&output.stderr).contains("PR cleanup is disabled"));
+        assert_eq!(fixture.acknowledge(name)["type"], "error");
         assert_eq!(fixture.ok(&["inspect", name])["pr_cleanup"], record);
         // Clear remains allowed while disabled, including for a scoped caller.
         assert_eq!(
@@ -8190,14 +8221,14 @@ fn legacy_pr_registrations_survive_disabled_cleanup_and_clear_after_restart() {
                 env!("CARGO_BIN_EXE_shoal"),
                 "--json",
                 "pr",
-                "clear"
+                "unwatch"
             ]),
             serde_json::json!({"registered": false})
         );
         fixture.restart();
         assert!(fixture.ok(&["inspect", name])["pr_cleanup"].is_null());
         assert_eq!(
-            fixture.ok(&["pr", "clear", name]),
+            fixture.ok(&["pr", "unwatch", name]),
             serde_json::json!({"registered": false})
         );
         assert!(Path::new(workspace["path"].as_str().unwrap()).exists());
@@ -8225,7 +8256,7 @@ fn invalid_persisted_pr_registration_retains_workspace_and_can_be_cleared() {
             String::from_utf8_lossy(&output.stderr).contains("expected exactly one of url or head")
         );
         assert!(Path::new(workspace["path"].as_str().unwrap()).exists());
-        fixture.ok(&["pr", "clear", "invalid"]);
+        fixture.ok(&["pr", "unwatch", "invalid"]);
         assert!(fixture.ok(&["inspect", "invalid"])["pr_cleanup"].is_null());
     }
 }
@@ -8253,7 +8284,7 @@ fn repository_config_sets_pr_cleanup_over_the_global_default() {
         ],
     );
     fixture.add("merged");
-    fixture.ok(&["pr", "merged", "merged"]);
+    assert_eq!(fixture.acknowledge("merged")["type"], "ok");
     wait_removed(&fixture, "merged");
     // The saved config is the top layer.
     let saved = fixture.root.path().join("saved.toml");
@@ -8266,16 +8297,21 @@ fn repository_config_sets_pr_cleanup_over_the_global_default() {
         saved.to_str().unwrap(),
     ]);
     fixture.add("kept");
-    let output = fixture.run(&["pr", "merged", "kept"]);
-    assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("PR cleanup is disabled"));
+    let output = fixture.acknowledge("kept");
+    assert_eq!(output["type"], "error");
+    assert!(
+        output["data"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("PR cleanup is disabled")
+    );
 }
 
 #[test]
 fn pr_watch_checks_github_state_and_commit_and_survives_restart() {
     let mut fixture = Fixture::with_config(Some("[auto_cleanup]\nenabled=false\n"));
     let workspace = fixture.add("watch");
-    let failed = fixture.run(&["pr", "56", "watch"]);
+    let failed = fixture.run(&["pr", "watch", "56", "watch"]);
     assert!(!failed.status.success());
     assert!(String::from_utf8_lossy(&failed.stderr).contains("origin remote"));
     assert!(fixture.ok(&["inspect", "watch"])["pr_cleanup"].is_null());
@@ -8292,13 +8328,23 @@ fn pr_watch_checks_github_state_and_commit_and_survives_restart() {
     fs::create_dir(&bin).unwrap();
     fs::write(bin.join("gh"), "#!/bin/sh\ncat \"$HOME/pr.json\"\n").unwrap();
     fs::set_permissions(bin.join("gh"), fs::Permissions::from_mode(0o755)).unwrap();
-    let failed = fixture.run(&["pr", "https://github.com/team/repo/pull/56", "watch"]);
+    let failed = fixture.run(&[
+        "pr",
+        "watch",
+        "https://github.com/team/repo/pull/56",
+        "watch",
+    ]);
     assert!(!failed.status.success());
-    assert!(String::from_utf8_lossy(&failed.stderr).contains("shoal pr merged"));
+    assert!(String::from_utf8_lossy(&failed.stderr).contains("shoal done"));
     assert!(fixture.ok(&["inspect", "watch"])["pr_cleanup"].is_null());
     assert!(
         !fixture
-            .run(&["pr", "https://github.com/other/repo/pull/56", "watch"])
+            .run(&[
+                "pr",
+                "watch",
+                "https://github.com/other/repo/pull/56",
+                "watch"
+            ])
             .status
             .success()
     );
@@ -8313,10 +8359,15 @@ fn pr_watch_checks_github_state_and_commit_and_survives_restart() {
     .trim()
     .to_owned();
     write_response("OPEN", &head);
-    fixture.ok(&["pr", "https://github.com/team/repo/pull/56", "watch"]);
-    fixture.ok(&["pr", "clear", "watch"]);
-    fixture.ok(&["pr", "56", "watch"]);
-    fixture.ok(&["pr", "clear", "watch"]);
+    fixture.ok(&[
+        "pr",
+        "watch",
+        "https://github.com/team/repo/pull/56",
+        "watch",
+    ]);
+    fixture.ok(&["pr", "unwatch", "watch"]);
+    fixture.ok(&["pr", "watch", "56", "watch"]);
+    fixture.ok(&["pr", "unwatch", "watch"]);
     // Scoped callers can omit the workspace and register by number too.
     fixture.ok(&[
         "exec",
@@ -8325,6 +8376,7 @@ fn pr_watch_checks_github_state_and_commit_and_survives_restart() {
         env!("CARGO_BIN_EXE_shoal"),
         "--json",
         "pr",
+        "watch",
         "56",
     ]);
     fixture.restart();
@@ -8393,7 +8445,7 @@ fn pr_watch_checks_forgejo_merge_and_commits_with_fixture_cli() {
         format!("commit {} (+1, -0)\nAuthor: Test\n", head.trim()),
     )
     .unwrap();
-    fixture.ok(&["pr", "56", "fj-watch"]);
+    fixture.ok(&["pr", "watch", "56", "fj-watch"]);
     wait_removed(&fixture, "fj-watch");
 }
 
@@ -8429,7 +8481,7 @@ fn merged_rechecks_head_after_removal_hooks() {
         if key == "pre_resource_release_cmd" {
             fixture.ok(&["resource", "acquire", "signing", "hook"]);
         }
-        fixture.ok(&["pr", "merged", "hook"]);
+        assert_eq!(fixture.acknowledge("hook")["type"], "ok");
         wait_pr_error(&fixture, "hook", "HEAD changed during removal hooks");
         assert!(Path::new(workspace["path"].as_str().unwrap()).exists());
     }
@@ -9364,7 +9416,7 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
             }
         }
     });
-    fixture.ok(&["pr", "merged", "waiter"]);
+    assert_eq!(fixture.acknowledge("waiter")["type"], "ok");
     wait_removed(&fixture, "waiter");
     let line = lines
         .recv_timeout(Duration::from_secs(15))
@@ -11331,7 +11383,7 @@ fn done_records_completion_without_claiming_dirty_work_is_merged() {
 
 #[test]
 fn multiple_prs_complete_once_only_after_every_merge_and_honor_done_policy() {
-    for cleanup in [false, true] {
+    for (cleanup, manual_keep) in [(false, false), (true, false), (true, true)] {
         let mut fixture = Fixture::with_config(Some(&format!(
             "[auto_cleanup]\nenabled=false\n[done]\ncleanup={cleanup}\n"
         )));
@@ -11355,9 +11407,9 @@ fn multiple_prs_complete_once_only_after_every_merge_and_honor_done_policy() {
         };
         write_pr(1, "OPEN", "earlier");
         write_pr(2, "OPEN", head.trim());
-        fixture.ok(&["pr", "1", "multi"]);
-        fixture.ok(&["pr", "2", "multi"]);
-        fixture.ok(&["pr", "1", "multi"]);
+        fixture.ok(&["pr", "watch", "1", "multi"]);
+        fixture.ok(&["pr", "watch", "2", "multi"]);
+        fixture.ok(&["pr", "watch", "1", "multi"]);
         assert_eq!(
             fixture.ok(&["inspect", "multi"])["pr_cleanup"]["urls"]
                 .as_array()
@@ -11365,6 +11417,35 @@ fn multiple_prs_complete_once_only_after_every_merge_and_honor_done_policy() {
                 .len(),
             2
         );
+        // Scoped cancellation selects one PR and preserves the other.
+        fixture.ok(&[
+            "exec",
+            "multi",
+            "--",
+            env!("CARGO_BIN_EXE_shoal"),
+            "--json",
+            "pr",
+            "unwatch",
+            "--pr",
+            "2",
+        ]);
+        assert_eq!(
+            fixture.ok(&["inspect", "multi"])["pr_cleanup"]["url"],
+            "https://github.com/team/project/pull/1"
+        );
+        fixture.ok(&[
+            "exec",
+            "multi",
+            "--",
+            env!("CARGO_BIN_EXE_shoal"),
+            "--json",
+            "pr",
+            "watch",
+            "2",
+        ]);
+        if manual_keep {
+            fixture.ok(&["done", "multi", "--keep"]);
+        }
         write_pr(1, "MERGED", "earlier");
         write_pr(2, "CLOSED", head.trim());
         let root = fixture.root.path().to_owned();
@@ -11377,17 +11458,27 @@ fn multiple_prs_complete_once_only_after_every_merge_and_honor_done_policy() {
                 .lines()
                 .any(|s| s == "2")
         });
-        assert!(fixture.ok(&["inspect", "multi"])["completion"].is_null());
+        assert_eq!(
+            fixture.ok(&["inspect", "multi"])["completion"].is_null(),
+            !manual_keep
+        );
         fs::write(root.join("pr-2.json"), serde_json::json!({"number":2,"state":"MERGED","headRefName":"multi","commits":[{"oid":head.trim()}]}).to_string()).unwrap();
         fixture.restart();
-        if cleanup {
+        if cleanup && !manual_keep {
             wait_removed(&fixture, "multi");
         } else {
             wait_until("automatic completion", || {
-                fixture.ok(&["inspect", "multi"])["completion"]["cleanup"] == false
+                fixture.ok(&["inspect", "multi"])["pr_cleanup"]["merged_head"] == head.trim()
             });
             let state = fixture.ok(&["inspect", "multi"]);
             assert_eq!(state["pr_cleanup"]["merged_head"], head.trim());
+            fixture.ok(&["notifications"]);
+            // A changed default must not re-complete a kept assignment.
+            fs::write(
+                root.join(".config/shoal/config.toml"),
+                "[auto_cleanup]\nenabled=false\n[done]\ncleanup=true\n",
+            )
+            .unwrap();
             fixture.restart();
             assert_eq!(
                 fixture.ok(&["inspect", "multi"])["completion"]["cleanup"],

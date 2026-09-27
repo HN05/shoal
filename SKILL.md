@@ -49,18 +49,19 @@ workspaces; the human or console session does.
 
 ## Completion
 
-When the assignment is finished, call `shoal done` as your last command. It
-records completion and defaults to cleanup, which may stop your execution.
+Register each PR with `shoal pr watch <number-or-url>`. Watches accumulate per
+workspace; all must merge, and the merged set must contain current HEAD, before
+Shoal marks the assignment done automatically. `shoal pr unwatch --pr <number-or-url>`
+cancels one watch; omit `--pr` to cancel all. Closed, unmerged PRs keep waiting.
+
+To finish without waiting for watches, first cancel them and call `shoal done`
+as your last command. It defaults to cleanup, which may stop your execution.
 Use `shoal done --keep` when the user wants to review in this workspace;
 `--cleanup` overrides a keep default. `[done] cleanup = false` makes keeping the
-default. Dirty, unpushed or newer work is retained; inspect `completion.error`
-for cleanup failures. Completion does not claim a merge occurred.
-
-After opening a PR, run `shoal pr <number-or-url>`. Shoal checks with `gh`/`fj` and, when
-merged, stops tracked agents and removes the clean workspace. Without those
-tools/login, confirm the merge yourself and call `shoal pr merged` as your last
-command. Never acknowledge unmerged work. `[pr_cleanup] enabled = false` disables
-this; `shoal pr clear` cancels a watch. Dirty or newer work is retained.
+default for manual and automatic completion. Dirty or newer work is retained;
+completion without a merge also requires preserved commits. Completion does not
+claim a merge occurred. Inspect `completion.error` and `pr_cleanup.error` for
+cleanup or lookup failures. `[pr_cleanup] enabled = false` pauses PR completion.
 
 ## Merge branches into your own branch
 

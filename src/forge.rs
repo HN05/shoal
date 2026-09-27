@@ -425,7 +425,7 @@ fn strip_bidi_isolates(text: &str) -> String {
         .collect()
 }
 
-const MERGED_HINT: &str = "; otherwise confirm the merge yourself and run `shoal pr merged`";
+const MERGED_HINT: &str = "; use `shoal done` to finish without a PR watch";
 
 #[derive(Clone, Copy)]
 enum Query {
@@ -515,7 +515,7 @@ mod tests {
                 (
                     Query::Pull(MERGED_HINT),
                     crate::subprocess::MAX_DIAGNOSTIC_CHARS,
-                    "shoal pr merged",
+                    "shoal done",
                 ),
                 (
                     Query::Pull(""),
