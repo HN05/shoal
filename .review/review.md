@@ -36,7 +36,9 @@ removal, check it against the rule those files state before judging it.
   merge acknowledgements, completion signals and effective-configuration reads are allowed;
   notifications are read by the unscoped user only and never fail the
   operation they record. PR cleanup defaults on,
-  stops tracked agents, and requires clean files and unchanged merged HEAD. PR
+  completes the workspace only after every watched PR merges and the set contains
+  HEAD; completion honors the done default and explicit keep choices before
+  stopping tracked agents with clean files and unchanged merged HEAD. PR
   numbers resolve against the workspace's origin and persist as repository-bound URLs.
   Registration variants preserve existing stored and JSON shapes and reject ambiguous
   records and conflicting actions without blocking other workspaces' cleanup;

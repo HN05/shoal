@@ -20,18 +20,21 @@ pub struct Registration {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RegistrationKind {
     Watch {
-        url: String,
+        urls: Vec<String>,
+        merged_head: Option<String>,
     },
     /// Manual acknowledgement is tied to exactly this commit.
-    Acknowledgement {
-        head: String,
-    },
+    Acknowledgement { head: String },
 }
 
 /// Keep the persisted record and CLI JSON compatible with existing daemons.
 #[derive(Serialize, Deserialize)]
 struct RegistrationRecord {
     url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    urls: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    merged_head: Option<String>,
     head: Option<String>,
     error: Option<String>,
 }
@@ -40,11 +43,24 @@ impl TryFrom<RegistrationRecord> for Registration {
     type Error = anyhow::Error;
 
     fn try_from(record: RegistrationRecord) -> Result<Self> {
-        let kind = match (record.url, record.head) {
-            (Some(url), None) => RegistrationKind::Watch { url },
-            (None, Some(head)) => RegistrationKind::Acknowledgement { head },
+        let kind = match (record.url, record.urls, record.head, record.merged_head) {
+            (Some(url), None, None, merged_head) => RegistrationKind::Watch {
+                urls: vec![url],
+                merged_head,
+            },
+            (None, Some(urls), None, merged_head) => {
+                ensure!(
+                    !urls.is_empty()
+                        && urls.iter().all(|url| !url.is_empty())
+                        && urls.iter().collect::<std::collections::HashSet<_>>().len()
+                            == urls.len(),
+                    "invalid PR watches: expected nonempty, unique URLs"
+                );
+                RegistrationKind::Watch { urls, merged_head }
+            }
+            (None, None, Some(head), None) => RegistrationKind::Acknowledgement { head },
             _ => anyhow::bail!(
-                "invalid PR cleanup registration: expected exactly one of url or head"
+                "invalid PR cleanup registration: expected exactly one of url or head, or a watch URL list"
             ),
         };
         Ok(Self {
@@ -56,15 +72,28 @@ impl TryFrom<RegistrationRecord> for Registration {
 
 impl From<Registration> for RegistrationRecord {
     fn from(registration: Registration) -> Self {
-        let (url, head) = match registration.kind {
-            RegistrationKind::Watch { url } => (Some(url), None),
-            RegistrationKind::Acknowledgement { head } => (None, Some(head)),
-        };
-        Self {
-            url,
-            head,
+        let mut record = Self {
+            url: None,
+            urls: None,
+            head: None,
+            merged_head: None,
             error: registration.error,
+        };
+        match registration.kind {
+            RegistrationKind::Watch {
+                mut urls,
+                merged_head,
+            } => {
+                if urls.len() == 1 {
+                    record.url = urls.pop();
+                } else {
+                    record.urls = Some(urls);
+                }
+                record.merged_head = merged_head;
+            }
+            RegistrationKind::Acknowledgement { head } => record.head = Some(head),
         }
+        record
     }
 }
 
@@ -152,7 +181,18 @@ impl Manager {
                 forge
                     .merged_commits(&workspace.path, number, &workspace.branch)
                     .await?;
-                Some(RegistrationKind::Watch { url })
+                let (mut urls, mut merged_head) = match self.pr_registration(&workspace.id).await? {
+                    Some(Registration {
+                        kind: RegistrationKind::Watch { urls, merged_head },
+                        ..
+                    }) => (urls, merged_head),
+                    _ => (Vec::new(), None),
+                };
+                if !urls.contains(&url) {
+                    urls.push(url);
+                    merged_head = None;
+                }
+                Some(RegistrationKind::Watch { urls, merged_head })
             }
             Action::Acknowledge => Some(RegistrationKind::Acknowledgement {
                 head: current_head(&workspace).await?,
@@ -218,30 +258,29 @@ impl Manager {
             }
             // `Ok(true)` once the workspace is removed; `Ok(false)` while the PR is open.
             let result: Result<bool> = async {
-                if !self.completion_allows_cleanup(&workspace).await? {
-                    return Ok(false);
-                }
                 settings?;
                 self.verify_worktree(&workspace).await?;
                 let head = current_head(&workspace).await?;
-                match &registration.kind {
-                    RegistrationKind::Watch { url } => {
-                        let (forge, number, _) = self.pr_forge(&workspace, url).await?;
-                        let Some(commits) = forge.merged_commits(&workspace.path, number, &workspace.branch).await? else { return Ok(false); };
-                        ensure!(commits.contains(&head), "merged PR does not contain the current workspace commit; retaining workspace");
-                    }
-                    RegistrationKind::Acknowledgement { head: acknowledged } => {
-                        ensure!(acknowledged == &head, "HEAD changed after the merge acknowledgement; retaining workspace");
-                    }
+                if !self
+                    .confirm_pr_completion(&workspace, &mut registration.kind, &head)
+                    .await?
+                {
+                    return Ok(false);
+                }
+                if !self.completion_allows_cleanup(&workspace).await? {
+                    return Ok(false);
                 }
                 self.remove_merged(&workspace.id, &head).await?;
                 eprintln!("PR cleanup removed {}", workspace.name);
                 Ok(true)
-            }.await;
+            }
+            .await;
             match &result {
                 Ok(true) => {
                     let cause = match registration.kind {
-                        RegistrationKind::Watch { .. } => "removed after its pull request merged",
+                        RegistrationKind::Watch { .. } => {
+                            "removed after all watched pull requests merged"
+                        }
                         RegistrationKind::Acknowledgement { .. } => {
                             "removed after the merge acknowledgement"
                         }
@@ -277,6 +316,71 @@ impl Manager {
         }
         Ok(())
     }
+
+    async fn confirm_pr_completion(
+        &self,
+        workspace: &Workspace,
+        kind: &mut RegistrationKind,
+        head: &str,
+    ) -> Result<bool> {
+        match kind {
+            RegistrationKind::Acknowledgement { head: acknowledged } => {
+                ensure!(
+                    acknowledged == head,
+                    "HEAD changed after the merge acknowledgement; retaining workspace"
+                );
+            }
+            RegistrationKind::Watch { urls, merged_head } => {
+                if let Some(confirmed) = merged_head {
+                    ensure!(
+                        confirmed == head,
+                        "HEAD changed after the watched PRs completed; retaining workspace"
+                    );
+                    return Ok(true);
+                }
+                if !self.all_prs_merged(workspace, urls, head).await? {
+                    return Ok(false);
+                }
+                // A manual done choice takes precedence over automatic completion.
+                if let Some(completion) = self.completion(&workspace.id).await? {
+                    ensure!(
+                        completion.head == head,
+                        "HEAD changed after the assignment was marked done; retaining workspace"
+                    );
+                } else {
+                    self.record_done(workspace, head.to_owned(), None).await?;
+                }
+                // Completion is persisted first; after a crash it is reused above.
+                // The latch prevents repeated forge queries and completion signals.
+                *merged_head = Some(head.to_owned());
+            }
+        }
+        Ok(true)
+    }
+
+    async fn all_prs_merged(
+        &self,
+        workspace: &Workspace,
+        urls: &[String],
+        head: &str,
+    ) -> Result<bool> {
+        let mut contains_head = false;
+        for url in urls {
+            let (forge, number, _) = self.pr_forge(workspace, url).await?;
+            let Some(commits) = forge
+                .merged_commits(&workspace.path, number, &workspace.branch)
+                .await?
+            else {
+                return Ok(false);
+            };
+            contains_head |= commits.iter().any(|commit| commit == head);
+        }
+        ensure!(
+            contains_head,
+            "merged PR set does not contain the current workspace commit; retaining workspace"
+        );
+        Ok(true)
+    }
 }
 
 pub(crate) async fn current_head(workspace: &Workspace) -> Result<String> {
@@ -303,7 +407,8 @@ mod tests {
         for (kind, url, head) in [
             (
                 RegistrationKind::Watch {
-                    url: "https://forge.example/team/repo/pulls/7".into(),
+                    urls: vec!["https://forge.example/team/repo/pulls/7".into()],
+                    merged_head: None,
                 },
                 Some("https://forge.example/team/repo/pulls/7"),
                 None,
@@ -330,6 +435,24 @@ mod tests {
             serde_json::to_value(registration).unwrap(),
             json!({"url": null, "head": "abc123", "error": null})
         );
+    }
+
+    #[test]
+    fn multiple_watches_round_trip_and_reject_ambiguous_or_empty_sets() {
+        let value = json!({"url": null, "urls": ["first", "second"], "head": null,
+            "merged_head": "commit", "error": null});
+        let registration: Registration = serde_json::from_value(value.clone()).unwrap();
+        assert_eq!(serde_json::to_value(registration).unwrap(), value);
+        for value in [
+            json!({"urls": []}),
+            json!({"urls": ["same", "same"]}),
+            json!({"urls": [""]}),
+            json!({"url": "first", "urls": ["second"]}),
+            json!({"urls": ["first"], "head": "commit"}),
+            json!({"head": "commit", "merged_head": "commit"}),
+        ] {
+            assert!(serde_json::from_value::<Registration>(value).is_err());
+        }
     }
 
     #[test]

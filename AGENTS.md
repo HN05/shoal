@@ -49,7 +49,9 @@ when behavior changes, distinguishing decisions from proposals.
   10), resolved per workspace on each sweep. Automatic removal is only for idle,
   clean worktrees with all commits pushed or on the local default branch, or deleted worktrees. Keep one removal path for manual and automatic
   cleanup, retaining the default branch unless explicitly deleted. PR cleanup is
-  on by default: stop tracked agents, verify clean merged HEAD, use that path.
+  on by default: all watched PRs must merge and cover HEAD, then record completion
+  using its configured cleanup default or existing choice. Cleanup stops tracked
+  agents, verifies clean merged HEAD, and uses that path.
   Completion cleanup without a PR registration requires every commit pushed or
   on the local default branch, retaining dirty or newer work through the same
   removal path; a keep choice suppresses idle and PR cleanup.

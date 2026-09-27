@@ -671,7 +671,7 @@ fn render_status(status: &WorkspaceStatus, json: bool) {
     match &inspection.pr_cleanup {
         Some(registration) => {
             let target = match &registration.kind {
-                RegistrationKind::Watch { url } => url,
+                RegistrationKind::Watch { urls, .. } => &urls.join("\n               "),
                 RegistrationKind::Acknowledgement { head } => head,
             };
             println!("PR watch:      {target}");

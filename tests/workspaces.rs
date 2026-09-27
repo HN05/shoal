@@ -11328,3 +11328,74 @@ fn done_records_completion_without_claiming_dirty_work_is_merged() {
     assert_eq!(fs::read_to_string(path.join("work")).unwrap(), "retain");
     assert!(fixture.ok(&["inspect", "unfinished"])["pr_cleanup"].is_null());
 }
+
+#[test]
+fn multiple_prs_complete_once_only_after_every_merge_and_honor_done_policy() {
+    for cleanup in [false, true] {
+        let mut fixture = Fixture::with_config(Some(&format!(
+            "[auto_cleanup]\nenabled=false\n[done]\ncleanup={cleanup}\n"
+        )));
+        let workspace = fixture.add("multi");
+        fixture.add_github_origin();
+        let bin = fixture.root.path().join("bin");
+        fs::create_dir(&bin).unwrap();
+        fs::write(
+            bin.join("gh"),
+            "#!/bin/sh\ncat \"$HOME/pr-$3.json\"\necho \"$3\" >> \"$HOME/queries\"\n",
+        )
+        .unwrap();
+        fs::set_permissions(bin.join("gh"), fs::Permissions::from_mode(0o755)).unwrap();
+        let head = git(
+            Path::new(workspace["path"].as_str().unwrap()),
+            &["rev-parse", "HEAD"],
+        );
+        let write_pr = |number: u64, state: &str, commit: &str| {
+            fs::write(fixture.root.path().join(format!("pr-{number}.json")),
+                serde_json::json!({"number":number,"state":state,"headRefName":"multi","commits":[{"oid":commit}]}).to_string()).unwrap();
+        };
+        write_pr(1, "OPEN", "earlier");
+        write_pr(2, "OPEN", head.trim());
+        fixture.ok(&["pr", "1", "multi"]);
+        fixture.ok(&["pr", "2", "multi"]);
+        fixture.ok(&["pr", "1", "multi"]);
+        assert_eq!(
+            fixture.ok(&["inspect", "multi"])["pr_cleanup"]["urls"]
+                .as_array()
+                .unwrap()
+                .len(),
+            2
+        );
+        write_pr(1, "MERGED", "earlier");
+        write_pr(2, "CLOSED", head.trim());
+        let root = fixture.root.path().to_owned();
+        let queries = root.join("queries");
+        fs::write(&queries, "").unwrap();
+        fixture.restart();
+        wait_until("second PR queried", || {
+            fs::read_to_string(&queries)
+                .unwrap()
+                .lines()
+                .any(|s| s == "2")
+        });
+        assert!(fixture.ok(&["inspect", "multi"])["completion"].is_null());
+        fs::write(root.join("pr-2.json"), serde_json::json!({"number":2,"state":"MERGED","headRefName":"multi","commits":[{"oid":head.trim()}]}).to_string()).unwrap();
+        fixture.restart();
+        if cleanup {
+            wait_removed(&fixture, "multi");
+        } else {
+            wait_until("automatic completion", || {
+                fixture.ok(&["inspect", "multi"])["completion"]["cleanup"] == false
+            });
+            let state = fixture.ok(&["inspect", "multi"]);
+            assert_eq!(state["pr_cleanup"]["merged_head"], head.trim());
+            fixture.restart();
+            assert_eq!(
+                fixture.ok(&["inspect", "multi"])["completion"]["cleanup"],
+                false
+            );
+        }
+        let db = rusqlite::Connection::open(root.join("state/state.db")).unwrap();
+        let count: i64 = db.query_row("SELECT count(*) FROM notifications WHERE kind='workspace_done' AND workspace='multi'", [], |row| row.get(0)).unwrap();
+        assert_eq!(count, 1);
+    }
+}
