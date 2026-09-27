@@ -8352,6 +8352,39 @@ fn land_merges_into_main_without_a_remote_and_is_denied_to_scoped_processes() {
 }
 
 #[test]
+fn stop_preserves_the_child_exit_status_when_group_inventory_fails() {
+    let fixture = Fixture::new();
+    fixture.add("worker");
+    let bin = fixture.root.path().join("wrapper-bin");
+    fs::create_dir(&bin).unwrap();
+    let ps = bin.join("ps");
+    fs::write(&ps, "#!/bin/sh\nexit 1\n").unwrap();
+    fs::set_permissions(&ps, fs::Permissions::from_mode(0o700)).unwrap();
+    let ready = fixture.root.path().join("ready");
+    let wrapper = fixture
+        .command()
+        .args([
+            "exec",
+            "worker",
+            "--",
+            "sh",
+            "-c",
+            "trap 'exit 7' TERM; : > \"$READY\"; while :; do sleep 30; done",
+        ])
+        // Fail only the wrapper's inventory; the daemon can still verify exit.
+        .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+        .env("READY", &ready)
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    wait_until("command signal handler", || ready.exists());
+    fixture.ok(&["stop", "worker"]);
+    let output = wrapper.wait_with_output().unwrap();
+    assert_eq!(output.status.code(), Some(7), "{output:?}");
+}
+
+#[test]
 fn stop_allows_descendants_to_finish_signal_cleanup_after_the_leader_exits() {
     let fixture = Fixture::new();
     fixture.add("worker");

@@ -473,11 +473,13 @@ async fn stop(child: &mut Child, group: &ProcessGroup, signal: i32) -> Result<Ex
     let graceful_exit = async {
         let status = child.wait().await?;
         group.wait_for_exit().await?;
-        Ok(status)
+        Ok::<_, anyhow::Error>(status)
     };
     match timeout(timing::EXECUTION_STOP_GRACE, graceful_exit).await {
-        Ok(status) => status,
-        Err(_) => {
+        Ok(Ok(status)) => Ok(status),
+        // Inventory failure must still force cleanup and preserve the child's
+        // status; the daemon independently verifies execution completion.
+        Ok(Err(_)) | Err(_) => {
             group.send(libc::SIGKILL);
             Ok(child.wait().await?)
         }
