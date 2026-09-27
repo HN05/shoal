@@ -20,6 +20,8 @@ states!(NotificationKind {
     AgentExited => "agent_exited",
     /// The daemon removed or forgot a workspace on its own.
     WorkspaceRemoved => "workspace_removed",
+    /// An agent explicitly marked its assignment finished.
+    WorkspaceDone => "workspace_done",
     /// An automatic removal was attempted and the workspace retained.
     CleanupFailed => "cleanup_failed",
     /// Removal succeeded, but its post hook failed.

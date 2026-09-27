@@ -1,5 +1,6 @@
 //! Shared daemon state, workspace lookup, and worktree creation.
 mod adoption;
+mod done;
 mod executions;
 mod identity;
 mod lifecycle;
@@ -195,9 +196,11 @@ impl Manager {
         let workspace = self.workspace(selector).await?;
         let simulators = self.list_simulators(Some(&workspace.id)).await?;
         let pr_cleanup = self.pr_registration(&workspace.id).await?;
+        let completion = self.completion(&workspace.id).await?;
         self.store
             .run(move |db| {
                 Ok(Inspection {
+                    completion,
                     pr_cleanup,
                     executions: store::executions(db, &workspace.id)?,
                     ports: store::ports(db, Some(&workspace.id))?,

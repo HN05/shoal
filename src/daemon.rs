@@ -309,6 +309,9 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::WorkspaceStatus { workspace } => {
             Body::WorkspaceStatus(manager.workspace_status(&workspace).await?)
         }
+        Method::WorkspaceDone { workspace, cleanup } => {
+            Body::Completion(manager.mark_done(&workspace, cleanup).await?)
+        }
         Method::SetPr { workspace, action } => {
             manager.set_pr(&workspace, action).await?;
             Body::Ok

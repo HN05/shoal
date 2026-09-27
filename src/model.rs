@@ -95,8 +95,17 @@ pub struct Execution {
     pub group_id: Option<u32>,
 }
 
+/// An assignment completion signal, bound to the workspace's HEAD.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Completion {
+    pub head: String,
+    pub cleanup: bool,
+    pub error: Option<String>,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Inspection {
+    pub completion: Option<Completion>,
     pub pr_cleanup: Option<crate::forge::pr::Registration>,
     pub workspace: Workspace,
     pub executions: Vec<Execution>,
