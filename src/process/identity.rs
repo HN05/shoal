@@ -199,10 +199,8 @@ fn platform_identity(pid: u32) -> Result<Option<Identity>> {
     if metadata.uid() != unsafe { libc::geteuid() } {
         return Ok(None);
     }
-    let stat = match std::fs::read_to_string(format!("{path}/stat")) {
-        Ok(stat) => stat,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(e) => return Err(e.into()),
+    let Some(stat) = read_process_stat(&format!("{path}/stat"))? else {
+        return Ok(None);
     };
     let fields: Vec<_> = stat
         .rsplit_once(')')
@@ -220,6 +218,16 @@ fn platform_identity(pid: u32) -> Result<Option<Identity>> {
         birth: format!("{}:{}", boot.trim(), fields[19]),
     }))
 }
+#[cfg(target_os = "linux")]
+fn read_process_stat(path: &str) -> Result<Option<String>> {
+    match std::fs::read_to_string(path) {
+        Ok(stat) => Ok(Some(stat)),
+        // Linux returns ESRCH if the process exits between open and read.
+        Err(error) if matches!(error.raw_os_error(), Some(libc::ENOENT | libc::ESRCH)) => Ok(None),
+        Err(error) => Err(error.into()),
+    }
+}
+
 #[cfg(target_os = "linux")]
 fn environment(pid: u32) -> Result<Vec<Vec<u8>>> {
     Ok(std::fs::read(format!("/proc/{pid}/environ"))?
@@ -366,6 +374,33 @@ mod tests {
     fn marked_child() {
         std::thread::sleep(Duration::from_secs(30));
     }
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn stat_read_after_process_exit_is_not_an_inventory_failure() {
+        use std::os::fd::AsRawFd;
+
+        let mut child = tokio::process::Command::new("sleep")
+            .arg("30")
+            .env_clear()
+            .kill_on_drop(true)
+            .spawn()
+            .unwrap();
+        let pid = child.id().unwrap();
+        let stat = std::fs::File::open(format!("/proc/{pid}/stat")).unwrap();
+        assert!(capture(pid).unwrap().is_some());
+        child.kill().await.unwrap();
+
+        // Keep the proc inode open across exit to deterministically exercise
+        // the race between opening stat and reading it during an inventory.
+        let path = format!("/proc/self/fd/{}", stat.as_raw_fd());
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap_err().raw_os_error(),
+            Some(libc::ESRCH)
+        );
+        assert!(read_process_stat(&path).unwrap().is_none());
+        assert!(capture(pid).unwrap().is_none());
+    }
+
     #[tokio::test]
     async fn discovers_marked_processes_and_rejects_changed_identity() {
         let id = uuid::Uuid::new_v4().to_string();
