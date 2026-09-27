@@ -126,8 +126,10 @@ fails without
 touching existing work. Branch conflicts get numeric suffixes on the blocking
 component only, never changing the workspace name. Names reserved by the Worktrunk
 adapter across supported Git object formats get a leaf suffix on creation and
-an incompatibility error on existing-branch selection. Worktree Git metadata identity is
-recorded so moved or replaced directories are never adopted silently.
+an incompatibility error on existing-branch selection. Worktree Git metadata identity
+uses the directory inode and birth time when available, preserving ownership
+across device renumbering; filesystems without birth time use device/inode.
+Moved or replaced directories are never adopted silently.
 Existing-branch selection creates a worktree without suffixing; remote heads are
 discovered live and become local tracking branches. Local selection preserves
 commits; remote selection fast-forwards matching tracking branches. Ready owned

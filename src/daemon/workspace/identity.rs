@@ -1,0 +1,66 @@
+//! Persistent identity for Git administrative directories.
+use anyhow::{Result, ensure};
+use std::{
+    fs,
+    os::unix::fs::MetadataExt,
+    path::Path,
+    time::{SystemTime, UNIX_EPOCH},
+};
+
+pub(super) fn directory_identity(path: &Path) -> Result<String> {
+    let metadata = fs::metadata(path)?;
+    ensure!(metadata.is_dir(), "Git metadata is not a directory");
+    Ok(format_identity(
+        metadata.dev(),
+        metadata.ino(),
+        metadata.created().ok(),
+    ))
+}
+
+fn format_identity(device: u64, inode: u64, birth: Option<SystemTime>) -> String {
+    // Device numbers can change across mounts (notably Btrfs). Birth time
+    // survives those changes and distinguishes reuse of a directory inode.
+    match birth.and_then(|time| time.duration_since(UNIX_EPOCH).ok()) {
+        Some(time) => format!("birth:{inode}:{}:{}", time.as_secs(), time.subsec_nanos()),
+        None => format!("{device}:{inode}"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    #[test]
+    fn identity_survives_device_changes_but_not_inode_reuse() {
+        let birth = Some(UNIX_EPOCH + Duration::new(100, 42));
+        let original = format_identity(55, 123, birth);
+        assert_eq!(format_identity(56, 123, birth), original);
+        assert_ne!(format_identity(56, 124, birth), original);
+        let later = Some(UNIX_EPOCH + Duration::new(100, 43));
+        assert_ne!(format_identity(56, 123, later), original);
+        assert_ne!(
+            format_identity(55, 123, None),
+            format_identity(56, 123, None)
+        );
+    }
+
+    #[test]
+    fn identity_follows_symlinks_and_renames_but_rejects_replacement() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let original = temp.path().join("original");
+        let moved = temp.path().join("moved");
+        let alias = temp.path().join("alias");
+        fs::create_dir(&original)?;
+        let identity = directory_identity(&original)?;
+        fs::rename(&original, &moved)?;
+        std::os::unix::fs::symlink(&moved, &alias)?;
+        assert_eq!(directory_identity(&alias)?, identity);
+        fs::create_dir(&original)?;
+        assert_ne!(directory_identity(&original)?, identity);
+        fs::write(temp.path().join("file"), "data")?;
+        assert!(directory_identity(&temp.path().join("file")).is_err());
+        assert!(directory_identity(&temp.path().join("missing")).is_err());
+        Ok(())
+    }
+}

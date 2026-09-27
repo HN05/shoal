@@ -56,14 +56,6 @@ fn device_inode(metadata: &fs::Metadata) -> String {
     format!("{}:{}", metadata.dev(), metadata.ino())
 }
 
-/// Follow symlinks to an existing directory and return its `device:inode`.
-/// Missing paths and non-directories are errors.
-pub(super) fn directory_device_inode(path: &Path) -> Result<String> {
-    let metadata = fs::metadata(path)?;
-    ensure!(metadata.is_dir(), "Git metadata is not a directory");
-    Ok(device_inode(&metadata))
-}
-
 /// `device:inode` of a real, non-redirected directory; `None` when missing.
 pub(super) fn real_directory_identity(path: &Path) -> Result<Option<String>> {
     let metadata = match fs::symlink_metadata(path) {
@@ -136,27 +128,23 @@ mod tests {
         let root = fs::canonicalize(temp.path())?;
         let directory = root.join("directory");
         fs::create_dir(&directory)?;
-        let identity = directory_device_inode(&directory)?;
-        assert_eq!(real_directory_identity(&directory)?, Some(identity.clone()));
+        let identity = real_directory_identity(&directory)?;
+        assert!(identity.is_some());
 
         let alias = root.join("alias");
         symlink(&directory, &alias)?;
-        assert_eq!(directory_device_inode(&alias)?, identity);
         assert!(real_directory_identity(&alias).is_err());
         fs::create_dir(directory.join("child"))?;
         assert!(real_directory_identity(&alias.join("child")).is_err());
 
         let missing = root.join("missing");
-        assert!(directory_device_inode(&missing).is_err());
         assert_eq!(real_directory_identity(&missing)?, None);
         let dangling = root.join("dangling");
         symlink(&missing, &dangling)?;
-        assert!(directory_device_inode(&dangling).is_err());
         assert!(real_directory_identity(&dangling).is_err());
 
         let file = root.join("file");
         fs::write(&file, "contents")?;
-        assert!(directory_device_inode(&file).is_err());
         assert!(real_directory_identity(&file).is_err());
         Ok(())
     }
@@ -167,12 +155,12 @@ mod tests {
         let root = fs::canonicalize(temp.path())?;
         let directory = root.join("directory");
         fs::create_dir(&directory)?;
-        let identity = directory_device_inode(&directory)?;
+        let identity = real_directory_identity(&directory)?;
         let moved = root.join("moved");
         fs::rename(&directory, &moved)?;
-        assert_eq!(directory_device_inode(&moved)?, identity);
+        assert_eq!(real_directory_identity(&moved)?, identity);
         fs::create_dir(&directory)?;
-        assert_ne!(real_directory_identity(&directory)?, Some(identity));
+        assert_ne!(real_directory_identity(&directory)?, identity);
         Ok(())
     }
 

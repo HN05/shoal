@@ -1,8 +1,5 @@
 //! Verify the recorded Git worktree before execution, recovery, or removal.
-use super::{
-    Manager,
-    paths::{canonical_parent_only, directory_device_inode},
-};
+use super::{Manager, identity::directory_identity, paths::canonical_parent_only};
 use crate::{git, model::Workspace};
 use anyhow::{Context, Result, ensure};
 use rusqlite::params;
@@ -33,7 +30,7 @@ impl Manager {
         );
         if let Some(identity) = &workspace.git_dir_id {
             ensure!(
-                directory_device_inode(&actual_git_dir)? == *identity,
+                directory_identity(&actual_git_dir)? == *identity,
                 "Git worktree metadata was replaced; ownership cannot be verified"
             );
         }
@@ -48,7 +45,7 @@ impl Manager {
 
     pub(crate) async fn record_worktree_identity(&self, workspace: &Workspace) -> Result<()> {
         let git_dir = git_dir(&workspace.path).await?;
-        let identity = directory_device_inode(&git_dir)?;
+        let identity = directory_identity(&git_dir)?;
         let id = workspace.id.clone();
         self.store
             .run(move |db| {
@@ -88,7 +85,7 @@ impl Manager {
             && let Some(identity) = &workspace.git_dir_id
         {
             ensure!(
-                directory_device_inode(directory)? == *identity,
+                directory_identity(directory)? == *identity,
                 "Git worktree metadata was replaced; ownership cannot be verified"
             );
         }

@@ -1,6 +1,7 @@
 //! Shared daemon state, workspace lookup, and worktree creation.
 mod adoption;
 mod executions;
+mod identity;
 mod lifecycle;
 mod location;
 mod ownership;

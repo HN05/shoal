@@ -784,7 +784,8 @@ unknown, then audits worktrees without deleting files or releasing leases. Repai
 worktrees to ready and clears executions proven stopped; connected commands keep
 running unless `--stop`. Moved worktrees must return to their recorded path,
 replaced metadata is refused, and a deleted directory is forgotten by the next
-cleanup sweep or `shoal rm`, retaining the branch.
+cleanup sweep or `shoal rm`, retaining the branch. Git metadata identity survives
+device renumbering when the filesystem exposes directory birth time.
 
 Executions record wrapper and child identities plus a process group. Descendants
 inherit `SHOAL_EXECUTION_ID`, which recovery uses with live ancestry to find
