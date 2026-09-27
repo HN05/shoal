@@ -8417,7 +8417,7 @@ fn land_interruptions_stop_merge_drivers_and_restore_the_default_checkout() {
             &[
                 "config",
                 "merge.slow.driver",
-                "echo $$ > .git/land-driver.pid; exec sleep 60",
+                "echo $$ > .git/land-driver.pid.tmp; mv .git/land-driver.pid.tmp .git/land-driver.pid; exec sleep 60",
             ],
         );
         let stderr_path = fixture.root.path().join("land.stderr");
@@ -8515,7 +8515,8 @@ fn install_fake_happy(fixture: &Fixture) -> PathBuf {
   printf 'reconnect=%s|%s|%s|%s|%s|%s\n' "$HAPPY_RECONNECT_SESSION_ID" "$HAPPY_RECONNECT_ENCRYPTION_KEY" "$HAPPY_RECONNECT_ENCRYPTION_VARIANT" "$HAPPY_RECONNECT_SEQ" "$HAPPY_RECONNECT_METADATA_VERSION" "$HAPPY_RECONNECT_AGENT_STATE_VERSION"
   if read -r _line; then printf 'stdin=data\n'; else printf 'stdin=eof\n'; fi
   test -t 1 && printf 'stdout=tty\n' || printf 'stdout=notty\n'
-} > "$HAPPY_RECORD"
+} > "$HAPPY_RECORD.tmp"
+mv "$HAPPY_RECORD.tmp" "$HAPPY_RECORD"
 echo "hello from happy"
 echo "happy stderr" >&2
 # A real session connects to Happy's server and heartbeats; tell the fake server.
