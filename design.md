@@ -206,9 +206,12 @@ manual merge acknowledgement are own-workspace exceptions. Effective configurati
 may be read for the caller's own workspace; changing it needs an unscoped caller.
 Nested executions keep scope.
 
-The CLI takes explicit targets and `--json` for automation, and resolves omitted
-targets from the current directory. Interactive commands may use fzf;
-noninteractive calls and `config show` never open a picker. Agent pickers offer
+Single-workspace actions select an explicit target, otherwise the caller's scoped
+workspace or the workspace containing the current directory, then an interactive
+picker. Explicit misses fail without fallback; noninteractive and JSON calls
+without a current workspace require a target. Scope remains daemon-enforced.
+Bare `cd` always picks; all-workspace operations retain their scope.
+`config show` never opens a picker. Agent pickers offer
 “No agent” to continue without launching one. `config show` reports
 effective repository values with their winning layers and uses a registered checkout
 before a workspace exists. `status` combines lifecycle, fork-point changes, active work and

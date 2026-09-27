@@ -500,13 +500,15 @@ fn workspace_context_adapters_preserve_directory_scope_and_picker_policy() {
             assert!(text.contains("own-only"), "{text}");
             assert!(!text.contains("other-only"), "{text}");
         }
-        let output = command(cwd, scoped, false)
-            .args(["--json", "status"])
-            .output()
-            .unwrap();
-        assert!(output.status.success(), "{output:?}");
-        let status: Value = serde_json::from_slice(&output.stdout).unwrap();
-        assert_eq!(status["workspace"]["id"], own["id"]);
+        for action in ["status", "inspect"] {
+            let output = command(cwd, scoped, false)
+                .args(["--json", action])
+                .output()
+                .unwrap();
+            assert!(output.status.success(), "{output:?}");
+            let result: Value = serde_json::from_slice(&output.stdout).unwrap();
+            assert_eq!(result["workspace"]["id"], own["id"]);
+        }
 
         let output = command(cwd, scoped, true)
             .args(["--", "shoal", "run", "own"])
@@ -521,6 +523,10 @@ fn workspace_context_adapters_preserve_directory_scope_and_picker_policy() {
     }
     for args in [
         vec!["status", "context-other"],
+        vec!["inspect", "context-other"],
+        vec!["inspect", "missing"],
+        vec!["stop"],
+        vec!["stop", "context-other"],
         vec!["config", "show", "context-other"],
     ] {
         let output = command(other_path, true, false)
@@ -533,7 +539,7 @@ fn workspace_context_adapters_preserve_directory_scope_and_picker_policy() {
             "{output:?}"
         );
     }
-    for args in [vec!["inspect"], vec!["cd"]] {
+    for args in [vec!["cd"], vec!["--json", "cd"]] {
         let output = command(&nested, false, false).args(&args).output().unwrap();
         assert!(!output.status.success(), "{args:?}");
         assert!(String::from_utf8_lossy(&output.stderr).contains("non-interactive"));
@@ -2432,7 +2438,7 @@ fn agent_templates_resolve_per_launch_and_reach_native_instruction_options() {
 fn stop_and_manual_removal_terminate_connected_executions() {
     let fixture = Fixture::new();
     for operation in ["stop", "rm"] {
-        fixture.add("running");
+        let workspace = fixture.add("running");
         let child = fixture
             .command()
             .args(["exec", "running", "--", "sleep", "5"])
@@ -2449,7 +2455,13 @@ fn stop_and_manual_removal_terminate_connected_executions() {
             assert!(Instant::now() < deadline);
             thread::sleep(Duration::from_millis(10));
         }
-        fixture.ok(&[operation, "running"]);
+        let output = fixture
+            .command()
+            .current_dir(workspace["path"].as_str().unwrap())
+            .args(["--json", operation])
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
         let output = child.wait_with_output().unwrap();
         assert!(!output.status.success());
         assert!(Instant::now() < deadline);
@@ -2474,12 +2486,102 @@ fn registry_survives_daemon_restart() {
 }
 
 #[test]
+fn workspace_targets_precede_directory_and_picker_fallback() {
+    let fixture = Fixture::new();
+    let own = fixture.add("selection-own");
+    let other = fixture.add("selection-other");
+    let nested = Path::new(own["path"].as_str().unwrap()).join("nested");
+    fs::create_dir(&nested).unwrap();
+    let bin = fixture.root.path().join("bin");
+    fs::create_dir(&bin).unwrap();
+    let picked = fixture.root.path().join("picked");
+    let fzf = bin.join("fzf");
+    fs::write(
+        &fzf,
+        "#!/bin/sh\ntouch \"$HOME/picked\"\nawk -F '\\t' -v id=\"$PICK_ID\" '$1 == id {print}'\n",
+    )
+    .unwrap();
+    fs::set_permissions(fzf, fs::Permissions::from_mode(0o755)).unwrap();
+
+    for action in ["inspect", "stop"] {
+        for (cwd, explicit, json, expected, picker) in [
+            (nested.as_path(), None, false, &own, false),
+            (nested.as_path(), None, true, &own, false),
+            (
+                nested.as_path(),
+                Some("selection-other"),
+                false,
+                &other,
+                false,
+            ),
+            (nested.as_path(), other["id"].as_str(), true, &other, false),
+            (fixture.root.path(), None, false, &other, true),
+        ] {
+            let (_master, slave) = pty::open();
+            let mut command = fixture.command();
+            command
+                .current_dir(cwd)
+                .env("PICK_ID", other["id"].as_str().unwrap())
+                .stdin(slave.try_clone().unwrap())
+                .stderr(slave);
+            if json {
+                command.arg("--json");
+            }
+            command.arg(action).args(explicit);
+            let output = command.output().unwrap();
+            assert!(output.status.success(), "{action}: {output:?}");
+            assert_eq!(picked.exists(), picker);
+            if picker {
+                fs::remove_file(&picked).unwrap();
+            }
+            if action == "inspect" {
+                let result: Value = serde_json::from_slice(&output.stdout).unwrap();
+                assert_eq!(result["workspace"]["id"], expected["id"]);
+            }
+        }
+        for (cwd, args) in [
+            (nested.as_path(), vec![action, "missing"]),
+            (fixture.root.path(), vec![action, "missing"]),
+            (fixture.root.path(), vec!["--json", action]),
+        ] {
+            let (_master, slave) = pty::open();
+            let output = fixture
+                .command()
+                .current_dir(cwd)
+                .env("PICK_ID", other["id"].as_str().unwrap())
+                .args(args)
+                .stdin(slave.try_clone().unwrap())
+                .stderr(slave)
+                .output()
+                .unwrap();
+            assert!(!output.status.success(), "{output:?}");
+            assert!(!picked.exists());
+        }
+    }
+}
+
+#[test]
 fn noninteractive_missing_targets_do_not_open_pickers() {
     let fixture = Fixture::new();
-    for args in [&["add"][..], &["exec", "--", "true"], &["rm"]] {
-        let output = fixture.run(args);
-        assert!(!output.status.success());
-        assert!(String::from_utf8_lossy(&output.stderr).contains("non-interactive"));
+    fixture.add("available");
+    for args in [
+        &["add"][..],
+        &["exec", "--", "true"],
+        &["rm"],
+        &["inspect"],
+        &["stop"],
+        &["status"],
+        &["diff"],
+    ] {
+        for json in [false, true] {
+            let mut command = fixture.command();
+            if json {
+                command.arg("--json");
+            }
+            let output = command.args(args).output().unwrap();
+            assert!(!output.status.success(), "{args:?}: {output:?}");
+            assert!(String::from_utf8_lossy(&output.stderr).contains("explicit target"));
+        }
     }
 }
 

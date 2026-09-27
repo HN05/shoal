@@ -328,8 +328,6 @@ pub enum Fallback {
     CurrentDirectory,
     /// Use only the current workspace; never open a picker.
     CurrentDirectoryOnly,
-    /// Always open the picker.
-    Picker,
 }
 
 pub async fn select_workspace(
@@ -342,7 +340,7 @@ pub async fn select_workspace(
     }
     let workspaces = client::workspaces(&ctx.paths).await?;
     let scoped = crate::env::is_scoped();
-    let cwd = if !scoped && !matches!(fallback, Fallback::Picker) {
+    let cwd = if !scoped {
         Some(std::fs::canonicalize(std::env::current_dir()?)?)
     } else {
         None

@@ -115,7 +115,10 @@ shoal pr 42                   # Remove when merged (also accepts a PR URL)
 shoal pr merged               # Manually confirm merge and remove
 ```
 
-Inside a workspace, omit its name. Use `--json` or `shoal <command> --help`.
+For workspace actions, omit the name to use your scoped or current workspace;
+outside one, choose from the interactive picker or pass a target for `--json`
+and noninteractive calls. Bare `shoal cd` always opens a picker.
+Use `shoal <command> --help` for options.
 
 To move changes between your workspace and the default branch:
 

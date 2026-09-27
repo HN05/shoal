@@ -672,7 +672,7 @@ fn render_status(status: &WorkspaceStatus, json: bool) {
 }
 
 pub(super) async fn inspect(ctx: &Context, workspace: Option<String>) -> Result<i32> {
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::Picker).await?;
+    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let inspection = client::inspect(&ctx.paths, workspace).await?;
     ctx.show(&inspection, |inspection| {
         println!(
@@ -684,7 +684,7 @@ pub(super) async fn inspect(ctx: &Context, workspace: Option<String>) -> Result<
 }
 
 pub(super) async fn stop(ctx: &Context, workspace: Option<String>) -> Result<i32> {
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::Picker).await?;
+    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     request::<()>(&ctx.paths, Method::StopWorkspace { workspace }).await?;
     ctx.emit_styled(
         Style::Success,

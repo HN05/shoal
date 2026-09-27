@@ -133,9 +133,14 @@ runs Claude/Codex CLI, starts a Happy session, opens Codex/T3 apps, or runs a sh
 Ctrl-O inspects, Ctrl-S stops, Ctrl-F shows the diff. Each action returns to your
 shell.
 
-Omitted targets open an fzf picker; `rm`, `exec`, `claude`, `codex`, `happy`,
-`t3`, `status`, `diff`, `merge`, and `land` first use the workspace containing the
-current directory. `shoal add` offers repositories in most-recently-used order, then
+Commands acting on one workspace use an explicit target, otherwise the caller's
+scoped workspace or the workspace containing the current directory, then an
+interactive fzf picker. Invalid explicit targets fail without fallback; without a
+current workspace, noninteractive and JSON calls require a target. Scoped callers
+remain confined to their own workspace. Bare `shoal cd` always opens a picker;
+all-workspace listings and `--all` retain their scope. `config show` uses its
+checkout-aware, non-picker selection described below.
+`shoal add` offers repositories in most-recently-used order, then
 a new-branch prompt or existing-branch picker. Noninteractive and JSON calls never prompt;
 management commands support JSON output, while executed commands keep their
 own stdin, stdout, stderr, and exit code.
