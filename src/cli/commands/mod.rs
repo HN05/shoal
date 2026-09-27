@@ -273,6 +273,20 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
                 review::pull_request(&ctx, url, repository, reviewer, args).await
             }
         },
+        Command::Done {
+            workspace,
+            keep,
+            cleanup,
+        } => {
+            let cleanup = if keep {
+                Some(false)
+            } else if cleanup {
+                Some(true)
+            } else {
+                None
+            };
+            workspaces::done(&ctx, workspace, cleanup).await
+        }
         Command::Inspect { workspace } => workspaces::inspect(&ctx, workspace).await,
         Command::Notifications { all, follow, limit } => {
             notifications::run(&ctx, all, follow, limit).await

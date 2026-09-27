@@ -110,6 +110,9 @@ shoal diff fix-login           # Changes since the branch's fork point
 shoal inspect fix-login       # Detailed workspace and execution records
 shoal notifications           # Conflicts, finished agents, and removals you missed
 shoal stop fix-login          # Stop managed commands; keep the workspace
+shoal done fix-login          # Mark finished and request safe cleanup
+shoal done --keep fix-login   # Mark finished; keep for review
+shoal done --cleanup fix-login # Override a configured keep default
 shoal rm fix-login            # Remove the workspace
 shoal pr 42                   # Remove when merged (also accepts a PR URL)
 shoal pr merged               # Manually confirm merge and remove

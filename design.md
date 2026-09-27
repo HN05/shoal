@@ -201,9 +201,10 @@ own-branch checks.
 Commands launched through Shoal inherit a daemon-validated scope token that
 confines them to their own workspace: status, inspect, execute, setup, merge, and resources.
 `land`, creation, removal, reconciliation, other workspaces, repository
-administration, and service control need an unscoped caller. PR registration and
-manual merge acknowledgement are own-workspace exceptions. Effective configuration
-may be read for the caller's own workspace; changing it needs an unscoped caller.
+administration, and service control need an unscoped caller. PR registration,
+manual merge acknowledgement, and completion signals are own-workspace exceptions.
+Effective configuration may be read for the caller's own workspace; changing it
+needs an unscoped caller.
 Nested executions keep scope.
 
 Root help groups built-in commands by task; configured commands are discovered
@@ -386,9 +387,9 @@ reads use bounded concurrency, retain workspace order and report every failure.
 Workspace completion uses `[done] cleanup` (default true), resolved through the
 normal configuration layers with explicit keep and cleanup overrides. Completion
 is persisted separately from lifecycle readiness, binds to HEAD, and notifies the
-user; it does not assert that work was merged. Scoped callers may mark only their
-own workspace done. Keeping a completed workspace suppresses idle and PR cleanup
-until another completion requests cleanup or the user removes it. Completion
+user; it does not assert that work was merged. Keeping a completed workspace
+suppresses idle and PR cleanup until another completion requests cleanup or the
+user removes it. Completion
 cleanup without a PR registration requires clean files and every commit pushed or
 on the local default branch; an existing PR registration keeps its merge checks.
 The daemon stops tracked executions through shared removal and rechecks files and

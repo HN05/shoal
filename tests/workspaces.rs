@@ -328,7 +328,7 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
             "{args:?}"
         );
     }
-    for command in ["rm", "cd", "exec", "diff", "status", "inspect"] {
+    for command in ["rm", "cd", "exec", "diff", "status", "inspect", "done"] {
         assert!(
             complete(&[command, "fi"], fixture.root.path()).contains(&"first".into()),
             "{command}"
@@ -2572,6 +2572,7 @@ fn noninteractive_missing_targets_do_not_open_pickers() {
         &["stop"],
         &["status"],
         &["diff"],
+        &["done"],
     ] {
         for json in [false, true] {
             let mut command = fixture.command();
@@ -2634,6 +2635,17 @@ rm untracked
 shoal pr merged
 test "$PWD" = "$shoal_repo_dir"
 until ! shoal inspect acknowledged >/dev/null 2>&1; do sleep 0.1; done
+shoal add "$REPO" completed
+shoal done --keep
+test "${PWD##*/}" = completed
+printf 'keep me' > untracked
+shoal done --cleanup
+test "${PWD##*/}" = completed
+shoal done --keep
+rm untracked
+shoal done --cleanup
+test "$PWD" = "$shoal_repo_dir"
+until ! shoal inspect completed >/dev/null 2>&1; do sleep 0.1; done
 printf 'navigation-ok\n'
 "#;
     for shell in ["bash", "zsh"] {
@@ -2979,6 +2991,8 @@ fn execution_scope_limits_management_and_expires() {
         vec!["setup", "other"],
         vec!["pr", "merged", "other"],
         vec!["pr", "clear", "other"],
+        vec!["done", "other", "--keep"],
+        vec!["done", "other", "--cleanup"],
         vec!["config", "show", "other"],
         vec![
             "config",
@@ -11223,4 +11237,94 @@ fn benchmark_daemon_reads() {
             );
         }
     }
+}
+
+#[test]
+fn done_defaults_to_cleanup_and_releases_workspace_resources() {
+    let fixture = Fixture::with_config(Some("[auto_cleanup]\nenabled=false\n[resources.device]\n"));
+    let workspace = fixture.add("finished");
+    fixture.ok(&["port", "acquire", "web", "finished"]);
+    fixture.ok(&["resource", "acquire", "device", "finished"]);
+    let mut wrapper = fixture
+        .command()
+        .args(["exec", "finished", "--", "sleep", "60"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    wait_registered_execution(&fixture, "finished");
+    let completion = fixture.ok(&["done", "finished"]);
+    assert_eq!(completion["cleanup"], true);
+    wait_removed(&fixture, "finished");
+    assert!(!wrapper.wait().unwrap().success());
+    assert!(!Path::new(workspace["path"].as_str().unwrap()).exists());
+    assert!(
+        fixture
+            .ok(&["resource", "list", "--all"])
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        fixture
+            .ok(&["port", "list", "--all"])
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
+fn done_keep_is_scoped_persistent_and_can_be_overridden_in_both_directions() {
+    let mut fixture = Fixture::new();
+    let workspace = fixture.add("review");
+    let output = fixture.ok(&[
+        "exec",
+        "review",
+        "--",
+        env!("CARGO_BIN_EXE_shoal"),
+        "--json",
+        "done",
+        "--keep",
+    ]);
+    assert_eq!(output["cleanup"], false);
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    fixture.restart();
+    assert_eq!(
+        fixture.ok(&["status", "review"])["completion"]["cleanup"],
+        false
+    );
+    let status = fixture.run(&["status", "review"]);
+    assert!(String::from_utf8_lossy(&status.stdout).contains("done (kept for review)"));
+    assert!(path.exists());
+    fixture.ok(&["done", "review", "--cleanup"]);
+    wait_removed(&fixture, "review");
+
+    let fixture = Fixture::with_config(Some("[done]\ncleanup=false\n"));
+    fixture.add("keep-default");
+    assert_eq!(fixture.ok(&["done", "keep-default"])["cleanup"], false);
+    // Agents can explicitly clean their own workspace despite a keep default.
+    fixture.run(&[
+        "exec",
+        "keep-default",
+        "--",
+        env!("CARGO_BIN_EXE_shoal"),
+        "done",
+        "--cleanup",
+    ]);
+    wait_removed(&fixture, "keep-default");
+}
+
+#[test]
+fn done_records_completion_without_claiming_dirty_work_is_merged() {
+    let fixture = Fixture::new();
+    let workspace = fixture.add("unfinished");
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    fs::write(path.join("work"), "retain").unwrap();
+    fixture.ok(&["done", "unfinished"]);
+    wait_until("completion cleanup error", || {
+        fixture.ok(&["inspect", "unfinished"])["completion"]["error"].is_string()
+    });
+    assert_eq!(fs::read_to_string(path.join("work")).unwrap(), "retain");
+    assert!(fixture.ok(&["inspect", "unfinished"])["pr_cleanup"].is_null());
 }

@@ -639,6 +639,27 @@ Git protects other checkouts. Failed ancestry or exact-ref checks stop removal
 with the Git diagnostic, as they do branch selection and refresh; a missing ref
 is a negative answer. Shell integration returns to `<root_dir>/<repo>`.
 
+### Assignment completion
+
+`shoal done [workspace]` records that the assignment is finished and notifies the
+user. `[done] cleanup` defaults to true; `--keep` and `--cleanup` override it in
+either direction and cannot be combined. The setting follows normal repository
+and worktree configuration precedence. Scoped agents may mark only their own
+workspace done; completion does not verify or assert a merge.
+
+Cleanup runs in the daemon without an idle delay, stopping tracked commands and
+using normal branch retention and resource release. Without a PR registration,
+files must be clean and all commits pushed or on the local default branch; an
+existing registration keeps its merge requirements. Files and the completed HEAD
+are checked again after stopping and removal hooks. Failure retains ownership;
+`status` and `inspect` show the completion choice and cleanup errors. Changed HEAD
+requires a new `done` signal before completion cleanup can proceed.
+
+Keeping persists across restarts and suppresses idle and PR cleanup until a new
+`done --cleanup` request or explicit removal. It leaves tracked commands running.
+With cleanup requested, shell integration leaves a clean, preserved workspace for
+`<root_dir>/<repo>`; keeping or visibly unsafe work leaves the current directory.
+
 ### PR cleanup
 
 `shoal pr <number-or-url> [workspace]` watches a GitHub/Forgejo PR using the

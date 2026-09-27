@@ -6,7 +6,9 @@ use clap::Subcommand;
 const GROUPS: &[(&str, &[&str])] = &[
     (
         "Workspaces",
-        &["add", "issue", "ls", "cd", "status", "setup", "adopt", "rm"],
+        &[
+            "add", "issue", "ls", "cd", "status", "setup", "adopt", "done", "rm",
+        ],
     ),
     (
         "Run commands and agents",

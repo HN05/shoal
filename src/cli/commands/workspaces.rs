@@ -25,7 +25,7 @@ use crate::{
         existing_branch::{Branch, OpenedWorkspace},
     },
     hooks::{self, Hook, HookKind},
-    model::{DiffBase, Repository, Workspace, WorkspaceStatus},
+    model::{Completion, DiffBase, Repository, Workspace, WorkspaceStatus},
     protocol::{ConfigTarget, Method},
     removal::{BranchChoice, RemovalCheck, RemovalResult},
     shell,
@@ -655,6 +655,19 @@ fn render_status(status: &WorkspaceStatus, json: bool) {
         );
     }
 
+    if let Some(completion) = &inspection.completion {
+        println!(
+            "Completion:    done ({})",
+            if completion.cleanup {
+                "cleanup requested"
+            } else {
+                "kept for review"
+            }
+        );
+        if let Some(error) = &completion.error {
+            println!("  {}", palette.paint(Style::Warning, error));
+        }
+    }
     match &inspection.pr_cleanup {
         Some(registration) => {
             let target = match &registration.kind {
@@ -817,6 +830,50 @@ pub(super) async fn exec(
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     execution::run(&ctx.paths, workspace, command, None).await
+}
+
+pub(super) async fn done(
+    ctx: &Context,
+    workspace: Option<String>,
+    cleanup: Option<bool>,
+) -> Result<i32> {
+    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    // Calculate navigation before the daemon can remove the worktree. A failed
+    // preview must not prevent recording completion, especially a keep default.
+    let escape = if cleanup != Some(false) && !env::is_scoped() && !ctx.json {
+        done_destination(ctx, &workspace).await.unwrap_or(None)
+    } else {
+        None
+    };
+    let completion: Completion =
+        request(&ctx.paths, Method::WorkspaceDone { workspace, cleanup }).await?;
+    if completion.cleanup
+        && let Some(destination) = escape
+    {
+        shell::navigate(&destination, ctx.json)?;
+    }
+    ctx.emit(if completion.cleanup {
+        "Assignment marked done; cleanup requested. Tracked commands may stop and the workspace may be removed."
+    } else {
+        "Assignment marked done; workspace kept for review."
+    }, &completion)?;
+    Ok(0)
+}
+
+async fn done_destination(ctx: &Context, workspace: &str) -> Result<Option<PathBuf>> {
+    let check: RemovalCheck = request(
+        &ctx.paths,
+        Method::CheckRemoval {
+            workspace: workspace.to_owned(),
+            caller_pid: std::process::id(),
+            include_changes: false,
+        },
+    )
+    .await?;
+    if check.dirty || check.unpushed_commits != 0 {
+        return Ok(None);
+    }
+    escape_destination(ctx, &check.workspace).await
 }
 
 pub(super) async fn pr(ctx: &Context, workspace: Option<String>, action: Action) -> Result<i32> {

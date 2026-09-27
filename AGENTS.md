@@ -50,8 +50,9 @@ when behavior changes, distinguishing decisions from proposals.
   clean worktrees with all commits pushed or on the local default branch, or deleted worktrees. Keep one removal path for manual and automatic
   cleanup, retaining the default branch unless explicitly deleted. PR cleanup is
   on by default: stop tracked agents, verify clean merged HEAD, use that path.
-  Completion cleanup uses the same path and preserves dirty, unpushed or newer
-  work; a keep choice suppresses idle and PR cleanup.
+  Completion cleanup without a PR registration requires every commit pushed or
+  on the local default branch, retaining dirty or newer work through the same
+  removal path; a keep choice suppresses idle and PR cleanup.
 - TCP port reservations are cooperative and owned by the worktree. Keep them
   across command exits and failed removal; successful removal releases them with
   the workspace record. `[ports]` `start`/`end` set the automatic range.

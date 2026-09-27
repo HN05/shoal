@@ -47,7 +47,14 @@ is in `prompt_file` and the user must send it from the app. Sessions launched
 through Shoal are scoped and cannot create workspaces or start sessions in other
 workspaces; the human or console session does.
 
-## PR completion
+## Completion
+
+When the assignment is finished, call `shoal done` as your last command. It
+records completion and defaults to cleanup, which may stop your execution.
+Use `shoal done --keep` when the user wants to review in this workspace;
+`--cleanup` overrides a keep default. `[done] cleanup = false` makes keeping the
+default. Dirty, unpushed or newer work is retained; inspect `completion.error`
+for cleanup failures. Completion does not claim a merge occurred.
 
 After opening a PR, run `shoal pr <number-or-url>`. Shoal checks with `gh`/`fj` and, when
 merged, stops tracked agents and removes the clean workspace. Without those
