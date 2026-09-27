@@ -22,7 +22,7 @@ and resolve to your own workspace. Agents launched independently in a managed
 worktree can use the same commands: Shoal resolves the workspace from the current
 directory, but the session itself has no execution scope or lifecycle tracking.
 
-When unsure whether your checkout is managed, use `shoal --json list` and match
+When unsure whether your checkout is managed, use `shoal --json ls` and match
 your working directory to a returned workspace `path`. In an ordinary checkout,
 use ordinary Git for merges. Shoal's resources require a managed workspace;
 do not select another agent's workspace or create one just to obtain a lease.
