@@ -136,7 +136,8 @@ shell.
 
 Commands acting on one workspace use an explicit target, otherwise the caller's
 scoped workspace or the workspace containing the current directory, then an
-interactive fzf picker. Invalid explicit targets fail without fallback; without a
+interactive fzf picker; a deleted current directory provides no workspace context.
+Invalid explicit targets fail without fallback; without a
 current workspace, noninteractive and JSON calls require a target. Scoped callers
 remain confined to their own workspace. Bare `shoal cd` always opens a picker;
 all-workspace listings and `--all` retain their scope. `config show` uses its

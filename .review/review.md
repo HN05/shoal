@@ -101,7 +101,8 @@ removal, check it against the rule those files state before judging it.
   managed workspace, or an interactive picker. Issue URLs must match the selected
   repository's remote; lookup failures create nothing.
 - Single-workspace actions use an explicit target, then scope or current directory,
-  then an interactive picker; explicit misses never fall back. Noninteractive and
+  then an interactive picker; a deleted current directory provides no workspace
+  context. Explicit misses never fall back. Noninteractive and
   JSON calls without a current workspace need a target. Bare `cd` always picks;
   all-workspace operations and checkout-aware `config show` keep their selection.
 - Agent pickers offer “No agent”: issue creation continues without a launch,

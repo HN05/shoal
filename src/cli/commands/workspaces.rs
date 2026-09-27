@@ -799,7 +799,9 @@ fn confirm_removal(ctx: &Context, check: &RemovalCheck, choice: BranchChoice) ->
 /// Where the shell should go if the current directory is inside `workspace`:
 /// its repository's Shoal directory, or home when that is unavailable.
 async fn escape_destination(ctx: &Context, workspace: &Workspace) -> Result<Option<PathBuf>> {
-    let cwd = std::env::current_dir()?;
+    let Some(cwd) = ui::current_directory()? else {
+        return Ok(None);
+    };
     if !workspace.contains(&cwd) {
         return Ok(None);
     }

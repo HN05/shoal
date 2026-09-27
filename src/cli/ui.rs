@@ -266,6 +266,9 @@ fn run_picker(
         "nothing to select; register a repository with `shoal repo add <path-or-url>` or create a workspace with `shoal add`"
     );
     let mut command = Command::new(Tool::Fzf.program());
+    if current_directory()?.is_none() {
+        command.current_dir("/");
+    }
     command
         .args([
             "--no-sort",
@@ -330,6 +333,14 @@ pub enum Fallback {
     CurrentDirectoryOnly,
 }
 
+pub(super) fn current_directory() -> io::Result<Option<std::path::PathBuf>> {
+    match std::env::current_dir().and_then(std::fs::canonicalize) {
+        Ok(cwd) => Ok(Some(cwd)),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error),
+    }
+}
+
 pub async fn select_workspace(
     ctx: &Context,
     explicit: Option<String>,
@@ -340,11 +351,7 @@ pub async fn select_workspace(
     }
     let workspaces = client::workspaces(&ctx.paths).await?;
     let scoped = crate::env::is_scoped();
-    let cwd = if !scoped {
-        Some(std::fs::canonicalize(std::env::current_dir()?)?)
-    } else {
-        None
-    };
+    let cwd = if !scoped { current_directory()? } else { None };
     let context = WorkspaceContext::from_directory(&workspaces, cwd.as_deref());
     if let Some(workspace) = context.resolve(None, scoped, ScopeOrder::BeforeDirectory) {
         return Ok(workspace.id.clone());

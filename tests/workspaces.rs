@@ -2596,6 +2596,92 @@ fn workspace_targets_precede_directory_and_picker_fallback() {
 }
 
 #[test]
+fn workspace_commands_select_from_a_deleted_current_directory() {
+    use std::{ffi::CString, os::unix::process::CommandExt};
+
+    let fixture = Fixture::new();
+    let workspace = fixture.add("available");
+    let bin = fixture.root.path().join("bin");
+    fs::create_dir(&bin).unwrap();
+    let picked = fixture.root.path().join("picked");
+    let fzf = bin.join("fzf");
+    // Bash reports getcwd failures at startup if the picker inherits a deleted cwd.
+    fs::write(&fzf, "#!/bin/bash\npwd -P > \"$HOME/picked\"\ncat\n").unwrap();
+    fs::set_permissions(fzf, fs::Permissions::from_mode(0o755)).unwrap();
+
+    for (args, interactive, expect_report) in [
+        (vec!["doctor"], true, true),
+        (vec!["--json", "doctor"], false, false),
+        (vec!["--json", "doctor", "available"], false, true),
+        (vec!["--json", "doctor", "--all"], false, true),
+        (vec!["rm", "--yes", "--keep-branch"], true, true),
+    ] {
+        let deleted = fixture.root.path().join("deleted");
+        fs::create_dir(&deleted).unwrap();
+        let path = CString::new(deleted.as_os_str().as_encoded_bytes()).unwrap();
+        let mut command = fixture.command();
+        command.current_dir(&deleted).args(&args);
+        // Delete only the child's cwd, after chdir and before exec; never change
+        // the test process's directory or the fixture's managed worktree.
+        unsafe {
+            command.pre_exec(move || {
+                if libc::rmdir(path.as_ptr()) != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+        let (mut master, slave) = pty::open();
+        if interactive {
+            command
+                .stdin(slave.try_clone().unwrap())
+                .stderr(slave.try_clone().unwrap());
+        }
+        let output = command.output().unwrap();
+        drop(command);
+        drop(slave);
+        assert!(matches!(output.status.code(), Some(0 | 2)), "{output:?}");
+        assert!(output.stderr.is_empty(), "{output:?}");
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        if interactive {
+            use std::io::Read;
+            let mut transcript = String::new();
+            let _ = master.read_to_string(&mut transcript);
+            assert!(transcript.is_empty(), "{transcript}");
+            if args[0] == "doctor" {
+                assert!(stdout.contains("available: ready"), "{stdout}");
+            } else {
+                assert!(stdout.contains("Workspace removed"), "{stdout}");
+                assert!(fixture.ok(&["ls"]).as_array().unwrap().is_empty());
+            }
+            assert!(!stdout.contains("Could not check workspaces"), "{stdout}");
+            assert_eq!(fs::read_to_string(&picked).unwrap().trim(), "/");
+            fs::remove_file(&picked).unwrap();
+        } else {
+            let report: Value = serde_json::from_str(&stdout).unwrap();
+            assert!(!picked.exists());
+            if expect_report {
+                assert_eq!(report["workspaces"][0]["workspace"]["id"], workspace["id"]);
+            } else {
+                assert_eq!(report["workspaces"], serde_json::json!([]));
+                let check = report["checks"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .find(|check| check["name"] == "workspaces")
+                    .unwrap();
+                assert!(
+                    check["message"]
+                        .as_str()
+                        .unwrap()
+                        .contains("explicit target")
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn noninteractive_missing_targets_do_not_open_pickers() {
     let fixture = Fixture::new();
     fixture.add("available");

@@ -212,7 +212,8 @@ through `run`.
 
 Single-workspace actions select an explicit target, otherwise the caller's scoped
 workspace or the workspace containing the current directory, then an interactive
-picker. Explicit misses fail without fallback; noninteractive and JSON calls
+picker; a deleted current directory provides no workspace context. Explicit misses
+fail without fallback; noninteractive and JSON calls
 without a current workspace require a target. Scope remains daemon-enforced.
 Bare `cd` always picks; all-workspace operations retain their scope.
 `config show` never opens a picker. Agent pickers offer
