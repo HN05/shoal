@@ -33,16 +33,27 @@ impl Manager {
         let _guard = self.pr_gate.lock().await;
         let workspace = self.workspace(selector).await?;
         self.verify_worktree(&workspace).await?;
+        let head = crate::forge::pr::current_head(&workspace).await?;
+        self.record_done(&workspace, head, cleanup).await
+    }
+
+    /// Caller holds the PR gate and has verified ownership and this HEAD.
+    pub(crate) async fn record_done(
+        &self,
+        workspace: &Workspace,
+        head: String,
+        cleanup: Option<bool>,
+    ) -> Result<Completion> {
         let cleanup = match cleanup {
             Some(cleanup) => cleanup,
-            None => self.workspace_settings(&workspace).await?.done.cleanup,
+            None => self.workspace_settings(workspace).await?.done.cleanup,
         };
         let completion = Completion {
-            head: crate::forge::pr::current_head(&workspace).await?,
+            head,
             cleanup,
             error: None,
         };
-        let id = workspace.id;
+        let id = workspace.id.clone();
         let record = serde_json::to_string(&completion)?;
         self.store
             .run(move |db| {
