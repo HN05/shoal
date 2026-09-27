@@ -74,6 +74,7 @@ pub struct RepoConfig {
     pub simulators: SimulatorPreferences,
     pub auto_cleanup: AutoCleanup,
     pub pr_cleanup: PrCleanup,
+    pub done: Done,
 }
 
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
@@ -174,6 +175,13 @@ pub struct Codex {
 pub struct AutoCleanup {
     pub enabled: Option<bool>,
     pub idle_minutes: Option<u64>,
+}
+
+/// Default cleanup choice when an agent marks its workspace done.
+#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Done {
+    pub cleanup: Option<bool>,
 }
 
 /// Repository value for the global `[pr_cleanup]`.

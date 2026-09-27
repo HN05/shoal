@@ -89,3 +89,7 @@ allow_any = false
 # capacity = 2
 # [resource_pools.devices.resources.alpha]
 # capacity = 1
+
+# Clean up when an agent marks its workspace done; false keeps it for review.
+[done]
+cleanup = true

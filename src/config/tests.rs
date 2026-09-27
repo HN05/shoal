@@ -316,3 +316,19 @@ fn root_directory_defaults_and_validates_explicit_paths() {
         PathBuf::from("/home/test/new")
     );
 }
+
+#[test]
+fn done_cleanup_defaults_on_and_can_be_overridden_per_repository() {
+    let global: Config = toml::from_str("[done]\ncleanup = false\n").unwrap();
+    assert!(
+        Config::default()
+            .effective(&Default::default())
+            .unwrap()
+            .done
+            .cleanup
+    );
+    assert!(!global.effective(&Default::default()).unwrap().done.cleanup);
+    let repo = repo::parse("[done]\ncleanup = true\n").unwrap();
+    assert!(global.effective(&repo).unwrap().done.cleanup);
+    assert!(toml::from_str::<Config>("[done]\ncleanup = 'yes'").is_err());
+}

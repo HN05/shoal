@@ -39,6 +39,7 @@ pub struct Config {
     pub codex: repo::Codex,
     pub auto_cleanup: repo::AutoCleanup,
     pub pr_cleanup: repo::PrCleanup,
+    pub done: repo::Done,
     pub ports: PortRange,
     pub resources: std::collections::BTreeMap<String, crate::daemon::resources::ResourceConfig>,
     pub resource_pools: std::collections::BTreeMap<String, crate::daemon::resources::PoolConfig>,
@@ -144,6 +145,17 @@ pub struct PrCleanup {
 impl Default for PrCleanup {
     fn default() -> Self {
         Self { enabled: true }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct Done {
+    pub cleanup: bool,
+}
+
+impl Default for Done {
+    fn default() -> Self {
+        Self { cleanup: true }
     }
 }
 
@@ -335,6 +347,7 @@ impl Config {
             },
             auto_cleanup: self.auto_cleanup,
             pr_cleanup: self.pr_cleanup,
+            done: self.done,
             ..Default::default()
         }
     }

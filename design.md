@@ -383,6 +383,10 @@ reads use bounded concurrency, retain workspace order and report every failure.
 
 ## Removal and recovery
 
+Workspace completion uses `[done] cleanup` (default true), resolved through the
+normal configuration layers. The `done` command will allow explicit keep and
+cleanup overrides; completion does not assert that work was merged.
+
 Manual and automatic cleanup share one path: establish ownership, stop owned
 executions, run removal hooks, remove owned simulators, remove the worktree,
 and release leases with the record. Failures retain what is needed to retry.
