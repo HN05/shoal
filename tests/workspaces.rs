@@ -7556,6 +7556,79 @@ fn issue_command_finds_the_repository_and_starts_the_default_agent() {
 }
 
 #[test]
+fn agent_picker_can_skip_launch_select_agents_or_cancel() {
+    let fixture = Fixture::with_config(Some("[commands]\nnone = ['agent-probe']\n"));
+    fixture.add_github_origin();
+    let bin = fixture.root.path().join("bin");
+    fs::create_dir(&bin).unwrap();
+    for (tool, script) in [
+        (
+            "gh",
+            r#"#!/bin/sh
+printf '{"number":298,"title":"Pick an agent","body":"Issue context"}'
+"#,
+        ),
+        (
+            "fzf",
+            r#"#!/bin/sh
+cat > "$HOME/picker-input"
+choice=$(cat "$HOME/choice")
+[ "$choice" != cancel ] || exit 130
+awk -F '\t' -v choice="$choice" '$2 == choice {print}' "$HOME/picker-input"
+"#,
+        ),
+        (
+            "codex",
+            "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$HOME/agent-args\"\n",
+        ),
+        (
+            "agent-probe",
+            "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$HOME/agent-args\"\n",
+        ),
+    ] {
+        let path = bin.join(tool);
+        fs::write(&path, script).unwrap();
+        fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let agent_args = fixture.root.path().join("agent-args");
+    for choice in ["cancel", "No agent", "codex", "none"] {
+        fs::write(fixture.root.path().join("choice"), choice).unwrap();
+        let (output, transcript) = fixture.interactive(
+            &[
+                "issue",
+                "https://github.com/team/project/issues/298",
+                "--base",
+                "HEAD",
+            ],
+            "",
+        );
+        if choice == "cancel" {
+            assert!(!output.status.success(), "{output:?}");
+            assert!(transcript.contains("selection canceled"), "{transcript}");
+            assert_eq!(fixture.ok(&["list"]), serde_json::json!([]));
+            continue;
+        }
+        assert!(output.status.success(), "{output:?}\n{transcript}");
+        let inspection = fixture.ok(&["inspect", "issue-298-pick-an-agent"]);
+        assert_eq!(inspection["workspace"]["state"], "ready");
+        assert_eq!(inspection["executions"], serde_json::json!([]));
+        if choice == "No agent" {
+            assert!(!agent_args.exists());
+            // The shared review picker also accepts the choice without a launch.
+            let (output, transcript) =
+                fixture.interactive(&["review", "issue-298-pick-an-agent"], "");
+            assert!(output.status.success(), "{output:?}\n{transcript}");
+            assert!(!agent_args.exists());
+        } else {
+            let prompt = fs::read_to_string(&agent_args).unwrap();
+            assert!(prompt.contains("Issue context"), "{prompt}");
+            fs::remove_file(&agent_args).unwrap();
+        }
+        fixture.ok(&["rm", "issue-298-pick-an-agent", "--yes", "--delete-branch"]);
+    }
+}
+
+#[test]
 fn issue_number_picks_a_repository_before_lookup_interactively() {
     let fixture = Fixture::with_config(Some("default_agent = 'claude'\n"));
     fixture.add_github_origin();

@@ -100,7 +100,8 @@ use the current registered checkout or managed workspace, falling back to the
 repository picker interactively; otherwise pass `--repo`. URLs select by remote
 unless `--repo` is explicit, in which case it must match. The command starts
 `--agent`, else `default_agent` from the repository or global config, else an
-interactive picker. Agent names select built-in launchers or entries in `[commands]`.
+interactive picker. Choosing “No agent” creates the workspace without a launch.
+Agent names select built-in launchers or entries in `[commands]`.
 
 ```sh
 shoal repo add /path/to/repo             # Or a Git clone URL; register once
@@ -199,7 +200,8 @@ review-worktree = ["tuicr", "-w"]
 `shoal review [workspace]` asks whether to review manually or with an agent;
 `--manual` or `--agent <name>` skips the question, which is required without a
 terminal. Manual review runs the `review` command (`shoal run review` also does);
-without one, the agent reviews. The agent is chosen as for `shoal issue` and is
+without one, the agent reviews. Choosing “No agent” returns without starting a reviewer.
+The agent is otherwise chosen as for `shoal issue` and is
 prompted to report findings, not to change files, commit, push, or post.
 `shoal pr review <number-or-url>` looks up the PR with your `gh`/`fj` login and
 reviews it the same way in the workspace that owns its head branch, or opens one

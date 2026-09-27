@@ -163,12 +163,15 @@ pub(super) async fn run(
     };
     match reviewer {
         Reviewer::Agent(agent) => {
-            let agent = crate::cli::agents::default_agent(
+            let Some(agent) = crate::cli::agents::default_agent(
                 ctx,
                 ConfigTarget::Workspace(workspace.clone()),
                 agent,
             )
-            .await?;
+            .await?
+            else {
+                return Ok(0);
+            };
             let workspace = client::inspect(&ctx.paths, workspace).await?.workspace;
             let prompt = prompt(&workspace, pull.as_ref());
             // Desktop apps cannot receive the prompt.

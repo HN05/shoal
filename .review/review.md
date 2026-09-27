@@ -94,6 +94,8 @@ removal, check it against the rule those files state before judging it.
 - Issue numbers use an explicit repository, the current registered checkout or
   managed workspace, or an interactive picker. Issue URLs must match the selected
   repository's remote; lookup failures create nothing.
+- Agent pickers offer “No agent”: issue creation continues without a launch,
+  and review returns without starting a reviewer.
 - Claude and Codex launches (including Happy and Codex app handoffs) persist
   workspace trust even when the user config is absent, preserving other settings.
 - Agent forge wrappers are opt-in, resolve per tool through configuration layers,

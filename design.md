@@ -205,7 +205,8 @@ Nested executions keep scope.
 
 The CLI takes explicit targets and `--json` for automation, and resolves omitted
 targets from the current directory. Interactive commands may use fzf;
-noninteractive calls and `config show` never open a picker. `config show` reports
+noninteractive calls and `config show` never open a picker. Agent pickers offer
+“No agent” to continue without launching one. `config show` reports
 effective repository values with their winning layers and uses a registered checkout
 before a workspace exists. `status` combines lifecycle, fork-point changes, active work and
 leases in one workspace view. Human output uses `Display` for enum values and a shared

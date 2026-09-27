@@ -221,11 +221,11 @@ async fn resolve_add_agent(
         || client::settings(&ctx.paths, ConfigTarget::Repository(repository.into()));
     let agent = match agent {
         AgentLaunch::Explicit(agent) => agent,
-        AgentLaunch::IssueDefault(agent) => Some(agents::select_default_agent(
+        AgentLaunch::IssueDefault(agent) => agents::select_default_agent(
             ctx,
             settings.get_or_try_init(load_settings).await?,
             agent,
-        )?),
+        )?,
     };
     // Validate launch configuration before looking up the issue or creating work.
     if let Some(Agent::Custom(name)) = &agent {
