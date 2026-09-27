@@ -682,8 +682,6 @@ not mark done. Unwatching does not undo a recorded completion; use `done --keep`
 to cancel its cleanup. `[pr_cleanup] enabled = false` pauses PR-driven completion
 and cleanup independently of idle cleanup, globally (restart after changing it)
 or per repository (applies at once). Cancellation remains available when disabled.
-Bare registration, `pr clear`, and `pr merged` are not compatibility aliases; use
-`done` to finish without a forge watch.
 
 ### Automatic cleanup
 
