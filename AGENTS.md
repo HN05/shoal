@@ -133,6 +133,10 @@ Containerfile's `ARG RUST`, and the `image:` tag in every workflow. Cargo builds
 share the runner-mounted `/ci-target`; every step that runs cargo there sources
 `.forgejo/scripts/lock-target-dir.sh` first, which takes a free slot directory
 instead of waiting, and runs `cargo clean -p shoal`.
+`.forgejo/workflows/deps.yml` runs weekly (and on `fj actions dispatch deps.yml
+main`) and rewrites one evergreen `tracking` issue, found by the marker comment
+in its body, with `cargo audit` and `cargo outdated` findings. It is never a
+required check; findings do not fail it, a tool that could not run does.
 `.forgejo/workflows/review.yml` posts an advisory review-bot review when a PR
 opens and whenever `review/default`, `review/claude` or `review/codex` is
 added; `review/none` suppresses it. `.review/review.md` is its project brief;

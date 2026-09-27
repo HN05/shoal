@@ -1,0 +1,85 @@
+# Weekly dependency report, written into one evergreen issue. Kept out of ci.yml
+# on purpose: findings must never gate a pull request. Findings do not fail the
+# job — they are the product — but a tool that could not run does, so a quiet
+# report and a broken one cannot look alike.
+
+name: deps
+
+on:
+  schedule:
+    # Off the hour so it does not queue behind everything else that wakes on one.
+    - cron: '17 4 * * 1'
+  # `fj actions dispatch deps.yml main` after a dependency bump.
+  workflow_dispatch:
+
+concurrency:
+  group: deps
+  # Two runs would fight over one issue body; let the first finish.
+  cancel-in-progress: false
+
+env:
+  # The report parses cargo's own JSON, so no escape codes anywhere in it.
+  CARGO_TERM_COLOR: never
+
+jobs:
+  report:
+    name: dependency report
+    runs-on: docker
+    container:
+      # Same image as ci.yml's rust job; bump every tag together.
+      image: git.henriknordvik.com/hn05/ci-shoal:1.98
+    steps:
+      - name: Checkout
+        run: |
+          # A scheduled event carries no head commit on every Forgejo version.
+          ref='${{ github.sha }}'
+          [ -n "$ref" ] || ref='${{ github.ref_name }}'
+          git init -q .
+          git remote add origin "${{ github.server_url }}/${{ github.repository }}.git"
+          git -c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:${{ github.token }}' | base64 | tr -d '\n')" \
+            fetch -q --depth 1 origin "$ref"
+          git checkout -q FETCH_HEAD
+
+      - name: Tooling (baked into the image)
+        run: |
+          # A missing tool degrades the report rather than failing it, so this
+          # listing is where a half-built image becomes obvious.
+          for t in cargo-audit cargo-outdated jq curl; do
+            if command -v "$t" >/dev/null 2>&1; then
+              echo "$t: $("$t" --version 2>&1 | head -1)"
+            else
+              echo "$t: MISSING — rebuild the image (.forgejo/ci-image/build.sh on the runner host)"
+            fi
+          done
+
+      # No CARGO_TARGET_DIR: nothing here compiles the crate, so it takes no
+      # /ci-target slot.
+      - name: Collect the report
+        env:
+          # Forgejo's run URL takes the run number, not the internal run id.
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_number }}
+          SOURCE: ${{ github.server_url }}/${{ github.repository }}/src/branch/main/.forgejo/workflows/deps.yml
+        run: |
+          # rc=1 means the report is incomplete, not that collecting failed:
+          # publish it anyway, then fail in the last step.
+          rc=0
+          .forgejo/scripts/dependency-report.sh > report.md || rc=$?
+          echo "REPORT_RC=$rc" >> "$GITHUB_ENV"
+          cat report.md
+
+      - name: Publish into the evergreen issue
+        env:
+          FORGE_API: ${{ github.api_url }}
+          FORGE_REPO: ${{ github.repository }}
+          FORGE_TOKEN: ${{ github.token }}
+          # Only used the first time, when the issue has to be created.
+          ISSUE_TITLE: Dependency report
+          ISSUE_LABELS: area/infra,tracking
+        run: .forgejo/scripts/publish-report.sh report.md
+
+      - name: Fail if a tool could not run
+        run: |
+          if [ "$REPORT_RC" != 0 ]; then
+            echo "::error::the dependency report is incomplete; the issue body says which tool failed"
+            exit 1
+          fi
