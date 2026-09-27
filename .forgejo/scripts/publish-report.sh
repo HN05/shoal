@@ -3,9 +3,10 @@
 #
 #   publish-report.sh <body-file>
 #
-# The issue is found by the HTML-comment marker on the body's first line rather
-# than a hardcoded number, so it survives a retitle, relabel or transfer; the
-# oldest open issue carrying the marker wins, so a stray duplicate cannot take
+# The issue is found by the HTML-comment marker that starts its body rather
+# than a hardcoded number, so it survives a retitle, relabel or transfer. Only
+# a body that starts with it counts, so an issue quoting the marker is never
+# overwritten, and the oldest open match wins, so a stray duplicate cannot take
 # over. The body is replaced in full and the issue is never closed.
 #
 # Environment:
@@ -69,7 +70,7 @@ while [ "$page" -le 20 ]; do
   api GET "repos/$FORGE_REPO/issues?state=open&type=issues&sort=oldest&limit=50&page=$page" >"$work/issues.json"
   [ "$(jq 'length' "$work/issues.json")" -gt 0 ] || break
   number=$(jq -r --arg m "$marker" \
-    '[.[] | select((.body // "") | contains($m)) | .number] | min // empty' \
+    '[.[] | select((.body // "") | startswith($m)) | .number] | min // empty' \
     "$work/issues.json")
   [ -z "$number" ] || break
   page=$((page + 1))
