@@ -257,7 +257,8 @@ Agent shortcuts use the execution wrapper: by default Codex CLI gets full access
 approvals, Claude gets remote control named after the workspace. Both trust the
 workspace in their user config before launch, creating the file if needed; Happy
 launches and Codex app handoffs do so too. General agent templates become native
-CLI instructions or a first-message prefix for Happy Codex; desktop handoffs carry no instructions.
+CLI instructions that do not start a turn, or a first-message prefix for Happy Codex;
+desktop handoffs carry no instructions.
 Codex's default mode is a config value read at launch; `--cli` and `--app`
 override it.
 `add --issue` resolves issue numbers/URLs using the remote and existing gh/fj

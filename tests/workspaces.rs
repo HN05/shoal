@@ -2350,6 +2350,74 @@ fn agent_shortcuts_forward_arguments_without_starting_real_agents() {
 }
 
 #[test]
+fn agent_shortcuts_with_bundled_instructions_do_not_supply_a_user_prompt() {
+    let fixture = Fixture::new();
+    let workspace = fixture.add("no-prompt");
+    let path = workspace["path"].as_str().unwrap();
+    let config_dir = fixture.root.path().join(".config/shoal");
+    fs::create_dir_all(&config_dir).unwrap();
+    let template = include_str!("../agent-template.md");
+    fs::write(config_dir.join("agent-template.md"), template).unwrap();
+    let instructions = template
+        .replace("{workspace}", "no-prompt")
+        .replace("{branch}", "no-prompt")
+        .replace("{path}", path);
+    let bin = fixture.root.path().join("no-prompt-bin");
+    fs::create_dir(&bin).unwrap();
+    for (agent, config, remote_control) in [
+        ("claude", "", true),
+        ("codex", "", false),
+        (
+            "claude",
+            "[commands]\nclaude = ['claude', '{args}']\n",
+            false,
+        ),
+    ] {
+        fs::write(config_dir.join("config.toml"), config).unwrap();
+        let stub = bin.join(agent);
+        fs::write(&stub, "#!/bin/sh\nprintf '%s\\0' \"$@\"\n").unwrap();
+        fs::set_permissions(stub, fs::Permissions::from_mode(0o700)).unwrap();
+        for target in [Some("no-prompt"), None] {
+            let mut command = fixture.command();
+            command.current_dir(path).arg(agent);
+            if let Some(target) = target {
+                command.arg(target);
+            }
+            let output = command
+                .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+                .output()
+                .unwrap();
+            assert!(output.status.success(), "{output:?}");
+            let stdout = String::from_utf8(output.stdout).unwrap();
+            let args: Vec<_> = stdout.split_terminator('\0').collect();
+            if agent == "claude" {
+                let mut expected = vec!["--append-system-prompt", instructions.as_str()];
+                if remote_control {
+                    expected.extend(["--remote-control", "no-prompt"]);
+                }
+                assert_eq!(args, expected);
+            } else {
+                assert_eq!(args.len(), 5, "unexpected prompt argument: {args:?}");
+                assert_eq!(args[0], "-c");
+                let setting: toml::Value = toml::from_str(args[1]).unwrap();
+                assert_eq!(
+                    setting["developer_instructions"].as_str(),
+                    Some(instructions.as_str())
+                );
+                assert_eq!(
+                    args[2..],
+                    [
+                        "--sandbox",
+                        "danger-full-access",
+                        "--ask-for-approval=never"
+                    ]
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn agent_templates_resolve_per_launch_and_reach_native_instruction_options() {
     let fixture = Fixture::new();
     let workspace = fixture.add("instructions");

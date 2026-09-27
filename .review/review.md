@@ -99,6 +99,7 @@ removal, check it against the rule those files state before judging it.
   and review returns without starting a reviewer.
 - Claude and Codex launches (including Happy and Codex app handoffs) persist
   workspace trust even when the user config is absent, preserving other settings.
+  Native CLI templates supply background instructions without submitting a user message.
 - Agent forge wrappers are opt-in, resolve per tool through configuration layers,
   and change only the tracked agent's PATH, inherited by descendants. Wrappers
   own authentication; Shoal must not read tokens or switch the user's login.

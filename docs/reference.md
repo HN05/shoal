@@ -181,7 +181,9 @@ codex = ["codex", "{args}", "--sandbox", "danger-full-access", "--ask-for-approv
 ```
 
 Override their `[commands]` entries to change the executable or flags; prompt
-templates, trust setup, and agent exit notifications still apply.
+templates, trust setup, and agent exit notifications still apply. Positional
+prompt arguments in these arrays are submitted at startup; to disable Claude's
+remote control, remove both `"--remote-control"` and its `"{workspace}"` value.
 Claude and Codex shortcuts, including Happy, trust the workspace directory before
 launch, creating the agent's user config if needed and preserving other settings.
 Claude uses `~/.claude.json` (or `$CLAUDE_CONFIG_DIR/.claude.json`); Codex CLI
@@ -339,8 +341,10 @@ without a daemon restart.
 
 The agent template supplies general instructions, with `{workspace}`, `{branch}`
 and `{path}` from the target worktree. Claude receives `--append-system-prompt`,
-Codex CLI receives a `developer_instructions` config override, and Happy Codex
-receives the instructions before its first prompt through Happy's delivery path
+Codex CLI receives a `developer_instructions` config override; these instructions
+do not submit a user message. With no prompt in their launch arguments,
+`shoal claude` and `shoal codex` wait for input. Happy Codex receives the
+instructions before its first prompt through Happy's delivery path
 (or as the first message when no prompt was supplied). Desktop handoffs do not
 consume templates. User prompt arguments are preserved.
 
