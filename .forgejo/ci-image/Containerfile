@@ -1,6 +1,6 @@
-# CI image for ci.yml and release.yml. Everything the jobs would otherwise
-# install per run lives here, and the tag is the Rust version: never a floating
-# tag, so a run can say which toolchain it used.
+# CI image for ci.yml, deps.yml and release.yml. Everything the jobs would
+# otherwise install per run lives here, and the tag is the Rust version: never a
+# floating tag, so a run can say which toolchain it used.
 #
 # Build with ./build.sh on the runner host, then bump ARG RUST below and the
 # `image:` tags in every workflow that uses this image, and package.rust-version
@@ -12,8 +12,9 @@ FROM docker.io/library/rust:${RUST}-trixie
 
 # The daemon and workspace tests spawn these: git and Worktrunk for worktrees,
 # lsof for port checks, zsh and bash as user shells, python3 for the xcrun
-# fixture and the release scripts. curl and jq serve the label gate in ci.yml
-# and the Zig download below; xz-utils unpacks it.
+# fixture and the release scripts. curl and jq serve the label gate in ci.yml,
+# deps.yml and the Zig download below; xz-utils unpacks it. pkg-config and
+# libssl-dev build cargo-outdated, which links the cargo crate.
 RUN rustup component add rustfmt clippy \
  && apt-get update -qq \
  && apt-get install -y -qq --no-install-recommends \
@@ -25,6 +26,8 @@ RUN rustup component add rustfmt clippy \
       curl \
       jq \
       xz-utils \
+      pkg-config \
+      libssl-dev \
  && rm -rf /var/lib/apt/lists/*
 
 # Worktrunk is pinned because Shoal drives its CLI. --locked builds it against
@@ -33,6 +36,17 @@ RUN rustup component add rustfmt clippy \
 # would survive a later RUN that deletes them, and the runner mounts the host's
 # registry over that path at run time anyway.
 RUN cargo install --locked worktrunk --version 0.78.0 \
+ && rm -rf "$CARGO_HOME/registry"
+
+# cargo-audit and cargo-outdated feed deps.yml's weekly report, which parses
+# their JSON, so they are pinned as well. cargo-outdated builds in its own
+# layer with LTO off: it links the whole cargo crate, and its final LTO pass can
+# outgrow the runner LXC's memory. The slower binary does not matter weekly.
+RUN cargo install --locked cargo-audit --version 0.22.2 \
+ && rm -rf "$CARGO_HOME/registry"
+RUN CARGO_PROFILE_RELEASE_LTO=false \
+    CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16 \
+    cargo install --locked cargo-outdated --version 0.19.0 \
  && rm -rf "$CARGO_HOME/registry"
 
 # release.yml cross-builds the release binaries with cargo-zigbuild, which
@@ -61,4 +75,5 @@ RUN rustup target add \
 # Sanity: the versions the jobs will run with, visible in `podman build` output.
 RUN rustc --version && cargo clippy --version && cargo fmt --version \
  && wt --version && git --version && lsof -v 2>&1 | head -1 && zsh --version && python3 --version && jq --version \
- && zig version && cargo-zigbuild --version
+ && zig version && cargo-zigbuild --version \
+ && cargo audit --version && cargo outdated --version
