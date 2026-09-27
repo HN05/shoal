@@ -40,7 +40,10 @@ removal, check it against the rule those files state before judging it.
   numbers resolve against the workspace's origin and persist as repository-bound URLs.
   Registration variants preserve existing stored and JSON shapes and reject ambiguous
   records and conflicting actions without blocking other workspaces' cleanup;
-  manual acknowledgements bind to exactly the recorded HEAD. This is cooperative,
+  manual acknowledgements bind to exactly the recorded HEAD. Completion cleanup
+  requires preserved commits without a PR registration, honors existing merge
+  checks, and rechecks its recorded HEAD; keeping completion blocks idle and PR
+  cleanup. This is cooperative,
   not a security boundary, so judge it as such.
 - Simulator plans never authorize mutations by themselves: the executor rechecks
   recorded ownership and live capacity under the simulator gate. Indexed workspace

@@ -218,6 +218,9 @@ impl Manager {
             }
             // `Ok(true)` once the workspace is removed; `Ok(false)` while the PR is open.
             let result: Result<bool> = async {
+                if !self.completion_allows_cleanup(&workspace).await? {
+                    return Ok(false);
+                }
                 settings?;
                 self.verify_worktree(&workspace).await?;
                 let head = current_head(&workspace).await?;

@@ -21,6 +21,8 @@ mod tests;
 enum Removal<'a> {
     /// Explicit merge completion stops tracked agents without waiting for idle.
     Merged { head: &'a str },
+    /// An assignment finished; all commits must already be preserved.
+    Completed { head: &'a str },
     /// A user request; dirty or differing work needs an explicit branch choice.
     Manual {
         choice: BranchChoice,
@@ -37,24 +39,28 @@ impl Removal<'_> {
     fn choice(self) -> BranchChoice {
         match self {
             Removal::Manual { choice, .. } => choice,
-            Removal::Automatic { .. } | Removal::Deleted | Removal::Merged { .. } => {
-                BranchChoice::Auto
-            }
+            Removal::Automatic { .. }
+            | Removal::Deleted
+            | Removal::Merged { .. }
+            | Removal::Completed { .. } => BranchChoice::Auto,
         }
     }
 
     fn inspection(self) -> InspectionPolicy {
         match self {
             Removal::Manual { inspection, .. } => inspection,
-            Removal::Automatic { .. } | Removal::Deleted | Removal::Merged { .. } => {
-                InspectionPolicy::IncludeDirectoryProcesses
-            }
+            Removal::Automatic { .. }
+            | Removal::Deleted
+            | Removal::Merged { .. }
+            | Removal::Completed { .. } => InspectionPolicy::IncludeDirectoryProcesses,
         }
     }
 
     fn stop_policy(self) -> StopPolicy {
         match self {
-            Removal::Manual { .. } | Removal::Merged { .. } => StopPolicy::ForRemoval,
+            Removal::Manual { .. } | Removal::Merged { .. } | Removal::Completed { .. } => {
+                StopPolicy::ForRemoval
+            }
             Removal::Automatic { .. } | Removal::Deleted => StopPolicy::RequireCompleteProof,
         }
     }
@@ -63,6 +69,16 @@ impl Removal<'_> {
     /// needs a workspace that does not require a branch choice.
     fn verify(self, check: &RemovalCheck, stage: Stage) -> Result<()> {
         match (self, stage) {
+            (Removal::Completed { .. }, _) => {
+                ensure!(
+                    !check.dirty,
+                    "workspace has uncommitted or untracked work; retaining it"
+                );
+                ensure!(
+                    check.unpushed_commits == 0,
+                    "workspace has commits neither pushed nor on the local default branch; retaining it"
+                );
+            }
             (Removal::Merged { .. }, _) => ensure!(
                 !check.dirty,
                 "workspace has uncommitted or untracked work; retaining it"
@@ -145,7 +161,7 @@ impl Manager {
     /// A fingerprint of everything automatic cleanup must see unchanged before
     /// removing the workspace, or `None` when it is not a cleanup candidate.
     pub async fn cleanup_snapshot(&self, id: &str) -> Result<Option<u64>> {
-        if self.pr_registration(id).await?.is_some() {
+        if self.completion(id).await?.is_some() || self.pr_registration(id).await?.is_some() {
             return Ok(None);
         }
         if !self.list_resources(Some(id)).await?.is_empty() {
@@ -177,6 +193,7 @@ impl Manager {
     }
 
     pub async fn remove_idle(&self, selector: &str, snapshot: u64) -> Result<()> {
+        let _guard = self.pr_gate.lock().await;
         self.remove(selector, Removal::Automatic { snapshot })
             .await
             .map(|_| ())
@@ -184,6 +201,12 @@ impl Manager {
 
     pub async fn remove_merged(&self, selector: &str, head: &str) -> Result<()> {
         self.remove(selector, Removal::Merged { head })
+            .await
+            .map(|_| ())
+    }
+
+    pub(super) async fn remove_completed(&self, selector: &str, head: &str) -> Result<()> {
+        self.remove(selector, Removal::Completed { head })
             .await
             .map(|_| ())
     }
@@ -301,10 +324,10 @@ impl Manager {
             .check_removal(&workspace.id, removal.inspection())
             .await?;
         removal.verify(&check, Stage::Initial)?;
-        if let Removal::Merged { head } = removal {
+        if let Removal::Merged { head } | Removal::Completed { head } = removal {
             ensure!(
                 crate::forge::pr::current_head(workspace).await? == head,
-                "HEAD changed before PR cleanup"
+                "HEAD changed before completion cleanup"
             );
         }
         self.stop_executions(&workspace.id, removal.stop_policy())
@@ -319,7 +342,7 @@ impl Manager {
             .check_removal(&workspace.id, removal.inspection())
             .await?;
         removal.verify(&check, Stage::AfterStop)?;
-        if let Removal::Merged { head } = removal {
+        if let Removal::Merged { head } | Removal::Completed { head } = removal {
             ensure!(
                 crate::forge::pr::current_head(workspace).await? == head,
                 "HEAD changed while stopping commands"
@@ -338,7 +361,7 @@ impl Manager {
             self.run_resource_release_hook(workspace, &lease, release_hook.as_deref())
                 .await?;
         }
-        if let Removal::Merged { head } = removal {
+        if let Removal::Merged { head } | Removal::Completed { head } = removal {
             ensure!(
                 crate::forge::pr::current_head(workspace).await? == head,
                 "HEAD changed during removal hooks"

@@ -387,7 +387,13 @@ Workspace completion uses `[done] cleanup` (default true), resolved through the
 normal configuration layers with explicit keep and cleanup overrides. Completion
 is persisted separately from lifecycle readiness, binds to HEAD, and notifies the
 user; it does not assert that work was merged. Scoped callers may mark only their
-own workspace done.
+own workspace done. Keeping a completed workspace suppresses idle and PR cleanup
+until another completion requests cleanup or the user removes it. Completion
+cleanup without a PR registration requires clean files and every commit pushed or
+on the local default branch; an existing PR registration keeps its merge checks.
+The daemon stops tracked executions through shared removal and rechecks files and
+HEAD, including after hooks. Changed HEAD retains the workspace until a new
+completion signal; failed cleanup retains ownership and reports why.
 
 Manual and automatic cleanup share one path: establish ownership, stop owned
 executions, run removal hooks, remove owned simulators, remove the worktree,

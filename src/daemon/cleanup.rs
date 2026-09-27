@@ -80,6 +80,7 @@ pub fn fingerprint(root: &Path, head: &str, activity: u64) -> Result<u64> {
 /// Each workspace's idle delay comes from its own layered config; a disabled
 /// one gets only deleted-directory cleanup.
 pub async fn sweep(manager: &Manager, timers: &mut Timers) -> Result<()> {
+    manager.sweep_completed().await?;
     manager.sweep_prs().await?;
     let workspaces = manager.list_workspaces().await?;
     timers
