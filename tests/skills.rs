@@ -26,6 +26,69 @@ fn success(output: Output) -> Vec<u8> {
 }
 
 #[test]
+fn packaged_binary_runs_from_deleted_cwd_and_installs_a_stable_skill_link() {
+    let home = tempfile::tempdir_in("/tmp").unwrap();
+    let package = home.path().join("version one");
+    let stable = home.path().join("opt");
+    let bin = home.path().join("bin");
+    fs::create_dir_all(package.join("libexec")).unwrap();
+    fs::create_dir(&bin).unwrap();
+    fs::copy(env!("CARGO_BIN_EXE_shoal"), package.join("libexec/shoal")).unwrap();
+    fs::write(package.join("SKILL.md"), "version one").unwrap();
+    symlink(&package, &stable).unwrap();
+    symlink(stable.join("SKILL.md"), package.join("libexec/shoal-skill")).unwrap();
+    symlink(package.join("libexec/shoal"), bin.join("shoal")).unwrap();
+
+    for args in [
+        vec!["--json", "doctor", "--all"],
+        vec!["skill", "install", "codex"],
+    ] {
+        let deleted = home.path().join("deleted");
+        fs::create_dir(&deleted).unwrap();
+        let output = support::isolated(home.path(), "bash")
+            .args([
+                "--noprofile",
+                "--norc",
+                "-c",
+                "cd -- \"$1\" && rmdir -- \"$1\" || exit; shift; exec \"$@\"",
+                "deleted-cwd-test",
+            ])
+            .arg(&deleted)
+            .arg(bin.join("shoal"))
+            .args(&args)
+            .output()
+            .unwrap();
+        assert!(output.stderr.is_empty(), "{output:?}");
+        if args.contains(&"doctor") {
+            assert_eq!(output.status.code(), Some(2));
+            let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+            assert_eq!(report["checks"][0]["name"], "daemon");
+        } else {
+            success(output);
+        }
+    }
+    let installed = home.path().join(".agents/skills/shoal/SKILL.md");
+    assert_eq!(fs::read_link(&installed).unwrap(), stable.join("SKILL.md"));
+    let upgraded = home.path().join("version two");
+    fs::create_dir(&upgraded).unwrap();
+    fs::write(upgraded.join("SKILL.md"), "version two").unwrap();
+    fs::remove_file(&stable).unwrap();
+    symlink(&upgraded, &stable).unwrap();
+    assert_eq!(fs::read_to_string(&installed).unwrap(), "version two");
+
+    // The explicit runtime source still overrides the adjacent package link.
+    success(
+        support::isolated(home.path(), bin.join("shoal"))
+            .env("SHOAL_SKILL_PATH", package.join("SKILL.md"))
+            .args(["skill", "install", "codex"])
+            .output()
+            .unwrap(),
+    );
+    assert_eq!(fs::read_link(installed).unwrap(), package.join("SKILL.md"));
+    assert!(!home.path().join("state").exists());
+}
+
+#[test]
 fn skill_export_and_default_install_work_without_daemon_or_repository() {
     let home = tempfile::tempdir().unwrap();
     let expected = include_bytes!("../SKILL.md");

@@ -24,8 +24,8 @@ class Shoal < Formula
     else
       libexec.install "shoal"
       (share/"shoal/skill").install "SKILL.md"
-      (bin/"shoal").write_env_script opt_libexec/"shoal",
-                                    SHOAL_SKILL_PATH: opt_share/"shoal/skill/SKILL.md"
+      (libexec/"shoal-skill").make_symlink opt_share/"shoal/skill/SKILL.md"
+      bin.install_symlink libexec/"shoal"
     end
   end
 

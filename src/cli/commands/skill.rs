@@ -50,10 +50,10 @@ pub(super) fn run(command: Option<&SkillCommand>, json_output: bool) -> Result<i
         })
         .collect::<Result<Vec<_>>>()?;
     let mut installed = Vec::new();
-    let source = packaged_source(
-        std::env::var_os(crate::env::SKILL_PATH).map(PathBuf::from),
-        crate::env::COMPILED_SKILL_PATH.map(PathBuf::from),
-    )?;
+    let configured_source = std::env::var_os(crate::env::SKILL_PATH)
+        .map(PathBuf::from)
+        .or_else(|| crate::env::COMPILED_SKILL_PATH.map(PathBuf::from));
+    let source = packaged_source(configured_source, &std::env::current_exe()?)?;
     for (agent, path) in destinations {
         let directory = path.parent().context("missing skill directory")?;
         fs::create_dir_all(directory)
@@ -70,8 +70,19 @@ pub(super) fn run(command: Option<&SkillCommand>, json_output: bool) -> Result<i
     Ok(0)
 }
 
-fn packaged_source(runtime: Option<PathBuf>, compiled: Option<PathBuf>) -> Result<Option<PathBuf>> {
-    let source = runtime.or(compiled);
+fn packaged_source(configured: Option<PathBuf>, executable: &Path) -> Result<Option<PathBuf>> {
+    let source = match configured {
+        Some(source) => Some(source),
+        None => match fs::read_link(
+            fs::canonicalize(executable)
+                .context("resolve packaged executable")?
+                .with_file_name("shoal-skill"),
+        ) {
+            Ok(source) => Some(source),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+            Err(error) => return Err(error).context("read packaged shoal-skill link"),
+        },
+    };
     if let Some(source) = &source {
         ensure!(source.is_absolute(), "packaged skill path must be absolute");
         ensure!(
@@ -129,26 +140,49 @@ mod tests {
     }
 
     #[test]
-    fn runtime_skill_path_overrides_build_path_and_requires_a_file() {
+    fn packaged_skill_link_is_optional_and_explicit_paths_take_precedence() {
         let root = tempfile::tempdir().unwrap();
+        let executable = root.path().join("shoal");
+        let link = root.path().join("shoal-skill");
         let source = root.path().join("SKILL.md");
         let missing = root.path().join("missing.md");
+        fs::write(&executable, "binary").unwrap();
         fs::write(&source, "packaged").unwrap();
+        assert_eq!(packaged_source(None, &executable).unwrap(), None);
+        symlink(&source, &link).unwrap();
         assert_eq!(
-            packaged_source(Some(source.clone()), Some(missing.clone())).unwrap(),
+            packaged_source(None, &executable).unwrap(),
             Some(source.clone())
         );
+        let bin = root.path().join("bin");
+        fs::create_dir(&bin).unwrap();
+        let launcher = bin.join("shoal");
+        symlink(&executable, &launcher).unwrap();
         assert_eq!(
-            packaged_source(None, Some(source.clone())).unwrap(),
+            packaged_source(None, &launcher).unwrap(),
             Some(source.clone())
         );
-        assert_eq!(packaged_source(None, None).unwrap(), None);
+        // Preserve the stable symlink target instead of canonicalizing it to a
+        // versioned package path that disappears on upgrade.
+        let stable = root.path().join("stable.md");
+        symlink(&source, &stable).unwrap();
+        assert_eq!(
+            packaged_source(Some(stable.clone()), &executable).unwrap(),
+            Some(stable)
+        );
         for invalid in [
             PathBuf::from("relative.md"),
             missing,
             root.path().to_owned(),
         ] {
-            assert!(packaged_source(Some(invalid), Some(source.clone())).is_err());
+            assert!(packaged_source(Some(invalid.clone()), &executable).is_err());
+            fs::remove_file(&link).unwrap();
+            symlink(&invalid, &link).unwrap();
+            assert!(packaged_source(None, &executable).is_err());
+            assert_eq!(
+                packaged_source(Some(source.clone()), &executable).unwrap(),
+                Some(source.clone())
+            );
         }
     }
 
