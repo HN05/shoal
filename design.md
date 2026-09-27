@@ -46,7 +46,8 @@ Internal CLI workers are built through one typed argument builder that explicitl
 passes the resolved state directory and output mode.
 The execution wrapper owns terminal I/O, environment delivery, exit codes, and
 command process groups, registers through one request carrying its execution kind,
-and handles stop requests. The daemon prepares each kind before shared registration.
+and gives the entire command process group a shared grace period on stop requests,
+even after its leader exits. The daemon prepares each kind before shared registration.
 The daemon never proxies terminals, and a lost connection is not proof that an
 execution stopped or that its resources are free.
 

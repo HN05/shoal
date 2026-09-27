@@ -11,6 +11,7 @@ use std::{
     os::unix::process::ExitStatusExt,
     path::{Path, PathBuf},
     process::{ExitStatus, Stdio},
+    time::Duration,
 };
 use tokio::{
     io::{AsyncBufReadExt, BufReader},
@@ -440,6 +441,19 @@ impl ProcessGroup {
         self.0 as u32
     }
 
+    async fn wait_for_exit(&self) -> Result<()> {
+        // The leader may exit before descendants finish their signal handlers.
+        // Native identity checks exclude zombies that can no longer clean up.
+        while !process::identity::related(None, Some(self.pid()))
+            .await?
+            .1
+            .is_empty()
+        {
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+        Ok(())
+    }
+
     fn send(&self, signal: i32) {
         // SAFETY: this is the process group of the child just spawned here.
         unsafe {
@@ -456,8 +470,13 @@ impl Drop for ProcessGroup {
 
 async fn stop(child: &mut Child, group: &ProcessGroup, signal: i32) -> Result<ExitStatus> {
     group.send(signal);
-    match timeout(timing::EXECUTION_STOP_GRACE, child.wait()).await {
-        Ok(status) => Ok(status?),
+    let graceful_exit = async {
+        let status = child.wait().await?;
+        group.wait_for_exit().await?;
+        Ok(status)
+    };
+    match timeout(timing::EXECUTION_STOP_GRACE, graceful_exit).await {
+        Ok(status) => status,
         Err(_) => {
             group.send(libc::SIGKILL);
             Ok(child.wait().await?)

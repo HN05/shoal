@@ -789,9 +789,10 @@ cleanup sweep or `shoal rm`, retaining the branch.
 Executions record wrapper and child identities plus a process group. Descendants
 inherit `SHOAL_EXECUTION_ID`, which recovery uses with live ancestry to find
 survivors; identities are rechecked before signaling, and unverified candidates are
-never killed. Detection is cooperative: hidden environments, cleared markers, and
-old records can leave it uncertain. After checking yourself that such processes
-stopped, use `--repair --acknowledge-stopped`; visible live processes still block.
+never killed. Stopping gives the entire command process group a shared grace period
+before forced termination, even if its leader exits first. Detection is cooperative:
+hidden environments, cleared markers, and old records can leave it uncertain. After
+checking yourself that such processes stopped, use `--repair --acknowledge-stopped`; visible live processes still block.
 
 ### Scoped workspace commands
 

@@ -8352,6 +8352,44 @@ fn land_merges_into_main_without_a_remote_and_is_denied_to_scoped_processes() {
 }
 
 #[test]
+fn stop_allows_descendants_to_finish_signal_cleanup_after_the_leader_exits() {
+    let fixture = Fixture::new();
+    fixture.add("worker");
+    let leader = fixture.root.path().join("leader.sh");
+    let descendant = fixture.root.path().join("descendant.sh");
+    let ready = fixture.root.path().join("ready");
+    let cleaned = fixture.root.path().join("cleaned");
+    fs::write(&leader, "trap 'exit 0' TERM\nsh \"$1\" &\nwait\n").unwrap();
+    fs::write(
+        &descendant,
+        "trap 'sleep 0.2; echo done > \"$CLEANED\"; exit 0' TERM\n: > \"$READY\"\nwhile :; do sleep 30; done\n",
+    )
+    .unwrap();
+    let wrapper = fixture
+        .command()
+        .args(["exec", "worker", "--", "sh"])
+        .arg(&leader)
+        .arg(&descendant)
+        .env("READY", &ready)
+        .env("CLEANED", &cleaned)
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    wait_until("descendant signal handler", || ready.exists());
+    fixture.ok(&["stop", "worker"]);
+    let output = wrapper.wait_with_output().unwrap();
+    assert!(
+        cleaned.exists(),
+        "descendant cleanup was killed: {output:?}"
+    );
+    assert_eq!(
+        fixture.ok(&["inspect", "worker"])["executions"],
+        serde_json::json!([])
+    );
+}
+
+#[test]
 fn land_interruptions_stop_merge_drivers_and_restore_the_default_checkout() {
     for interruption in ["stop", "daemon", "interrupt"] {
         let mut fixture = Fixture::new();
