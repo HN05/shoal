@@ -689,7 +689,7 @@ idle cleanup. Each line shows the local time, the workspace, and the message;
 Ghostty, WezTerm, and Kitty show as a desktop notification (tmux needs
 `allow-passthrough`); other terminals ignore it. Repeated
 identical conflicts and cleanup failures collapse into one entry until read;
-every agent exit is listed. `shoal list` and `daemon status` mention pending
+every agent exit is listed. `shoal ls` and `daemon status` mention pending
 ones. Plain `exec` commands and manual `rm` are your own and record nothing.
 Scoped commands cannot read notifications. Read entries older than the newest
 500 are dropped; unread ones stay.

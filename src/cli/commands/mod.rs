@@ -215,7 +215,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             .await
         }
         Command::Setup { workspace } => workspaces::setup(&ctx, workspace).await,
-        Command::List => workspaces::list(&ctx).await,
+        Command::Ls => workspaces::list(&ctx).await,
         Command::Status { workspace } => workspaces::status(&ctx, workspace).await,
         Command::Cd { workspace } => workspaces::cd(&ctx, workspace).await,
         Command::Diff { workspace } => workspaces::diff(&ctx, workspace).await,

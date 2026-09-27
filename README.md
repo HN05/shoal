@@ -92,7 +92,7 @@ After [configuring a custom agent](docs/reference.md#agents), run
 
 ```sh
 shoal                         # Interactive workspace menu
-shoal list                    # List workspaces
+shoal ls                      # List workspaces
 shoal status fix-login        # Workspace activity, changes, and resources
 shoal config show fix-login   # Effective settings and the source of each value
 shoal config set default_agent codex

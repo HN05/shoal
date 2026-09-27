@@ -134,7 +134,7 @@ pub enum Command {
     /// Run or retry the configured workspace setup command.
     Setup { workspace: Option<String> },
     /// List managed workspaces.
-    List,
+    Ls,
     /// Summarize what the current or named workspace is doing.
     Status { workspace: Option<String> },
     /// Pick a workspace with fzf, enter a named workspace, or use - for the previous directory.

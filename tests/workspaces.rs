@@ -190,7 +190,7 @@ fn named_workspace_uses_committed_history_and_deletes_redundant_branch() {
         ),
         ""
     );
-    assert_eq!(fixture.ok(&["list"]), serde_json::json!([]));
+    assert_eq!(fixture.ok(&["ls"]), serde_json::json!([]));
     assert_eq!(
         fs::read_to_string(fixture.repo.join("tracked")).unwrap(),
         "uncommitted source\n"
@@ -279,7 +279,7 @@ fn displayed_repository_name_resolves_old_uuid_clones_and_rejects_ambiguity() {
     // The remaining inferred name now resolves, deleting its workspace too.
     fixture.ok(&["repo", "rm", "saldoir-server", "--yes"]);
     assert!(!Path::new(clones[0]["path"].as_str().unwrap()).exists());
-    assert_eq!(fixture.ok(&["list"]), serde_json::json!([]));
+    assert_eq!(fixture.ok(&["ls"]), serde_json::json!([]));
     assert!(fixture.repo.exists());
 }
 
@@ -1896,7 +1896,7 @@ fn concurrent_adds_cannot_claim_the_same_name() {
         let second = fixture.run(&["add", fixture.repo.to_str().unwrap(), second_name]);
         let first = first.wait_with_output().unwrap();
         assert_ne!(first.status.success(), second.status.success());
-        assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
+        assert_eq!(fixture.ok(&["ls"]).as_array().unwrap().len(), 1);
         fixture.ok(&["rm", workspace_name]);
     }
 }
@@ -1995,7 +1995,7 @@ fn invalid_branch_names_and_normalized_name_collisions_preserve_existing_work() 
                 .success(),
             "{branch}"
         );
-        assert_eq!(fixture.ok(&["list"]), serde_json::json!([]));
+        assert_eq!(fixture.ok(&["ls"]), serde_json::json!([]));
     }
     git(&fixture.repo, &["branch", "-d", "previous"]);
     let existing = fixture.add("feature/topic");
@@ -2004,7 +2004,7 @@ fn invalid_branch_names_and_normalized_name_collisions_preserve_existing_work() 
         assert!(!output.status.success());
         assert!(String::from_utf8_lossy(&output.stderr).contains("feature-topic"));
     }
-    assert_eq!(fixture.ok(&["list"]), serde_json::json!([existing]));
+    assert_eq!(fixture.ok(&["ls"]), serde_json::json!([existing]));
     assert_eq!(
         git(
             &fixture.repo,
@@ -2625,7 +2625,7 @@ fn resource_overviews_preserve_results_after_workspace_errors() {
     )
     .unwrap();
     // The daemon lists by name, so a failure must not short-circuit the query.
-    let workspaces = fixture.ok(&["list"]);
+    let workspaces = fixture.ok(&["ls"]);
     assert_eq!(workspaces[0]["name"], "broken");
     assert_eq!(workspaces[1]["name"], "healthy");
     for (noun, empty_text) in [
@@ -2804,7 +2804,7 @@ fn execution_scope_limits_management_and_expires() {
             .output()
             .unwrap()
     };
-    let output = scoped(&["--json", "list"]);
+    let output = scoped(&["--json", "ls"]);
     assert!(output.status.success());
     let list: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(list.as_array().unwrap().len(), 1);
@@ -2918,12 +2918,12 @@ fn execution_scope_limits_management_and_expires() {
     let output = fixture
         .command()
         .env("SHOAL_SCOPE_TOKEN", token)
-        .args(["list"])
+        .args(["ls"])
         .output()
         .unwrap();
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("expired or unknown"));
-    assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 2);
+    assert_eq!(fixture.ok(&["ls"]).as_array().unwrap().len(), 2);
 }
 
 #[test]
@@ -5105,7 +5105,7 @@ fn doctor_daemon_reports_untracked_worktrees_without_adopting_them() {
             .contains(orphan.to_str().unwrap())
     );
     assert_eq!(fs::read_to_string(orphan.join("dirty")).unwrap(), "keep me");
-    assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
+    assert_eq!(fixture.ok(&["ls"]).as_array().unwrap().len(), 1);
 }
 
 fn repaired_workspaces(fixture: &Fixture, args: &[&str]) -> Value {
@@ -5409,7 +5409,7 @@ fn deleted_worktrees_are_forgotten_with_their_resources_but_moved_ones_are_kept(
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {
         let names: Vec<String> = fixture
-            .ok(&["list"])
+            .ok(&["ls"])
             .as_array()
             .unwrap()
             .iter()
@@ -6192,7 +6192,7 @@ fn repository_removal_deletes_local_checkout_workspaces_and_leases_and_stops_com
     assert!(!first_path.exists());
     assert!(!Path::new(second["path"].as_str().unwrap()).exists());
     assert!(fixture.ok(&["repo", "list"]).as_array().unwrap().is_empty());
-    assert!(fixture.ok(&["list"]).as_array().unwrap().is_empty());
+    assert!(fixture.ok(&["ls"]).as_array().unwrap().is_empty());
     let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
     for table in [
         "ports",
@@ -6541,7 +6541,7 @@ fn repository_removal_serializes_with_workspace_creation() {
     fixture.ok(&["repo", "rm", &id, "--yes"]);
     let _ = add.wait_with_output().unwrap();
     assert!(fixture.ok(&["repo", "list"]).as_array().unwrap().is_empty());
-    assert!(fixture.ok(&["list"]).as_array().unwrap().is_empty());
+    assert!(fixture.ok(&["ls"]).as_array().unwrap().is_empty());
     // The emptied repository directory goes with the registration.
     assert!(!Path::new(repo["workspaces_dir"].as_str().unwrap()).exists());
     assert!(!fixture.repo.exists());
@@ -7020,7 +7020,7 @@ test ! -f fail-removal || { echo 'session still busy' >&2; exit 3; }
     assert!(!path.exists());
     assert!(
         !fixture
-            .ok(&["list"])
+            .ok(&["ls"])
             .as_array()
             .unwrap()
             .iter()
@@ -7605,7 +7605,7 @@ awk -F '\t' -v choice="$choice" '$2 == choice {print}' "$HOME/picker-input"
         if choice == "cancel" {
             assert!(!output.status.success(), "{output:?}");
             assert!(transcript.contains("selection canceled"), "{transcript}");
-            assert_eq!(fixture.ok(&["list"]), serde_json::json!([]));
+            assert_eq!(fixture.ok(&["ls"]), serde_json::json!([]));
             continue;
         }
         assert!(output.status.success(), "{output:?}\n{transcript}");
@@ -7651,7 +7651,7 @@ fn issue_number_picks_a_repository_before_lookup_interactively() {
         transcript.contains(&format!("lookup in {}", fixture.repo.display())),
         "{transcript}"
     );
-    assert_eq!(fixture.ok(&["list"]), serde_json::json!([]));
+    assert_eq!(fixture.ok(&["ls"]), serde_json::json!([]));
 }
 
 #[test]
@@ -7719,7 +7719,7 @@ fn issue_lookup_errors_never_create_a_workspace() {
             String::from_utf8_lossy(&output.stderr).contains(diagnostic),
             "{output:?}"
         );
-        assert_eq!(fixture.ok(&["list"]), serde_json::json!([]));
+        assert_eq!(fixture.ok(&["ls"]), serde_json::json!([]));
     }
     for (args, diagnostic) in [
         (
@@ -7792,7 +7792,7 @@ fn issue_lookup_errors_never_create_a_workspace() {
             String::from_utf8_lossy(&output.stderr).contains(diagnostic),
             "{output:?}"
         );
-        assert_eq!(fixture.ok(&["list"]), serde_json::json!([]));
+        assert_eq!(fixture.ok(&["ls"]), serde_json::json!([]));
     }
 }
 
@@ -7916,13 +7916,13 @@ fn interactive_add_picks_existing_branch_and_reopens_workspace() {
             workspace["workspace"]["path"].as_str().unwrap()
         );
     }
-    assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
+    assert_eq!(fixture.ok(&["ls"]).as_array().unwrap().len(), 1);
 }
 
 fn wait_removed(fixture: &Fixture, name: &str) {
     let deadline = Instant::now() + Duration::from_secs(15);
     while fixture
-        .ok(&["list"])
+        .ok(&["ls"])
         .as_array()
         .unwrap()
         .iter()
@@ -9134,7 +9134,7 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
 
     let status = fixture.ok(&["daemon", "status"]);
     assert_eq!(status["daemon"]["unread_notifications"], 3);
-    let list = fixture.run(&["list"]);
+    let list = fixture.run(&["ls"]);
     assert!(list.status.success());
     assert_eq!(
         String::from_utf8_lossy(&list.stderr),
@@ -9212,7 +9212,7 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
     let all = fixture.ok(&["notifications", "--all", "--limit", "2"]);
     assert_eq!(all.as_array().unwrap().len(), 2);
     assert!(all.as_array().unwrap().iter().all(|n| n["read"] == true));
-    assert_eq!(fixture.run(&["list"]).stderr, b"");
+    assert_eq!(fixture.run(&["ls"]).stderr, b"");
     let text = fixture.run(&["notifications", "--all"]);
     let text = String::from_utf8_lossy(&text.stdout);
     assert!(
@@ -9429,7 +9429,7 @@ fn git_profile_flag_overrides_config_for_new_and_existing_branches() {
             "manual@example.invalid"
         );
     }
-    let before = fixture.ok(&["list"]);
+    let before = fixture.ok(&["ls"]);
     let output = fixture.run(&[
         "add",
         fixture.repo.to_str().unwrap(),
@@ -9439,7 +9439,7 @@ fn git_profile_flag_overrides_config_for_new_and_existing_branches() {
     ]);
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("git profile unknown is not defined"));
-    assert_eq!(fixture.ok(&["list"]), before);
+    assert_eq!(fixture.ok(&["ls"]), before);
     assert!(git(&fixture.repo, &["branch", "--list", "bad-profile"]).is_empty());
 }
 
@@ -9496,7 +9496,7 @@ fn configured_commands_preserve_arguments_scope_and_exit_status() {
 #[test]
 fn run_lists_command_layers_and_executes_names_that_collide_with_built_ins() {
     let fixture = Fixture::with_config(Some(
-        "[commands]\nglobal = ['printf', '%s', 'global command']\nshadowed = ['global']\nlist = ['printf', '%s', 'configured list']\nclaude = ['global-claude']\n",
+        "[commands]\nglobal = ['printf', '%s', 'global command']\nshadowed = ['global']\nls = ['printf', '%s', 'configured ls']\nclaude = ['global-claude']\n",
     ));
     let workspace = fixture.add("run-command");
     let path = Path::new(workspace["path"].as_str().unwrap());
@@ -9519,14 +9519,14 @@ fn run_lists_command_layers_and_executes_names_that_collide_with_built_ins() {
         saved.to_str().unwrap(),
     ]);
 
-    let output = fixture.run(&["run", "list", "run-command"]);
+    let output = fixture.run(&["run", "ls", "run-command"]);
     assert!(
         output.status.success(),
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    assert_eq!(output.stdout, b"configured list");
-    assert!(fixture.ok(&["list"]).is_array());
+    assert_eq!(output.stdout, b"configured ls");
+    assert!(fixture.ok(&["ls"]).is_array());
 
     let output = fixture
         .command()
@@ -9545,7 +9545,7 @@ fn run_lists_command_layers_and_executes_names_that_collide_with_built_ins() {
     assert_eq!(command("codex")["bare_name"], "built_in");
     assert_eq!(command("claude")["layer"], "global_config");
     assert_eq!(command("global")["bare_name"], "shorthand");
-    assert_eq!(command("list")["bare_name"], "built_in");
+    assert_eq!(command("ls")["bare_name"], "built_in");
     assert_eq!(command("worktree")["layer"], "worktree_file");
     assert_eq!(command("saved")["layer"], "saved_repository_config");
     assert_eq!(command("shadowed")["argv"], serde_json::json!(["saved"]));
@@ -9860,7 +9860,7 @@ fn one_off_workspace_paths_reject_existing_and_protected_directories() {
         fs::read_to_string(occupied.join("keep")).unwrap(),
         "precious"
     );
-    assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
+    assert_eq!(fixture.ok(&["ls"]).as_array().unwrap().len(), 1);
     assert!(!git(&fixture.repo, &["branch", "--list", "rejected"]).contains("rejected"));
 }
 
@@ -9923,7 +9923,7 @@ fn adopt_cli_preserves_work_and_uses_normal_lifecycle() {
     fixture.ok(&["port", "acquire", "test", "adopt-topic"]);
     fixture.ok(&["repo", "rm", fixture.repo.to_str().unwrap(), "--yes"]);
     assert!(!path.exists());
-    assert!(fixture.ok(&["list"]).as_array().unwrap().is_empty());
+    assert!(fixture.ok(&["ls"]).as_array().unwrap().is_empty());
 }
 
 #[test]
@@ -9972,7 +9972,7 @@ fn explicit_locations_do_not_require_unrelated_checkouts_to_be_readable() {
                 .success()
         );
     }
-    assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 2);
+    assert_eq!(fixture.ok(&["ls"]).as_array().unwrap().len(), 2);
 }
 
 #[test]
@@ -10078,7 +10078,7 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
         fs::read_to_string(fixture.root.path().join("agent-args")).unwrap(),
         "Follow custom-add\0user message\0"
     );
-    let before = fixture.ok(&["list"]);
+    let before = fixture.ok(&["ls"]);
     let unknown = fixture.run(&[
         "add",
         fixture.repo.to_str().unwrap(),
@@ -10088,7 +10088,7 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
     ]);
     assert!(!unknown.status.success());
     assert!(String::from_utf8_lossy(&unknown.stderr).contains("unknown agent"));
-    assert_eq!(fixture.ok(&["list"]), before);
+    assert_eq!(fixture.ok(&["ls"]), before);
 }
 
 #[test]
@@ -11019,7 +11019,7 @@ fn daemon_git_predicate_failures_preserve_branches_and_workspaces() {
             fs::read_to_string(path.join("tracked")).unwrap(),
             "preserved work\n"
         );
-        assert_eq!(fixture.ok(&["list"]).as_array().unwrap().len(), 1);
+        assert_eq!(fixture.ok(&["ls"]).as_array().unwrap().len(), 1);
     }
 }
 
