@@ -3,6 +3,7 @@ pub mod client;
 pub mod commands;
 pub mod completion;
 pub mod context;
+mod help;
 pub mod internal;
 pub mod output;
 mod progress;
@@ -19,7 +20,8 @@ use crate::agent::{Agent, BuiltinAgent};
 #[command(
     version,
     about,
-    after_help = "Configured commands: shoal run <name> [workspace] -- [args], or the shorthand shoal <name> [workspace] -- [args]. Run `shoal run` to list them."
+    help_template = help::template(),
+    after_help = "Start here (with a registered repository):\n  shoal add my-project fix-login\n  shoal exec fix-login -- cargo test\n  shoal status fix-login\n\nRun `shoal run` to list configured commands.\nUse `shoal <command> --help` for details."
 )]
 pub struct Cli {
     /// Override Shoal's state directory (also isolates the daemon).
@@ -48,7 +50,7 @@ pub struct WorkspaceScope {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
-    /// List or run commands defined in [commands].
+    /// List or run configured commands.
     Run {
         name: Option<String>,
         workspace: Option<String>,
@@ -58,12 +60,12 @@ pub enum Command {
     /// Run a command defined in [commands].
     #[command(external_subcommand)]
     Custom(Vec<OsString>),
-    /// Print the bundled agent skill, or install it at user scope.
+    /// Show or install Shoal instructions for agents.
     Skill {
         #[command(subcommand)]
         command: Option<SkillCommand>,
     },
-    /// Print shell completions for commands, flags, and live targets.
+    /// Generate shell completion scripts.
     Completions {
         #[arg(value_enum)]
         shell: clap_complete::Shell,
@@ -73,12 +75,12 @@ pub enum Command {
         #[command(subcommand)]
         command: ShellCommand,
     },
-    /// Register repositories and list recently used repositories.
+    /// Register and manage repositories.
     Repo {
         #[command(subcommand)]
         command: RepoCommand,
     },
-    /// Create a named worktree from a registered repository.
+    /// Create or reopen a workspace.
     Add {
         /// Registered repository; may be omitted when --issue is a URL.
         repository: Option<String>,
@@ -107,14 +109,14 @@ pub enum Command {
         #[arg(last = true, requires = "agent")]
         args: Vec<OsString>,
     },
-    /// Take ownership of an existing linked worktree, including normal automatic cleanup.
+    /// Bring an existing worktree under Shoal management, including cleanup.
     Adopt {
         /// Registered repository that owns the linked worktree.
         repository: String,
         /// Existing worktree root; files and Git settings are preserved, setup is skipped.
         path: PathBuf,
     },
-    /// Create a workspace for an issue number or URL and start an agent.
+    /// Open an issue workspace and start an agent.
     Issue {
         /// Forge issue number or URL.
         issue: String,
@@ -131,17 +133,19 @@ pub enum Command {
         #[arg(last = true)]
         args: Vec<OsString>,
     },
-    /// Run or retry the configured workspace setup command.
+    /// Run or retry workspace setup.
     Setup { workspace: Option<String> },
-    /// List managed workspaces.
+    /// List workspaces.
     Ls,
-    /// Summarize what the current or named workspace is doing.
+    /// Show workspace activity, changes, and resources.
     Status { workspace: Option<String> },
-    /// Pick a workspace with fzf, enter a named workspace, or use - for the previous directory.
+    /// Enter a workspace, or use - for the previous directory.
+    ///
+    /// Omit the workspace to open the picker, even inside a workspace.
     Cd { workspace: Option<String> },
-    /// Show your changes since the fork point using native Git diff configuration.
+    /// Show changes since the branch's fork point.
     Diff { workspace: Option<String> },
-    /// Review changes since the fork point manually or with an agent.
+    /// Start a review tool or agent to review workspace changes.
     Review {
         workspace: Option<String>,
         /// Run the configured `review` command without asking.
@@ -154,7 +158,7 @@ pub enum Command {
         #[arg(last = true)]
         args: Vec<OsString>,
     },
-    /// Merge a local or remote branch into this workspace's own branch.
+    /// Merge another branch into this workspace.
     Merge {
         branch: String,
         workspace: Option<String>,
@@ -165,7 +169,7 @@ pub enum Command {
         #[arg(long, conflicts_with = "remote")]
         local: bool,
     },
-    /// Merge this workspace's branch into the repository default branch locally, without pushing.
+    /// Merge this workspace into the default branch locally, without pushing.
     Land { workspace: Option<String> },
     #[command(name = internal::LAND, hide = true)]
     LandInternal { plan: String },
@@ -178,7 +182,7 @@ pub enum Command {
         #[arg(long)]
         local: bool,
     },
-    /// Watch, acknowledge, or clear PR cleanup for a workspace.
+    /// Review PRs or manage workspace cleanup after merge.
     #[command(arg_required_else_help = true, args_conflicts_with_subcommands = true)]
     Pr {
         /// GitHub or Forgejo PR number or URL to watch.
@@ -188,7 +192,7 @@ pub enum Command {
         #[command(subcommand)]
         command: Option<PrCommand>,
     },
-    /// List, acquire, and release named TCP ports owned by a worktree.
+    /// Reserve and release workspace TCP ports.
     #[command(
         args_conflicts_with_subcommands = true,
         mut_arg("workspace", |arg| arg.help("Show the effective configuration and reservations for this workspace")),
@@ -205,7 +209,7 @@ pub enum Command {
         #[command(subcommand)]
         command: Option<AccessCommand>,
     },
-    /// Acquire, list, and release cooperative resource permits.
+    /// Acquire and release shared resource permits.
     #[command(
         args_conflicts_with_subcommands = true,
         mut_arg("workspace", |arg| arg.help("Show effective capacity and leases for this workspace")),
@@ -217,7 +221,7 @@ pub enum Command {
         #[command(flatten)]
         scope: WorkspaceScope,
     },
-    /// Share Shoal-managed Xcode simulators between worktrees.
+    /// Acquire and release Xcode simulators.
     #[command(
         args_conflicts_with_subcommands = true,
         mut_arg("workspace", |arg| arg.help("Show configured profiles, capacity, and devices for this workspace")),
@@ -229,9 +233,9 @@ pub enum Command {
         #[command(flatten)]
         scope: WorkspaceScope,
     },
-    /// Inspect a workspace and its executions.
+    /// Show detailed workspace and execution records.
     Inspect { workspace: Option<String> },
-    /// Show what happened while you were away: conflicts, finished agents, removed workspaces.
+    /// Show resource conflicts, finished agents, and automatic cleanup.
     Notifications {
         /// Include notifications already shown.
         #[arg(long, conflicts_with = "follow")]
@@ -256,10 +260,11 @@ pub enum Command {
         #[arg(long, requires = "repair")]
         acknowledge_stopped: bool,
     },
-    /// Stop managed commands and verified survivors, preserving the workspace.
+    /// Stop managed commands and keep the workspace.
     Stop { workspace: Option<String> },
-    /// Remove a worktree and its redundant branch.
+    /// Remove a workspace and release its resources.
     ///
+    /// Redundant branches are removed; the default branch is retained unless explicitly deleted.
     /// Differing or dirty work still needs a branch choice when confirmation is skipped.
     Rm {
         workspace: Option<String>,
@@ -272,19 +277,19 @@ pub enum Command {
         #[arg(long, conflicts_with = "keep_branch")]
         delete_branch: bool,
     },
-    /// Execute a command in a named or current workspace.
+    /// Run an arbitrary command in a workspace.
     Exec {
         workspace: Option<String>,
         #[arg(last = true, required = true)]
         command: Vec<OsString>,
     },
-    /// Run Claude with remote control named after the workspace.
+    /// Run Claude Code in a workspace.
     Claude {
         workspace: Option<String>,
         #[arg(last = true)]
         args: Vec<OsString>,
     },
-    /// Run the Codex CLI or open a workspace in the Codex app.
+    /// Run Codex CLI or open the Codex app.
     Codex {
         workspace: Option<String>,
         /// Run the Codex CLI, overriding codex.default_mode.
@@ -296,13 +301,13 @@ pub enum Command {
         #[arg(last = true)]
         args: Vec<OsString>,
     },
-    /// Open a workspace in the running T3 Code desktop app.
+    /// Open a workspace in the running T3 Code app.
     T3 {
         workspace: Option<String>,
         #[arg(last = true)]
         args: Vec<OsString>,
     },
-    /// Start a detached Happy session (Claude Code or Codex) that appears in the Happy app.
+    /// Start a detached agent session in Happy.
     Happy {
         #[arg(value_enum)]
         agent: BuiltinAgent,
@@ -324,7 +329,7 @@ pub enum Command {
         #[arg(last = true, required = true)]
         command: Vec<OsString>,
     },
-    /// Inspect effective settings and edit global or saved repository config.
+    /// Show and change Shoal configuration.
     Config {
         #[command(subcommand)]
         command: ConfigCommand,

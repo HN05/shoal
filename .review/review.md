@@ -108,6 +108,8 @@ removal, check it against the rule those files state before judging it.
   own authentication; Shoal must not read tokens or switch the user's login.
 - Git profiles apply only to newly created worktrees, before setup, using
   per-worktree config; other worktrees keep their settings.
+- Root help groups built-in commands by task; configured commands are discovered
+  through `run`.
 - Named commands follow repository/global precedence per name and use the
   tracked execution wrapper with workspace scope. CLI agent argument defaults
   are replaceable; substitutions expand once and forwarded arguments stay literal.

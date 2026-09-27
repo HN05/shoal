@@ -206,6 +206,9 @@ manual merge acknowledgement are own-workspace exceptions. Effective configurati
 may be read for the caller's own workspace; changing it needs an unscoped caller.
 Nested executions keep scope.
 
+Root help groups built-in commands by task; configured commands are discovered
+through `run`.
+
 Single-workspace actions select an explicit target, otherwise the caller's scoped
 workspace or the workspace containing the current directory, then an interactive
 picker. Explicit misses fail without fallback; noninteractive and JSON calls

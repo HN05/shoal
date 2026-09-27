@@ -73,6 +73,36 @@ fn run_with_reply(
 }
 
 #[test]
+fn root_help_entry_points_are_grouped_and_subcommand_help_stays_specific() {
+    let root = tempfile::tempdir().unwrap();
+    let mut outputs = Vec::new();
+    for args in [vec![], vec!["-h"], vec!["--help"], vec!["help"]] {
+        let output = support::cli(root.path())
+            .args(args)
+            .stdin(Stdio::null())
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+        assert!(output.stderr.is_empty(), "{output:?}");
+        let help = String::from_utf8(output.stdout).unwrap();
+        assert!(help.contains("Workspaces:\n"), "{help}");
+        assert!(help.contains("shoal exec fix-login -- cargo test"));
+        assert!(!help.contains('\x1b'));
+        outputs.push(help);
+    }
+    assert!(outputs.windows(2).all(|pair| pair[0] == pair[1]));
+    for args in [["cd", "--help"], ["help", "cd"]] {
+        let output = support::cli(root.path()).args(args).output().unwrap();
+        assert!(output.status.success(), "{output:?}");
+        let help = String::from_utf8(output.stdout).unwrap();
+        assert!(help.contains("Usage: shoal cd"), "{help}");
+        assert!(help.contains("Omit the workspace to open the picker"));
+        assert!(!help.contains("Workspaces:\n"));
+    }
+    assert!(!root.path().join("state").exists());
+}
+
+#[test]
 fn repository_progress_respects_output_mode_and_clears_before_errors() {
     let success = serde_json::json!({
         "type": "repository",

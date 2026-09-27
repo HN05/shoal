@@ -128,7 +128,8 @@ shoal rm fix-login                       # Remove; choose what to keep if work d
 ```
 
 Bare `shoal` opens an fzf list of workspaces (`shoal --help`, or bare `shoal`
-without a terminal, prints help). Enter enters the selection; Ctrl-D deletes, Ctrl-E
+without a terminal, prints commands grouped by task and a starting workflow).
+Enter enters the selection; Ctrl-D deletes, Ctrl-E
 runs Claude/Codex CLI, starts a Happy session, opens Codex/T3 apps, or runs a shell command, Ctrl-A adds,
 Ctrl-O inspects, Ctrl-S stops, Ctrl-F shows the diff. Each action returns to your
 shell.
