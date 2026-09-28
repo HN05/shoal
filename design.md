@@ -271,9 +271,14 @@ launches and Codex app handoffs do so too. General agent templates become native
 CLI instructions or a first-message prefix for Happy Codex; desktop handoffs carry no instructions.
 Codex's default mode is a config value read at launch; `--cli` and `--app`
 override it.
+
+Issue-based workspace opening persists the canonical issue URL before tracked
+setup or agent launch. Reopening with that issue is idempotent; a different issue
+cannot replace an existing association. Status and inspection expose it.
+
 `add --issue` resolves issue numbers/URLs using the remote and existing gh/fj
 login, derives a portable name, and renders issue context from a plain-text
-template for CLI agents; forge lookup stays in the CLI with no Shoal credentials
+template for CLI agents; initial lookup runs in the CLI with no Shoal credentials
 or forge configuration. An issue URL may select the single registered repository
 by remote identity when `add` omits it, never cloning. `issue <number-or-url>`
 invokes that same path with the configured `default_agent` standing in for
@@ -295,9 +300,6 @@ happy-cli would, attaches the CLI through Happy's reconnection variables, and po
 the first message once the session is alive, keeping a copy on disk when that
 fails. Shoal reads Happy's credentials only for this and stores none. A Happy-side
 pre-spawn hook asking Shoal for a workspace was considered and not adopted.
-Issue-based workspace opening persists the canonical issue URL before tracked
-setup or agent launch. Reopening with that issue is idempotent; a different issue
-cannot replace an existing association. Status and inspection expose it.
 
 Notifications stay in the terminal: the daemon records what a user would
 otherwise miss (busy resources and who holds them, port conflicts, exits of
@@ -403,6 +405,10 @@ on the local default branch; an existing PR registration keeps its merge checks.
 The daemon stops tracked executions through shared removal and rechecks files and
 HEAD, including after hooks. Changed HEAD retains the workspace until a new
 completion signal; failed cleanup retains ownership and reports why.
+Issue associations suppress idle cleanup. The daemon polls their repository-bound
+URLs using its existing forge login and records completion once closure is
+confirmed, honoring the done default without replacing an existing completion.
+Lookup failures retain the workspace; reopening the issue does not undo completion.
 
 Manual and automatic cleanup share one path: establish ownership, stop owned
 executions, run removal hooks, remove owned simulators, remove the worktree,

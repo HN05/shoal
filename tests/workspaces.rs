@@ -11577,3 +11577,179 @@ fn multiple_prs_complete_once_only_after_every_merge_and_honor_done_policy() {
         assert_eq!(count, 1);
     }
 }
+
+fn issue_completion_fixture(tool: &str, cleanup: bool) -> Fixture {
+    let fixture = Fixture::with_config(Some(&format!(
+        "[auto_cleanup]\nenabled=false\n[done]\ncleanup={cleanup}\n"
+    )));
+    git(&fixture.repo, &["config", "protocol.allow", "never"]);
+    git(
+        &fixture.repo,
+        &[
+            "symbolic-ref",
+            "refs/remotes/origin/HEAD",
+            "refs/remotes/origin/main",
+        ],
+    );
+    let host = if tool == "gh" {
+        "github.com"
+    } else {
+        "forge.example"
+    };
+    git(
+        &fixture.repo,
+        &[
+            "remote",
+            "add",
+            "origin",
+            &format!("https://{host}/team/repo"),
+        ],
+    );
+    let bin = fixture.root.path().join("bin");
+    fs::create_dir(&bin).unwrap();
+    fs::write(bin.join(tool), "#!/bin/sh\ncat \"$HOME/issue-response\"\n").unwrap();
+    fs::set_permissions(bin.join(tool), fs::Permissions::from_mode(0o755)).unwrap();
+    write_issue_state(&fixture, tool, "Open");
+    fixture.ok(&[
+        "add",
+        fixture.repo.to_str().unwrap(),
+        "issue-work",
+        "--issue",
+        "316",
+        "--base",
+        "HEAD",
+    ]);
+    fixture
+}
+
+fn write_issue_state(fixture: &Fixture, tool: &str, state: &str) {
+    let response = if tool == "gh" {
+        serde_json::json!({"number":316,"title":"Issue","body":"context","state":state.to_uppercase()}).to_string()
+    } else {
+        format!("Issue #316\nBy user — {state}\n\ncontext\n\n0 comments\n")
+    };
+    fs::write(fixture.root.path().join("issue-response"), response).unwrap();
+}
+
+fn wait_issue_field(fixture: &Fixture, field: &str, expected: &str) -> Value {
+    let mut inspection = Value::Null;
+    wait_until(expected, || {
+        inspection = fixture.ok(&["inspect", "issue-work"]);
+        inspection
+            .pointer(field)
+            .and_then(Value::as_str)
+            .is_some_and(|value| value.contains(expected))
+    });
+    inspection
+}
+
+#[test]
+fn closed_issue_completes_for_both_forges_and_failed_queries_retain_work() {
+    for tool in ["gh", "fj"] {
+        let mut fixture = issue_completion_fixture(tool, true);
+        fixture.restart();
+        assert!(fixture.ok(&["inspect", "issue-work"])["completion"].is_null());
+        write_issue_state(&fixture, tool, "Unexpected");
+        fixture.restart();
+        let inspection = wait_issue_field(&fixture, "/issue/error", "issue");
+        assert!(inspection["completion"].is_null());
+        // A saved URL must not silently follow an edited origin, even if closed.
+        write_issue_state(&fixture, tool, "Closed");
+        let original = git(&fixture.repo, &["remote", "get-url", "origin"]);
+        git(
+            &fixture.repo,
+            &[
+                "remote",
+                "set-url",
+                "origin",
+                "https://other.example/team/repo",
+            ],
+        );
+        fixture.restart();
+        let inspection = wait_issue_field(&fixture, "/issue/error", "different repository");
+        assert!(inspection["completion"].is_null());
+        git(
+            &fixture.repo,
+            &["remote", "set-url", "origin", original.trim()],
+        );
+        fixture.restart();
+        wait_removed(&fixture, "issue-work");
+    }
+}
+
+#[test]
+fn closed_issue_honors_keep_and_does_not_complete_later_work_again() {
+    for explicit_keep in [false, true] {
+        let mut fixture = issue_completion_fixture("gh", explicit_keep);
+        if explicit_keep {
+            fixture.ok(&["done", "issue-work", "--keep"]);
+        }
+        write_issue_state(&fixture, "gh", "Closed");
+        fixture.restart();
+        let inspection = wait_issue_field(&fixture, "/completion/head", "");
+        assert_eq!(inspection["completion"]["cleanup"], false);
+        let completion = inspection["completion"].clone();
+        let path = Path::new(inspection["workspace"]["path"].as_str().unwrap());
+        merge_commit(path, "later", "preserve later work\n");
+        fixture.restart();
+        assert_eq!(
+            fixture.ok(&["inspect", "issue-work"])["completion"],
+            completion
+        );
+        let notifications = fixture.ok(&["notifications", "--all"]);
+        assert_eq!(
+            notifications
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|n| n["kind"] == "workspace_done")
+                .count(),
+            1
+        );
+    }
+}
+
+#[test]
+fn closed_issue_keeps_pr_requirements_and_preserves_dirty_and_newer_work() {
+    let mut fixture = issue_completion_fixture("gh", true);
+    let inspection = fixture.ok(&["inspect", "issue-work"]);
+    let path = Path::new(inspection["workspace"]["path"].as_str().unwrap());
+    let head = git(path, &["rev-parse", "HEAD"]).trim().to_owned();
+    let pr_response = fixture.root.path().join("pr-response");
+    let write_pr = |state| {
+        fs::write(
+            &pr_response,
+            serde_json::json!({
+                "number":1,"state":state,"headRefName":"issue-work","commits":[{"oid":head}]
+            })
+            .to_string(),
+        )
+        .unwrap()
+    };
+    fs::write(fixture.root.path().join("bin/gh"), "#!/bin/sh\nif [ \"$1\" = pr ]; then cat \"$HOME/pr-response\"; else cat \"$HOME/issue-response\"; fi\n").unwrap();
+    write_pr("OPEN");
+    fixture.ok(&["pr", "watch", "1", "issue-work"]);
+    write_issue_state(&fixture, "gh", "Closed");
+    fixture.restart();
+    let inspection = wait_issue_field(&fixture, "/completion/head", &head);
+    assert_eq!(inspection["completion"]["cleanup"], true);
+    assert!(path.exists());
+    fs::write(path.join("dirty"), "preserve me").unwrap();
+    write_pr("MERGED");
+    fixture.restart();
+    wait_pr_error(&fixture, "issue-work", "uncommitted");
+    // Removing the PR watch still uses completion's ordinary preservation checks.
+    fixture.ok(&["pr", "unwatch", "issue-work"]);
+    wait_issue_field(&fixture, "/completion/error", "uncommitted");
+    merge_commit(path, "dirty", "later commit\n");
+    git(
+        path,
+        &["update-ref", "refs/remotes/origin/issue-work", "HEAD"],
+    );
+    fixture.restart();
+    wait_issue_field(&fixture, "/completion/error", "HEAD changed");
+    assert_eq!(
+        fixture.ok(&["inspect", "issue-work"])["completion"]["head"],
+        head
+    );
+}

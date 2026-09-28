@@ -29,7 +29,7 @@ impl Manager {
     }
 
     pub async fn mark_done(&self, selector: &str, cleanup: Option<bool>) -> Result<Completion> {
-        // Serialize keep/cleanup choices with completion and PR sweeps.
+        // Serialize keep/cleanup choices with automatic completion sweeps.
         let _guard = self.pr_gate.lock().await;
         let workspace = self.workspace(selector).await?;
         self.verify_worktree(&workspace).await?;

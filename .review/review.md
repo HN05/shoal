@@ -101,6 +101,9 @@ removal, check it against the rule those files state before judging it.
   managed workspace, or an interactive picker. Issue URLs must match the selected
   repository's remote; lookup failures create nothing. The canonical URL persists
   before tracked setup or agent launch; reopening cannot replace an association.
+  Associated issues suppress idle cleanup and complete the assignment once confirmed
+  closed, without replacing an existing completion or bypassing removal checks.
+  Lookup failures and changed origin identity never count as closure.
 - Single-workspace actions use an explicit target, then scope or current directory,
   then an interactive picker; a deleted current directory provides no workspace
   context. Explicit misses never fall back. Noninteractive and

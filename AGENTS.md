@@ -54,7 +54,9 @@ when behavior changes, distinguishing decisions from proposals.
   agents, verifies clean merged HEAD, and uses that path.
   Completion cleanup without a PR registration requires every commit pushed or
   on the local default branch, retaining dirty or newer work through the same
-  removal path; a keep choice suppresses idle and PR cleanup.
+  removal path; a keep choice suppresses idle and PR cleanup. Associated issues
+  suppress idle cleanup and record completion once closure is confirmed, without
+  replacing an existing completion or bypassing PR merge requirements.
 - TCP port reservations are cooperative and owned by the worktree. Keep them
   across command exits and failed removal; successful removal releases them with
   the workspace record. `[ports]` `start`/`end` set the automatic range.

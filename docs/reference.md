@@ -651,6 +651,12 @@ either direction and cannot be combined. The setting follows normal repository
 and worktree configuration precedence. Scoped agents may mark only their own
 workspace done; completion does not verify or assert a merge.
 
+For workspaces opened with `--issue` or `shoal issue`, the daemon polls the saved
+issue URL every ~30 seconds using its `gh`/`fj` login. Confirmed closure records
+`done` with the configured default, preserving any existing completion. Issue
+associations suppress idle cleanup; failed lookups retain the workspace and appear
+in `status` and `inspect`. Reopening an issue does not undo completion.
+
 Cleanup runs in the daemon without an idle delay, stopping tracked commands and
 using normal branch retention and resource release. Without a PR registration,
 files must be clean and all commits pushed or on the local default branch; an

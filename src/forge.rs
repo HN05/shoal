@@ -438,13 +438,10 @@ impl ForgeKind {
     async fn query(self, path: &std::path::Path, args: &[&str], query: Query) -> Result<String> {
         let tool = self.tool();
         let mut command = tokio::process::Command::new(tool);
-        command.current_dir(path).args(args);
+        command.current_dir(path).args(args).env("NO_COLOR", "1");
         let seconds = match query {
             Query::Issue => 30,
-            Query::Pull(_) => {
-                command.env("NO_COLOR", "1");
-                20
-            }
+            Query::Pull(_) => 20,
         };
         let output = crate::subprocess::Run::new(command)
             .timeout(std::time::Duration::from_secs(seconds))
