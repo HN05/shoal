@@ -7419,7 +7419,8 @@ fn add_from_issue_uses_existing_forge_cli_and_passes_context_to_agents() {
             git(&fixture.repo, &["remote", "set-url", "origin", &remote]);
         }
         let text = if host == "github.com" {
-            serde_json::json!({"number": number, "title": title, "body": body}).to_string()
+            serde_json::json!({"state":"OPEN", "number": number, "title": title, "body": body})
+                .to_string()
         } else {
             format!(
                 "\u{2068}{title}\u{2069} #\u{2068}{number}\u{2069}\"\nBy user — Open\n\n> {body}\n\n0 comments\n"
@@ -7528,7 +7529,7 @@ fn issue_templates_resolve_saved_config_then_worktree_then_global() {
         (
             "gh",
             r#"#!/bin/sh
-printf '%s' '{"number":44,"title":"Literal {body}","body":"$(false)"}'
+printf '%s' '{"state":"OPEN","number":44,"title":"Literal {body}","body":"$(false)"}'
 "#,
         ),
         ("claude", "#!/bin/sh\nprintf '%s' \"$1\"\n"),
@@ -7678,7 +7679,7 @@ fn issue_command_finds_the_repository_and_starts_the_default_agent() {
         }
         fs::write(
             &response,
-            serde_json::json!({"number": number, "title": "Paste an issue", "body": body})
+            serde_json::json!({"state":"OPEN", "number": number, "title": "Paste an issue", "body": body})
                 .to_string(),
         )
         .unwrap();
@@ -7745,7 +7746,7 @@ fn issue_command_finds_the_repository_and_starts_the_default_agent() {
     ] {
         fs::write(
             &response,
-            serde_json::json!({"number": number, "title": "Create workspace", "body": body})
+            serde_json::json!({"state":"OPEN", "number": number, "title": "Create workspace", "body": body})
                 .to_string(),
         )
         .unwrap();
@@ -7803,7 +7804,7 @@ fn agent_picker_can_skip_launch_select_agents_or_cancel() {
         (
             "gh",
             r#"#!/bin/sh
-printf '{"number":298,"title":"Pick an agent","body":"Issue context"}'
+printf '{"state":"OPEN","number":298,"title":"Pick an agent","body":"Issue context"}'
 "#,
         ),
         (
@@ -8989,7 +8990,7 @@ fn happy_issue_prompts_reach_claude_and_are_saved_for_codex() {
         &gh,
         format!(
             "#!/bin/sh\nprintf '%s' '{}'\n",
-            serde_json::json!({"number": 34, "title": title, "body": body})
+            serde_json::json!({"state":"OPEN", "number": 34, "title": title, "body": body})
         ),
     )
     .unwrap();
@@ -10240,7 +10241,7 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
     for (name, script) in [
         (
             "gh",
-            "#!/bin/sh\nprintf '%s' '{\"number\":37,\"title\":\"Literal {branch}\",\"body\":\"$(false)\"}'\n",
+            "#!/bin/sh\nprintf '%s' '{\"state\":\"OPEN\",\"number\":37,\"title\":\"Literal {branch}\",\"body\":\"$(false)\"}'\n",
         ),
         (
             "fake-agent",
@@ -11752,4 +11753,25 @@ fn closed_issue_keeps_pr_requirements_and_preserves_dirty_and_newer_work() {
         fixture.ok(&["inspect", "issue-work"])["completion"]["head"],
         head
     );
+}
+
+#[test]
+fn already_closed_issues_are_rejected_before_creating_workspaces() {
+    for tool in ["gh", "fj"] {
+        let fixture = issue_completion_fixture(tool, true);
+        write_issue_state(&fixture, tool, "Closed");
+        let before = fixture.ok(&["ls"]);
+        let output = fixture.run(&[
+            "add",
+            fixture.repo.to_str().unwrap(),
+            "closed-work",
+            "--issue",
+            "316",
+            "--base",
+            "HEAD",
+        ]);
+        assert!(!output.status.success());
+        assert!(String::from_utf8_lossy(&output.stderr).contains("issue is already closed"));
+        assert_eq!(fixture.ok(&["ls"]), before);
+    }
 }

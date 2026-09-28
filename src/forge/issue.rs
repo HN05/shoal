@@ -173,6 +173,14 @@ impl ForgeRepo {
     }
 }
 
+pub(super) fn require_open(kind: ForgeKind, output: &str, number: u64) -> Result<()> {
+    ensure!(
+        parse_state(kind, output, number)? == IssueState::Open,
+        "issue is already closed; reopen it before starting an issue workspace"
+    );
+    Ok(())
+}
+
 fn parse_state(kind: ForgeKind, output: &str, number: u64) -> Result<IssueState> {
     match kind {
         ForgeKind::GitHub => {

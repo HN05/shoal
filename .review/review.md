@@ -99,8 +99,8 @@ removal, check it against the rule those files state before judging it.
   evaluate or recursively expand inserted text.
 - Issue numbers use an explicit repository, the current registered checkout or
   managed workspace, or an interactive picker. Issue URLs must match the selected
-  repository's remote; lookup failures create nothing. The canonical URL persists
-  before tracked setup or agent launch; reopening cannot replace an association.
+  repository's remote; lookup failures or already-closed issues create nothing. The
+  canonical URL persists before tracked setup or agent launch and cannot be replaced.
   Associated issues suppress idle cleanup and complete the assignment once confirmed
   closed, without replacing an existing completion or bypassing removal checks.
   Lookup failures and changed origin identity never count as closure.

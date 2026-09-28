@@ -272,9 +272,9 @@ CLI instructions or a first-message prefix for Happy Codex; desktop handoffs car
 Codex's default mode is a config value read at launch; `--cli` and `--app`
 override it.
 
-Issue-based workspace opening persists the canonical issue URL before tracked
-setup or agent launch. Reopening with that issue is idempotent; a different issue
-cannot replace an existing association. Status and inspection expose it.
+Issue-based workspace opening requires an open issue and persists its canonical
+URL before tracked setup or agent launch. Associations are idempotent and cannot
+be replaced. Status and inspection expose them.
 
 `add --issue` resolves issue numbers/URLs using the remote and existing gh/fj
 login, derives a portable name, and renders issue context from a plain-text

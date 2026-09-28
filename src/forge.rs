@@ -252,9 +252,10 @@ impl ForgeKind {
                 "--repo",
                 &repo,
                 "--json",
-                "number,title,body",
+                "number,title,body,state",
             ];
             let text = self.query(path, &args, Query::Issue).await?;
+            issue::require_open(self, &text, number)?;
             #[derive(serde::Deserialize)]
             struct GitHubIssue {
                 number: u64,
@@ -270,7 +271,9 @@ impl ForgeKind {
                 "--style", "minimal", "issue", "view", &id, "--host", &repo.host, "--remote",
                 "origin",
             ];
-            forgejo_details(&self.query(path, &args, Query::Issue).await?, number)?
+            let text = self.query(path, &args, Query::Issue).await?;
+            issue::require_open(self, &text, number)?;
+            forgejo_details(&text, number)?
         };
         ensure!(!title.trim().is_empty(), "issue title is empty");
         Ok((title, details))
