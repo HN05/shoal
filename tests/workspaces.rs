@@ -2070,25 +2070,39 @@ fn interactive_add_preserves_literal_branch_spelling() {
 }
 
 #[test]
-fn execution_restores_terminal_settings_after_exit_and_stop() {
+fn execution_and_hooks_restore_terminal_settings_after_exit_and_stop() {
     let fixture = Fixture::new();
-    fixture.add("terminal");
+    let workspace = fixture.add("terminal");
     let agent = fixture.root.path().join("raw-agent.py");
     fs::write(
         &agent,
-        r#"import os, pathlib, signal, sys, time, tty
+        r#"#!/usr/bin/env python3
+import os, pathlib, signal, sys, time, tty
+mode = sys.argv[1] if len(sys.argv) > 1 else 'success'
 tty.setraw(0)
 pathlib.Path('raw-ready').touch()
-if sys.argv[1] in ('success', 'exit'):
-    sys.exit(0 if sys.argv[1] == 'success' else 7)
-if sys.argv[1] == 'killed':
+if mode in ('success', 'exit'):
+    sys.exit(0 if mode == 'success' else 7)
+if mode == 'killed':
     os.kill(os.getpid(), signal.SIGKILL)
 while True:
     time.sleep(0.01)
 "#,
     )
     .unwrap();
-    for mode in ["success", "exit", "killed", "interrupt", "stop"] {
+    fs::set_permissions(&agent, fs::Permissions::from_mode(0o755)).unwrap();
+    let setup = Path::new(workspace["path"].as_str().unwrap()).join("setup.sh");
+    fs::write(&setup, "#!/bin/sh\nexit 0\n").unwrap();
+    fs::set_permissions(&setup, fs::Permissions::from_mode(0o755)).unwrap();
+    fs::write(
+        Path::new(workspace["path"].as_str().unwrap()).join(".shoal.toml"),
+        format!(
+            "setup_cmd = 'setup.sh'\npost_setup_cmd = '{}'\n",
+            agent.display()
+        ),
+    )
+    .unwrap();
+    for mode in ["success", "exit", "killed", "interrupt", "stop", "hook"] {
         let (_master, slave) = pty::open();
         let output = support::isolated(fixture.root.path(), "python3")
             .args([
@@ -2103,8 +2117,9 @@ settings[6][termios.VEOF] = b'\x1d'
 termios.tcsetattr(0, termios.TCSANOW, settings)
 before = termios.tcgetattr(0)
 group = os.tcgetpgrp(0)
-child = subprocess.Popen([binary, 'exec', 'terminal', '--', 'python3', agent, mode],
-                         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+command = [binary, 'setup', 'terminal'] if mode == 'hook' else [
+    binary, 'exec', 'terminal', '--', 'python3', agent, mode]
+child = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 try:
     if mode in ('interrupt', 'stop'):
         import json
@@ -2120,7 +2135,7 @@ try:
         else:
             subprocess.run([binary, 'stop', 'terminal'], check=True, capture_output=True, timeout=15)
     stdout, stderr = child.communicate(timeout=15)
-    expected = {'success': 0, 'exit': 7, 'killed': 137, 'interrupt': 143, 'stop': 143}[mode]
+    expected = {'success': 0, 'exit': 7, 'killed': 137, 'interrupt': 143, 'stop': 143, 'hook': 0}[mode]
     assert child.returncode == expected, (child.returncode, stdout, stderr)
     assert os.tcgetpgrp(0) == group, 'foreground group was not restored'
     assert termios.tcgetattr(0) == before, (mode, before, termios.tcgetattr(0))
