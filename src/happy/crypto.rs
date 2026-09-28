@@ -4,12 +4,15 @@
 //! data-key accounts give each session a random AES-256-GCM key sealed to the
 //! account's NaCl box public key.
 use aes_gcm::{
-    Aes256Gcm, KeyInit,
-    aead::{Aead, AeadCore, OsRng, rand_core::RngCore},
+    Aes256Gcm,
+    aead::{Aead as _, Generate, KeyInit as _},
 };
 use anyhow::{Context, Result, ensure};
 use crypto_box::{PublicKey, SalsaBox, SecretKey};
-use crypto_secretbox::XSalsa20Poly1305;
+use crypto_secretbox::{
+    XSalsa20Poly1305,
+    aead::{Aead, AeadCore, KeyInit, OsRng, rand_core::RngCore},
+};
 
 /// How a session's records and messages are encrypted; Happy's wire spelling.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -49,7 +52,7 @@ pub fn encrypt(key: &[u8], variant: Variant, plaintext: &[u8]) -> Result<Vec<u8>
         // version(1) || nonce(12) || ciphertext || tag(16)
         Variant::DataKey => {
             let cipher = Aes256Gcm::new_from_slice(key)?;
-            let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
+            let nonce = aes_gcm::Nonce::generate();
             let ciphertext = cipher
                 .encrypt(&nonce, plaintext)
                 .context("AES-GCM encryption failed")?;
@@ -82,7 +85,7 @@ pub fn seal_for_account(data: &[u8], account_public_key: &[u8]) -> Result<Vec<u8
 #[cfg(test)]
 mod tests {
     use super::*;
-    use aes_gcm::aead::Nonce;
+    use crypto_secretbox::aead::Nonce;
 
     #[test]
     fn legacy_bundles_are_nonce_then_secretbox() {
@@ -105,7 +108,7 @@ mod tests {
         assert_eq!(bundle.len(), 1 + 12 + 5 + 16);
         assert_eq!(bundle[0], 0);
         let cipher = Aes256Gcm::new_from_slice(&key).unwrap();
-        let nonce = Nonce::<Aes256Gcm>::from_slice(&bundle[1..13]);
+        let nonce = <&aes_gcm::Nonce<_>>::try_from(&bundle[1..13]).unwrap();
         assert_eq!(cipher.decrypt(nonce, &bundle[13..]).unwrap(), b"hello");
     }
 
