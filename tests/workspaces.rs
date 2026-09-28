@@ -2070,6 +2070,86 @@ fn interactive_add_preserves_literal_branch_spelling() {
 }
 
 #[test]
+fn execution_restores_terminal_settings_after_exit_and_stop() {
+    let fixture = Fixture::new();
+    fixture.add("terminal");
+    let agent = fixture.root.path().join("raw-agent.py");
+    fs::write(
+        &agent,
+        r#"import os, pathlib, signal, sys, time, tty
+tty.setraw(0)
+pathlib.Path('raw-ready').touch()
+if sys.argv[1] in ('success', 'exit'):
+    sys.exit(0 if sys.argv[1] == 'success' else 7)
+if sys.argv[1] == 'killed':
+    os.kill(os.getpid(), signal.SIGKILL)
+while True:
+    time.sleep(0.01)
+"#,
+    )
+    .unwrap();
+    for mode in ["success", "exit", "killed", "interrupt", "stop"] {
+        let (_master, slave) = pty::open();
+        let output = support::isolated(fixture.root.path(), "python3")
+            .args([
+                "-c",
+                r#"import fcntl, os, pathlib, signal, subprocess, sys, termios, time
+binary, agent, mode = sys.argv[1:]
+os.setsid()
+fcntl.ioctl(0, termios.TIOCSCTTY, 0)
+# Preserve deliberate caller customization too, rather than resetting to sane.
+settings = termios.tcgetattr(0)
+settings[6][termios.VEOF] = b'\x1d'
+termios.tcsetattr(0, termios.TCSANOW, settings)
+before = termios.tcgetattr(0)
+group = os.tcgetpgrp(0)
+child = subprocess.Popen([binary, 'exec', 'terminal', '--', 'python3', agent, mode],
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+try:
+    if mode in ('interrupt', 'stop'):
+        import json
+        workspace = pathlib.Path(json.loads(subprocess.check_output(
+            [binary, '--json', 'inspect', 'terminal'], text=True))['workspace']['path'])
+        deadline = time.monotonic() + 10
+        while not (workspace / 'raw-ready').exists():
+            assert child.poll() is None, child.communicate()
+            assert time.monotonic() < deadline, 'agent did not enter raw mode'
+            time.sleep(0.01)
+        if mode == 'interrupt':
+            child.send_signal(signal.SIGTERM)
+        else:
+            subprocess.run([binary, 'stop', 'terminal'], check=True, capture_output=True, timeout=15)
+    stdout, stderr = child.communicate(timeout=15)
+    expected = {'success': 0, 'exit': 7, 'killed': 137, 'interrupt': 143, 'stop': 143}[mode]
+    assert child.returncode == expected, (child.returncode, stdout, stderr)
+    assert os.tcgetpgrp(0) == group, 'foreground group was not restored'
+    assert termios.tcgetattr(0) == before, (mode, before, termios.tcgetattr(0))
+finally:
+    if child.poll() is None:
+        child.kill()
+        child.wait()
+"#,
+                env!("CARGO_BIN_EXE_shoal"),
+                agent.to_str().unwrap(),
+                mode,
+            ])
+            .stdin(slave)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{mode}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let workspace = fixture.ok(&["inspect", "terminal"]);
+        fs::remove_file(
+            Path::new(workspace["workspace"]["path"].as_str().unwrap()).join("raw-ready"),
+        )
+        .unwrap();
+    }
+}
+
+#[test]
 fn execution_preserves_pipes_exit_code_environment_and_current_workspace() {
     let fixture = Fixture::new();
     let workspace = fixture.add("execute");

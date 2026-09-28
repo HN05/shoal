@@ -138,8 +138,9 @@ removal, check it against the rule those files state before judging it.
   subprocesses share optional deadlines and bounded diagnostics, terminate on
   cancellation, and drain output while sending input. Internal CLI workers use
   one typed builder with explicit state directory and output mode.
-  Terminal I/O stays in the execution wrapper; stop requests give the entire command
-  process group a shared grace period, even after its leader exits. The daemon owns
+  Terminal I/O stays in the execution wrapper, which restores the caller's foreground
+  group and terminal settings after commands and interactive hooks; stop requests
+  give the entire command process group a shared grace period, even after its leader exits. The daemon owns
   state and prepares each execution kind before shared registration through one
   request. CLI styles, enum `Display` formatting and transient progress belong at presentation
   sites; machine output and stored values stay plain. Progress clears before results and stays off for JSON,

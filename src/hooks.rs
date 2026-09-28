@@ -156,6 +156,7 @@ pub async fn run_interactive(
     quiet: bool,
 ) -> Result<()> {
     let background_terminal = crate::execution::Terminal::stdin_is_background();
+    let mut terminal = crate::execution::Terminal::capture(false)?;
     let mut child = command(hook, workspace, executable, paths)?
         .stdin(if quiet || background_terminal {
             Stdio::null()
@@ -170,7 +171,9 @@ pub async fn run_interactive(
         .spawn()
         .with_context(|| format!("launch {} {}", hook.kind().key(), executable.display()))?;
     let group = child.id().context("hook process ID unavailable")? as i32;
-    let _terminal = crate::execution::Terminal::give_to_if_foreground(group)?;
+    if let Some(terminal) = &mut terminal {
+        terminal.give_to(group)?;
+    }
     // The hook may have stopped on terminal I/O before becoming foreground.
     unsafe {
         libc::kill(-group, libc::SIGCONT);

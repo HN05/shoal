@@ -295,6 +295,9 @@ async fn supervise(
     let mut terminate = signal(SignalKind::terminate())?;
     let mut interrupt = signal(SignalKind::interrupt())?;
     let mut quit = signal(SignalKind::quit())?;
+    // Capture before spawning, and restore after child/process-group cleanup,
+    // including failures before the terminal handoff.
+    let mut terminal = Terminal::capture(true)?;
     let mut child = spawn(paths, plan, command, mode, auth)?;
     let group = ProcessGroup(child.id().context("child PID unavailable")? as i32);
     protocol::write(
@@ -318,7 +321,9 @@ async fn supervise(
             log: log.clone(),
         })?;
     }
-    let _terminal = Terminal::give_to(group.0)?;
+    if let Some(terminal) = &mut terminal {
+        terminal.give_to(group.0)?;
+    }
     // The child may have been stopped by SIGTTIN/SIGTTOU before it became the
     // foreground group.
     group.send(libc::SIGCONT);
@@ -486,10 +491,11 @@ async fn stop(child: &mut Child, group: &ProcessGroup, signal: i32) -> Result<Ex
     }
 }
 
-/// Foreground terminal ownership lent to the command; restored when dropped.
+/// Foreground ownership and terminal settings restored when dropped.
 pub(crate) struct Terminal {
     previous_group: i32,
-    previous_handler: libc::sighandler_t,
+    previous_settings: libc::termios,
+    previous_handler: Option<libc::sighandler_t>,
 }
 
 impl Terminal {
@@ -498,17 +504,9 @@ impl Terminal {
             && unsafe { libc::tcgetpgrp(libc::STDIN_FILENO) != libc::getpgrp() }
     }
 
-    pub(crate) fn give_to(group: i32) -> Result<Option<Self>> {
-        Self::give_to_inner(group, true)
-    }
-
-    /// Lend the terminal only when Shoal currently owns it. Hooks launched by
-    /// a background Shoal command still run, but cannot read from its terminal.
-    pub(crate) fn give_to_if_foreground(group: i32) -> Result<Option<Self>> {
-        Self::give_to_inner(group, false)
-    }
-
-    fn give_to_inner(group: i32, require_foreground: bool) -> Result<Option<Self>> {
+    /// Capture before launching a child. Background hooks skip the terminal;
+    /// tracked commands require foreground ownership when stdin is a terminal.
+    pub(crate) fn capture(require_foreground: bool) -> Result<Option<Self>> {
         if !std::io::stdin().is_terminal() {
             return Ok(None);
         }
@@ -521,27 +519,44 @@ impl Terminal {
             );
             return Ok(None);
         }
-        // Ignore SIGTTOU only in the wrapper, after spawning the child, so it can
-        // restore the terminal once its process group is in the background.
-        let previous_handler = unsafe { libc::signal(libc::SIGTTOU, libc::SIG_IGN) };
-        let terminal = Self {
+        let mut settings = std::mem::MaybeUninit::uninit();
+        // SAFETY: tcgetattr initializes settings on success.
+        if unsafe { libc::tcgetattr(libc::STDIN_FILENO, settings.as_mut_ptr()) } != 0 {
+            return Err(std::io::Error::last_os_error()).context("capture terminal settings");
+        }
+        Ok(Some(Self {
             previous_group,
-            previous_handler,
-        };
+            previous_settings: unsafe { settings.assume_init() },
+            previous_handler: None,
+        }))
+    }
+
+    pub(crate) fn give_to(&mut self, group: i32) -> Result<()> {
+        // Ignore SIGTTOU only after spawning, so the child keeps normal job
+        // control while the wrapper can reclaim the terminal from background.
+        self.previous_handler = Some(unsafe { libc::signal(libc::SIGTTOU, libc::SIG_IGN) });
+        // SAFETY: stdin is our foreground terminal, captured before launch.
         ensure!(
             unsafe { libc::tcsetpgrp(libc::STDIN_FILENO, group) } == 0,
             "cannot hand terminal to command"
         );
-        Ok(Some(terminal))
+        Ok(())
     }
 }
 
 impl Drop for Terminal {
     fn drop(&mut self) {
-        // SAFETY: restore the foreground group and handler captured above.
+        // SAFETY: ignore SIGTTOU while reclaiming our terminal from the child's
+        // foreground group. TCSANOW restores settings without discarding input
+        // or waiting indefinitely for output to drain.
         unsafe {
+            let previous_handler = libc::signal(libc::SIGTTOU, libc::SIG_IGN);
             libc::tcsetpgrp(libc::STDIN_FILENO, self.previous_group);
-            libc::signal(libc::SIGTTOU, self.previous_handler);
+            libc::tcsetattr(libc::STDIN_FILENO, libc::TCSANOW, &self.previous_settings);
+            libc::signal(
+                libc::SIGTTOU,
+                self.previous_handler.unwrap_or(previous_handler),
+            );
         }
     }
 }

@@ -229,7 +229,8 @@ Shoal tracks execution; the review tool owns sessions, exports, and forge access
 `add --agent <name>` starts the agent after worktree creation, setup, and
 the post-setup hook succeed; arguments after `--` go to the agent. CLI agents
 run in your terminal through the tracked execution wrapper and return the
-agent's exit code; the workspace is retained even when launch fails. With shell
+agent's exit code, restoring the previous terminal settings even after interruption;
+the workspace is retained even when launch fails. With shell
 integration, your shell enters the new workspace after the agent exits.
 `--json` emits the workspace record first, then the agent's unmodified output.
 
