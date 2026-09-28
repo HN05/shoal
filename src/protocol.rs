@@ -24,7 +24,7 @@ use crate::{
     sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
 };
 
-pub const VERSION: u32 = 45;
+pub const VERSION: u32 = 46;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -152,6 +152,10 @@ pub enum Method {
     WorkspaceDone {
         workspace: String,
         cleanup: Option<bool>,
+    },
+    SetIssue {
+        workspace: String,
+        url: String,
     },
     SetPr {
         workspace: String,

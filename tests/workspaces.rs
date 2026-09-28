@@ -7463,6 +7463,7 @@ fn add_from_issue_uses_existing_forge_cli_and_passes_context_to_agents() {
         let name = format!("issue-{number}-fix-api-timeout-false");
         assert_eq!(workspace["name"], name);
         assert_eq!(workspace["branch"], name);
+        assert_eq!(fixture.ok(&["inspect", &name])["issue"]["url"], url);
         assert_eq!(
             fs::read_to_string(&issue_cwd).unwrap().trim(),
             fixture.repo.to_str().unwrap()

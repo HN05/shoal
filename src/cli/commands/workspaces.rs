@@ -148,6 +148,16 @@ pub(super) async fn add(
         None => None,
     };
     let opened = open_add_workspace(ctx, &target, creation, issue.as_ref()).await?;
+    if let Some(issue) = &issue {
+        request::<()>(
+            &ctx.paths,
+            Method::SetIssue {
+                workspace: opened.workspace.id.clone(),
+                url: issue.url.clone(),
+            },
+        )
+        .await?;
+    }
     let Some(workspace) = finish_add_workspace(ctx, opened).await? else {
         return Ok(1);
     };
@@ -655,6 +665,12 @@ fn render_status(status: &WorkspaceStatus, json: bool) {
         );
     }
 
+    if let Some(issue) = &inspection.issue {
+        println!("Issue:         {}", issue.url);
+        if let Some(error) = &issue.error {
+            println!("  {}", palette.paint(Style::Warning, error));
+        }
+    }
     if let Some(completion) = &inspection.completion {
         println!(
             "Completion:    done ({})",

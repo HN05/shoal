@@ -105,6 +105,7 @@ pub struct Completion {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Inspection {
+    pub issue: Option<crate::forge::issue::Registration>,
     pub completion: Option<Completion>,
     pub pr_cleanup: Option<crate::forge::pr::Registration>,
     pub workspace: Workspace,

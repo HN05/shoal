@@ -312,6 +312,10 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::WorkspaceDone { workspace, cleanup } => {
             Body::Completion(manager.mark_done(&workspace, cleanup).await?)
         }
+        Method::SetIssue { workspace, url } => {
+            manager.set_issue(&workspace, &url).await?;
+            Body::Ok
+        }
         Method::SetPr { workspace, action } => {
             manager.set_pr(&workspace, action).await?;
             Body::Ok

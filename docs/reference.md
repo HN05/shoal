@@ -103,6 +103,8 @@ unless `--repo` is explicit, in which case it must match. The command starts
 `--agent`, else `default_agent` from the repository or global config, else an
 interactive picker. Choosing “No agent” creates the workspace without a launch.
 Agent names select built-in launchers or entries in `[commands]`.
+Issue-based workspaces retain their issue URL across restarts, visible in `status`
+and `inspect`. Reopening cannot replace it with a different issue.
 
 ```sh
 shoal repo add /path/to/repo             # Or a Git clone URL; register once

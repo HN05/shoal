@@ -1,4 +1,4 @@
-//! Forge issue lookup belongs to the CLI; the daemon only creates workspaces.
+//! Resolve issue context before workspace creation and agent launch.
 use anyhow::{Context as _, Result, bail, ensure};
 
 use crate::{
@@ -78,7 +78,7 @@ pub(super) async fn repository_with_remote<'a>(
 pub(super) struct Issue {
     number: u64,
     title: String,
-    url: String,
+    pub(super) url: String,
     details: String,
 }
 

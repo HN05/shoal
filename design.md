@@ -295,6 +295,9 @@ happy-cli would, attaches the CLI through Happy's reconnection variables, and po
 the first message once the session is alive, keeping a copy on disk when that
 fails. Shoal reads Happy's credentials only for this and stores none. A Happy-side
 pre-spawn hook asking Shoal for a workspace was considered and not adopted.
+Issue-based workspace opening persists the canonical issue URL before tracked
+setup or agent launch. Reopening with that issue is idempotent; a different issue
+cannot replace an existing association. Status and inspection expose it.
 
 Notifications stay in the terminal: the daemon records what a user would
 otherwise miss (busy resources and who holds them, port conflicts, exits of

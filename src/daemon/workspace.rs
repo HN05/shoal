@@ -195,11 +195,13 @@ impl Manager {
     pub async fn inspect_workspace(&self, selector: &str) -> Result<Inspection> {
         let workspace = self.workspace(selector).await?;
         let simulators = self.list_simulators(Some(&workspace.id)).await?;
+        let issue = self.issue_registration(&workspace.id).await?;
         let pr_cleanup = self.pr_registration(&workspace.id).await?;
         let completion = self.completion(&workspace.id).await?;
         self.store
             .run(move |db| {
                 Ok(Inspection {
+                    issue,
                     completion,
                     pr_cleanup,
                     executions: store::executions(db, &workspace.id)?,

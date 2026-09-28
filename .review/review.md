@@ -99,7 +99,8 @@ removal, check it against the rule those files state before judging it.
   evaluate or recursively expand inserted text.
 - Issue numbers use an explicit repository, the current registered checkout or
   managed workspace, or an interactive picker. Issue URLs must match the selected
-  repository's remote; lookup failures create nothing.
+  repository's remote; lookup failures create nothing. The canonical URL persists
+  before tracked setup or agent launch; reopening cannot replace an association.
 - Single-workspace actions use an explicit target, then scope or current directory,
   then an interactive picker; a deleted current directory provides no workspace
   context. Explicit misses never fall back. Noninteractive and
