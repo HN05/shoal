@@ -1265,6 +1265,10 @@ async fn adoption_preserves_dirty_worktree_and_persists_identity_and_readiness()
     assert_eq!(w.state, crate::state::WorkspaceState::Ready);
     assert_eq!(w.base_ref.as_deref(), Some("refs/heads/main"));
     assert!(w.git_dir.is_some() && w.git_dir_id.is_some());
+    assert_eq!(
+        fs::read_to_string(w.git_dir.as_ref().unwrap().join("shoal-workspace")).unwrap(),
+        format!("{}\n", w.id)
+    );
     assert_eq!(git(&path, &["status", "--porcelain"]), before);
     assert_eq!(
         f.manager

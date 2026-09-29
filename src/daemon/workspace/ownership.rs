@@ -1,7 +1,7 @@
 //! Verify the recorded Git worktree before execution, recovery, or removal.
 use super::{
     Manager,
-    identity::{directory_identity, verify_directory_identity},
+    identity::{directory_identity, mark_owner, marked_owner, verify_owner},
     paths::canonical_parent_only,
 };
 use crate::{git, model::Workspace};
@@ -32,9 +32,11 @@ impl Manager {
             actual_git_dir != actual,
             "workspace was replaced by a main repository checkout"
         );
-        if let Some(identity) = &workspace.git_dir_id {
-            verify_directory_identity(&actual_git_dir, identity)?;
-        }
+        verify_owner(
+            &actual_git_dir,
+            &workspace.id,
+            workspace.git_dir_id.as_deref(),
+        )?;
         if let Some(expected) = &workspace.git_dir {
             ensure!(
                 fs::canonicalize(expected)? == actual_git_dir,
@@ -44,13 +46,20 @@ impl Manager {
         Ok(())
     }
 
+    /// Mark the worktree's admin directory as this workspace's and record its
+    /// location and filesystem identity, returning whether anything changed.
     pub(crate) async fn record_worktree_identity(&self, workspace: &Workspace) -> Result<bool> {
         let git_dir = git_dir(&workspace.path).await?;
+        let marked = marked_owner(&git_dir)?.as_deref() == Some(workspace.id.as_str());
+        if !marked {
+            mark_owner(&git_dir, &workspace.id)?;
+        }
+        // The identity only proves ownership of records made before markers.
         let identity = directory_identity(&git_dir)?;
         if workspace.git_dir.as_ref() == Some(&git_dir)
             && workspace.git_dir_id.as_ref() == Some(&identity)
         {
-            return Ok(false);
+            return Ok(!marked);
         }
         let id = workspace.id.clone();
         self.store
@@ -87,10 +96,8 @@ impl Manager {
                 .find(|tree| tree.is_branch(&workspace.branch) && tree.path.is_dir())
                 .map(|tree| tree.path));
         };
-        if directory.try_exists()?
-            && let Some(identity) = &workspace.git_dir_id
-        {
-            verify_directory_identity(directory, identity)?;
+        if directory.try_exists()? {
+            verify_owner(directory, &workspace.id, workspace.git_dir_id.as_deref())?;
         }
         match fs::read_to_string(directory.join("gitdir")) {
             Ok(destination) => {

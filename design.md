@@ -127,13 +127,16 @@ fails without
 touching existing work. Branch conflicts get numeric suffixes on the blocking
 component only, never changing the workspace name. Names reserved by the Worktrunk
 adapter across supported Git object formats get a leaf suffix on creation and
-an incompatibility error on existing-branch selection. Worktree Git metadata identity
-uses the directory inode and birth time when available (queried through statx on
-Linux independently of libc), preserving ownership
-across device renumbering; filesystems without birth time use device/inode.
-Legacy device/inode records upgrade during startup audit or explicit repair only
-after both still match; an already changed device cannot be verified from an inode alone.
-Moved or replaced directories are never adopted silently.
+an incompatibility error on existing-branch selection. Ownership of a worktree's
+Git admin directory is proven by a marker naming the workspace, written there on
+creation, adoption and verified repair: Git keeps it across moves and drops it
+when the worktree is re-created, so device renumbering, restores and copies keep
+ownership while replacement does not. A byte-for-byte copy of the admin directory
+is therefore accepted as the same worktree. The inode and birth time (statx on
+Linux independently of libc; device/inode without birth time) are still recorded
+and prove only unmarked records, which gain a marker during startup audit or
+explicit repair once that identity matches; an already changed device cannot be
+verified from an inode alone. Moved or replaced directories are never adopted silently.
 Existing-branch selection creates a worktree without suffixing; remote heads are
 discovered live and become local tracking branches. Local selection preserves
 commits; remote selection fast-forwards matching tracking branches. Ready owned

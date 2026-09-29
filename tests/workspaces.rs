@@ -5643,6 +5643,62 @@ fn doctor_repairs_interrupted_state_and_preserves_work_and_leases() {
     );
 }
 
+const OWNER_MARKER: &str = "shoal-workspace";
+
+/// Make a workspace look like one recorded before owner markers existed.
+fn unmark_owner(workspace: &Value) {
+    fs::remove_file(Path::new(workspace["git_dir"].as_str().unwrap()).join(OWNER_MARKER)).unwrap();
+}
+
+#[test]
+fn owner_marker_keeps_workspaces_verified_when_filesystem_identity_changes() {
+    let mut fixture = Fixture::with_config(Some("[resources.lock]\n"));
+    let workspace = fixture.add("marked");
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    let marker = Path::new(workspace["git_dir"].as_str().unwrap()).join(OWNER_MARKER);
+    assert_eq!(
+        fs::read_to_string(&marker).unwrap().trim_end(),
+        workspace["id"].as_str().unwrap()
+    );
+    fs::write(path.join("dirty"), "preserve me").unwrap();
+    let lease = fixture.ok(&["resource", "acquire", "lock", "marked"]);
+    // A reboot renumbering the device, or a restore from backup, changes the
+    // stat identity without changing ownership.
+    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+    db.execute("UPDATE workspaces SET git_dir_id='birth:1:2:3'", [])
+        .unwrap();
+    fixture.restart();
+    let saved = fixture.ok(&["inspect", "marked"])["workspace"].clone();
+    assert_eq!(saved["state"], "ready", "{saved}");
+    assert_eq!(saved["git_dir_id"], workspace["git_dir_id"]);
+    assert!(
+        fixture
+            .run(&["exec", "marked", "--", "true"])
+            .status
+            .success()
+    );
+    assert_eq!(fixture.ok(&["resource", "marked"])["leases"][0], lease);
+    // A marker naming another workspace is never accepted.
+    fs::write(&marker, "another-workspace\n").unwrap();
+    let report = recovery_report(&fixture, &["doctor", "marked", "--repair"]);
+    assert_eq!(report[0]["directory"], "unverified");
+    assert!(
+        report[0]["issues"]
+            .to_string()
+            .contains("another Shoal workspace")
+    );
+    assert!(
+        !fixture
+            .run(&["exec", "marked", "--", "true"])
+            .status
+            .success()
+    );
+    assert_eq!(
+        fs::read_to_string(path.join("dirty")).unwrap(),
+        "preserve me"
+    );
+}
+
 #[test]
 fn legacy_worktree_identity_upgrades_only_after_verification() {
     use std::os::unix::fs::MetadataExt;
@@ -5655,6 +5711,7 @@ fn legacy_worktree_identity_upgrades_only_after_verification() {
         let metadata = fs::metadata(workspace["git_dir"].as_str().unwrap()).unwrap();
         let device = metadata.dev() + u64::from(name == "renumbered");
         let legacy = format!("{device}:{}", metadata.ino());
+        unmark_owner(&workspace);
         fs::write(
             Path::new(workspace["path"].as_str().unwrap()).join("dirty"),
             "preserve me",
@@ -5723,6 +5780,7 @@ fn legacy_identity_still_detects_missing_worktrees_that_moved() {
     let workspace = fixture.add("legacy");
     let metadata = fs::metadata(workspace["git_dir"].as_str().unwrap()).unwrap();
     let legacy = format!("{}:{}", metadata.dev(), metadata.ino());
+    unmark_owner(&workspace);
     let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
     db.execute("UPDATE workspaces SET git_dir_id=?1", [&legacy])
         .unwrap();
@@ -5777,14 +5835,15 @@ fn doctor_detects_moved_and_replaced_worktrees_without_deleting_data() {
         ],
     );
     repaired_workspaces(&fixture, &["doctor", "original", "--repair"]);
-    // Replace the admin directory at its SAME path, proving pathname checks alone are insufficient.
+    // Replace the admin directory at its SAME path, proving pathname checks alone
+    // are insufficient. Git re-creates it without Shoal's owner marker.
     let admin = Path::new(workspace["git_dir"].as_str().unwrap());
     let old = fixture.root.path().join("old-admin");
     fs::rename(admin, &old).unwrap();
     fs::create_dir(admin).unwrap();
     for entry in fs::read_dir(&old).unwrap() {
         let entry = entry.unwrap();
-        if entry.file_type().unwrap().is_file() {
+        if entry.file_type().unwrap().is_file() && entry.file_name() != OWNER_MARKER {
             fs::copy(entry.path(), admin.join(entry.file_name())).unwrap();
         }
     }

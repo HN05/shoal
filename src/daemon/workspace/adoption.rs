@@ -64,6 +64,9 @@ impl Manager {
         // Record identity, base and readiness together: a crash must never leave
         // an adopted directory with weaker ownership checks or pending setup.
         self.insert_workspace(workspace.clone()).await?;
+        // Mark only once the record exists: insertion refuses metadata another
+        // workspace owns, whose marker must survive a refused adoption.
+        self.record_worktree_identity(&workspace).await?;
         Ok(workspace)
     }
 }

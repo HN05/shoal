@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, path::PathBuf};
 
 use crate::{
-    daemon::workspace::{Manager, identity::needs_identity_upgrade},
+    daemon::workspace::Manager,
     model::Workspace,
     process::{execution::Processes, identity as process},
     state::{ExecutionState, WorkspaceState, states},
@@ -86,8 +86,12 @@ impl Manager {
                     )),
                 )
                 .await?;
-            } else if needs_identity_upgrade(workspace.git_dir_id.as_deref()) {
-                self.record_worktree_identity(&workspace).await?;
+            } else if let Err(error) = self.record_worktree_identity(&workspace).await {
+                // Verification passed, so the existing record still protects it.
+                eprintln!(
+                    "worktree identity not recorded for {}: {error:#}",
+                    workspace.name
+                );
             }
         }
         Ok(())
@@ -216,10 +220,7 @@ impl Manager {
             match self.verify_worktree(workspace).await {
                 Ok(()) => {
                     report.directory = DirectoryState::Valid;
-                    if options.repair
-                        && needs_identity_upgrade(workspace.git_dir_id.as_deref())
-                        && self.record_worktree_identity(workspace).await?
-                    {
+                    if options.repair && self.record_worktree_identity(workspace).await? {
                         report.changes.push("Recorded Git worktree identity".into());
                     }
                 }

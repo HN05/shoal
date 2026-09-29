@@ -1,18 +1,61 @@
 //! Persistent identity for Git administrative directories.
-use anyhow::{Result, ensure};
+use anyhow::{Context, Result, ensure};
 use std::{
     fs,
+    io::ErrorKind,
     os::unix::fs::MetadataExt,
     path::Path,
     time::{SystemTime, UNIX_EPOCH},
 };
+
+/// Names the owning workspace inside a worktree's Git admin directory. Git keeps
+/// unknown files there across moves and discards them with the worktree, so the
+/// marker survives device renumbering, restores and copies but not re-creation.
+const OWNER_MARKER: &str = "shoal-workspace";
+
+/// The workspace ID recorded in an admin directory, if Shoal marked it.
+pub(super) fn marked_owner(git_dir: &Path) -> Result<Option<String>> {
+    match fs::read_to_string(git_dir.join(OWNER_MARKER)) {
+        Ok(owner) => Ok(Some(owner.trim_end().to_owned())),
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error).context("read Git worktree owner marker"),
+    }
+}
+
+pub(super) fn mark_owner(git_dir: &Path, workspace_id: &str) -> Result<()> {
+    // Rename into place so a crash never leaves a truncated marker.
+    let partial = git_dir.join(format!("{OWNER_MARKER}.partial"));
+    fs::write(&partial, format!("{workspace_id}\n")).context("write Git worktree owner marker")?;
+    fs::rename(&partial, git_dir.join(OWNER_MARKER)).context("write Git worktree owner marker")
+}
+
+/// Prove an admin directory belongs to a workspace: by its marker, or for records
+/// made before markers existed, by the recorded filesystem identity.
+pub(super) fn verify_owner(
+    git_dir: &Path,
+    workspace_id: &str,
+    recorded: Option<&str>,
+) -> Result<()> {
+    match marked_owner(git_dir)? {
+        Some(owner) => ensure!(
+            owner == workspace_id,
+            "Git worktree metadata is marked as another Shoal workspace's; ownership cannot be verified"
+        ),
+        None => {
+            if let Some(identity) = recorded {
+                verify_directory_identity(git_dir, identity)?;
+            }
+        }
+    }
+    Ok(())
+}
 
 pub(super) fn directory_identity(path: &Path) -> Result<String> {
     let (metadata, birth) = directory_metadata(path)?;
     Ok(format_identity(metadata.dev(), metadata.ino(), birth))
 }
 
-pub(super) fn verify_directory_identity(path: &Path, recorded: &str) -> Result<()> {
+fn verify_directory_identity(path: &Path, recorded: &str) -> Result<()> {
     let (metadata, birth) = directory_metadata(path)?;
     ensure!(
         matches_identity(recorded, metadata.dev(), metadata.ino(), birth),
@@ -66,10 +109,6 @@ fn matches_identity(recorded: &str, device: u64, inode: u64, birth: Option<Syste
     recorded == format_identity(device, inode, birth) || recorded == format!("{device}:{inode}")
 }
 
-pub(in crate::daemon) fn needs_identity_upgrade(recorded: Option<&str>) -> bool {
-    recorded.is_none_or(|identity| !identity.starts_with("birth:"))
-}
-
 fn format_identity(device: u64, inode: u64, birth: Option<SystemTime>) -> String {
     // Device numbers can change across mounts (notably Btrfs). Birth time
     // survives those changes and distinguishes reuse of a directory inode.
@@ -102,6 +141,26 @@ mod tests {
                 Some(seconds.to_string().as_str())
             );
         }
+        Ok(())
+    }
+
+    #[test]
+    fn marker_proves_ownership_before_any_recorded_identity() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let git_dir = temp.path();
+        let stale = "0:0";
+        let current = directory_identity(git_dir)?;
+        verify_owner(git_dir, "workspace", Some(&current))?;
+        assert!(verify_owner(git_dir, "workspace", Some(stale)).is_err());
+        verify_owner(git_dir, "workspace", None)?;
+        mark_owner(git_dir, "workspace")?;
+        assert_eq!(marked_owner(git_dir)?.as_deref(), Some("workspace"));
+        verify_owner(git_dir, "workspace", Some(stale))?;
+        let error = verify_owner(git_dir, "other", Some(&current)).unwrap_err();
+        assert!(error.to_string().contains("another Shoal workspace"));
+        mark_owner(git_dir, "other")?;
+        assert_eq!(marked_owner(git_dir)?.as_deref(), Some("other"));
+        assert!(!git_dir.join(format!("{OWNER_MARKER}.partial")).exists());
         Ok(())
     }
 
