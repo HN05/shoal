@@ -833,7 +833,9 @@ worktrees to ready and clears executions proven stopped; connected commands keep
 running unless `--stop`. Moved worktrees must return to their recorded path,
 replaced metadata is refused, and a deleted directory is forgotten by the next
 cleanup sweep or `shoal rm`, retaining the branch. Git metadata identity survives
-device renumbering when the filesystem exposes directory birth time.
+device renumbering when the filesystem exposes directory birth time. Legacy
+device/inode records upgrade after verification at startup or with `doctor --repair`;
+records whose device already changed remain unverified.
 
 Executions record wrapper and child identities plus a process group. Descendants
 inherit `SHOAL_EXECUTION_ID`, which recovery uses with live ancestry to find

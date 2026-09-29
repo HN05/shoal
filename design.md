@@ -130,6 +130,8 @@ adapter across supported Git object formats get a leaf suffix on creation and
 an incompatibility error on existing-branch selection. Worktree Git metadata identity
 uses the directory inode and birth time when available, preserving ownership
 across device renumbering; filesystems without birth time use device/inode.
+Legacy device/inode records upgrade during startup audit or explicit repair only
+after both still match; an already changed device cannot be verified from an inode alone.
 Moved or replaced directories are never adopted silently.
 Existing-branch selection creates a worktree without suffixing; remote heads are
 discovered live and become local tracking branches. Local selection preserves

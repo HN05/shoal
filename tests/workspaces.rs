@@ -5644,6 +5644,105 @@ fn doctor_repairs_interrupted_state_and_preserves_work_and_leases() {
 }
 
 #[test]
+fn legacy_worktree_identity_upgrades_only_after_verification() {
+    use std::os::unix::fs::MetadataExt;
+
+    let mut fixture = Fixture::with_config(Some("[resources.lock]\ncapacity = 3\n"));
+    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+    let mut cases = Vec::new();
+    for name in ["ready", "failed", "renumbered"] {
+        let workspace = fixture.add(name);
+        let metadata = fs::metadata(workspace["git_dir"].as_str().unwrap()).unwrap();
+        let device = metadata.dev() + u64::from(name == "renumbered");
+        let legacy = format!("{device}:{}", metadata.ino());
+        fs::write(
+            Path::new(workspace["path"].as_str().unwrap()).join("dirty"),
+            "preserve me",
+        )
+        .unwrap();
+        let lease = fixture.ok(&["resource", "acquire", "lock", name]);
+        db.execute(
+            "UPDATE workspaces SET git_dir_id=?1,state=?2 WHERE id=?3",
+            rusqlite::params![
+                legacy,
+                if name == "failed" { "failed" } else { "ready" },
+                workspace["id"].as_str().unwrap()
+            ],
+        )
+        .unwrap();
+        cases.push((name, workspace, legacy, lease));
+    }
+    fixture.restart();
+    for (name, workspace, legacy, lease) in cases {
+        let saved = fixture.ok(&["inspect", name])["workspace"].clone();
+        if name == "ready" {
+            assert_eq!(saved["state"], "ready");
+            assert_eq!(saved["git_dir_id"], workspace["git_dir_id"]);
+        } else {
+            assert_eq!(saved["state"], "failed");
+            assert_eq!(saved["git_dir_id"], legacy);
+        }
+        recovery_report(&fixture, &["doctor", name]);
+        assert_eq!(fixture.ok(&["inspect", name])["workspace"], saved);
+        let report = recovery_report(&fixture, &["doctor", name, "--repair"]);
+        if name == "renumbered" {
+            assert_eq!(report[0]["directory"], "unverified");
+            assert_eq!(report[0]["workspace"]["git_dir_id"], legacy);
+            assert!(report[0]["issues"].to_string().contains("identity changed"));
+            assert!(!fixture.run(&["exec", name, "--", "true"]).status.success());
+            assert!(
+                !fixture
+                    .run(&["rm", name, "--yes", "--delete-branch"])
+                    .status
+                    .success()
+            );
+        } else {
+            assert_eq!(report[0]["workspace"]["state"], "ready");
+            assert_eq!(
+                report[0]["workspace"]["git_dir_id"],
+                workspace["git_dir_id"]
+            );
+            assert!(fixture.run(&["exec", name, "--", "true"]).status.success());
+            let repeated = recovery_report(&fixture, &["doctor", name, "--repair"]);
+            assert!(repeated[0]["changes"].as_array().unwrap().is_empty());
+        }
+        assert_eq!(fixture.ok(&["resource", name])["leases"][0], lease);
+        assert_eq!(
+            fs::read_to_string(Path::new(workspace["path"].as_str().unwrap()).join("dirty"))
+                .unwrap(),
+            "preserve me"
+        );
+    }
+}
+
+#[test]
+fn legacy_identity_still_detects_missing_worktrees_that_moved() {
+    use std::os::unix::fs::MetadataExt;
+
+    let fixture = Fixture::new();
+    let workspace = fixture.add("legacy");
+    let metadata = fs::metadata(workspace["git_dir"].as_str().unwrap()).unwrap();
+    let legacy = format!("{}:{}", metadata.dev(), metadata.ino());
+    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+    db.execute("UPDATE workspaces SET git_dir_id=?1", [&legacy])
+        .unwrap();
+    let moved = fixture.root.path().join("moved");
+    git(
+        &fixture.repo,
+        &[
+            "worktree",
+            "move",
+            workspace["path"].as_str().unwrap(),
+            moved.to_str().unwrap(),
+        ],
+    );
+    let report = recovery_report(&fixture, &["doctor", "legacy", "--repair"]);
+    assert_eq!(report[0]["directory"], "moved");
+    assert_eq!(report[0]["workspace"]["git_dir_id"], legacy);
+    assert!(moved.join("tracked").exists());
+}
+
+#[test]
 fn doctor_detects_moved_and_replaced_worktrees_without_deleting_data() {
     let fixture = Fixture::new();
     let workspace = fixture.add("original");

@@ -1,5 +1,9 @@
 //! Verify the recorded Git worktree before execution, recovery, or removal.
-use super::{Manager, identity::directory_identity, paths::canonical_parent_only};
+use super::{
+    Manager,
+    identity::{directory_identity, verify_directory_identity},
+    paths::canonical_parent_only,
+};
 use crate::{git, model::Workspace};
 use anyhow::{Context, Result, ensure};
 use rusqlite::params;
@@ -29,10 +33,7 @@ impl Manager {
             "workspace was replaced by a main repository checkout"
         );
         if let Some(identity) = &workspace.git_dir_id {
-            ensure!(
-                directory_identity(&actual_git_dir)? == *identity,
-                "Git worktree metadata was replaced; ownership cannot be verified"
-            );
+            verify_directory_identity(&actual_git_dir, identity)?;
         }
         if let Some(expected) = &workspace.git_dir {
             ensure!(
@@ -43,9 +44,14 @@ impl Manager {
         Ok(())
     }
 
-    pub(crate) async fn record_worktree_identity(&self, workspace: &Workspace) -> Result<()> {
+    pub(crate) async fn record_worktree_identity(&self, workspace: &Workspace) -> Result<bool> {
         let git_dir = git_dir(&workspace.path).await?;
         let identity = directory_identity(&git_dir)?;
+        if workspace.git_dir.as_ref() == Some(&git_dir)
+            && workspace.git_dir_id.as_ref() == Some(&identity)
+        {
+            return Ok(false);
+        }
         let id = workspace.id.clone();
         self.store
             .run(move |db| {
@@ -53,7 +59,7 @@ impl Manager {
                     "UPDATE workspaces SET git_dir=?2,git_dir_id=?3 WHERE id=?1",
                     params![id, git_dir.to_str(), identity],
                 )?;
-                Ok(())
+                Ok(true)
             })
             .await
     }
@@ -84,10 +90,7 @@ impl Manager {
         if directory.try_exists()?
             && let Some(identity) = &workspace.git_dir_id
         {
-            ensure!(
-                directory_identity(directory)? == *identity,
-                "Git worktree metadata was replaced; ownership cannot be verified"
-            );
+            verify_directory_identity(directory, identity)?;
         }
         match fs::read_to_string(directory.join("gitdir")) {
             Ok(destination) => {

@@ -2,7 +2,7 @@
 mod adoption;
 mod done;
 mod executions;
-mod identity;
+pub(super) mod identity;
 mod lifecycle;
 mod location;
 mod ownership;

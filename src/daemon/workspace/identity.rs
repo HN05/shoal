@@ -17,6 +17,29 @@ pub(super) fn directory_identity(path: &Path) -> Result<String> {
     ))
 }
 
+pub(super) fn verify_directory_identity(path: &Path, recorded: &str) -> Result<()> {
+    let metadata = fs::metadata(path)?;
+    ensure!(metadata.is_dir(), "Git metadata is not a directory");
+    ensure!(
+        matches_identity(
+            recorded,
+            metadata.dev(),
+            metadata.ino(),
+            metadata.created().ok(),
+        ),
+        "Git worktree metadata was replaced or its recorded filesystem identity changed; ownership cannot be verified"
+    );
+    Ok(())
+}
+
+fn matches_identity(recorded: &str, device: u64, inode: u64, birth: Option<SystemTime>) -> bool {
+    recorded == format_identity(device, inode, birth) || recorded == format!("{device}:{inode}")
+}
+
+pub(in crate::daemon) fn needs_identity_upgrade(recorded: Option<&str>) -> bool {
+    recorded.is_none_or(|identity| !identity.starts_with("birth:"))
+}
+
 fn format_identity(device: u64, inode: u64, birth: Option<SystemTime>) -> String {
     // Device numbers can change across mounts (notably Btrfs). Birth time
     // survives those changes and distinguishes reuse of a directory inode.
@@ -43,6 +66,25 @@ mod tests {
             format_identity(55, 123, None),
             format_identity(56, 123, None)
         );
+    }
+
+    #[test]
+    fn legacy_identity_requires_both_device_and_inode_before_upgrade() {
+        let birth = Some(UNIX_EPOCH + Duration::new(100, 42));
+        assert!(matches_identity("55:123", 55, 123, birth));
+        assert!(matches_identity("55:123", 55, 123, None));
+        assert!(!matches_identity("55:123", 56, 123, birth));
+        assert!(!matches_identity("55:123", 55, 124, birth));
+        assert!(!matches_identity("invalid", 55, 123, birth));
+        let upgraded = format_identity(55, 123, birth);
+        assert!(matches_identity(&upgraded, 56, 123, birth));
+        assert!(!matches_identity(&upgraded, 55, 123, None));
+        assert!(!matches_identity(
+            &upgraded,
+            55,
+            123,
+            Some(UNIX_EPOCH + Duration::new(100, 43))
+        ));
     }
 
     #[test]
