@@ -5742,7 +5742,7 @@ fn doctor_reclaims_unverifiable_worktrees_only_on_explicit_request() {
     assert!(
         refused[0]["issues"]
             .to_string()
-            .contains("owned by workspace other")
+            .contains("already owned by other")
     );
     fs::remove_file(&marker).unwrap();
     assert!(

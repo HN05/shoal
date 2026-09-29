@@ -29,6 +29,15 @@ pub(super) fn mark_owner(git_dir: &Path, workspace_id: &str) -> Result<()> {
     fs::rename(&partial, git_dir.join(OWNER_MARKER)).context("write Git worktree owner marker")
 }
 
+pub(super) fn clear_owner(git_dir: &Path) -> Result<()> {
+    match fs::remove_file(git_dir.join(OWNER_MARKER)) {
+        Err(error) if error.kind() != ErrorKind::NotFound => {
+            Err(error).context("remove Git worktree owner marker")
+        }
+        _ => Ok(()),
+    }
+}
+
 /// Prove an admin directory belongs to a workspace: by its marker, or for records
 /// made before markers existed, by the recorded filesystem identity.
 pub(super) fn verify_owner(

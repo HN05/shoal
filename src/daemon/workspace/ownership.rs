@@ -1,7 +1,7 @@
 //! Verify the recorded Git worktree before execution, recovery, or removal.
 use super::{
     Manager,
-    identity::{directory_identity, mark_owner, marked_owner, verify_owner},
+    identity::{clear_owner, directory_identity, mark_owner, marked_owner, verify_owner},
     paths::canonical_parent_only,
 };
 use crate::{git, model::Workspace};
@@ -43,23 +43,39 @@ impl Manager {
             "worktree is not on its recorded branch {}; check it out before reclaiming",
             workspace.branch
         );
-        let marked = marked_owner(&git_dir)?;
+        self.release_stale_owner(&git_dir, &workspace.id).await?;
+        self.record_worktree_identity(workspace).await?;
+        self.verify_worktree(&self.workspace(&workspace.id).await?)
+            .await
+    }
+
+    /// Refuse an admin directory another recorded workspace owns, by marker or
+    /// recorded location, and clear a marker naming no recorded workspace: one
+    /// left behind when a record was forgotten or the state directory reset.
+    pub(super) async fn release_stale_owner(
+        &self,
+        git_dir: &Path,
+        workspace_id: &str,
+    ) -> Result<()> {
+        let marked = marked_owner(git_dir)?;
         for other in self.list_workspaces().await? {
             let owns = marked.as_deref() == Some(other.id.as_str())
                 || other
                     .git_dir
                     .as_ref()
                     .and_then(|dir| fs::canonicalize(dir).ok())
-                    == Some(git_dir.clone());
+                    .as_deref()
+                    == Some(git_dir);
             ensure!(
-                other.id == workspace.id || !owns,
-                "Git worktree is owned by workspace {}",
+                other.id == workspace_id || !owns,
+                "Git worktree is already owned by {}; restore its recorded path",
                 other.name
             );
         }
-        self.record_worktree_identity(workspace).await?;
-        self.verify_worktree(&self.workspace(&workspace.id).await?)
-            .await
+        if marked.is_some_and(|owner| owner != workspace_id) {
+            clear_owner(git_dir)?;
+        }
+        Ok(())
     }
 
     /// The admin directory of the linked worktree rooted at the recorded path

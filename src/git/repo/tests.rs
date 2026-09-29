@@ -1240,6 +1240,39 @@ impl Manager {
 }
 
 #[tokio::test]
+async fn adoption_replaces_markers_of_forgotten_workspaces_only() {
+    let f = Fixture::new().await;
+    let marked = |branch: &str, owner: &str| {
+        let path = f.root.path().join(branch.replace('/', "-"));
+        git(
+            &f.repo,
+            &["worktree", "add", "-b", branch, path.to_str().unwrap()],
+        );
+        let marker =
+            PathBuf::from(git(&path, &["rev-parse", "--path-format=absolute", "--git-dir"]).trim())
+                .join("shoal-workspace");
+        fs::write(&marker, format!("{owner}\n")).unwrap();
+        (path, marker)
+    };
+    // A marker outliving its record, e.g. after a state reset, is replaced.
+    let (path, marker) = marked("adopt/stale", "forgotten-workspace");
+    let w = f.manager.adopt_workspace(&f.repo_id, &path).await.unwrap();
+    assert_eq!(fs::read_to_string(&marker).unwrap(), format!("{}\n", w.id));
+    // One naming a recorded workspace refuses adoption and stays in place.
+    let (path, marker) = marked("adopt/owned", &w.id);
+    let error = f
+        .manager
+        .adopt_workspace(&f.repo_id, &path)
+        .await
+        .unwrap_err();
+    assert!(
+        error.to_string().contains("already owned by adopt-stale"),
+        "{error}"
+    );
+    assert_eq!(fs::read_to_string(&marker).unwrap(), format!("{}\n", w.id));
+}
+
+#[tokio::test]
 async fn adoption_preserves_dirty_worktree_and_persists_identity_and_readiness() {
     let f = Fixture::new().await;
     let path = f.root.path().join("external");

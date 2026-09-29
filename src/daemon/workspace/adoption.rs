@@ -50,7 +50,7 @@ impl Manager {
         let workspace = Workspace {
             base_commit: Some(commit),
             base_ref: base.starts_with("refs/").then_some(base),
-            git_dir: Some(git_dir),
+            git_dir: Some(git_dir.clone()),
             git_dir_id: Some(identity),
             ..Workspace::new_record(
                 repo.id,
@@ -60,6 +60,9 @@ impl Manager {
                 WorkspaceState::Ready,
             )
         };
+        // A marker naming no recorded workspace outlived its record or a reset
+        // state directory; one naming a recorded workspace refuses adoption.
+        self.release_stale_owner(&git_dir, &workspace.id).await?;
         self.verify_worktree(&workspace).await?;
         // Record identity, base and readiness together: a crash must never leave
         // an adopted directory with weaker ownership checks or pending setup.
