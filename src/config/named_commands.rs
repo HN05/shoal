@@ -267,7 +267,7 @@ pub async fn expand_with_fields(
 }
 
 fn unknown_command(name: &str) -> anyhow::Error {
-    let mut message = format!("unknown command {name:?}");
+    let mut message = format!("unknown command {name:?} in the current context");
     // Let clap suggest from the actual built-ins, without the custom-command fallback.
     if let Err(error) = crate::cli::Cli::command()
         .allow_external_subcommands(false)
@@ -285,7 +285,7 @@ fn unknown_command(name: &str) -> anyhow::Error {
         message.push_str(&format!("; did you mean {suggestions}?"));
     }
     message.push_str(
-        "; run `shoal --help` for built-in commands or define it in [commands] in Shoal config",
+        "; run `shoal --help` for built-in commands or `shoal run` for configured commands",
     );
     anyhow::anyhow!(message)
 }

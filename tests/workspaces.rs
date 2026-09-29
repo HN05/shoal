@@ -9992,6 +9992,15 @@ fn unknown_commands_never_open_the_workspace_picker() {
         "[commands]\nlocal-check = ['printf', '%s', 'repository command']\n",
     )
     .unwrap();
+    let output = fixture.run(&["local-check"]);
+    let error = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success());
+    assert!(error.contains("in the current context"), "{error}");
+    assert!(
+        error.contains("repository-only commands require a current or explicit workspace"),
+        "{error}"
+    );
+    assert!(!error.contains("define it"), "{error}");
     let output = fixture
         .command()
         .current_dir(path)
