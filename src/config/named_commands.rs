@@ -179,9 +179,17 @@ pub async fn run(
     } else {
         Fallback::CurrentDirectoryOnly
     };
-    let workspace = ui::select_workspace(ctx, workspace, fallback).await.with_context(|| {
-        format!("command {name:?} needs a workspace; repository-only commands require a current or explicit workspace")
-    })?;
+    let workspace = ui::select_workspace(ctx, workspace, fallback)
+        .await
+        .map_err(|error| {
+            if error.is::<ui::NoCurrentWorkspace>() {
+                error
+                    .context("repository-only commands require a current or explicit workspace")
+                    .context(unknown_command(name))
+            } else {
+                error
+            }
+        })?;
     let settings = client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.clone())).await?;
     let inspection = client::inspect(&ctx.paths, workspace.clone()).await?;
     let command = expand(
@@ -221,9 +229,7 @@ pub async fn expand_with_fields(
     args: Vec<OsString>,
     extra_fields: &[(&str, &OsStr)],
 ) -> Result<Vec<OsString>> {
-    let argv = commands.get(name).with_context(|| {
-        format!("unknown command {name:?}; define it in [commands] in Shoal config")
-    })?;
+    let argv = commands.get(name).ok_or_else(|| unknown_command(name))?;
     let base = if argv.iter().any(|arg| arg.contains("{diff_base}")) {
         Some(
             request::<DiffBase>(
@@ -258,6 +264,30 @@ pub async fn expand_with_fields(
     }
     command.extend(args.unwrap_or_default());
     Ok(command)
+}
+
+fn unknown_command(name: &str) -> anyhow::Error {
+    let mut message = format!("unknown command {name:?}");
+    // Let clap suggest from the actual built-ins, without the custom-command fallback.
+    if let Err(error) = crate::cli::Cli::command()
+        .allow_external_subcommands(false)
+        .external_subcommand_value_parser(None)
+        .try_get_matches_from(["shoal", name])
+        && let Some(clap::error::ContextValue::Strings(suggestions)) =
+            error.get(clap::error::ContextKind::SuggestedSubcommand)
+        && !suggestions.is_empty()
+    {
+        let suggestions = suggestions
+            .iter()
+            .map(|suggestion| format!("`shoal {suggestion}`"))
+            .collect::<Vec<_>>()
+            .join(" or ");
+        message.push_str(&format!("; did you mean {suggestions}?"));
+    }
+    message.push_str(
+        "; run `shoal --help` for built-in commands or define it in [commands] in Shoal config",
+    );
+    anyhow::anyhow!(message)
 }
 
 #[cfg(test)]

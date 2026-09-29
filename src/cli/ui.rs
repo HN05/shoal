@@ -333,6 +333,17 @@ pub enum Fallback {
     CurrentDirectoryOnly,
 }
 
+#[derive(Debug)]
+pub struct NoCurrentWorkspace;
+
+impl std::fmt::Display for NoCurrentWorkspace {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("no current workspace; pass an explicit workspace")
+    }
+}
+
+impl std::error::Error for NoCurrentWorkspace {}
+
 pub(super) fn current_directory() -> io::Result<Option<std::path::PathBuf>> {
     match std::env::current_dir().and_then(std::fs::canonicalize) {
         Ok(cwd) => Ok(Some(cwd)),
@@ -357,10 +368,9 @@ pub async fn select_workspace(
         return Ok(workspace.id.clone());
     }
     ensure!(!scoped, "scoped workspace is unavailable");
-    ensure!(
-        !matches!(fallback, Fallback::CurrentDirectoryOnly),
-        "no current workspace; pass an explicit workspace"
-    );
+    if matches!(fallback, Fallback::CurrentDirectoryOnly) {
+        return Err(NoCurrentWorkspace.into());
+    }
     pick_workspace(ctx, workspaces)
 }
 

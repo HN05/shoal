@@ -126,7 +126,8 @@ removal, check it against the rule those files state before judging it.
 - Named commands follow repository/global precedence per name and use the
   tracked execution wrapper with workspace scope. CLI agent argument defaults
   are replaceable; substitutions expand once and forwarded arguments stay literal.
-  Repository-only commands require a current or explicit workspace.
+  Repository-only commands require a current or explicit workspace; unknown names
+  report command errors with built-in suggestions without opening a picker.
   `{diff_base}` resolves lazily through the shared daemon diff-base lookup.
   Custom agent names select named commands and run as tracked agents. Their
   `{prompt}` combines general instructions and issue context, prepended to

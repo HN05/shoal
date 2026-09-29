@@ -9982,7 +9982,7 @@ fn unknown_commands_never_open_the_workspace_picker() {
     let error = String::from_utf8_lossy(&output.stderr);
     assert!(!output.status.success());
     assert!(
-        error.contains("lsit") && error.contains("no current workspace"),
+        error.contains("unknown command \"lsit\"") && error.contains("no current workspace"),
         "{error}"
     );
     assert!(!error.contains("non-interactive"), "{error}");
@@ -10011,6 +10011,43 @@ fn unknown_commands_never_open_the_workspace_picker() {
         .output()
         .unwrap();
     assert!(String::from_utf8_lossy(&output.stderr).contains("unknown command"));
+}
+
+#[test]
+fn misspelled_built_ins_are_rejected_with_a_suggestion() {
+    let fixture = Fixture::new();
+    let workspace = fixture.add("command-target");
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    for directory in [fixture.root.path(), path] {
+        for args in [
+            vec!["ports"],
+            vec!["ports", "command-target"],
+            vec!["run", "ports"],
+            vec!["run", "ports", "command-target"],
+        ] {
+            let output = fixture
+                .command()
+                .current_dir(directory)
+                .args(&args)
+                .output()
+                .unwrap();
+            let error = String::from_utf8_lossy(&output.stderr);
+            assert!(!output.status.success(), "{directory:?} {args:?}");
+            assert!(error.contains("unknown command \"ports\""), "{error}");
+            assert!(error.contains("`shoal port`"), "{error}");
+            assert!(!error.contains("needs a workspace"), "{error}");
+            assert!(!error.contains("non-interactive"), "{error}");
+        }
+    }
+    // A similar built-in name must not prevent an explicitly configured shortcut.
+    fs::write(
+        path.join(".shoal.toml"),
+        "[commands]\nports = ['printf', '%s', 'configured command']\n",
+    )
+    .unwrap();
+    let output = fixture.run(&["ports", "command-target"]);
+    assert!(output.status.success());
+    assert_eq!(output.stdout, b"configured command");
 }
 
 #[test]

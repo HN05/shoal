@@ -249,7 +249,8 @@ launch. They run through the tracked wrapper with workspace scope, terminal I/O,
 and literal extra arguments. `run` lists the resolved arrays with their layers and
 provides an explicit spelling for names that collide with built-ins; built-ins win
 the bare shorthand. Repository-only commands require a current or explicit
-workspace, so unknown names never open a picker. Workspace fields expand once within individual
+workspace. Unknown names report a command error with suggestions for similar
+built-ins and never open a picker. Workspace fields expand once within individual
 arguments; a standalone `{args}` places the caller's literal arguments.
 `{diff_base}` lazily uses `diff`'s daemon lookup. Built-in `review` chooses
 between the `review` command and an agent prompted to report, not change, the
