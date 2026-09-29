@@ -134,3 +134,7 @@ jobs:
           cargo clean -p shoal
           cargo clippy --locked --all-targets -- -D warnings
           cargo test --locked
+          # Exercise the libc used by distributed Linux binaries too: GNU-only
+          # tests cannot catch musl's unsupported Metadata::created().
+          musl_target="$(rustc -vV | sed -n 's/^host: //p' | sed 's/-gnu$/-musl/')"
+          cargo-zigbuild test --locked --target "$musl_target" --bin shoal daemon::workspace::identity

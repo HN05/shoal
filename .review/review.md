@@ -15,7 +15,8 @@ removal, check it against the rule those files state before judging it.
 - Safety of user work: removal goes through the one shared path, preserves
   work and leases on failure, never adopts moved or replaced worktrees, and
   never signals a process whose recorded identity was not verified. Git metadata
-  identity uses inode and birth time when available, surviving device renumbering.
+  identity uses inode and birth time when available, surviving device renumbering;
+  Linux queries statx independently of libc support.
   Legacy identities upgrade only after their device and inode still match. Any new
   path that deletes a directory, kills a process or mutates a simulator
   without those checks is a blocker. Removal confirmations list uncommitted changes

@@ -128,7 +128,8 @@ touching existing work. Branch conflicts get numeric suffixes on the blocking
 component only, never changing the workspace name. Names reserved by the Worktrunk
 adapter across supported Git object formats get a leaf suffix on creation and
 an incompatibility error on existing-branch selection. Worktree Git metadata identity
-uses the directory inode and birth time when available, preserving ownership
+uses the directory inode and birth time when available (queried through statx on
+Linux independently of libc), preserving ownership
 across device renumbering; filesystems without birth time use device/inode.
 Legacy device/inode records upgrade during startup audit or explicit repair only
 after both still match; an already changed device cannot be verified from an inode alone.

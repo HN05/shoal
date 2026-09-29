@@ -8,28 +8,58 @@ use std::{
 };
 
 pub(super) fn directory_identity(path: &Path) -> Result<String> {
-    let metadata = fs::metadata(path)?;
-    ensure!(metadata.is_dir(), "Git metadata is not a directory");
-    Ok(format_identity(
-        metadata.dev(),
-        metadata.ino(),
-        metadata.created().ok(),
-    ))
+    let (metadata, birth) = directory_metadata(path)?;
+    Ok(format_identity(metadata.dev(), metadata.ino(), birth))
 }
 
 pub(super) fn verify_directory_identity(path: &Path, recorded: &str) -> Result<()> {
-    let metadata = fs::metadata(path)?;
-    ensure!(metadata.is_dir(), "Git metadata is not a directory");
+    let (metadata, birth) = directory_metadata(path)?;
     ensure!(
-        matches_identity(
-            recorded,
-            metadata.dev(),
-            metadata.ino(),
-            metadata.created().ok(),
-        ),
+        matches_identity(recorded, metadata.dev(), metadata.ino(), birth),
         "Git worktree metadata was replaced or its recorded filesystem identity changed; ownership cannot be verified"
     );
     Ok(())
+}
+
+#[cfg(not(target_os = "linux"))]
+fn directory_metadata(path: &Path) -> Result<(fs::Metadata, Option<SystemTime>)> {
+    let metadata = fs::metadata(path)?;
+    ensure!(metadata.is_dir(), "Git metadata is not a directory");
+    let birth = metadata.created().ok();
+    Ok((metadata, birth))
+}
+
+#[cfg(target_os = "linux")]
+fn directory_metadata(path: &Path) -> Result<(fs::Metadata, Option<SystemTime>)> {
+    use std::os::unix::fs::OpenOptionsExt;
+
+    // Rust's musl Metadata::created is unsupported even when the filesystem
+    // exposes birth time. Pin the directory so stat and statx inspect one inode.
+    let directory = fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_PATH | libc::O_DIRECTORY)
+        .open(path)?;
+    let metadata = directory.metadata()?;
+    let birth = linux_birth_time(&directory)?;
+    Ok((metadata, birth))
+}
+
+#[cfg(target_os = "linux")]
+fn linux_birth_time(directory: &fs::File) -> Result<Option<SystemTime>> {
+    use rustix::fs::{AtFlags, StatxFlags, statx};
+    use rustix::io::Errno;
+    use std::time::Duration;
+
+    let stat = match statx(directory, "", AtFlags::EMPTY_PATH, StatxFlags::BTIME) {
+        Ok(stat) => stat,
+        Err(Errno::NOSYS | Errno::OPNOTSUPP) => return Ok(None),
+        Err(error) => return Err(error.into()),
+    };
+    if stat.stx_mask & StatxFlags::BTIME.bits() == 0 || stat.stx_btime.tv_sec < 0 {
+        return Ok(None);
+    }
+    let birth = Duration::new(stat.stx_btime.tv_sec as u64, stat.stx_btime.tv_nsec);
+    Ok(UNIX_EPOCH.checked_add(birth))
 }
 
 fn matches_identity(recorded: &str, device: u64, inode: u64, birth: Option<SystemTime>) -> bool {
@@ -53,6 +83,27 @@ fn format_identity(device: u64, inode: u64, birth: Option<SystemTime>) -> String
 mod tests {
     use super::*;
     use std::time::Duration;
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linux_identity_uses_birth_time_when_the_filesystem_exposes_it() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let output = std::process::Command::new("stat")
+            .args(["-c", "%W"])
+            .arg(temp.path())
+            .output()?;
+        ensure!(output.status.success(), "stat failed");
+        let seconds: u64 = std::str::from_utf8(&output.stdout)?.trim().parse()?;
+        if seconds != 0 {
+            let identity = directory_identity(temp.path())?;
+            assert!(identity.starts_with("birth:"), "{identity}");
+            assert_eq!(
+                identity.split(':').nth(2),
+                Some(seconds.to_string().as_str())
+            );
+        }
+        Ok(())
+    }
 
     #[test]
     fn identity_survives_device_changes_but_not_inode_reuse() {

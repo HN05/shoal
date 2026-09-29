@@ -901,6 +901,7 @@ dependencies = [
  "libc",
  "plist",
  "rusqlite",
+ "rustix",
  "serde",
  "serde_json",
  "socket2",
