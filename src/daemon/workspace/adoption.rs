@@ -67,9 +67,14 @@ impl Manager {
         // Record identity, base and readiness together: a crash must never leave
         // an adopted directory with weaker ownership checks or pending setup.
         self.insert_workspace(workspace.clone()).await?;
-        // Mark only once the record exists: insertion refuses metadata another
-        // workspace owns, whose marker must survive a refused adoption.
-        self.record_worktree_identity(&workspace).await?;
+        // Mark only once the record exists, so a refused insertion leaves the
+        // metadata untouched; the committed identity protects it if marking fails.
+        if let Err(error) = self.record_worktree_identity(&workspace).await {
+            eprintln!(
+                "worktree identity not recorded for {}: {error:#}",
+                workspace.name
+            );
+        }
         Ok(workspace)
     }
 }
