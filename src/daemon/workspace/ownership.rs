@@ -14,6 +14,57 @@ use std::{
 
 impl Manager {
     pub(crate) async fn verify_worktree(&self, workspace: &Workspace) -> Result<()> {
+        let actual_git_dir = self.linked_git_dir(workspace).await?;
+        verify_owner(
+            &actual_git_dir,
+            &workspace.id,
+            workspace.git_dir_id.as_deref(),
+        )?;
+        if let Some(expected) = &workspace.git_dir {
+            ensure!(
+                fs::canonicalize(expected)? == actual_git_dir,
+                "workspace path now refers to a different Git worktree"
+            );
+        }
+        Ok(())
+    }
+
+    /// Re-establish ownership of the worktree at the recorded path after a human
+    /// confirmed it is this workspace's, whatever made verification fail. It must
+    /// still be a linked worktree of the recorded repository on the recorded
+    /// branch, and no other workspace may own it.
+    pub(crate) async fn reclaim_worktree(&self, workspace: &Workspace) -> Result<()> {
+        let git_dir = self.linked_git_dir(workspace).await?;
+        let branch = git::head_branch(&workspace.path, true, git::run)
+            .await
+            .context("worktree HEAD must be on the recorded branch")?;
+        ensure!(
+            branch.as_deref() == Some(workspace.branch.as_str()),
+            "worktree is not on its recorded branch {}; check it out before reclaiming",
+            workspace.branch
+        );
+        let marked = marked_owner(&git_dir)?;
+        for other in self.list_workspaces().await? {
+            let owns = marked.as_deref() == Some(other.id.as_str())
+                || other
+                    .git_dir
+                    .as_ref()
+                    .and_then(|dir| fs::canonicalize(dir).ok())
+                    == Some(git_dir.clone());
+            ensure!(
+                other.id == workspace.id || !owns,
+                "Git worktree is owned by workspace {}",
+                other.name
+            );
+        }
+        self.record_worktree_identity(workspace).await?;
+        self.verify_worktree(&self.workspace(&workspace.id).await?)
+            .await
+    }
+
+    /// The admin directory of the linked worktree rooted at the recorded path
+    /// that belongs to the recorded repository.
+    async fn linked_git_dir(&self, workspace: &Workspace) -> Result<PathBuf> {
         let repo = self.repository(&workspace.repository_id).await?;
         // Verify this is still the checkout Shoal created before any deletion.
         let root = git::run(&workspace.path, &["rev-parse", "--show-toplevel"]).await?;
@@ -32,18 +83,7 @@ impl Manager {
             actual_git_dir != actual,
             "workspace was replaced by a main repository checkout"
         );
-        verify_owner(
-            &actual_git_dir,
-            &workspace.id,
-            workspace.git_dir_id.as_deref(),
-        )?;
-        if let Some(expected) = &workspace.git_dir {
-            ensure!(
-                fs::canonicalize(expected)? == actual_git_dir,
-                "workspace path now refers to a different Git worktree"
-            );
-        }
-        Ok(())
+        Ok(actual_git_dir)
     }
 
     /// Mark the worktree's admin directory as this workspace's and record its

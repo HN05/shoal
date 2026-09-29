@@ -351,11 +351,13 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             repair,
             stop,
             acknowledge_stopped,
+            reclaim,
         } => {
             let options = crate::daemon::recovery::ReconcileOptions {
                 repair,
                 stop,
                 acknowledge_stopped,
+                reclaim,
             };
             recovery::run(&ctx, scope, options).await
         }

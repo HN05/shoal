@@ -18,6 +18,10 @@ pub struct ReconcileOptions {
     pub stop: bool,
     /// The caller checked that untracked processes have stopped.
     pub acknowledge_stopped: bool,
+    /// The caller checked that the worktree at the recorded path is this
+    /// workspace's; re-establish ownership when verification fails.
+    #[serde(default)]
+    pub reclaim: bool,
 }
 
 states!(DirectoryState {
@@ -120,8 +124,8 @@ impl Manager {
 
     pub async fn reconcile(&self, selector: &str, options: ReconcileOptions) -> Result<Report> {
         ensure!(
-            options.repair || !(options.stop || options.acknowledge_stopped),
-            "stop/acknowledge-stopped require --repair"
+            options.repair || !(options.stop || options.acknowledge_stopped || options.reclaim),
+            "stop/acknowledge-stopped/reclaim require --repair"
         );
         let workspace = self.workspace(selector).await?;
         // Serializes with branch creation and main updates; state reservation below
@@ -224,9 +228,21 @@ impl Manager {
                         report.changes.push("Recorded Git worktree identity".into());
                     }
                 }
-                Err(error) => report
-                    .issues
-                    .push(format!("Worktree ownership cannot be verified: {error:#}")),
+                Err(error) if options.reclaim => match self.reclaim_worktree(workspace).await {
+                    Ok(()) => {
+                        report.directory = DirectoryState::Valid;
+                        report.changes.push(format!(
+                            "Reclaimed the worktree at its recorded path after: {error:#}"
+                        ));
+                    }
+                    Err(refused) => report.issues.push(format!(
+                        "Worktree ownership cannot be verified: {error:#}; reclaim refused: {refused:#}"
+                    )),
+                },
+                Err(error) => report.issues.push(format!(
+                    "Worktree ownership cannot be verified: {error:#}; if {} is still this workspace's worktree, use --repair --reclaim",
+                    workspace.path.display()
+                )),
             }
             return Ok(());
         }

@@ -461,8 +461,12 @@ auditing, serving requests, or cleanup; failure aborts startup and leaves commit
 migrations available for retry. Startup audits but never deletes, kills, clears
 unknown executions, or releases leases.
 Survivors are signaled only after verifying PID birth identity and same-user
-ownership; acknowledgement cannot override visible live processes. Moved or
-replaced worktrees stay unresolved until restored. A deleted directory means
+ownership; acknowledgement cannot override visible live processes. Moved
+worktrees stay unresolved until restored. Any other ownership failure is
+recoverable by explicit reclaim, which a human requests after checking the
+worktree: it re-marks a linked worktree of the recorded repository at the
+recorded path on the recorded branch that no other workspace owns, then
+repairs normally. It is never automatic, and scoped callers cannot run doctor. A deleted directory means
 the user removed the worktree: the cleanup sweep forgets it through the shared
 removal path, releasing its leases and retaining its branch, unless it has
 commands Shoal cannot verify stopped.

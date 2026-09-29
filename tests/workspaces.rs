@@ -5700,6 +5700,97 @@ fn owner_marker_keeps_workspaces_verified_when_filesystem_identity_changes() {
 }
 
 #[test]
+fn doctor_reclaims_unverifiable_worktrees_only_on_explicit_request() {
+    let mut fixture = Fixture::with_config(Some("[resources.lock]\n"));
+    let workspace = fixture.add("reclaimed");
+    let other = fixture.add("other");
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    let marker = Path::new(workspace["git_dir"].as_str().unwrap()).join(OWNER_MARKER);
+    fs::write(path.join("dirty"), "preserve me").unwrap();
+    let lease = fixture.ok(&["resource", "acquire", "lock", "reclaimed"]);
+    // An unmarked record whose filesystem identity changed cannot be verified.
+    unmark_owner(&workspace);
+    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+    db.execute(
+        "UPDATE workspaces SET git_dir_id='0:0' WHERE name='reclaimed'",
+        [],
+    )
+    .unwrap();
+    fixture.restart();
+    assert_eq!(
+        fixture.ok(&["inspect", "reclaimed"])["workspace"]["state"],
+        "failed"
+    );
+    let preview = recovery_report(&fixture, &["doctor", "reclaimed"]);
+    assert!(preview[0]["issues"].to_string().contains("--reclaim"));
+    let report = recovery_report(&fixture, &["doctor", "reclaimed", "--repair"]);
+    assert_eq!(report[0]["directory"], "unverified");
+    assert!(
+        !fixture
+            .run(&["doctor", "reclaimed", "--reclaim"])
+            .status
+            .success()
+    );
+    // Reclaim still requires the recorded branch and metadata no one else owns.
+    git(path, &["switch", "-q", "-c", "elsewhere"]);
+    let refused = recovery_report(&fixture, &["doctor", "reclaimed", "--repair", "--reclaim"]);
+    assert!(refused[0]["issues"].to_string().contains("recorded branch"));
+    assert_eq!(refused[0]["workspace"]["state"], "failed");
+    git(path, &["switch", "-q", "reclaimed"]);
+    fs::write(&marker, format!("{}\n", other["id"].as_str().unwrap())).unwrap();
+    let refused = recovery_report(&fixture, &["doctor", "reclaimed", "--repair", "--reclaim"]);
+    assert!(
+        refused[0]["issues"]
+            .to_string()
+            .contains("owned by workspace other")
+    );
+    fs::remove_file(&marker).unwrap();
+    assert!(
+        !fixture
+            .run(&[
+                "exec",
+                "other",
+                "--",
+                env!("CARGO_BIN_EXE_shoal"),
+                "doctor",
+                "reclaimed",
+                "--repair",
+                "--reclaim"
+            ])
+            .status
+            .success()
+    );
+    let reclaimed =
+        repaired_workspaces(&fixture, &["doctor", "reclaimed", "--repair", "--reclaim"]);
+    assert_eq!(reclaimed[0]["workspace"]["state"], "ready");
+    assert!(reclaimed[0]["changes"].to_string().contains("Reclaimed"));
+    assert_eq!(
+        fs::read_to_string(&marker).unwrap().trim_end(),
+        workspace["id"].as_str().unwrap()
+    );
+    assert_eq!(
+        reclaimed[0]["workspace"]["git_dir_id"],
+        workspace["git_dir_id"]
+    );
+    assert!(
+        fixture
+            .run(&["exec", "reclaimed", "--", "true"])
+            .status
+            .success()
+    );
+    assert_eq!(fixture.ok(&["resource", "reclaimed"])["leases"][0], lease);
+    assert_eq!(
+        fs::read_to_string(path.join("dirty")).unwrap(),
+        "preserve me"
+    );
+    fixture.restart();
+    assert_eq!(
+        fixture.ok(&["inspect", "reclaimed"])["workspace"]["state"],
+        "ready"
+    );
+}
+
+#[test]
 fn legacy_worktree_identity_upgrades_only_after_verification() {
     use std::os::unix::fs::MetadataExt;
 

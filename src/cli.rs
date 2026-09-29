@@ -264,6 +264,9 @@ pub enum Command {
         /// Confirm untracked/legacy processes have stopped; visible survivors still block repair.
         #[arg(long, requires = "repair")]
         acknowledge_stopped: bool,
+        /// Confirm the worktree at the recorded path is this workspace's; re-establish its ownership.
+        #[arg(long, requires = "repair")]
+        reclaim: bool,
     },
     /// Stop managed commands and keep the workspace.
     Stop { workspace: Option<String> },
@@ -771,7 +774,7 @@ mod tests {
         let command = Cli::command();
         assert!(command.find_subcommand("doctor").is_some());
         assert!(command.find_subcommand("reconcile").is_none());
-        for flag in ["--stop", "--acknowledge-stopped"] {
+        for flag in ["--stop", "--acknowledge-stopped", "--reclaim"] {
             assert!(Cli::try_parse_from(["shoal", "doctor", flag]).is_err());
             assert!(Cli::try_parse_from(["shoal", "doctor", "--repair", flag]).is_ok());
         }
