@@ -124,7 +124,8 @@ impl Manager {
     }
 
     /// Missing worktrees may have been moved outside Shoal, not deleted. Consult
-    /// their recorded admin directory before allowing ownership cleanup.
+    /// their recorded admin directory before allowing ownership cleanup; only a
+    /// link to another existing path needs proof that the directory is ours.
     pub(crate) async fn missing_worktree(&self, workspace: &Workspace) -> Result<Option<PathBuf>> {
         let repo = self.repository(&workspace.repository_id).await?;
         let Some(directory) = &workspace.git_dir else {
@@ -136,21 +137,22 @@ impl Manager {
                 .find(|tree| tree.is_branch(&workspace.branch) && tree.path.is_dir())
                 .map(|tree| tree.path));
         };
-        if directory.try_exists()? {
-            verify_owner(directory, &workspace.id, workspace.git_dir_id.as_deref())?;
-        }
-        match fs::read_to_string(directory.join("gitdir")) {
-            Ok(destination) => {
-                let path = PathBuf::from(destination.trim_end_matches('\n'));
-                let path = path.parent().context("invalid Git worktree link")?;
-                if path.try_exists()? && fs::canonicalize(path)? != workspace.path {
-                    return Ok(Some(path.to_owned()));
-                }
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        let destination = match fs::read_to_string(directory.join("gitdir")) {
+            Ok(destination) => PathBuf::from(destination.trim_end_matches('\n')),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
             Err(error) => return Err(error).context("read worktree ownership link"),
+        };
+        let path = destination.parent().context("invalid Git worktree link")?;
+        if !path.try_exists()? || fs::canonicalize(path)? == workspace.path {
+            return Ok(None);
         }
-        Ok(None)
+        // Only this workspace's admin directory proves that its worktree moved;
+        // one marked for another workspace means this worktree was deleted.
+        match marked_owner(directory)? {
+            Some(owner) if owner != workspace.id => return Ok(None),
+            _ => verify_owner(directory, &workspace.id, workspace.git_dir_id.as_deref())?,
+        }
+        Ok(Some(path.to_owned()))
     }
 }
 

@@ -5791,6 +5791,52 @@ fn doctor_reclaims_unverifiable_worktrees_only_on_explicit_request() {
 }
 
 #[test]
+fn deleted_worktrees_are_forgotten_even_when_their_metadata_is_unverifiable() {
+    let fixture = Fixture::new();
+    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+    let mut paths = Vec::new();
+    for name in ["deleted", "moved"] {
+        let workspace = fixture.add(name);
+        unmark_owner(&workspace);
+        db.execute(
+            "UPDATE workspaces SET git_dir_id='0:0' WHERE name=?1",
+            [name],
+        )
+        .unwrap();
+        paths.push(PathBuf::from(workspace["path"].as_str().unwrap()));
+    }
+    // Git still lists the deleted worktree, but nothing exists to protect.
+    fs::remove_dir_all(&paths[0]).unwrap();
+    let elsewhere = fixture.root.path().join("elsewhere");
+    git(
+        &fixture.repo,
+        &[
+            "worktree",
+            "move",
+            paths[1].to_str().unwrap(),
+            elsewhere.to_str().unwrap(),
+        ],
+    );
+    let report = recovery_report(&fixture, &["doctor", "moved", "--repair"]);
+    assert!(
+        report[0]["issues"]
+            .to_string()
+            .contains("cannot be verified")
+    );
+    assert!(!fixture.run(&["rm", "moved", "--yes"]).status.success());
+    assert!(elsewhere.join("tracked").exists());
+    assert!(fixture.run(&["rm", "deleted", "--yes"]).status.success());
+    let names: Vec<_> = fixture
+        .ok(&["ls"])
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|w| w["name"].clone())
+        .collect();
+    assert_eq!(names, ["moved"]);
+}
+
+#[test]
 fn legacy_worktree_identity_upgrades_only_after_verification() {
     use std::os::unix::fs::MetadataExt;
 
