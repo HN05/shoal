@@ -77,6 +77,14 @@ enabled = false
 used_percent = 90
 sustained_seconds = 300
 
+[overload.recovery]
+# Automatically restore agents with a configured [agent_resume] command.
+enabled = true
+# Require headroom for a full minute; restart agents one at a time.
+memory_used_percent = 85
+cpu_used_percent = 75
+sustained_seconds = 60
+
 [auto_cleanup]
 # Remove idle, clean, pushed or landed workspaces automatically.
 enabled = true

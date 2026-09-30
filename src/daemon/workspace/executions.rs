@@ -482,6 +482,9 @@ impl Manager {
                     .filter(|sender| !sender.is_closed())
                 {
                     Some(sender) => {
+                        if let Some(agent) = self.agents.lock().await.get_mut(&execution.id) {
+                            agent.cancel_recovery();
+                        }
                         sender
                             .send(true)
                             .context("execution disconnected during stop")?;

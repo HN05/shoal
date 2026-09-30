@@ -34,6 +34,11 @@ fn linux_memory(text: &str, threshold: u8) -> Result<bool> {
 
 #[cfg(target_os = "macos")]
 pub fn critical_memory(_used_percent: u8) -> Result<bool> {
+    Ok(memory_level()? == 4)
+}
+
+#[cfg(target_os = "macos")]
+fn memory_level() -> Result<libc::c_int> {
     let mut level: libc::c_int = 0;
     let mut size = std::mem::size_of_val(&level);
     // SAFETY: sysctl writes at most size bytes into the initialized integer;
@@ -58,7 +63,7 @@ pub fn critical_memory(_used_percent: u8) -> Result<bool> {
         matches!(level, 1 | 2 | 4),
         "unknown memory pressure level {level}"
     );
-    Ok(level == 4)
+    Ok(level)
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
@@ -191,5 +196,18 @@ mod cpu_tests {
         ] {
             assert!(linux_cpu(text).is_err(), "{text}");
         }
+    }
+}
+
+/// Recovery requires headroom, and native normal pressure on macOS.
+pub fn safe_memory(used_percent: u8) -> Result<bool> {
+    #[cfg(target_os = "macos")]
+    {
+        let _ = used_percent;
+        Ok(memory_level()? == 1)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Ok(!critical_memory(used_percent)?)
     }
 }

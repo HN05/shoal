@@ -161,6 +161,9 @@ impl Manager {
     /// A fingerprint of everything automatic cleanup must see unchanged before
     /// removing the workspace, or `None` when it is not a cleanup candidate.
     pub async fn cleanup_snapshot(&self, id: &str) -> Result<Option<u64>> {
+        if crate::execution::recovery::pending(&self.paths, id)? {
+            return Ok(None);
+        }
         if self.completion(id).await?.is_some()
             || self.pr_registration(id).await?.is_some()
             || self.issue_registration(id).await?.is_some()

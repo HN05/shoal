@@ -125,6 +125,10 @@ removal, check it against the rule those files state before judging it.
   agent at a time through its wrapper, newest first, with configurable thresholds
   and timing; retain work and leases, notify, and never select disconnected
   executions. Failed readings reset the sustained timer and authorize no stop.
+  Automatic recovery requires a configured session restore command, proven child
+  termination, verified ready workspace ownership and sustained healthy headroom.
+  Keep waiting wrappers tracked, serialize restores and honor manual stop/removal.
+  Persist manual recovery without replaying the original prompt.
 - Agent forge wrappers are opt-in, resolve per tool through configuration layers,
   and change only the tracked agent's PATH, inherited by descendants. Wrappers
   own authentication; Shoal must not read tokens or switch the user's login.

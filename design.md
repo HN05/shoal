@@ -63,6 +63,13 @@ configurable; unavailable readings authorize no stop. Preserve work and leases,
 notify the user, and never signal an unknown execution. Session recovery commands
 are explicitly configured per agent, with repository layering and workspace
 substitutions; they restore a session rather than repeat its initial task.
+Configured recovery defaults to automatic, requiring sustained healthy readings
+with headroom and serializing restores with a fresh healthy interval for each.
+Keep the wrapper connected and its execution owned while waiting; manual stop,
+removal, uncertain survivors, or lost ownership cancels recovery. A saved restore
+record suppresses idle cleanup and provides manual recovery after the wrapper
+exits or the daemon restarts;
+without a configured command, built-in terminal agents use their session picker.
 Agent metadata is transient, so restart cannot select disconnected survivors.
 
 Use short transactions for atomic claims. Closed Shoal enums with matching display and

@@ -24,6 +24,9 @@ impl Sustained {
 struct Monitor {
     memory: Sustained,
     cpu: Sustained,
+    healthy: Sustained,
+    recovery_epoch: u64,
+    cpu_used: Option<f64>,
     previous_cpu: Option<crate::process::load::CpuTicks>,
     last_observation: Option<Instant>,
 }
@@ -41,6 +44,7 @@ impl Monitor {
         }) {
             self.memory = Sustained::default();
             self.cpu = Sustained::default();
+            self.healthy = Sustained::default();
             self.previous_cpu = None;
         }
         let memory = memory.unwrap_or_else(|error| {
@@ -58,6 +62,7 @@ impl Monitor {
                 None
             }
         };
+        self.cpu_used = used;
         let memory = self.memory.observe(
             now,
             settings.memory.enabled && memory,
@@ -97,7 +102,31 @@ pub(super) async fn run(manager: Arc<Manager>) {
         } else {
             Ok(crate::process::load::CpuTicks::default())
         };
-        if let Some(reason) = monitor.reason(Instant::now(), settings, memory, cpu)
+        let now = Instant::now();
+        let reason = monitor.reason(now, settings, memory, cpu);
+        let epoch = manager
+            .recovery_epoch
+            .load(std::sync::atomic::Ordering::Relaxed);
+        if monitor.recovery_epoch != epoch {
+            monitor.healthy = Sustained::default();
+            monitor.recovery_epoch = epoch;
+        }
+        let memory_safe = !settings.memory.enabled
+            || crate::process::load::safe_memory(settings.recovery.memory_used_percent)
+                .unwrap_or(false);
+        let cpu_safe = !settings.cpu.enabled
+            || monitor
+                .cpu_used
+                .is_some_and(|used| used < f64::from(settings.recovery.cpu_used_percent));
+        let recovered = monitor.healthy.observe(
+            now,
+            memory_safe && cpu_safe,
+            settings.recovery.sustained_seconds,
+        );
+        manager
+            .recovery_ready
+            .send_replace(recovered.then_some(epoch));
+        if let Some(reason) = reason
             && manager.stop_agent_for_overload(reason).await
         {
             monitor = Monitor::default();
@@ -135,8 +164,10 @@ mod tests {
     #[test]
     fn cpu_is_opt_in_and_requires_continuous_samples() {
         let start = Instant::now();
-        let mut settings = crate::config::overload::Overload::default();
-        settings.poll_seconds = 100;
+        let mut settings = crate::config::overload::Overload {
+            poll_seconds: 100,
+            ..Default::default()
+        };
         let mut monitor = Monitor::default();
         let ticks = |n: u64| {
             Ok(crate::process::load::CpuTicks {

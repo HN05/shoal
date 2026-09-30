@@ -968,6 +968,7 @@ async fn execution_scope_preserves_role_authorization_and_expires() {
                     workspace: target.name.clone(),
                     kind: requested,
                     agent: None,
+                    recover: false,
                     wrapper: wrapper.clone(),
                 };
                 let allowed = target.id == workspace.id
@@ -1163,6 +1164,7 @@ async fn land_refuses_dirty_checkouts_other_branches_and_scoped_callers() {
     let mut denied = Method::Execute {
         kind: crate::daemon::workspace::ExecutionKind::Land,
         agent: None,
+        recover: false,
         workspace: workspace.id.clone(),
         wrapper: crate::process::identity::capture(std::process::id())
             .unwrap()

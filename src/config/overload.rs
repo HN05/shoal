@@ -7,6 +7,7 @@ use serde::Deserialize;
 pub struct Overload {
     pub memory: Memory,
     pub cpu: Cpu,
+    pub recovery: Recovery,
     pub cooldown_seconds: u64,
     pub poll_seconds: u64,
 }
@@ -16,6 +17,7 @@ impl Default for Overload {
         Self {
             memory: Memory::default(),
             cpu: Cpu::default(),
+            recovery: Recovery::default(),
             cooldown_seconds: 5,
             poll_seconds: 2,
         }
@@ -59,6 +61,26 @@ impl Default for Cpu {
     }
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Recovery {
+    pub enabled: bool,
+    pub memory_used_percent: u8,
+    pub cpu_used_percent: u8,
+    pub sustained_seconds: u64,
+}
+
+impl Default for Recovery {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            memory_used_percent: 85,
+            cpu_used_percent: 75,
+            sustained_seconds: 60,
+        }
+    }
+}
+
 impl Overload {
     pub fn validate(&self) -> Result<()> {
         ensure!(
@@ -74,6 +96,20 @@ impl Overload {
             "overload.cpu.used_percent must be between 1 and 100"
         );
         validate_seconds(self.cpu.sustained_seconds, "overload.cpu.sustained_seconds")?;
+        ensure!(
+            self.recovery.memory_used_percent > 0
+                && self.recovery.memory_used_percent < self.memory.used_percent,
+            "overload.recovery.memory_used_percent must be positive and below overload.memory.used_percent"
+        );
+        ensure!(
+            self.recovery.cpu_used_percent > 0
+                && self.recovery.cpu_used_percent < self.cpu.used_percent,
+            "overload.recovery.cpu_used_percent must be positive and below overload.cpu.used_percent"
+        );
+        validate_seconds(
+            self.recovery.sustained_seconds,
+            "overload.recovery.sustained_seconds",
+        )?;
         validate_seconds(self.poll_seconds, "overload.poll_seconds")?;
         validate_seconds(self.cooldown_seconds, "overload.cooldown_seconds")
     }
@@ -99,6 +135,9 @@ mod tests {
         defaults.validate().unwrap();
         for text in [
             "cooldown_seconds = 0",
+            "[recovery]\nmemory_used_percent = 95",
+            "[recovery]\ncpu_used_percent = 90",
+            "[recovery]\nsustained_seconds = 0",
             "[cpu]\nused_percent = 0",
             "[cpu]\nused_percent = 101",
             "[cpu]\nsustained_seconds = 0",

@@ -6,6 +6,8 @@ mod cleanup;
 pub mod doctor;
 pub mod notifications;
 mod overload;
+#[cfg(test)]
+mod overload_tests;
 pub mod ports;
 pub mod recovery;
 pub mod resources;
@@ -192,6 +194,7 @@ async fn serve(mut stream: UnixStream, server: Server) -> Result<()> {
             wrapper,
             kind,
             agent,
+            recover,
         } => {
             return execute(
                 stream,
@@ -202,6 +205,7 @@ async fn serve(mut stream: UnixStream, server: Server) -> Result<()> {
                     wrapper,
                     kind,
                     agent,
+                    recover,
                     parent_execution: caller.map(|caller| caller.execution_id),
                 },
             )
@@ -481,6 +485,7 @@ struct ExecutionContext {
     wrapper: Identity,
     kind: ExecutionKind,
     agent: Option<String>,
+    recover: bool,
     parent_execution: Option<String>,
 }
 
@@ -497,6 +502,7 @@ async fn execute(
         wrapper,
         kind,
         agent,
+        recover,
         parent_execution,
     } = context;
     let StartedExecution {
@@ -515,7 +521,10 @@ async fn execute(
     };
     let execution_id = plan.id.clone();
     let workspace_name = plan.workspace.name.clone();
-    if let Some(agent) = &agent {
+    let workspace_id = plan.workspace.id.clone();
+    if kind == ExecutionKind::Command
+        && let Some(agent) = &agent
+    {
         manager
             .track_agent(&execution_id, agent, &workspace_name)
             .await;
@@ -530,28 +539,69 @@ async fn execute(
             &Response::new(request_id, Body::Execution(plan)),
         )
         .await?;
-        match incoming.recv().await.context("execution disconnected")?? {
-            ExecutionEvent::Finished { exit_code } => return Ok(exit_code),
-            ExecutionEvent::Started { child, group_id } => {
-                manager
-                    .record_execution_child(execution_id.clone(), child, group_id)
-                    .await?;
-                protocol::write(&mut writer, &Control::Started).await?;
-            }
-        }
-        let finished = incoming.recv();
-        tokio::pin!(finished);
+        let recover = recover && manager.config.overload.recovery.enabled;
+        let mut awaiting_started = true;
         let mut sent_stop = false;
         loop {
-            tokio::select! {
-                result = &mut finished => break match result.context("execution disconnected")?? {
-                    ExecutionEvent::Finished { exit_code } => Ok(exit_code),
-                    _ => anyhow::bail!("unexpected execution event"),
-                },
-                changed = stop.changed(), if !sent_stop => {
-                    changed?;
-                    protocol::write(&mut writer, &Control::Stop).await?;
-                    sent_stop = true;
+            let event = if awaiting_started {
+                incoming.recv().await.context("execution disconnected")??
+            } else {
+                let event = incoming.recv();
+                tokio::pin!(event);
+                loop {
+                    tokio::select! {
+                        event = &mut event => break event.context("execution disconnected")??,
+                        changed = stop.changed(), if !sent_stop => {
+                            changed?;
+                            if *stop.borrow_and_update() {
+                                let control = if manager.agent_was_overloaded(&execution_id).await {
+                                    Control::OverloadStop { recover }
+                                } else { Control::Stop };
+                                protocol::write(&mut writer, &control).await?;
+                                sent_stop = true;
+                            }
+                        }
+                    }
+                }
+            };
+            match event {
+                ExecutionEvent::Started { child, group_id } => {
+                    awaiting_started = false;
+                    manager
+                        .record_execution_child(execution_id.clone(), child, group_id)
+                        .await?;
+                    protocol::write(&mut writer, &Control::Started).await?;
+                }
+                ExecutionEvent::Finished { exit_code } => break Ok(exit_code),
+                ExecutionEvent::Paused => {
+                    ensure!(recover, "execution is not eligible for overload recovery");
+                    if !manager.agent_was_overloaded(&execution_id).await {
+                        protocol::write(&mut writer, &Control::Stop).await?;
+                        continue;
+                    }
+                    manager
+                        .pause_agent_execution(&execution_id, &workspace_id)
+                        .await?;
+                    // A manual stop/removal always cancels automatic recovery.
+                    let resume = tokio::select! {
+                        biased;
+                        event = incoming.recv() => {
+                            match event.context("execution disconnected")?? {
+                                ExecutionEvent::Finished { exit_code } => break Ok(exit_code),
+                                _ => anyhow::bail!("unexpected event during overload recovery"),
+                            }
+                        }
+                        changed = stop.changed() => { changed?; false }
+                        ready = manager.await_overload_recovery(&workspace_id) => { ready?; true }
+                    };
+                    if resume && manager.resume_agent_execution(&execution_id).await? {
+                        awaiting_started = true;
+                        sent_stop = false;
+                        let ports = manager.inspect_workspace(&workspace_id).await?.ports;
+                        protocol::write(&mut writer, &Control::Resume { ports }).await?;
+                    } else {
+                        protocol::write(&mut writer, &Control::Stop).await?;
+                    }
                 }
             }
         }

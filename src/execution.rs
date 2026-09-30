@@ -3,6 +3,8 @@
 //! completion. The daemon never touches terminal I/O. A detached launch runs
 //! the same wrapper in a background `shoal` process with a log file instead
 //! of the terminal, so the invoking CLI returns once the launch is recorded.
+pub mod recovery;
+
 use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -235,16 +237,23 @@ async fn run_tracked(
     let wrapper = process::identity::capture(std::process::id())?
         .context("cannot identify execution wrapper")?;
     let kind = mode.kind();
+    let recovery = if let Some(agent) = &agent {
+        let record = client::inspect(paths, workspace.clone()).await?.workspace;
+        Some(recovery::Recovery::resolve(paths, &record, agent).await?)
+    } else {
+        None
+    };
     let method = Method::Execute {
         workspace,
         wrapper,
         kind,
         agent,
+        recover: recovery.as_ref().is_some_and(|recovery| recovery.automatic),
     };
     let (mut stream, body) = timeout(kind.start_timeout(), client::open(paths, method))
         .await
         .context("daemon did not start the execution in time")??;
-    let plan = ExecutionPlan::try_from(body)?;
+    let mut plan = ExecutionPlan::try_from(body)?;
     let command = if let Some(land) = &plan.land {
         internal_command(
             paths,
@@ -259,10 +268,48 @@ async fn run_tracked(
             None => command,
         }
     };
-    let mut result = if mode.is_setup() && command.is_empty() {
-        Ok(0)
-    } else {
-        supervise(&mut stream, paths, &plan, &command, &mode, auth.as_ref()).await
+    let mut next_command = command;
+    let mut recovery_record = None;
+    let mut restored = false;
+    let mut result = loop {
+        let outcome = if mode.is_setup() && next_command.is_empty() {
+            Ok(Outcome::Exited(0))
+        } else {
+            supervise(
+                &mut stream,
+                paths,
+                &plan,
+                &next_command,
+                &mode,
+                auth.as_ref(),
+            )
+            .await
+        };
+        match outcome {
+            Ok(Outcome::Exited(code)) => break Ok(code),
+            Ok(Outcome::Overloaded { code, recover }) => {
+                if let Some(recovery) = &recovery {
+                    match recovery.save(paths, &plan.workspace.id, &plan.id) {
+                        Ok(path) => recovery_record = Some(path),
+                        Err(error) => eprintln!("warning: cannot save recovery command: {error:#}"),
+                    }
+                    eprintln!("shoal: agent stopped for overload; session restore record saved");
+                    if recover && recovery.automatic {
+                        protocol::write(&mut stream, &ExecutionEvent::Paused).await?;
+                        eprintln!("shoal: waiting for healthy load before restoring agent session");
+                        if let Some(ports) = recovery::wait(&mut stream).await? {
+                            plan.ports = ports;
+                            restored = true;
+                            next_command = recovery.command.clone();
+                            eprintln!("shoal: restoring agent session");
+                            continue;
+                        }
+                    }
+                }
+                break Ok(code);
+            }
+            Err(error) => break Err(error),
+        }
     };
     if !matches!(result, Ok(0))
         && let Some(land) = &plan.land
@@ -274,12 +321,25 @@ async fn run_tracked(
     // Report only after child/process-group cleanup. A lost connection never
     // grants the daemon permission to assume processes stopped.
     let report = report_completion(&mut stream, code, &mode).await;
+    let complete = report.as_ref().is_ok_and(|complete| *complete);
     if mode.is_setup() {
         report?;
     } else if let Err(error) = report {
         eprintln!("warning: unable to report execution completion: {error:#}");
     }
+    if restored
+        && complete
+        && matches!(result, Ok(0))
+        && let Some(path) = recovery_record
+    {
+        let _ = std::fs::remove_file(path);
+    }
     result
+}
+
+enum Outcome {
+    Exited(i32),
+    Overloaded { code: i32, recover: bool },
 }
 
 /// Launch the command, register its process group, and wait for it to exit or
@@ -291,7 +351,7 @@ async fn supervise(
     command: &[OsString],
     mode: &Mode,
     auth: Option<&crate::agent_auth::Launch>,
-) -> Result<i32> {
+) -> Result<Outcome> {
     let mut terminate = signal(SignalKind::terminate())?;
     let mut interrupt = signal(SignalKind::interrupt())?;
     let mut quit = signal(SignalKind::quit())?;
@@ -329,11 +389,17 @@ async fn supervise(
     group.send(libc::SIGCONT);
     let control = protocol::read::<Control>(stream);
     tokio::pin!(control);
+    let mut overload = None;
     let status = tokio::select! {
         status = child.wait() => status?,
         result = &mut control => {
             let status = stop(&mut child, &group, libc::SIGTERM).await?;
-            result.context("daemon disconnected; command stopped, execution requires reconciliation")?;
+            let control = result.context("daemon disconnected; command stopped, execution requires reconciliation")?;
+            match control {
+                Control::OverloadStop { recover } => overload = Some(recover),
+                Control::Stop => {},
+                _ => bail!("unexpected execution control"),
+            }
             status
         }
         _ = terminate.recv() => stop(&mut child, &group, libc::SIGTERM).await?,
@@ -342,7 +408,13 @@ async fn supervise(
     };
     // A command owns its process group; descendants do not outlive its lease.
     drop(group);
-    Ok(exit_code(status))
+    Ok(match overload {
+        Some(recover) => Outcome::Overloaded {
+            code: exit_code(status),
+            recover,
+        },
+        None => Outcome::Exited(exit_code(status)),
+    })
 }
 
 fn spawn(
@@ -415,7 +487,7 @@ fn configure_environment(process: &mut Command, paths: &Paths, plan: &ExecutionP
         .env(env::RESERVED_PORT_ENV, exported.join(":"));
 }
 
-async fn report_completion(stream: &mut UnixStream, code: i32, mode: &Mode) -> Result<()> {
+async fn report_completion(stream: &mut UnixStream, code: i32, mode: &Mode) -> Result<bool> {
     let exchange = async {
         protocol::write(stream, &ExecutionEvent::Finished { exit_code: code }).await?;
         loop {
@@ -429,7 +501,7 @@ async fn report_completion(stream: &mut UnixStream, code: i32, mode: &Mode) -> R
                         "setup has surviving or unverified processes"
                     );
                 }
-                return Ok(());
+                return Ok(complete);
             }
         }
     };

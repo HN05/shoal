@@ -89,7 +89,7 @@ memory pressure on macOS, it asks the newest connected tracked agent to stop.
 The wrapper terminates its process group through the normal grace period; the
 monitor waits five seconds before resampling and stopping another agent if
 pressure persists. It retains workspaces, execution recovery records and resource
-leases, records an `agent_stopped` notification, and never restarts the agent.
+leases and records an `agent_stopped` notification.
 Ordinary commands, desktop handoffs and disconnected executions are not selected.
 Monitoring does not guarantee that the OS will never reach its OOM limit.
 
@@ -109,6 +109,12 @@ sustained_seconds = 0           # Stop on the first critical sample
 enabled = false                # Opt in with true
 used_percent = 90              # Aggregate busy time across all cores; 1–100
 sustained_seconds = 300         # Five minutes
+
+[overload.recovery]
+enabled = true                 # Applies only with a configured resume command
+memory_used_percent = 85       # Linux; macOS requires normal pressure
+cpu_used_percent = 75
+sustained_seconds = 60
 ```
 
 Durations are seconds, bounded to one day; polling and cooldown must be positive.
@@ -120,7 +126,14 @@ memory protection remains independent of CPU readings.
 Resume commands are argument arrays in `[agent_resume]`, keyed by the tracked
 agent name. They use the same workspace substitutions and repository layering as
 `[commands]`; they must restore a session without repeating the initial prompt.
-No resume command is configured by default.
+No resume command is configured by default. With one configured, the wrapper
+stays connected while the agent is stopped and automatically runs that command
+after healthy readings persist for the recovery interval. Recovery requires
+headroom below each enabled signal’s recovery threshold; thresholds must be
+positive and below their stop thresholds. Agents restore one at a time, each with
+a fresh healthy interval. Missing readings, manual stop/removal, lost connections,
+uncertain surviving processes, or changed workspace ownership prevent recovery.
+
 
 ## Workspaces
 

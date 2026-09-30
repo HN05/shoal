@@ -24,7 +24,7 @@ use crate::{
     sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
 };
 
-pub const VERSION: u32 = 46;
+pub const VERSION: u32 = 47;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -215,6 +215,8 @@ pub enum Method {
         kind: ExecutionKind,
         #[serde(default)]
         agent: Option<String>,
+        #[serde(default)]
+        recover: bool,
     },
     // Notifications.
     ListNotifications {
@@ -510,6 +512,7 @@ pub enum ExecutionEvent {
     Finished {
         exit_code: i32,
     },
+    Paused,
 }
 
 /// Daemon → wrapper messages during an execution.
@@ -518,7 +521,15 @@ pub enum ExecutionEvent {
 pub enum Control {
     Started,
     Stop,
-    Finished { complete: bool },
+    OverloadStop {
+        recover: bool,
+    },
+    Resume {
+        ports: Vec<crate::model::PortReservation>,
+    },
+    Finished {
+        complete: bool,
+    },
 }
 
 pub async fn read<T: DeserializeOwned>(stream: &mut (impl AsyncRead + Unpin)) -> Result<T> {
@@ -696,6 +707,7 @@ mod tests {
                 wrapper: wrapper.clone(),
                 kind,
                 agent: Some("test-agent".into()),
+                recover: false,
             };
             let encoded = serde_json::to_value(method).unwrap();
             assert_eq!(encoded["execute"]["kind"], spelling);

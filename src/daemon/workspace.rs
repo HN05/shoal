@@ -72,6 +72,9 @@ pub struct Manager {
     /// Connected executions and the channel that asks their wrapper to stop.
     connections: Mutex<HashMap<String, watch::Sender<bool>>>,
     agents: Mutex<HashMap<String, agents::Agent>>,
+    pub(super) recovery_ready: watch::Sender<Option<u64>>,
+    pub(super) recovery_epoch: std::sync::atomic::AtomicU64,
+    pub(super) recovery_gate: Mutex<()>,
     /// Per-workspace activity counters folded into cleanup fingerprints.
     activity: Mutex<HashMap<String, u64>>,
     /// The newest recorded notification ID; wakes `shoal notifications --follow`.
@@ -96,6 +99,9 @@ impl Manager {
             scopes: Mutex::new(HashMap::new()),
             connections: Mutex::new(HashMap::new()),
             agents: Mutex::new(HashMap::new()),
+            recovery_ready: watch::channel(None).0,
+            recovery_epoch: std::sync::atomic::AtomicU64::new(0),
+            recovery_gate: Mutex::new(()),
             activity: Mutex::new(HashMap::new()),
             notifications_changed: watch::channel(0).0,
         }))

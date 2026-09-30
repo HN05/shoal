@@ -20,6 +20,8 @@ states!(NotificationKind {
     AgentExited => "agent_exited",
     /// The overload monitor asked a tracked agent to stop.
     AgentStopped => "agent_stopped",
+    /// A stopped agent was authorized to restore its session.
+    AgentResumed => "agent_resumed",
     /// The daemon removed or forgot a workspace on its own.
     WorkspaceRemoved => "workspace_removed",
     /// An agent explicitly marked its assignment finished.
@@ -36,7 +38,11 @@ impl NotificationKind {
     fn collapses(self) -> bool {
         !matches!(
             self,
-            Self::AgentExited | Self::AgentStopped | Self::WorkspaceRemoved | Self::HookFailed
+            Self::AgentExited
+                | Self::AgentStopped
+                | Self::AgentResumed
+                | Self::WorkspaceRemoved
+                | Self::HookFailed
         )
     }
 }
