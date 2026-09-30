@@ -331,6 +331,15 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             manager.stop_workspace(&workspace).await?;
             Body::Ok
         }
+        Method::WorkspacePause {
+            workspace,
+            execution,
+        } => {
+            manager
+                .pause_workspace_agents(&workspace, execution.as_deref())
+                .await?;
+            Body::Ok
+        }
         Method::CheckRemoval {
             workspace,
             caller_pid,
@@ -557,6 +566,8 @@ async fn execute(
                             if *stop.borrow_and_update() {
                                 let control = if manager.agent_was_overloaded(&execution_id).await {
                                     Control::OverloadStop { recover }
+                                } else if manager.agent_was_paused(&execution_id).await {
+                                    Control::Pause
                                 } else { Control::Stop };
                                 protocol::write(&mut writer, &control).await?;
                                 sent_stop = true;

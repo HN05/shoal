@@ -73,7 +73,7 @@ async fn wait_paused(manager: &Manager, workspace: &crate::model::Workspace) {
                 .run(move |db| {
                     Ok(store::executions(db, &id)?
                         .iter()
-                        .any(|record| record.group_id.is_none()))
+                        .any(|record| record.wrapper.is_some() && record.group_id.is_none()))
                 })
                 .await
                 .unwrap();
@@ -105,6 +105,148 @@ fn launch(
         )
         .await
     })
+}
+
+#[tokio::test]
+async fn manual_pause_preserves_work_and_leases_and_requires_manual_resume() {
+    let (_root, manager, workspace, serving) = fixture().await;
+    manager
+        .acquire_port(
+            &workspace.id,
+            "web".into(),
+            crate::daemon::ports::PortRequest::default(),
+            None,
+        )
+        .await
+        .unwrap();
+    fs::write(workspace.path.join("unfinished"), "work in progress").unwrap();
+    let unrelated = manager
+        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .await
+        .unwrap();
+    fs::remove_file(workspace.path.join(".shoal.toml")).unwrap();
+    let launched = launch(&manager, &workspace);
+    wait_started(&workspace).await;
+    let ctx = crate::cli::context::Context::new(manager.paths.clone(), true);
+    crate::cli::client::request::<()>(
+        &manager.paths,
+        Method::WorkspacePause {
+            workspace: workspace.id.clone(),
+            execution: None,
+        },
+    )
+    .await
+    .unwrap();
+    bounded(launched).await.unwrap().unwrap();
+    let retained = manager.inspect_workspace(&workspace.id).await.unwrap();
+    assert_eq!(retained.workspace.state, workspace.state);
+    assert_eq!(retained.ports.len(), 1);
+    assert_eq!(retained.executions.len(), 1);
+    assert!(!*unrelated.stop.borrow());
+    assert_eq!(
+        fs::read_to_string(workspace.path.join("unfinished")).unwrap(),
+        "work in progress"
+    );
+    assert!(crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
+    manager.recovery_ready.send_replace(Some(0));
+    assert!(!workspace.path.join("restored").exists());
+    fs::write(
+        workspace.path.join(".shoal.toml"),
+        "[agent_resume]\nfixture = ['./resume.sh']\n",
+    )
+    .unwrap();
+    assert_eq!(
+        bounded(crate::cli::commands::resume::run(
+            &ctx,
+            Some(workspace.id.clone()),
+            None,
+            false
+        ))
+        .await
+        .unwrap(),
+        0
+    );
+    assert!(workspace.path.join("restored").exists());
+    manager
+        .finish_execution(unrelated.plan.id, ExecutionKind::Command, Some(0))
+        .await
+        .unwrap();
+    serving.abort();
+}
+
+#[tokio::test]
+async fn manual_pause_selects_only_the_requested_connected_agent() {
+    let (_root, manager, workspace, serving) = fixture().await;
+    let launched = launch(&manager, &workspace);
+    wait_started(&workspace).await;
+    let id = manager
+        .inspect_workspace(&workspace.id)
+        .await
+        .unwrap()
+        .executions[0]
+        .id
+        .clone();
+    let unrelated = manager
+        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .await
+        .unwrap();
+    manager
+        .track_agent(&unrelated.plan.id, "other", &workspace.name)
+        .await;
+    assert!(
+        manager
+            .pause_workspace_agents(&workspace.id, Some("missing"))
+            .await
+            .is_err()
+    );
+    assert!(!*unrelated.stop.borrow());
+    let token = unrelated.plan.scope_token.clone();
+    let mut method = Method::WorkspacePause {
+        workspace: workspace.id.clone(),
+        execution: Some(id.clone()),
+    };
+    assert!(
+        scope::authorize(&manager, Some(&token), &mut method)
+            .await
+            .is_err()
+    );
+    bounded(manager.pause_workspace_agents(&workspace.id, Some(&id)))
+        .await
+        .unwrap();
+    bounded(launched).await.unwrap().unwrap();
+    assert!(crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
+    assert!(!workspace.path.join("restored").exists());
+    assert!(!*unrelated.stop.borrow());
+    assert!(
+        manager
+            .inspect_workspace(&workspace.id)
+            .await
+            .unwrap()
+            .executions
+            .iter()
+            .any(|execution| execution.id == unrelated.plan.id)
+    );
+    manager
+        .finish_execution(unrelated.plan.id, ExecutionKind::Command, Some(0))
+        .await
+        .unwrap();
+    serving.abort();
+}
+
+#[tokio::test]
+async fn manual_pause_cancels_automatic_restore_of_an_overloaded_agent() {
+    let (_root, manager, workspace, serving) = fixture().await;
+    let launched = launch(&manager, &workspace);
+    wait_started(&workspace).await;
+    assert!(manager.stop_agent_for_overload("test pressure").await);
+    wait_paused(&manager, &workspace).await;
+    bounded(manager.pause_workspace_agents(&workspace.id, None))
+        .await
+        .unwrap();
+    bounded(launched).await.unwrap().unwrap();
+    assert!(crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
+    assert!(!workspace.path.join("restored").exists());
+    serving.abort();
 }
 
 #[tokio::test]

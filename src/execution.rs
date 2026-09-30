@@ -309,14 +309,14 @@ async fn run_tracked(
         };
         match outcome {
             Ok(Outcome::Exited(code)) => break Ok(code),
-            Ok(Outcome::Overloaded { code, recover }) => {
+            Ok(Outcome::Paused { code, recover }) => {
                 if let Some(recovery) = &recovery {
                     match recovery.save(paths, &plan.workspace.id, &plan.id) {
                         Ok(path) => {
                             recovery_record = Some(path);
                             if !recover || !recovery.automatic {
                                 eprintln!(
-                                    "shoal: agent stopped for overload; restore with shoal resume {} --execution {}",
+                                    "shoal: agent stopped; restore with shoal resume {} --execution {}",
                                     plan.workspace.name, plan.id
                                 );
                             }
@@ -359,7 +359,7 @@ async fn run_tracked(
 
 enum Outcome {
     Exited(i32),
-    Overloaded { code: i32, recover: bool },
+    Paused { code: i32, recover: bool },
 }
 
 /// Launch the command, register its process group, and wait for it to exit or
@@ -416,14 +416,15 @@ async fn supervise(
     group.send(libc::SIGCONT);
     let control = protocol::read::<Control>(stream);
     tokio::pin!(control);
-    let mut overload = None;
+    let mut recovery = None;
     let status = tokio::select! {
         status = child.wait() => status?,
         result = &mut control => {
             let status = stop(&mut child, &group, libc::SIGTERM).await?;
             let control = result.context("daemon disconnected; command stopped, execution requires reconciliation")?;
             match control {
-                Control::OverloadStop { recover } => overload = Some(recover),
+                Control::OverloadStop { recover } => recovery = Some(recover),
+                Control::Pause => recovery = Some(false),
                 Control::Stop => {},
                 _ => bail!("unexpected execution control"),
             }
@@ -435,8 +436,8 @@ async fn supervise(
     };
     // A command owns its process group; descendants do not outlive its lease.
     drop(group);
-    Ok(match overload {
-        Some(recover) => Outcome::Overloaded {
+    Ok(match recovery {
+        Some(recover) => Outcome::Paused {
             code: exit_code(status),
             recover,
         },
