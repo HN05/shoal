@@ -133,7 +133,14 @@ pub enum Command {
         #[arg(last = true)]
         args: Vec<OsString>,
     },
-    /// Restore an agent stopped by overload protection.
+    /// Stop tracked agents and save their sessions for manual resume.
+    Pause {
+        workspace: Option<String>,
+        /// Pause only this tracked execution; defaults to all connected agents.
+        #[arg(long)]
+        execution: Option<String>,
+    },
+    /// Restore a paused agent or one stopped by overload protection.
     Resume {
         workspace: Option<String>,
         /// Select a stopped execution when the workspace has several records.

@@ -300,6 +300,10 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             execution,
             discard,
         } => resume::run(&ctx, workspace, execution, discard).await,
+        Command::Pause {
+            workspace,
+            execution,
+        } => workspaces::pause(&ctx, workspace, execution).await,
         Command::Stop { workspace } => workspaces::stop(&ctx, workspace).await,
         Command::Rm {
             workspace,

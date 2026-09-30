@@ -2662,6 +2662,107 @@ fn stop_and_manual_removal_terminate_connected_executions() {
 }
 
 #[test]
+fn pause_selects_an_agent_then_pauses_the_rest_and_resumes_saved_sessions() {
+    let fixture = Fixture::with_config(Some(
+        "[commands]\nclaude = ['sh', './agent.sh']\n[agent_resume]\nclaude = ['sh', './resume.sh']\n",
+    ));
+    let workspace = fixture.add("paused");
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    fs::write(
+        path.join("agent.sh"),
+        "touch started-$SHOAL_EXECUTION_ID\ntrap 'exit 0' TERM\nwhile :; do sleep 1; done\n",
+    )
+    .unwrap();
+    fs::write(path.join("resume.sh"), "printf restored > restored\n").unwrap();
+    let mut agents = (0..2)
+        .map(|_| {
+            fixture
+                .command()
+                .args(["claude", "paused"])
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::piped())
+                .spawn()
+                .unwrap()
+        })
+        .collect::<Vec<_>>();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let ids = loop {
+        let inspection = fixture.ok(&["inspect", "paused"]);
+        let executions = inspection["executions"].as_array().unwrap();
+        let ids = executions
+            .iter()
+            .map(|execution| execution["id"].as_str().unwrap().to_owned())
+            .collect::<Vec<_>>();
+        if ids.len() == 2
+            && ids
+                .iter()
+                .all(|id| path.join(format!("started-{id}")).exists())
+        {
+            break ids;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "agents did not start: {inspection}"
+        );
+        thread::sleep(Duration::from_millis(10));
+    };
+    let output = fixture
+        .command()
+        .current_dir(path)
+        .args(["--json", "pause", "--execution", &ids[0]])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(
+        serde_json::from_slice::<Value>(&output.stdout).unwrap()["paused"],
+        true
+    );
+    assert_eq!(
+        fixture.ok(&["inspect", "paused"])["executions"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(fixture.ok(&["pause", "paused"])["paused"], true);
+    for agent in agents.drain(..) {
+        let output = agent.wait_with_output().unwrap();
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains("shoal resume"),
+            "{output:?}"
+        );
+    }
+    let state = fixture
+        .root
+        .path()
+        .join("state/workspaces")
+        .join(workspace["id"].as_str().unwrap());
+    for id in &ids {
+        assert!(state.join(format!("{id}.recovery.json")).exists());
+    }
+    let output = fixture.run(&["resume", "paused"]);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("--execution"));
+    for id in &ids {
+        assert!(
+            fixture
+                .run(&["resume", "paused", "--execution", id])
+                .status
+                .success()
+        );
+        assert!(!state.join(format!("{id}.recovery.json")).exists());
+    }
+    assert_eq!(
+        fs::read_to_string(path.join("restored")).unwrap(),
+        "restored"
+    );
+    let output = fixture.run(&["exec", "paused", "--", env!("CARGO_BIN_EXE_shoal"), "pause"]);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("outside scoped executions"));
+}
+
+#[test]
 fn registry_survives_daemon_restart() {
     let mut fixture = Fixture::new();
     let workspace = fixture.add("persistent");

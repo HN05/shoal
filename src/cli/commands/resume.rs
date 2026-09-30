@@ -25,7 +25,7 @@ pub async fn run(
     let inspection = client::inspect(&ctx.paths, id).await?;
     let records = records(&ctx.paths, &inspection.workspace.id, execution.as_deref())?;
     let selected = match records.as_slice() {
-        [] => anyhow::bail!("no overload recovery record for this workspace"),
+        [] => anyhow::bail!("no agent recovery record for this workspace"),
         [(_, path)] => path.clone(),
         _ if ctx.interactive() => {
             let choices = records

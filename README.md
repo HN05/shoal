@@ -110,6 +110,7 @@ shoal diff fix-login           # Changes since the branch's fork point
 shoal inspect fix-login       # Detailed workspace and execution records
 shoal notifications           # Conflicts, finished agents, and removals you missed
 shoal stop fix-login          # Stop managed commands; keep the workspace
+shoal pause fix-login         # Stop agents; save sessions for shoal resume
 shoal done fix-login          # Mark finished and request safe cleanup
 shoal done --keep fix-login   # Mark finished; keep for review
 shoal done --cleanup fix-login # Override a configured keep default
@@ -157,8 +158,9 @@ for wrapper setup.
 Memory overload protection stops tracked agents by default while retaining their
 workspaces and leases. To opt out, run `shoal config set overload.memory.enabled
 false` and restart the daemon. See [overload protection](docs/reference.md#overload-protection)
-for thresholds and timing. Restore a stopped session with `shoal resume`; configure
-`[agent_resume]` to restore it automatically when load recovers.
+for thresholds and timing. Pause agents manually with `shoal pause`, then restore
+a stopped session with `shoal resume`; configure `[agent_resume]` for automatic
+recovery after overload when load recovers.
 
 ## Share resources
 

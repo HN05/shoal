@@ -133,7 +133,14 @@ positive and below their stop thresholds. Agents restore one at a time, each wit
 a fresh healthy interval. Missing readings, manual stop/removal, lost connections,
 uncertain surviving processes, or changed workspace ownership prevent recovery.
 
-`shoal resume [workspace]` restores a saved overload recovery record after its
+`shoal pause [workspace]` stops connected tracked agents through
+their wrappers and saves recovery records, retaining work and resource leases.
+Use `--execution <id>` to pause one agent. Ordinary commands keep running;
+disconnected executions require `shoal doctor`. Pause cancels a waiting automatic
+restore and requires explicit resume even with `[agent_resume]` configured.
+Run pause and resume outside scoped executions.
+
+`shoal resume [workspace]` restores a saved agent recovery record after its
 wrapper exits; use `--execution <id>` when several agents stopped in one workspace.
 Use `--discard` to forget the selected stopped agent's recovery record without
 launching it, allowing normal idle cleanup again.
@@ -143,7 +150,7 @@ the current resume configuration; without one, built-in terminal agents open
 their session picker. Other agents require a configured restore command. Records
 survive daemon restart and suppress idle cleanup until the replacement process
 is registered or the workspace is removed. A failed launch retains its record;
-a later overload creates a record for the replacement execution. The original
+a later pause or overload creates a record for the replacement execution. The original
 task prompt is never replayed.
 
 ## Workspaces
