@@ -395,7 +395,7 @@ mod recovery_tests {
         tokio::time::sleep(std::time::Duration::from_millis(30)).await;
         assert!(!pending.is_finished());
         manager.recovery_ready.send_replace(Some(1));
-        tokio::time::timeout(std::time::Duration::from_secs(5), pending)
+        tokio::time::timeout(std::time::Duration::from_secs(60), pending)
             .await
             .unwrap()
             .unwrap()

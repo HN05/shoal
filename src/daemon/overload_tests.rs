@@ -3,7 +3,8 @@ use crate::test_support::{manager, repository};
 use std::{future::Future, os::unix::fs::PermissionsExt};
 
 async fn bounded<T>(future: impl Future<Output = T>) -> T {
-    timeout(Duration::from_secs(10), future)
+    // A hang guard, not a deadline for process scans on a shared CI host.
+    timeout(Duration::from_secs(60), future)
         .await
         .expect("overload exchange timed out")
 }
