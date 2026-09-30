@@ -236,3 +236,52 @@ async fn recovery_disconnect_closes_the_connection_without_forgetting_ownership(
     reopened.store.shutdown().await;
     serving.abort();
 }
+
+#[tokio::test]
+async fn manual_resume_uses_current_restore_config_and_removes_the_record() {
+    let (_root, manager, workspace, serving) = fixture().await;
+    let launched = launch(&manager, &workspace);
+    wait_started(&workspace).await;
+    assert!(
+        manager
+            .stop_agent_for_overload("test memory pressure")
+            .await
+    );
+    wait_paused(&manager, &workspace).await;
+    bounded(manager.stop_workspace(&workspace.id))
+        .await
+        .unwrap();
+    bounded(launched).await.unwrap().unwrap();
+    let directory = manager.paths.workspace_state(&workspace.id);
+    let record = fs::read_dir(&directory)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .find(|path| path.to_string_lossy().ends_with(".recovery.json"))
+        .unwrap();
+    assert_eq!(
+        fs::metadata(&record).unwrap().permissions().mode() & 0o777,
+        0o600
+    );
+    fs::write(
+        workspace.path.join("resume.sh"),
+        "#!/bin/sh\nprintf changed > restored\n",
+    )
+    .unwrap();
+    let ctx = crate::cli::context::Context::new(manager.paths.clone(), true);
+    assert_eq!(
+        bounded(crate::cli::commands::resume::run(
+            &ctx,
+            Some(workspace.id.clone()),
+            None
+        ))
+        .await
+        .unwrap(),
+        0
+    );
+    assert_eq!(
+        fs::read_to_string(workspace.path.join("restored")).unwrap(),
+        "changed"
+    );
+    assert!(!record.exists());
+    serving.abort();
+}

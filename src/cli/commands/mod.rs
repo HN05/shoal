@@ -10,6 +10,7 @@ mod ports;
 mod recovery;
 mod repositories;
 mod resources;
+pub(crate) mod resume;
 mod review;
 mod service;
 mod simulators;
@@ -294,6 +295,10 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         Command::Notifications { all, follow, limit } => {
             notifications::run(&ctx, all, follow, limit).await
         }
+        Command::Resume {
+            workspace,
+            execution,
+        } => resume::run(&ctx, workspace, execution).await,
         Command::Stop { workspace } => workspaces::stop(&ctx, workspace).await,
         Command::Rm {
             workspace,

@@ -133,6 +133,13 @@ pub enum Command {
         #[arg(last = true)]
         args: Vec<OsString>,
     },
+    /// Restore an agent stopped by overload protection.
+    Resume {
+        workspace: Option<String>,
+        /// Select a stopped execution when the workspace has several records.
+        #[arg(long)]
+        execution: Option<String>,
+    },
     /// Run or retry workspace setup.
     Setup { workspace: Option<String> },
     /// Mark the assignment finished; by default stop tracked commands and clean up safely.

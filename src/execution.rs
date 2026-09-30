@@ -293,7 +293,10 @@ async fn run_tracked(
                         Ok(path) => recovery_record = Some(path),
                         Err(error) => eprintln!("warning: cannot save recovery command: {error:#}"),
                     }
-                    eprintln!("shoal: agent stopped for overload; session restore record saved");
+                    eprintln!(
+                        "shoal: agent stopped for overload; restore with shoal resume {} --execution {}",
+                        plan.workspace.name, plan.id
+                    );
                     if recover && recovery.automatic {
                         protocol::write(&mut stream, &ExecutionEvent::Paused).await?;
                         eprintln!("shoal: waiting for healthy load before restoring agent session");

@@ -157,7 +157,8 @@ for wrapper setup.
 Memory overload protection stops tracked agents by default while retaining their
 workspaces and leases. To opt out, run `shoal config set overload.memory.enabled
 false` and restart the daemon. See [overload protection](docs/reference.md#overload-protection)
-for thresholds and timing.
+for thresholds and timing. Restore a stopped session with `shoal resume`; configure
+`[agent_resume]` to restore it automatically when load recovers.
 
 ## Share resources
 
