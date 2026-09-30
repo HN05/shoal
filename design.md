@@ -55,24 +55,12 @@ The daemon never proxies terminals, and a lost connection is not proof that an
 execution stopped or that its resources are free.
 
 Overload protection is configured machine-wide: memory is enabled by default,
-CPU is opt-in and requires sustained aggregate busy time across all cores.
-Linux uses available memory including reclaimable cache; macOS uses native
-critical pressure. Stop the newest connected tracked agent through its wrapper,
-then allow memory to recover before selecting another. Thresholds and timing are
-configurable; unavailable readings authorize no stop. Preserve work and leases,
-notify the user, and never signal an unknown execution. Session recovery commands
-are explicitly configured per agent, with repository layering and workspace
-substitutions; they restore a session rather than repeat its initial task.
-Configured recovery defaults to automatic, requiring sustained healthy readings
-with headroom and serializing restores with a fresh healthy interval for each.
-Keep the wrapper connected and its execution owned while waiting; manual stop,
-removal, uncertain survivors, or lost ownership cancels recovery. A saved restore
-record suppresses idle cleanup until restored or explicitly discarded and provides manual recovery through `shoal resume`
-after the wrapper exits or the daemon restarts; without a configured command,
-built-in terminal agents use their session picker. Manual recovery claims only the
-selected stopped execution and consumes its record once the replacement process
-is registered, leaving unrelated executions running. A failed restore-command
-lookup disables automatic recovery for that launch and retains manual recovery.
+CPU is opt-in and requires sustained aggregate busy time. Stop connected tracked
+agents through their execution wrappers, preserving work and leases. Agent
+session recovery is automatic when explicitly configured and load has recovered;
+never replay the original task prompt. Keep waiting wrappers tracked, serialize
+restores, and preserve manual recovery across restarts. Saved recovery represents
+unfinished work until restored or explicitly discarded.
 Agent metadata is transient, so restart cannot select disconnected survivors.
 
 Use short transactions for atomic claims. Closed Shoal enums with matching display and

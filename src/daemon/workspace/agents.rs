@@ -165,7 +165,7 @@ impl Manager {
         self.notify(
             Some(&workspace),
             NotificationKind::AgentStopped,
-            format!("Stopping {name}: {reason}; workspace and resource leases retained. Restore with shoal resume {workspace} after it stops"),
+            format!("Stopping {name}: {reason}; workspace and resource leases retained"),
         )
         .await;
         true
