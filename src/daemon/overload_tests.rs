@@ -196,6 +196,47 @@ async fn manual_stop_cancels_waiting_recovery_and_leaves_a_restore_record() {
 }
 
 #[tokio::test]
+async fn refused_recovery_finishes_the_stopped_execution_and_retains_manual_recovery() {
+    let (_root, manager, workspace, serving) = fixture().await;
+    let launched = launch(&manager, &workspace);
+    wait_started(&workspace).await;
+    assert!(
+        manager
+            .stop_agent_for_overload("test memory pressure")
+            .await
+    );
+    wait_paused(&manager, &workspace).await;
+    manager
+        .set_state(&workspace.id, crate::state::WorkspaceState::Failed, None)
+        .await
+        .unwrap();
+    let epoch = manager
+        .recovery_epoch
+        .load(std::sync::atomic::Ordering::Relaxed);
+    manager.recovery_ready.send_replace(Some(epoch));
+    bounded(launched).await.unwrap().unwrap();
+    assert!(
+        manager
+            .inspect_workspace(&workspace.id)
+            .await
+            .unwrap()
+            .executions
+            .is_empty()
+    );
+    assert!(!workspace.path.join("restored").exists());
+    assert!(crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
+    assert!(
+        manager
+            .notifications(false, 10)
+            .await
+            .unwrap()
+            .iter()
+            .all(|event| !event.message.contains("run shoal doctor"))
+    );
+    serving.abort();
+}
+
+#[tokio::test]
 async fn recovery_disconnect_closes_the_connection_without_forgetting_ownership() {
     let (_root, manager, workspace, serving) = fixture().await;
     let launched = launch(&manager, &workspace);

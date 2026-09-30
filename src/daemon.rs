@@ -4,6 +4,7 @@ pub mod access;
 pub mod allocation;
 mod cleanup;
 pub mod doctor;
+mod execution_recovery;
 pub mod notifications;
 mod overload;
 #[cfg(test)]
@@ -574,33 +575,24 @@ async fn execute(
                 }
                 ExecutionEvent::Finished { exit_code } => break Ok(exit_code),
                 ExecutionEvent::Paused => {
-                    ensure!(recover, "execution is not eligible for overload recovery");
-                    if !manager.agent_was_overloaded(&execution_id).await {
-                        protocol::write(&mut writer, &Control::Stop).await?;
-                        continue;
-                    }
-                    manager
-                        .pause_agent_execution(&execution_id, &workspace_id)
-                        .await?;
-                    // A manual stop/removal always cancels automatic recovery.
-                    let resume = tokio::select! {
-                        biased;
-                        event = incoming.recv() => {
-                            match event.context("execution disconnected")?? {
-                                ExecutionEvent::Finished { exit_code } => break Ok(exit_code),
-                                _ => anyhow::bail!("unexpected event during overload recovery"),
-                            }
+                    use execution_recovery::Action;
+                    match execution_recovery::pause(
+                        &manager,
+                        &execution_id,
+                        &workspace_id,
+                        &mut incoming,
+                        &mut stop,
+                        recover,
+                    )
+                    .await?
+                    {
+                        Action::Resume(ports) => {
+                            awaiting_started = true;
+                            sent_stop = false;
+                            protocol::write(&mut writer, &Control::Resume { ports }).await?;
                         }
-                        changed = stop.changed() => { changed?; false }
-                        ready = manager.await_overload_recovery(&workspace_id) => { ready?; true }
-                    };
-                    if resume && manager.resume_agent_execution(&execution_id).await? {
-                        awaiting_started = true;
-                        sent_stop = false;
-                        let ports = manager.inspect_workspace(&workspace_id).await?.ports;
-                        protocol::write(&mut writer, &Control::Resume { ports }).await?;
-                    } else {
-                        protocol::write(&mut writer, &Control::Stop).await?;
+                        Action::Stop => protocol::write(&mut writer, &Control::Stop).await?,
+                        Action::Finished(exit_code) => break Ok(exit_code),
                     }
                 }
             }
