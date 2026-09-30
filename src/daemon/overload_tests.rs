@@ -110,6 +110,11 @@ fn launch(
 #[tokio::test]
 async fn overload_restores_the_configured_session_and_keeps_waiting_execution_owned() {
     let (_root, manager, workspace, serving) = fixture().await;
+    fs::write(
+        workspace.path.join("resume.sh"),
+        "#!/bin/sh\nprintf restored > restored\nexit 7\n",
+    )
+    .unwrap();
     let launched = launch(&manager, &workspace);
     wait_started(&workspace).await;
     assert!(
@@ -130,7 +135,8 @@ async fn overload_restores_the_configured_session_and_keeps_waiting_execution_ow
     tokio::time::sleep(Duration::from_millis(50)).await;
     assert!(!workspace.path.join("restored").exists());
     manager.recovery_ready.send_replace(Some(epoch));
-    assert_eq!(bounded(launched).await.unwrap().unwrap(), 0);
+    assert_eq!(bounded(launched).await.unwrap().unwrap(), 7);
+    assert!(!crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
     assert_eq!(
         fs::read_to_string(workspace.path.join("restored")).unwrap(),
         "restored"
@@ -178,10 +184,7 @@ async fn manual_stop_cancels_waiting_recovery_and_leaves_a_restore_record() {
     assert_eq!(records.len(), 1);
     let text = fs::read_to_string(&records[0]).unwrap();
     let record: serde_json::Value = serde_json::from_str(&text).unwrap();
-    let command: Vec<std::ffi::OsString> =
-        serde_json::from_value(record["command"].clone()).unwrap();
-    assert_eq!(command, [std::ffi::OsString::from("./resume.sh")]);
-    assert!(record.get("prompt").is_none());
+    assert_eq!(record, serde_json::json!({"agent": "fixture"}));
     assert!(
         manager
             .cleanup_snapshot(&workspace.id)
@@ -238,7 +241,7 @@ async fn recovery_disconnect_closes_the_connection_without_forgetting_ownership(
 }
 
 #[tokio::test]
-async fn manual_resume_uses_current_restore_config_and_removes_the_record() {
+async fn manual_resume_consumes_the_record_on_start_even_if_other_commands_run_or_restore_fails() {
     let (_root, manager, workspace, serving) = fixture().await;
     let launched = launch(&manager, &workspace);
     wait_started(&workspace).await;
@@ -264,9 +267,13 @@ async fn manual_resume_uses_current_restore_config_and_removes_the_record() {
     );
     fs::write(
         workspace.path.join("resume.sh"),
-        "#!/bin/sh\nprintf changed > restored\n",
+        "#!/bin/sh\nprintf changed > restored\nexit 7\n",
     )
     .unwrap();
+    let unrelated = manager
+        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .await
+        .unwrap();
     let ctx = crate::cli::context::Context::new(manager.paths.clone(), true);
     assert_eq!(
         bounded(crate::cli::commands::resume::run(
@@ -276,12 +283,16 @@ async fn manual_resume_uses_current_restore_config_and_removes_the_record() {
         ))
         .await
         .unwrap(),
-        0
+        7
     );
     assert_eq!(
         fs::read_to_string(workspace.path.join("restored")).unwrap(),
         "changed"
     );
     assert!(!record.exists());
+    manager
+        .finish_execution(unrelated.plan.id, ExecutionKind::Command, Some(0))
+        .await
+        .unwrap();
     serving.abort();
 }

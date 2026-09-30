@@ -5,7 +5,7 @@ use crate::{
         context::Context,
         ui::{self, Fallback},
     },
-    execution::recovery::Recovery,
+    execution::recovery::{Record, Recovery},
     paths::Paths,
 };
 use anyhow::{Context as _, Result, ensure};
@@ -22,10 +22,6 @@ pub async fn run(
     );
     let id = ui::select_workspace(ctx, selector, Fallback::CurrentDirectory).await?;
     let inspection = client::inspect(&ctx.paths, id).await?;
-    ensure!(
-        inspection.executions.is_empty(),
-        "workspace has active or unknown executions; stop or reconcile them before resuming"
-    );
     let records = records(&ctx.paths, &inspection.workspace.id, execution.as_deref())?;
     let selected = match records.as_slice() {
         [] => anyhow::bail!("no overload recovery record for this workspace"),
@@ -39,7 +35,20 @@ pub async fn run(
         }
         _ => anyhow::bail!("multiple stopped agents; select one with --execution <id>"),
     };
-    let recorded: Recovery =
+    let selected_id = selected
+        .file_name()
+        .and_then(|name| name.to_str())
+        .and_then(|name| name.strip_suffix(".recovery.json"))
+        .context("invalid recovery filename")?;
+    ensure!(
+        !inspection
+            .executions
+            .iter()
+            .any(|execution| execution.id == selected_id),
+        "selected execution is active or unknown; stop or reconcile it before resuming"
+    );
+    let _claim = claim(&selected)?;
+    let recorded: Record =
         serde_json::from_slice(&std::fs::read(&selected)?).context("read recovery record")?;
     let recovery = Recovery::resolve(&ctx.paths, &inspection.workspace, &recorded.agent).await?;
     ensure!(
@@ -54,17 +63,14 @@ pub async fn run(
             recovery.agent
         );
     }
-    let code = crate::execution::run(
+    crate::execution::run_recovery(
         &ctx.paths,
         inspection.workspace.id,
         recovery.command,
-        Some(recovery.agent),
+        recovery.agent,
+        selected,
     )
-    .await?;
-    if code == 0 {
-        std::fs::remove_file(selected)?;
-    }
-    Ok(code)
+    .await
 }
 
 fn records(
@@ -91,4 +97,32 @@ fn records(
     }
     records.sort();
     Ok(records)
+}
+
+fn claim(path: &std::path::Path) -> Result<std::fs::File> {
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(path)?;
+    fs2::FileExt::try_lock_exclusive(&file)
+        .context("this recovery record is already being resumed")?;
+    ensure!(path.try_exists()?, "recovery record was already consumed");
+    Ok(file)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_recovery_record_cannot_be_claimed_twice() {
+        let root = tempfile::tempdir().unwrap();
+        let record = root.path().join("recovery.json");
+        std::fs::write(&record, "{}").unwrap();
+        let first = claim(&record).unwrap();
+        assert!(claim(&record).is_err());
+        std::fs::remove_file(&record).unwrap();
+        drop(first);
+        assert!(claim(&record).is_err());
+    }
 }

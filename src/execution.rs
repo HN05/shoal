@@ -56,6 +56,9 @@ pub fn exit_code(status: ExitStatus) -> i32 {
 enum Mode {
     /// An arbitrary command chosen by the caller.
     Command,
+    Recovery {
+        record: PathBuf,
+    },
     /// A caller-chosen command without a terminal: no stdin, output appended
     /// to `log`, and the launch reported on stdout for the spawning CLI.
     Detached {
@@ -73,7 +76,7 @@ enum Mode {
 impl Mode {
     fn kind(&self) -> ExecutionKind {
         match self {
-            Self::Command | Self::Detached { .. } => ExecutionKind::Command,
+            Self::Command | Self::Recovery { .. } | Self::Detached { .. } => ExecutionKind::Command,
             Self::Land { .. } => ExecutionKind::Land,
             Self::Setup { .. } => ExecutionKind::Setup,
         }
@@ -93,6 +96,26 @@ pub async fn run(
 ) -> Result<i32> {
     ensure!(!command.is_empty(), "a command is required after --");
     run_tracked(paths, workspace, command, Mode::Command, agent).await
+}
+
+/// Consume the selected recovery record only after the replacement process is
+/// recorded, so failed launches remain recoverable without duplicating sessions.
+pub async fn run_recovery(
+    paths: &Paths,
+    workspace: String,
+    command: Vec<OsString>,
+    agent: String,
+    record: PathBuf,
+) -> Result<i32> {
+    ensure!(!command.is_empty(), "a restore command is required");
+    run_tracked(
+        paths,
+        workspace,
+        command,
+        Mode::Recovery { record },
+        Some(agent),
+    )
+    .await
 }
 
 /// The background half of a detached launch: an ordinary tracked wrapper whose
@@ -270,7 +293,6 @@ async fn run_tracked(
     };
     let mut next_command = command;
     let mut recovery_record = None;
-    let mut restored = false;
     let mut result = loop {
         let outcome = if mode.is_setup() && next_command.is_empty() {
             Ok(Outcome::Exited(0))
@@ -282,6 +304,7 @@ async fn run_tracked(
                 &next_command,
                 &mode,
                 auth.as_ref(),
+                recovery_record.as_deref(),
             )
             .await
         };
@@ -302,7 +325,6 @@ async fn run_tracked(
                         eprintln!("shoal: waiting for healthy load before restoring agent session");
                         if let Some(ports) = recovery::wait(&mut stream).await? {
                             plan.ports = ports;
-                            restored = true;
                             next_command = recovery.command.clone();
                             eprintln!("shoal: restoring agent session");
                             continue;
@@ -324,18 +346,10 @@ async fn run_tracked(
     // Report only after child/process-group cleanup. A lost connection never
     // grants the daemon permission to assume processes stopped.
     let report = report_completion(&mut stream, code, &mode).await;
-    let complete = report.as_ref().is_ok_and(|complete| *complete);
     if mode.is_setup() {
         report?;
     } else if let Err(error) = report {
         eprintln!("warning: unable to report execution completion: {error:#}");
-    }
-    if restored
-        && complete
-        && matches!(result, Ok(0))
-        && let Some(path) = recovery_record
-    {
-        let _ = std::fs::remove_file(path);
     }
     result
 }
@@ -354,6 +368,7 @@ async fn supervise(
     command: &[OsString],
     mode: &Mode,
     auth: Option<&crate::agent_auth::Launch>,
+    recovery_record: Option<&Path>,
 ) -> Result<Outcome> {
     let mut terminate = signal(SignalKind::terminate())?;
     let mut interrupt = signal(SignalKind::interrupt())?;
@@ -377,6 +392,12 @@ async fn supervise(
         matches!(acknowledged, Control::Started),
         "daemon did not acknowledge process registration"
     );
+    if let Mode::Recovery { record } = mode {
+        recovery::consume(record)?;
+    }
+    if let Some(record) = recovery_record {
+        recovery::consume(record)?;
+    }
     if let Mode::Detached { log } = mode {
         report_launch(&DetachedLaunch {
             execution_id: plan.id.clone(),

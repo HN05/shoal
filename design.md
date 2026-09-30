@@ -69,7 +69,9 @@ Keep the wrapper connected and its execution owned while waiting; manual stop,
 removal, uncertain survivors, or lost ownership cancels recovery. A saved restore
 record suppresses idle cleanup and provides manual recovery through `shoal resume`
 after the wrapper exits or the daemon restarts; without a configured command,
-built-in terminal agents use their session picker.
+built-in terminal agents use their session picker. Manual recovery claims only the
+selected stopped execution and consumes its record once the replacement process
+is registered, leaving unrelated executions running.
 Agent metadata is transient, so restart cannot select disconnected survivors.
 
 Use short transactions for atomic claims. Closed Shoal enums with matching display and

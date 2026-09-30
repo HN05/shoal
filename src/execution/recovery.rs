@@ -13,11 +13,16 @@ use crate::{
     protocol::ConfigTarget,
 };
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug)]
 pub(crate) struct Recovery {
     pub agent: String,
     pub command: Vec<OsString>,
     pub automatic: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub(crate) struct Record {
+    pub agent: String,
 }
 
 impl Recovery {
@@ -30,8 +35,26 @@ impl Recovery {
             named_commands::expand(paths, &settings.agent_resume, &name, workspace, vec![]).await?
         } else {
             match name.as_str() {
-                "codex" => vec!["codex".into(), "resume".into()],
-                "claude" => vec!["claude".into(), "--resume".into()],
+                "codex" => {
+                    named_commands::expand(
+                        paths,
+                        &settings.commands,
+                        &name,
+                        workspace,
+                        vec!["resume".into()],
+                    )
+                    .await?
+                }
+                "claude" => {
+                    named_commands::expand(
+                        paths,
+                        &settings.commands,
+                        &name,
+                        workspace,
+                        vec!["--resume".into()],
+                    )
+                    .await?
+                }
                 _ => vec![],
             }
         };
@@ -48,7 +71,9 @@ impl Recovery {
         let path = directory.join(format!("{id}.recovery.json"));
         crate::fsutil::replace_atomically(
             &path,
-            &serde_json::to_vec(self)?,
+            &serde_json::to_vec(&Record {
+                agent: self.agent.clone(),
+            })?,
             ReplaceOptions {
                 permissions: Permissions::Temporary,
                 sync: true,
@@ -96,4 +121,12 @@ pub fn pending(paths: &Paths, workspace_id: &str) -> Result<bool> {
         }
     }
     Ok(false)
+}
+
+pub(super) fn consume(path: &std::path::Path) -> Result<()> {
+    match std::fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error.into()),
+    }
 }

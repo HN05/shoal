@@ -128,7 +128,9 @@ removal, check it against the rule those files state before judging it.
   Automatic recovery requires a configured session restore command, proven child
   termination, verified ready workspace ownership and sustained healthy headroom.
   Keep waiting wrappers tracked, serialize restores and honor manual stop/removal.
-  Persist manual recovery without replaying the original prompt.
+  Persist manual recovery without replaying the original prompt; consume the
+  selected record only after its replacement process is registered. Unrelated
+  executions do not block manual recovery.
 - Agent forge wrappers are opt-in, resolve per tool through configuration layers,
   and change only the tracked agent's PATH, inherited by descendants. Wrappers
   own authentication; Shoal must not read tokens or switch the user's login.

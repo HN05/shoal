@@ -83,12 +83,11 @@ state directory; Linux uses `journalctl --user -u shoal.service`. Native Linux s
 
 ### Overload protection
 
-The daemon samples machine memory every two seconds. At 95% used memory on
-Linux (based on `MemAvailable`, including reclaimable cache), or native critical
-memory pressure on macOS, it asks the newest connected tracked agent to stop.
-The wrapper terminates its process group through the normal grace period; the
-monitor waits five seconds before resampling and stopping another agent if
-pressure persists. It retains workspaces, execution recovery records and resource
+At the configured memory threshold, the daemon asks the newest connected tracked
+agent to stop. Linux measures usage from `MemAvailable`, including reclaimable
+cache; macOS uses native critical pressure. The wrapper terminates the process
+group through its normal grace period. The monitor waits for the cooldown before
+resampling and stopping another agent if pressure persists. It retains workspaces, execution recovery records and resource
 leases and records an `agent_stopped` notification.
 Ordinary commands, desktop handoffs and disconnected executions are not selected.
 Monitoring does not guarantee that the OS will never reach its OOM limit.
@@ -117,10 +116,9 @@ cpu_used_percent = 75
 sustained_seconds = 60
 ```
 
-Durations are seconds, bounded to one day; polling and cooldown must be positive.
-CPU protection is opt-in; its default threshold requires five minutes at 90%
-aggregate busy time, excluding I/O wait. CPU protection requires a positive sustained
-duration. A failed reading resets that signal’s timer and cannot authorize a stop;
+Durations are seconds, bounded to one day; polling, cooldown and sustained CPU
+and recovery durations must be positive. CPU usage measures aggregate busy time
+across all cores, excluding I/O wait. A failed reading resets that signal’s timer and cannot authorize a stop;
 memory protection remains independent of CPU readings.
 
 Resume commands are argument arrays in `[agent_resume]`, keyed by the tracked
@@ -136,12 +134,14 @@ uncertain surviving processes, or changed workspace ownership prevent recovery.
 
 `shoal resume [workspace]` restores a saved overload recovery record after its
 wrapper exits; use `--execution <id>` when several agents stopped in one workspace.
-Active or unknown executions must stop or be reconciled first. The command uses
+The selected execution must stop or be reconciled first; unrelated executions may
+keep running. The command uses
 the current resume configuration; without one, built-in terminal agents open
 their session picker. Other agents require a configured restore command. Records
-survive daemon restart, suppress idle cleanup, and are removed with successful
-recovery or workspace removal.
-The original task prompt is never replayed.
+survive daemon restart and suppress idle cleanup until the replacement process
+is registered or the workspace is removed. A failed launch retains its record;
+a later overload creates a record for the replacement execution. The original
+task prompt is never replayed.
 
 ## Workspaces
 
