@@ -496,7 +496,7 @@ pub(crate) struct Terminal {
     previous_group: i32,
     previous_settings: libc::termios,
     previous_handler: Option<libc::sighandler_t>,
-    output: std::fs::File,
+    output: Option<std::fs::File>,
 }
 
 impl Terminal {
@@ -529,13 +529,7 @@ impl Terminal {
             previous_group,
             previous_settings: unsafe { settings.assume_init() },
             previous_handler: None,
-            // Use the controlling terminal even when both output streams are
-            // redirected. Cleanup must neither enter a pipe nor block on output.
-            output: std::fs::OpenOptions::new()
-                .write(true)
-                .custom_flags(libc::O_NOCTTY | libc::O_NONBLOCK)
-                .open("/dev/tty")
-                .context("open terminal for input-mode cleanup")?,
+            output: Self::input_mode_output(),
         }))
     }
 
@@ -573,12 +567,30 @@ impl Drop for Terminal {
 }
 
 impl Terminal {
+    fn input_mode_output() -> Option<std::fs::File> {
+        let term = std::env::var_os("TERM")?;
+        if term.is_empty() || term == "dumb" {
+            return None;
+        }
+        // Use the controlling terminal even when both output streams are
+        // redirected. Cleanup must neither enter a pipe nor block on output,
+        // and inability to open the output must not prevent command launch.
+        std::fs::OpenOptions::new()
+            .write(true)
+            .custom_flags(libc::O_NOCTTY | libc::O_NONBLOCK)
+            .open("/dev/tty")
+            .ok()
+    }
+
     fn reset_input_modes(&mut self) {
+        let Some(output) = &mut self.output else {
+            return;
+        };
         // termios cannot undo emulator modes left by an interrupted TUI.
         // Disable mouse tracking/encodings, focus and paste reports, and restore
         // ordinary cursor/keypad and keyboard input. Avoid a full terminal reset,
         // which would clear the user's scrollback and other terminal settings.
-        let _ = self.output.write_all(
+        let _ = output.write_all(
             concat!(
                 "\x1b[?1000l\x1b[?1002l\x1b[?1003l",
                 "\x1b[?1005l\x1b[?1006l\x1b[?1015l\x1b[?1016l",

@@ -144,9 +144,9 @@ removal, check it against the rule those files state before judging it.
   cancellation, and drain output while sending input. Internal CLI workers use
   one typed builder with explicit state directory and output mode.
   Terminal I/O stays in the execution wrapper, which restores the caller's foreground
-  group and OS terminal settings and resets emulator input modes for the shell after
-  commands and interactive hooks, writing cleanup to the terminal rather than redirected
-  output; stop requests
+  group and OS terminal settings after commands and interactive hooks. When `TERM` is
+  nonempty and not `dumb`, it also resets emulator input modes for the shell, writing
+  best-effort cleanup to the terminal rather than redirected output; stop requests
   give the entire command process group a shared grace period, even after its leader exits. The daemon owns
   state and prepares each execution kind before shared registration through one
   request. CLI styles, enum `Display` formatting and transient progress belong at presentation

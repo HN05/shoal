@@ -2110,9 +2110,25 @@ while True:
         ),
     )
     .unwrap();
-    for mode in ["success", "exit", "killed", "interrupt", "stop", "hook"] {
+    for (mode, term) in [
+        ("success", Some("xterm-256color")),
+        ("exit", Some("xterm-256color")),
+        ("killed", Some("xterm-256color")),
+        ("interrupt", Some("xterm-256color")),
+        ("stop", Some("xterm-256color")),
+        ("hook", Some("xterm-256color")),
+        ("success", Some("dumb")),
+        ("hook", Some("dumb")),
+        ("success", Some("")),
+        ("success", None),
+    ] {
         let (mut master, slave) = pty::open();
-        let output = support::isolated(fixture.root.path(), "python3")
+        let mut driver = support::isolated(fixture.root.path(), "python3");
+        match term {
+            Some(term) => driver.env("TERM", term),
+            None => driver.env_remove("TERM"),
+        };
+        let output = driver
             .args([
                 "-c",
                 r#"import fcntl, os, pathlib, signal, subprocess, sys, termios, time
@@ -2162,28 +2178,43 @@ finally:
             .unwrap();
         assert!(
             output.status.success(),
-            "{mode}: {}",
+            "{mode} {term:?}: {}",
             String::from_utf8_lossy(&output.stderr)
         );
         let mut transcript = String::new();
         // The nonblocking master may report WouldBlock or EIO once drained.
         let _ = master.read_to_string(&mut transcript);
+        let resets_input = term == Some("xterm-256color");
         for number in [
             1000, 1002, 1003, 1005, 1006, 1015, 1016, 1004, 1007, 2004, 1,
         ] {
             let enabled = transcript.rfind(&format!("\x1b[?{number}h")).unwrap();
-            let disabled = transcript.rfind(&format!("\x1b[?{number}l")).unwrap();
-            assert!(disabled > enabled, "{mode}: input mode {number} leaked");
+            let disabled = transcript.rfind(&format!("\x1b[?{number}l"));
+            if resets_input {
+                assert!(
+                    disabled.unwrap() > enabled,
+                    "{mode}: input mode {number} leaked"
+                );
+            } else {
+                assert!(disabled.is_none(), "{term:?}: unnecessary terminal escape");
+            }
         }
         for (enabled, disabled) in [
             ("\x1b=", "\x1b>"),
             ("\x1b[>4;2m", "\x1b[>4;0m"),
             ("\x1b[=15u", "\x1b[=0u"),
         ] {
-            assert!(
-                transcript.rfind(disabled).unwrap() > transcript.rfind(enabled).unwrap(),
-                "{mode}: keyboard mode leaked"
-            );
+            if resets_input {
+                assert!(
+                    transcript.rfind(disabled).unwrap() > transcript.rfind(enabled).unwrap(),
+                    "{mode}: keyboard mode leaked"
+                );
+            } else {
+                assert!(
+                    !transcript.contains(disabled),
+                    "{term:?}: unnecessary terminal escape"
+                );
+            }
         }
         let workspace = fixture.ok(&["inspect", "terminal"]);
         fs::remove_file(
