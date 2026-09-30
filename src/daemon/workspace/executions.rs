@@ -399,6 +399,7 @@ impl Manager {
             })
             .await?;
         connections.remove(&id);
+        self.agents.lock().await.remove(&id);
         self.scopes
             .lock()
             .await

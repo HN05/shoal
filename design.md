@@ -54,6 +54,14 @@ even after its leader exits. The daemon prepares each kind before shared registr
 The daemon never proxies terminals, and a lost connection is not proof that an
 execution stopped or that its resources are free.
 
+Memory overload protection is enabled by default and configured machine-wide.
+Linux uses available memory including reclaimable cache; macOS uses native
+critical pressure. Stop the newest connected tracked agent through its wrapper,
+then allow memory to recover before selecting another. Thresholds and timing are
+configurable; unavailable readings authorize no stop. Preserve work and leases,
+notify the user, and never restart an agent or signal an unknown execution.
+Agent metadata is transient, so restart cannot select disconnected survivors.
+
 Use short transactions for atomic claims. Closed Shoal enums with matching display and
 wire names use one macro to share explicit spellings across conversions and reject
 unknown values. Native simulator states use a

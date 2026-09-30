@@ -120,6 +120,10 @@ removal, check it against the rule those files state before judging it.
   and review returns without starting a reviewer.
 - Claude and Codex launches (including Happy and Codex app handoffs) persist
   workspace trust even when the user config is absent, preserving other settings.
+- Machine-wide memory overload protection is opt-out. Stop one connected tracked
+  agent at a time through its wrapper, newest first, with configurable thresholds
+  and timing; retain work and leases, notify, and never select disconnected
+  executions. Failed readings reset the sustained timer and authorize no stop.
 - Agent forge wrappers are opt-in, resolve per tool through configuration layers,
   and change only the tracked agent's PATH, inherited by descendants. Wrappers
   own authentication; Shoal must not read tokens or switch the user's login.

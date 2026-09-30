@@ -18,6 +18,8 @@ states!(NotificationKind {
     PortConflict => "port_conflict",
     /// An agent launched through a Shoal shortcut ended.
     AgentExited => "agent_exited",
+    /// The overload monitor asked a tracked agent to stop.
+    AgentStopped => "agent_stopped",
     /// The daemon removed or forgot a workspace on its own.
     WorkspaceRemoved => "workspace_removed",
     /// An agent explicitly marked its assignment finished.
@@ -34,7 +36,7 @@ impl NotificationKind {
     fn collapses(self) -> bool {
         !matches!(
             self,
-            Self::AgentExited | Self::WorkspaceRemoved | Self::HookFailed
+            Self::AgentExited | Self::AgentStopped | Self::WorkspaceRemoved | Self::HookFailed
         )
     }
 }

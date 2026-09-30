@@ -1,5 +1,6 @@
 pub mod edit;
 pub mod named_commands;
+pub mod overload;
 mod placeholders;
 pub mod repo;
 pub mod report;
@@ -37,6 +38,7 @@ pub struct Config {
     /// Agent `shoal issue` starts when `--agent` is omitted.
     pub default_agent: Option<crate::agent::Agent>,
     pub codex: repo::Codex,
+    pub overload: overload::Overload,
     pub auto_cleanup: repo::AutoCleanup,
     pub pr_cleanup: repo::PrCleanup,
     pub done: repo::Done,
@@ -359,6 +361,7 @@ impl Config {
         if let Some(minutes) = config.auto_cleanup.idle_minutes {
             validate_idle_minutes(minutes)?;
         }
+        config.overload.validate()?;
         config.simulators.validate()?;
         config.git.validate()?;
         config.agent_auth.validate()?;

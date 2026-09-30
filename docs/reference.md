@@ -81,6 +81,34 @@ daemons and commands until restart; incompatible daemons restart automatically.
 Stop foreground daemons manually. macOS diagnostics go to `daemon.log` in the
 state directory; Linux uses `journalctl --user -u shoal.service`. Native Linux service integration remains untested.
 
+### Overload protection
+
+The daemon samples machine memory every two seconds. At 95% used memory on
+Linux (based on `MemAvailable`, including reclaimable cache), or native critical
+memory pressure on macOS, it asks the newest connected tracked agent to stop.
+The wrapper terminates its process group through the normal grace period; the
+monitor waits five seconds before resampling and stopping another agent if
+pressure persists. It retains workspaces, execution recovery records and resource
+leases, records an `agent_stopped` notification, and never restarts the agent.
+Ordinary commands, desktop handoffs and disconnected executions are not selected.
+Monitoring does not guarantee that the OS will never reach its OOM limit.
+
+Configure machine-wide settings in global TOML and restart the daemon:
+
+```toml
+[overload]
+poll_seconds = 2
+cooldown_seconds = 5
+
+[overload.memory]
+enabled = true                 # Opt out with false
+used_percent = 95              # Linux only; 50–99
+sustained_seconds = 0           # Stop on the first critical sample
+```
+
+Durations are seconds, bounded to one day; polling and cooldown must be positive.
+A failed memory reading resets the sustained timer and cannot authorize a stop.
+
 ## Workspaces
 
 `add [<repository>] --issue <number-or-url>` reads the registered repository's issue using `gh`

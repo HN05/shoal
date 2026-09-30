@@ -6,7 +6,7 @@
 # .shoal.toml (or the config saved with `shoal repo config`) holds its named
 # ports, setup and hook commands and resource pools, and may set any value below
 # for that repository except root_dir, AI skill directories, the simulator limits and profiles, Git profile definitions, and
-# the shared resources.
+# the shared resources and overload protection.
 
 # Parent of every repository's workspaces and URL clones.
 root_dir = "~/shoal"
@@ -54,6 +54,17 @@ codex = ["codex", "{args}", "--sandbox", "danger-full-access", "--ask-for-approv
 [codex]
 # `shoal codex` without --cli/--app: "cli" or "app".
 default_mode = "cli"
+
+[overload]
+# Machine-wide agent protection; allow stop requests to free memory before retrying.
+poll_seconds = 2
+cooldown_seconds = 5
+
+[overload.memory]
+enabled = true
+# Linux usage excludes reclaimable cache; macOS uses native critical pressure.
+used_percent = 95
+sustained_seconds = 0
 
 [auto_cleanup]
 # Remove idle, clean, pushed or landed workspaces automatically.

@@ -5,6 +5,7 @@ pub mod allocation;
 mod cleanup;
 pub mod doctor;
 pub mod notifications;
+mod overload;
 pub mod ports;
 pub mod recovery;
 pub mod resources;
@@ -102,6 +103,7 @@ pub async fn run(paths: Paths, managed: bool) -> Result<()> {
     eprintln!("shoal daemon listening on {}", paths.socket.display());
     let mut background = JoinSet::new();
     background.spawn(cleanup::run(manager.clone()));
+    background.spawn(overload::run(manager.clone()));
     background.spawn(expire_simulators(manager.clone()));
     let mut clients = JoinSet::new();
     let result = loop {
@@ -513,6 +515,11 @@ async fn execute(
     };
     let execution_id = plan.id.clone();
     let workspace_name = plan.workspace.name.clone();
+    if let Some(agent) = &agent {
+        manager
+            .track_agent(&execution_id, agent, &workspace_name)
+            .await;
+    }
     let (mut reader, mut writer) = stream.split();
     let result = async {
         protocol::write(

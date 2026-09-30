@@ -1,5 +1,6 @@
 //! Shared daemon state, workspace lookup, and worktree creation.
 mod adoption;
+mod agents;
 mod done;
 mod executions;
 pub(super) mod identity;
@@ -70,6 +71,7 @@ pub struct Manager {
     scopes: Mutex<HashMap<String, Caller>>,
     /// Connected executions and the channel that asks their wrapper to stop.
     connections: Mutex<HashMap<String, watch::Sender<bool>>>,
+    agents: Mutex<HashMap<String, agents::Agent>>,
     /// Per-workspace activity counters folded into cleanup fingerprints.
     activity: Mutex<HashMap<String, u64>>,
     /// The newest recorded notification ID; wakes `shoal notifications --follow`.
@@ -93,6 +95,7 @@ impl Manager {
             resource_gates: Mutex::new(HashMap::new()),
             scopes: Mutex::new(HashMap::new()),
             connections: Mutex::new(HashMap::new()),
+            agents: Mutex::new(HashMap::new()),
             activity: Mutex::new(HashMap::new()),
             notifications_changed: watch::channel(0).0,
         }))

@@ -154,6 +154,11 @@ gh = "~/bin/gh-agent"
 See [agent forge authentication](docs/reference.md#agent-forge-authentication)
 for wrapper setup.
 
+Memory overload protection stops tracked agents by default while retaining their
+workspaces and leases. To opt out, run `shoal config set overload.memory.enabled
+false` and restart the daemon. See [overload protection](docs/reference.md#overload-protection)
+for thresholds and timing.
+
 ## Share resources
 
 From a managed workspace:
