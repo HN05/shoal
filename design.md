@@ -60,7 +60,9 @@ Linux uses available memory including reclaimable cache; macOS uses native
 critical pressure. Stop the newest connected tracked agent through its wrapper,
 then allow memory to recover before selecting another. Thresholds and timing are
 configurable; unavailable readings authorize no stop. Preserve work and leases,
-notify the user, and never restart an agent or signal an unknown execution.
+notify the user, and never signal an unknown execution. Session recovery commands
+are explicitly configured per agent, with repository layering and workspace
+substitutions; they restore a session rather than repeat its initial task.
 Agent metadata is transient, so restart cannot select disconnected survivors.
 
 Use short transactions for atomic claims. Closed Shoal enums with matching display and

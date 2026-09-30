@@ -40,6 +40,11 @@ codex = ["codex", "{args}", "--sandbox", "danger-full-access", "--ask-for-approv
 # Local committed-change review, with tuicr installed on PATH:
 # review = ["tuicr", "-r", "{diff_base}..HEAD"]
 
+# Resume commands must restore a session rather than repeat its initial prompt.
+# Optional, with the same argument substitutions and repository layering as commands.
+# [agent_resume]
+# my-agent = ["my-agent", "resume", "{path}"]
+
 # Separate forge logins for tracked agents; user-owned executable wrappers.
 # See docs/reference.md#agent-forge-authentication for setup.
 # [agent_auth]

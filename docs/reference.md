@@ -117,6 +117,11 @@ aggregate busy time, excluding I/O wait. CPU protection requires a positive sust
 duration. A failed reading resets that signal’s timer and cannot authorize a stop;
 memory protection remains independent of CPU readings.
 
+Resume commands are argument arrays in `[agent_resume]`, keyed by the tracked
+agent name. They use the same workspace substitutions and repository layering as
+`[commands]`; they must restore a session without repeating the initial prompt.
+No resume command is configured by default.
+
 ## Workspaces
 
 `add [<repository>] --issue <number-or-url>` reads the registered repository's issue using `gh`

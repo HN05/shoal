@@ -19,6 +19,7 @@ use crate::{
 #[derive(Debug, Serialize)]
 pub struct Effective {
     pub commands: named_commands::Commands,
+    pub agent_resume: named_commands::Commands,
     pub issue_template: Option<String>,
     pub agent_template: Option<String>,
     pub agent_auth: crate::agent_auth::Config,
@@ -141,6 +142,7 @@ impl Effective {
         ports.validate()?;
         Ok(Self {
             commands: merged.commands,
+            agent_resume: merged.agent_resume,
             issue_template: merged.issue_template,
             agent_template: merged.agent_template,
             agent_auth: merged.agent_auth,
@@ -396,6 +398,7 @@ fn fields() -> &'static [Box<dyn Field + Send + Sync>] {
 fn build_fields() -> Vec<Box<dyn Field + Send + Sync>> {
     let mut fields: Vec<Box<dyn Field + Send + Sync>> = vec![
         named!("commands", commands),
+        named!("agent_resume", agent_resume),
         scalar!(issue_template),
         scalar!(agent_template),
         scalar!(agent_auth.fj),
@@ -441,7 +444,7 @@ issue_template = 'issue'\nagent_template = 'agent'\ngit_profile = 'work'\n\
 default_agent = 'claude'\nsetup_cmd = 'setup'\npre_setup_cmd = 'pre-setup'\n\
 post_remove_cmd = 'post-remove'\npost_resource_acquire_cmd = 'acquire'\n\
 pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd = 'detach'\n\
-[commands]\nreview = ['review']\n[agent_auth]\nfj = '/fj'\ngh = '/gh'\n[codex]\ndefault_mode = 'app'\n\
+[commands]\nreview = ['review']\n[agent_resume]\nreview = ['review', '--resume']\n[agent_auth]\nfj = '/fj'\ngh = '/gh'\n[codex]\ndefault_mode = 'app'\n\
 [ports]\non_conflict = 'auto'\nstart = 3000\nend = 3100\n[ports.web]\nport = 3000\n\
 [resources.lock]\ncapacity = 1\n[resource_pools.devices]\ncapacity = 2\n\
 [resource_pools.devices.resources.phone]\ncapacity = 1\n\
@@ -466,6 +469,7 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
         let full = parse(FULL).unwrap();
         let RepoConfig {
             commands,
+            agent_resume,
             issue_template,
             agent_template,
             agent_auth,
@@ -487,7 +491,12 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
             pr_cleanup,
             done,
         } = full.clone();
-        assert!(!commands.is_empty() && !resources.is_empty() && !resource_pools.is_empty());
+        assert!(
+            !commands.is_empty()
+                && !agent_resume.is_empty()
+                && !resources.is_empty()
+                && !resource_pools.is_empty()
+        );
         assert!(!ports.definitions.is_empty() && !simulators.preferred.is_empty());
         for present in [
             issue_template.is_some(),

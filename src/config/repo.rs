@@ -52,6 +52,7 @@ states!(
 #[serde(default, deny_unknown_fields)]
 pub struct RepoConfig {
     pub commands: crate::config::named_commands::Commands,
+    pub agent_resume: crate::config::named_commands::Commands,
     pub issue_template: Option<String>,
     pub agent_template: Option<String>,
     pub agent_auth: crate::agent_auth::Config,
@@ -131,6 +132,7 @@ pub fn load(workspace_dir: &Path) -> Result<RepoConfig> {
 pub fn parse(text: &str) -> Result<RepoConfig> {
     let config: RepoConfig = toml::from_str(text)?;
     crate::config::named_commands::validate(&config.commands)?;
+    crate::config::named_commands::validate(&config.agent_resume)?;
     config.agent_auth.validate()?;
     if let Some(name) = &config.git_profile {
         crate::validate::name("git profile", name)?;

@@ -23,6 +23,7 @@ pub use resolve::Effective;
 pub struct Config {
     pub ai: crate::ai::Agents,
     pub commands: named_commands::Commands,
+    pub agent_resume: named_commands::Commands,
     pub issue_template: Option<String>,
     pub agent_template: Option<String>,
     pub agent_auth: crate::agent_auth::Config,
@@ -325,6 +326,7 @@ impl Config {
     pub fn repository_layer(&self) -> RepoConfig {
         RepoConfig {
             commands: self.commands.clone(),
+            agent_resume: self.agent_resume.clone(),
             issue_template: self.issue_template.clone(),
             agent_template: self.agent_template.clone(),
             agent_auth: self.agent_auth.clone(),
@@ -371,6 +373,7 @@ impl Config {
             }
         }
         named_commands::validate(&config.commands)?;
+        named_commands::validate(&config.agent_resume)?;
         if let Some(name) = &config.git_profile {
             config.git.profile(name)?;
         }
