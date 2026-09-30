@@ -20,28 +20,87 @@ impl Sustained {
     }
 }
 
-pub(super) async fn run(manager: Arc<Manager>) {
-    let settings = &manager.config.overload;
-    if !settings.memory.enabled {
-        return;
-    }
-    let mut memory = Sustained::default();
-    loop {
-        tokio::time::sleep(Duration::from_secs(settings.poll_seconds)).await;
-        let critical = match crate::process::load::critical_memory(settings.memory.used_percent) {
-            Ok(critical) => critical,
+#[derive(Default)]
+struct Monitor {
+    memory: Sustained,
+    cpu: Sustained,
+    previous_cpu: Option<crate::process::load::CpuTicks>,
+    last_observation: Option<Instant>,
+}
+
+impl Monitor {
+    fn reason(
+        &mut self,
+        now: Instant,
+        settings: &crate::config::overload::Overload,
+        memory: anyhow::Result<bool>,
+        cpu: anyhow::Result<crate::process::load::CpuTicks>,
+    ) -> Option<&'static str> {
+        if self.last_observation.replace(now).is_some_and(|previous| {
+            now.duration_since(previous) > Duration::from_secs(settings.poll_seconds * 3)
+        }) {
+            self.memory = Sustained::default();
+            self.cpu = Sustained::default();
+            self.previous_cpu = None;
+        }
+        let memory = memory.unwrap_or_else(|error| {
+            eprintln!("memory overload monitor: {error:#}");
+            false
+        });
+        let used = match cpu {
+            Ok(ticks) => self
+                .previous_cpu
+                .replace(ticks)
+                .and_then(|previous| ticks.used_percent_since(previous)),
             Err(error) => {
-                memory.since = None;
-                eprintln!("overload monitor: {error:#}");
-                continue;
+                eprintln!("CPU overload monitor: {error:#}");
+                self.previous_cpu = None;
+                None
             }
         };
-        if memory.observe(Instant::now(), critical, settings.memory.sustained_seconds)
-            && manager
-                .stop_agent_for_overload("critical memory pressure")
-                .await
+        let memory = self.memory.observe(
+            now,
+            settings.memory.enabled && memory,
+            settings.memory.sustained_seconds,
+        );
+        let cpu = self.cpu.observe(
+            now,
+            settings.cpu.enabled
+                && used.is_some_and(|used| used >= f64::from(settings.cpu.used_percent)),
+            settings.cpu.sustained_seconds,
+        );
+        if memory {
+            Some("critical memory pressure")
+        } else if cpu {
+            Some("sustained CPU overload")
+        } else {
+            None
+        }
+    }
+}
+
+pub(super) async fn run(manager: Arc<Manager>) {
+    let settings = &manager.config.overload;
+    if !settings.memory.enabled && !settings.cpu.enabled {
+        return;
+    }
+    let mut monitor = Monitor::default();
+    loop {
+        tokio::time::sleep(Duration::from_secs(settings.poll_seconds)).await;
+        let memory = if settings.memory.enabled {
+            crate::process::load::critical_memory(settings.memory.used_percent)
+        } else {
+            Ok(false)
+        };
+        let cpu = if settings.cpu.enabled {
+            crate::process::load::cpu_ticks()
+        } else {
+            Ok(crate::process::load::CpuTicks::default())
+        };
+        if let Some(reason) = monitor.reason(Instant::now(), settings, memory, cpu)
+            && manager.stop_agent_for_overload(reason).await
         {
-            memory.since = None;
+            monitor = Monitor::default();
             tokio::time::sleep(Duration::from_secs(settings.cooldown_seconds)).await;
         }
     }
@@ -50,6 +109,99 @@ pub(super) async fn run(manager: Arc<Manager>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn missing_readings_reset_pressure_and_default_memory_is_immediate() {
+        let start = Instant::now();
+        let settings = crate::config::overload::Overload::default();
+        let mut monitor = Monitor::default();
+        let ticks = crate::process::load::CpuTicks::default();
+        assert_eq!(
+            monitor.reason(start, &settings, Ok(true), Ok(ticks)),
+            Some("critical memory pressure")
+        );
+        assert_eq!(
+            monitor.reason(
+                start,
+                &settings,
+                Err(anyhow::anyhow!("unavailable")),
+                Ok(ticks)
+            ),
+            None
+        );
+        assert!(monitor.memory.since.is_none());
+    }
+
+    #[test]
+    fn cpu_is_opt_in_and_requires_continuous_samples() {
+        let start = Instant::now();
+        let mut settings = crate::config::overload::Overload::default();
+        settings.poll_seconds = 100;
+        let mut monitor = Monitor::default();
+        let ticks = |n: u64| {
+            Ok(crate::process::load::CpuTicks {
+                busy: 95 * n,
+                total: 100 * n,
+            })
+        };
+        assert_eq!(monitor.reason(start, &settings, Ok(false), ticks(0)), None);
+        assert_eq!(
+            monitor.reason(
+                start + Duration::from_secs(600),
+                &settings,
+                Ok(false),
+                ticks(1)
+            ),
+            None
+        );
+        settings.cpu.enabled = true;
+        assert_eq!(
+            monitor.reason(
+                start + Duration::from_secs(601),
+                &settings,
+                Ok(false),
+                ticks(2)
+            ),
+            None
+        );
+        assert_eq!(
+            monitor.reason(
+                start + Duration::from_secs(900),
+                &settings,
+                Ok(false),
+                ticks(3)
+            ),
+            None
+        );
+        assert_eq!(
+            monitor.reason(
+                start + Duration::from_secs(901),
+                &settings,
+                Ok(false),
+                ticks(4)
+            ),
+            Some("sustained CPU overload")
+        );
+        assert_eq!(
+            monitor.reason(
+                start + Duration::from_secs(902),
+                &settings,
+                Ok(false),
+                Err(anyhow::anyhow!("unavailable"))
+            ),
+            None
+        );
+        assert!(monitor.cpu.since.is_none());
+        assert_eq!(
+            monitor.reason(
+                start + Duration::from_secs(903),
+                &settings,
+                Ok(true),
+                ticks(5)
+            ),
+            Some("critical memory pressure")
+        );
+    }
 
     #[test]
     fn pressure_must_be_continuous_and_restart_after_recovery() {

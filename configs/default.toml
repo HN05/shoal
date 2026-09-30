@@ -66,6 +66,12 @@ enabled = true
 used_percent = 95
 sustained_seconds = 0
 
+[overload.cpu]
+# Optional aggregate CPU protection, sustained for five minutes.
+enabled = false
+used_percent = 90
+sustained_seconds = 300
+
 [auto_cleanup]
 # Remove idle, clean, pushed or landed workspaces automatically.
 enabled = true

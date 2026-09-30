@@ -6,6 +6,7 @@ use serde::Deserialize;
 #[serde(default, deny_unknown_fields)]
 pub struct Overload {
     pub memory: Memory,
+    pub cpu: Cpu,
     pub cooldown_seconds: u64,
     pub poll_seconds: u64,
 }
@@ -14,6 +15,7 @@ impl Default for Overload {
     fn default() -> Self {
         Self {
             memory: Memory::default(),
+            cpu: Cpu::default(),
             cooldown_seconds: 5,
             poll_seconds: 2,
         }
@@ -39,6 +41,24 @@ impl Default for Memory {
     }
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Cpu {
+    pub enabled: bool,
+    pub used_percent: u8,
+    pub sustained_seconds: u64,
+}
+
+impl Default for Cpu {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            used_percent: 90,
+            sustained_seconds: 300,
+        }
+    }
+}
+
 impl Overload {
     pub fn validate(&self) -> Result<()> {
         ensure!(
@@ -49,6 +69,11 @@ impl Overload {
             self.memory.sustained_seconds <= 86400,
             "overload.memory.sustained_seconds must be between 0 and 86400"
         );
+        ensure!(
+            (1..=100).contains(&self.cpu.used_percent),
+            "overload.cpu.used_percent must be between 1 and 100"
+        );
+        validate_seconds(self.cpu.sustained_seconds, "overload.cpu.sustained_seconds")?;
         validate_seconds(self.poll_seconds, "overload.poll_seconds")?;
         validate_seconds(self.cooldown_seconds, "overload.cooldown_seconds")
     }
@@ -70,9 +95,13 @@ mod tests {
     fn memory_is_opt_out_and_settings_are_bounded() {
         let defaults = Overload::default();
         assert!(defaults.memory.enabled);
+        assert!(!defaults.cpu.enabled);
         defaults.validate().unwrap();
         for text in [
             "cooldown_seconds = 0",
+            "[cpu]\nused_percent = 0",
+            "[cpu]\nused_percent = 101",
+            "[cpu]\nsustained_seconds = 0",
             "[memory]\nused_percent = 0",
             "[memory]\nused_percent = 100",
             "[memory]\nsustained_seconds = 86401",

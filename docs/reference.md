@@ -104,10 +104,18 @@ cooldown_seconds = 5
 enabled = true                 # Opt out with false
 used_percent = 95              # Linux only; 50–99
 sustained_seconds = 0           # Stop on the first critical sample
+
+[overload.cpu]
+enabled = false                # Opt in with true
+used_percent = 90              # Aggregate busy time across all cores; 1–100
+sustained_seconds = 300         # Five minutes
 ```
 
 Durations are seconds, bounded to one day; polling and cooldown must be positive.
-A failed memory reading resets the sustained timer and cannot authorize a stop.
+CPU protection is opt-in; its default threshold requires five minutes at 90%
+aggregate busy time, excluding I/O wait. CPU protection requires a positive sustained
+duration. A failed reading resets that signal’s timer and cannot authorize a stop;
+memory protection remains independent of CPU readings.
 
 ## Workspaces
 

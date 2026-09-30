@@ -120,7 +120,8 @@ removal, check it against the rule those files state before judging it.
   and review returns without starting a reviewer.
 - Claude and Codex launches (including Happy and Codex app handoffs) persist
   workspace trust even when the user config is absent, preserving other settings.
-- Machine-wide memory overload protection is opt-out. Stop one connected tracked
+- Machine-wide memory overload protection is opt-out; sustained CPU protection is
+  opt-in. Stop one connected tracked
   agent at a time through its wrapper, newest first, with configurable thresholds
   and timing; retain work and leases, notify, and never select disconnected
   executions. Failed readings reset the sustained timer and authorize no stop.

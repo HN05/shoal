@@ -87,3 +87,109 @@ mod tests {
         }
     }
 }
+
+/// Cumulative CPU ticks across every core. I/O wait is idle; Linux guest ticks
+/// are already included in user/nice and must not be counted twice.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct CpuTicks {
+    pub(crate) busy: u64,
+    pub(crate) total: u64,
+}
+
+impl CpuTicks {
+    pub fn used_percent_since(self, previous: Self) -> Option<f64> {
+        let total = self.total.checked_sub(previous.total)?;
+        let busy = self.busy.checked_sub(previous.busy)?;
+        (total > 0 && busy <= total).then(|| busy as f64 * 100.0 / total as f64)
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub fn cpu_ticks() -> Result<CpuTicks> {
+    linux_cpu(&std::fs::read_to_string("/proc/stat").context("read CPU ticks")?)
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn linux_cpu(text: &str) -> Result<CpuTicks> {
+    let mut fields = text
+        .lines()
+        .next()
+        .context("missing CPU reading")?
+        .split_whitespace();
+    ensure!(
+        fields.next() == Some("cpu"),
+        "missing aggregate CPU reading"
+    );
+    let values = fields
+        .take(8)
+        .map(str::parse::<u64>)
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    ensure!(values.len() >= 4, "incomplete CPU reading");
+    let total = values
+        .iter()
+        .try_fold(0u64, |sum, value| sum.checked_add(*value))
+        .context("CPU ticks overflow")?;
+    let idle = values[3]
+        .checked_add(values.get(4).copied().unwrap_or_default())
+        .context("idle ticks overflow")?;
+    Ok(CpuTicks {
+        busy: total - idle,
+        total,
+    })
+}
+
+#[cfg(target_os = "macos")]
+pub fn cpu_ticks() -> Result<CpuTicks> {
+    // Retain one host port for the process lifetime instead of acquiring a new
+    // Mach send right on every sample.
+    static HOST: std::sync::OnceLock<libc::mach_port_t> = std::sync::OnceLock::new();
+    let host = *HOST.get_or_init(|| unsafe { libc::mach_host_self() });
+    let mut info = std::mem::MaybeUninit::<libc::host_cpu_load_info>::zeroed();
+    let mut count = libc::HOST_CPU_LOAD_INFO_COUNT;
+    // SAFETY: the output buffer and count match HOST_CPU_LOAD_INFO's ABI.
+    let result = unsafe {
+        libc::host_statistics(
+            host,
+            libc::HOST_CPU_LOAD_INFO,
+            info.as_mut_ptr().cast(),
+            &mut count,
+        )
+    };
+    ensure!(
+        result == libc::KERN_SUCCESS && count == libc::HOST_CPU_LOAD_INFO_COUNT,
+        "read CPU ticks: Mach error {result}"
+    );
+    let ticks = unsafe { info.assume_init() }.cpu_ticks.map(u64::from);
+    let total = ticks.iter().sum();
+    Ok(CpuTicks {
+        total,
+        busy: total - ticks[libc::CPU_STATE_IDLE as usize],
+    })
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+pub fn cpu_ticks() -> Result<CpuTicks> {
+    anyhow::bail!("CPU monitoring is unsupported on this platform")
+}
+
+#[cfg(test)]
+mod cpu_tests {
+    use super::*;
+
+    #[test]
+    fn cpu_usage_measures_all_cores_without_guest_double_counting() {
+        let first = linux_cpu("cpu 100 0 100 800 0 0 0 0 100 0\ncpu0 1 2 3 4").unwrap();
+        let next = linux_cpu("cpu 180 0 110 805 5 0 0 0 180 0").unwrap();
+        assert_eq!(next.used_percent_since(first), Some(90.0));
+        assert_eq!(first.used_percent_since(first), None);
+        assert_eq!(first.used_percent_since(next), None);
+        for text in [
+            "cpu0 1 2 3 4",
+            "cpu 1 2 3",
+            "cpu x 2 3 4",
+            "cpu 18446744073709551615 1 0 0",
+        ] {
+            assert!(linux_cpu(text).is_err(), "{text}");
+        }
+    }
+}

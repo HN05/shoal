@@ -54,7 +54,8 @@ even after its leader exits. The daemon prepares each kind before shared registr
 The daemon never proxies terminals, and a lost connection is not proof that an
 execution stopped or that its resources are free.
 
-Memory overload protection is enabled by default and configured machine-wide.
+Overload protection is configured machine-wide: memory is enabled by default,
+CPU is opt-in and requires sustained aggregate busy time across all cores.
 Linux uses available memory including reclaimable cache; macOS uses native
 critical pressure. Stop the newest connected tracked agent through its wrapper,
 then allow memory to recover before selecting another. Thresholds and timing are
