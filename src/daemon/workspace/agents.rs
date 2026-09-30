@@ -196,9 +196,7 @@ impl Manager {
             {
                 for id in ids {
                     anyhow::ensure!(
-                        self.paths
-                            .workspace_state(workspace_id)
-                            .join(format!("{id}.recovery.json"))
+                        crate::execution::recovery::record_path(&self.paths, workspace_id, id)
                             .is_file(),
                         "agent {id} exited without a saved recovery record"
                     );

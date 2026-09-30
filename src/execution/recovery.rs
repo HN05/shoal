@@ -86,7 +86,7 @@ impl Recovery {
     pub(super) fn save(&self, paths: &Paths, workspace_id: &str, id: &str) -> Result<PathBuf> {
         let directory = paths.workspace_state(workspace_id);
         std::fs::create_dir_all(&directory)?;
-        let path = directory.join(format!("{id}.recovery.json"));
+        let path = record_path(paths, workspace_id, id);
         crate::fsutil::replace_atomically(
             &path,
             &serde_json::to_vec(&Record {
@@ -99,6 +99,12 @@ impl Recovery {
         )?;
         Ok(path)
     }
+}
+
+pub(crate) fn record_path(paths: &Paths, workspace_id: &str, id: &str) -> PathBuf {
+    paths
+        .workspace_state(workspace_id)
+        .join(format!("{id}.recovery.json"))
 }
 
 pub(super) async fn wait(
