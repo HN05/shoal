@@ -26,6 +26,24 @@ pub(crate) struct Record {
 }
 
 impl Recovery {
+    pub(super) async fn for_launch(paths: &Paths, workspace_id: &str, agent: &str) -> Self {
+        let resolved = async {
+            let workspace = client::inspect(paths, workspace_id.to_owned())
+                .await?
+                .workspace;
+            Self::resolve(paths, &workspace, agent).await
+        }
+        .await;
+        resolved.unwrap_or_else(|error| {
+            eprintln!("warning: automatic agent recovery unavailable: {error:#}");
+            Self {
+                agent: agent.replace(' ', "-"),
+                command: vec![],
+                automatic: false,
+            }
+        })
+    }
+
     pub(crate) async fn resolve(paths: &Paths, workspace: &Workspace, agent: &str) -> Result<Self> {
         let settings =
             client::settings(paths, ConfigTarget::Workspace(workspace.id.clone())).await?;

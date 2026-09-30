@@ -124,7 +124,8 @@ memory protection remains independent of CPU readings.
 Resume commands are argument arrays in `[agent_resume]`, keyed by the tracked
 agent name. They use the same workspace substitutions and repository layering as
 `[commands]`; they must restore a session without repeating the initial prompt.
-No resume command is configured by default. With one configured, the wrapper
+No resume command is configured by default; a failed command lookup warns and
+disables automatic recovery for that launch. With one configured, the wrapper
 stays connected while the agent is stopped and automatically runs that command
 after healthy readings persist for the recovery interval. Recovery requires
 headroom below each enabled signal’s recovery threshold; thresholds must be

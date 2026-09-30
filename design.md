@@ -71,7 +71,8 @@ record suppresses idle cleanup and provides manual recovery through `shoal resum
 after the wrapper exits or the daemon restarts; without a configured command,
 built-in terminal agents use their session picker. Manual recovery claims only the
 selected stopped execution and consumes its record once the replacement process
-is registered, leaving unrelated executions running.
+is registered, leaving unrelated executions running. A failed restore-command
+lookup disables automatic recovery for that launch and retains manual recovery.
 Agent metadata is transient, so restart cannot select disconnected survivors.
 
 Use short transactions for atomic claims. Closed Shoal enums with matching display and

@@ -196,6 +196,47 @@ async fn manual_stop_cancels_waiting_recovery_and_leaves_a_restore_record() {
 }
 
 #[tokio::test]
+async fn failed_restore_expansion_does_not_block_launch_or_manual_recovery_record() {
+    let (_root, manager, workspace, serving) = fixture().await;
+    let id = workspace.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "UPDATE workspaces SET base_ref='refs/heads/missing' WHERE id=?1",
+                [id],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    fs::write(
+        workspace.path.join(".shoal.toml"),
+        "[agent_resume]\nfixture = ['./resume.sh', '{diff_base}']\n",
+    )
+    .unwrap();
+    let launched = launch(&manager, &workspace);
+    wait_started(&workspace).await;
+    assert!(
+        manager
+            .stop_agent_for_overload("test memory pressure")
+            .await
+    );
+    bounded(launched).await.unwrap().unwrap();
+    assert!(!workspace.path.join("restored").exists());
+    assert!(crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
+    assert!(
+        manager
+            .inspect_workspace(&workspace.id)
+            .await
+            .unwrap()
+            .executions
+            .is_empty()
+    );
+    serving.abort();
+}
+
+#[tokio::test]
 async fn refused_recovery_finishes_the_stopped_execution_and_retains_manual_recovery() {
     let (_root, manager, workspace, serving) = fixture().await;
     let launched = launch(&manager, &workspace);

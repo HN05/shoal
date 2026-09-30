@@ -261,8 +261,7 @@ async fn run_tracked(
         .context("cannot identify execution wrapper")?;
     let kind = mode.kind();
     let recovery = if let Some(agent) = &agent {
-        let record = client::inspect(paths, workspace.clone()).await?.workspace;
-        Some(recovery::Recovery::resolve(paths, &record, agent).await?)
+        Some(recovery::Recovery::for_launch(paths, &workspace, agent).await)
     } else {
         None
     };
