@@ -522,8 +522,15 @@ pub enum Control {
 }
 
 pub async fn read<T: DeserializeOwned>(stream: &mut (impl AsyncRead + Unpin)) -> Result<T> {
+    read_buffered(&mut BufReader::new(stream)).await
+}
+
+pub async fn read_buffered<T: DeserializeOwned>(
+    stream: &mut (impl tokio::io::AsyncBufRead + Unpin),
+) -> Result<T> {
     let mut bytes = Vec::new();
-    BufReader::new(stream.take(MAX_FRAME as u64 + 1))
+    stream
+        .take(MAX_FRAME as u64 + 1)
         .read_until(b'\n', &mut bytes)
         .await?;
     ensure!(
@@ -547,6 +554,24 @@ pub async fn write<T: Serialize>(stream: &mut (impl AsyncWrite + Unpin), value: 
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[tokio::test]
+    async fn buffered_execution_reads_preserve_adjacent_frames() {
+        let (mut writer, reader) = tokio::io::duplex(1024);
+        write(&mut writer, &ExecutionEvent::Finished { exit_code: 7 })
+            .await
+            .unwrap();
+        write(&mut writer, &ExecutionEvent::Finished { exit_code: 8 })
+            .await
+            .unwrap();
+        let mut reader = BufReader::new(reader);
+        for expected in [7, 8] {
+            let event: ExecutionEvent = read_buffered(&mut reader).await.unwrap();
+            assert!(
+                matches!(event, ExecutionEvent::Finished { exit_code } if exit_code == expected)
+            );
+        }
+    }
 
     #[test]
     fn daemon_error_codes_preserve_wire_spellings() {

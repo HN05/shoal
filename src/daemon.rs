@@ -520,14 +520,17 @@ async fn execute(
             .track_agent(&execution_id, agent, &workspace_name)
             .await;
     }
-    let (mut reader, mut writer) = stream.split();
+    let (reader, mut writer) = stream.into_split();
+    let (events, mut incoming) = tokio::sync::mpsc::channel(4);
+    let mut readers = JoinSet::new();
+    readers.spawn(read_execution_events(reader, events));
     let result = async {
         protocol::write(
             &mut writer,
             &Response::new(request_id, Body::Execution(plan)),
         )
         .await?;
-        match protocol::read::<ExecutionEvent>(&mut reader).await? {
+        match incoming.recv().await.context("execution disconnected")?? {
             ExecutionEvent::Finished { exit_code } => return Ok(exit_code),
             ExecutionEvent::Started { child, group_id } => {
                 manager
@@ -536,12 +539,12 @@ async fn execute(
                 protocol::write(&mut writer, &Control::Started).await?;
             }
         }
-        let finished = protocol::read::<ExecutionEvent>(&mut reader);
+        let finished = incoming.recv();
         tokio::pin!(finished);
         let mut sent_stop = false;
         loop {
             tokio::select! {
-                result = &mut finished => break match result? {
+                result = &mut finished => break match result.context("execution disconnected")?? {
                     ExecutionEvent::Finished { exit_code } => Ok(exit_code),
                     _ => anyhow::bail!("unexpected execution event"),
                 },
@@ -554,6 +557,7 @@ async fn execute(
         }
     }
     .await;
+    readers.abort_all();
     let complete = manager
         .finish_execution(execution_id, kind, result.as_ref().ok().copied())
         .await?;
@@ -577,6 +581,22 @@ async fn execute(
         protocol::write(&mut writer, &Control::Finished { complete }).await?;
     }
     result.map(|_| ())
+}
+
+/// Keep frame reads alive across control changes so stop/recovery cannot discard
+/// a partially received execution event.
+async fn read_execution_events(
+    reader: tokio::net::unix::OwnedReadHalf,
+    events: tokio::sync::mpsc::Sender<Result<ExecutionEvent>>,
+) {
+    let mut reader = tokio::io::BufReader::new(reader);
+    loop {
+        let event = protocol::read_buffered::<ExecutionEvent>(&mut reader).await;
+        let failed = event.is_err();
+        if events.send(event).await.is_err() || failed {
+            break;
+        }
+    }
 }
 
 /// Preserve the legacy request field at the protocol boundary. Its numeric
