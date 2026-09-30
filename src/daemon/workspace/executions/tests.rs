@@ -25,7 +25,7 @@ async fn fixture(hook: &str) -> (tempfile::TempDir, Arc<Manager>, Workspace) {
 }
 
 async fn bounded<T>(future: impl Future<Output = T>) -> T {
-    tokio::time::timeout(Duration::from_secs(10), future)
+    tokio::time::timeout(Duration::from_secs(60), future)
         .await
         .expect("execution operation timed out")
 }

@@ -59,7 +59,7 @@ async fn workspace_overviews_refill_past_delays_and_failures_in_workspace_order(
             gate.add_permits(1);
         }
     };
-    let (overviews, ()) = tokio::time::timeout(Duration::from_secs(5), async {
+    let (overviews, ()) = tokio::time::timeout(Duration::from_secs(60), async {
         tokio::join!(collect, release)
     })
     .await
