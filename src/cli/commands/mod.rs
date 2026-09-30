@@ -298,7 +298,8 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         Command::Resume {
             workspace,
             execution,
-        } => resume::run(&ctx, workspace, execution).await,
+            discard,
+        } => resume::run(&ctx, workspace, execution, discard).await,
         Command::Stop { workspace } => workspaces::stop(&ctx, workspace).await,
         Command::Rm {
             workspace,

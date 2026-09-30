@@ -237,6 +237,54 @@ async fn failed_restore_expansion_does_not_block_launch_or_manual_recovery_recor
 }
 
 #[tokio::test]
+async fn discard_clears_pending_recovery_without_launching_an_agent() {
+    let (_root, manager, workspace, serving) = fixture().await;
+    let launched = launch(&manager, &workspace);
+    wait_started(&workspace).await;
+    assert!(
+        manager
+            .stop_agent_for_overload("test memory pressure")
+            .await
+    );
+    wait_paused(&manager, &workspace).await;
+    assert!(
+        crate::cli::commands::resume::run(
+            &crate::cli::context::Context::new(manager.paths.clone(), true),
+            Some(workspace.id.clone()),
+            None,
+            true,
+        )
+        .await
+        .is_err()
+    );
+    bounded(manager.stop_workspace(&workspace.id))
+        .await
+        .unwrap();
+    bounded(launched).await.unwrap().unwrap();
+    // Discard does not depend on valid current restore configuration.
+    fs::write(
+        workspace.path.join(".shoal.toml"),
+        "[agent_resume]\nfixture = ['./missing', '{diff_base}']\n",
+    )
+    .unwrap();
+    assert_eq!(
+        crate::cli::commands::resume::run(
+            &crate::cli::context::Context::new(manager.paths.clone(), true),
+            Some(workspace.id.clone()),
+            None,
+            true,
+        )
+        .await
+        .unwrap(),
+        0
+    );
+    assert!(!crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
+    assert!(!workspace.path.join("restored").exists());
+    assert!(workspace.path.is_dir());
+    serving.abort();
+}
+
+#[tokio::test]
 async fn refused_recovery_finishes_the_stopped_execution_and_retains_manual_recovery() {
     let (_root, manager, workspace, serving) = fixture().await;
     let launched = launch(&manager, &workspace);
@@ -361,7 +409,8 @@ async fn manual_resume_consumes_the_record_on_start_even_if_other_commands_run_o
         bounded(crate::cli::commands::resume::run(
             &ctx,
             Some(workspace.id.clone()),
-            None
+            None,
+            false
         ))
         .await
         .unwrap(),

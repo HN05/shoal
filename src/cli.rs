@@ -139,6 +139,9 @@ pub enum Command {
         /// Select a stopped execution when the workspace has several records.
         #[arg(long)]
         execution: Option<String>,
+        /// Discard a stopped agent's saved recovery record.
+        #[arg(long)]
+        discard: bool,
     },
     /// Run or retry workspace setup.
     Setup { workspace: Option<String> },

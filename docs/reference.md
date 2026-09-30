@@ -135,6 +135,8 @@ uncertain surviving processes, or changed workspace ownership prevent recovery.
 
 `shoal resume [workspace]` restores a saved overload recovery record after its
 wrapper exits; use `--execution <id>` when several agents stopped in one workspace.
+Use `--discard` to forget the selected stopped agent's recovery record without
+launching it, allowing normal idle cleanup again.
 The selected execution must stop or be reconciled first; unrelated executions may
 keep running. The command uses
 the current resume configuration; without one, built-in terminal agents open

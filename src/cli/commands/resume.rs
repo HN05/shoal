@@ -15,6 +15,7 @@ pub async fn run(
     ctx: &Context,
     selector: Option<String>,
     execution: Option<String>,
+    discard: bool,
 ) -> Result<i32> {
     ensure!(
         !crate::env::is_scoped(),
@@ -45,9 +46,16 @@ pub async fn run(
             .executions
             .iter()
             .any(|execution| execution.id == selected_id),
-        "selected execution is active or unknown; stop or reconcile it before resuming"
+        "selected execution is active or unknown; stop or reconcile it first"
     );
     let _claim = claim(&selected)?;
+    if discard {
+        std::fs::remove_file(&selected)?;
+        ctx.show(&selected_id, |id| {
+            println!("Discarded recovery record for {id}")
+        })?;
+        return Ok(0);
+    }
     let recorded: Record =
         serde_json::from_slice(&std::fs::read(&selected)?).context("read recovery record")?;
     let recovery = Recovery::resolve(&ctx.paths, &inspection.workspace, &recorded.agent).await?;
