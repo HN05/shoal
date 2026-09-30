@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     ffi::OsString,
     io::{IsTerminal, Write},
-    os::unix::process::ExitStatusExt,
+    os::unix::{fs::OpenOptionsExt, process::ExitStatusExt},
     path::{Path, PathBuf},
     process::{ExitStatus, Stdio},
     time::Duration,
@@ -491,11 +491,12 @@ async fn stop(child: &mut Child, group: &ProcessGroup, signal: i32) -> Result<Ex
     }
 }
 
-/// Foreground ownership and terminal settings restored when dropped.
+/// Restore foreground ownership, OS settings and shell input modes on exit.
 pub(crate) struct Terminal {
     previous_group: i32,
     previous_settings: libc::termios,
     previous_handler: Option<libc::sighandler_t>,
+    output: std::fs::File,
 }
 
 impl Terminal {
@@ -528,6 +529,13 @@ impl Terminal {
             previous_group,
             previous_settings: unsafe { settings.assume_init() },
             previous_handler: None,
+            // Use the controlling terminal even when both output streams are
+            // redirected. Cleanup must neither enter a pipe nor block on output.
+            output: std::fs::OpenOptions::new()
+                .write(true)
+                .custom_flags(libc::O_NOCTTY | libc::O_NONBLOCK)
+                .open("/dev/tty")
+                .context("open terminal for input-mode cleanup")?,
         }))
     }
 
@@ -553,10 +561,31 @@ impl Drop for Terminal {
             let previous_handler = libc::signal(libc::SIGTTOU, libc::SIG_IGN);
             libc::tcsetpgrp(libc::STDIN_FILENO, self.previous_group);
             libc::tcsetattr(libc::STDIN_FILENO, libc::TCSANOW, &self.previous_settings);
+            if self.previous_handler.is_some() {
+                self.reset_input_modes();
+            }
             libc::signal(
                 libc::SIGTTOU,
                 self.previous_handler.unwrap_or(previous_handler),
             );
         }
+    }
+}
+
+impl Terminal {
+    fn reset_input_modes(&mut self) {
+        // termios cannot undo emulator modes left by an interrupted TUI.
+        // Disable mouse tracking/encodings, focus and paste reports, and restore
+        // ordinary cursor/keypad and keyboard input. Avoid a full terminal reset,
+        // which would clear the user's scrollback and other terminal settings.
+        let _ = self.output.write_all(
+            concat!(
+                "\x1b[?1000l\x1b[?1002l\x1b[?1003l",
+                "\x1b[?1005l\x1b[?1006l\x1b[?1015l\x1b[?1016l",
+                "\x1b[?1004l\x1b[?1007l\x1b[?2004l",
+                "\x1b[?1l\x1b>\x1b[>4;0m\x1b[=0u",
+            )
+            .as_bytes(),
+        );
     }
 }

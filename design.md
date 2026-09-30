@@ -45,8 +45,9 @@ wire format; unfamiliar codes are preserved verbatim for version compatibility.
 Internal CLI workers are built through one typed argument builder that explicitly
 passes the resolved state directory and output mode.
 The execution wrapper owns terminal I/O, environment delivery, exit codes, and
-command process groups. It restores the caller's foreground group and terminal
-settings after commands and interactive hooks, registers through one request carrying its execution kind,
+command process groups. After commands and interactive hooks it restores the caller's
+foreground group and OS terminal settings and resets emulator input modes for the shell,
+writing cleanup directly to the terminal even when output is redirected. It registers through one request carrying its execution kind,
 and gives the entire command process group a shared grace period on stop requests,
 even after its leader exits. The daemon prepares each kind before shared registration.
 The daemon never proxies terminals, and a lost connection is not proof that an

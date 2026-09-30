@@ -2071,6 +2071,8 @@ fn interactive_add_preserves_literal_branch_spelling() {
 
 #[test]
 fn execution_and_hooks_restore_terminal_settings_after_exit_and_stop() {
+    use std::io::Read;
+
     let fixture = Fixture::new();
     let workspace = fixture.add("terminal");
     let agent = fixture.root.path().join("raw-agent.py");
@@ -2080,6 +2082,12 @@ fn execution_and_hooks_restore_terminal_settings_after_exit_and_stop() {
 import os, pathlib, signal, sys, time, tty
 mode = sys.argv[1] if len(sys.argv) > 1 else 'success'
 tty.setraw(0)
+# Emulator modes are independent of termios. Write to the terminal even when
+# the command's output streams are pipes (as in the driver below).
+with open('/dev/tty', 'wb', buffering=0) as terminal:
+    for mode_number in (1000, 1002, 1003, 1005, 1006, 1015, 1016, 1004, 1007, 2004, 1):
+        terminal.write(f'\x1b[?{mode_number}h'.encode())
+    terminal.write(b'\x1b=\x1b[>4;2m\x1b[=15u')
 pathlib.Path('raw-ready').touch()
 if mode in ('success', 'exit'):
     sys.exit(0 if mode == 'success' else 7)
@@ -2103,7 +2111,7 @@ while True:
     )
     .unwrap();
     for mode in ["success", "exit", "killed", "interrupt", "stop", "hook"] {
-        let (_master, slave) = pty::open();
+        let (mut master, slave) = pty::open();
         let output = support::isolated(fixture.root.path(), "python3")
             .args([
                 "-c",
@@ -2137,6 +2145,7 @@ try:
     stdout, stderr = child.communicate(timeout=15)
     expected = {'success': 0, 'exit': 7, 'killed': 137, 'interrupt': 143, 'stop': 143, 'hook': 0}[mode]
     assert child.returncode == expected, (child.returncode, stdout, stderr)
+    assert b'\x1b' not in stdout + stderr, (stdout, stderr)
     assert os.tcgetpgrp(0) == group, 'foreground group was not restored'
     assert termios.tcgetattr(0) == before, (mode, before, termios.tcgetattr(0))
 finally:
@@ -2156,6 +2165,26 @@ finally:
             "{mode}: {}",
             String::from_utf8_lossy(&output.stderr)
         );
+        let mut transcript = String::new();
+        // The nonblocking master may report WouldBlock or EIO once drained.
+        let _ = master.read_to_string(&mut transcript);
+        for number in [
+            1000, 1002, 1003, 1005, 1006, 1015, 1016, 1004, 1007, 2004, 1,
+        ] {
+            let enabled = transcript.rfind(&format!("\x1b[?{number}h")).unwrap();
+            let disabled = transcript.rfind(&format!("\x1b[?{number}l")).unwrap();
+            assert!(disabled > enabled, "{mode}: input mode {number} leaked");
+        }
+        for (enabled, disabled) in [
+            ("\x1b=", "\x1b>"),
+            ("\x1b[>4;2m", "\x1b[>4;0m"),
+            ("\x1b[=15u", "\x1b[=0u"),
+        ] {
+            assert!(
+                transcript.rfind(disabled).unwrap() > transcript.rfind(enabled).unwrap(),
+                "{mode}: keyboard mode leaked"
+            );
+        }
         let workspace = fixture.ok(&["inspect", "terminal"]);
         fs::remove_file(
             Path::new(workspace["workspace"]["path"].as_str().unwrap()).join("raw-ready"),
