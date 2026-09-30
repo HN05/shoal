@@ -195,6 +195,8 @@ removal, check it against the rule those files state before judging it.
 - Tests run in temporary state directories and repositories without the launching
   environment's Shoal variables or configuration locations, use the isolated
   xcrun fixture, and never install services or touch personal simulators.
+  Check timing against AGENTS.md's validation rule: tests must not depend on
+  runner speed.
 - Documentation: usage lives in README.md, behavior in docs/reference.md,
   decisions in design.md, contributor rules in AGENTS.md. Flag behavior
   changes without the matching sentence edit, text that restates code or

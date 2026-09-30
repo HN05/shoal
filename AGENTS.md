@@ -127,6 +127,13 @@ for Rust changes. Test in temporary state directories and repositories, without 
 launching environment's Shoal variables or configuration locations; never install
 persistent OS services or modify real user workspaces as a side effect of tests.
 
+A test must not depend on runner speed. Never assert that work finishes within
+a wall-clock duration or race it against a short real timeout. Assert the outcome
+and the applied limit, drive time with a paused Tokio clock, or wait on an explicit
+signal. Give limits that should not trigger generous values; test limits that
+should trigger with work that cannot finish. Real timeouts are generous hang
+guards only, never the behavior being asserted.
+
 ## CI
 
 `.forgejo/workflows/ci.yml` runs on pull requests and pushes to `main`. Its
