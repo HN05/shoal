@@ -12032,6 +12032,69 @@ fn install_done_hook(fixture: &Fixture) -> PathBuf {
 }
 
 #[test]
+fn agent_exit_hook_exposes_custom_agent_results_without_completing_the_assignment() {
+    let fixture = Fixture::with_config(Some("post_agent_exit_cmd = '/usr/bin/false'\n"));
+    let hook = fixture.root.path().join("agent-exit.sh");
+    fs::write(&hook, "#!/bin/sh\nprintf '%s|%s|%s|%s|%s|%s|%s\\n' \"$SHOAL_HOOK\" \"$SHOAL_WORKSPACE\" \"$SHOAL_AGENT\" \"$SHOAL_AGENT_EXIT_CODE\" \"$SHOAL_AGENT_EXIT_COMPLETE\" \"${SHOAL_SCOPE_TOKEN-unset}\" \"${SHOAL_DONE_CHOICE-unset}\" >> \"$HOME/agent-exits\"\n").unwrap();
+    fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).unwrap();
+    set_repository_toml(
+        &fixture,
+        &format!(
+            "post_agent_exit_cmd = '{}'\n[commands]\nhelper = ['/bin/sh', '-c', 'exit 7']\n",
+            hook.display()
+        ),
+    );
+    let agent = fixture.run(&[
+        "add",
+        fixture.repo.to_str().unwrap(),
+        "agent-work",
+        "--agent",
+        "helper",
+    ]);
+    assert_eq!(agent.status.code(), Some(7), "{agent:?}");
+    let events = fixture.root.path().join("agent-exits");
+    assert_eq!(
+        fs::read_to_string(&events).unwrap(),
+        "post_agent_exit|agent-work|helper|7|true|unset|unset\n"
+    );
+    assert!(fixture.ok(&["inspect", "agent-work"])["completion"].is_null());
+    assert_eq!(
+        fixture.run(&["run", "helper", "agent-work"]).status.code(),
+        Some(7)
+    );
+    assert_eq!(fs::read_to_string(&events).unwrap().lines().count(), 1);
+    // Falling back to a failing global hook must preserve the agent's code.
+    fixture.ok(&[
+        "config",
+        "unset",
+        "post_agent_exit_cmd",
+        "--repo",
+        fixture.repo.to_str().unwrap(),
+    ]);
+    let agent = fixture.run(&[
+        "add",
+        fixture.repo.to_str().unwrap(),
+        "--existing",
+        "agent-work",
+        "--agent",
+        "helper",
+    ]);
+    assert_eq!(agent.status.code(), Some(7), "{agent:?}");
+    assert!(
+        fixture
+            .ok(&["notifications", "--all"])
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|n| n["kind"] == "hook_failed"
+                && n["message"]
+                    .as_str()
+                    .unwrap()
+                    .contains("post_agent_exit_cmd exited with 1"))
+    );
+}
+
+#[test]
 fn post_done_hook_runs_for_scoped_keep_and_retained_cleanup_with_config_layers() {
     let mut fixture = Fixture::with_config(Some("post_done_cmd = '/usr/bin/false'\n"));
     let workspace = fixture.add("hooked");

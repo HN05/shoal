@@ -90,6 +90,7 @@ hook_kinds! {
     PreRemove => (pre_remove_cmd, "pre_remove", true, Worktree),
     PostRemove => (post_remove_cmd, "post_remove", true, Checkout),
     PostDone => (post_done_cmd, "post_done", true, Worktree),
+    PostAgentExit => (post_agent_exit_cmd, "post_agent_exit", true, Worktree),
     PostResourceAcquire => (post_resource_acquire_cmd, "post_resource_acquire", true, Worktree),
     PreResourceRelease => (pre_resource_release_cmd, "pre_resource_release", true, Worktree),
 }
@@ -101,6 +102,11 @@ pub enum Hook<'a> {
     PreRemove,
     PostRemove(&'a Path),
     PostDone(&'a crate::model::Completion),
+    PostAgentExit {
+        agent: &'a str,
+        exit_code: Option<i32>,
+        complete: bool,
+    },
     PostResourceAcquire(&'a ResourceLease),
     PreResourceRelease(&'a ResourceLease),
 }
@@ -113,6 +119,7 @@ impl Hook<'_> {
             Hook::PreRemove => HookKind::PreRemove,
             Hook::PostRemove(_) => HookKind::PostRemove,
             Hook::PostDone(_) => HookKind::PostDone,
+            Hook::PostAgentExit { .. } => HookKind::PostAgentExit,
             Hook::PostResourceAcquire(_) => HookKind::PostResourceAcquire,
             Hook::PreResourceRelease(_) => HookKind::PreResourceRelease,
         }
@@ -137,6 +144,9 @@ fn command(
         ))
         .env(env::HOOK, hook.kind().as_str())
         .env(env::WORKSPACE_PATH, &workspace.path)
+        .env_remove(env::AGENT)
+        .env_remove(env::AGENT_EXIT_CODE)
+        .env_remove(env::AGENT_EXIT_COMPLETE)
         .env_remove(env::DONE_CHOICE)
         .env_remove(env::RESOURCE_LEASE)
         .env_remove(env::SCOPE_TOKEN)
@@ -156,6 +166,23 @@ fn command(
                 "keep"
             },
         );
+    }
+    if let Hook::PostAgentExit {
+        agent,
+        exit_code,
+        complete,
+    } = hook
+    {
+        command
+            .env(env::AGENT, agent)
+            .env(
+                env::AGENT_EXIT_CODE,
+                exit_code.map(|code| code.to_string()).unwrap_or_default(),
+            )
+            .env(
+                env::AGENT_EXIT_COMPLETE,
+                if complete { "true" } else { "false" },
+            );
     }
     Ok(command)
 }

@@ -34,6 +34,7 @@ pub struct Config {
     pub pre_remove_cmd: Option<String>,
     pub post_remove_cmd: Option<String>,
     pub post_done_cmd: Option<String>,
+    pub post_agent_exit_cmd: Option<String>,
     pub post_resource_acquire_cmd: Option<String>,
     pub pre_resource_release_cmd: Option<String>,
     pub root_dir: Option<PathBuf>,
@@ -341,6 +342,7 @@ impl Config {
             pre_remove_cmd: self.pre_remove_cmd.clone(),
             post_remove_cmd: self.post_remove_cmd.clone(),
             post_done_cmd: self.post_done_cmd.clone(),
+            post_agent_exit_cmd: self.post_agent_exit_cmd.clone(),
             post_resource_acquire_cmd: self.post_resource_acquire_cmd.clone(),
             pre_resource_release_cmd: self.pre_resource_release_cmd.clone(),
             ports: repo::PortDefaults {

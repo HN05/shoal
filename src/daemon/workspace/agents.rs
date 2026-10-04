@@ -3,7 +3,7 @@
 use std::time::Instant;
 use tokio::sync::watch;
 
-use super::Manager;
+use super::{GuardMode, Manager};
 use crate::{daemon::notifications::NotificationKind, protocol::timing, state::WorkspaceState};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -27,6 +27,90 @@ impl Agent {
 }
 
 impl Manager {
+    pub(crate) async fn notify_agent_exit(
+        &self,
+        workspace: &crate::model::Workspace,
+        agent: &str,
+        exit_code: Option<i32>,
+        complete: bool,
+    ) {
+        let message = match exit_code {
+            Some(code) if complete => format!("{agent} exited with code {code}"),
+            Some(code) => format!(
+                "{agent} exited with code {code}, leaving processes behind; run shoal doctor"
+            ),
+            None => format!("{agent} disconnected without reporting; run shoal doctor"),
+        };
+        self.notify(
+            Some(&workspace.name),
+            NotificationKind::AgentExited,
+            message,
+        )
+        .await;
+        if let Err(error) = self
+            .run_agent_exit_hook(workspace, agent, exit_code, complete)
+            .await
+        {
+            self.notify(
+                Some(&workspace.name),
+                NotificationKind::HookFailed,
+                format!("agent exited; {error:#}"),
+            )
+            .await;
+        }
+    }
+
+    async fn run_agent_exit_hook(
+        &self,
+        workspace: &crate::model::Workspace,
+        agent: &str,
+        exit_code: Option<i32>,
+        complete: bool,
+    ) -> anyhow::Result<()> {
+        use crate::hooks::{self, Hook, HookKind};
+        if !self.agent_exit_workspace_ready(&workspace.id).await? {
+            return Ok(());
+        }
+        let Some(command) = self
+            .workspace_hook(workspace, HookKind::PostAgentExit)
+            .await?
+        else {
+            return Ok(());
+        };
+        let _resources = self
+            .resource_guard(&workspace.id, GuardMode::Exclusive)
+            .await?;
+        // Removal uses its own hooks; recheck after excluding new transitions.
+        if !self.agent_exit_workspace_ready(&workspace.id).await? {
+            return Ok(());
+        }
+        self.verify_worktree(workspace).await?;
+        hooks::run_detached(
+            Hook::PostAgentExit {
+                agent,
+                exit_code,
+                complete,
+            },
+            workspace,
+            &command,
+            &self.paths,
+        )
+        .await
+    }
+
+    async fn agent_exit_workspace_ready(&self, id: &str) -> anyhow::Result<bool> {
+        let id = id.to_owned();
+        self.store
+            .run(move |db| {
+                crate::daemon::store::exists(
+                    db,
+                    "SELECT 1 FROM workspaces WHERE id=?1 AND state=?2",
+                    rusqlite::params![id, WorkspaceState::Ready],
+                )
+            })
+            .await
+    }
+
     pub(crate) async fn track_agent(&self, id: &str, name: &str, workspace: &str) {
         let connections = self.connections.lock().await;
         if let Some(stop) = connections.get(id) {
@@ -284,6 +368,54 @@ mod tests {
         daemon::{ports::PortRequest, workspace::ExecutionKind},
         test_support::{manager, repository},
     };
+
+    #[tokio::test]
+    async fn agent_exit_hook_reports_disconnects_and_skips_removing_workspaces() {
+        use std::{fs, os::unix::fs::PermissionsExt};
+        let (root, manager) = manager().await;
+        let repo = repository(root.path(), "repo");
+        let repo = manager
+            .register_repository(repo.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        let workspace = manager
+            .create_workspace(&repo.id, "agent".into(), None, None, None)
+            .await
+            .unwrap();
+        let hook = workspace.path.join("exited");
+        fs::write(&hook, "#!/bin/sh\nprintf '%s|%s|%s\\n' \"$SHOAL_AGENT\" \"$SHOAL_AGENT_EXIT_CODE\" \"$SHOAL_AGENT_EXIT_COMPLETE\" >> exits\n").unwrap();
+        fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).unwrap();
+        manager
+            .set_repository_config(&repo.id, Some("post_agent_exit_cmd = 'exited'\n".into()))
+            .await
+            .unwrap();
+        manager
+            .notify_agent_exit(&workspace, "helper", None, false)
+            .await;
+        assert_eq!(
+            fs::read_to_string(workspace.path.join("exits")).unwrap(),
+            "helper||false\n"
+        );
+        assert!(manager.completion(&workspace.id).await.unwrap().is_none());
+        manager
+            .reserve_lifecycle(&workspace.id, WorkspaceState::Removing)
+            .await
+            .unwrap();
+        manager
+            .notify_agent_exit(&workspace, "helper", Some(143), true)
+            .await;
+        assert_eq!(
+            fs::read_to_string(workspace.path.join("exits")).unwrap(),
+            "helper||false\n"
+        );
+        let events = manager.notifications(false, 10).await.unwrap();
+        assert_eq!(events.len(), 2);
+        assert!(
+            events
+                .iter()
+                .all(|event| event.kind == NotificationKind::AgentExited)
+        );
+    }
 
     #[tokio::test]
     async fn overload_stops_only_one_agent_and_preserves_work_and_leases() {

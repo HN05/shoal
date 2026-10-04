@@ -30,6 +30,12 @@ pub const WORKSPACE_PATH: &str = "SHOAL_WORKSPACE_PATH";
 pub const RESOURCE_LEASE: &str = "SHOAL_RESOURCE_LEASE";
 /// Requested completion policy passed to post-done hooks: `keep` or `cleanup`.
 pub const DONE_CHOICE: &str = "SHOAL_DONE_CHOICE";
+/// Shortcut or configured agent name passed to agent-exit hooks.
+pub const AGENT: &str = "SHOAL_AGENT";
+/// Reported exit code, empty when the agent disconnected without reporting.
+pub const AGENT_EXIT_CODE: &str = "SHOAL_AGENT_EXIT_CODE";
+/// Whether the tracked execution finished without surviving processes.
+pub const AGENT_EXIT_COMPLETE: &str = "SHOAL_AGENT_EXIT_COMPLETE";
 /// File the shell wrapper reads to change directory after the command exits.
 pub const SHELL_DIRECTIVE: &str = "SHOAL_SHELL_DIRECTIVE";
 /// The shell wrapper's `OLDPWD`, passed explicitly because it is shell-local.

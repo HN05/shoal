@@ -1,3 +1,4 @@
+use super::notifications::NotificationKind;
 use super::*;
 use crate::test_support::{manager, repository};
 use std::{future::Future, os::unix::fs::PermissionsExt};

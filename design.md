@@ -330,7 +330,11 @@ shortcut-launched agents, workspaces it removed or retained on its own) and the
 CLI shows them once, on request or as a followed stream that also raises the
 terminal's own notifications (OSC 9); `ls`, workspace `status`, and `daemon status` only count them. Recording never fails the operation it describes,
 repeated polled conflicts collapse until read, and scoped processes cannot read
-them. Desktop or push delivery was considered and not adopted.
+them. `post_agent_exit_cmd` exposes tracked-agent exit notifications to user
+integrations while the workspace is ready, using normal configuration precedence
+and daemon hook rules with the agent name, reported code, and process-completion
+status. Failure notifies without changing the exit result or marking completion;
+removal uses its own hooks. Desktop or push delivery was considered and not adopted.
 
 The skill is installed at user scope, independent of the daemon and never from
 a scoped execution; its availability registers nothing. Global `[ai.<name>]`

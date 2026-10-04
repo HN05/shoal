@@ -25,6 +25,8 @@ when behavior changes, distinguishing decisions from proposals.
   `post_done_cmd` runs in the daemon after completion persists and before cleanup,
   excluding lifecycle and permit changes; failure notifies without undoing completion
   or blocking cleanup. Explicit completion reruns it; restart does not replay it.
+  `post_agent_exit_cmd` exposes tracked-agent exits while ready under the same
+  daemon hook rules without marking completion; removal uses its own hooks.
   Missing-worktree cleanup skips hooks. Optional local repository config lives
   in daemon state, layers per option over the worktree config, and is deleted
   with its registration. Every option that does not describe the machine may

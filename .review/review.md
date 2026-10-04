@@ -35,7 +35,9 @@ removal, check it against the rule those files state before judging it.
   skip hooks, and post-remove events are not replayed on restart. Post-done runs
   after completion persists and before cleanup, including issue and PR completion;
   failure notifies without undoing completion or blocking cleanup. It excludes
-  lifecycle and permit changes and is not replayed on restart.
+  lifecycle and permit changes and is not replayed on restart. Agent-exit hooks
+  expose tracked agent exits while ready, including disconnects, without changing
+  the exit result or marking completion; removal uses its own hooks.
 - Doctor reports current issues before falling back to the recorded
   failure and repair guidance; repair remains an explicit choice.
 - Scope: workspace commands carry a scope token and get own-worktree access

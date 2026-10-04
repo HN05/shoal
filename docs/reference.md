@@ -658,6 +658,7 @@ command, with saved repository config taking precedence over the worktree file.
 pre_setup_cmd = "scripts/before.sh"   # Before tracked setup, without a terminal
 setup_cmd = "scripts/setup.sh"        # Prepares the worktree; must exit 0
 post_setup_cmd = "scripts/attach.sh"  # After the workspace is ready, e.g. open tmux
+post_agent_exit_cmd = "scripts/exited.sh" # When a tracked agent exits
 post_done_cmd = "scripts/done.sh"     # After assignment completion, before cleanup
 pre_remove_cmd = "scripts/detach.sh"  # Before the worktree is removed, e.g. close it
 post_remove_cmd = "scripts/removed.sh" # After removal, from the repository checkout
@@ -740,6 +741,14 @@ and PR-watch completion even when cleanup retains the workspace. Failure records
 a `hook_failed` notification without undoing completion or blocking cleanup.
 Lifecycle and permit changes are rejected while it runs. Each explicit `done`
 runs it again; automatic completion and daemon restart do not replay it.
+
+`post_agent_exit_cmd` runs alongside agent-exit notifications, including configured
+agents and disconnects, while the workspace is ready. It uses the same daemon hook
+rules and config precedence as `post_done_cmd`, with `SHOAL_AGENT`,
+`SHOAL_AGENT_EXIT_CODE` (empty on disconnect), and `SHOAL_AGENT_EXIT_COMPLETE`
+(`true` when no owned processes remain, otherwise `false`). Failure only records
+`hook_failed`; agent exit does not mark an assignment done. Removal uses its own
+hooks, and plain commands and restart do not produce agent-exit hooks.
 
 For workspaces opened with `--issue` or `shoal issue`, the daemon polls the saved
 issue URL every ~30 seconds using its `gh`/`fj` login. Confirmed closure records

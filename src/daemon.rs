@@ -33,7 +33,6 @@ use tokio::{
     time::timeout,
 };
 
-use notifications::NotificationKind;
 use ports::Acquisition;
 use scope::Caller;
 use workspace::{ExecutionKind, Manager, StartedExecution};
@@ -530,13 +529,13 @@ async fn execute(
         }
     };
     let execution_id = plan.id.clone();
-    let workspace_name = plan.workspace.name.clone();
+    let agent_workspace = plan.workspace.clone();
     let workspace_id = plan.workspace.id.clone();
     if kind == ExecutionKind::Command
         && let Some(agent) = &agent
     {
         manager
-            .track_agent(&execution_id, agent, &workspace_name)
+            .track_agent(&execution_id, agent, &agent_workspace.name)
             .await;
     }
     let (reader, mut writer) = stream.into_split();
@@ -615,18 +614,12 @@ async fn execute(
         .finish_execution(execution_id, kind, result.as_ref().ok().copied())
         .await?;
     if let Some(agent) = agent {
-        let message = match &result {
-            Ok(code) if complete => format!("{agent} exited with code {code}"),
-            Ok(code) => format!(
-                "{agent} exited with code {code}, leaving processes behind; run shoal doctor"
-            ),
-            Err(_) => format!("{agent} disconnected without reporting; run shoal doctor"),
-        };
         manager
-            .notify(
-                Some(&workspace_name),
-                NotificationKind::AgentExited,
-                message,
+            .notify_agent_exit(
+                &agent_workspace,
+                &agent,
+                result.as_ref().ok().copied(),
+                complete,
             )
             .await;
     }
