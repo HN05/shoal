@@ -43,6 +43,7 @@ pub struct Config {
     /// Agent `shoal issue` starts when `--agent` is omitted.
     pub default_agent: Option<crate::agent::Agent>,
     pub codex: repo::Codex,
+    pub herdr: repo::Herdr,
     pub overload: overload::Overload,
     pub auto_cleanup: repo::AutoCleanup,
     pub pr_cleanup: repo::PrCleanup,
@@ -337,6 +338,7 @@ impl Config {
             git_profile: self.git_profile.clone(),
             default_agent: self.default_agent.clone(),
             codex: self.codex,
+            herdr: self.herdr,
             pre_setup_cmd: self.pre_setup_cmd.clone(),
             post_setup_cmd: self.post_setup_cmd.clone(),
             pre_remove_cmd: self.pre_remove_cmd.clone(),
@@ -410,3 +412,10 @@ fn default_template() -> &'static str {
 
 /// Named templates shipped in this binary, independent of the source checkout.
 pub const PACKAGED: &[(&str, &str)] = include!(concat!(env!("OUT_DIR"), "/packaged_configs.rs"));
+
+#[derive(Debug, Serialize)]
+pub struct Herdr {
+    pub new_tab: bool,
+    pub focus: bool,
+    pub close_when_done: bool,
+}

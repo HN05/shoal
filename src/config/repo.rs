@@ -60,6 +60,7 @@ pub struct RepoConfig {
     /// Agent `shoal issue` starts when `--agent` is omitted.
     pub default_agent: Option<Agent>,
     pub codex: Codex,
+    pub herdr: Herdr,
     pub setup_cmd: Option<String>,
     pub pre_setup_cmd: Option<String>,
     pub post_remove_cmd: Option<String>,
@@ -306,4 +307,12 @@ mod tests {
             assert_eq!(serde_json::to_value(config).unwrap()[key], "scripts/hook");
         }
     }
+}
+
+#[derive(Debug, Default, Clone, Copy, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Herdr {
+    pub new_tab: Option<bool>,
+    pub focus: Option<bool>,
+    pub close_when_done: Option<bool>,
 }

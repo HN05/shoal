@@ -26,6 +26,7 @@ pub struct Effective {
     pub git_profile: Option<String>,
     pub default_agent: Option<crate::agent::Agent>,
     pub codex: Codex,
+    pub herdr: config::Herdr,
     pub setup_cmd: Option<String>,
     pub pre_setup_cmd: Option<String>,
     pub post_remove_cmd: Option<String>,
@@ -150,6 +151,11 @@ impl Effective {
             agent_auth: merged.agent_auth,
             git_profile: merged.git_profile,
             default_agent: merged.default_agent,
+            herdr: config::Herdr {
+                new_tab: built_in(merged.herdr.new_tab, "herdr.new_tab")?,
+                focus: built_in(merged.herdr.focus, "herdr.focus")?,
+                close_when_done: built_in(merged.herdr.close_when_done, "herdr.close_when_done")?,
+            },
             codex: Codex {
                 default_mode: built_in(merged.codex.default_mode, "codex.default_mode")?,
             },
@@ -201,6 +207,11 @@ fn built_in() -> RepoConfig {
     let auto_cleanup = AutoCleanup::default();
     RepoConfig {
         commands: named_commands::defaults(),
+        herdr: config::repo::Herdr {
+            new_tab: Some(true),
+            focus: Some(true),
+            close_when_done: Some(true),
+        },
         codex: config::repo::Codex {
             default_mode: Some(Codex::default().default_mode),
         },
@@ -410,6 +421,9 @@ fn build_fields() -> Vec<Box<dyn Field + Send + Sync>> {
         scalar!(git_profile),
         scalar!(default_agent),
         scalar!(codex.default_mode),
+        scalar!(herdr.new_tab),
+        scalar!(herdr.focus),
+        scalar!(herdr.close_when_done),
     ];
     fields.extend(
         HookKind::ALL
@@ -448,7 +462,7 @@ issue_template = 'issue'\nagent_template = 'agent'\ngit_profile = 'work'\n\
 default_agent = 'claude'\nsetup_cmd = 'setup'\npre_setup_cmd = 'pre-setup'\n\
 post_remove_cmd = 'post-remove'\npost_done_cmd = 'post-done'\npost_agent_exit_cmd = 'agent-exit'\npost_resource_acquire_cmd = 'acquire'\n\
 pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd = 'detach'\n\
-[commands]\nreview = ['review']\n[agent_resume]\nreview = ['review', '--resume']\n[agent_auth]\nfj = '/fj'\ngh = '/gh'\n[codex]\ndefault_mode = 'app'\n\
+[commands]\nreview = ['review']\n[agent_resume]\nreview = ['review', '--resume']\n[agent_auth]\nfj = '/fj'\ngh = '/gh'\n[codex]\ndefault_mode = 'app'\n[herdr]\nnew_tab = false\nfocus = false\nclose_when_done = false\n\
 [ports]\non_conflict = 'auto'\nstart = 3000\nend = 3100\n[ports.web]\nport = 3000\n\
 [resources.lock]\ncapacity = 1\n[resource_pools.devices]\ncapacity = 2\n\
 [resource_pools.devices.resources.phone]\ncapacity = 1\n\
@@ -469,6 +483,21 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
     }
 
     #[test]
+    fn herdr_defaults_and_options_resolve_independently() {
+        let defaults = stack("", "", "").resolve().unwrap().herdr;
+        assert!(defaults.new_tab && defaults.focus && defaults.close_when_done);
+        let settings = stack(
+            "[herdr]\nnew_tab = false\nfocus = false\n",
+            "[herdr]\nnew_tab = true\nclose_when_done = false\n",
+            "[herdr]\nfocus = true\n",
+        )
+        .resolve()
+        .unwrap()
+        .herdr;
+        assert!(settings.new_tab && settings.focus && !settings.close_when_done);
+    }
+
+    #[test]
     fn every_option_survives_layering_in_both_directions() {
         let full = parse(FULL).unwrap();
         let RepoConfig {
@@ -480,6 +509,7 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
             git_profile,
             default_agent,
             codex,
+            herdr,
             setup_cmd,
             pre_setup_cmd,
             post_remove_cmd,
@@ -512,6 +542,9 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
             git_profile.is_some(),
             default_agent.is_some(),
             codex.default_mode.is_some(),
+            herdr.new_tab.is_some(),
+            herdr.focus.is_some(),
+            herdr.close_when_done.is_some(),
             setup_cmd.is_some(),
             pre_setup_cmd.is_some(),
             post_remove_cmd.is_some(),
