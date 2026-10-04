@@ -47,6 +47,15 @@ impl Manager {
             message,
         )
         .await;
+    }
+
+    pub(crate) async fn post_agent_exit(
+        &self,
+        workspace: &crate::model::Workspace,
+        agent: &str,
+        exit_code: Option<i32>,
+        complete: bool,
+    ) {
         if let Err(error) = self
             .run_agent_exit_hook(workspace, agent, exit_code, complete)
             .await
@@ -392,6 +401,9 @@ mod tests {
         manager
             .notify_agent_exit(&workspace, "helper", None, false)
             .await;
+        manager
+            .post_agent_exit(&workspace, "helper", None, false)
+            .await;
         assert_eq!(
             fs::read_to_string(workspace.path.join("exits")).unwrap(),
             "helper||false\n"
@@ -403,6 +415,9 @@ mod tests {
             .unwrap();
         manager
             .notify_agent_exit(&workspace, "helper", Some(143), true)
+            .await;
+        manager
+            .post_agent_exit(&workspace, "helper", Some(143), true)
             .await;
         assert_eq!(
             fs::read_to_string(workspace.path.join("exits")).unwrap(),

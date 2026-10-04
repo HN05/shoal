@@ -743,7 +743,8 @@ Lifecycle and permit changes are rejected while it runs. Each explicit `done`
 runs it again; automatic completion and daemon restart do not replay it.
 
 `post_agent_exit_cmd` runs alongside agent-exit notifications, including configured
-agents and disconnects, while the workspace is ready. It uses the same daemon hook
+agents and disconnects, while the workspace is ready, after acknowledging the
+wrapper's exit. It uses the same daemon hook
 rules and config precedence as `post_done_cmd`, with `SHOAL_AGENT`,
 `SHOAL_AGENT_EXIT_CODE` (empty on disconnect), and `SHOAL_AGENT_EXIT_COMPLETE`
 (`true` when no owned processes remain, otherwise `false`). Failure only records

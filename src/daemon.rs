@@ -613,9 +613,25 @@ async fn execute(
     let complete = manager
         .finish_execution(execution_id, kind, result.as_ref().ok().copied())
         .await?;
-    if let Some(agent) = agent {
+    if let Some(agent) = &agent {
         manager
             .notify_agent_exit(
+                &agent_workspace,
+                agent,
+                result.as_ref().ok().copied(),
+                complete,
+            )
+            .await;
+    }
+    let acknowledged = if result.is_ok() {
+        protocol::write(&mut writer, &Control::Finished { complete }).await
+    } else {
+        Ok(())
+    };
+    // A bounded hook can outlast the wrapper's acknowledgement deadline.
+    if let Some(agent) = agent {
+        manager
+            .post_agent_exit(
                 &agent_workspace,
                 &agent,
                 result.as_ref().ok().copied(),
@@ -623,9 +639,7 @@ async fn execute(
             )
             .await;
     }
-    if result.is_ok() {
-        protocol::write(&mut writer, &Control::Finished { complete }).await?;
-    }
+    acknowledged?;
     result.map(|_| ())
 }
 

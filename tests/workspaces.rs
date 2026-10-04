@@ -12053,6 +12053,11 @@ fn agent_exit_hook_exposes_custom_agent_results_without_completing_the_assignmen
     ]);
     assert_eq!(agent.status.code(), Some(7), "{agent:?}");
     let events = fixture.root.path().join("agent-exits");
+    wait_until("agent exit hook", || {
+        fs::read_to_string(&events).is_ok_and(|events| {
+            events.contains("post_agent_exit|agent-work|helper|7|true|unset|unset\n")
+        })
+    });
     assert_eq!(
         fs::read_to_string(&events).unwrap(),
         "post_agent_exit|agent-work|helper|7|true|unset|unset\n"
@@ -12080,18 +12085,70 @@ fn agent_exit_hook_exposes_custom_agent_results_without_completing_the_assignmen
         "helper",
     ]);
     assert_eq!(agent.status.code(), Some(7), "{agent:?}");
-    assert!(
+    wait_until("failed agent exit hook", || {
         fixture
             .ok(&["notifications", "--all"])
             .as_array()
             .unwrap()
             .iter()
-            .any(|n| n["kind"] == "hook_failed"
-                && n["message"]
-                    .as_str()
-                    .unwrap()
-                    .contains("post_agent_exit_cmd exited with 1"))
+            .any(|n| {
+                n["kind"] == "hook_failed"
+                    && n["message"]
+                        .as_str()
+                        .unwrap()
+                        .contains("post_agent_exit_cmd exited with 1")
+            })
+    });
+}
+
+#[test]
+fn agent_exit_acknowledgement_does_not_wait_for_the_hook() {
+    let fixture = Fixture::new();
+    let hook = fixture.root.path().join("exit-hook");
+    let barrier = fixture.root.path().join("release-exit");
+    assert!(
+        Command::new("mkfifo")
+            .arg(&barrier)
+            .status()
+            .unwrap()
+            .success()
     );
+    fs::write(&hook, "#!/bin/sh\ntouch \"$HOME/exit-started\"\nread release < \"$HOME/release-exit\"\ntouch \"$HOME/exit-finished\"\n").unwrap();
+    fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).unwrap();
+    set_repository_toml(
+        &fixture,
+        &format!(
+            "post_agent_exit_cmd = '{}'\n[commands]\nhelper = ['/bin/sh', '-c', 'exit 7']\n",
+            hook.display()
+        ),
+    );
+    let mut agent = fixture
+        .command()
+        .args([
+            "add",
+            fixture.repo.to_str().unwrap(),
+            "agent-work",
+            "--agent",
+            "helper",
+        ])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    wait_until("agent exit hook started", || {
+        fixture.root.path().join("exit-started").exists()
+    });
+    let mut status = None;
+    wait_until("agent wrapper acknowledged", || {
+        status = agent.try_wait().unwrap();
+        status.is_some()
+    });
+    assert_eq!(status.unwrap().code(), Some(7));
+    assert!(!fixture.root.path().join("exit-finished").exists());
+    fs::write(&barrier, "release\n").unwrap();
+    wait_until("agent exit hook finished", || {
+        fixture.root.path().join("exit-finished").exists()
+    });
 }
 
 #[test]
