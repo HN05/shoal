@@ -2,7 +2,7 @@
 use crate::tools::Tool;
 use std::{ffi::OsString, path::PathBuf};
 
-use anyhow::{Result, ensure};
+use anyhow::{Context as _, Result, ensure};
 use serde_json::json;
 
 use crate::{
@@ -143,6 +143,7 @@ pub(super) async fn add(
         .transpose()?;
     let target = resolve_add_target(ctx, repository, issue.as_deref(), &agent).await?;
     let agent = resolve_add_agent(ctx, &target.selector, agent, issue.is_some()).await?;
+    let creation = select_add_creation(ctx, &target, creation, issue.is_some()).await?;
     let issue = match issue {
         Some(input) => Some(super::issues::load(target.repository(ctx).await?, &input).await?),
         None => None,
@@ -262,22 +263,16 @@ async fn resolve_add_agent(
     Ok(ResolvedAddAgent { agent, codex_mode })
 }
 
-async fn open_add_workspace(
+async fn select_add_creation(
     ctx: &Context,
     target: &AddTarget,
-    creation: Creation,
-    issue: Option<&super::issues::Issue>,
-) -> Result<OpenedWorkspace> {
-    let Creation {
-        path,
-        branch,
-        mut existing,
-        base,
-        git_profile,
-    } = creation;
-    let repository = target.selector.clone();
-    let mut branch = branch.or_else(|| issue.map(|issue| issue.branch_name()));
-    if branch.is_none() && existing.is_none() && base.is_none() && ctx.interactive() {
+    mut creation: Creation,
+    has_issue: bool,
+) -> Result<Creation> {
+    if has_issue || creation.branch.is_some() || creation.existing.is_some() {
+        return Ok(creation);
+    }
+    if creation.base.is_none() && ctx.interactive() {
         #[derive(Clone, Copy)]
         enum BranchMode {
             New,
@@ -292,9 +287,36 @@ async fn open_add_workspace(
             ],
         )?;
         if let BranchMode::Existing = mode {
-            existing = Some(pick_add_branch(ctx, target).await?);
+            creation.existing = Some(pick_add_branch(ctx, target).await?);
+            return Ok(creation);
         }
     }
+    // Check here so a typo can be corrected before creating work.
+    creation.branch = Some(loop {
+        let name = ui::input(ctx, "Branch name")?;
+        match git::check_branch_name(None, &name).await {
+            Ok(()) => break name,
+            Err(error) => eprintln!("{error:#}"),
+        }
+    });
+    Ok(creation)
+}
+
+async fn open_add_workspace(
+    ctx: &Context,
+    target: &AddTarget,
+    creation: Creation,
+    issue: Option<&super::issues::Issue>,
+) -> Result<OpenedWorkspace> {
+    let Creation {
+        path,
+        branch,
+        existing,
+        base,
+        git_profile,
+    } = creation;
+    let repository = target.selector.clone();
+    let branch = branch.or_else(|| issue.map(|issue| issue.branch_name()));
     if let Some(branch) = existing {
         request::<OpenedWorkspace>(
             &ctx.paths,
@@ -308,18 +330,7 @@ async fn open_add_workspace(
         )
         .await
     } else {
-        let name = match branch.take() {
-            Some(name) => name,
-            // The daemon rejects bad syntax too; checking here lets a typo be
-            // corrected instead of ending the command.
-            None => loop {
-                let name = ui::input(ctx, "Branch name")?;
-                match git::check_branch_name(None, &name).await {
-                    Ok(()) => break name,
-                    Err(error) => eprintln!("{error:#}"),
-                }
-            },
-        };
+        let name = branch.context("a branch name is required")?;
         let workspace = request::<Workspace>(
             &ctx.paths,
             Method::CreateWorkspace {
