@@ -154,7 +154,9 @@ impl Fixture {
         // ownership to its child, not just file descriptors that pass isatty.
         unsafe {
             command.pre_exec(|| {
-                if libc::setsid() < 0 || libc::ioctl(libc::STDIN_FILENO, libc::TIOCSCTTY, 0) < 0 {
+                if libc::setsid() < 0
+                    || libc::ioctl(libc::STDIN_FILENO, libc::TIOCSCTTY as _, 0) < 0
+                {
                     return Err(std::io::Error::last_os_error());
                 }
                 Ok(())
