@@ -6,6 +6,48 @@ use crate::{
 use std::{fs, sync::Arc};
 
 #[tokio::test]
+async fn completion_without_a_hook_allows_concurrent_permit_operations() {
+    let (_root, manager, workspace) = fixture().await;
+    let resources = manager
+        .resource_guard(&workspace.id, GuardMode::Shared)
+        .await
+        .unwrap();
+    manager.mark_done(&workspace.id, Some(false)).await.unwrap();
+    manager
+        .set_repository_config(
+            &workspace.repository_id,
+            Some("post_done_cmd = '/usr/bin/true'\n".into()),
+        )
+        .await
+        .unwrap();
+    let error = manager
+        .mark_done(&workspace.id, Some(true))
+        .await
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("resource operation is in progress")
+    );
+    assert!(
+        !manager
+            .completion(&workspace.id)
+            .await
+            .unwrap()
+            .unwrap()
+            .cleanup
+    );
+    drop(resources);
+    assert!(
+        manager
+            .mark_done(&workspace.id, Some(true))
+            .await
+            .unwrap()
+            .cleanup
+    );
+}
+
+#[tokio::test]
 async fn completion_persists_and_explicit_choices_override_the_repository_default() {
     let (_root, manager, workspace) = fixture().await;
     let repo = manager.repository(&workspace.repository_id).await.unwrap();
