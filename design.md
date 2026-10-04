@@ -420,7 +420,12 @@ reads use bounded concurrency, retain workspace order and report every failure.
 Workspace completion uses `[done] cleanup` (default true), resolved through the
 normal configuration layers with explicit keep and cleanup overrides. Completion
 is persisted separately from lifecycle readiness, binds to HEAD, and notifies the
-user; it does not assert that work was merged. Keeping a completed workspace
+user; it does not assert that work was merged. The daemon runs `post_done_cmd`
+after persisting explicit or automatic completion and before cleanup, using normal
+config precedence and the worktree's hook identity plus the keep/cleanup choice.
+It is bounded, excludes lifecycle and permit changes, and reports failure through
+a notification without undoing completion or blocking cleanup. Explicit signals
+rerun it; events are not queued or replayed on restart. Keeping a completed workspace
 suppresses idle and PR cleanup until another completion requests cleanup or the
 user removes it. Completion
 cleanup without a PR registration requires clean files and every commit pushed or

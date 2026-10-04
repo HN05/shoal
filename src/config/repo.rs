@@ -63,6 +63,7 @@ pub struct RepoConfig {
     pub setup_cmd: Option<String>,
     pub pre_setup_cmd: Option<String>,
     pub post_remove_cmd: Option<String>,
+    pub post_done_cmd: Option<String>,
     pub post_resource_acquire_cmd: Option<String>,
     pub pre_resource_release_cmd: Option<String>,
     /// Runs untracked after the workspace is ready, e.g. to open a tmux session.

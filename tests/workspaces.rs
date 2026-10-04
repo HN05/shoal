@@ -12012,10 +12012,153 @@ fn benchmark_daemon_reads() {
     }
 }
 
+fn set_repository_toml(fixture: &Fixture, text: &str) {
+    let config = fixture.root.path().join("repository.toml");
+    fs::write(&config, text).unwrap();
+    fixture.ok(&[
+        "repo",
+        "config",
+        fixture.repo.to_str().unwrap(),
+        "--file",
+        config.to_str().unwrap(),
+    ]);
+}
+
+fn install_done_hook(fixture: &Fixture) -> PathBuf {
+    let hook = fixture.root.path().join("done hook.sh");
+    fs::write(&hook, "#!/bin/sh\nprintf '%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\\n' \"$SHOAL_HOOK\" \"$SHOAL_WORKSPACE\" \"$SHOAL_WORKSPACE_ID\" \"$SHOAL_WORKSPACE_PATH\" \"$PWD\" \"$SHOAL_STATE_DIR\" \"$SHOAL_DONE_CHOICE\" \"${SHOAL_SCOPE_TOKEN-unset}\" \"${SHOAL_EXECUTION_ID-unset}\" \"${SHOAL_RESERVED_PORT_ENV-unset}\" >> \"$HOME/done-events\"\n").unwrap();
+    fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).unwrap();
+    hook
+}
+
+#[test]
+fn post_done_hook_runs_for_scoped_keep_and_retained_cleanup_with_config_layers() {
+    let mut fixture = Fixture::with_config(Some("post_done_cmd = '/usr/bin/false'\n"));
+    let workspace = fixture.add("hooked");
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    let hook = install_done_hook(&fixture);
+    let config = format!("post_done_cmd = '{}'\n", hook.display());
+    // The worktree file overrides the global failure hook.
+    fs::write(path.join(".shoal.toml"), &config).unwrap();
+    let completion = fixture.ok(&[
+        "exec",
+        "hooked",
+        "--",
+        env!("CARGO_BIN_EXE_shoal"),
+        "--json",
+        "done",
+        "--keep",
+    ]);
+    assert_eq!(completion["cleanup"], false);
+    let events = fixture.root.path().join("done-events");
+    let identity = format!(
+        "post_done|hooked|{}|{}|{}|{}|",
+        workspace["id"].as_str().unwrap(),
+        path.display(),
+        path.display(),
+        fixture.root.path().join("state").display()
+    );
+    assert_eq!(
+        fs::read_to_string(&events).unwrap(),
+        format!("{identity}keep|unset|unset|unset\n")
+    );
+    // Saved repository config overrides the file and determines the default choice.
+    fs::write(
+        path.join(".shoal.toml"),
+        "post_done_cmd = '/usr/bin/false'\n",
+    )
+    .unwrap();
+    set_repository_toml(&fixture, &format!("{config}[done]\ncleanup=true\n"));
+    fixture.ok(&["done", "hooked"]);
+    wait_until("completion cleanup error", || {
+        fixture.ok(&["inspect", "hooked"])["completion"]["error"].is_string()
+    });
+    assert_eq!(
+        fs::read_to_string(&events).unwrap(),
+        format!("{identity}keep|unset|unset|unset\n{identity}cleanup|unset|unset|unset\n")
+    );
+    fixture.restart();
+    assert_eq!(fs::read_to_string(&events).unwrap().lines().count(), 2);
+    // Failure is best effort and cannot cancel a recorded keep choice.
+    fixture.ok(&["repo", "config", fixture.repo.to_str().unwrap(), "--clear"]);
+    fs::remove_file(path.join(".shoal.toml")).unwrap();
+    assert_eq!(fixture.ok(&["done", "hooked", "--keep"])["cleanup"], false);
+    assert!(
+        fixture
+            .ok(&["notifications", "--all"])
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|n| n["kind"] == "hook_failed"
+                && n["message"]
+                    .as_str()
+                    .unwrap()
+                    .contains("post_done_cmd exited with 1"))
+    );
+}
+
+#[test]
+fn post_done_hook_observes_persisted_completion_and_excludes_lifecycle_and_permits() {
+    let fixture = Fixture::with_config(Some("[resources.device]\n"));
+    fixture.add("hooked");
+    let hook = install_done_hook(&fixture);
+    let barrier = fixture.root.path().join("release-done");
+    assert!(
+        Command::new("mkfifo")
+            .arg(&barrier)
+            .status()
+            .unwrap()
+            .success()
+    );
+    fs::write(
+        &hook,
+        "#!/bin/sh\ntouch \"$HOME/done-started\"\nread release < \"$HOME/release-done\"\n",
+    )
+    .unwrap();
+    set_repository_toml(
+        &fixture,
+        &format!(
+            "post_done_cmd = '{}'\nsetup_cmd = '/usr/bin/true'\n",
+            hook.display()
+        ),
+    );
+    let mut done = fixture
+        .command()
+        .args(["done", "hooked", "--keep"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    wait_until("post-done hook started", || {
+        fixture.root.path().join("done-started").exists()
+    });
+    assert_eq!(
+        fixture.ok(&["inspect", "hooked"])["completion"]["cleanup"],
+        false
+    );
+    for args in [
+        vec!["setup", "hooked"],
+        vec!["rm", "hooked", "--yes", "--keep-branch"],
+        vec!["resource", "acquire", "device", "hooked"],
+    ] {
+        let output = fixture.run(&args);
+        assert!(!output.status.success(), "{args:?}: {output:?}");
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains("hook finishes"),
+            "{output:?}"
+        );
+    }
+    fs::write(&barrier, "release\n").unwrap();
+    assert!(done.wait().unwrap().success());
+    fixture.ok(&["resource", "acquire", "device", "hooked"]);
+}
+
 #[test]
 fn done_defaults_to_cleanup_and_releases_workspace_resources() {
     let fixture = Fixture::with_config(Some("[auto_cleanup]\nenabled=false\n[resources.device]\n"));
+    let hook = install_done_hook(&fixture);
     let workspace = fixture.add("finished");
+    set_repository_toml(&fixture, &format!("post_done_cmd = '{}'\n", hook.display()));
     fixture.ok(&["port", "acquire", "web", "finished"]);
     fixture.ok(&["resource", "acquire", "device", "finished"]);
     let mut wrapper = fixture
@@ -12029,6 +12172,11 @@ fn done_defaults_to_cleanup_and_releases_workspace_resources() {
     let completion = fixture.ok(&["done", "finished"]);
     assert_eq!(completion["cleanup"], true);
     wait_removed(&fixture, "finished");
+    assert!(
+        fs::read_to_string(fixture.root.path().join("done-events"))
+            .unwrap()
+            .contains("|cleanup|")
+    );
     assert!(!wrapper.wait().unwrap().success());
     assert!(!Path::new(workspace["path"].as_str().unwrap()).exists());
     assert!(
@@ -12108,6 +12256,8 @@ fn multiple_prs_complete_once_only_after_every_merge_and_honor_done_policy() {
         let mut fixture = Fixture::with_config(Some(&format!(
             "[auto_cleanup]\nenabled=false\n[done]\ncleanup={cleanup}\n"
         )));
+        let hook = install_done_hook(&fixture);
+        set_repository_toml(&fixture, &format!("post_done_cmd = '{}'\n", hook.display()));
         let workspace = fixture.add("multi");
         fixture.add_github_origin();
         let bin = fixture.root.path().join("bin");
@@ -12209,6 +12359,13 @@ fn multiple_prs_complete_once_only_after_every_merge_and_honor_done_policy() {
         let db = rusqlite::Connection::open(root.join("state/state.db")).unwrap();
         let count: i64 = db.query_row("SELECT count(*) FROM notifications WHERE kind='workspace_done' AND workspace='multi'", [], |row| row.get(0)).unwrap();
         assert_eq!(count, 1);
+        assert_eq!(
+            fs::read_to_string(root.join("done-events"))
+                .unwrap()
+                .lines()
+                .count(),
+            1
+        );
     }
 }
 
@@ -12315,6 +12472,8 @@ fn closed_issue_completes_for_both_forges_and_failed_queries_retain_work() {
 fn closed_issue_honors_keep_and_does_not_complete_later_work_again() {
     for explicit_keep in [false, true] {
         let mut fixture = issue_completion_fixture("gh", explicit_keep);
+        let hook = install_done_hook(&fixture);
+        set_repository_toml(&fixture, &format!("post_done_cmd = '{}'\n", hook.display()));
         if explicit_keep {
             fixture.ok(&["done", "issue-work", "--keep"]);
         }
@@ -12329,6 +12488,13 @@ fn closed_issue_honors_keep_and_does_not_complete_later_work_again() {
         assert_eq!(
             fixture.ok(&["inspect", "issue-work"])["completion"],
             completion
+        );
+        assert_eq!(
+            fs::read_to_string(fixture.root.path().join("done-events"))
+                .unwrap()
+                .lines()
+                .count(),
+            1
         );
         let notifications = fixture.ok(&["notifications", "--all"]);
         assert_eq!(

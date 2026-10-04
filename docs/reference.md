@@ -658,6 +658,7 @@ command, with saved repository config taking precedence over the worktree file.
 pre_setup_cmd = "scripts/before.sh"   # Before tracked setup, without a terminal
 setup_cmd = "scripts/setup.sh"        # Prepares the worktree; must exit 0
 post_setup_cmd = "scripts/attach.sh"  # After the workspace is ready, e.g. open tmux
+post_done_cmd = "scripts/done.sh"     # After assignment completion, before cleanup
 pre_remove_cmd = "scripts/detach.sh"  # Before the worktree is removed, e.g. close it
 post_remove_cmd = "scripts/removed.sh" # After removal, from the repository checkout
 ```
@@ -729,6 +730,16 @@ user. `[done] cleanup` defaults to true; `--keep` and `--cleanup` override it in
 either direction and cannot be combined. The setting follows normal repository
 and worktree configuration precedence. Scoped agents may mark only their own
 workspace done; completion does not verify or assert a merge.
+
+`post_done_cmd` runs in the daemon after recording completion, before cleanup,
+with the worktree as its working directory, no terminal, and a 60-second limit.
+It follows normal global and repository configuration precedence and receives the
+[hook identity environment](#workspace-setup-and-hooks) plus
+`SHOAL_DONE_CHOICE=keep` or `cleanup`. It runs for explicit `done`, issue closure,
+and PR-watch completion even when cleanup retains the workspace. Failure records
+a `hook_failed` notification without undoing completion or blocking cleanup.
+Lifecycle and permit changes are rejected while it runs. Each explicit `done`
+runs it again; automatic completion and daemon restart do not replay it.
 
 For workspaces opened with `--issue` or `shoal issue`, the daemon polls the saved
 issue URL every ~30 seconds using its `gh`/`fj` login. Confirmed closure records

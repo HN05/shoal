@@ -28,7 +28,7 @@ states!(NotificationKind {
     WorkspaceDone => "workspace_done",
     /// An automatic removal was attempted and the workspace retained.
     CleanupFailed => "cleanup_failed",
-    /// Removal succeeded, but its post hook failed.
+    /// A best-effort event hook failed.
     HookFailed => "hook_failed",
 });
 

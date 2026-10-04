@@ -28,6 +28,8 @@ pub const HOOK: &str = "SHOAL_HOOK";
 pub const WORKSPACE_PATH: &str = "SHOAL_WORKSPACE_PATH";
 /// JSON resource lease passed to permit hooks.
 pub const RESOURCE_LEASE: &str = "SHOAL_RESOURCE_LEASE";
+/// Requested completion policy passed to post-done hooks: `keep` or `cleanup`.
+pub const DONE_CHOICE: &str = "SHOAL_DONE_CHOICE";
 /// File the shell wrapper reads to change directory after the command exits.
 pub const SHELL_DIRECTIVE: &str = "SHOAL_SHELL_DIRECTIVE";
 /// The shell wrapper's `OLDPWD`, passed explicitly because it is shell-local.

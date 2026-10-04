@@ -29,6 +29,7 @@ pub struct Effective {
     pub setup_cmd: Option<String>,
     pub pre_setup_cmd: Option<String>,
     pub post_remove_cmd: Option<String>,
+    pub post_done_cmd: Option<String>,
     pub post_resource_acquire_cmd: Option<String>,
     pub pre_resource_release_cmd: Option<String>,
     pub post_setup_cmd: Option<String>,
@@ -154,6 +155,7 @@ impl Effective {
             setup_cmd: merged.setup_cmd,
             pre_setup_cmd: merged.pre_setup_cmd,
             post_remove_cmd: merged.post_remove_cmd,
+            post_done_cmd: merged.post_done_cmd,
             post_resource_acquire_cmd: merged.post_resource_acquire_cmd,
             pre_resource_release_cmd: merged.pre_resource_release_cmd,
             post_setup_cmd: merged.post_setup_cmd,
@@ -442,7 +444,7 @@ mod tests {
     const FULL: &str = "\
 issue_template = 'issue'\nagent_template = 'agent'\ngit_profile = 'work'\n\
 default_agent = 'claude'\nsetup_cmd = 'setup'\npre_setup_cmd = 'pre-setup'\n\
-post_remove_cmd = 'post-remove'\npost_resource_acquire_cmd = 'acquire'\n\
+post_remove_cmd = 'post-remove'\npost_done_cmd = 'post-done'\npost_resource_acquire_cmd = 'acquire'\n\
 pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd = 'detach'\n\
 [commands]\nreview = ['review']\n[agent_resume]\nreview = ['review', '--resume']\n[agent_auth]\nfj = '/fj'\ngh = '/gh'\n[codex]\ndefault_mode = 'app'\n\
 [ports]\non_conflict = 'auto'\nstart = 3000\nend = 3100\n[ports.web]\nport = 3000\n\
@@ -479,6 +481,7 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
             setup_cmd,
             pre_setup_cmd,
             post_remove_cmd,
+            post_done_cmd,
             post_resource_acquire_cmd,
             pre_resource_release_cmd,
             post_setup_cmd,
@@ -509,6 +512,7 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
             setup_cmd.is_some(),
             pre_setup_cmd.is_some(),
             post_remove_cmd.is_some(),
+            post_done_cmd.is_some(),
             post_resource_acquire_cmd.is_some(),
             pre_resource_release_cmd.is_some(),
             post_setup_cmd.is_some(),

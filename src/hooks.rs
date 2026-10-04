@@ -89,6 +89,7 @@ hook_kinds! {
     PostSetup => (post_setup_cmd, "post_setup", true, Worktree),
     PreRemove => (pre_remove_cmd, "pre_remove", true, Worktree),
     PostRemove => (post_remove_cmd, "post_remove", true, Checkout),
+    PostDone => (post_done_cmd, "post_done", true, Worktree),
     PostResourceAcquire => (post_resource_acquire_cmd, "post_resource_acquire", true, Worktree),
     PreResourceRelease => (pre_resource_release_cmd, "pre_resource_release", true, Worktree),
 }
@@ -99,6 +100,7 @@ pub enum Hook<'a> {
     PostSetup,
     PreRemove,
     PostRemove(&'a Path),
+    PostDone(&'a crate::model::Completion),
     PostResourceAcquire(&'a ResourceLease),
     PreResourceRelease(&'a ResourceLease),
 }
@@ -110,6 +112,7 @@ impl Hook<'_> {
             Hook::PostSetup => HookKind::PostSetup,
             Hook::PreRemove => HookKind::PreRemove,
             Hook::PostRemove(_) => HookKind::PostRemove,
+            Hook::PostDone(_) => HookKind::PostDone,
             Hook::PostResourceAcquire(_) => HookKind::PostResourceAcquire,
             Hook::PreResourceRelease(_) => HookKind::PreResourceRelease,
         }
@@ -134,6 +137,7 @@ fn command(
         ))
         .env(env::HOOK, hook.kind().as_str())
         .env(env::WORKSPACE_PATH, &workspace.path)
+        .env_remove(env::DONE_CHOICE)
         .env_remove(env::RESOURCE_LEASE)
         .env_remove(env::SCOPE_TOKEN)
         .env_remove(env::EXECUTION_ID)
@@ -142,6 +146,16 @@ fn command(
         .kill_on_drop(true);
     if let Hook::PostResourceAcquire(lease) | Hook::PreResourceRelease(lease) = hook {
         command.env(env::RESOURCE_LEASE, serde_json::to_string(lease)?);
+    }
+    if let Hook::PostDone(completion) = hook {
+        command.env(
+            env::DONE_CHOICE,
+            if completion.cleanup {
+                "cleanup"
+            } else {
+                "keep"
+            },
+        );
     }
     Ok(command)
 }

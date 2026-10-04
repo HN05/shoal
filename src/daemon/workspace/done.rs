@@ -2,9 +2,10 @@
 use anyhow::{Result, ensure};
 use rusqlite::OptionalExtension;
 
-use super::Manager;
+use super::{GuardMode, Manager};
 use crate::{
     daemon::{notifications::NotificationKind, store},
+    hooks::{self, Hook, HookKind},
     model::{Completion, Workspace},
     state::WorkspaceState,
 };
@@ -44,10 +45,15 @@ impl Manager {
         head: String,
         cleanup: Option<bool>,
     ) -> Result<Completion> {
-        let cleanup = match cleanup {
-            Some(cleanup) => cleanup,
-            None => self.workspace_settings(workspace).await?.done.cleanup,
-        };
+        let settings = self.workspace_settings(workspace).await?;
+        let command = HookKind::PostDone
+            .command(&settings)
+            .map(|path| workspace.path.join(path));
+        let _resources = self
+            .resource_guard(&workspace.id, GuardMode::Exclusive)
+            .await?;
+        self.verify_worktree(workspace).await?;
+        let cleanup = cleanup.unwrap_or(settings.done.cleanup);
         let completion = Completion {
             head,
             cleanup,
@@ -78,6 +84,22 @@ impl Manager {
             },
         )
         .await;
+        if let Some(command) = command
+            && let Err(error) = hooks::run_detached(
+                Hook::PostDone(&completion),
+                workspace,
+                &command,
+                &self.paths,
+            )
+            .await
+        {
+            self.notify(
+                Some(&workspace.name),
+                NotificationKind::HookFailed,
+                format!("assignment finished; {error:#}"),
+            )
+            .await;
+        }
         self.cleanup_notify.notify_one();
         Ok(completion)
     }
