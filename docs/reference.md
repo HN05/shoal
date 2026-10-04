@@ -649,7 +649,10 @@ follow Git. A missing or unrelated base is an error.
 ### Workspace setup and hooks
 
 Repository config (`.shoal.toml`, `.shoal/config.toml`, or the imported local
-config) can name lifecycle executables:
+config) can name lifecycle executables. Untracked hooks may also be global
+defaults in `~/.config/shoal/config.toml`; a repository value replaces the global
+command, with saved repository config taking precedence over the worktree file.
+`setup_cmd` is repository-only:
 
 ```toml
 pre_setup_cmd = "scripts/before.sh"   # Before tracked setup, without a terminal
@@ -665,8 +668,8 @@ its root and use it as their working directory. Give scripts a shebang and put
 arguments and shell logic inside them.
 
 `pre_setup_cmd` runs in the daemon before tracked setup, after ownership and
-execution checks, with a 60-second limit. It may also be a global default and
-works without a `setup_cmd`. Failure marks the workspace failed and skips setup;
+execution checks, with a 60-second limit. It works without a `setup_cmd`.
+Failure marks the workspace failed and skips setup;
 retry with `shoal setup`. Lifecycle and permit changes are rejected while it runs.
 
 `setup_cmd` runs through the tracked execution wrapper with workspace scope and
@@ -697,9 +700,9 @@ stderr as its error. It is skipped when the worktree directory is already gone.
 `post_remove_cmd` runs after successful removal from the shared daemon path,
 with a 60-second limit and no terminal. Its path and working directory are relative
 to the repository checkout, whose copy of the script must exist; `SHOAL_WORKSPACE_PATH`
-still names the removed worktree. The command is selected before removal using
-repository config over the global default. Failure cannot undo deletion: removal
-still succeeds, with a CLI warning, JSON `hook_error`, and a `hook_failed`
+still names the removed worktree. The command is selected before removal.
+Failure cannot undo deletion: removal still succeeds, with a CLI warning,
+JSON `hook_error`, and a `hook_failed`
 notification. It is skipped for already-missing worktrees and is not replayed
 following a daemon restart. Use a pre-remove hook when failure must retain ownership.
 

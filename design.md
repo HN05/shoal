@@ -183,18 +183,19 @@ a nonzero exit. `setup` reruns setup explicitly; nothing retries automatically.
 Hooks are deliberately untracked user processes with the workspace identity
 but no scope token, because their purpose is to start or stop things that
 outlive the hook (a tmux session, say) without becoming execution survivors.
+They use global defaults below repository config.
 The pre-setup hook runs in the daemon after ownership and execution checks,
 with a time limit, while preparation excludes lifecycle and permit changes;
-failure marks setup failed. It may be configured without a setup command and
-uses global defaults below repository config. The post-setup hook runs from the CLI
-with the terminal once the workspace is ready and before any agent; failure keeps the ready workspace. The pre-remove
+failure marks setup failed. It may be configured without a setup command.
+The post-setup hook runs from the CLI with the terminal once the workspace is
+ready and before any agent; failure keeps the ready workspace. The pre-remove
 hook runs in the daemon inside the single removal path for manual, repository,
 and automatic removal, after checks pass and commands stop, bounded in time;
 failure retains the workspace. Post-remove runs after ownership is released,
 from the repository checkout with its copy of the executable, retaining the old
-workspace path in the environment. Its command is selected before removal, with
-repository values above global defaults. It is best-effort: failure is a warning
-and notification, never a failed removal or restored ownership. Missing-worktree
+workspace path in the environment. Its command is selected before removal.
+It is best-effort: failure is a warning and notification, never a failed removal
+or restored ownership. Missing-worktree
 cleanup skips hooks; post-remove events are not durably queued or replayed.
 
 `diff` compares against the recorded base's fork point (merge-base fallback, fixed

@@ -452,7 +452,7 @@ pub(super) async fn setup(ctx: &Context, workspace: Option<String>) -> Result<i3
     Ok(0)
 }
 
-/// Run the repository's `post_setup_cmd`, if any, once the workspace is ready.
+/// Run the configured `post_setup_cmd`, if any, once the workspace is ready.
 /// A failure keeps the ready workspace and stops what would follow.
 async fn run_post_setup(ctx: &Context, workspace: &Workspace) -> Result<()> {
     let command = request::<Option<PathBuf>>(

@@ -11097,7 +11097,7 @@ fn workspace_hook_resolution_preserves_layers_and_directories() {
     // exist: resolution must not run a hook or require its executable yet.
     fs::write(
         fixture.root.path().join(".config/shoal/config.toml"),
-        "pre_setup_cmd = 'global'\npost_remove_cmd = 'global'\n\
+        "pre_setup_cmd = 'global'\npost_setup_cmd = 'global'\npre_remove_cmd = 'global'\npost_remove_cmd = 'global'\n\
          post_resource_acquire_cmd = 'global'\npre_resource_release_cmd = 'global'\n",
     )
     .unwrap();
@@ -11133,8 +11133,8 @@ fn workspace_hook_resolution_preserves_layers_and_directories() {
     for (kind, global) in [
         ("setup", false),
         ("pre_setup", true),
-        ("post_setup", false),
-        ("pre_remove", false),
+        ("post_setup", true),
+        ("pre_remove", true),
         ("post_remove", true),
         ("post_resource_acquire", true),
         ("pre_resource_release", true),
@@ -11178,6 +11178,40 @@ fn workspace_hook_resolution_preserves_layers_and_directories() {
         save(&format!("{kind}_cmd = '/absolute/hook'\n"));
         assert_eq!(resolve(kind)["data"], "/absolute/hook");
     }
+}
+
+#[test]
+fn global_post_setup_and_pre_remove_hooks_run_without_setup() {
+    let fixture = Fixture::with_config(Some(
+        "post_setup_cmd = 'hook.sh'\npre_remove_cmd = 'hook.sh'\n",
+    ));
+    fs::write(
+        fixture.repo.join("hook.sh"),
+        r#"#!/bin/sh
+set -eu
+test -z "${SHOAL_SCOPE_TOKEN:-}"
+test -z "${SHOAL_EXECUTION_ID:-}"
+test -f tracked
+printf '%s\n' "$SHOAL_HOOK" >> "$HOME/hooks"
+"#,
+    )
+    .unwrap();
+    fs::set_permissions(
+        fixture.repo.join("hook.sh"),
+        fs::Permissions::from_mode(0o755),
+    )
+    .unwrap();
+    commit_resource_config(&fixture.repo, "");
+    let workspace = fixture.add("global-hooks");
+    assert_eq!(workspace["state"], "ready");
+    let markers = fixture.root.path().join("hooks");
+    assert_eq!(fs::read_to_string(&markers).unwrap(), "post_setup\n");
+    fixture.ok(&["rm", "global-hooks", "--yes", "--delete-branch"]);
+    assert!(!Path::new(workspace["path"].as_str().unwrap()).exists());
+    assert_eq!(
+        fs::read_to_string(&markers).unwrap(),
+        "post_setup\npre_remove\n"
+    );
 }
 
 #[test]

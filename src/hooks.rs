@@ -86,8 +86,8 @@ macro_rules! hook_kinds {
 hook_kinds! {
     Setup => (setup_cmd, "setup", false, Worktree),
     PreSetup => (pre_setup_cmd, "pre_setup", true, Worktree),
-    PostSetup => (post_setup_cmd, "post_setup", false, Worktree),
-    PreRemove => (pre_remove_cmd, "pre_remove", false, Worktree),
+    PostSetup => (post_setup_cmd, "post_setup", true, Worktree),
+    PreRemove => (pre_remove_cmd, "pre_remove", true, Worktree),
     PostRemove => (post_remove_cmd, "post_remove", true, Checkout),
     PostResourceAcquire => (post_resource_acquire_cmd, "post_resource_acquire", true, Worktree),
     PreResourceRelease => (pre_resource_release_cmd, "pre_resource_release", true, Worktree),

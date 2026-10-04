@@ -26,7 +26,8 @@ removal, check it against the rule those files state before judging it.
   entries. Doctor environment and untracked-worktree
   checks diagnose only, including when repair is requested; dependency checks use
   the shared executable catalog.
-- Pre-setup hooks run untracked in the daemon after ownership and execution
+- Untracked hooks use global defaults below repository config.
+  Pre-setup hooks run untracked in the daemon after ownership and execution
   checks, with a timeout; failure gates readiness even without a setup command.
   Lifecycle and permit changes are excluded while the hook runs. Post-remove
   runs from the repository checkout after ownership is released; failure is a

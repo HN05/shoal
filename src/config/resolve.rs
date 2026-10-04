@@ -667,6 +667,50 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
     }
 
     #[test]
+    fn post_setup_and_pre_remove_hooks_use_global_defaults_below_repository_layers() {
+        for kind in [HookKind::PostSetup, HookKind::PreRemove] {
+            let key = kind.key();
+            let global = format!("{key} = 'global/hook'\n");
+            let worktree = format!("{key} = 'file/hook'\n");
+            let saved = format!("{key} = 'saved/hook'\n");
+            for (global, worktree, saved, expected, layer) in [
+                ("", "", "", None, Layer::BuiltInDefault),
+                (
+                    global.as_str(),
+                    "",
+                    "",
+                    Some("global/hook"),
+                    Layer::GlobalConfig,
+                ),
+                (
+                    global.as_str(),
+                    worktree.as_str(),
+                    "",
+                    Some("file/hook"),
+                    Layer::WorktreeFile,
+                ),
+                (
+                    global.as_str(),
+                    worktree.as_str(),
+                    saved.as_str(),
+                    Some("saved/hook"),
+                    Layer::SavedRepositoryConfig,
+                ),
+            ] {
+                let stack = stack(global, worktree, saved);
+                let settings = stack.clone().resolve().unwrap();
+                assert_eq!(kind.command(&settings).map(String::as_str), expected);
+                assert!(settings.setup_cmd.is_none());
+                assert!(settings.pre_setup_cmd.is_none());
+                let entries = stack.report().unwrap();
+                let entry = entries.iter().find(|entry| entry.key == key).unwrap();
+                assert_eq!(entry.value, serde_json::json!(expected));
+                assert_eq!(entry.layer, layer);
+            }
+        }
+    }
+
+    #[test]
     fn hooks_resolve_by_kind_through_the_settings() {
         let settings = stack(
             "pre_setup_cmd = 'global/pre'\npost_remove_cmd = 'global/remove'\n",

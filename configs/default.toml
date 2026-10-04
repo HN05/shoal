@@ -23,6 +23,11 @@ root_dir = "~/shoal"
 # Git identity for new worktrees (no default); may also be set per repository.
 # git_profile = "work"
 
+# Optional untracked lifecycle hooks; repository values replace these commands.
+# Each value is one executable path, relative to the worktree or absolute.
+# post_setup_cmd = "/path/to/attach" # After readiness, in the CLI with a terminal.
+# pre_remove_cmd = "/path/to/detach" # Before removal, in the daemon without a terminal.
+
 # Named Git settings; omitted keys keep their normal Git values.
 # [git.profiles.work]
 # user.name = "Your Name"
