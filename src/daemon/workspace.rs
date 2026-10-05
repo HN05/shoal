@@ -59,6 +59,8 @@ pub struct Manager {
     pub cleanup_notify: tokio::sync::Notify,
     /// The global file as last loaded; a reload replaces it for later reads.
     config: std::sync::RwLock<Arc<Config>>,
+    /// Orders reloads so the last file read is the one published.
+    config_reload: Mutex<()>,
     pub(crate) paths: Paths,
     /// Serializes every simctl transition.
     pub(crate) simulator_gate: Mutex<()>,
@@ -89,6 +91,7 @@ impl Manager {
         fs::write(paths.worktrunk_config(), "# Managed by Shoal.\n")?;
         Ok(Arc::new(Self {
             config: std::sync::RwLock::new(Arc::new(Config::load(&paths)?)),
+            config_reload: Mutex::new(()),
             pr_gate: Mutex::new(()),
             cleanup_notify: tokio::sync::Notify::new(),
             store: Store::open(paths.database()).await?,
@@ -120,6 +123,7 @@ impl Manager {
     /// Replace the global config with the file's current contents for later
     /// operations. An invalid file leaves the running config in place.
     pub async fn reload_config(&self) -> Result<()> {
+        let _reload = self.config_reload.lock().await;
         let paths = self.paths.clone();
         let config = tokio::task::spawn_blocking(move || Config::load_settled(&paths)).await??;
         *self
@@ -403,8 +407,9 @@ impl Manager {
         )
         .await?;
         self.record_worktree_identity(workspace).await?;
-        let settings = self.workspace_settings(workspace).await?;
-        self.apply_workspace_git_profile(workspace, &settings, git_profile)
+        let config = self.config();
+        let settings = self.workspace_settings_from(&config, workspace).await?;
+        self.apply_workspace_git_profile(workspace, &config, &settings, git_profile)
             .await?;
         Ok(settings.setup_cmd.is_some() || settings.pre_setup_cmd.is_some())
     }
@@ -486,11 +491,12 @@ impl Manager {
     async fn apply_workspace_git_profile(
         &self,
         workspace: &Workspace,
+        config: &Config,
         settings: &crate::config::Effective,
         git_profile: Option<&str>,
     ) -> Result<()> {
         if let Some(name) = git_profile.or(settings.git_profile.as_deref()) {
-            crate::git_profile::apply(&workspace.path, self.config().git.profile(name)?)
+            crate::git_profile::apply(&workspace.path, config.git.profile(name)?)
                 .await
                 .with_context(|| format!("apply git profile {name}"))?;
         }

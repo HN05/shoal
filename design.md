@@ -385,8 +385,8 @@ absent; explicit key edits preserve unrelated settings and comments and validate
 once per command before saving, so dependent keys change together, while reset or named template installation replaces the file.
 Global writes keep the previous file as a backup; the daemon reads it at startup
 and on reload, which global CLI writes request of a running daemon, replacing its
-snapshot only with a valid file so agents and leases are untouched; each operation
-reads one snapshot. The CLI reads agent settings per command. Repository TOML comes from the
+snapshot only with a valid file so agents and leases are untouched; an operation
+that combines global definitions with resolved settings reads both from one snapshot. The CLI reads agent settings per command. Repository TOML comes from the
 worktree (`.shoal.toml` or `.shoal/config.toml`, both together is an error) with
 a local override stored in the database by repository ID layered over it per
 option, a named table replacing the one below it whole, and deleted with the

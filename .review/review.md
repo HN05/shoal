@@ -210,8 +210,9 @@ instructions instead of the PR delivery guidance below.
   Config key edits preserve unrelated settings and comments and validate one command's
   changes together before saving;
   repository edits serialize read/modify/write in the daemon and leave worktree files alone.
-  Daemon code reads the global config as one snapshot per operation; a reload, which
-  global CLI writes request, replaces it only with a valid file and never stops agents.
+  An operation that combines global definitions with resolved settings reads both from
+  one global config snapshot; reloads are serialized, replace it only with a valid
+  file, and never stop agents.
   Packaged config installation replaces global TOML only on explicit request,
   keeps a backup, and uses templates embedded in the binary.
   Packaged skills use the runtime `SHOAL_SKILL_PATH`, then the build-time path,

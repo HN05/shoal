@@ -371,7 +371,7 @@ impl Manager {
             None
         } else {
             Some(
-                self.resolve_profile(&workspace, &request, &inventory)
+                self.resolve_profile(&config, &workspace, &request, &inventory)
                     .await?,
             )
         };
@@ -420,7 +420,7 @@ impl Manager {
             }
         }
         let plan = planning::plan(&records, &inventory, limits, &profile, request.clean);
-        self.execute_simulator_plan(workspace, request, profile, plan, audit)
+        self.execute_simulator_plan(&config, workspace, request, profile, plan, audit)
             .await
     }
 
@@ -428,13 +428,13 @@ impl Manager {
     /// Audits precede destructive actions; claims survive every failed boot step.
     async fn execute_simulator_plan(
         &self,
+        config: &crate::config::Config,
         workspace: Workspace,
         request: SimRequest,
         profile: Profile,
         plan: planning::Plan<'_>,
         audit: &mut Option<CleanRequest>,
     ) -> Result<Allocation<Box<Simulator>>> {
-        let config = self.config();
         let limits = &config.simulators;
         let records = self.list_simulators(None).await?;
         for sim in plan.unowned_candidates.iter().copied().chain(plan.reusable) {
@@ -574,17 +574,13 @@ impl Manager {
 
     async fn resolve_profile(
         &self,
+        config: &crate::config::Config,
         workspace: &Workspace,
         request: &SimRequest,
         inventory: &Inventory,
     ) -> Result<Profile> {
-        let settings = self.workspace_settings(workspace).await?;
-        planning::resolve_request(
-            &self.config().simulators,
-            &settings.simulators,
-            request,
-            inventory,
-        )
+        let settings = self.workspace_settings_from(config, workspace).await?;
+        planning::resolve_request(&config.simulators, &settings.simulators, request, inventory)
     }
 
     pub async fn release_simulator(&self, selector: &str, name: String) -> Result<()> {

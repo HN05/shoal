@@ -2,7 +2,7 @@
 use super::Manager;
 use crate::{
     config::{
-        self, Effective,
+        self, Config, Effective,
         repo::{ConfigLayers, LocalConfig, RepoConfig},
     },
     hooks::{HookDirectory, HookKind},
@@ -161,7 +161,17 @@ impl Manager {
     /// The workspace's settings after every layer: the saved config, the
     /// worktree file and the global config.
     pub(crate) async fn workspace_settings(&self, workspace: &Workspace) -> Result<Effective> {
-        self.config()
-            .resolve(&self.workspace_layers(workspace).await?)
+        self.workspace_settings_from(&self.config(), workspace)
+            .await
+    }
+
+    /// [`Self::workspace_settings`] over a global snapshot the caller also
+    /// reads, so one operation never combines two versions.
+    pub(crate) async fn workspace_settings_from(
+        &self,
+        config: &Config,
+        workspace: &Workspace,
+    ) -> Result<Effective> {
+        config.resolve(&self.workspace_layers(workspace).await?)
     }
 }

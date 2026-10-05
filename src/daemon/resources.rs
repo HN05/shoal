@@ -493,8 +493,8 @@ impl Manager {
         &self,
         workspace: &crate::model::Workspace,
     ) -> Result<BTreeMap<String, (Scope, Definition)>> {
-        let repo = self.workspace_settings(workspace).await?;
         let config = self.config();
+        let repo = self.workspace_settings_from(&config, workspace).await?;
         let global = definitions(&config.resources, &config.resource_pools)?;
         let local = definitions(&repo.resources, &repo.resource_pools)?;
         let mut result: BTreeMap<_, _> = global
