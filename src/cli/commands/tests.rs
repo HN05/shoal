@@ -131,3 +131,11 @@ async fn workspace_overviews_account_for_request_timeouts() {
     assert!(error.starts_with("daemon request timed out:"));
     assert!(overviews[1..].iter().all(|result| !result.is_failed()));
 }
+
+#[test]
+fn bare_repo_opens_the_repository_menu() {
+    let cli = <Cli as clap::Parser>::try_parse_from(["shoal", "repo"]).unwrap();
+    assert_eq!(menu_path(cli.command.as_ref()), Some(&["repo"][..]));
+    let cli = <Cli as clap::Parser>::try_parse_from(["shoal", "repo", "list"]).unwrap();
+    assert_eq!(menu_path(cli.command.as_ref()), None);
+}

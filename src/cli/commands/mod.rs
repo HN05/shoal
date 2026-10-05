@@ -8,6 +8,7 @@ mod menu;
 mod notifications;
 mod ports;
 mod recovery;
+mod repo_menu;
 mod repositories;
 mod resources;
 pub(crate) mod resume;
@@ -121,6 +122,29 @@ async fn collect_workspace_overviews<T>(
     overviews.into_iter().map(Option::unwrap).collect()
 }
 
+/// Subcommand path of an invocation that opens a menu; without a terminal its
+/// help is printed instead.
+fn menu_path(command: Option<&Command>) -> Option<&'static [&'static str]> {
+    match command {
+        None => Some(&[]),
+        Some(Command::Repo { command: None }) => Some(&["repo"]),
+        Some(_) => None,
+    }
+}
+
+fn print_help(path: &[&str]) -> Result<()> {
+    let mut root = Cli::command();
+    root.build();
+    let mut command = &mut root;
+    for name in path {
+        command = command
+            .find_subcommand_mut(name)
+            .expect("menu subcommands are defined");
+    }
+    command.print_help()?;
+    Ok(())
+}
+
 pub(crate) async fn run(cli: Cli) -> Result<i32> {
     // Shell recovery must also work after cleanup, without daemon configuration.
     if let Some(Command::Shell {
@@ -139,12 +163,15 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
     if let Some(Command::Skill { command }) = &cli.command {
         return skill::run(command.as_ref(), cli.json);
     }
-    if cli.command.is_none() && !Context::is_interactive(cli.json) {
-        Cli::command().print_help()?;
+    if let Some(path) = menu_path(cli.command.as_ref())
+        && !Context::is_interactive(cli.json)
+    {
+        print_help(path)?;
         return Ok(0);
     }
     let ctx = Context::new(Paths::new(cli.state_dir)?, cli.json);
     let command = match cli.command {
+        Some(Command::Repo { command: None }) => repo_menu::choose(&ctx).await?,
         Some(command) => command,
         None => menu::choose(&ctx).await?,
     };
@@ -179,7 +206,10 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         Command::Shell {
             command: ShellCommand::Recover { .. },
         } => unreachable!("shell recovery is handled before loading paths"),
-        Command::Repo { command } => repositories::run(&ctx, command).await,
+        Command::Repo {
+            command: Some(command),
+        } => repositories::run(&ctx, command).await,
+        Command::Repo { command: None } => unreachable!("the repository menu returns a command"),
         Command::Add {
             here,
             path,

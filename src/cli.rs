@@ -76,10 +76,10 @@ pub enum Command {
         #[command(subcommand)]
         command: ShellCommand,
     },
-    /// Register and manage repositories.
+    /// Register and manage repositories; omit the subcommand for a menu.
     Repo {
         #[command(subcommand)]
-        command: RepoCommand,
+        command: Option<RepoCommand>,
     },
     /// Create or reopen a workspace.
     Add {
@@ -828,10 +828,10 @@ mod tests {
             assert!(matches!(
                 repository.command,
                 Some(Command::Repo {
-                    command: RepoCommand::Rm {
+                    command: Some(RepoCommand::Rm {
                         confirmation: ConfirmationArgs { yes: true },
                         ..
-                    }
+                    })
                 })
             ));
         }

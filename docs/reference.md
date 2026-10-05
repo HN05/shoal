@@ -186,6 +186,7 @@ shoal repo add /path/to/repo             # Or a Git clone URL; register once
 shoal repo add /path/to/repo --name my-project
 shoal repo rename my-project new-name
 shoal repo list
+shoal repo                               # Interactive repository menu
 shoal add my-project fix-login
 shoal add my-project fix-api --agent codex -- "Fix the API timeout"
 shoal issue https://forge.example/team/repo/issues/34 -- --model fast
@@ -214,7 +215,9 @@ workspaces span several.
 Enter enters the selection; Ctrl-D deletes, Ctrl-E
 runs Claude/Codex CLI, starts a Happy session, opens Codex/T3 apps, or runs a shell command, Ctrl-A adds,
 Ctrl-O inspects, Ctrl-S stops, Ctrl-F shows the diff. Each action returns to your
-shell.
+shell. Bare `shoal repo` opens the same kind of list over registered repositories
+(without a terminal it prints `repo` help): Enter adds a workspace, Ctrl-A
+registers a path or URL, Ctrl-R renames, Ctrl-O shows saved config, Ctrl-D deletes.
 
 Commands acting on one workspace use an explicit target, otherwise the caller's
 scoped workspace or the workspace containing the current directory, then an
