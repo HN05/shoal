@@ -14,8 +14,9 @@ removal, check it against the rule those files state before judging it.
   boundaries rather than function length or the number of helpers.
 - Safety of user work: removal goes through the one shared path, preserves
   work and leases on failure, never adopts moved or replaced worktrees, and
-  never signals a process whose recorded identity was not verified. Worktree
-  ownership is proven by the owner marker in the Git admin directory; the recorded
+  never signals a process whose recorded identity was not verified. Unreadable
+  inventory entries block ownership proof only while their recorded identity is live.
+  Worktree ownership is proven by the owner marker in the Git admin directory; the recorded
   inode/birth-time identity proves only unmarked records, which gain a marker only
   after it still matches. Only an explicit `doctor --repair --reclaim` may
   re-establish ownership that failed verification, and only at the recorded path,

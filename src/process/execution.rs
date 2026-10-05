@@ -36,16 +36,17 @@ impl Processes {
         }
         owned.sort_by(|a, b| a.pid.cmp(&b.pid).then(a.birth.cmp(&b.birth)));
         owned.dedup();
-        let unreadable = scan
-            .unreadable
-            .iter()
-            .filter(|p| {
-                execution
-                    .wrapper
-                    .as_ref()
-                    .is_none_or(|w| p.not_older_than(w))
-            })
-            .count();
+        let mut unreadable = 0;
+        for identity in &scan.unreadable {
+            if execution
+                .wrapper
+                .as_ref()
+                .is_none_or(|w| identity.not_older_than(w))
+                && process::alive(identity)?
+            {
+                unreadable += 1;
+            }
+        }
         Ok(Self {
             wrapper,
             owned,
@@ -79,5 +80,42 @@ impl Processes {
         targets.extend(self.wrapper.iter().cloned());
         process::stop_verified(&targets).await?;
         Ok(!targets.is_empty())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn unreadable_evidence_blocks_only_while_the_same_process_is_alive() {
+        let mut child = tokio::process::Command::new("sleep")
+            .arg("60")
+            .env_clear()
+            .env("SHOAL_TEST_PROCESS", "1")
+            .kill_on_drop(true)
+            .spawn()
+            .unwrap();
+        let identity = process::capture(child.id().unwrap()).unwrap().unwrap();
+        let execution = Execution {
+            id: "test-execution".into(),
+            workspace_id: "test-workspace".into(),
+            state: crate::state::ExecutionState::Running,
+            wrapper: Some(identity.clone()),
+            child: None,
+            group_id: Some(identity.pid),
+        };
+        let scan = process::Scan {
+            unreadable: vec![identity],
+            ..Default::default()
+        };
+        let live = Processes::inspect(&execution, &scan).await.unwrap();
+        assert_eq!(live.unreadable, 1);
+        assert!(!live.visibility_complete());
+        child.kill().await.unwrap();
+        child.wait().await.unwrap();
+        let exited = Processes::inspect(&execution, &scan).await.unwrap();
+        assert_eq!(exited.unreadable, 0);
+        assert!(exited.visibility_complete());
     }
 }
