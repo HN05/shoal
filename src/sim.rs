@@ -181,7 +181,7 @@ impl Manager {
                 .into_iter()
                 .filter(|r| r.is_available)
                 .collect(),
-            policy: self.config.simulators.clone(),
+            policy: self.config().simulators.clone(),
         })
     }
 
@@ -195,7 +195,7 @@ impl Manager {
             None => (None, Vec::new()),
         };
         Ok(SimulatorOverview {
-            policy: self.config.simulators.clone(),
+            policy: self.config().simulators.clone(),
             preferred,
             simulators: self.list_simulators(owner.as_deref()).await?,
         })
@@ -358,7 +358,8 @@ impl Manager {
             "workspace is not ready"
         );
         self.touch(&workspace.id).await;
-        let limits = &self.config.simulators;
+        let config = self.config();
+        let limits = &config.simulators;
         let mut records = self.list_simulators(None).await?;
         let inventory = simctl::inventory().await?;
         let explicit =
@@ -433,7 +434,8 @@ impl Manager {
         plan: planning::Plan<'_>,
         audit: &mut Option<CleanRequest>,
     ) -> Result<Allocation<Box<Simulator>>> {
-        let limits = &self.config.simulators;
+        let config = self.config();
+        let limits = &config.simulators;
         let records = self.list_simulators(None).await?;
         for sim in plan.unowned_candidates.iter().copied().chain(plan.reusable) {
             planning::check_unowned_record(sim, &records)?;
@@ -578,7 +580,7 @@ impl Manager {
     ) -> Result<Profile> {
         let settings = self.workspace_settings(workspace).await?;
         planning::resolve_request(
-            &self.config.simulators,
+            &self.config().simulators,
             &settings.simulators,
             request,
             inventory,
@@ -648,10 +650,10 @@ impl Manager {
         let Ok(_guard) = self.simulator_gate.try_lock() else {
             return Ok(());
         };
+        let idle_seconds = self.config().simulators.idle_seconds;
         for mut sim in self.list_simulators(None).await? {
             if sim.workspace_id.is_none()
-                && unix_seconds().saturating_sub(sim.last_used)
-                    >= self.config.simulators.idle_seconds
+                && unix_seconds().saturating_sub(sim.last_used) >= idle_seconds
             {
                 self.delete_sim(&mut sim).await?;
             }

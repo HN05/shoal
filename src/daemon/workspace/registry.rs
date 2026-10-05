@@ -64,7 +64,7 @@ impl Manager {
                 None => Ok(existing.clone()),
             };
         }
-        let root = self.config.root_dir(&self.paths)?;
+        let root = self.config().root_dir(&self.paths)?;
         let state = fs::canonicalize(&self.paths.state)?;
         let checkouts = repositories.iter().map(|repo| repo.path.as_path());
         let directory_name = name
@@ -181,7 +181,7 @@ impl Manager {
             return Ok(directory.clone());
         }
         let root = prepare_root(
-            &self.config.root_dir(&self.paths)?,
+            &self.config().root_dir(&self.paths)?,
             &fs::canonicalize(&self.paths.state)?,
             repositories.iter().map(|repo| repo.path.as_path()),
         )?;

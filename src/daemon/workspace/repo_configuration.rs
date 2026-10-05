@@ -161,7 +161,7 @@ impl Manager {
     /// The workspace's settings after every layer: the saved config, the
     /// worktree file and the global config.
     pub(crate) async fn workspace_settings(&self, workspace: &Workspace) -> Result<Effective> {
-        self.config
+        self.config()
             .resolve(&self.workspace_layers(workspace).await?)
     }
 }

@@ -315,6 +315,13 @@ impl Config {
         Self::parse(&text, paths).with_context(|| format!("parse {}", path.display()))
     }
 
+    /// [`Self::load`] under the edit lock, so a concurrent edit is read whole
+    /// rather than while its file is moved aside.
+    pub fn load_settled(paths: &Paths) -> Result<Self> {
+        let _lock = Self::lock_file(&Self::path(paths))?;
+        Self::load(paths)
+    }
+
     /// [`Self::load`] with the template files beside the config standing in
     /// for omitted inline templates, as the CLI reads it for a launch.
     pub fn load_with_templates(paths: &Paths) -> Result<Self> {

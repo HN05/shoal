@@ -57,7 +57,8 @@ pub struct Manager {
     pub store: Store,
     pub(crate) pr_gate: Mutex<()>,
     pub cleanup_notify: tokio::sync::Notify,
-    pub config: Config,
+    /// The global file as last loaded; a reload replaces it for later reads.
+    config: std::sync::RwLock<Arc<Config>>,
     pub(crate) paths: Paths,
     /// Serializes every simctl transition.
     pub(crate) simulator_gate: Mutex<()>,
@@ -87,7 +88,7 @@ impl Manager {
         // Avoid inheriting personal Worktrunk hooks and layout preferences.
         fs::write(paths.worktrunk_config(), "# Managed by Shoal.\n")?;
         Ok(Arc::new(Self {
-            config: Config::load(&paths)?,
+            config: std::sync::RwLock::new(Arc::new(Config::load(&paths)?)),
             pr_gate: Mutex::new(()),
             cleanup_notify: tokio::sync::Notify::new(),
             store: Store::open(paths.database()).await?,
@@ -105,6 +106,27 @@ impl Manager {
             activity: Mutex::new(HashMap::new()),
             notifications_changed: watch::channel(0).0,
         }))
+    }
+
+    /// The global config as last loaded. Take one snapshot per operation so a
+    /// concurrent reload cannot mix two versions.
+    pub fn config(&self) -> Arc<Config> {
+        self.config
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+
+    /// Replace the global config with the file's current contents for later
+    /// operations. An invalid file leaves the running config in place.
+    pub async fn reload_config(&self) -> Result<()> {
+        let paths = self.paths.clone();
+        let config = tokio::task::spawn_blocking(move || Config::load_settled(&paths)).await??;
+        *self
+            .config
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Arc::new(config);
+        Ok(())
     }
 
     /// Acquire the Git gate by recorded ID without checking repository availability.
@@ -256,7 +278,7 @@ impl Manager {
         path: Option<std::path::PathBuf>,
     ) -> Result<Workspace> {
         if let Some(name) = git_profile {
-            self.config.git.profile(name)?;
+            self.config().git.profile(name)?;
         }
         let (base, existing) = match source {
             WorkspaceSource::New(base) => (base, None),
@@ -468,7 +490,7 @@ impl Manager {
         git_profile: Option<&str>,
     ) -> Result<()> {
         if let Some(name) = git_profile.or(settings.git_profile.as_deref()) {
-            crate::git_profile::apply(&workspace.path, self.config.git.profile(name)?)
+            crate::git_profile::apply(&workspace.path, self.config().git.profile(name)?)
                 .await
                 .with_context(|| format!("apply git profile {name}"))?;
         }
@@ -612,4 +634,33 @@ async fn existing_base(repo: &crate::model::Repository, branch: &str) -> Result<
             .to_owned(),
         },
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn reload_replaces_the_global_config_only_when_valid() {
+        let (_root, manager) = crate::test_support::manager().await;
+        let path = Config::path(&manager.paths);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let before = manager.config();
+        fs::write(&path, "[simulators.profiles.phone]\ndevice = 'iPhone 17'\n").unwrap();
+        assert!(manager.reload_config().await.is_err());
+        assert!(Arc::ptr_eq(&manager.config(), &before));
+        fs::write(
+            &path,
+            "[simulators]\ndefault = 'phone'\n\
+             [simulators.profiles.phone]\ndevice = 'iPhone 17'\nruntime = 'iOS 27'\n",
+        )
+        .unwrap();
+        manager.reload_config().await.unwrap();
+        assert_eq!(
+            manager.config().simulators.default.as_deref(),
+            Some("phone")
+        );
+        // A snapshot taken before the reload keeps the settings it started with.
+        assert_eq!(before.simulators.default, None);
+    }
 }

@@ -85,13 +85,16 @@ impl Monitor {
 }
 
 pub(super) async fn run(manager: Arc<Manager>) {
-    let settings = &manager.config.overload;
-    if !settings.memory.enabled && !settings.cpu.enabled {
-        return;
-    }
     let mut monitor = Monitor::default();
     loop {
+        // Read the settings each round so a config reload applies here too.
+        let config = manager.config();
+        let settings = &config.overload;
         tokio::time::sleep(Duration::from_secs(settings.poll_seconds)).await;
+        if !settings.memory.enabled && !settings.cpu.enabled {
+            monitor = Monitor::default();
+            continue;
+        }
         let memory = if settings.memory.enabled {
             crate::process::load::critical_memory(settings.memory.used_percent)
         } else {

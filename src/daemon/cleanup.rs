@@ -303,18 +303,14 @@ mod tests {
             git,
             test_support::{commit, git as git_in, manager, repository},
         };
-        let (temp, mut manager) = manager().await;
+        let (temp, manager) = manager().await;
         let repository_dir = repository(temp.path(), "repo");
         fs::write(repository_dir.join(".gitignore"), "ignored/\n").unwrap();
         commit(&repository_dir, ".gitignore");
-        std::sync::Arc::get_mut(&mut manager)
-            .unwrap()
-            .config
-            .resources
-            .insert(
-                "test-lock".into(),
-                crate::daemon::resources::ResourceConfig::default(),
-            );
+        let config = crate::config::Config::path(&manager.paths);
+        fs::create_dir_all(config.parent().unwrap()).unwrap();
+        fs::write(config, "[resources.test-lock]\n").unwrap();
+        manager.reload_config().await.unwrap();
         let repo = manager
             .register_repository(repository_dir.to_str().unwrap().into(), None, None)
             .await

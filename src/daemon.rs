@@ -244,6 +244,10 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::Status | Method::Shutdown | Method::Execute { .. } | Method::WatchNotifications => {
             anyhow::bail!("unsupported operation")
         }
+        Method::ReloadConfig => {
+            manager.reload_config().await?;
+            Body::Ok
+        }
         Method::ListRepositories => {
             let mut repos = manager.repositories().await?;
             if let Some(caller) = caller {
@@ -547,7 +551,7 @@ async fn execute(
             &Response::new(request_id, Body::Execution(plan)),
         )
         .await?;
-        let recover = recover && manager.config.overload.recovery.enabled;
+        let recover = recover && manager.config().overload.recovery.enabled;
         let mut awaiting_started = true;
         let mut sent_stop = false;
         loop {
