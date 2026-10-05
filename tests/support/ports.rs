@@ -1,26 +1,40 @@
-//! Ephemeral ports the daemon's availability probe sees exactly as the test does.
+//! Ports the daemon's availability probe sees exactly as the test does.
 use socket2::{Domain, Protocol, Socket, Type};
 use std::{
+    collections::hash_map::RandomState,
+    hash::{BuildHasher, Hasher},
     io,
     net::{Ipv4Addr, Ipv6Addr, SocketAddr},
+    ops::Range,
 };
 
-/// An ephemeral port held on both wildcard addresses until dropped.
+/// A port held on both wildcard addresses until dropped.
 ///
-/// The daemon probes `0.0.0.0` and `[::]`, so a port picked on loopback alone
-/// can still be bound on another address and refuse allocation after the test
-/// releases its listener. Sockets skip SO_REUSEADDR like the probe: with it,
-/// macOS can hand out a wildcard port another socket holds on loopback.
+/// The daemon probes `0.0.0.0` and `[::]`, so the test holds both. Sockets
+/// skip SO_REUSEADDR like the probe: with it, macOS can bind a wildcard port
+/// another socket holds on loopback. Ports come from below the ephemeral
+/// ranges (Linux 32768, macOS 49152) and the built-in Shoal range, so once
+/// released the kernel does not hand them to another process's `bind(0)` or
+/// outgoing connection before the daemon probes them.
 pub struct HeldPort {
     pub port: u16,
     _ipv4: Socket,
     _ipv6: Option<Socket>,
 }
 
+const RANGE: Range<u16> = 20000..32768;
+
 pub fn hold() -> HeldPort {
-    loop {
-        let ipv4 = listen(SocketAddr::from((Ipv4Addr::UNSPECIFIED, 0))).unwrap();
-        let port = ipv4.local_addr().unwrap().as_socket().unwrap().port();
+    // Start at a random offset so concurrent tests rarely probe the same ports.
+    let offset = RandomState::new().build_hasher().finish() as usize;
+    let span = RANGE.len();
+    for step in 0..span {
+        let port = RANGE.start + ((offset + step) % span) as u16;
+        let ipv4 = match listen(SocketAddr::from((Ipv4Addr::UNSPECIFIED, port))) {
+            Ok(socket) => socket,
+            Err(error) if error.kind() == io::ErrorKind::AddrInUse => continue,
+            Err(error) => panic!("hold IPv4 wildcard port {port}: {error}"),
+        };
         if let Some(ipv6) = hold_ipv6(port) {
             return HeldPort {
                 port,
@@ -29,6 +43,7 @@ pub fn hold() -> HeldPort {
             };
         }
     }
+    panic!("no free port in {RANGE:?}");
 }
 
 /// `None` when the IPv6 wildcard is taken; `Some(None)` when the host has no
