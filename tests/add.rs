@@ -4,7 +4,8 @@ use serde_json::{Value, json};
 use std::{
     io::{BufRead, BufReader, Write},
     os::unix::net::{UnixListener, UnixStream},
-    process::Stdio,
+    path::PathBuf,
+    process::{Command, Stdio},
     thread,
     time::Duration,
 };
@@ -15,22 +16,22 @@ fn add_reuses_resolution_requests_without_reordering_failures() {
     for (args, expected, diagnostic) in [
         (
             vec!["issue", url],
-            vec!["list_repositories", "layered_config"],
+            vec!["list_repositories", "layered_config test"],
             "issue number must be positive",
         ),
         (
             vec!["add", "--issue", url, "--agent", "custom"],
-            vec!["list_repositories", "layered_config"],
+            vec!["list_repositories", "layered_config test"],
             "issue number must be positive",
         ),
         (
             vec!["issue", "0", "--repo", "test"],
-            vec!["layered_config", "list_repositories"],
+            vec!["layered_config test", "list_repositories"],
             "issue number must be positive",
         ),
         (
             vec!["issue", "0", "--repo", "test", "--agent", "missing"],
-            vec!["layered_config"],
+            vec!["layered_config test"],
             "unknown agent",
         ),
         (
@@ -63,10 +64,43 @@ fn add_reuses_resolution_requests_without_reordering_failures() {
         ),
         (
             vec!["add", "test", "new", "--agent", "codex"],
-            vec!["layered_config", "create_workspace"],
+            vec!["layered_config test", "create_workspace"],
             "creation reached",
         ),
     ] {
+        let daemon = FakeDaemon::start();
+        let output = daemon
+            .command()
+            .arg("--json")
+            .args(&args)
+            .stdin(Stdio::null())
+            .output()
+            .unwrap();
+        assert_eq!(daemon.methods(), expected, "{args:?}: {output:?}");
+        assert!(!output.status.success(), "{args:?}");
+        assert!(output.stdout.is_empty(), "{args:?}: {output:?}");
+        let error: Value = serde_json::from_slice(&output.stderr).unwrap();
+        assert_eq!(error["error"]["code"], "command_failed");
+        assert!(
+            error["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains(diagnostic),
+            "{args:?}: {output:?}"
+        );
+    }
+}
+
+/// A daemon socket in a checkout of forge.example/team/repo that records each
+/// request's method and answers with one registered repository.
+struct FakeDaemon {
+    root: tempfile::TempDir,
+    socket: PathBuf,
+    server: thread::JoinHandle<Vec<String>>,
+}
+
+impl FakeDaemon {
+    fn start() -> Self {
         let root = tempfile::tempdir_in("/tmp").unwrap();
         for args in [
             vec!["init", "-b", "main"],
@@ -102,7 +136,7 @@ fn add_reuses_resolution_requests_without_reordering_failures() {
                     break;
                 }
                 let request: Value = serde_json::from_str(&line).unwrap();
-                let method = request["method"]
+                let mut method = request["method"]
                     .as_str()
                     .unwrap_or_else(|| {
                         request["method"]
@@ -119,10 +153,9 @@ fn add_reuses_resolution_requests_without_reordering_failures() {
                         "source": "https://forge.example/team/repo", "last_used": 0
                     }]}),
                     "layered_config" => {
-                        assert_eq!(
-                            request["method"]["layered_config"]["target"],
-                            json!({"repository": "test"})
-                        );
+                        let target = &request["method"]["layered_config"]["target"];
+                        method =
+                            format!("layered_config {}", target["repository"].as_str().unwrap());
                         json!({"type": "layered_config", "data": {
                             "worktree_file": {}, "saved_repository_config": {
                                 "default_agent": "custom", "commands": {"custom": ["false"]}
@@ -140,30 +173,28 @@ fn add_reuses_resolution_requests_without_reordering_failures() {
             }
             methods
         });
-        let output = support::cli(root.path())
-            .args(["--state-dir", root.path().to_str().unwrap(), "--json"])
-            .args(&args)
-            .current_dir(root.path())
-            .env("HOME", root.path())
+        Self {
+            root,
+            socket,
+            server,
+        }
+    }
+
+    fn command(&self) -> Command {
+        let mut command = support::cli(self.root.path());
+        command
+            .args(["--state-dir", self.root.path().to_str().unwrap()])
+            .current_dir(self.root.path())
+            .env("HOME", self.root.path())
             .env("GIT_CONFIG_GLOBAL", "/dev/null")
-            .env("GIT_CONFIG_NOSYSTEM", "1")
-            .stdin(Stdio::null())
-            .output()
-            .unwrap();
+            .env("GIT_CONFIG_NOSYSTEM", "1");
+        command
+    }
+
+    fn methods(self) -> Vec<String> {
         // Keep the sentinel peer alive while macOS sets its read timeout.
-        let mut sentinel = UnixStream::connect(socket).unwrap();
+        let mut sentinel = UnixStream::connect(&self.socket).unwrap();
         writeln!(sentinel).unwrap();
-        assert_eq!(server.join().unwrap(), expected, "{args:?}: {output:?}");
-        assert!(!output.status.success(), "{args:?}");
-        assert!(output.stdout.is_empty(), "{args:?}: {output:?}");
-        let error: Value = serde_json::from_slice(&output.stderr).unwrap();
-        assert_eq!(error["error"]["code"], "command_failed");
-        assert!(
-            error["error"]["message"]
-                .as_str()
-                .unwrap()
-                .contains(diagnostic),
-            "{args:?}: {output:?}"
-        );
+        self.server.join().unwrap()
     }
 }
