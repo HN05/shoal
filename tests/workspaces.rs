@@ -2132,7 +2132,7 @@ while True:
             Some(term) => driver.env("TERM", term),
             None => driver.env_remove("TERM"),
         };
-        let output = driver
+        let mut child = driver
             .args([
                 "-c",
                 r#"import fcntl, os, pathlib, signal, subprocess, sys, termios, time
@@ -2143,7 +2143,13 @@ fcntl.ioctl(0, termios.TIOCSCTTY, 0)
 settings = termios.tcgetattr(0)
 settings[6][termios.VEOF] = b'\x1d'
 termios.tcsetattr(0, termios.TCSANOW, settings)
-before = termios.tcgetattr(0)
+def terminal_settings():
+    settings = termios.tcgetattr(0)
+    # PENDIN describes pending input reprocessing, which the kernel can set
+    # when canonical mode is restored; it is not a caller-controlled setting.
+    settings[3] &= ~getattr(termios, 'PENDIN', 0)
+    return settings
+before = terminal_settings()
 group = os.tcgetpgrp(0)
 command = [binary, 'setup', 'terminal'] if mode == 'hook' else [
     binary, 'exec', 'terminal', '--', 'python3', agent, mode]
@@ -2167,7 +2173,7 @@ try:
     assert child.returncode == expected, (child.returncode, stdout, stderr)
     assert b'\x1b' not in stdout + stderr, (stdout, stderr)
     assert os.tcgetpgrp(0) == group, 'foreground group was not restored'
-    assert termios.tcgetattr(0) == before, (mode, before, termios.tcgetattr(0))
+    assert terminal_settings() == before, (mode, before, terminal_settings())
 finally:
     if child.poll() is None:
         child.kill()
@@ -2177,15 +2183,34 @@ finally:
                 agent.to_str().unwrap(),
                 mode,
             ])
-            .stdin(slave)
-            .output()
+            .stdin(slave.try_clone().unwrap())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
             .unwrap();
+        let deadline = Instant::now() + Duration::from_secs(60);
+        let mut transcript = String::new();
+        loop {
+            // Drain while the driver runs: closing a PTY can wait for unread
+            // output on macOS, including when the driver has been killed.
+            let _ = master.read_to_string(&mut transcript);
+            if child.try_wait().unwrap().is_some() {
+                break;
+            }
+            if Instant::now() >= deadline {
+                let _ = child.kill();
+                let _ = master.read_to_string(&mut transcript);
+                let _ = child.wait();
+                panic!("terminal driver hung: {mode} {term:?}: {transcript:?}");
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+        let output = child.wait_with_output().unwrap();
         assert!(
             output.status.success(),
             "{mode} {term:?}: {}",
             String::from_utf8_lossy(&output.stderr)
         );
-        let mut transcript = String::new();
         // The nonblocking master may report WouldBlock or EIO once drained.
         let _ = master.read_to_string(&mut transcript);
         let resets_input = term == Some("xterm-256color");
