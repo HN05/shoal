@@ -141,7 +141,10 @@ mod tests {
 
     fn shell(script: &str) -> Command {
         let mut command = Command::new("/bin/sh");
-        command.args(["-c", script]).env_clear();
+        command
+            .args(["-c", script])
+            .env_clear()
+            .env("SHOAL_TEST_PROCESS", "1");
         command
     }
 

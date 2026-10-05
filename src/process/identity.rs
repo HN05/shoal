@@ -382,6 +382,7 @@ mod tests {
         let mut child = tokio::process::Command::new("sleep")
             .arg("30")
             .env_clear()
+            .env("SHOAL_TEST_PROCESS", "1")
             .kill_on_drop(true)
             .spawn()
             .unwrap();
