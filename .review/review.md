@@ -129,6 +129,8 @@ removal, check it against the rule those files state before judging it.
   choices, literal arguments and state/config selection; tab labels use the
   allocated workspace branch. Preparation failures keep the tab readable; only
   tracked agent completion closes it, including cleanup stops.
+  Default focus follows the resolved launch: shells receive focus, agents stay
+  in the background, and explicit focus settings override either default.
   JSON, help, noninteractive and `--here` calls run in place. Shell and untracked
   desktop handoffs retain the tab.
 - Agent pickers offer “No agent”: issue creation continues without a launch,

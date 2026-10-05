@@ -169,6 +169,10 @@ pub(in crate::cli) struct AddPlan {
 }
 
 impl AddPlan {
+    pub fn launches_agent(&self) -> bool {
+        self.agent.agent.is_some()
+    }
+
     pub fn label(&self) -> &str {
         self.creation
             .branch

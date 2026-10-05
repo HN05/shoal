@@ -416,6 +416,6 @@ pub const PACKAGED: &[(&str, &str)] = include!(concat!(env!("OUT_DIR"), "/packag
 #[derive(Debug, Serialize)]
 pub struct Herdr {
     pub new_tab: bool,
-    pub focus: bool,
+    pub focus: Option<bool>,
     pub close_when_done: bool,
 }

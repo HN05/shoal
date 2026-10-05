@@ -322,12 +322,14 @@ workspace branch. `--here` keeps the command in the current pane; JSON, help,
 and noninteractive calls run in place.
 
 The `[herdr]` table in global or repository config uses normal per-option
-precedence; all values default to true:
+precedence. New tabs focus by default when opening a workspace shell and stay
+in the background when launching an agent; an explicit `focus` overrides this.
+The other options default to true:
 
 ```toml
 [herdr]
 new_tab = true          # Enable the handoff inside Herdr
-focus = true            # Focus the new tab
+# focus = true          # Always focus the new tab
 close_when_done = true  # Close after a tracked agent exits, including cleanup stops
 ```
 

@@ -38,7 +38,8 @@ pub(super) async fn handoff(ctx: &Context, plan: &AddPlan, here: bool) -> Result
         !env::is_scoped(),
         "workspace processes cannot allocate workspaces"
     );
-    let created = create_tab(ctx, plan, settings.herdr.focus).await?;
+    let focus = settings.herdr.focus.unwrap_or(!plan.launches_agent());
+    let created = create_tab(ctx, plan, focus).await?;
     submit_worker(ctx, created, settings.herdr.close_when_done).await?;
     Ok(true)
 }

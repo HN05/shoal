@@ -153,7 +153,7 @@ impl Effective {
             default_agent: merged.default_agent,
             herdr: config::Herdr {
                 new_tab: built_in(merged.herdr.new_tab, "herdr.new_tab")?,
-                focus: built_in(merged.herdr.focus, "herdr.focus")?,
+                focus: merged.herdr.focus,
                 close_when_done: built_in(merged.herdr.close_when_done, "herdr.close_when_done")?,
             },
             codex: Codex {
@@ -209,7 +209,7 @@ fn built_in() -> RepoConfig {
         commands: named_commands::defaults(),
         herdr: config::repo::Herdr {
             new_tab: Some(true),
-            focus: Some(true),
+            focus: None,
             close_when_done: Some(true),
         },
         codex: config::repo::Codex {
@@ -485,7 +485,8 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
     #[test]
     fn herdr_defaults_and_options_resolve_independently() {
         let defaults = stack("", "", "").resolve().unwrap().herdr;
-        assert!(defaults.new_tab && defaults.focus && defaults.close_when_done);
+        assert!(defaults.new_tab && defaults.close_when_done);
+        assert_eq!(defaults.focus, None);
         let settings = stack(
             "[herdr]\nnew_tab = false\nfocus = false\n",
             "[herdr]\nnew_tab = true\nclose_when_done = false\n",
@@ -494,7 +495,16 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
         .resolve()
         .unwrap()
         .herdr;
-        assert!(settings.new_tab && settings.focus && !settings.close_when_done);
+        assert!(settings.new_tab && !settings.close_when_done);
+        assert_eq!(settings.focus, Some(true));
+        assert_eq!(
+            stack("[herdr]\nfocus = false\n", "", "")
+                .resolve()
+                .unwrap()
+                .herdr
+                .focus,
+            Some(false)
+        );
     }
 
     #[test]

@@ -12881,7 +12881,7 @@ fn herdr_handoff_preserves_choices_and_literal_arguments() {
     assert_eq!(fs::read_to_string(directive).unwrap(), "unchanged");
     let calls = herdr_calls(&fixture);
     assert_eq!(&calls[0][..3], ["tab", "create", "--workspace"]);
-    assert!(calls[0].iter().any(|arg| arg == "--focus"));
+    assert!(calls[0].iter().any(|arg| arg == "--no-focus"));
     assert_eq!(&calls[1][..3], ["pane", "run", "w1:p9"]);
     let state = fixture.root.path().join("state");
     assert_eq!(
@@ -12927,6 +12927,11 @@ fn herdr_picks_before_handoff_and_retains_lookup_errors() {
     assert!(caller.status.success(), "{caller:?} {transcript}");
     assert!(transcript.contains("Repository>"), "{transcript}");
     assert!(transcript.contains("Agent>"), "{transcript}");
+    assert!(
+        herdr_calls(&fixture)[0]
+            .iter()
+            .any(|arg| arg == "--no-focus")
+    );
     let (worker, transcript) = fixture.interactive_command(&mut herdr_worker_command(&fixture), "");
     assert!(!worker.status.success(), "{worker:?}");
     assert!(transcript.contains("lookup-failed"), "{transcript}");
@@ -13027,6 +13032,45 @@ fn herdr_labels_use_allocated_branches_for_issues() {
             fixture.ok(&["rm", branch, "--keep-branch", "--yes"]);
         }
     }
+}
+
+#[test]
+fn herdr_focus_defaults_follow_the_resolved_agent_and_allow_overrides() {
+    for (focus, agent, expected) in [
+        (None, None, "--focus"),
+        (Some(false), None, "--no-focus"),
+        (Some(true), Some("pi"), "--focus"),
+        (Some(false), Some("pi"), "--no-focus"),
+    ] {
+        let mut config = "[commands]\npi = ['sh', '-c', 'exit 0']\n".to_owned();
+        if let Some(focus) = focus {
+            config.push_str(&format!("[herdr]\nfocus = {focus}\n"));
+        }
+        let fixture = Fixture::with_config(Some(&config));
+        install_fake_herdr(&fixture);
+        let mut args = vec!["add", fixture.repo.to_str().unwrap(), "focus"];
+        if let Some(agent) = agent {
+            args.extend(["--agent", agent]);
+        }
+        let (caller, transcript) = herdr_call(&fixture, &args, "");
+        assert!(caller.status.success(), "{caller:?} {transcript}");
+        assert!(herdr_calls(&fixture)[0].iter().any(|arg| arg == expected));
+    }
+
+    let fixture = Fixture::new();
+    fixture.add_github_origin();
+    install_fake_herdr(&fixture);
+    install_test_script(
+        &fixture.root.path().join("bin/fzf"),
+        "#!/bin/sh\nawk -F '\t' '$2 == \"No agent\" {print}'\n",
+    );
+    let (caller, transcript) = herdr_call(
+        &fixture,
+        &["issue", "34", "--repo", fixture.repo.to_str().unwrap()],
+        "",
+    );
+    assert!(caller.status.success(), "{caller:?} {transcript}");
+    assert!(herdr_calls(&fixture)[0].iter().any(|arg| arg == "--focus"));
 }
 
 #[test]

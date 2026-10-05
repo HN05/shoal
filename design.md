@@ -240,6 +240,8 @@ The CLI owns Herdr tab handoffs after interactive workspace and
 agent choices and labels the tab with the allocated workspace branch. It carries
 a resolved launch plan to the new pane in the tab's environment, preserving
 state/config selection and literal arguments without hook scripts or state files.
+By default, workspace shells receive focus and agent launches stay in the
+background; an explicit focus setting overrides this choice.
 The worker drops the plan before starting children; a retained tab's shell keeps
 it, inert, while a non-default state directory is passed only to the worker.
 Tracked agent completion closes its tab, including cleanup stops; preparation
