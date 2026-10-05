@@ -174,8 +174,11 @@ impl AddPlan {
             .branch
             .as_deref()
             .or(self.creation.existing.as_deref())
-            .or(self.issue.as_deref())
-            .unwrap_or("shoal add")
+            .unwrap_or(if self.issue.is_some() {
+                "shoal issue"
+            } else {
+                "shoal add"
+            })
     }
 }
 
@@ -200,6 +203,9 @@ async fn execute_add_with_target(ctx: &Context, plan: AddPlan, target: AddTarget
         None => None,
     };
     let opened = open_add_workspace(ctx, &target, creation, issue.as_ref()).await?;
+    if let Some(tab) = &ctx.herdr_tab {
+        tab.rename(&opened.workspace.branch).await;
+    }
     if let Some(issue) = &issue {
         request::<()>(
             &ctx.paths,

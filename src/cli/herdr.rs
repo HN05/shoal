@@ -145,6 +145,14 @@ pub async fn worker(
 }
 
 impl Tab {
+    pub async fn rename(&self, branch: &str) {
+        let mut rename = Command::new("herdr");
+        rename.args(["tab", "rename"]).arg(&self.id).arg(branch);
+        if let Err(error) = Run::new(rename).checked().await {
+            eprintln!("warning: cannot rename Herdr tab {}: {error:#}", self.id);
+        }
+    }
+
     pub async fn close(&self) {
         if !self.close_when_done {
             return;

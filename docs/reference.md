@@ -311,8 +311,9 @@ integration, your shell enters the new workspace after the agent exits.
 Inside Herdr (`HERDR_ENV=1`), interactive `shoal issue` and `shoal add` resolve
 repository, branch, and agent choices in the caller's pane, then open a tab in
 `HERDR_WORKSPACE_ID` and return once the command is submitted there. Issue lookup,
-setup, and agent execution run in that tab. `--here` keeps the command in the
-current pane; JSON, help, and noninteractive calls run in place.
+setup, and agent execution run in that tab, which is labeled with the allocated
+workspace branch. `--here` keeps the command in the current pane; JSON, help,
+and noninteractive calls run in place.
 
 The `[herdr]` table in global or repository config uses normal per-option
 precedence; all values default to true:

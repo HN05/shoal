@@ -12798,6 +12798,8 @@ if args[:2] == ['tab', 'create']:
     print(json.dumps({'result': {'tab': {'tab_id': 'w1:t9'}, 'root_pane': {'pane_id': 'w1:p9'}}}))
 elif args[:2] == ['pane', 'run']:
     (root / 'herdr-worker').write_text(json.dumps(shlex.split(args[3])))
+elif args[:2] == ['tab', 'rename'] and (root / 'fail-rename').exists():
+    sys.exit('rename-failed')
 print('{}') if args[:2] != ['tab', 'create'] else None
 "#,
     );
@@ -12911,6 +12913,102 @@ fn herdr_picks_before_handoff_and_retains_lookup_errors() {
 }
 
 #[test]
+fn herdr_labels_use_allocated_branches_for_issues() {
+    let fixture = Fixture::with_config(Some("[commands]\npi = ['sh', '-c', 'exit 0']\n"));
+    fixture.add_github_origin();
+    install_fake_herdr(&fixture);
+    install_test_script(
+        &fixture.root.path().join("bin/gh"),
+        "#!/bin/sh\necho '{\"state\":\"OPEN\",\"number\":34,\"title\":\"Fix API timeout\",\"body\":\"Details\"}'\n",
+    );
+    let url = "https://github.com/team/project/issues/34";
+    for (mut args, initial, branch, fail_rename) in [
+        (
+            vec![
+                "issue",
+                "34",
+                "--repo",
+                fixture.repo.to_str().unwrap(),
+                "--agent",
+                "pi",
+            ],
+            "shoal issue",
+            "issue-34-fix-api-timeout",
+            false,
+        ),
+        (
+            vec![
+                "issue",
+                url,
+                "--repo",
+                fixture.repo.to_str().unwrap(),
+                "--agent",
+                "pi",
+            ],
+            "shoal issue",
+            "issue-34-fix-api-timeout-2",
+            false,
+        ),
+        (
+            vec![
+                "add",
+                fixture.repo.to_str().unwrap(),
+                "fix/short",
+                "--issue",
+                url,
+                "--agent",
+                "pi",
+            ],
+            "fix/short",
+            "fix/short",
+            true,
+        ),
+        (
+            vec![
+                "add",
+                fixture.repo.to_str().unwrap(),
+                "--existing",
+                "fix/short",
+                "--agent",
+                "pi",
+            ],
+            "fix/short",
+            "fix/short",
+            false,
+        ),
+    ] {
+        if !args.contains(&"--existing") {
+            args.extend(["--base", "HEAD"]);
+        }
+        let marker = fixture.root.path().join("fail-rename");
+        if fail_rename {
+            fs::write(&marker, "").unwrap();
+        } else if marker.exists() {
+            fs::remove_file(&marker).unwrap();
+        }
+        let (caller, transcript) = herdr_call(&fixture, &args, "");
+        assert!(caller.status.success(), "{caller:?} {transcript}");
+        let calls = herdr_calls(&fixture);
+        let create = &calls[calls.len() - 2];
+        let label = create.iter().position(|arg| arg == "--label").unwrap();
+        assert_eq!(create[label + 1], initial);
+        let argv = herdr_worker(&fixture);
+        let (worker, transcript) = fixture.interactive(
+            &argv[1..].iter().map(String::as_str).collect::<Vec<_>>(),
+            "",
+        );
+        assert!(worker.status.success(), "{worker:?} {transcript}");
+        assert_eq!(transcript.contains("rename-failed"), fail_rename);
+        let calls = herdr_calls(&fixture);
+        assert_eq!(calls[calls.len() - 2], ["tab", "rename", "w1:t9", branch]);
+        assert_eq!(calls.last().unwrap(), &["tab", "close", "w1:t9"]);
+        if branch == "issue-34-fix-api-timeout" {
+            fixture.ok(&["rm", branch, "--keep-branch", "--yes"]);
+        }
+    }
+}
+
+#[test]
 fn herdr_no_agent_opens_workspace_shell_and_honors_focus_setting() {
     let fixture = Fixture::with_config(Some("[herdr]\nfocus = false\n"));
     install_fake_herdr(&fixture);
@@ -12938,7 +13036,7 @@ fn herdr_no_agent_opens_workspace_shell_and_honors_focus_setting() {
             .trim(),
         workspace["workspace"]["path"].as_str().unwrap()
     );
-    assert_eq!(herdr_calls(&fixture).len(), 2);
+    assert_eq!(herdr_calls(&fixture).len(), 3);
 }
 
 fn install_test_script(path: &Path, script: &str) {
@@ -13014,7 +13112,7 @@ fn herdr_retains_setup_failures_and_can_disable_completion_closure() {
         "",
     );
     assert!(worker.status.success(), "{worker:?}");
-    assert_eq!(herdr_calls(&fixture).len(), 2);
+    assert_eq!(herdr_calls(&fixture).len(), 3);
     // Enable closure, then fail setup before the agent can start.
     fs::write(
         fixture.repo.join(".shoal.toml"),
@@ -13062,7 +13160,7 @@ fn herdr_retains_setup_failures_and_can_disable_completion_closure() {
         "\n",
     );
     assert_eq!(worker.status.code(), Some(1));
-    assert_eq!(herdr_calls(&fixture).len(), 4);
+    assert_eq!(herdr_calls(&fixture).len(), 6);
 }
 
 #[test]

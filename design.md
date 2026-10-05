@@ -234,8 +234,9 @@ Root help groups built-in commands by task; configured commands are discovered
 through `run`.
 
 The CLI owns Herdr tab handoffs after interactive workspace and
-agent choices. It carries a resolved launch plan to the new pane, preserving
-state/config selection and literal arguments without hook scripts or state files.
+agent choices and labels the tab with the allocated workspace branch. It carries
+a resolved launch plan to the new pane, preserving state/config selection and
+literal arguments without hook scripts or state files.
 Tracked agent completion closes its tab, including cleanup stops; preparation
 failures and shell or untracked desktop handoffs retain it.
 
