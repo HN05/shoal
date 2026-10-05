@@ -57,8 +57,9 @@ pub struct Manager {
     pub store: Store,
     pub(crate) pr_gate: Mutex<()>,
     pub cleanup_notify: tokio::sync::Notify,
-    /// The global file as last loaded; a reload replaces it for later reads.
-    config: std::sync::RwLock<Arc<Config>>,
+    /// The global file as last loaded; a reload replaces it for later reads
+    /// and wakes subscribers.
+    config: watch::Sender<Arc<Config>>,
     /// Orders reloads so the last file read is the one published.
     config_reload: Mutex<()>,
     pub(crate) paths: Paths,
@@ -90,7 +91,7 @@ impl Manager {
         // Avoid inheriting personal Worktrunk hooks and layout preferences.
         fs::write(paths.worktrunk_config(), "# Managed by Shoal.\n")?;
         Ok(Arc::new(Self {
-            config: std::sync::RwLock::new(Arc::new(Config::load(&paths)?)),
+            config: watch::channel(Arc::new(Config::load(&paths)?)).0,
             config_reload: Mutex::new(()),
             pr_gate: Mutex::new(()),
             cleanup_notify: tokio::sync::Notify::new(),
@@ -114,10 +115,17 @@ impl Manager {
     /// The global config as last loaded. Take one snapshot per operation so a
     /// concurrent reload cannot mix two versions.
     pub fn config(&self) -> Arc<Config> {
-        self.config
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .clone()
+        self.config.borrow().clone()
+    }
+
+    /// Observe reloads, for waits that a policy change must end.
+    pub(crate) fn watch_config(&self) -> watch::Receiver<Arc<Config>> {
+        self.config.subscribe()
+    }
+
+    /// Make `config` the one later operations read.
+    pub(crate) fn publish_config(&self, config: Config) {
+        self.config.send_replace(Arc::new(config));
     }
 
     /// Replace the global config with the file's current contents for later
@@ -126,10 +134,7 @@ impl Manager {
         let _reload = self.config_reload.lock().await;
         let paths = self.paths.clone();
         let config = tokio::task::spawn_blocking(move || Config::load_settled(&paths)).await??;
-        *self
-            .config
-            .write()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = Arc::new(config);
+        self.publish_config(config);
         Ok(())
     }
 

@@ -36,6 +36,7 @@ pub(super) async fn pause(
             _ => return Err(anyhow::anyhow!("unexpected event during overload recovery")),
         },
         changed = stop.changed() => { changed?; return Ok(Action::Stop); }
+        () = recovery_disabled(manager) => return Ok(Action::Stop),
         ready = manager.await_overload_recovery(workspace_id) => ready,
     };
     let resume = async {
@@ -53,6 +54,19 @@ pub(super) async fn pause(
             eprintln!("agent recovery cancelled: {error:#}");
             Ok(Action::Stop)
         }
+    }
+}
+
+/// Resolves once a reload disables overload recovery, so a waiting agent
+/// finishes with its restore record instead of waiting for load to recover.
+async fn recovery_disabled(manager: &Manager) {
+    let mut config = manager.watch_config();
+    if config
+        .wait_for(|config| !config.overload.recovery.enabled)
+        .await
+        .is_err()
+    {
+        std::future::pending::<()>().await;
     }
 }
 

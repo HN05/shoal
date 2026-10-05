@@ -2,7 +2,7 @@
 use anyhow::{Result, ensure};
 use serde::Deserialize;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, PartialEq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Overload {
     pub memory: Memory,
@@ -24,7 +24,7 @@ impl Default for Overload {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, PartialEq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Memory {
     pub enabled: bool,
@@ -43,7 +43,7 @@ impl Default for Memory {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, PartialEq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Cpu {
     pub enabled: bool,
@@ -61,7 +61,7 @@ impl Default for Cpu {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, PartialEq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Recovery {
     pub enabled: bool,

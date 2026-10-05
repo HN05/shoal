@@ -528,8 +528,8 @@ async fn disabling_recovery_while_an_agent_waits_finishes_it_with_a_restore_reco
     wait_started(&workspace).await;
     assert!(manager.stop_agent_for_overload("test pressure").await);
     wait_paused(&manager, &workspace).await;
+    // Load never recovers here: disabling alone must end the wait.
     set_recovery(&manager, false).await;
-    publish_recovery(&manager);
     bounded(launched).await.unwrap().unwrap();
     assert!(!workspace.path.join("restored").exists());
     assert!(crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());

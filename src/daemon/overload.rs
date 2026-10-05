@@ -86,12 +86,19 @@ impl Monitor {
 
 pub(super) async fn run(manager: Arc<Manager>) {
     let mut monitor = Monitor::default();
+    let mut applied = manager.config();
     loop {
         // Read the settings each round so a config reload applies here too.
         // Keep publishing recovery with both protections off: an agent stopped
         // before they were disabled still waits for it.
         let config = manager.config();
         let settings = &config.overload;
+        if *settings != applied.overload {
+            // Readings taken under other thresholds do not count toward these.
+            monitor = Monitor::default();
+            manager.reset_overload_recovery();
+        }
+        applied = config.clone();
         tokio::time::sleep(Duration::from_secs(settings.poll_seconds)).await;
         let memory = if settings.memory.enabled {
             crate::process::load::critical_memory(settings.memory.used_percent)
@@ -156,6 +163,33 @@ mod tests {
             .expect("recovery was never published")
             .unwrap();
         assert_eq!(*ready.borrow(), Some(0));
+        monitor.abort();
+    }
+
+    #[tokio::test]
+    async fn changed_thresholds_restart_the_recovery_window() {
+        let (_root, manager) = crate::test_support::manager().await;
+        let config = |sustained_seconds| {
+            let mut config = crate::config::Config::default();
+            config.overload.memory.enabled = false;
+            config.overload.recovery.sustained_seconds = sustained_seconds;
+            config
+        };
+        manager.publish_config(config(60));
+        let mut ready = manager.recovery_ready.subscribe();
+        tokio::time::pause();
+        let start = Instant::now();
+        let monitor = tokio::spawn(run(manager.clone()));
+        // Most of the old window has passed when the threshold changes.
+        tokio::time::sleep(Duration::from_secs(41)).await;
+        assert_eq!(*ready.borrow(), None);
+        manager.publish_config(config(61));
+        tokio::time::timeout(Duration::from_secs(3600), ready.wait_for(Option::is_some))
+            .await
+            .expect("recovery was never published")
+            .unwrap();
+        // Without a reset the old observations publish at about 62 seconds.
+        assert!(start.elapsed() >= Duration::from_secs(41 + 61));
         monitor.abort();
     }
 
