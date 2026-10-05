@@ -300,14 +300,21 @@ fn install_preserves_a_compatible_foreground_daemon() {
     assert!(daemon.run(&["daemon", "status"]).status.success());
 }
 
-#[test]
-fn install_is_repeatable_and_service_controls_work_with_an_isolated_manager() {
-    let root = tempfile::tempdir_in("/tmp").unwrap();
-    let bin = root.path().join("bin");
-    fs::create_dir(&bin).unwrap();
-    // Emulate only the OS command boundary. The installed definition and daemon
-    // are real; no commands reach this machine's launchd/systemd instance.
-    let script = r#"#!/bin/sh
+/// launchctl and systemctl stand-ins that run a real managed daemon. Only the
+/// OS command boundary is emulated: the installed definition and daemon are
+/// real, and no commands reach this machine's launchd/systemd instance.
+struct FakeServiceManager {
+    root: TempDir,
+    bin: std::path::PathBuf,
+    pid: std::path::PathBuf,
+}
+
+impl FakeServiceManager {
+    fn new() -> Self {
+        let root = tempfile::tempdir_in("/tmp").unwrap();
+        let bin = root.path().join("bin");
+        fs::create_dir(&bin).unwrap();
+        let script = r#"#!/bin/sh
 if [ "$1" = --user ]; then shift; fi
 start() {
   if [ -f "$FAKE_PID" ]; then return; fi
@@ -329,39 +336,51 @@ case "$1" in
   *) exit 2 ;;
 esac
 "#;
-    for name in ["launchctl", "systemctl"] {
-        let path = bin.join(name);
-        fs::write(&path, script).unwrap();
-        fs::set_permissions(path, fs::Permissions::from_mode(0o700)).unwrap();
+        for name in ["launchctl", "systemctl"] {
+            let path = bin.join(name);
+            fs::write(&path, script).unwrap();
+            fs::set_permissions(path, fs::Permissions::from_mode(0o700)).unwrap();
+        }
+        let pid = root.path().join("pid");
+        Self { root, bin, pid }
     }
-    let pid_path = root.path().join("pid");
-    struct Cleanup(std::path::PathBuf);
-    impl Drop for Cleanup {
-        fn drop(&mut self) {
-            if let Ok(pid) = fs::read_to_string(&self.0) {
-                // PID comes only from the process spawned by the test manager.
-                if let Ok(pid) = pid.trim().parse::<i32>() {
-                    unsafe {
-                        libc::kill(pid, libc::SIGTERM);
-                    }
+
+    fn command(&self) -> std::process::Command {
+        let mut command = command(self.root.path());
+        command
+            .env(
+                "PATH",
+                format!("{}:{}", self.bin.display(), std::env::var("PATH").unwrap()),
+            )
+            .env("SHOAL_BINARY", env!("CARGO_BIN_EXE_shoal"))
+            .env("SHOAL_TEST_STATE", self.root.path().join("state"))
+            .env("FAKE_PID", &self.pid)
+            .env("FAKE_LOG", self.root.path().join("service.log"));
+        command
+    }
+}
+
+impl Drop for FakeServiceManager {
+    fn drop(&mut self) {
+        if let Ok(pid) = fs::read_to_string(&self.pid) {
+            // PID comes only from the process spawned by the test manager.
+            if let Ok(pid) = pid.trim().parse::<i32>() {
+                unsafe {
+                    libc::kill(pid, libc::SIGTERM);
                 }
             }
         }
     }
-    let _cleanup = Cleanup(pid_path.clone());
+}
+
+#[test]
+fn install_is_repeatable_and_service_controls_work_with_an_isolated_manager() {
+    let manager = FakeServiceManager::new();
+    let root = &manager.root;
+    let bin = manager.bin.clone();
+    let pid_path = manager.pid.clone();
     let run = |args: &[&str]| {
-        let output = command(root.path())
-            .args(args)
-            .env(
-                "PATH",
-                format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()),
-            )
-            .env("SHOAL_BINARY", env!("CARGO_BIN_EXE_shoal"))
-            .env("SHOAL_TEST_STATE", root.path().join("state"))
-            .env("FAKE_PID", &pid_path)
-            .env("FAKE_LOG", root.path().join("service.log"))
-            .output()
-            .unwrap();
+        let output = manager.command().args(args).output().unwrap();
         assert!(
             output.status.success(),
             "{args:?}: {}",

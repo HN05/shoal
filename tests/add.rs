@@ -1,3 +1,5 @@
+#[path = "support/prompt.rs"]
+mod prompt;
 #[path = "support/pty.rs"]
 mod pty;
 mod support;
@@ -9,7 +11,7 @@ use std::{
     path::PathBuf,
     process::{Command, Stdio},
     thread,
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 #[test]
@@ -95,7 +97,6 @@ fn add_reuses_resolution_requests_without_reordering_failures() {
 
 #[test]
 fn unregistered_repositories_are_registered_on_confirmation() {
-    use std::io::Read;
     let registered = vec![
         "list_repositories",
         "register_repository https://other.example/team/repo",
@@ -120,29 +121,10 @@ fn unregistered_repositories_are_registered_on_confirmation() {
         ),
     ] {
         let daemon = FakeDaemon::start();
-        let (mut master, slave) = pty::open();
-        let mut child = daemon
-            .command()
-            .args(args)
-            .args(["--agent", "missing"])
-            .stdin(slave.try_clone().unwrap())
-            .stderr(slave.try_clone().unwrap())
-            .stdout(Stdio::null())
-            .spawn()
-            .unwrap();
-        master.write_all(answer.as_bytes()).unwrap();
-        let deadline = Instant::now() + Duration::from_secs(30);
-        let mut transcript = Vec::new();
-        let status = loop {
-            let _ = master.read_to_end(&mut transcript);
-            if let Some(status) = child.try_wait().unwrap() {
-                break status;
-            }
-            assert!(Instant::now() < deadline, "hung: {transcript:?}");
-            thread::sleep(Duration::from_millis(10));
-        };
-        let _ = master.read_to_end(&mut transcript);
-        let transcript = String::from_utf8_lossy(&transcript);
+        let (status, transcript) = prompt::answer(
+            daemon.command().args(args).args(["--agent", "missing"]),
+            answer,
+        );
         assert_eq!(daemon.methods(), expected, "{args:?}: {transcript}");
         assert!(!status.success(), "{args:?}: {transcript}");
         assert!(
