@@ -5,7 +5,7 @@ use anyhow::{Context as _, Result, ensure};
 use serde_json::json;
 
 use crate::{
-    cli::{DaemonCommand, client, context::Context, output::Style},
+    cli::{DaemonCommand, client, context::Context, output::Style, ui},
     daemon,
     paths::Paths,
     protocol::Method,
@@ -148,6 +148,14 @@ pub(super) async fn run(ctx: Context, command: DaemonCommand) -> Result<i32> {
             return Ok(if running { 0 } else { 1 });
         }
         DaemonCommand::Start => {
+            if !service::file(&ctx.paths, Platform::current()?).is_file()
+                && ui::offer(
+                    &ctx,
+                    "The daemon service is not installed. Install it with `shoal install`?",
+                )?
+            {
+                return install(&ctx, false, None).await;
+            }
             start(&ctx).await?;
             ctx.emit_styled(Style::Success, "Daemon started", json!({"running": true}))?;
         }
