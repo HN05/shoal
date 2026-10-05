@@ -9,6 +9,9 @@ use daemon_fixture::DaemonGuard;
 mod git_fixture;
 use git_fixture::{git, init_repo};
 
+#[path = "support/ports.rs"]
+mod ports;
+
 mod support;
 
 use support::cli;
@@ -1728,10 +1731,7 @@ fn repository_config_sets_the_automatic_port_range() {
     let fixture = Fixture::new();
     let workspace = fixture.add("ranged");
     let path = Path::new(workspace["path"].as_str().unwrap());
-    let [first, second] = [(); 2].map(|()| {
-        let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
-        listener.local_addr().unwrap().port()
-    });
+    let [first, second] = [(); 2].map(|()| ports::hold()).map(|held| held.port);
     fs::write(
         path.join(".shoal.toml"),
         format!("[ports]\nstart={first}\nend={first}\n"),
@@ -1897,8 +1897,8 @@ fn config_show_reports_effective_values_and_their_layers() {
 
 #[test]
 fn configured_port_range_exhaustion_and_release() {
-    let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
-    let number = listener.local_addr().unwrap().port();
+    let held = ports::hold();
+    let number = held.port;
     let fixture = Fixture::with_config(Some(&format!("[ports]\nstart={number}\nend={number}\n")));
     fixture.add("limited");
     assert!(
@@ -1907,7 +1907,7 @@ fn configured_port_range_exhaustion_and_release() {
             .status
             .success()
     );
-    drop(listener);
+    drop(held);
     let lease = fixture.ok(&["port", "acquire", "web", "limited"]);
     assert_eq!(lease["port"], number);
     assert!(
