@@ -76,3 +76,16 @@ pub fn isolated_test(root: &Path, name: &str) -> tokio::process::Command {
         .kill_on_drop(true);
     command
 }
+
+/// Poll through setup and verify that an explicit gate still holds the future.
+pub async fn assert_pending(future: impl std::future::Future) {
+    tokio::pin!(future);
+    std::future::poll_fn(|cx| {
+        assert!(
+            future.as_mut().poll(cx).is_pending(),
+            "future completed before release"
+        );
+        std::task::Poll::Ready(())
+    })
+    .await;
+}

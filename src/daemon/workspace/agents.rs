@@ -533,18 +533,16 @@ mod recovery_tests {
                 .load(std::sync::atomic::Ordering::Relaxed),
             1
         );
-        let pending = {
+        let mut pending = {
             let manager = manager.clone();
             let id = workspace.id;
-            tokio::spawn(async move { manager.await_overload_recovery(&id).await })
+            Box::pin(async move { manager.await_overload_recovery(&id).await })
         };
         manager.recovery_ready.send_replace(Some(0));
-        tokio::time::sleep(std::time::Duration::from_millis(30)).await;
-        assert!(!pending.is_finished());
+        crate::test_support::assert_pending(&mut pending).await;
         manager.recovery_ready.send_replace(Some(1));
         tokio::time::timeout(std::time::Duration::from_secs(60), pending)
             .await
-            .unwrap()
             .unwrap()
             .unwrap();
         assert_eq!(

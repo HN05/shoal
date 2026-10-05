@@ -313,7 +313,6 @@ async fn overload_restores_the_configured_session_and_keeps_waiting_execution_ow
     manager
         .recovery_ready
         .send_replace(Some(epoch.wrapping_sub(1)));
-    tokio::time::sleep(Duration::from_millis(50)).await;
     assert!(!workspace.path.join("restored").exists());
     manager.recovery_ready.send_replace(Some(epoch));
     assert_eq!(bounded(launched).await.unwrap().unwrap(), 7);

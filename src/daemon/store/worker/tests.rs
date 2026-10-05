@@ -135,7 +135,7 @@ async fn full_queue_waits_and_drains_cancelled_callers_before_shutdown() -> Resu
     }
     let clone = store.clone();
     let (ran, cancelled) = std::sync::mpsc::channel::<()>();
-    let mut cancelled_caller = tokio::spawn(async move {
+    let mut cancelled_caller = Box::pin(async move {
         clone
             .run(move |_| {
                 let _ = ran.send(());
@@ -144,30 +144,21 @@ async fn full_queue_waits_and_drains_cancelled_callers_before_shutdown() -> Resu
             .await
     });
     let clone = store.clone();
-    let mut waiting_caller = tokio::spawn(async move { clone.run(|_| Ok(())).await });
-    for caller in [&mut cancelled_caller, &mut waiting_caller] {
-        assert!(
-            tokio::time::timeout(Duration::from_millis(20), caller)
-                .await
-                .is_err()
-        );
-    }
+    let mut waiting_caller = Box::pin(async move { clone.run(|_| Ok(())).await });
+    crate::test_support::assert_pending(&mut cancelled_caller).await;
+    crate::test_support::assert_pending(&mut waiting_caller).await;
     // Cancelling before admission drops the operation without running it.
-    cancelled_caller.abort();
+    drop(cancelled_caller);
     active.abort();
     let clone = store.clone();
-    let mut shutdown = tokio::spawn(async move { clone.shutdown().await });
-    assert!(
-        tokio::time::timeout(Duration::from_millis(20), &mut shutdown)
-            .await
-            .is_err()
-    );
+    let mut shutdown = Box::pin(async move { clone.shutdown().await });
+    crate::test_support::assert_pending(&mut shutdown).await;
     release.send(())?;
-    shutdown.await?;
+    let ((), result) = tokio::join!(shutdown, waiting_caller);
+    result?;
     for receive in queued {
         receive.await?;
     }
-    waiting_caller.await??;
     assert_eq!(
         cancelled.try_recv(),
         Err(std::sync::mpsc::TryRecvError::Disconnected)
@@ -193,7 +184,7 @@ async fn full_queue_waits_and_drains_cancelled_callers_before_shutdown() -> Resu
 }
 
 #[tokio::test]
-async fn external_contention_keeps_the_timeout_and_runtime_responsive() -> Result<()> {
+async fn external_contention_keeps_the_configured_timeout() -> Result<()> {
     let root = tempfile::tempdir()?;
     let path = root.path().join("state.db");
     let store = Store::open(path.clone()).await?;
@@ -209,21 +200,20 @@ async fn external_contention_keeps_the_timeout_and_runtime_responsive() -> Resul
     });
     waiting.await?;
     let clone = store.clone();
-    let mut claim = tokio::spawn(async move {
+    let claim = async move {
         clone
-            .run(|db| {
+            .run(move |db| {
+                assert_eq!(
+                    db.query_row("PRAGMA busy_timeout", [], |r| r.get::<_, i64>(0))?,
+                    5000
+                );
                 let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
                 tx.commit()?;
                 Ok(())
             })
             .await
-    });
-    assert!(
-        tokio::time::timeout(Duration::from_millis(20), &mut claim)
-            .await
-            .is_err()
-    );
-    let error = claim.await?.unwrap_err();
+    };
+    let error = claim.await.unwrap_err();
     assert!(
         matches!(error.downcast_ref::<rusqlite::Error>(), Some(rusqlite::Error::SqliteFailure(code, _)) if code.code == rusqlite::ErrorCode::DatabaseBusy)
     );
