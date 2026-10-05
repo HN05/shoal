@@ -87,7 +87,7 @@ environments without a service manager. The service captures the installing shel
 `PATH`.
 
 Advisory repository reviews default to Codex, retaining configured agent overrides
-and automatic fallback. Repository code audits inspect existing code read-only
+and automatic fallback. Repository code audits rotate focused read-only inspections
 and maintain one recurring report issue with triage in comments. Failed or
 incomplete attempts retain the last successful findings; audit results are
 advisory and do not gate merges.

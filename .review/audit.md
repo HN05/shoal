@@ -4,6 +4,11 @@ Inspect existing code within the requested scope. Read `AGENTS.md`, scoped
 rules and the correctness priorities in [review.md](review.md); consult
 `design.md` and `docs/reference.md` for the relevant contracts.
 
+For the default rotating scope, use prior audit coverage to choose a bounded
+area different from the last successful inspection. Start with workspace
+ownership if there is no history. State the selected area in the summary and
+trace related callers and tests as needed; do not claim repository-wide coverage.
+
 This is a read-only inspection. Repository delivery instructions do not apply:
 do not edit files, commit, push, open PRs or create follow-up issues. The audit
 action publishes the report. Do not inspect credentials or local configuration,

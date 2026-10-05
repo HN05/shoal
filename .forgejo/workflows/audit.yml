@@ -9,8 +9,8 @@ on:
         description: Branch, tag or commit (empty uses the default branch)
         default: ''
       scope:
-        description: Paths, area or theme to inspect
-        default: 'CLI, daemon, tests and CI: correctness, ownership, code quality and maintainability'
+        description: Paths, area or theme (empty rotates focused areas)
+        default: ''
 
 concurrency:
   group: code-audit
@@ -33,7 +33,7 @@ jobs:
           agent: codex
           audit-ref: ${{ inputs.ref || '' }}
           audit-scope: >-
-            ${{ inputs.scope || 'CLI, daemon, tests and CI: correctness, ownership, code quality and maintainability' }}
+            ${{ inputs.scope || 'Rotate one focused area of the CLI, daemon, tests or CI from prior audit coverage: correctness, ownership, code quality and maintainability' }}
           audit-instructions-file: .review/audit.md
           audit-timeout-seconds: '900'
           # Reuse a writable shared mount to serialize report updates across containers.
