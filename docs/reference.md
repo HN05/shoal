@@ -260,7 +260,7 @@ appended. Forwarded arguments are never expanded. The CLI agent defaults are:
 
 ```toml
 [commands]
-claude = ["claude", "{args}", "--remote-control", "{workspace}"]
+claude = ["claude"]
 codex = ["codex", "{args}", "--sandbox", "danger-full-access", "--ask-for-approval=never"]
 ```
 

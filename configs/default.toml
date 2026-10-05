@@ -36,7 +36,7 @@ root_dir = "~/shoal"
 
 # Named workspace shortcuts: shoal check [workspace] -- <extra arguments>
 [commands]
-claude = ["claude", "{args}", "--remote-control", "{workspace}"]
+claude = ["claude"]
 codex = ["codex", "{args}", "--sandbox", "danger-full-access", "--ask-for-approval=never"]
 # check = ["cargo", "test"]
 # Custom agents: shoal add <repository> <branch> --agent pi

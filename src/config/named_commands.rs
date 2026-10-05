@@ -46,10 +46,7 @@ pub enum BareName {
 
 pub fn defaults() -> Commands {
     [
-        (
-            "claude",
-            vec!["claude", "{args}", "--remote-control", "{workspace}"],
-        ),
+        ("claude", vec!["claude"]),
         (
             "codex",
             vec![

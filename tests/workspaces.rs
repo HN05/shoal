@@ -2354,7 +2354,7 @@ exit 7
         let args = if mode == "app" {
             format!("\napp\n{path}\nliteral spaces; $(false)\n")
         } else if agent == "claude" {
-            format!("{name}\nliteral spaces; $(false)\n--remote-control\n{name}\n")
+            format!("{name}\nliteral spaces; $(false)\n")
         } else {
             format!(
                 "{name}\nliteral spaces; $(false)\n--sandbox\ndanger-full-access\n--ask-for-approval=never\n"
@@ -2548,15 +2548,15 @@ fn agent_shortcuts_forward_arguments_without_starting_real_agents() {
             format!(
                 "shortcut\n--version\nhello with spaces\n{}",
                 if agent == "claude" {
-                    "--remote-control\nshortcut\n"
+                    ""
                 } else {
                     "--sandbox\ndanger-full-access\n--ask-for-approval=never\n"
                 }
             )
         );
     }
-    // Current-directory resolution supplies an ID internally; Claude still gets
-    // the human workspace name, as it must after an fzf selection as well.
+    // Current-directory resolution supplies an ID internally; Claude's
+    // environment still names the human workspace, as after an fzf selection.
     for target in [Some(workspace["id"].as_str().unwrap()), None] {
         let mut command = fixture.command();
         command
@@ -2570,7 +2570,7 @@ fn agent_shortcuts_forward_arguments_without_starting_real_agents() {
             .output()
             .unwrap();
         assert!(output.status.success());
-        assert_eq!(output.stdout, b"shortcut\n--remote-control\nshortcut\n");
+        assert_eq!(output.stdout, b"shortcut\n");
     }
 }
 
