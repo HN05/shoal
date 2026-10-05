@@ -4,6 +4,8 @@ use std::{fs, os::unix::fs::PermissionsExt, path::PathBuf};
 
 use anyhow::{Context, Result, ensure};
 
+const DEFAULT_STATE: &str = ".local/state/shoal";
+
 /// macOS limits `sun_path`; it is the more restrictive supported platform.
 const MAX_SOCKET_PATH_LEN: usize = 104;
 
@@ -30,7 +32,7 @@ impl Paths {
     pub fn new(state: Option<PathBuf>) -> Result<Self> {
         let home = crate::fsutil::home_dir()?;
         ensure!(home.is_absolute(), "HOME must be an absolute path");
-        let state = state.unwrap_or_else(|| home.join(".local/state/shoal"));
+        let state = state.unwrap_or_else(|| home.join(DEFAULT_STATE));
         let state = if state.is_absolute() {
             state
         } else {
@@ -47,6 +49,11 @@ impl Paths {
             state,
             socket,
         })
+    }
+
+    /// Whether the state directory is the one a CLI with this home uses by default.
+    pub fn is_default_state(&self) -> bool {
+        self.state == self.home.join(DEFAULT_STATE)
     }
 
     pub fn prepare(&self) -> Result<()> {

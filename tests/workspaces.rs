@@ -12826,6 +12826,7 @@ fn herdr_worker(fixture: &Fixture) -> Vec<String> {
 fn herdr_worker_command(fixture: &Fixture) -> Command {
     let mut command = fixture.command();
     command
+        .env_remove("SHOAL_STATE_DIR")
         .args(&herdr_worker(fixture)[1..])
         .env("HERDR_TAB_ID", "w1:t9");
     let calls = herdr_calls(fixture);
@@ -12882,15 +12883,16 @@ fn herdr_handoff_preserves_choices_and_literal_arguments() {
     assert_eq!(&calls[0][..3], ["tab", "create", "--workspace"]);
     assert!(calls[0].iter().any(|arg| arg == "--focus"));
     assert_eq!(&calls[1][..3], ["pane", "run", "w1:p9"]);
+    let state = fixture.root.path().join("state");
     assert_eq!(
         &herdr_worker(&fixture)[1..],
-        ["herdr-internal", "--close-when-done"]
+        [
+            "--state-dir",
+            state.to_str().unwrap(),
+            "herdr-internal",
+            "--close-when-done"
+        ]
     );
-    let state = format!(
-        "SHOAL_STATE_DIR={}",
-        fixture.root.path().join("state").display()
-    );
-    assert!(calls[0].contains(&state), "{:?}", calls[0]);
     let (agent, transcript) = fixture.interactive_command(&mut herdr_worker_command(&fixture), "");
     assert_eq!(agent.status.code(), Some(7), "{agent:?} {transcript}");
     assert_eq!(

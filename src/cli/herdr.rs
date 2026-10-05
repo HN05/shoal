@@ -11,7 +11,7 @@ use super::{
     context::Context,
     internal,
 };
-use crate::{config::Config, env, protocol::ConfigTarget, subprocess::Run};
+use crate::{config::Config, env, paths::Paths, protocol::ConfigTarget, subprocess::Run};
 
 pub struct Tab {
     id: String,
@@ -39,11 +39,11 @@ pub(super) async fn handoff(ctx: &Context, plan: &AddPlan, here: bool) -> Result
         "workspace processes cannot allocate workspaces"
     );
     let created = create_tab(ctx, plan, settings.herdr.focus).await?;
-    submit_worker(created, settings.herdr.close_when_done).await?;
+    submit_worker(ctx, created, settings.herdr.close_when_done).await?;
     Ok(true)
 }
 
-// The tab environment carries state selection and the plan, keeping the typed command short.
+// The tab environment carries the plan, keeping the typed command short.
 async fn create_tab(ctx: &Context, plan: &AddPlan, focus: bool) -> Result<CreatedResult> {
     let workspace = std::env::var_os("HERDR_WORKSPACE_ID")
         .filter(|id| !id.is_empty())
@@ -69,9 +69,6 @@ async fn create_tab(ctx: &Context, plan: &AddPlan, focus: bool) -> Result<Create
     create
         .arg("--env")
         .arg(format!("XDG_CONFIG_HOME={}", config_home.display()));
-    create
-        .arg("--env")
-        .arg(format!("{}={}", env::STATE_DIR, ctx.paths.state.display()));
     create.arg("--env").arg(format!(
         "{}={}",
         env::HERDR_PLAN,
@@ -83,14 +80,8 @@ async fn create_tab(ctx: &Context, plan: &AddPlan, focus: bool) -> Result<Create
     Ok(created.result)
 }
 
-async fn submit_worker(created: CreatedResult, close_when_done: bool) -> Result<()> {
-    let mut argv = vec![
-        std::env::current_exe()?.into_os_string(),
-        internal::HERDR.into(),
-    ];
-    if close_when_done {
-        argv.push("--close-when-done".into());
-    }
+async fn submit_worker(ctx: &Context, created: CreatedResult, close_when_done: bool) -> Result<()> {
+    let argv = worker_argv(&ctx.paths, close_when_done)?;
     let mut run = Command::new("herdr");
     run.args(["pane", "run"])
         .arg(&created.root_pane.pane_id)
@@ -100,6 +91,19 @@ async fn submit_worker(created: CreatedResult, close_when_done: bool) -> Result<
         .await
         .context("run Shoal in the new Herdr tab (tab retained)")?;
     Ok(())
+}
+
+// The tab inherits HOME, so only a non-default state directory needs naming.
+fn worker_argv(paths: &Paths, close_when_done: bool) -> Result<Vec<OsString>> {
+    let mut argv = vec![std::env::current_exe()?.into_os_string()];
+    if !paths.is_default_state() {
+        argv.extend(["--state-dir".into(), paths.state.clone().into_os_string()]);
+    }
+    argv.push(internal::HERDR.into());
+    if close_when_done {
+        argv.push("--close-when-done".into());
+    }
+    Ok(argv)
 }
 
 #[derive(Deserialize)]
@@ -220,6 +224,27 @@ impl Tab {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn worker_argv_names_only_a_non_default_state_directory() {
+        let custom = Paths::for_test("/home");
+        let default = Paths {
+            state: "/home/.local/state/shoal".into(),
+            ..custom.clone()
+        };
+        let tail = |paths: &Paths| worker_argv(paths, true).unwrap()[1..].to_vec();
+        assert_eq!(tail(&default), ["herdr-internal", "--close-when-done"]);
+        assert_eq!(
+            tail(&custom),
+            [
+                "--state-dir",
+                "/home/state",
+                "herdr-internal",
+                "--close-when-done"
+            ]
+        );
+        assert_eq!(worker_argv(&default, false).unwrap().len(), 2);
+    }
 
     #[test]
     fn shell_command_quotes_only_words_that_need_it() {
