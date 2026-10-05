@@ -429,7 +429,10 @@ after persisting explicit or automatic completion and before cleanup, using norm
 config precedence and the worktree's hook identity plus the keep/cleanup choice.
 It is bounded, excludes lifecycle and permit changes, and reports failure through
 a notification without undoing completion or blocking cleanup. Explicit signals
-rerun it; events are not queued or replayed on restart. Keeping a completed workspace
+rerun it; events are not queued or replayed on restart. Completion/PR serialization
+covers the hook, which must not call gated Shoal mutations. Completion without a
+hook takes no resource guard, so an agent-exit hook may signal it; configured
+completion hooks cannot nest inside another guarded hook. Keeping a completed workspace
 suppresses idle and PR cleanup until another completion requests cleanup or the
 user removes it. Completion
 cleanup without a PR registration requires clean files and every commit pushed or

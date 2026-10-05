@@ -6,10 +6,10 @@ use crate::{
 use std::{fs, sync::Arc};
 
 #[tokio::test]
-async fn completion_without_a_hook_allows_concurrent_permit_operations() {
+async fn completion_without_a_hook_allows_concurrent_resource_hooks() {
     let (_root, manager, workspace) = fixture().await;
     let resources = manager
-        .resource_guard(&workspace.id, GuardMode::Shared)
+        .resource_guard(&workspace.id, GuardMode::Exclusive)
         .await
         .unwrap();
     manager.mark_done(&workspace.id, Some(false)).await.unwrap();

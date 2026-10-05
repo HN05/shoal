@@ -12102,6 +12102,39 @@ fn agent_exit_hook_exposes_custom_agent_results_without_completing_the_assignmen
 }
 
 #[test]
+fn agent_exit_hook_can_signal_completion_without_a_post_done_hook() {
+    let fixture = Fixture::new();
+    let hook = fixture.root.path().join("finish-assignment");
+    fs::write(
+        &hook,
+        format!(
+            "#!/bin/sh\nexec '{}' --json done --keep \"$SHOAL_WORKSPACE\"\n",
+            env!("CARGO_BIN_EXE_shoal")
+        ),
+    )
+    .unwrap();
+    fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).unwrap();
+    set_repository_toml(
+        &fixture,
+        &format!(
+            "post_agent_exit_cmd = '{}'\n[commands]\nhelper = ['/bin/sh', '-c', 'exit 7']\n",
+            hook.display()
+        ),
+    );
+    let agent = fixture.run(&[
+        "add",
+        fixture.repo.to_str().unwrap(),
+        "agent-work",
+        "--agent",
+        "helper",
+    ]);
+    assert_eq!(agent.status.code(), Some(7), "{agent:?}");
+    wait_until("completion from exit hook", || {
+        fixture.ok(&["inspect", "agent-work"])["completion"]["cleanup"] == false
+    });
+}
+
+#[test]
 fn agent_exit_acknowledgement_does_not_wait_for_the_hook() {
     let fixture = Fixture::new();
     let hook = fixture.root.path().join("exit-hook");

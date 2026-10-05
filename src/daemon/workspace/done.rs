@@ -49,12 +49,14 @@ impl Manager {
         let command = HookKind::PostDone
             .command(&settings)
             .map(|path| workspace.path.join(path));
-        let mode = if command.is_some() {
-            GuardMode::Exclusive
+        let _resources = if command.is_some() {
+            Some(
+                self.resource_guard(&workspace.id, GuardMode::Exclusive)
+                    .await?,
+            )
         } else {
-            GuardMode::Shared
+            None
         };
-        let _resources = self.resource_guard(&workspace.id, mode).await?;
         self.verify_worktree(workspace).await?;
         let cleanup = cleanup.unwrap_or(settings.done.cleanup);
         let completion = Completion {

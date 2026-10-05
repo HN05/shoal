@@ -739,8 +739,10 @@ It follows normal global and repository configuration precedence and receives th
 `SHOAL_DONE_CHOICE=keep` or `cleanup`. It runs for explicit `done`, issue closure,
 and PR-watch completion even when cleanup retains the workspace. Failure records
 a `hook_failed` notification without undoing completion or blocking cleanup.
-Lifecycle and permit changes are rejected while it runs. Each explicit `done`
-runs it again; automatic completion and daemon restart do not replay it.
+Lifecycle and permit changes are rejected while it runs. The hook holds the
+completion/PR gate, so it must not call Shoal commands that change completion or
+PR registrations, including in other workspaces. Each explicit `done` runs it
+again; automatic completion and daemon restart do not replay it.
 
 `post_agent_exit_cmd` runs alongside agent-exit notifications, including configured
 agents and disconnects, while the workspace is ready, after acknowledging the
@@ -749,7 +751,9 @@ rules and config precedence as `post_done_cmd`, with `SHOAL_AGENT`,
 `SHOAL_AGENT_EXIT_CODE` (empty on disconnect), and `SHOAL_AGENT_EXIT_COMPLETE`
 (`true` when no owned processes remain, otherwise `false`). Failure only records
 `hook_failed`; agent exit does not mark an assignment done. Removal uses its own
-hooks, and plain commands and restart do not produce agent-exit hooks.
+hooks, and plain commands and restart do not produce agent-exit hooks. An exit
+hook may signal `done` only when no `post_done_cmd` is configured; otherwise the
+completion hook would conflict with its lifecycle/permit guard.
 
 For workspaces opened with `--issue` or `shoal issue`, the daemon polls the saved
 issue URL every ~30 seconds using its `gh`/`fj` login. Confirmed closure records
