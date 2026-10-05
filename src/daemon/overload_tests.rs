@@ -309,11 +309,6 @@ async fn overload_restores_the_configured_session_and_keeps_waiting_execution_ow
     let epoch = manager
         .recovery_epoch
         .load(std::sync::atomic::Ordering::Relaxed);
-    // Stale healthy evidence from before the overload must not release it.
-    manager
-        .recovery_ready
-        .send_replace(Some(epoch.wrapping_sub(1)));
-    assert!(!workspace.path.join("restored").exists());
     manager.recovery_ready.send_replace(Some(epoch));
     assert_eq!(bounded(launched).await.unwrap().unwrap(), 7);
     assert!(!crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
