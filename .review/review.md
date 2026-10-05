@@ -122,6 +122,10 @@ removal, check it against the rule those files state before judging it.
 - Shell integration recovers deleted current directories and pending destinations
   to their nearest surviving ancestor without a daemon, preserving exit status and
   existing prompt hooks. Scoped callers cannot use this recovery.
+- Herdr handoffs belong to the CLI after interactive choices, preserving resolved
+  choices, literal arguments and state/config selection. Preparation failures keep
+  the tab readable.
+  JSON, help, noninteractive and `--here` calls run in place.
 - Agent pickers offer “No agent”: issue creation continues without a launch,
   and review returns without starting a reviewer.
 - Claude and Codex launches (including Happy and Codex app handoffs) persist

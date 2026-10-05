@@ -8,7 +8,7 @@ pub fn isolated(root: &Path, program: impl AsRef<OsStr>) -> Command {
     let mut command = Command::new(program);
     for (name, _) in std::env::vars_os() {
         if name.to_str().is_some_and(|name| {
-            ["SHOAL_", "XDG_", "HAPPY_", "GIT_"]
+            ["SHOAL_", "XDG_", "HAPPY_", "GIT_", "HERDR_"]
                 .iter()
                 .any(|prefix| name.starts_with(prefix))
                 || ["CLAUDE_CONFIG_DIR", "CODEX_HOME", "BASH_ENV", "ENV"].contains(&name)

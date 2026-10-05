@@ -115,7 +115,8 @@ fn navigate(ctx: &Context, path: &std::path::Path) -> Result<()> {
     shell::navigate(path, ctx.json)
 }
 
-pub(super) struct Creation {
+#[derive(serde::Serialize, serde::Deserialize)]
+pub(in crate::cli) struct Creation {
     pub path: Option<PathBuf>,
     pub branch: Option<String>,
     pub existing: Option<String>,
@@ -135,6 +136,7 @@ pub(super) async fn add(
     issue: Option<String>,
     agent: AgentLaunch,
     args: Vec<OsString>,
+    here: bool,
 ) -> Result<i32> {
     let mut creation = creation;
     creation.path = creation
@@ -144,6 +146,55 @@ pub(super) async fn add(
     let target = resolve_add_target(ctx, repository, issue.as_deref(), &agent).await?;
     let agent = resolve_add_agent(ctx, &target.selector, agent, issue.is_some()).await?;
     let creation = select_add_creation(ctx, &target, creation, issue.is_some()).await?;
+    let plan = AddPlan {
+        repository: target.selector.clone(),
+        creation,
+        issue,
+        agent,
+        args,
+    };
+    if crate::cli::herdr::handoff(ctx, &plan, here).await? {
+        return Ok(0);
+    }
+    execute_add_with_target(ctx, plan, target).await
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub(in crate::cli) struct AddPlan {
+    pub repository: String,
+    pub creation: Creation,
+    pub issue: Option<String>,
+    agent: ResolvedAddAgent,
+    args: Vec<OsString>,
+}
+
+impl AddPlan {
+    pub fn label(&self) -> &str {
+        self.creation
+            .branch
+            .as_deref()
+            .or(self.creation.existing.as_deref())
+            .or(self.issue.as_deref())
+            .unwrap_or("shoal add")
+    }
+}
+
+pub(in crate::cli) async fn execute_add(ctx: &Context, plan: AddPlan) -> Result<i32> {
+    let target = AddTarget {
+        selector: plan.repository.clone(),
+        repositories: tokio::sync::OnceCell::new(),
+    };
+    execute_add_with_target(ctx, plan, target).await
+}
+
+async fn execute_add_with_target(ctx: &Context, plan: AddPlan, target: AddTarget) -> Result<i32> {
+    let AddPlan {
+        repository: _,
+        creation,
+        issue,
+        agent,
+        args,
+    } = plan;
     let issue = match issue {
         Some(input) => Some(super::issues::load(target.repository(ctx).await?, &input).await?),
         None => None,
@@ -216,6 +267,7 @@ async fn resolve_add_target(
     })
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
 struct ResolvedAddAgent {
     agent: Option<Agent>,
     codex_mode: Option<CodexMode>,
@@ -400,7 +452,9 @@ async fn finish_add_workspace(ctx: &Context, opened: OpenedWorkspace) -> Result<
         ),
         &workspace,
     )?;
-    shell::navigate(&workspace.path, ctx.json)?;
+    if ctx.herdr_tab.is_none() {
+        shell::navigate(&workspace.path, ctx.json)?;
+    }
     if !reused {
         run_post_setup(ctx, &workspace).await?;
     }

@@ -83,6 +83,7 @@ pub(super) async fn choose(ctx: &Context) -> Result<Command> {
     let workspace = Some(picked.id);
     Ok(match action {
         MenuAction::Add => Command::Add {
+            here: false,
             path: None,
             repository: None,
             branch: None,

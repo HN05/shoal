@@ -75,6 +75,9 @@ shoal issue 34                             # Use the current repository, or pick
 shoal issue 34 --repo my-project          # Select the repository explicitly
 ```
 
+Inside Herdr, `issue` and `add` open a new tab after your choices; use `--here`
+to run in the current pane. See [Herdr settings](docs/reference.md#agents).
+
 Use `--agent claude` for Claude Code, or `--agent happy-claude`/`happy-codex` for
 a detached [Happy](https://github.com/slopus/happy) session that appears in the
 Happy app. `shoal issue` takes the same `--agent`, or `default_agent = "codex"`

@@ -13,7 +13,7 @@ Agents cooperate with Shoal's scope and allocations. Shoal does not stop a
 hostile same-user process from bypassing them through Git, the filesystem, or
 direct resource access; filesystem restrictions are future work.
 
-Caller-specific integration stays outside the core: Superlogical owns terminals;
+Caller-specific integration stays outside the daemon core: Superlogical owns terminals;
 Macraft owns VM/container provisioning. Shoal does not provision tools, manage
 browsers, schedule agent tasks, or store conversations. Agent shortcuts
 (`claude`, `codex`, `happy`, `t3`) are thin launchers around the generic `exec`
@@ -230,7 +230,10 @@ needs an unscoped caller.
 Nested executions keep scope.
 
 Root help groups built-in commands by task; configured commands are discovered
-through `run`.
+through `run`. The CLI owns Herdr tab handoffs after interactive workspace and
+agent choices. It carries a resolved launch plan to the new pane, preserving
+state/config selection and literal arguments without hook scripts or state files.
+Preparation failures retain the tab.
 
 Single-workspace actions select an explicit target, otherwise the caller's scoped
 workspace or the workspace containing the current directory, then an interactive

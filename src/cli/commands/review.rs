@@ -115,6 +115,7 @@ pub(super) async fn pull_request(
                 None,
                 super::workspaces::AgentLaunch::Explicit(None),
                 Vec::new(),
+                true,
             )
             .await?;
             if code != 0 {

@@ -4,6 +4,7 @@ pub mod commands;
 pub mod completion;
 pub mod context;
 mod help;
+pub(crate) mod herdr;
 pub mod internal;
 pub mod output;
 mod progress;
@@ -82,6 +83,9 @@ pub enum Command {
     },
     /// Create or reopen a workspace.
     Add {
+        /// Run in the current pane instead of opening a Herdr tab.
+        #[arg(long)]
+        here: bool,
         /// Registered repository; may be omitted when --issue is a URL.
         repository: Option<String>,
         /// Git branch name; a portable workspace name is derived from it.
@@ -118,6 +122,9 @@ pub enum Command {
     },
     /// Open an issue workspace and start an agent.
     Issue {
+        /// Run in the current pane instead of opening a Herdr tab.
+        #[arg(long)]
+        here: bool,
         /// Forge issue number or URL.
         issue: String,
         /// Registered repository; defaults to the URL's repository or the current checkout/workspace.
@@ -200,6 +207,13 @@ pub enum Command {
     Land { workspace: Option<String> },
     #[command(name = internal::LAND, hide = true)]
     LandInternal { plan: String },
+    #[command(name = internal::HERDR, hide = true)]
+    HerdrInternal {
+        tab: String,
+        #[arg(long)]
+        close_when_done: bool,
+        plan: String,
+    },
     /// Internal worker launched through the tracked execution wrapper.
     #[command(name = internal::MERGE, hide = true)]
     MergeInternal {

@@ -147,9 +147,12 @@ impl Fixture {
     }
 
     fn interactive(&self, args: &[&str], answer: &str) -> (Output, String) {
+        self.interactive_command(self.command().args(args), answer)
+    }
+
+    fn interactive_command(&self, command: &mut Command, answer: &str) -> (Output, String) {
         use std::{io::Read, os::unix::process::CommandExt};
         let (mut master, slave) = pty::open();
-        let mut command = self.command();
         // A tracked command needs a controlling terminal to transfer foreground
         // ownership to its child, not just file descriptors that pass isatty.
         unsafe {
@@ -163,7 +166,6 @@ impl Fixture {
             });
         }
         let mut child = command
-            .args(args)
             .stdin(slave.try_clone().unwrap())
             .stderr(slave.try_clone().unwrap())
             .stdout(Stdio::piped())
@@ -12726,4 +12728,175 @@ fn already_closed_issues_are_rejected_before_creating_workspaces() {
         assert!(String::from_utf8_lossy(&output.stderr).contains("issue is already closed"));
         assert_eq!(fixture.ok(&["ls"]), before);
     }
+}
+
+fn install_fake_herdr(fixture: &Fixture) {
+    install_test_script(
+        &fixture.root.path().join("bin/herdr"),
+        r#"#!/usr/bin/env python3
+import json, os, shlex, sys
+from pathlib import Path
+root = Path(os.environ['HOME'])
+args = sys.argv[1:]
+with (root / 'herdr-calls').open('a') as calls:
+    calls.write(json.dumps(args) + '\n')
+if args[:2] == ['tab', 'create']:
+    print(json.dumps({'result': {'tab': {'tab_id': 'w1:t9'}, 'root_pane': {'pane_id': 'w1:p9'}}}))
+elif args[:2] == ['pane', 'run']:
+    (root / 'herdr-worker').write_text(json.dumps(shlex.split(args[3])))
+print('{}') if args[:2] != ['tab', 'create'] else None
+"#,
+    );
+}
+
+fn herdr_call(fixture: &Fixture, args: &[&str], answer: &str) -> (Output, String) {
+    fixture.interactive_command(
+        fixture
+            .command()
+            .args(args)
+            .env("HERDR_ENV", "1")
+            .env("HERDR_WORKSPACE_ID", "w1")
+            .env("HERDR_TAB_ID", "w1:t1")
+            .env("HERDR_PANE_ID", "w1:p1"),
+        answer,
+    )
+}
+
+fn herdr_worker(fixture: &Fixture) -> Vec<String> {
+    serde_json::from_slice(&fs::read(fixture.root.path().join("herdr-worker")).unwrap()).unwrap()
+}
+
+fn herdr_calls(fixture: &Fixture) -> Vec<Vec<String>> {
+    fs::read_to_string(fixture.root.path().join("herdr-calls"))
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect()
+}
+
+#[test]
+fn herdr_handoff_preserves_choices_and_literal_arguments() {
+    let fixture = Fixture::with_config(Some(
+        "[commands]\npi = ['sh', '-c', 'printf \"%s\\0\" \"$@\" > \"$HOME/agent-args\"; exit 7', 'agent', '{args}']\n",
+    ));
+    install_fake_herdr(&fixture);
+    let directive = fixture.root.path().join("caller-directive");
+    fs::write(&directive, "unchanged").unwrap();
+    let args = [
+        "add",
+        fixture.repo.to_str().unwrap(),
+        "herdr-agent",
+        "--agent",
+        "pi",
+        "--",
+        "two words",
+        "quote ' ; $(touch injected)",
+    ];
+    let (caller, _) = fixture.interactive_command(
+        fixture
+            .command()
+            .args(args)
+            .env("HERDR_ENV", "1")
+            .env("HERDR_WORKSPACE_ID", "w1")
+            .env("SHOAL_SHELL_DIRECTIVE", &directive),
+        "",
+    );
+    assert!(caller.status.success(), "{caller:?}");
+    assert!(fixture.ok(&["ls"]).as_array().unwrap().is_empty());
+    assert_eq!(fs::read_to_string(directive).unwrap(), "unchanged");
+    let calls = herdr_calls(&fixture);
+    assert_eq!(&calls[0][..3], ["tab", "create", "--workspace"]);
+    assert!(calls[0].iter().any(|arg| arg == "--focus"));
+    assert_eq!(&calls[1][..3], ["pane", "run", "w1:p9"]);
+    let argv = herdr_worker(&fixture);
+    assert_eq!(argv[2], fixture.root.path().join("state").to_str().unwrap());
+    let (agent, transcript) = fixture.interactive(
+        &argv[1..].iter().map(String::as_str).collect::<Vec<_>>(),
+        "",
+    );
+    assert_eq!(agent.status.code(), Some(7), "{agent:?} {transcript}");
+    assert_eq!(
+        fs::read(fixture.root.path().join("agent-args")).unwrap(),
+        b"two words\0quote ' ; $(touch injected)\0"
+    );
+    assert!(!fixture.root.path().join("injected").exists());
+    assert_eq!(herdr_calls(&fixture).len(), 2);
+}
+
+#[test]
+fn herdr_picks_before_handoff_and_retains_lookup_errors() {
+    let fixture = Fixture::new();
+    fixture.add_github_origin();
+    install_fake_herdr(&fixture);
+    install_test_script(
+        &fixture.root.path().join("bin/gh"),
+        "#!/bin/sh\necho lookup-failed >&2\nexit 1\n",
+    );
+    install_test_script(
+        &fixture.root.path().join("bin/fzf"),
+        "#!/bin/sh\necho \"$*\" >&2\nhead -n 1\n",
+    );
+    let (caller, transcript) = herdr_call(&fixture, &["issue", "34"], "");
+    assert!(caller.status.success(), "{caller:?} {transcript}");
+    assert!(transcript.contains("Repository>"), "{transcript}");
+    assert!(transcript.contains("Agent>"), "{transcript}");
+    let argv = herdr_worker(&fixture);
+    let (worker, transcript) = fixture.interactive(
+        &argv[1..].iter().map(String::as_str).collect::<Vec<_>>(),
+        "",
+    );
+    assert!(!worker.status.success(), "{worker:?}");
+    assert!(transcript.contains("lookup-failed"), "{transcript}");
+    assert!(!transcript.contains("Repository>"));
+    assert!(!transcript.contains("Agent>"));
+    assert_eq!(herdr_calls(&fixture).len(), 2);
+    assert!(fixture.ok(&["ls"]).as_array().unwrap().is_empty());
+}
+
+fn install_test_script(path: &Path, script: &str) {
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(path, script).unwrap();
+    fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
+}
+
+#[test]
+fn herdr_opt_out_and_noninteractive_calls_stay_in_place() {
+    let fixture = Fixture::new();
+    install_fake_herdr(&fixture);
+    for (name, mode) in [
+        ("here", "here"),
+        ("json", "json"),
+        ("pipe", "pipe"),
+        ("outside", "outside"),
+    ] {
+        let mut command = fixture.command();
+        command.args(["add", fixture.repo.to_str().unwrap(), name]);
+        if mode != "outside" {
+            command
+                .env("HERDR_ENV", "1")
+                .env("HERDR_WORKSPACE_ID", "w1");
+        }
+        let output = match mode {
+            "here" => fixture.interactive_command(command.arg("--here"), "").0,
+            "json" => fixture.interactive_command(command.arg("--json"), "").0,
+            "outside" => fixture.interactive_command(&mut command, "").0,
+            _ => command.output().unwrap(),
+        };
+        assert!(output.status.success(), "{output:?}");
+    }
+    let (help, _) = herdr_call(&fixture, &["issue", "--help"], "");
+    assert!(help.status.success());
+    assert!(!fixture.root.path().join("herdr-calls").exists());
+    fs::write(
+        fixture.repo.join(".shoal.toml"),
+        "[herdr]\nnew_tab = false\n",
+    )
+    .unwrap();
+    let (disabled, _) = herdr_call(
+        &fixture,
+        &["add", fixture.repo.to_str().unwrap(), "disabled"],
+        "",
+    );
+    assert!(disabled.status.success(), "{disabled:?}");
+    assert!(!fixture.root.path().join("herdr-calls").exists());
 }

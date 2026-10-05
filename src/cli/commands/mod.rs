@@ -15,7 +15,7 @@ mod review;
 mod service;
 mod simulators;
 mod skill;
-mod workspaces;
+pub(in crate::cli) mod workspaces;
 
 #[cfg(test)]
 mod tests;
@@ -181,6 +181,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         } => unreachable!("shell recovery is handled before loading paths"),
         Command::Repo { command } => repositories::run(&ctx, command).await,
         Command::Add {
+            here,
             path,
             repository,
             branch,
@@ -204,11 +205,13 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
                 issue,
                 workspaces::AgentLaunch::Explicit(agent),
                 args,
+                here,
             )
             .await
         }
         Command::Adopt { repository, path } => workspaces::adopt(&ctx, repository, path).await,
         Command::Issue {
+            here,
             issue,
             repository,
             agent,
@@ -228,9 +231,15 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
                 Some(issue),
                 workspaces::AgentLaunch::IssueDefault(agent),
                 args,
+                here,
             )
             .await
         }
+        Command::HerdrInternal {
+            tab,
+            close_when_done,
+            plan,
+        } => super::herdr::worker(ctx, tab, close_when_done, &plan).await,
         Command::Setup { workspace } => workspaces::setup(&ctx, workspace).await,
         Command::Ls => workspaces::list(&ctx).await,
         Command::Status { workspace } => workspaces::status(&ctx, workspace).await,

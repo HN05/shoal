@@ -301,12 +301,28 @@ Shoal tracks execution; the review tool owns sessions, exports, and forge access
 
 `add --agent <name>` starts the agent after worktree creation, setup, and
 the post-setup hook succeed; arguments after `--` go to the agent. CLI agents
-run in your terminal through the tracked execution wrapper and return the
+run through the tracked execution wrapper and return the
 agent's exit code, restoring OS terminal settings even after interruption. When
 `TERM` is nonempty and not `dumb`, it also resets emulator input modes for the shell;
 the workspace is retained even when launch fails. With shell
 integration, your shell enters the new workspace after the agent exits.
 `--json` emits the workspace record first, then the agent's unmodified output.
+
+Inside Herdr (`HERDR_ENV=1`), interactive `shoal issue` and `shoal add` resolve
+repository, branch, and agent choices in the caller's pane, then open a tab in
+`HERDR_WORKSPACE_ID` and return once the command is submitted there. Issue lookup,
+setup, and agent execution run in that tab. `--here` keeps the command in the
+current pane; JSON, help, and noninteractive calls run in place.
+
+The `[herdr]` table in global or repository config uses normal per-option
+precedence; all values default to true:
+
+```toml
+[herdr]
+new_tab = true          # Enable the handoff inside Herdr
+focus = true            # Focus the new tab
+close_when_done = true  # Close after a tracked agent exits, including cleanup stops
+```
 
 Custom agents use `[commands]` with normal repository/global precedence:
 

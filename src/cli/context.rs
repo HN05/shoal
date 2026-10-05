@@ -11,6 +11,7 @@ use crate::{
 
 pub struct Context {
     pub paths: Paths,
+    pub herdr_tab: Option<super::herdr::Tab>,
     /// Emit machine-readable output and never prompt.
     pub json: bool,
 }
@@ -26,7 +27,11 @@ impl Context {
     }
 
     pub fn new(paths: Paths, json: bool) -> Self {
-        Self { paths, json }
+        Self {
+            paths,
+            json,
+            herdr_tab: None,
+        }
     }
 
     /// Prompts are allowed: a human is on both stdin and stderr, and the caller
