@@ -78,7 +78,9 @@ fn add_reuses_resolution_requests_without_reordering_failures() {
                     .set_read_timeout(Some(Duration::from_secs(5)))
                     .unwrap();
                 let mut line = String::new();
-                if BufReader::new(&stream).read_line(&mut line).unwrap() == 0 {
+                if BufReader::new(&stream).read_line(&mut line).unwrap() == 0
+                    || line.trim().is_empty()
+                {
                     break;
                 }
                 let request: Value = serde_json::from_str(&line).unwrap();
@@ -130,7 +132,9 @@ fn add_reuses_resolution_requests_without_reordering_failures() {
             .stdin(Stdio::null())
             .output()
             .unwrap();
-        drop(UnixStream::connect(socket).unwrap());
+        // Keep the sentinel peer alive while macOS sets its read timeout.
+        let mut sentinel = UnixStream::connect(socket).unwrap();
+        writeln!(sentinel).unwrap();
         assert_eq!(server.join().unwrap(), expected, "{args:?}: {output:?}");
         assert!(!output.status.success(), "{args:?}");
         assert!(
