@@ -3490,12 +3490,15 @@ fn simulator_exclusivity_wait_reuse_scope_and_removal() {
         serde_json::from_slice::<Value>(&busy.stdout).unwrap()["acquired"],
         false
     );
-    let waiting = fixture
+    fixture.ok(&["notifications"]);
+    let mut waiting = fixture
         .command()
         .args(["--json", "sim", "acquire", "second", "--wait", "60"])
         .stdout(Stdio::piped())
         .spawn()
         .unwrap();
+    wait_for_busy(&fixture, "second");
+    assert!(waiting.try_wait().unwrap().is_none());
     fixture.ok(&["sim", "release", "default", "first"]);
     assert_eq!(
         fixture.ok(&["status", "first"])["simulators"],
@@ -4375,7 +4378,8 @@ fn resource_claims_are_atomic_persistent_and_wait_for_release() {
     fixture.daemon.child.wait().unwrap();
     fixture.restart();
     assert_eq!(fixture.ok(&["resource", "--all"]), leases);
-    let waiter = fixture
+    fixture.ok(&["notifications"]);
+    let mut waiter = fixture
         .command()
         .args([
             "--json", "resource", "acquire", "workers", "worker", "--name", "waiter", "--wait",
@@ -4384,6 +4388,8 @@ fn resource_claims_are_atomic_persistent_and_wait_for_release() {
         .stdout(Stdio::piped())
         .spawn()
         .unwrap();
+    wait_for_busy(&fixture, "worker");
+    assert!(waiter.try_wait().unwrap().is_none());
     fixture.ok(&[
         "resource",
         "release",
@@ -5245,7 +5251,8 @@ fn rwlock_modes_survive_restart_wait_and_failed_removal() {
             .code(),
         Some(2)
     );
-    let waiter = fixture
+    fixture.ok(&["notifications"]);
+    let mut waiter = fixture
         .command()
         .args([
             "--json", "resource", "acquire", "cache", "writer", "--mode", "write", "--wait", "60",
@@ -5254,6 +5261,8 @@ fn rwlock_modes_survive_restart_wait_and_failed_removal() {
         .stderr(Stdio::piped())
         .spawn()
         .unwrap();
+    wait_for_busy(&fixture, "writer");
+    assert!(waiter.try_wait().unwrap().is_none());
     let path = Path::new(workspace["path"].as_str().unwrap());
     fs::write(path.join("unfinished"), "retain").unwrap();
     assert!(!fixture.run(&["rm", "reader"]).status.success());
@@ -9378,6 +9387,17 @@ sleep 300
 
 fn process_alive(pid: u32) -> bool {
     unsafe { libc::kill(pid as i32, 0) == 0 }
+}
+
+fn wait_for_busy(fixture: &Fixture, workspace: &str) {
+    wait_until("blocked acquisition notification", || {
+        fixture
+            .ok(&["notifications"])
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|event| event["kind"] == "resource_busy" && event["workspace"] == workspace)
+    });
 }
 
 fn wait_until(what: &str, mut done: impl FnMut() -> bool) {
