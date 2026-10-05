@@ -12269,6 +12269,9 @@ fn post_done_hook_runs_for_scoped_keep_and_retained_cleanup_with_config_layers()
     )
     .unwrap();
     set_repository_toml(&fixture, &format!("{config}[done]\ncleanup=true\n"));
+    // Retention must survive removal of the configuration file later in this
+    // test; otherwise the cleanup sweep can win the race against done --keep.
+    fs::write(path.join("retain-work"), "uncommitted work\n").unwrap();
     fixture.ok(&["done", "hooked"]);
     wait_until("completion cleanup error", || {
         fixture.ok(&["inspect", "hooked"])["completion"]["error"].is_string()
@@ -12682,6 +12685,12 @@ fn closed_issue_honors_keep_and_does_not_complete_later_work_again() {
         let inspection = wait_issue_field(&fixture, "/completion/head", "");
         assert_eq!(inspection["completion"]["cleanup"], false);
         let completion = inspection["completion"].clone();
+        // Completion persists before the hook runs. Observe the hook's output
+        // before restarting so the test cannot cancel the event it asserts.
+        wait_until("post-done hook output", || {
+            fs::read_to_string(fixture.root.path().join("done-events"))
+                .is_ok_and(|events| events.ends_with('\n'))
+        });
         let path = Path::new(inspection["workspace"]["path"].as_str().unwrap());
         merge_commit(path, "later", "preserve later work\n");
         fixture.restart();
