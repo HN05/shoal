@@ -123,8 +123,13 @@ impl Manager {
         self.config.subscribe()
     }
 
-    /// Make `config` the one later operations read.
+    /// Make `config` the one later operations read. Changed overload
+    /// settings withdraw recovery readiness before anything can read them, so
+    /// a waiting agent needs a fresh healthy interval under the new thresholds.
     pub(crate) fn publish_config(&self, config: Config) {
+        if config.overload != self.config().overload {
+            self.reset_overload_recovery();
+        }
         self.config.send_replace(Arc::new(config));
     }
 

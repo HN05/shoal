@@ -86,20 +86,22 @@ impl Monitor {
 
 pub(super) async fn run(manager: Arc<Manager>) {
     let mut monitor = Monitor::default();
-    let mut applied = manager.config();
+    let mut config = manager.config();
     loop {
-        // Read the settings each round so a config reload applies here too.
         // Keep publishing recovery with both protections off: an agent stopped
         // before they were disabled still waits for it.
-        let config = manager.config();
-        let settings = &config.overload;
-        if *settings != applied.overload {
-            // Readings taken under other thresholds do not count toward these.
+        tokio::time::sleep(Duration::from_secs(config.overload.poll_seconds)).await;
+        // Check after sleeping, so a reload during it cannot be sampled under
+        // the old thresholds. Publication already withdrew readiness, and
+        // earlier readings do not count toward the new thresholds.
+        let current = manager.config();
+        let changed = current.overload != config.overload;
+        config = current;
+        if changed {
             monitor = Monitor::default();
-            manager.reset_overload_recovery();
+            continue;
         }
-        applied = config.clone();
-        tokio::time::sleep(Duration::from_secs(settings.poll_seconds)).await;
+        let settings = &config.overload;
         let memory = if settings.memory.enabled {
             crate::process::load::critical_memory(settings.memory.used_percent)
         } else {
@@ -147,6 +149,14 @@ pub(super) async fn run(manager: Arc<Manager>) {
 mod tests {
     use super::*;
 
+    /// A hang guard on the paused clock, well past any recovery window.
+    async fn wait_published(ready: &mut tokio::sync::watch::Receiver<Option<u64>>) {
+        tokio::time::timeout(Duration::from_secs(3600), ready.wait_for(Option::is_some))
+            .await
+            .expect("recovery was never published")
+            .unwrap();
+    }
+
     #[tokio::test]
     async fn recovery_progresses_after_both_protections_are_disabled() {
         let (_root, manager) = crate::test_support::manager().await;
@@ -157,12 +167,11 @@ mod tests {
         let mut ready = manager.recovery_ready.subscribe();
         tokio::time::pause();
         let monitor = tokio::spawn(run(manager.clone()));
-        // Virtual time: a hang guard well past the default recovery window.
-        tokio::time::timeout(Duration::from_secs(3600), ready.wait_for(Option::is_some))
-            .await
-            .expect("recovery was never published")
-            .unwrap();
-        assert_eq!(*ready.borrow(), Some(0));
+        wait_published(&mut ready).await;
+        let epoch = manager
+            .recovery_epoch
+            .load(std::sync::atomic::Ordering::Relaxed);
+        assert_eq!(*ready.borrow(), Some(epoch));
         monitor.abort();
     }
 
@@ -184,12 +193,33 @@ mod tests {
         tokio::time::sleep(Duration::from_secs(41)).await;
         assert_eq!(*ready.borrow(), None);
         manager.publish_config(config(61));
-        tokio::time::timeout(Duration::from_secs(3600), ready.wait_for(Option::is_some))
-            .await
-            .expect("recovery was never published")
-            .unwrap();
+        wait_published(&mut ready).await;
         // Without a reset the old observations publish at about 62 seconds.
         assert!(start.elapsed() >= Duration::from_secs(41 + 61));
+        monitor.abort();
+    }
+
+    #[tokio::test]
+    async fn a_reload_withdraws_published_readiness_until_a_new_window() {
+        let (_root, manager) = crate::test_support::manager().await;
+        let config = |memory_used_percent| {
+            let mut config = crate::config::Config::default();
+            config.overload.memory.enabled = false;
+            config.overload.recovery.memory_used_percent = memory_used_percent;
+            config
+        };
+        manager.publish_config(config(85));
+        let mut ready = manager.recovery_ready.subscribe();
+        tokio::time::pause();
+        let monitor = tokio::spawn(run(manager.clone()));
+        wait_published(&mut ready).await;
+        // Tightening a threshold withdraws readiness before any agent can use it.
+        manager.publish_config(config(75));
+        assert_eq!(*ready.borrow_and_update(), None);
+        let reloaded = Instant::now();
+        wait_published(&mut ready).await;
+        let window = Duration::from_secs(manager.config().overload.recovery.sustained_seconds);
+        assert!(reloaded.elapsed() >= window);
         monitor.abort();
     }
 
