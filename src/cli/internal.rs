@@ -10,11 +10,6 @@ pub const LAND: &str = "land-internal";
 pub const DETACHED: &str = "detached-internal";
 
 pub enum InternalCommand<'a> {
-    Herdr {
-        tab: &'a str,
-        close_when_done: bool,
-        plan: &'a str,
-    },
     Merge {
         branch: &'a str,
         remote: Option<&'a str>,
@@ -46,17 +41,6 @@ pub fn internal_command(
         args.push("--json".into());
     }
     match command {
-        InternalCommand::Herdr {
-            tab,
-            close_when_done,
-            plan,
-        } => {
-            args.extend([HERDR.into(), tab.into()]);
-            if close_when_done {
-                args.push("--close-when-done".into());
-            }
-            args.push(plan.into());
-        }
         InternalCommand::Merge {
             branch,
             remote,

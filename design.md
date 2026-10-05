@@ -238,8 +238,9 @@ through `run`.
 
 The CLI owns Herdr tab handoffs after interactive workspace and
 agent choices and labels the tab with the allocated workspace branch. It carries
-a resolved launch plan to the new pane, preserving state/config selection and
-literal arguments without hook scripts or state files.
+a resolved launch plan to the new pane in the tab's environment, preserving
+state/config selection and literal arguments without hook scripts or state files;
+the worker drops the plan before starting children.
 Tracked agent completion closes its tab, including cleanup stops; preparation
 failures and shell or untracked desktop handoffs retain it.
 

@@ -209,9 +209,9 @@ pub enum Command {
     LandInternal { plan: String },
     #[command(name = internal::HERDR, hide = true)]
     HerdrInternal {
-        tab: String,
         #[arg(long)]
         close_when_done: bool,
+        #[arg(env = crate::env::HERDR_PLAN, hide_env_values = true)]
         plan: String,
     },
     /// Internal worker launched through the tracked execution wrapper.

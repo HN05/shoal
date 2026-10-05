@@ -12822,6 +12822,24 @@ fn herdr_worker(fixture: &Fixture) -> Vec<String> {
     serde_json::from_slice(&fs::read(fixture.root.path().join("herdr-worker")).unwrap()).unwrap()
 }
 
+/// The worker Herdr runs in the created tab, with that tab's environment.
+fn herdr_worker_command(fixture: &Fixture) -> Command {
+    let mut command = fixture.command();
+    command
+        .args(&herdr_worker(fixture)[1..])
+        .env("HERDR_TAB_ID", "w1:t9");
+    let calls = herdr_calls(fixture);
+    let create = calls
+        .iter()
+        .rfind(|call| call[..2] == ["tab", "create"])
+        .unwrap();
+    for pair in create.windows(2).filter(|pair| pair[0] == "--env") {
+        let (name, value) = pair[1].split_once('=').unwrap();
+        command.env(name, value);
+    }
+    command
+}
+
 fn herdr_calls(fixture: &Fixture) -> Vec<Vec<String>> {
     fs::read_to_string(fixture.root.path().join("herdr-calls"))
         .unwrap()
@@ -12833,7 +12851,7 @@ fn herdr_calls(fixture: &Fixture) -> Vec<Vec<String>> {
 #[test]
 fn herdr_handoff_preserves_choices_and_literal_arguments() {
     let fixture = Fixture::with_config(Some(
-        "[commands]\npi = ['sh', '-c', 'printf \"%s\\0\" \"$@\" > \"$HOME/agent-args\"; exit 7', 'agent', '{args}']\n",
+        "[commands]\npi = ['sh', '-c', 'printf \"%s\\0\" \"$@\" > \"$HOME/agent-args\"; echo \"${SHOAL_HERDR_PLAN-unset}\" > \"$HOME/agent-plan\"; exit 7', 'agent', '{args}']\n",
     ));
     install_fake_herdr(&fixture);
     let directive = fixture.root.path().join("caller-directive");
@@ -12864,16 +12882,24 @@ fn herdr_handoff_preserves_choices_and_literal_arguments() {
     assert_eq!(&calls[0][..3], ["tab", "create", "--workspace"]);
     assert!(calls[0].iter().any(|arg| arg == "--focus"));
     assert_eq!(&calls[1][..3], ["pane", "run", "w1:p9"]);
-    let argv = herdr_worker(&fixture);
-    assert_eq!(argv[2], fixture.root.path().join("state").to_str().unwrap());
-    let (agent, transcript) = fixture.interactive(
-        &argv[1..].iter().map(String::as_str).collect::<Vec<_>>(),
-        "",
+    assert_eq!(
+        &herdr_worker(&fixture)[1..],
+        ["herdr-internal", "--close-when-done"]
     );
+    let state = format!(
+        "SHOAL_STATE_DIR={}",
+        fixture.root.path().join("state").display()
+    );
+    assert!(calls[0].contains(&state), "{:?}", calls[0]);
+    let (agent, transcript) = fixture.interactive_command(&mut herdr_worker_command(&fixture), "");
     assert_eq!(agent.status.code(), Some(7), "{agent:?} {transcript}");
     assert_eq!(
         fs::read(fixture.root.path().join("agent-args")).unwrap(),
         b"two words\0quote ' ; $(touch injected)\0"
+    );
+    assert_eq!(
+        fs::read_to_string(fixture.root.path().join("agent-plan")).unwrap(),
+        "unset\n"
     );
     assert!(!fixture.root.path().join("injected").exists());
     assert_eq!(
@@ -12899,11 +12925,7 @@ fn herdr_picks_before_handoff_and_retains_lookup_errors() {
     assert!(caller.status.success(), "{caller:?} {transcript}");
     assert!(transcript.contains("Repository>"), "{transcript}");
     assert!(transcript.contains("Agent>"), "{transcript}");
-    let argv = herdr_worker(&fixture);
-    let (worker, transcript) = fixture.interactive(
-        &argv[1..].iter().map(String::as_str).collect::<Vec<_>>(),
-        "",
-    );
+    let (worker, transcript) = fixture.interactive_command(&mut herdr_worker_command(&fixture), "");
     assert!(!worker.status.success(), "{worker:?}");
     assert!(transcript.contains("lookup-failed"), "{transcript}");
     assert!(!transcript.contains("Repository>"));
@@ -12992,11 +13014,8 @@ fn herdr_labels_use_allocated_branches_for_issues() {
         let create = &calls[calls.len() - 2];
         let label = create.iter().position(|arg| arg == "--label").unwrap();
         assert_eq!(create[label + 1], initial);
-        let argv = herdr_worker(&fixture);
-        let (worker, transcript) = fixture.interactive(
-            &argv[1..].iter().map(String::as_str).collect::<Vec<_>>(),
-            "",
-        );
+        let (worker, transcript) =
+            fixture.interactive_command(&mut herdr_worker_command(&fixture), "");
         assert!(worker.status.success(), "{worker:?} {transcript}");
         assert_eq!(transcript.contains("rename-failed"), fail_rename);
         let calls = herdr_calls(&fixture);
@@ -13025,9 +13044,8 @@ fn herdr_no_agent_opens_workspace_shell_and_honors_focus_setting() {
     );
     let shell = fixture.root.path().join("bin/test-shell");
     install_test_script(&shell, "#!/bin/sh\npwd > \"$HOME/shell-cwd\"\n");
-    let argv = herdr_worker(&fixture);
     let (worker, transcript) =
-        fixture.interactive_command(fixture.command().args(&argv[1..]).env("SHELL", shell), "");
+        fixture.interactive_command(herdr_worker_command(&fixture).env("SHELL", shell), "");
     assert!(worker.status.success(), "{worker:?} {transcript}");
     let workspace = fixture.ok(&["inspect", "herdr-shell"]);
     assert_eq!(
@@ -13105,12 +13123,12 @@ fn herdr_retains_setup_failures_and_can_disable_completion_closure() {
         "",
     );
     assert!(caller.status.success());
-    let argv = herdr_worker(&fixture);
-    assert!(!argv.iter().any(|arg| arg == "--close-when-done"));
-    let (worker, _) = fixture.interactive(
-        &argv[1..].iter().map(String::as_str).collect::<Vec<_>>(),
-        "",
+    assert!(
+        !herdr_worker(&fixture)
+            .iter()
+            .any(|arg| arg == "--close-when-done")
     );
+    let (worker, _) = fixture.interactive_command(&mut herdr_worker_command(&fixture), "");
     assert!(worker.status.success(), "{worker:?}");
     assert_eq!(herdr_calls(&fixture).len(), 3);
     // Enable closure, then fail setup before the agent can start.
@@ -13154,11 +13172,7 @@ fn herdr_retains_setup_failures_and_can_disable_completion_closure() {
         "",
     );
     assert!(caller.status.success());
-    let argv = herdr_worker(&fixture);
-    let (worker, _) = fixture.interactive(
-        &argv[1..].iter().map(String::as_str).collect::<Vec<_>>(),
-        "\n",
-    );
+    let (worker, _) = fixture.interactive_command(&mut herdr_worker_command(&fixture), "\n");
     assert_eq!(worker.status.code(), Some(1));
     assert_eq!(herdr_calls(&fixture).len(), 6);
 }
@@ -13181,12 +13195,8 @@ fn herdr_closes_when_done_cleanup_terminates_the_agent() {
         "",
     );
     assert!(caller.status.success());
-    let argv = herdr_worker(&fixture);
     let (worker, transcript) = fixture.interactive_command(
-        fixture
-            .command()
-            .args(&argv[1..])
-            .env("SHOAL_TEST_BINARY", env!("CARGO_BIN_EXE_shoal")),
+        herdr_worker_command(&fixture).env("SHOAL_TEST_BINARY", env!("CARGO_BIN_EXE_shoal")),
         "",
     );
     assert_eq!(worker.status.code(), Some(143), "{worker:?} {transcript}");
@@ -13219,11 +13229,7 @@ fn herdr_closes_after_detached_happy_execution_finishes() {
         "",
     );
     assert!(caller.status.success());
-    let argv = herdr_worker(&fixture);
-    let (worker, transcript) = fixture.interactive(
-        &argv[1..].iter().map(String::as_str).collect::<Vec<_>>(),
-        "",
-    );
+    let (worker, transcript) = fixture.interactive_command(&mut herdr_worker_command(&fixture), "");
     assert!(worker.status.success(), "{worker:?} {transcript}");
     assert_eq!(
         herdr_calls(&fixture).last().unwrap(),

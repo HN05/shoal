@@ -9,7 +9,7 @@ use super::{
     client,
     commands::workspaces::{AddPlan, execute_add},
     context::Context,
-    internal::{InternalCommand, internal_command},
+    internal,
 };
 use crate::{config::Config, env, protocol::ConfigTarget, subprocess::Run};
 
@@ -38,12 +38,12 @@ pub(super) async fn handoff(ctx: &Context, plan: &AddPlan, here: bool) -> Result
         !env::is_scoped(),
         "workspace processes cannot allocate workspaces"
     );
-    let payload = serde_json::to_string(plan)?;
     let created = create_tab(ctx, plan, settings.herdr.focus).await?;
-    submit_worker(ctx, created, settings.herdr.close_when_done, &payload).await?;
+    submit_worker(created, settings.herdr.close_when_done).await?;
     Ok(true)
 }
 
+// The tab environment carries state selection and the plan, keeping the typed command short.
 async fn create_tab(ctx: &Context, plan: &AddPlan, focus: bool) -> Result<CreatedResult> {
     let workspace = std::env::var_os("HERDR_WORKSPACE_ID")
         .filter(|id| !id.is_empty())
@@ -69,27 +69,28 @@ async fn create_tab(ctx: &Context, plan: &AddPlan, focus: bool) -> Result<Create
     create
         .arg("--env")
         .arg(format!("XDG_CONFIG_HOME={}", config_home.display()));
+    create
+        .arg("--env")
+        .arg(format!("{}={}", env::STATE_DIR, ctx.paths.state.display()));
+    create.arg("--env").arg(format!(
+        "{}={}",
+        env::HERDR_PLAN,
+        serde_json::to_string(plan)?
+    ));
     let output = Run::new(create).checked().await?;
     let created: Created =
         serde_json::from_slice(&output.stdout).context("invalid Herdr tab creation response")?;
     Ok(created.result)
 }
 
-async fn submit_worker(
-    ctx: &Context,
-    created: CreatedResult,
-    close_when_done: bool,
-    payload: &str,
-) -> Result<()> {
-    let argv = internal_command(
-        &ctx.paths,
-        false,
-        InternalCommand::Herdr {
-            tab: &created.tab.tab_id,
-            close_when_done,
-            plan: payload,
-        },
-    )?;
+async fn submit_worker(created: CreatedResult, close_when_done: bool) -> Result<()> {
+    let mut argv = vec![
+        std::env::current_exe()?.into_os_string(),
+        internal::HERDR.into(),
+    ];
+    if close_when_done {
+        argv.push("--close-when-done".into());
+    }
     let mut run = Command::new("herdr");
     run.args(["pane", "run"])
         .arg(&created.root_pane.pane_id)
@@ -107,36 +108,38 @@ struct Created {
 }
 #[derive(Deserialize)]
 struct CreatedResult {
-    tab: CreatedTab,
     root_pane: CreatedPane,
-}
-#[derive(Deserialize)]
-struct CreatedTab {
-    tab_id: String,
 }
 #[derive(Deserialize)]
 struct CreatedPane {
     pane_id: String,
 }
 
-// Herdr's pane API sends shell text. Quote every word, including the JSON payload.
+// Herdr's pane API sends shell text. Quote words that are not plainly literal.
 fn shell_command(argv: &[OsString]) -> Result<String> {
     argv.iter()
         .map(|arg| {
             let arg = arg.to_str().context("Herdr command path is not UTF-8")?;
-            Ok(format!("'{}'", arg.replace('\'', "'\\''")))
+            let literal = !arg.is_empty()
+                && arg
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || "/._-+:=@%,".contains(c));
+            Ok(if literal {
+                arg.to_owned()
+            } else {
+                format!("'{}'", arg.replace('\'', "'\\''"))
+            })
         })
         .collect::<Result<Vec<_>>>()
         .map(|words| words.join(" "))
 }
 
-pub async fn worker(
-    mut ctx: Context,
-    id: String,
-    close_when_done: bool,
-    payload: &str,
-) -> Result<i32> {
+pub async fn worker(mut ctx: Context, close_when_done: bool, payload: &str) -> Result<i32> {
     let plan = serde_json::from_str(payload).context("invalid Herdr workspace plan")?;
+    let id = std::env::var("HERDR_TAB_ID")
+        .ok()
+        .filter(|id| !id.is_empty())
+        .context("Herdr did not provide HERDR_TAB_ID")?;
     ctx.herdr_tab = Some(Tab {
         id,
         close_when_done,
@@ -211,5 +214,21 @@ impl Tab {
             }
             tokio::time::sleep(Duration::from_millis(500)).await;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn shell_command_quotes_only_words_that_need_it() {
+        let argv: Vec<OsString> = ["/opt/bin/shoal", "herdr-internal", "a b", "it's", ""]
+            .map(Into::into)
+            .into();
+        assert_eq!(
+            shell_command(&argv).unwrap(),
+            r#"/opt/bin/shoal herdr-internal 'a b' 'it'\''s' ''"#
+        );
     }
 }

@@ -10,6 +10,8 @@ pub const PREFIX: &str = "SHOAL_";
 
 /// Overrides the state directory; also isolates the daemon socket.
 pub const STATE_DIR: &str = "SHOAL_STATE_DIR";
+/// Resolved launch plan a new Herdr tab hands its worker; removed at startup.
+pub const HERDR_PLAN: &str = "SHOAL_HERDR_PLAN";
 /// Cooperative scope token given to processes launched through the wrapper.
 pub const SCOPE_TOKEN: &str = "SHOAL_SCOPE_TOKEN";
 /// Execution marker used to discover owned processes during recovery.

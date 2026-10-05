@@ -36,12 +36,15 @@ fn main() {
     clap_complete::CompleteEnv::with_factory(cli::completion::command)
         .var(env::COMPLETE)
         .complete();
-    run_cli();
+    let cli = Cli::parse();
+    // SAFETY: no other threads exist before the runtime starts. The Herdr plan is
+    // parsed above and must not reach the worker's children.
+    unsafe { std::env::remove_var(env::HERDR_PLAN) };
+    run_cli(cli);
 }
 
 #[tokio::main]
-async fn run_cli() {
-    let cli = Cli::parse();
+async fn run_cli(cli: Cli) {
     let json_output = cli.json;
     match cli::commands::run(cli).await {
         Ok(code) => std::process::exit(code),
