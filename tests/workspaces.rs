@@ -7855,12 +7855,14 @@ test ! -f fail-removal || { echo 'session still busy' >&2; exit 3; }
 }
 
 #[test]
-fn claude_launch_marks_the_workspace_trusted_in_claude_config() {
+fn claude_launch_trusts_workspace_and_repository_directories() {
     let fixture = Fixture::new();
     let home = fixture.root.path();
     let workspace = fixture.add("trusted");
     let path = fs::canonicalize(workspace["path"].as_str().unwrap()).unwrap();
-    let key = path.to_str().unwrap();
+    let repository = fixture.ok(&["repo", "list"])[0].clone();
+    let directory = fs::canonicalize(repository["workspaces_dir"].as_str().unwrap()).unwrap();
+    let keys = [path.as_path(), directory.as_path(), fixture.repo.as_path()];
     let bin = home.join("bin");
     fs::create_dir_all(&bin).unwrap();
     fs::write(bin.join("claude"), "#!/bin/sh\nexit 0\n").unwrap();
@@ -7870,13 +7872,25 @@ fn claude_launch_marks_the_workspace_trusted_in_claude_config() {
     // First launch creates a trusted entry even before Claude has a config.
     assert!(fixture.run(&["claude", "trusted"]).status.success());
     let root: Value = serde_json::from_str(&fs::read_to_string(&config).unwrap()).unwrap();
-    assert_eq!(root["projects"][key]["hasTrustDialogAccepted"], true);
+    for path in keys {
+        assert_eq!(
+            root["projects"][path.to_str().unwrap()]["hasTrustDialogAccepted"],
+            true
+        );
+    }
+    assert!(root["projects"][fixture.shoal_dir().to_str().unwrap()].is_null());
 
     fs::write(&config, r#"{"numStartups": 1, "projects": {}}"#).unwrap();
     assert!(fixture.run(&["claude", "trusted"]).status.success());
     let root: Value = serde_json::from_str(&fs::read_to_string(&config).unwrap()).unwrap();
     assert_eq!(root["numStartups"], 1);
-    assert_eq!(root["projects"][key]["hasTrustDialogAccepted"], true);
+    for path in keys {
+        assert_eq!(
+            root["projects"][path.to_str().unwrap()]["hasTrustDialogAccepted"],
+            true
+        );
+    }
+    assert!(root["projects"][fixture.shoal_dir().to_str().unwrap()].is_null());
 
     // An absolute CLAUDE_CONFIG_DIR selects that directory's config instead.
     let config_dir = home.join("claude-config");
@@ -7891,9 +7905,14 @@ fn claude_launch_marks_the_workspace_trusted_in_claude_config() {
     let overridden: Value =
         serde_json::from_str(&fs::read_to_string(config_dir.join(".claude.json")).unwrap())
             .unwrap();
-    assert_eq!(overridden["projects"][key]["hasTrustDialogAccepted"], true);
+    for path in keys {
+        assert_eq!(
+            overridden["projects"][path.to_str().unwrap()]["hasTrustDialogAccepted"],
+            true
+        );
+    }
     let untouched: Value = serde_json::from_str(&fs::read_to_string(&config).unwrap()).unwrap();
-    assert!(untouched["projects"][key].is_null());
+    assert_eq!(untouched["projects"], serde_json::json!({}));
 
     // A bad override warns and still launches.
     let output = fixture
@@ -7907,12 +7926,22 @@ fn claude_launch_marks_the_workspace_trusted_in_claude_config() {
 }
 
 #[test]
-fn codex_launches_trust_the_workspace_in_the_selected_user_config() {
+fn codex_launches_trust_workspace_and_repository_in_selected_config() {
     let fixture = Fixture::new();
     let home = fixture.root.path();
-    let workspace = fixture.add("trusted");
+    // An explicit path must not make its arbitrary parent a trust root.
+    let external = home.join("external/workspace");
+    let workspace = fixture.ok(&[
+        "add",
+        fixture.repo.to_str().unwrap(),
+        "trusted",
+        "--path",
+        external.to_str().unwrap(),
+    ]);
     let path = fs::canonicalize(workspace["path"].as_str().unwrap()).unwrap();
-    let key = path.to_str().unwrap();
+    let repository = fixture.ok(&["repo", "list"])[0].clone();
+    let directory = fs::canonicalize(repository["workspaces_dir"].as_str().unwrap()).unwrap();
+    let keys = [path.as_path(), directory.as_path(), fixture.repo.as_path()];
     let bin = home.join("bin");
     fs::create_dir_all(&bin).unwrap();
     // Inspect the config from the child so trust must precede the launch.
@@ -7945,9 +7974,21 @@ fn codex_launches_trust_the_workspace_in_the_selected_user_config() {
             assert!(output.status.success(), "{output:?}");
             let root: toml::Value =
                 toml::from_str(std::str::from_utf8(&output.stdout).unwrap()).unwrap();
-            assert_eq!(
-                root["projects"][key]["trust_level"].as_str(),
-                Some("trusted")
+            for path in keys {
+                assert_eq!(
+                    root["projects"][path.to_str().unwrap()]["trust_level"].as_str(),
+                    Some("trusted")
+                );
+            }
+            assert!(
+                root["projects"]
+                    .get(path.parent().unwrap().to_str().unwrap())
+                    .is_none()
+            );
+            assert!(
+                root["projects"]
+                    .get(fixture.shoal_dir().to_str().unwrap())
+                    .is_none()
             );
             assert_eq!(fs::read(&target).unwrap(), output.stdout);
             if overridden {
@@ -9478,10 +9519,14 @@ fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
             )
             .unwrap();
             let key = fs::canonicalize(workspace["path"].as_str().unwrap()).unwrap();
-            assert_eq!(
-                config["projects"][key.to_str().unwrap()]["trust_level"].as_str(),
-                Some("trusted")
-            );
+            let repository = fixture.ok(&["repo", "list"])[0].clone();
+            let directory = Path::new(repository["workspaces_dir"].as_str().unwrap());
+            for path in [key.as_path(), directory, fixture.repo.as_path()] {
+                assert_eq!(
+                    config["projects"][path.to_str().unwrap()]["trust_level"].as_str(),
+                    Some("trusted")
+                );
+            }
             launch
         } else {
             let workspace = fixture.add(&name);
@@ -9505,10 +9550,14 @@ fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
             let config: Value =
                 serde_json::from_str(&fs::read_to_string(&claude_config).unwrap()).unwrap();
             let key = fs::canonicalize(workspace["path"].as_str().unwrap()).unwrap();
-            assert_eq!(
-                config["projects"][key.to_str().unwrap()]["hasTrustDialogAccepted"],
-                true
-            );
+            let repository = fixture.ok(&["repo", "list"])[0].clone();
+            let directory = Path::new(repository["workspaces_dir"].as_str().unwrap());
+            for path in [key.as_path(), directory, fixture.repo.as_path()] {
+                assert_eq!(
+                    config["projects"][path.to_str().unwrap()]["hasTrustDialogAccepted"],
+                    true
+                );
+            }
             launch
         };
         assert_eq!(launch["agent"], agent);

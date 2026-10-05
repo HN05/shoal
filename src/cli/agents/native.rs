@@ -27,7 +27,7 @@ pub(in crate::cli) async fn claude(
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let launch = ResolvedLaunch::inspect(ctx, workspace, None).await?;
-    trust_claude(ctx, &launch.workspace.path);
+    trust_claude(ctx, &launch.workspace).await;
     let args = templates::instruction_args(BuiltinAgent::Claude, launch.instructions())
         .into_iter()
         .chain(args)
@@ -51,7 +51,7 @@ pub(in crate::cli) async fn codex(
         return open_app(ctx, Some(workspace), "codex", args).await;
     }
     let launch = ResolvedLaunch::inspect(ctx, workspace, Some(settings)).await?;
-    trust_codex(ctx, &launch.workspace.path);
+    trust_codex(ctx, &launch.workspace).await;
     let args = templates::instruction_args(BuiltinAgent::Codex, launch.instructions())
         .into_iter()
         .chain(args)

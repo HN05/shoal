@@ -45,8 +45,8 @@ pub(in crate::cli) async fn happy(
         prompt
     };
     match agent {
-        BuiltinAgent::Claude => trust_claude(ctx, &workspace.path),
-        BuiltinAgent::Codex => trust_codex(ctx, &workspace.path),
+        BuiltinAgent::Claude => trust_claude(ctx, &workspace).await,
+        BuiltinAgent::Codex => trust_codex(ctx, &workspace).await,
     }
     let daemon_state = happy::daemon_state_path(&ctx.paths.home);
     let daemon_recorded = daemon_state.is_file();

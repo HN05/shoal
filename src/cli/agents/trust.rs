@@ -3,31 +3,73 @@ use crate::fsutil::{self, Permissions, ReplaceOptions};
 use anyhow::{Context as _, Result};
 use serde_json::json;
 
-use crate::{cli::context::Context, env};
+use crate::{
+    cli::{client, context::Context},
+    env,
+    model::Workspace,
+};
 
 /// Mark the workspace trusted in Claude Code's config so a launch, attached or
 /// detached, never stops at the trust dialog. Failure only warns.
-pub(super) fn trust_claude(ctx: &Context, workspace: &std::path::Path) {
-    let trusted = env::claude_config_dir().and_then(|dir| {
-        let config = dir
-            .unwrap_or_else(|| ctx.paths.home.clone())
-            .join(".claude.json");
-        trust_claude_workspace(&config, workspace)
+pub(super) async fn trust_claude(ctx: &Context, workspace: &Workspace) {
+    let config = env::claude_config_dir().map(|dir| {
+        dir.unwrap_or_else(|| ctx.paths.home.clone())
+            .join(".claude.json")
     });
-    if let Err(error) = trusted {
-        eprintln!("warning: could not mark the workspace as trusted for Claude Code: {error:#}");
-    }
+    trust_launch(
+        ctx,
+        workspace,
+        config,
+        "Claude Code",
+        trust_claude_workspace,
+    )
+    .await;
 }
 
-pub(super) fn trust_codex(ctx: &Context, workspace: &std::path::Path) {
-    let trusted = env::codex_home().and_then(|dir| {
-        let config = dir
-            .unwrap_or_else(|| ctx.paths.home.join(".codex"))
-            .join("config.toml");
-        trust_codex_workspace(&config, workspace)
+pub(super) async fn trust_codex(ctx: &Context, workspace: &Workspace) {
+    let config = env::codex_home().map(|dir| {
+        dir.unwrap_or_else(|| ctx.paths.home.join(".codex"))
+            .join("config.toml")
     });
-    if let Err(error) = trusted {
-        eprintln!("warning: could not mark the workspace as trusted for Codex: {error:#}");
+    trust_launch(ctx, workspace, config, "Codex", trust_codex_workspace).await;
+}
+
+async fn trust_launch(
+    ctx: &Context,
+    workspace: &Workspace,
+    config: Result<std::path::PathBuf>,
+    agent: &str,
+    update: fn(&std::path::Path, &std::path::Path) -> Result<bool>,
+) {
+    let config = match config {
+        Ok(config) => config,
+        Err(error) => {
+            eprintln!("warning: could not mark the workspace as trusted for {agent}: {error:#}");
+            return;
+        }
+    };
+    let mut paths = vec![workspace.path.clone()];
+    match client::repositories(&ctx.paths).await.and_then(|repos| {
+        repos
+            .into_iter()
+            .find(|repo| repo.id == workspace.repository_id)
+            .context("workspace repository is missing")
+    }) {
+        Ok(repo) => {
+            paths.extend(repo.workspaces_dir);
+            paths.push(repo.path);
+        }
+        Err(error) => {
+            eprintln!("warning: could not resolve repository trust paths for {agent}: {error:#}");
+        }
+    }
+    for path in paths {
+        if let Err(error) = update(&config, &path) {
+            eprintln!(
+                "warning: could not mark {} as trusted for {agent}: {error:#}",
+                path.display()
+            );
+        }
     }
 }
 

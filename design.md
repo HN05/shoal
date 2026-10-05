@@ -306,7 +306,8 @@ their specialized launchers; custom names add no tool-specific flags or trust se
 
 Agent shortcuts use the execution wrapper: by default Codex CLI gets full access without
 approvals and Claude runs with its own settings. Both trust the
-workspace in their user config before launch, creating the file if needed; Happy
+workspace, its repository's Shoal directory, and the registered checkout in their
+user config before launch, creating the file if needed; Happy
 launches and Codex app handoffs do so too. General agent templates become native
 CLI instructions or a first-message prefix for Happy Codex; desktop handoffs carry no instructions.
 Codex's default mode is a config value read at launch; `--cli` and `--app`

@@ -136,7 +136,8 @@ removal, check it against the rule those files state before judging it.
 - Agent pickers offer “No agent”: issue creation continues without a launch,
   and review returns without starting a reviewer.
 - Claude and Codex launches (including Happy and Codex app handoffs) persist
-  workspace trust even when the user config is absent, preserving other settings.
+  trust for the workspace, its repository's Shoal directory, and the registered
+  checkout even when the user config is absent, preserving other settings.
 - Machine-wide memory overload protection is opt-out; sustained CPU protection is
   opt-in. Stop one connected tracked
   agent at a time through its wrapper, newest first, with configurable thresholds

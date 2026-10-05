@@ -28,7 +28,7 @@ pub(in crate::cli) async fn open_app(
         "workspace directory is missing"
     );
     if program == "codex" {
-        trust_codex(ctx, &inspection.workspace.path);
+        trust_codex(ctx, &inspection.workspace).await;
     }
     let status = tokio::process::Command::new(program)
         .arg("app")
