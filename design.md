@@ -237,8 +237,8 @@ Root help groups built-in commands by task; configured commands are discovered
 through `run`.
 
 The CLI owns Herdr tab handoffs after interactive workspace and
-agent choices and labels the tab with the allocated workspace branch. It carries
-a resolved launch plan to the new pane in the tab's environment, preserving
+agent choices and labels the tab `<repo>#<number>` for an issue, otherwise with the
+allocated workspace branch. It carries a resolved launch plan to the new pane in the tab's environment, preserving
 state/config selection and literal arguments without hook scripts or state files.
 By default, workspace shells receive focus and agent launches stay in the
 background; an explicit focus setting overrides this choice.

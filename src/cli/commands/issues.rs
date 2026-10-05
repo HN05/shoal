@@ -141,6 +141,11 @@ impl Issue {
         name
     }
 
+    /// `<repo>#<number>`: short, and unique across repositories sharing a Herdr workspace.
+    pub fn tab_label(&self, repo: &Repository) -> String {
+        format!("{}#{}", crate::forge::repository::name(repo), self.number)
+    }
+
     pub fn prompt(&self, template: Option<&str>) -> String {
         crate::config::templates::render(
             template.unwrap_or(crate::config::templates::ISSUE_DEFAULT),

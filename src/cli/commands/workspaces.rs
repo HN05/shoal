@@ -208,7 +208,11 @@ async fn execute_add_with_target(ctx: &Context, plan: AddPlan, target: AddTarget
     };
     let opened = open_add_workspace(ctx, &target, creation, issue.as_ref()).await?;
     if let Some(tab) = &ctx.herdr_tab {
-        tab.rename(&opened.workspace.branch).await;
+        let label = match &issue {
+            Some(issue) => issue.tab_label(target.repository(ctx).await?),
+            None => opened.workspace.branch.clone(),
+        };
+        tab.rename(&label).await;
     }
     if let Some(issue) = &issue {
         request::<()>(

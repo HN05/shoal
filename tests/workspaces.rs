@@ -12995,16 +12995,17 @@ fn herdr_picks_before_handoff_and_retains_lookup_errors() {
 }
 
 #[test]
-fn herdr_labels_use_allocated_branches_for_issues() {
+fn herdr_labels_name_issues_by_repository_and_number() {
     let fixture = Fixture::with_config(Some("[commands]\npi = ['sh', '-c', 'exit 0']\n"));
     fixture.add_github_origin();
+    fixture.ok(&["repo", "rename", fixture.repo.to_str().unwrap(), "project"]);
     install_fake_herdr(&fixture);
     install_test_script(
         &fixture.root.path().join("bin/gh"),
         "#!/bin/sh\necho '{\"state\":\"OPEN\",\"number\":34,\"title\":\"Fix API timeout\",\"body\":\"Details\"}'\n",
     );
     let url = "https://github.com/team/project/issues/34";
-    for (mut args, initial, branch, fail_rename) in [
+    for (mut args, initial, renamed, fail_rename) in [
         (
             vec![
                 "issue",
@@ -13015,7 +13016,7 @@ fn herdr_labels_use_allocated_branches_for_issues() {
                 "pi",
             ],
             "shoal issue",
-            "issue-34-fix-api-timeout",
+            "project#34",
             false,
         ),
         (
@@ -13028,7 +13029,7 @@ fn herdr_labels_use_allocated_branches_for_issues() {
                 "pi",
             ],
             "shoal issue",
-            "issue-34-fix-api-timeout-2",
+            "project#34",
             false,
         ),
         (
@@ -13042,7 +13043,7 @@ fn herdr_labels_use_allocated_branches_for_issues() {
                 "pi",
             ],
             "fix/short",
-            "fix/short",
+            "project#34",
             true,
         ),
         (
@@ -13079,10 +13080,10 @@ fn herdr_labels_use_allocated_branches_for_issues() {
         assert!(worker.status.success(), "{worker:?} {transcript}");
         assert_eq!(transcript.contains("rename-failed"), fail_rename);
         let calls = herdr_calls(&fixture);
-        assert_eq!(calls[calls.len() - 2], ["tab", "rename", "w1:t9", branch]);
+        assert_eq!(calls[calls.len() - 2], ["tab", "rename", "w1:t9", renamed]);
         assert_eq!(calls.last().unwrap(), &["tab", "close", "w1:t9"]);
-        if branch == "issue-34-fix-api-timeout" {
-            fixture.ok(&["rm", branch, "--keep-branch", "--yes"]);
+        if args[1] == "34" {
+            fixture.ok(&["rm", "issue-34-fix-api-timeout", "--keep-branch", "--yes"]);
         }
     }
 }

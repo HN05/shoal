@@ -126,8 +126,8 @@ removal, check it against the rule those files state before judging it.
   to their nearest surviving ancestor without a daemon, preserving exit status and
   existing prompt hooks. Scoped callers cannot use this recovery.
 - Herdr handoffs belong to the CLI after interactive choices, preserving resolved
-  choices, literal arguments and state/config selection; tab labels use the
-  allocated workspace branch. Preparation failures keep the tab readable; only
+  choices, literal arguments and state/config selection; tab labels use
+  `<repo>#<number>` for issues and the allocated workspace branch otherwise. Preparation failures keep the tab readable; only
   tracked agent completion closes it, including cleanup stops.
   Default focus follows the resolved launch: shells receive focus, agents stay
   in the background, and explicit focus settings override either default.
