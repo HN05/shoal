@@ -128,6 +128,9 @@ fn launch(
 #[tokio::test]
 #[ignore = "isolated tracked wrapper launched by overload tests"]
 async fn tracked_agent_child() {
+    if std::env::var_os("SHOAL_TEST_HELPER").is_none() {
+        return;
+    }
     let root = std::env::current_dir().unwrap();
     let paths = crate::paths::Paths::for_test(root);
     let id = std::env::var("SHOAL_TEST_WORKSPACE").unwrap();

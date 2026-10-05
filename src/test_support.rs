@@ -71,6 +71,7 @@ pub fn isolated_test(root: &Path, name: &str) -> tokio::process::Command {
         .env("ZDOTDIR", root)
         .env("GIT_CONFIG_GLOBAL", "/dev/null")
         .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env("SHOAL_TEST_HELPER", "1")
         .current_dir(root)
         .stdin(std::process::Stdio::null())
         .kill_on_drop(true);

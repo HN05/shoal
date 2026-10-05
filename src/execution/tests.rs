@@ -21,6 +21,9 @@ async fn adjacent_controls_survive_start_and_recovery_transitions() {
 #[tokio::test]
 #[ignore = "isolated wrapper launched by control regression"]
 async fn adjacent_controls_child() {
+    if std::env::var_os("SHOAL_TEST_HELPER").is_none() {
+        return;
+    }
     let root = std::env::current_dir().unwrap();
     let paths = Paths::for_test(&root);
     let plan = ExecutionPlan {
