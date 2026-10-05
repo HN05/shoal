@@ -40,6 +40,10 @@ pub(super) async fn pause(
     };
     let resume = async {
         ready?;
+        ensure!(
+            manager.config().overload.recovery.enabled,
+            "overload recovery was disabled while the agent waited"
+        );
         prepare_resume(manager, execution_id, workspace_id).await
     }
     .await;

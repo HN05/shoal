@@ -88,13 +88,11 @@ pub(super) async fn run(manager: Arc<Manager>) {
     let mut monitor = Monitor::default();
     loop {
         // Read the settings each round so a config reload applies here too.
+        // Keep publishing recovery with both protections off: an agent stopped
+        // before they were disabled still waits for it.
         let config = manager.config();
         let settings = &config.overload;
         tokio::time::sleep(Duration::from_secs(settings.poll_seconds)).await;
-        if !settings.memory.enabled && !settings.cpu.enabled {
-            monitor = Monitor::default();
-            continue;
-        }
         let memory = if settings.memory.enabled {
             crate::process::load::critical_memory(settings.memory.used_percent)
         } else {
@@ -141,6 +139,25 @@ pub(super) async fn run(manager: Arc<Manager>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn recovery_progresses_after_both_protections_are_disabled() {
+        let (_root, manager) = crate::test_support::manager().await;
+        let config = crate::config::Config::path(&manager.paths);
+        std::fs::create_dir_all(config.parent().unwrap()).unwrap();
+        std::fs::write(&config, "[overload.memory]\nenabled = false\n").unwrap();
+        manager.reload_config().await.unwrap();
+        let mut ready = manager.recovery_ready.subscribe();
+        tokio::time::pause();
+        let monitor = tokio::spawn(run(manager.clone()));
+        // Virtual time: a hang guard well past the default recovery window.
+        tokio::time::timeout(Duration::from_secs(3600), ready.wait_for(Option::is_some))
+            .await
+            .expect("recovery was never published")
+            .unwrap();
+        assert_eq!(*ready.borrow(), Some(0));
+        monitor.abort();
+    }
 
     #[test]
     fn missing_readings_reset_pressure_and_default_memory_is_immediate() {

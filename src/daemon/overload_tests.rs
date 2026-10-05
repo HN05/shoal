@@ -503,6 +503,57 @@ async fn refused_recovery_finishes_the_stopped_execution_and_retains_manual_reco
     serving.abort();
 }
 
+async fn set_recovery(manager: &Manager, enabled: bool) {
+    let config = crate::config::Config::path(&manager.paths);
+    fs::create_dir_all(config.parent().unwrap()).unwrap();
+    fs::write(
+        config,
+        format!("[overload.recovery]\nenabled = {enabled}\n"),
+    )
+    .unwrap();
+    manager.reload_config().await.unwrap();
+}
+
+fn publish_recovery(manager: &Manager) {
+    let epoch = manager
+        .recovery_epoch
+        .load(std::sync::atomic::Ordering::Relaxed);
+    manager.recovery_ready.send_replace(Some(epoch));
+}
+
+#[tokio::test]
+async fn disabling_recovery_while_an_agent_waits_finishes_it_with_a_restore_record() {
+    let (_root, manager, workspace, serving) = fixture().await;
+    let launched = launch(&manager, &workspace);
+    wait_started(&workspace).await;
+    assert!(manager.stop_agent_for_overload("test pressure").await);
+    wait_paused(&manager, &workspace).await;
+    set_recovery(&manager, false).await;
+    publish_recovery(&manager);
+    bounded(launched).await.unwrap().unwrap();
+    assert!(!workspace.path.join("restored").exists());
+    assert!(crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
+    serving.abort();
+}
+
+#[tokio::test]
+async fn enabling_recovery_applies_to_an_agent_started_without_it() {
+    let (_root, manager, workspace, serving) = fixture().await;
+    set_recovery(&manager, false).await;
+    let launched = launch(&manager, &workspace);
+    wait_started(&workspace).await;
+    set_recovery(&manager, true).await;
+    assert!(manager.stop_agent_for_overload("test pressure").await);
+    wait_paused(&manager, &workspace).await;
+    publish_recovery(&manager);
+    bounded(launched).await.unwrap().unwrap();
+    assert_eq!(
+        fs::read_to_string(workspace.path.join("restored")).unwrap(),
+        "restored"
+    );
+    serving.abort();
+}
+
 #[tokio::test]
 async fn recovery_disconnect_closes_the_connection_without_forgetting_ownership() {
     let (_root, manager, workspace, serving) = fixture().await;

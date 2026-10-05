@@ -551,9 +551,9 @@ async fn execute(
             &Response::new(request_id, Body::Execution(plan)),
         )
         .await?;
-        let recover = recover && manager.config().overload.recovery.enabled;
         let mut awaiting_started = true;
         let mut sent_stop = false;
+        let mut recovering = false;
         loop {
             let event = if awaiting_started {
                 incoming.recv().await.context("execution disconnected")??
@@ -567,7 +567,9 @@ async fn execute(
                             changed?;
                             if *stop.borrow_and_update() {
                                 let control = if manager.agent_was_overloaded(&execution_id).await {
-                                    Control::OverloadStop { recover }
+                                    // Read the policy now, so a reload applies to running agents.
+                                    recovering = recover && manager.config().overload.recovery.enabled;
+                                    Control::OverloadStop { recover: recovering }
                                 } else if manager.agent_was_paused(&execution_id).await {
                                     Control::Pause
                                 } else { Control::Stop };
@@ -595,7 +597,7 @@ async fn execute(
                         &workspace_id,
                         &mut incoming,
                         &mut stop,
-                        recover,
+                        recovering,
                     )
                     .await?
                     {
