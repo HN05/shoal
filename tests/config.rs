@@ -18,6 +18,7 @@ fn inline_edits_validate_preserve_comments_and_work_without_a_daemon() {
     let result: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(result["config"], config.to_str().unwrap());
     assert!(result["backup"].is_null());
+    assert_eq!(result["daemon_reloaded"], false);
     let original =
         "# policy\ndefault_agent = 'codex' # chosen\n[ports]\nstart = 3000\nend = 4000\n";
     fs::write(&config, original).unwrap();

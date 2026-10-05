@@ -129,6 +129,46 @@ fn cli_connects_to_daemon_and_stops_it() {
 }
 
 #[test]
+fn global_config_changes_reload_a_running_daemon() {
+    let daemon = Daemon::start();
+    let policy = || {
+        let output = daemon.run(&["--json", "sim", "--all"]);
+        assert!(output.status.success(), "{output:?}");
+        serde_json::from_slice::<Value>(&output.stdout).unwrap()["policy"].clone()
+    };
+    assert!(policy()["default"].is_null());
+    let output = daemon.run(&[
+        "--json",
+        "config",
+        "set",
+        "simulators.profiles.phone.device",
+        "iPhone 17",
+        "simulators.profiles.phone.runtime",
+        "iOS 27",
+        "simulators.default",
+        "phone",
+    ]);
+    assert!(output.status.success(), "{output:?}");
+    let result: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(result["daemon_reloaded"], true);
+    assert_eq!(policy()["default"], "phone");
+    // Hand edits apply on an explicit reload; an invalid file keeps the running config.
+    let config = daemon.root.path().join(".config/shoal/config.toml");
+    fs::write(&config, "[simulators]\nmax_booted = 0\n").unwrap();
+    assert!(!daemon.run(&["daemon", "reload"]).status.success());
+    assert_eq!(policy()["default"], "phone");
+    fs::write(&config, "").unwrap();
+    assert!(daemon.run(&["daemon", "reload"]).status.success());
+    assert!(policy()["default"].is_null());
+    let scoped = command(daemon.root.path())
+        .args(["daemon", "reload"])
+        .env("SHOAL_SCOPE_TOKEN", "test-scope")
+        .output()
+        .unwrap();
+    assert!(!scoped.status.success());
+}
+
+#[test]
 fn second_daemon_cannot_steal_the_socket() {
     let daemon = Daemon::start();
     let output = daemon.run(&["daemon", "run"]);

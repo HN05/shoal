@@ -53,7 +53,7 @@ installation copies the embedded skill.
 cargo install --path .
 shoal install --dry-run     # Preview the OS service definition
 shoal install               # Register and start the per-user service
-shoal daemon status|stop|start|restart
+shoal daemon status|stop|start|restart|reload
 ```
 
 macOS uses a launchd LaunchAgent in `~/Library/LaunchAgents` (requires a GUI
@@ -77,8 +77,11 @@ install <name>` replaces the entire global file with a packaged template;
 `shoal config reset` installs `default`. Both move the current file to
 `config.toml.backup` (replacing an older backup) without asking. Templates are
 copied, so package upgrades leave installed edits alone. Unknown names fail
-without changing either file; installation needs no daemon. Restart the daemon
-to apply its settings; the CLI reads agent settings on each command. Setup preserves compatible
+without changing either file; installation needs no daemon. `shoal config` edits,
+installs and resets apply to a running daemon at once; after editing the file by
+hand, run `shoal daemon reload`. Reloading keeps running agents and leases, and an
+invalid file leaves the daemon's previous settings in place. The CLI reads agent
+settings on each command. Setup preserves compatible
 daemons and commands until restart; incompatible daemons restart automatically.
 Stop foreground daemons manually. macOS diagnostics go to `daemon.log` in the
 state directory; Linux uses `journalctl --user -u shoal.service`. Native Linux service integration remains untested.
@@ -94,7 +97,7 @@ leases and records an `agent_stopped` notification.
 Ordinary commands, desktop handoffs and disconnected executions are not selected.
 Monitoring does not guarantee that the OS will never reach its OOM limit.
 
-Configure machine-wide settings in global TOML and restart the daemon:
+Configure machine-wide settings in global TOML and reload the daemon:
 
 ```toml
 [overload]
@@ -540,7 +543,7 @@ repository gets `~/shoal/<name>/`, named by `--name` or the source basename with
 default to it and a URL clone lives there as `.checkout`. A local checkout
 already at `~/shoal/<name>/<anything>` keeps that directory. `root_dir =
 "~/Projects"` in the global config (absolute or `~/` path outside Shoal's state
-directory and every checkout; daemon restart required) changes the parent for new
+directory and every checkout; daemon reload required) changes the parent for new
 registrations; symlinks and `..` are resolved before checking and creating the root,
 even across missing components. Existing registrations keep their paths, as do
 workspaces created before this layout. `repo add <url> --path <dir>` clones one repository to an exact new
@@ -555,7 +558,7 @@ and source URLs; inferred names work when unambiguous.
 
 ### Git profiles
 
-Define named Git settings in the global config, then restart the daemon:
+Define named Git settings in the global config, then reload the daemon:
 
 ```toml
 [git.profiles.work]
@@ -843,7 +846,7 @@ errors in `pr_cleanup`. Invalid registrations retain the workspace.
 only that PR, leaving the remaining watches active. Removing the final watch does
 not mark done. Unwatching does not undo a recorded completion; use `done --keep`
 to cancel its cleanup. `[pr_cleanup] enabled = false` pauses PR-driven completion
-and cleanup independently of idle cleanup, globally (restart after changing it)
+and cleanup independently of idle cleanup, globally (on reload)
 or per repository (applies at once). Cancellation remains available when disabled.
 
 ### Automatic cleanup
@@ -863,7 +866,7 @@ enabled = false # Default: true
 idle_minutes = 10
 ```
 
-Restart the daemon after changing this globally; the same table in a
+Reload the daemon after changing this globally; the same table in a
 repository config applies to that repository's workspaces on the next sweep.
 
 ### Notifications
@@ -1015,7 +1018,7 @@ direct filesystem or Git operations.
 ## Simulators (macOS)
 
 Shoal creates, boots, shares, and deletes its own Xcode simulators. Configure
-profiles in the global config and restart the daemon:
+profiles in the global config and reload the daemon:
 
 ```toml
 [simulators]
@@ -1105,7 +1108,7 @@ never changes silently. Repeating a pool and lease name (default `default`) retu
 the existing permit. `--json` returns the lease or `acquired: false` with exit 2;
 `--wait` polls for up to 3600 seconds without fairness. Global names cannot be
 redefined by a repository; repository pools are keyed by repository, so equal names
-elsewhere are independent. Global changes need a restart, repository config is read
+elsewhere are independent. Global changes apply on reload, repository config is read
 per request, and conflicting definitions block new claims until they agree or leases
 drain. Leases survive command exit and restarts, block automatic cleanup, and are
 released by successful removal. Shoal accounts for permits only; stop using a

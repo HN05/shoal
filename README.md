@@ -161,7 +161,7 @@ for wrapper setup.
 
 Memory overload protection stops tracked agents by default while retaining their
 workspaces and leases. To opt out, run `shoal config set overload.memory.enabled
-false` and restart the daemon. See [overload protection](docs/reference.md#overload-protection)
+false`. See [overload protection](docs/reference.md#overload-protection)
 for thresholds and timing. Pause agents manually with `shoal pause`, then restore
 a stopped session with `shoal resume`; configure `[agent_resume]` for automatic
 recovery after overload when load recovers.
@@ -223,7 +223,7 @@ Automatic cleanup removes idle, clean, pushed or landed workspaces after 10 minu
 and forgets workspaces whose directory you deleted yourself, keeping the branch.
 Disable it when using desktop agents whose activity Shoal cannot track. Set this
 in a repository's `.shoal.toml`, or for every repository in
-`~/.config/shoal/config.toml` followed by a daemon restart:
+`~/.config/shoal/config.toml` followed by `shoal daemon reload`:
 
 ```toml
 [auto_cleanup]

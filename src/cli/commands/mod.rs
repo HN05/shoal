@@ -418,8 +418,8 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
                 configuration::edit(&ctx, configuration::unsets(keys), repository).await
             }
             ConfigCommand::Show { workspace } => configuration::show(&ctx, workspace).await,
-            ConfigCommand::Reset => service::install_config(&ctx, None),
-            ConfigCommand::Install { name } => service::install_config(&ctx, Some(name)),
+            ConfigCommand::Reset => service::install_config(&ctx, None).await,
+            ConfigCommand::Install { name } => service::install_config(&ctx, Some(name)).await,
         },
         Command::Install {
             dry_run,

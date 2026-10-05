@@ -54,11 +54,33 @@ pub(super) async fn edit(
         return Ok(0);
     }
     let (path, backup) = crate::config::Config::edit(&ctx.paths, &changes)?;
+    let reloaded = reload_daemon(ctx).await;
     ctx.emit(
-        &format!("Updated {}", path.display()),
-        serde_json::json!({"config": path, "backup": backup}),
+        &reload_message(format!("Updated {}", path.display()), reloaded),
+        serde_json::json!({"config": path, "backup": backup, "daemon_reloaded": reloaded}),
     )?;
     Ok(0)
+}
+
+/// Apply a saved global file to a running daemon. The file is already saved,
+/// so a daemon that cannot reload it is a warning rather than a failure.
+pub(super) async fn reload_daemon(ctx: &Context) -> bool {
+    client::reload_config(&ctx.paths)
+        .await
+        .unwrap_or_else(|error| {
+            eprintln!(
+                "warning: the daemon keeps its previous settings: {error:#}; run `shoal daemon reload` or `shoal daemon restart`"
+            );
+            false
+        })
+}
+
+pub(super) fn reload_message(message: String, reloaded: bool) -> String {
+    if reloaded {
+        format!("{message}; the daemon reloaded it")
+    } else {
+        message
+    }
 }
 
 pub(super) async fn show(ctx: &Context, workspace: Option<String>) -> Result<i32> {

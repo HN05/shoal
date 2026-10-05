@@ -444,6 +444,7 @@ impl Command {
                         | DaemonCommand::Start
                         | DaemonCommand::Stop
                         | DaemonCommand::Restart
+                        | DaemonCommand::Reload
                 }
         )
     }
@@ -629,6 +630,8 @@ pub enum DaemonCommand {
     Start,
     Stop,
     Restart,
+    /// Reread the global config without stopping running agents.
+    Reload,
     /// Run in the foreground, without registering an OS service.
     Run {
         #[arg(long, hide = true)]

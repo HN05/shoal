@@ -47,7 +47,10 @@ pub async fn open(paths: &Paths, method: Method) -> Result<(UnixStream, Body)> {
 
 /// One request; daemon errors become `code: message` failures.
 pub async fn call(paths: &Paths, method: Method) -> Result<Body> {
-    let duration = if matches!(method, Method::Status | Method::Shutdown) {
+    let duration = if matches!(
+        method,
+        Method::Status | Method::Shutdown | Method::ReloadConfig
+    ) {
         timing::ADMIN_REQUEST_TIMEOUT
     } else {
         timing::REQUEST_TIMEOUT
@@ -94,6 +97,16 @@ pub async fn status(paths: &Paths) -> Result<Option<DaemonStatus>> {
     match request(paths, Method::Status).await {
         Ok(status) => Ok(Some(status)),
         Err(error) if is_unreachable(&error) => Ok(None),
+        Err(error) => Err(error),
+    }
+}
+
+/// Ask a running daemon to reread the global config; `false` when none is
+/// running, since a starting daemon reads it anyway.
+pub async fn reload_config(paths: &Paths) -> Result<bool> {
+    match call(paths, Method::ReloadConfig).await {
+        Ok(_) => Ok(true),
+        Err(error) if is_unreachable(&error) => Ok(false),
         Err(error) => Err(error),
     }
 }

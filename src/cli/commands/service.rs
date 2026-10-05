@@ -90,7 +90,7 @@ pub(super) async fn install(
 }
 
 /// Install the packaged config `name`, or the default one for `None`.
-pub(super) fn install_config(ctx: &Context, name: Option<String>) -> Result<i32> {
+pub(super) async fn install_config(ctx: &Context, name: Option<String>) -> Result<i32> {
     let (name, (config, backup)) = match name {
         None => (
             "default".to_owned(),
@@ -109,9 +109,10 @@ pub(super) fn install_config(ctx: &Context, name: Option<String>) -> Result<i32>
         ),
         None => format!("Installed config {name} at {}", config.display()),
     };
+    let reloaded = super::configuration::reload_daemon(ctx).await;
     ctx.emit(
-        &message,
-        json!({"name": name, "config": config, "backup": backup}),
+        &super::configuration::reload_message(message, reloaded),
+        json!({"name": name, "config": config, "backup": backup, "daemon_reloaded": reloaded}),
     )?;
     Ok(0)
 }
@@ -162,6 +163,17 @@ pub(super) async fn run(ctx: Context, command: DaemonCommand) -> Result<i32> {
         DaemonCommand::Stop => {
             ctx.progress("Stopping daemon", stop(&ctx.paths)).await?;
             ctx.emit_styled(Style::Success, "Daemon stopped", json!({"running": false}))?;
+        }
+        DaemonCommand::Reload => {
+            ensure!(
+                client::reload_config(&ctx.paths).await?,
+                "the daemon is not running; it reads the config when it starts"
+            );
+            ctx.emit_styled(
+                Style::Success,
+                "Daemon reloaded the global config",
+                json!({"reloaded": true}),
+            )?;
         }
         DaemonCommand::Restart => {
             // Service administration must still work after a protocol upgrade.
