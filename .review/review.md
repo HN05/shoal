@@ -235,5 +235,5 @@ changes are a valid reason for a larger commit.
 
 Label conventions: `area/` allows several affected areas; `type/` and
 `complexity/` each allow one. PR review controls use the exclusive `review/`
-scope: `default`, `claude` and `codex` are consumed at run start; `none`
-persists to suppress review.
+scope: `default` uses `REVIEW_AGENT` or Codex; reviewer requests are consumed
+at run start, while `none` persists to suppress review.

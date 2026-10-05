@@ -86,6 +86,9 @@ Service setup manages one per-user launchd/systemd service; foreground mode cove
 environments without a service manager. The service captures the installing shell's
 `PATH`.
 
+Advisory repository reviews default to Codex, retaining configured agent overrides
+and automatic fallback.
+
 Distribution is a Homebrew formula in the shared HN05 tap: releases install
 checksummed prebuilt Linux and macOS binaries on x86_64 and arm64; `--HEAD`
 builds `main` from source.
