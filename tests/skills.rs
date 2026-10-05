@@ -89,6 +89,46 @@ fn packaged_binary_runs_from_deleted_cwd_and_installs_a_stable_skill_link() {
 }
 
 #[test]
+fn relative_packaged_skill_link_follows_homebrew_upgrades() {
+    let home = tempfile::tempdir().unwrap();
+    let prefix = fs::canonicalize(home.path()).unwrap();
+    let old = prefix.join("Cellar/shoal/0.5.0");
+    let new = prefix.join("Cellar/shoal/0.5.1");
+    let skill = Path::new("share/shoal/skill/SKILL.md");
+    for (package, contents) in [(&old, "version one"), (&new, "version two")] {
+        fs::create_dir_all(package.join("share/shoal/skill")).unwrap();
+        fs::write(package.join(skill), contents).unwrap();
+    }
+    fs::create_dir_all(old.join("libexec")).unwrap();
+    fs::copy(env!("CARGO_BIN_EXE_shoal"), old.join("libexec/shoal")).unwrap();
+    symlink(
+        "../../../../opt/shoal/share/shoal/skill/SKILL.md",
+        old.join("libexec/shoal-skill"),
+    )
+    .unwrap();
+    fs::create_dir(prefix.join("opt")).unwrap();
+    let stable = prefix.join("opt/shoal");
+    symlink("../Cellar/shoal/0.5.0", &stable).unwrap();
+    fs::create_dir(prefix.join("bin")).unwrap();
+    let launcher = prefix.join("bin/shoal");
+    symlink("../Cellar/shoal/0.5.0/libexec/shoal", &launcher).unwrap();
+
+    success(
+        support::isolated(home.path(), &launcher)
+            .args(["skill", "install", "codex"])
+            .output()
+            .unwrap(),
+    );
+    let installed = home.path().join(".agents/skills/shoal/SKILL.md");
+    assert_eq!(fs::read_link(&installed).unwrap(), stable.join(skill));
+    assert_eq!(fs::read_to_string(&installed).unwrap(), "version one");
+    fs::remove_file(&stable).unwrap();
+    symlink("../Cellar/shoal/0.5.1", &stable).unwrap();
+    fs::remove_dir_all(old).unwrap();
+    assert_eq!(fs::read_to_string(&installed).unwrap(), "version two");
+}
+
+#[test]
 fn skill_export_and_default_install_work_without_daemon_or_repository() {
     let home = tempfile::tempdir().unwrap();
     let expected = include_bytes!("../SKILL.md");

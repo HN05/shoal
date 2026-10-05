@@ -43,8 +43,9 @@ the package and survive. Skill links follow Homebrew's stable `opt` path; a
 skill copied by an older install needs one `shoal skill install` to migrate.
 Packagers can set `SHOAL_SKILL_PATH` to an absolute skill file at runtime,
 overriding the path given in `SHOAL_BUILD_SKILL_PATH` at build time. Without either,
-an adjacent `shoal-skill` symlink can point to an absolute skill file through a
-stable installation prefix; without that link, installation copies the embedded skill.
+an adjacent `shoal-skill` symlink can point through a stable installation prefix;
+relative targets resolve lexically against its directory. Without that link,
+installation copies the embedded skill.
 
 ## Daemon
 

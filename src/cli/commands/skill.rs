@@ -73,15 +73,7 @@ pub(super) fn run(command: Option<&SkillCommand>, json_output: bool) -> Result<i
 fn packaged_source(configured: Option<PathBuf>, executable: &Path) -> Result<Option<PathBuf>> {
     let source = match configured {
         Some(source) => Some(source),
-        None => match fs::read_link(
-            fs::canonicalize(executable)
-                .context("resolve packaged executable")?
-                .with_file_name("shoal-skill"),
-        ) {
-            Ok(source) => Some(source),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
-            Err(error) => return Err(error).context("read packaged shoal-skill link"),
-        },
+        None => packaged_link_source(executable)?,
     };
     if let Some(source) = &source {
         ensure!(source.is_absolute(), "packaged skill path must be absolute");
@@ -92,6 +84,35 @@ fn packaged_source(configured: Option<PathBuf>, executable: &Path) -> Result<Opt
         );
     }
     Ok(source)
+}
+
+fn packaged_link_source(executable: &Path) -> Result<Option<PathBuf>> {
+    let link = fs::canonicalize(executable)
+        .context("resolve packaged executable")?
+        .with_file_name("shoal-skill");
+    let target = match fs::read_link(&link) {
+        Ok(target) => target,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error).context("read packaged shoal-skill link"),
+    };
+    if target.is_absolute() {
+        return Ok(Some(target));
+    }
+    let absolute = link
+        .parent()
+        .context("missing packaged skill directory")?
+        .join(target);
+    // Homebrew relativizes this link. Resolve it lexically so the installed
+    // skill follows the stable opt prefix rather than a versioned Cellar path.
+    let mut source = PathBuf::new();
+    for component in absolute.components() {
+        if component == std::path::Component::ParentDir {
+            source.pop();
+        } else {
+            source.push(component.as_os_str());
+        }
+    }
+    Ok(Some(source))
 }
 
 fn install(path: &Path, source: Option<&Path>) -> Result<()> {

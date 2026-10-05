@@ -361,8 +361,9 @@ settings name skill directories for user-configured tools, with Codex and Claude
 defaults. Skill directories describe the machine and cannot be set per repository;
 custom launchers use named commands without tool-specific integrations.
 Packaged skills resolve the runtime `SHOAL_SKILL_PATH`, build-time path, then
-an adjacent `shoal-skill` symlink to an absolute file. Preserve the selected
-path through stable installation prefixes so upgrades apply; unpackaged binaries
+an adjacent `shoal-skill` symlink to an existing file. Explicit paths must be
+absolute; relative link targets resolve lexically against the link's directory.
+Preserve stable installation prefixes so upgrades apply; unpackaged binaries
 install the embedded copy. Homebrew launches the binary directly, without a shell.
 
 ## Resource ownership
