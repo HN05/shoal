@@ -4,13 +4,31 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 #[tokio::test]
 async fn adjacent_controls_survive_start_and_recovery_transitions() {
     let root = tempfile::tempdir_in("/tmp").unwrap();
-    let paths = Paths::for_test(root.path());
+    let output = timeout(
+        Duration::from_secs(60),
+        crate::test_support::isolated_test(
+            root.path(),
+            "execution::tests::adjacent_controls_child",
+        )
+        .output(),
+    )
+    .await
+    .expect("isolated execution control test stalled")
+    .unwrap();
+    assert!(output.status.success(), "{output:?}");
+}
+
+#[tokio::test]
+#[ignore = "isolated wrapper launched by control regression"]
+async fn adjacent_controls_child() {
+    let root = std::env::current_dir().unwrap();
+    let paths = Paths::for_test(&root);
     let plan = ExecutionPlan {
         id: uuid::Uuid::new_v4().to_string(),
         workspace: Workspace::new_record(
             "repo".into(),
             "worker".into(),
-            root.path().to_owned(),
+            root.clone(),
             "worker".into(),
             crate::state::WorkspaceState::Ready,
         ),

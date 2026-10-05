@@ -59,3 +59,20 @@ pub async fn manager() -> (tempfile::TempDir, Arc<Manager>) {
     let manager = Manager::open(Paths::for_test(root.path())).await.unwrap();
     (root, manager)
 }
+
+/// Run a test helper as its own wrapper, without the runner's scope or terminal.
+pub fn isolated_test(root: &Path, name: &str) -> tokio::process::Command {
+    let mut command = tokio::process::Command::new(std::env::current_exe().unwrap());
+    command
+        .args(["--exact", name, "--ignored", "--nocapture"])
+        .env_clear()
+        .env("PATH", std::env::var_os("PATH").unwrap_or_default())
+        .env("HOME", root)
+        .env("ZDOTDIR", root)
+        .env("GIT_CONFIG_GLOBAL", "/dev/null")
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .current_dir(root)
+        .stdin(std::process::Stdio::null())
+        .kill_on_drop(true);
+    command
+}

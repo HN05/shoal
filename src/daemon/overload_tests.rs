@@ -10,12 +10,22 @@ async fn bounded<T>(future: impl Future<Output = T>) -> T {
         .expect("overload exchange timed out")
 }
 
+// Native ownership scans cover the whole process table. Another fixture's
+// terminating process may have an unreadable environment before it disappears.
+static PROCESS_FIXTURE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+struct FixtureRoot {
+    _root: tempfile::TempDir,
+    _process_guard: tokio::sync::MutexGuard<'static, ()>,
+}
+
 async fn fixture() -> (
-    tempfile::TempDir,
+    FixtureRoot,
     Arc<Manager>,
     crate::model::Workspace,
     tokio::task::JoinHandle<()>,
 ) {
+    let process_guard = PROCESS_FIXTURE.lock().await;
     let (root, manager) = manager().await;
     let repo = repository(root.path(), "repo");
     let repo = manager
@@ -50,11 +60,23 @@ async fn fixture() -> (
                     let server = server.clone();
                     clients.spawn(async move { serve(stream, server).await });
                 }
-                Some(result) = clients.join_next(), if !clients.is_empty() => { let _ = result.unwrap(); }
+                Some(result) = clients.join_next(), if !clients.is_empty() => {
+                    if let Err(error) = result.unwrap() {
+                        eprintln!("fixture server failed: {error:#}");
+                    }
+                }
             }
         }
     });
-    (root, manager, workspace, serving)
+    (
+        FixtureRoot {
+            _root: root,
+            _process_guard: process_guard,
+        },
+        manager,
+        workspace,
+        serving,
+    )
 }
 
 async fn wait_started(workspace: &crate::model::Workspace) {
@@ -92,21 +114,36 @@ fn launch(
     manager: &Manager,
     workspace: &crate::model::Workspace,
 ) -> tokio::task::JoinHandle<Result<i32>> {
-    let paths = manager.paths.clone();
-    let id = workspace.id.clone();
+    let mut command = crate::test_support::isolated_test(
+        &manager.paths.home,
+        "daemon::overload_tests::tracked_agent_child",
+    );
+    command.env("SHOAL_TEST_WORKSPACE", &workspace.id);
     tokio::spawn(async move {
-        crate::execution::run(
-            &paths,
-            id,
-            vec![
-                "sh".into(),
-                "-c".into(),
-                "touch started; trap 'exit 0' TERM; while :; do sleep 1; done".into(),
-            ],
-            Some("fixture".into()),
-        )
-        .await
+        let status = command.status().await?;
+        Ok(crate::execution::exit_code(status))
     })
+}
+
+#[tokio::test]
+#[ignore = "isolated tracked wrapper launched by overload tests"]
+async fn tracked_agent_child() {
+    let root = std::env::current_dir().unwrap();
+    let paths = crate::paths::Paths::for_test(root);
+    let id = std::env::var("SHOAL_TEST_WORKSPACE").unwrap();
+    let code = crate::execution::run(
+        &paths,
+        id,
+        vec![
+            "sh".into(),
+            "-c".into(),
+            "trap 'exit 0' TERM; touch started; while :; do sleep 1; done".into(),
+        ],
+        Some("fixture".into()),
+    )
+    .await
+    .unwrap();
+    std::process::exit(code);
 }
 
 #[tokio::test]
