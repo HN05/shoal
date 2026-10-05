@@ -7,6 +7,7 @@ use crate::{
     cli::{
         Command, ConfirmationArgs, client,
         context::Context,
+        output::{Palette, Style},
         ui::{self, KeyBindings},
     },
     env,
@@ -46,24 +47,16 @@ impl MenuAction {
 
 pub(super) async fn choose(ctx: &Context) -> Result<Command> {
     let repos = ui::repository_choices(client::repositories(&ctx.paths).await?).await?;
-    let mut entries: Vec<_> = client::workspaces(&ctx.paths)
-        .await?
-        .into_iter()
-        .map(|w| {
-            let repo = repos
-                .iter()
-                .find(|(id, _)| id == &w.repository_id)
-                .map(|(_, name)| name.as_str())
-                .unwrap_or("unknown repository");
-            (
-                w.id,
-                format!("{}  {repo}  {}  {}", w.name, w.state, w.branch),
-            )
-        })
-        .collect();
+    let workspaces = client::workspaces(&ctx.paths).await?;
+    let palette = Palette::stderr(ctx.json);
+    let rows = ui::workspace_rows(&workspaces, &repos, false, palette);
+    let mut entries: Vec<_> = workspaces.into_iter().map(|w| w.id).zip(rows).collect();
     let scoped = env::is_scoped();
     if !scoped {
-        entries.push((ADD_ENTRY.into(), "+ Add workspace".into()));
+        entries.push((
+            ADD_ENTRY.into(),
+            format!("{} Add workspace", palette.paint(Style::Success, "+")),
+        ));
     }
     let bindings: Vec<_> = BINDINGS
         .iter()

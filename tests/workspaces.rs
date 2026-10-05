@@ -5496,7 +5496,7 @@ head -n 1 "$HOME/picker-input"
             let args = fs::read_to_string(fixture.root.path().join("picker-args")).unwrap();
             let input = fs::read_to_string(fixture.root.path().join("picker-input")).unwrap();
             assert!(input.contains(workspace["id"].as_str().unwrap()));
-            assert_eq!(input.contains("+ Add workspace"), !scoped);
+            assert_eq!(input.contains("Add workspace"), !scoped);
             let (keys, header) = if scoped {
                 (
                     "ctrl-e,ctrl-o,ctrl-f",
