@@ -247,17 +247,28 @@ fn agent_defaults_come_from_the_repository_before_the_global_config() {
     assert_eq!(effective.default_agent, None);
 }
 
+fn change(key: &str, value: Option<&str>) -> edit::Change {
+    edit::Change {
+        key: key.into(),
+        value: value.map(Into::into),
+    }
+}
+
+fn edit_one(paths: &Paths, key: &str, value: Option<&str>) -> Result<()> {
+    Config::edit(paths, &[change(key, value)]).map(drop)
+}
+
 #[test]
 fn global_edits_must_leave_a_valid_range_with_the_defaults() {
     let home = tempfile::tempdir().unwrap();
     let paths = Paths::for_test(home.path());
-    let error = Config::edit(&paths, "ports.end", Some("4000"))
+    let error = edit_one(&paths, "ports.end", Some("4000"))
         .unwrap_err()
         .to_string();
     assert!(error.contains("invalid edited config"), "{error}");
-    assert!(Config::edit(&paths, "ports.end", Some("0")).is_err());
-    Config::edit(&paths, "ports.start", Some("3000")).unwrap();
-    Config::edit(&paths, "ports.end", Some("4000")).unwrap();
+    assert!(edit_one(&paths, "ports.end", Some("0")).is_err());
+    edit_one(&paths, "ports.start", Some("3000")).unwrap();
+    edit_one(&paths, "ports.end", Some("4000")).unwrap();
     let ports = Config::load(&paths)
         .unwrap()
         .resolve(&ConfigLayers::default())
@@ -265,10 +276,40 @@ fn global_edits_must_leave_a_valid_range_with_the_defaults() {
         .ports;
     assert_eq!((ports.start, ports.end), (3000, 4000));
     // Removing the start leaves the default start above the saved end.
-    assert!(Config::edit(&paths, "ports.start", None).is_err());
-    Config::edit(&paths, "ports.end", None).unwrap();
-    Config::edit(&paths, "ports.start", None).unwrap();
+    assert!(edit_one(&paths, "ports.start", None).is_err());
+    edit_one(&paths, "ports.end", None).unwrap();
+    edit_one(&paths, "ports.start", None).unwrap();
     assert!(Config::parse("[ports]\nstart = 60000\n", &paths).is_ok());
+}
+
+#[test]
+fn dependent_global_edits_validate_together() {
+    let home = tempfile::tempdir().unwrap();
+    let paths = Paths::for_test(home.path());
+    let profile = [
+        change("simulators.profiles.phone.device", Some("iPhone 17")),
+        change("simulators.profiles.phone.runtime", Some("iOS 27")),
+        change("simulators.default", Some("phone")),
+    ];
+    for single in &profile {
+        assert!(Config::edit(&paths, std::slice::from_ref(single)).is_err());
+    }
+    assert!(!Config::path(&paths).exists());
+    Config::edit(&paths, &profile).unwrap();
+    let simulators = Config::load(&paths).unwrap().simulators;
+    assert_eq!(simulators.default.as_deref(), Some("phone"));
+    assert_eq!(simulators.profiles["phone"].runtime, "iOS 27");
+    // Removing a profile its default still names fails unless both go at once.
+    assert!(edit_one(&paths, "simulators.profiles.phone", None).is_err());
+    Config::edit(
+        &paths,
+        &[
+            change("simulators.default", None),
+            change("simulators.profiles.phone", None),
+        ],
+    )
+    .unwrap();
+    assert!(Config::load(&paths).unwrap().simulators.profiles.is_empty());
 }
 
 #[test]

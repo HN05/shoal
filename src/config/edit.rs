@@ -1,6 +1,23 @@
 //! Small, format-preserving edits shared by global and saved repository config.
 use anyhow::{Context, Result, ensure};
+use serde::{Deserialize, Serialize};
 use toml_edit::{DocumentMut, Item, Key, Table, Value};
+
+/// One key to set, or to remove when `value` is `None`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Change {
+    pub key: String,
+    pub value: Option<String>,
+}
+
+/// Apply `changes` in order, so settings that are only valid together are
+/// validated once, after the last one.
+pub fn apply(text: &str, changes: &[Change]) -> Result<String> {
+    changes.iter().try_fold(text.to_owned(), |text, change| {
+        edit(&text, &change.key, change.value.as_deref())
+            .with_context(|| format!("edit {}", change.key))
+    })
+}
 
 pub fn edit(text: &str, key: &str, value: Option<&str>) -> Result<String> {
     let keys = Key::parse(key).context("expected a TOML dotted key")?;
@@ -68,5 +85,27 @@ mod tests {
         assert!(edit("default_agent = 'codex'", "default_agent.mode", Some("app")).is_err());
         assert!(edit("", "missing", None).is_err());
         assert!(edit("", "x..y", Some("1")).is_err());
+    }
+
+    #[test]
+    fn applies_changes_in_order_and_names_the_failing_key() {
+        let change = |key: &str, value: Option<&str>| Change {
+            key: key.into(),
+            value: value.map(Into::into),
+        };
+        let result = apply(
+            "",
+            &[
+                change("a.b", Some("1")),
+                change("c", Some("x")),
+                change("a.b", None),
+            ],
+        )
+        .unwrap();
+        let parsed: toml::Value = toml::from_str(&result).unwrap();
+        assert_eq!(parsed["c"].as_str(), Some("x"));
+        assert!(parsed["a"].get("b").is_none());
+        let error = apply("", &[change("c", Some("x")), change("missing", None)]).unwrap_err();
+        assert!(format!("{error:#}").contains("edit missing"), "{error:#}");
     }
 }

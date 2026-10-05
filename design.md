@@ -382,7 +382,7 @@ claimed at creation.
 
 Global TOML is machine policy, seeded by `install` with the stated defaults when
 absent; explicit key edits preserve unrelated settings and comments and validate
-before saving, while reset or named template installation replaces the file.
+once per command before saving, so dependent keys change together, while reset or named template installation replaces the file.
 Global writes keep the previous file as a backup; the daemon reads it at startup,
 while the CLI reads agent settings per command. Repository TOML comes from the
 worktree (`.shoal.toml` or `.shoal/config.toml`, both together is an error) with

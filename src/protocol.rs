@@ -24,7 +24,7 @@ use crate::{
     sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
 };
 
-pub const VERSION: u32 = 48;
+pub const VERSION: u32 = 49;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -120,8 +120,7 @@ pub enum Method {
     },
     EditRepositoryConfig {
         repository: String,
-        key: String,
-        value: Option<String>,
+        changes: Vec<crate::config::edit::Change>,
     },
     RemoveRepository {
         repository: String,

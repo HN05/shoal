@@ -39,8 +39,7 @@ impl Manager {
     pub async fn edit_repository_config(
         &self,
         selector: &str,
-        key: &str,
-        value: Option<&str>,
+        changes: &[config::edit::Change],
     ) -> Result<LocalConfig> {
         // Hold the same gate as imports and removal across read/modify/write.
         let _registry = self.registry_gate.lock().await;
@@ -50,7 +49,7 @@ impl Manager {
             .local_repository_config(&repo.id)
             .await?
             .unwrap_or_default();
-        let edited = crate::config::edit::edit(&text, key, value)?;
+        let edited = config::edit::apply(&text, changes)?;
         config::repo::parse(&edited).context("invalid local repository config")?;
         self.save_repository_config(repo.id, Some(edited)).await
     }

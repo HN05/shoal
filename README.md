@@ -100,7 +100,7 @@ shoal ls                      # List workspaces
 shoal status fix-login        # Workspace activity, changes, and resources
 shoal config show fix-login   # Effective settings and the source of each value
 shoal config set default_agent codex
-shoal config set auto_cleanup.idle_minutes 30
+shoal config set auto_cleanup.enabled true auto_cleanup.idle_minutes 30  # Saved together
 shoal config set default_agent claude --repo my-project
 shoal config unset default_agent  # Restore the default
 shoal cd fix-login             # Enter a workspace; omit the name for a picker

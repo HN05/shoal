@@ -589,14 +589,21 @@ workspace, or the registered checkout when no workspace exists yet. Named tables
 such as commands and ports show one entry per name. `--json` returns `key`, `value`,
 and `layer` for each entry.
 
-`shoal config set KEY VALUE` edits the global file without a daemon, creating it
-if absent; `shoal config unset KEY` removes an existing key or table to restore
-defaults. Keys use TOML dotted syntax (quote a component containing dots); values
+`shoal config set KEY VALUE [KEY VALUE...]` edits the global file without a daemon,
+creating it if absent; `shoal config unset KEY...` removes existing keys or tables
+to restore defaults. Keys use TOML dotted syntax (quote a component containing dots); values
 use TOML syntax, falling back to a string when they are not TOML values. Quote
 arrays for the shell, for example `shoal config set commands.check '["cargo", "test"]'`.
-Edits preserve unrelated settings and comments, validate the resulting config
-before saving, and keep the previous file as `config.toml.backup`. Invalid edits
-leave both files unchanged.
+Edits preserve unrelated settings and comments and keep the previous file as
+`config.toml.backup`. One command's changes apply in order and are validated once,
+so settings that depend on each other change together:
+
+```sh
+shoal config set simulators.profiles.phone.device '"iPhone 17"' \
+  simulators.profiles.phone.runtime '"iOS 27"' simulators.default phone
+```
+
+An invalid result leaves both files unchanged.
 
 ### Store repository config outside Git
 
@@ -607,8 +614,8 @@ shoal repo config my-project --clear  # Return to worktree config
 ```
 
 The file uses the `.shoal.toml` format and is validated and copied into Shoal's
-database; reimport it after edits, or use `shoal config set KEY VALUE --repo NAME`
-and `shoal config unset KEY --repo NAME` to edit individual saved keys with the
+database; reimport it after edits, or use `shoal config set KEY VALUE... --repo NAME`
+and `shoal config unset KEY... --repo NAME` to edit individual saved keys with the
 same syntax and validation as global edits. Repository edits are serialized in
 the daemon and leave worktree files untouched. Unsetting removes only the saved
 value, allowing lower layers to supply it. Repository options resolve per option, for

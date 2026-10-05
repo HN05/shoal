@@ -266,11 +266,10 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         }
         Method::EditRepositoryConfig {
             repository,
-            key,
-            value,
+            changes,
         } => Body::RepositoryConfig(
             manager
-                .edit_repository_config(&repository, &key, value.as_deref())
+                .edit_repository_config(&repository, &changes)
                 .await?,
         ),
         Method::RemoveRepository { repository } => {

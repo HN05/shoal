@@ -208,17 +208,14 @@ impl Config {
         Self::install_named(paths, "default")
     }
 
-    pub fn edit(
-        paths: &Paths,
-        key: &str,
-        value: Option<&str>,
-    ) -> Result<(PathBuf, Option<PathBuf>)> {
+    /// Apply `changes` together, saving only when the result is valid.
+    pub fn edit(paths: &Paths, changes: &[edit::Change]) -> Result<(PathBuf, Option<PathBuf>)> {
         let path = Self::path(paths);
         let _lock = Self::lock_file(&path)?;
         let text = crate::fsutil::read_optional(&path)
             .with_context(|| format!("read {}", path.display()))?
             .unwrap_or_default();
-        let edited = edit::edit(&text, key, value)?;
+        let edited = edit::apply(&text, changes)?;
         Self::parse(&edited, paths).context("invalid edited config")?;
         Self::replace_at(path, &edited)
     }

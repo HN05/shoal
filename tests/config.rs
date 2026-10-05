@@ -35,6 +35,8 @@ fn inline_edits_validate_preserve_comments_and_work_without_a_daemon() {
         vec!["config", "set", "auto_cleanup.enabled", "maybe"],
         vec!["config", "set", "default_agnet", "codex"],
         vec!["config", "unset", "missing"],
+        vec!["config", "set", "default_agent", "claude", "ports.start"],
+        vec!["config", "unset", "default_agent", "missing"],
     ] {
         assert!(!run(&args).status.success(), "{args:?}");
         assert_eq!(fs::read_to_string(&config).unwrap(), saved);

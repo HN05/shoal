@@ -4509,7 +4509,41 @@ fn inline_repository_config_edits_preserve_layers_and_serialize_updates() {
         );
         assert_eq!(fixture.ok(&["repo", "config", id]), saved);
     }
-    fixture.ok(&["config", "unset", "default_agent", "--repo", id]);
+    // One invalid change rejects the whole set.
+    assert!(
+        !fixture
+            .run(&[
+                "config",
+                "set",
+                "auto_cleanup.idle_minutes",
+                "30",
+                "auto_cleanup.enabled",
+                "maybe",
+                "--repo",
+                id,
+            ])
+            .status
+            .success()
+    );
+    assert_eq!(fixture.ok(&["repo", "config", id]), saved);
+    fixture.ok(&[
+        "config",
+        "set",
+        "auto_cleanup.idle_minutes",
+        "30",
+        "default_agent",
+        "claude",
+        "--repo",
+        id,
+    ]);
+    fixture.ok(&[
+        "config",
+        "unset",
+        "auto_cleanup",
+        "default_agent",
+        "--repo",
+        id,
+    ]);
     assert_eq!(agent()["value"], "codex");
     assert_eq!(agent()["layer"], "worktree_file");
     assert_eq!(

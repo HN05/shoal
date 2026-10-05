@@ -593,18 +593,19 @@ pub enum ShellCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum ConfigCommand {
-    /// Set a config value using a TOML dotted key (global by default).
+    /// Set config values using TOML dotted keys (global by default), saved together.
     Set {
-        key: String,
-        /// A TOML value, or an unquoted string.
-        value: String,
+        /// KEY VALUE pairs; each value is TOML, or an unquoted string.
+        #[arg(required = true, num_args = 2.., value_names = ["KEY", "VALUE"])]
+        assignments: Vec<String>,
         /// Edit this repository's saved config instead of the global file.
         #[arg(long = "repo")]
         repository: Option<String>,
     },
-    /// Remove a config key or table, falling back to lower layers or defaults.
+    /// Remove config keys or tables, falling back to lower layers or defaults.
     Unset {
-        key: String,
+        #[arg(required = true)]
+        keys: Vec<String>,
         /// Edit this repository's saved config instead of the global file.
         #[arg(long = "repo")]
         repository: Option<String>,

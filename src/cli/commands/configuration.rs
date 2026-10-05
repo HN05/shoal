@@ -7,15 +7,37 @@ use crate::{
         output::{Palette, Style},
         workspace_context::{ScopeOrder, WorkspaceContext},
     },
-    config::{self, repo::LocalConfig},
+    config::{self, edit::Change, repo::LocalConfig},
     env,
     protocol::ConfigTarget,
 };
 
+/// `KEY VALUE` pairs as the changes they set.
+pub(super) fn sets(assignments: Vec<String>) -> Result<Vec<Change>> {
+    ensure!(
+        assignments.len().is_multiple_of(2),
+        "expected KEY VALUE pairs; {} has no value",
+        assignments.last().expect("clap requires assignments")
+    );
+    let mut assignments = assignments.into_iter();
+    Ok(std::iter::from_fn(|| {
+        Some(Change {
+            key: assignments.next()?,
+            value: assignments.next(),
+        })
+    })
+    .collect())
+}
+
+pub(super) fn unsets(keys: Vec<String>) -> Vec<Change> {
+    keys.into_iter()
+        .map(|key| Change { key, value: None })
+        .collect()
+}
+
 pub(super) async fn edit(
     ctx: &Context,
-    key: String,
-    value: Option<String>,
+    changes: Vec<Change>,
     repository: Option<String>,
 ) -> Result<i32> {
     if let Some(repository) = repository {
@@ -24,15 +46,14 @@ pub(super) async fn edit(
             &ctx.paths,
             crate::protocol::Method::EditRepositoryConfig {
                 repository,
-                key,
-                value,
+                changes,
             },
         )
         .await?;
         ctx.emit("Updated saved repository config", &config)?;
         return Ok(0);
     }
-    let (path, backup) = crate::config::Config::edit(&ctx.paths, &key, value.as_deref())?;
+    let (path, backup) = crate::config::Config::edit(&ctx.paths, &changes)?;
     ctx.emit(
         &format!("Updated {}", path.display()),
         serde_json::json!({"config": path, "backup": backup}),
