@@ -79,6 +79,15 @@ pub fn confirm(ctx: &Context, action: &str, flag: &str) -> Result<bool> {
     confirm_with_io(action, &mut io::stdin().lock(), &mut io::stderr().lock())
 }
 
+/// Offer to run the fix an error would otherwise only suggest. Non-interactive
+/// callers decline, so the error and its hint stand.
+pub fn offer(ctx: &Context, question: &str) -> Result<bool> {
+    if !ctx.interactive() {
+        return Ok(false);
+    }
+    ask_yes_no(question, &mut io::stdin().lock(), &mut io::stderr().lock())
+}
+
 fn confirm_with_io(
     action: &str,
     input: &mut impl io::BufRead,
@@ -89,8 +98,16 @@ fn confirm_with_io(
         "{}",
         Palette::stderr(false).paint(Style::Warning, action)
     )?;
+    ask_yes_no("Are you sure?", input, output)
+}
+
+fn ask_yes_no(
+    question: &str,
+    input: &mut impl io::BufRead,
+    output: &mut impl Write,
+) -> Result<bool> {
     loop {
-        write!(output, "Are you sure? [y/N] ")?;
+        write!(output, "{question} [y/N] ")?;
         output.flush()?;
         match read_answer(input)?.as_deref() {
             None | Some("" | "n" | "no") => return Ok(false),
@@ -585,6 +602,21 @@ mod tests {
                 "● fix-login  shoal  /work/fix-login",
                 "● y          app    /work/y",
             ]
+        );
+    }
+
+    #[test]
+    fn yes_no_questions_default_to_no_and_repeat_unknown_answers() {
+        for (answers, expected) in [("\n", false), ("", false), ("maybe\nYes\n", true)] {
+            let mut output = Vec::new();
+            let answer = ask_yes_no("Register?", &mut answers.as_bytes(), &mut output).unwrap();
+            assert_eq!(answer, expected, "{answers:?}");
+        }
+        let mut output = Vec::new();
+        ask_yes_no("Register?", &mut "maybe\nn\n".as_bytes(), &mut output).unwrap();
+        assert_eq!(
+            String::from_utf8(output).unwrap(),
+            "Register? [y/N] Please enter y or n.\nRegister? [y/N] "
         );
     }
 }

@@ -1,3 +1,5 @@
+#[path = "support/pty.rs"]
+mod pty;
 mod support;
 
 use serde_json::{Value, json};
@@ -7,7 +9,7 @@ use std::{
     path::PathBuf,
     process::{Command, Stdio},
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 #[test]
@@ -91,6 +93,59 @@ fn add_reuses_resolution_requests_without_reordering_failures() {
     }
 }
 
+#[test]
+fn unregistered_issue_remotes_are_registered_on_confirmation() {
+    use std::io::Read;
+    for (answer, expected, diagnostic) in [
+        (
+            "y\n",
+            vec![
+                "list_repositories",
+                "register_repository https://other.example/team/repo",
+                "layered_config registered",
+            ],
+            "unknown agent",
+        ),
+        (
+            "n\n",
+            vec!["list_repositories"],
+            "shoal repo add https://other.example/team/repo",
+        ),
+    ] {
+        let daemon = FakeDaemon::start();
+        let (mut master, slave) = pty::open();
+        let mut child = daemon
+            .command()
+            .args(["issue", "https://other.example/team/repo/issues/7"])
+            .args(["--agent", "missing"])
+            .stdin(slave.try_clone().unwrap())
+            .stderr(slave.try_clone().unwrap())
+            .stdout(Stdio::null())
+            .spawn()
+            .unwrap();
+        master.write_all(answer.as_bytes()).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(30);
+        let mut transcript = Vec::new();
+        let status = loop {
+            let _ = master.read_to_end(&mut transcript);
+            if let Some(status) = child.try_wait().unwrap() {
+                break status;
+            }
+            assert!(Instant::now() < deadline, "hung: {transcript:?}");
+            thread::sleep(Duration::from_millis(10));
+        };
+        let _ = master.read_to_end(&mut transcript);
+        let transcript = String::from_utf8_lossy(&transcript);
+        assert_eq!(daemon.methods(), expected, "{transcript}");
+        assert!(!status.success(), "{transcript}");
+        assert!(
+            transcript.contains("Register https://other.example/team/repo with Shoal? [y/N]"),
+            "{transcript}"
+        );
+        assert!(transcript.contains(diagnostic), "{transcript}");
+    }
+}
+
 /// A daemon socket in a checkout of forge.example/team/repo that records each
 /// request's method and answers with one registered repository.
 struct FakeDaemon {
@@ -152,6 +207,14 @@ impl FakeDaemon {
                         "id": "test", "path": repo_path,
                         "source": "https://forge.example/team/repo", "last_used": 0
                     }]}),
+                    "register_repository" => {
+                        let source = &request["method"]["register_repository"]["source"];
+                        method = format!("register_repository {}", source.as_str().unwrap());
+                        json!({"type": "repository", "data": {
+                            "id": "registered", "path": repo_path, "source": source,
+                            "last_used": 0
+                        }})
+                    }
                     "layered_config" => {
                         let target = &request["method"]["layered_config"]["target"];
                         method =

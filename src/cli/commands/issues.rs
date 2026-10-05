@@ -32,11 +32,13 @@ pub(super) async fn repository_for_number(ctx: &Context, repos: Vec<Repository>)
 }
 
 /// The registered repository whose origin the issue URL belongs to.
-pub(super) async fn repository_for<'a>(
-    repos: &'a [Repository],
+pub(super) async fn repository_for(
+    ctx: &Context,
+    repos: &mut Vec<Repository>,
     url: &str,
-) -> Result<&'a Repository> {
-    repository_with_remote(
+) -> Result<String> {
+    registered_remote(
+        ctx,
         repos,
         ForgeRepo::from_issue_url(url)?,
         "shoal add <repository> --issue <url>",
@@ -44,9 +46,52 @@ pub(super) async fn repository_for<'a>(
     .await
 }
 
+/// The ID of the repository [`repository_with_remote`] selects. When none has
+/// the remote, the user may register its URL, which joins `repos`.
+pub(super) async fn registered_remote(
+    ctx: &Context,
+    repos: &mut Vec<Repository>,
+    forge: ForgeRepo,
+    retry: &str,
+) -> Result<String> {
+    let error = match repository_with_remote(repos, forge, retry).await {
+        Ok(repo) => return Ok(repo.id.clone()),
+        Err(error) => error,
+    };
+    let Some(url) = error
+        .downcast_ref::<UnregisteredRemote>()
+        .map(|remote| remote.0.repository_url())
+    else {
+        return Err(error);
+    };
+    let Some(repo) = super::repositories::offer_registration(ctx, &url).await? else {
+        return Err(error);
+    };
+    let id = repo.id.clone();
+    repos.push(repo);
+    Ok(id)
+}
+
+#[derive(Debug)]
+struct UnregisteredRemote(ForgeRepo);
+
+impl std::fmt::Display for UnregisteredRemote {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "no registered repository has the remote {}/{}; register it with `shoal repo add {}` and retry",
+            self.0.host,
+            self.0.path,
+            self.0.repository_url()
+        )
+    }
+}
+
+impl std::error::Error for UnregisteredRemote {}
+
 /// The only registered repository whose origin is `forge`; `retry` names the
 /// spelling that selects one explicitly.
-pub(super) async fn repository_with_remote<'a>(
+async fn repository_with_remote<'a>(
     repos: &'a [Repository],
     forge: ForgeRepo,
     retry: &str,
@@ -62,12 +107,7 @@ pub(super) async fn repository_with_remote<'a>(
     }
     match matches.as_slice() {
         [repo] => Ok(repo),
-        [] => bail!(
-            "no registered repository has the remote {}/{}; register it with `shoal repo add {}` and retry",
-            forge.host,
-            forge.path,
-            forge.repository_url()
-        ),
+        [] => Err(UnregisteredRemote(forge).into()),
         _ => bail!(
             "several registered repositories share the remote {}/{}; use `{retry}`",
             forge.host,
@@ -132,6 +172,10 @@ pub(super) async fn load(repo: &Repository, input: &str) -> Result<Issue> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    async fn repository_for<'a>(repos: &'a [Repository], url: &str) -> Result<&'a Repository> {
+        repository_with_remote(repos, ForgeRepo::from_issue_url(url)?, "retry").await
+    }
 
     #[test]
     fn forge_urls_match_transports_and_reject_other_repositories() {

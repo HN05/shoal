@@ -271,7 +271,9 @@ Ctrl-C (also after a tracked execution), and are bypassed only by
 explicit flags such as `-y`/`--yes`. Removal's branch choice stays separate from
 its confirmation, which lists uncommitted changes and untracked files with Git
 status codes and reports omitted entries when the preview reaches its size limit;
-explicit branch flags skip the choice only. Interactive
+explicit branch flags skip the choice only. A failure whose fix is one
+command asks interactive callers `[y/N]` whether to run it and continue;
+declining, and noninteractive or JSON calls, fail naming that command. Interactive
 navigation without the shell wrapper reports how to load it without changing
 redirected or JSON output.
 
@@ -318,9 +320,8 @@ be replaced. Status and inspection expose them.
 login, derives a portable name, and renders issue context from a plain-text
 template for CLI agents; initial lookup runs in the CLI with no Shoal credentials
 or forge configuration. An issue URL may select the single registered repository
-by remote identity when `add` omits it, never cloning. Unregistered issue or PR
-URLs fail with a concrete repository registration command to run before retrying.
-`issue <number-or-url>`
+by remote identity when `add` omits it; an unregistered remote offers to register
+the repository URL. `issue <number-or-url>`
 invokes that same path with the configured `default_agent` standing in for
 `--agent`. Numbers use an explicit `--repo`, the current registered checkout or
 managed workspace, or an interactive repository picker; URLs keep remote matching.

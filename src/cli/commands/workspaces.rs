@@ -248,20 +248,18 @@ async fn resolve_add_target(
     agent: &AgentLaunch,
 ) -> Result<AddTarget> {
     // Load on first use so explicit targets keep their original failure order.
-    let repositories = tokio::sync::OnceCell::new();
+    let mut repositories = None;
     let selector = match repository {
         Some(repo) => ui::repository_selector(repo)?,
         None => {
-            let repos = repositories
-                .get_or_try_init(|| client::repositories(&ctx.paths))
-                .await?;
+            let repos = repositories.insert(client::repositories(&ctx.paths).await?);
             let issue_command = matches!(agent, AgentLaunch::IssueDefault(_));
             match issue.map(|input| (input, IssueInput::parse(input))) {
                 Some((_, IssueInput::Number)) if issue_command => {
                     super::issues::repository_for_number(ctx, repos.clone()).await?
                 }
                 Some((url, kind)) if issue_command || kind == IssueInput::Url => {
-                    super::issues::repository_for(repos, url).await?.id.clone()
+                    super::issues::repository_for(ctx, repos, url).await?
                 }
                 _ => ui::pick(
                     ctx,
@@ -273,7 +271,7 @@ async fn resolve_add_target(
     };
     Ok(AddTarget {
         selector,
-        repositories,
+        repositories: tokio::sync::OnceCell::new_with(repositories),
     })
 }
 

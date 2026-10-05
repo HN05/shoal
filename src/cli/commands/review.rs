@@ -45,18 +45,17 @@ pub(super) async fn pull_request(
     reviewer: Reviewer,
     args: Vec<OsString>,
 ) -> Result<i32> {
-    let repos = client::repositories(&ctx.paths).await?;
+    let mut repos = client::repositories(&ctx.paths).await?;
     let repository = match repository {
         Some(repository) => ui::repository_selector(repository)?,
         None if input.starts_with("https://") || input.starts_with("http://") => {
-            super::issues::repository_with_remote(
-                &repos,
+            super::issues::registered_remote(
+                ctx,
+                &mut repos,
                 ForgeRepo::from_pull_url(&input)?,
                 "shoal pr review <url> --repo <repository>",
             )
             .await?
-            .id
-            .clone()
         }
         None => super::issues::repository_for_number(ctx, repos.clone()).await?,
     };

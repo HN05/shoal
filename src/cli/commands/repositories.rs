@@ -62,15 +62,7 @@ pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
         RepoCommand::Add { source, name, path } => {
             let source = ui::repository_selector(source)?;
             let path = path.map(|path| absolute(ctx, path)).transpose()?;
-            let repo = ctx
-                .progress(
-                    "Registering repository",
-                    request::<Repository>(
-                        &ctx.paths,
-                        Method::RegisterRepository { source, name, path },
-                    ),
-                )
-                .await?;
+            let repo = register(ctx, source, name, path).await?;
             ctx.emit(
                 &format!(
                     "Registered {}",
@@ -138,6 +130,35 @@ pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
         }
     }
     Ok(0)
+}
+
+async fn register(
+    ctx: &Context,
+    source: String,
+    name: Option<String>,
+    path: Option<PathBuf>,
+) -> Result<Repository> {
+    ctx.progress(
+        "Registering repository",
+        request::<Repository>(
+            &ctx.paths,
+            Method::RegisterRepository { source, name, path },
+        ),
+    )
+    .await
+}
+
+/// Register `source` for a command that needs it, when the user agrees.
+pub(super) async fn offer_registration(ctx: &Context, source: &str) -> Result<Option<Repository>> {
+    if !ui::offer(ctx, &format!("Register {source} with Shoal?"))? {
+        return Ok(None);
+    }
+    let repo = register(ctx, source.to_owned(), None, None).await?;
+    eprintln!(
+        "Registered {}",
+        ui::repository_label(&repo, Palette::stderr(ctx.json))
+    );
+    Ok(Some(repo))
 }
 
 /// Expand `~` and resolve relative paths against the caller's directory.
