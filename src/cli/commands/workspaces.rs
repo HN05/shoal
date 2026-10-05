@@ -144,11 +144,27 @@ pub(super) async fn add(
         .map(|path| super::repositories::absolute(ctx, path))
         .transpose()?;
     let target = resolve_add_target(ctx, repository, issue.as_deref(), &agent).await?;
-    let agent = resolve_add_agent(ctx, &target.selector, agent, issue.is_some()).await?;
-    let creation = select_add_creation(ctx, &target, creation, issue.is_some()).await?;
+    let settings = AddSettings {
+        ctx,
+        repository: &target.selector,
+        effective: tokio::sync::OnceCell::new(),
+    };
+    let agent = choose_add_agent(&settings, agent).await?;
+    // Look the issue up before any picker or handoff, so its failures end here.
+    let issue = match issue {
+        Some(input) => Some(super::issues::load(target.repository(ctx).await?, &input).await?),
+        None => None,
+    };
+    let agent = resolve_add_agent(ctx, &settings, agent, issue.is_some()).await?;
+    let creation = select_add_creation(ctx, &target, creation, issue.as_ref()).await?;
+    let tab_label = match &issue {
+        Some(issue) => Some(issue.tab_label(target.repository(ctx).await?)),
+        None => None,
+    };
     let plan = AddPlan {
         repository: target.selector.clone(),
         creation,
+        tab_label,
         issue,
         agent,
         args,
@@ -163,7 +179,8 @@ pub(super) async fn add(
 pub(in crate::cli) struct AddPlan {
     pub repository: String,
     pub creation: Creation,
-    pub issue: Option<String>,
+    tab_label: Option<String>,
+    issue: Option<super::issues::Issue>,
     agent: ResolvedAddAgent,
     args: Vec<OsString>,
 }
@@ -174,15 +191,11 @@ impl AddPlan {
     }
 
     pub fn label(&self) -> &str {
-        self.creation
-            .branch
+        self.tab_label
             .as_deref()
+            .or(self.creation.branch.as_deref())
             .or(self.creation.existing.as_deref())
-            .unwrap_or(if self.issue.is_some() {
-                "shoal issue"
-            } else {
-                "shoal add"
-            })
+            .unwrap_or("shoal add")
     }
 }
 
@@ -198,15 +211,12 @@ async fn execute_add_with_target(ctx: &Context, plan: AddPlan, target: AddTarget
     let AddPlan {
         repository: _,
         creation,
+        tab_label: _,
         issue,
         agent,
         args,
     } = plan;
-    let issue = match issue {
-        Some(input) => Some(super::issues::load(target.repository(ctx).await?, &input).await?),
-        None => None,
-    };
-    let opened = open_add_workspace(ctx, &target, creation, issue.as_ref()).await?;
+    let opened = open_add_workspace(ctx, &target, creation).await?;
     if let Some(tab) = &ctx.herdr_tab {
         let label = match &issue {
             Some(issue) => issue.tab_label(target.repository(ctx).await?),
@@ -290,43 +300,65 @@ struct ResolvedAddAgent {
     codex_mode: Option<CodexMode>,
 }
 
-async fn resolve_add_agent(
-    ctx: &Context,
-    repository: &str,
-    agent: AgentLaunch,
-    has_issue: bool,
-) -> Result<ResolvedAddAgent> {
-    let settings = tokio::sync::OnceCell::new();
-    let load_settings =
-        || client::settings(&ctx.paths, ConfigTarget::Repository(repository.into()));
+/// The repository's effective settings, loaded on first use.
+struct AddSettings<'a> {
+    ctx: &'a Context,
+    repository: &'a str,
+    effective: tokio::sync::OnceCell<crate::config::Effective>,
+}
+
+impl AddSettings<'_> {
+    async fn get(&self) -> Result<&crate::config::Effective> {
+        self.effective
+            .get_or_try_init(|| {
+                client::settings(
+                    &self.ctx.paths,
+                    ConfigTarget::Repository(self.repository.into()),
+                )
+            })
+            .await
+    }
+}
+
+enum AgentChoice {
+    Chosen(Option<Agent>),
+    /// No agent was named or configured; the picker runs after lookups.
+    Picker,
+}
+
+/// Validate a named agent before looking up the issue or creating work.
+async fn choose_add_agent(settings: &AddSettings<'_>, agent: AgentLaunch) -> Result<AgentChoice> {
     let agent = match agent {
         AgentLaunch::Explicit(agent) => agent,
-        AgentLaunch::IssueDefault(agent) => agents::select_default_agent(
-            ctx,
-            settings.get_or_try_init(load_settings).await?,
-            agent,
-        )?,
+        AgentLaunch::IssueDefault(agent) => {
+            match agent.or(settings.get().await?.default_agent.clone()) {
+                Some(agent) => Some(agent),
+                None => return Ok(AgentChoice::Picker),
+            }
+        }
     };
-    // Validate launch configuration before looking up the issue or creating work.
     if let Some(Agent::Custom(name)) = &agent {
         ensure!(
-            settings
-                .get_or_try_init(load_settings)
-                .await?
-                .commands
-                .contains_key(name),
+            settings.get().await?.commands.contains_key(name),
             "unknown agent {name:?}; define it in [commands] in Shoal config"
         );
     }
+    Ok(AgentChoice::Chosen(agent))
+}
+
+async fn resolve_add_agent(
+    ctx: &Context,
+    settings: &AddSettings<'_>,
+    agent: AgentChoice,
+    has_issue: bool,
+) -> Result<ResolvedAddAgent> {
+    let agent = match agent {
+        AgentChoice::Chosen(agent) => agent,
+        AgentChoice::Picker => agents::pick_default_agent(ctx, settings.get().await?)?,
+    };
     let codex_mode = match &agent {
         Some(Agent::Codex) if has_issue => Some(CodexMode::Cli),
-        Some(Agent::Codex) => Some(
-            settings
-                .get_or_try_init(load_settings)
-                .await?
-                .codex
-                .default_mode,
-        ),
+        Some(Agent::Codex) => Some(settings.get().await?.codex.default_mode),
         _ => None,
     };
     Ok(ResolvedAddAgent { agent, codex_mode })
@@ -336,9 +368,13 @@ async fn select_add_creation(
     ctx: &Context,
     target: &AddTarget,
     mut creation: Creation,
-    has_issue: bool,
+    issue: Option<&super::issues::Issue>,
 ) -> Result<Creation> {
-    if has_issue || creation.branch.is_some() || creation.existing.is_some() {
+    if creation.branch.is_some() || creation.existing.is_some() {
+        return Ok(creation);
+    }
+    if let Some(issue) = issue {
+        creation.branch = Some(issue.branch_name());
         return Ok(creation);
     }
     if creation.base.is_none() && ctx.interactive() {
@@ -375,7 +411,6 @@ async fn open_add_workspace(
     ctx: &Context,
     target: &AddTarget,
     creation: Creation,
-    issue: Option<&super::issues::Issue>,
 ) -> Result<OpenedWorkspace> {
     let Creation {
         path,
@@ -385,7 +420,6 @@ async fn open_add_workspace(
         git_profile,
     } = creation;
     let repository = target.selector.clone();
-    let branch = branch.or_else(|| issue.map(|issue| issue.branch_name()));
     if let Some(branch) = existing {
         request::<OpenedWorkspace>(
             &ctx.paths,

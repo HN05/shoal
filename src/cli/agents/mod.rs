@@ -9,7 +9,7 @@ use std::{
     path::Path,
 };
 
-use anyhow::{Result, bail};
+use anyhow::{Result, ensure};
 
 use crate::{
     agent::{Agent, CodexMode},
@@ -31,21 +31,19 @@ pub(super) async fn default_agent(
     agent: Option<Agent>,
 ) -> Result<Option<Agent>> {
     let settings = client::settings(&ctx.paths, target).await?;
-    select_default_agent(ctx, &settings, agent)
-}
-
-pub(super) fn select_default_agent(
-    ctx: &Context,
-    settings: &Effective,
-    agent: Option<Agent>,
-) -> Result<Option<Agent>> {
     match agent.or(settings.default_agent.clone()) {
         Some(agent) => Ok(Some(agent)),
-        None if ctx.interactive() => pick_agent(ctx, settings),
-        None => bail!(
-            "no agent selected; pass --agent or set default_agent in the repository or global config"
-        ),
+        None => pick_default_agent(ctx, &settings),
     }
+}
+
+/// The picker standing in for a missing `default_agent`.
+pub(super) fn pick_default_agent(ctx: &Context, settings: &Effective) -> Result<Option<Agent>> {
+    ensure!(
+        ctx.interactive(),
+        "no agent selected; pass --agent or set default_agent in the repository or global config"
+    );
+    pick_agent(ctx, settings)
 }
 
 fn pick_agent(ctx: &Context, settings: &Effective) -> Result<Option<Agent>> {

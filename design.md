@@ -236,7 +236,7 @@ Nested executions keep scope.
 Root help groups built-in commands by task; configured commands are discovered
 through `run`.
 
-The CLI owns Herdr tab handoffs after interactive workspace and
+The CLI owns Herdr tab handoffs after issue lookup and interactive workspace and
 agent choices and labels the tab `<repo>#<number>` for an issue, otherwise with the
 allocated workspace branch. It carries a resolved launch plan to the new pane in the tab's environment, preserving
 state/config selection and literal arguments without hook scripts or state files.

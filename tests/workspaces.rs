@@ -8590,6 +8590,13 @@ fn issue_lookup_errors_never_create_a_workspace() {
         );
         assert_eq!(fixture.ok(&["ls"]), serde_json::json!([]));
     }
+    // A found issue still needs an agent before anything is created.
+    fs::write(
+        &tool,
+        "#!/bin/sh\necho '{\"state\":\"OPEN\",\"number\":4,\"title\":\"Four\",\"body\":\"\"}'\n",
+    )
+    .unwrap();
+    fs::set_permissions(&tool, fs::Permissions::from_mode(0o700)).unwrap();
     for (args, diagnostic) in [
         (
             vec!["add", "--issue", "https://github.com/team/other/issues/4"],
@@ -12960,7 +12967,7 @@ fn herdr_handoff_preserves_choices_and_literal_arguments() {
 }
 
 #[test]
-fn herdr_picks_before_handoff_and_retains_lookup_errors() {
+fn herdr_reports_issue_lookup_errors_before_the_agent_picker() {
     let fixture = Fixture::new();
     fixture.add_github_origin();
     install_fake_herdr(&fixture);
@@ -12977,20 +12984,11 @@ fn herdr_picks_before_handoff_and_retains_lookup_errors() {
         "#!/bin/sh\necho \"$*\" >&2\nhead -n 1\n",
     );
     let (caller, transcript) = herdr_call(&fixture, &["issue", "34"], "");
-    assert!(caller.status.success(), "{caller:?} {transcript}");
+    assert!(!caller.status.success(), "{caller:?} {transcript}");
     assert!(transcript.contains("Repository>"), "{transcript}");
-    assert!(transcript.contains("Agent>"), "{transcript}");
-    assert!(
-        herdr_calls(&fixture)[0]
-            .iter()
-            .any(|arg| arg == "--no-focus")
-    );
-    let (worker, transcript) = fixture.interactive_command(&mut herdr_worker_command(&fixture), "");
-    assert!(!worker.status.success(), "{worker:?}");
     assert!(transcript.contains("lookup-failed"), "{transcript}");
-    assert!(!transcript.contains("Repository>"));
-    assert!(!transcript.contains("Agent>"));
-    assert_eq!(herdr_calls(&fixture).len(), 2);
+    assert!(!transcript.contains("Agent>"), "{transcript}");
+    assert!(!fixture.root.path().join("herdr-calls").exists());
     assert!(fixture.ok(&["ls"]).as_array().unwrap().is_empty());
 }
 
@@ -13015,7 +13013,7 @@ fn herdr_labels_name_issues_by_repository_and_number() {
                 "--agent",
                 "pi",
             ],
-            "shoal issue",
+            "project#34",
             "project#34",
             false,
         ),
@@ -13028,7 +13026,7 @@ fn herdr_labels_name_issues_by_repository_and_number() {
                 "--agent",
                 "pi",
             ],
-            "shoal issue",
+            "project#34",
             "project#34",
             false,
         ),
@@ -13042,7 +13040,7 @@ fn herdr_labels_name_issues_by_repository_and_number() {
                 "--agent",
                 "pi",
             ],
-            "fix/short",
+            "project#34",
             "project#34",
             true,
         ),
@@ -13117,6 +13115,10 @@ fn herdr_focus_defaults_follow_the_resolved_agent_and_allow_overrides() {
     install_test_script(
         &fixture.root.path().join("bin/fzf"),
         "#!/bin/sh\nawk -F '\t' '$2 == \"No agent\" {print}'\n",
+    );
+    install_test_script(
+        &fixture.root.path().join("bin/gh"),
+        "#!/bin/sh\necho '{\"state\":\"OPEN\",\"number\":34,\"title\":\"Focus\",\"body\":\"\"}'\n",
     );
     let (caller, transcript) = herdr_call(
         &fixture,

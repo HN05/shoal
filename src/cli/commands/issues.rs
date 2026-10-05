@@ -116,6 +116,7 @@ async fn repository_with_remote<'a>(
     }
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
 pub(super) struct Issue {
     number: u64,
     title: String,

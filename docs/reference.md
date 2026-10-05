@@ -177,8 +177,8 @@ use the current registered checkout or managed workspace, falling back to the
 repository picker interactively; otherwise pass `--repo`. URLs select by remote
 unless `--repo` is explicit, in which case it must match. The command starts
 `--agent`, else `default_agent` from the repository or global config, else an
-interactive picker listing agents whose executables are on PATH (Happy agents
-need `happy` and the agent). Choosing “No agent” creates the workspace without a launch.
+interactive picker, shown once the issue is found, listing agents whose
+executables are on PATH (Happy agents need `happy` and the agent). Choosing “No agent” creates the workspace without a launch.
 Agent names select built-in launchers or entries in `[commands]`.
 Closed issues are rejected before workspace creation; reopen the issue first.
 Issue-based workspaces retain their issue URL across restarts, visible in `status`
@@ -323,13 +323,13 @@ the workspace is retained even when launch fails. With shell
 integration, your shell enters the new workspace after the agent exits.
 `--json` emits the workspace record first, then the agent's unmodified output.
 
-Inside Herdr (`HERDR_ENV=1`), interactive `shoal issue` and `shoal add` resolve
-repository, branch, and agent choices in the caller's pane, then open a tab in
-`HERDR_WORKSPACE_ID` and return once the command is submitted there. Issue lookup,
-setup, and agent execution run in that tab, which is labeled `<repo>#<number>` for
-an issue (such as `shoal#375`) and with the allocated workspace branch otherwise.
-`--here` keeps the command in the current pane; JSON, help, and noninteractive
-calls run in place.
+Inside Herdr (`HERDR_ENV=1`), interactive `shoal issue` and `shoal add` look up
+the issue and resolve repository, branch, and agent choices in the caller's pane,
+then open a tab in `HERDR_WORKSPACE_ID` and return once the command is submitted
+there. Setup and agent execution run in that tab, which is labeled
+`<repo>#<number>` for an issue (such as `shoal#375`) and with the allocated
+workspace branch otherwise. `--here` keeps the command in the current pane; JSON,
+help, and noninteractive calls run in place.
 
 The `[herdr]` table in global or repository config uses normal per-option
 precedence. New tabs focus by default when opening a workspace shell and stay
