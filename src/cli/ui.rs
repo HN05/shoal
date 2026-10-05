@@ -14,11 +14,12 @@ use crate::{
     cli::{
         WorkspaceScope, client,
         context::Context,
-        output::{Palette, Style},
+        output::{Palette, Style, workspace_state_style},
         workspace_context::{ScopeOrder, WorkspaceContext},
     },
     model::{Repository, Workspace},
     removal::{BranchChoice, RemovalCheck},
+    state::WorkspaceState,
 };
 
 fn require_interactive(ctx: &Context) -> Result<()> {
@@ -398,25 +399,89 @@ pub async fn workspace_picker(ctx: &Context) -> Result<String> {
 }
 
 fn pick_workspace(ctx: &Context, workspaces: Vec<Workspace>) -> Result<String> {
-    let palette = Palette::stderr(ctx.json);
+    let rows = workspace_rows(&workspaces, &[], true, Palette::stderr(ctx.json));
     pick(
         ctx,
         "Workspace> ",
-        workspaces
-            .into_iter()
-            .map(|w| (w.id.clone(), workspace_label(&w, palette)))
-            .collect(),
+        workspaces.into_iter().map(|w| w.id).zip(rows).collect(),
     )
 }
 
-pub fn workspace_label(workspace: &Workspace, palette: Palette) -> String {
-    format!(
-        "{}  {}  {}  {}",
-        palette.paint(Style::Heading, &workspace.name),
-        palette.workspace_state(workspace.state),
-        workspace.branch,
-        palette.paint(Style::Muted, workspace.path.display())
-    )
+/// One aligned row per workspace: a state marker and the name, then only the
+/// columns that tell rows apart. Repositories (`(id, name)` pairs) appear when
+/// the rows span several, a branch where it differs from the name, and the
+/// state unless the workspace is ready.
+pub fn workspace_rows(
+    workspaces: &[Workspace],
+    repositories: &[(String, String)],
+    path: bool,
+    palette: Palette,
+) -> Vec<String> {
+    let repository = |workspace: &Workspace| {
+        repositories
+            .iter()
+            .find(|(id, _)| id == &workspace.repository_id)
+            .map_or("unknown repository", |(_, name)| name.as_str())
+    };
+    let several_repositories = workspaces
+        .iter()
+        .map(repository)
+        .collect::<std::collections::HashSet<_>>()
+        .len()
+        > 1;
+    let shown = |show: bool, text: String| if show { text } else { String::new() };
+    let cells: Vec<[(String, Option<Style>); 5]> = workspaces
+        .iter()
+        .map(|w| {
+            [
+                (w.name.clone(), Some(Style::Heading)),
+                (shown(several_repositories, repository(w).to_owned()), None),
+                (shown(w.branch != w.name, w.branch.clone()), None),
+                (
+                    shown(w.state != WorkspaceState::Ready, w.state.to_string()),
+                    Some(workspace_state_style(w.state)),
+                ),
+                (
+                    shown(path, w.path.display().to_string()),
+                    Some(Style::Muted),
+                ),
+            ]
+        })
+        .collect();
+    let widths: Vec<usize> = (0..5)
+        .map(|column| {
+            cells
+                .iter()
+                .map(|row| row[column].0.chars().count())
+                .max()
+                .unwrap_or(0)
+        })
+        .collect();
+    workspaces
+        .iter()
+        .zip(cells)
+        .map(|(workspace, row)| {
+            let last = row.iter().rposition(|(text, _)| !text.is_empty());
+            let mut line = palette.workspace_marker(workspace.state);
+            for (column, (text, style)) in row.into_iter().enumerate() {
+                if widths[column] == 0 || Some(column) > last {
+                    continue;
+                }
+                let padding = if Some(column) == last {
+                    0
+                } else {
+                    widths[column] - text.chars().count()
+                };
+                line.push_str(if column == 0 { " " } else { "  " });
+                line.push_str(&match style {
+                    Some(style) if !text.is_empty() => palette.paint(style, text),
+                    _ => text,
+                });
+                line.push_str(&" ".repeat(padding));
+            }
+            line
+        })
+        .collect()
 }
 
 pub fn repository_label(repo: &Repository, palette: Palette) -> String {
@@ -476,5 +541,50 @@ pub fn repository_selector(value: String) -> Result<String> {
             .to_owned())
     } else {
         Ok(value)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn workspace(repository: &str, name: &str, branch: &str, state: WorkspaceState) -> Workspace {
+        Workspace::new_record(
+            repository.into(),
+            name.into(),
+            format!("/work/{name}").into(),
+            branch.into(),
+            state,
+        )
+    }
+
+    #[test]
+    fn workspace_rows_align_and_show_only_distinguishing_columns() {
+        let plain = Palette::stdout(true);
+        let workspaces = [
+            workspace("a", "fix-login", "fix-login", WorkspaceState::Ready),
+            workspace("a", "x", "feature/x", WorkspaceState::Failed),
+            workspace("a", "new", "new", WorkspaceState::Preparing),
+        ];
+        assert_eq!(
+            workspace_rows(&workspaces, &[("a".into(), "shoal".into())], false, plain),
+            [
+                "● fix-login",
+                "✗ x          feature/x  failed",
+                "◌ new                   preparing",
+            ]
+        );
+        let repositories = [("a".into(), "shoal".into()), ("b".into(), "app".into())];
+        let workspaces = [
+            workspace("a", "fix-login", "fix-login", WorkspaceState::Ready),
+            workspace("b", "y", "y", WorkspaceState::Ready),
+        ];
+        assert_eq!(
+            workspace_rows(&workspaces, &repositories, true, plain),
+            [
+                "● fix-login  shoal  /work/fix-login",
+                "● y          app    /work/y",
+            ]
+        );
     }
 }

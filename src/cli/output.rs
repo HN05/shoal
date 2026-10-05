@@ -72,15 +72,20 @@ impl Palette {
     }
 
     pub fn workspace_state(self, state: WorkspaceState) -> String {
-        let style = match state {
-            WorkspaceState::Ready => Style::Success,
-            WorkspaceState::Failed => Style::Error,
+        self.paint(workspace_state_style(state), state)
+    }
+
+    /// A one-column state marker whose shape stays readable without color.
+    pub fn workspace_marker(self, state: WorkspaceState) -> String {
+        let marker = match state {
+            WorkspaceState::Ready => "●",
+            WorkspaceState::Failed => "✗",
             WorkspaceState::Preparing
             | WorkspaceState::Stopping
             | WorkspaceState::Removing
-            | WorkspaceState::Reconciling => Style::Warning,
+            | WorkspaceState::Reconciling => "◌",
         };
-        self.paint(style, state)
+        self.paint(workspace_state_style(state), marker)
     }
 
     pub fn simulator_state(self, state: SimulatorState) -> String {
@@ -103,6 +108,17 @@ impl Palette {
             },
             state,
         )
+    }
+}
+
+pub fn workspace_state_style(state: WorkspaceState) -> Style {
+    match state {
+        WorkspaceState::Ready => Style::Success,
+        WorkspaceState::Failed => Style::Error,
+        WorkspaceState::Preparing
+        | WorkspaceState::Stopping
+        | WorkspaceState::Removing
+        | WorkspaceState::Reconciling => Style::Warning,
     }
 }
 
