@@ -1,0 +1,45 @@
+name: Code audit
+
+on:
+  schedule:
+    - cron: '47 5 * * 1'
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag or commit (empty uses the default branch)
+        default: ''
+      scope:
+        description: Paths, area or theme to inspect
+        default: 'CLI, daemon, tests and CI: correctness, ownership, code quality and maintainability'
+
+concurrency:
+  group: code-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    name: review-bot audit
+    runs-on: docker
+    timeout-minutes: 60
+    container:
+      image: docker.io/library/node:22-bookworm
+      volumes:
+        - /var/lib/review-bot/claude:/var/lib/review-bot/claude
+        - /var/lib/review-bot/codex:/var/lib/review-bot/codex
+    steps:
+      - uses: https://git.henriknordvik.com/HN05/review-bot@3897b4ffeed89f18cfe88d0591745b13d2dbdc1d
+        with:
+          mode: audit
+          agent: codex
+          audit-ref: ${{ inputs.ref || '' }}
+          audit-scope: >-
+            ${{ inputs.scope || 'CLI, daemon, tests and CI: correctness, ownership, code quality and maintainability' }}
+          audit-instructions-file: .review/audit.md
+          audit-timeout-seconds: '900'
+          # Reuse a writable shared mount to serialize report updates across containers.
+          audit-lock-dir: /var/lib/review-bot/codex/audit-locks
+          audit-max-subagents: '0'
+          codex-model: ${{ vars.AUDIT_CODEX_MODEL || 'gpt-6-astra' }}
+          max-turns: '80'
+          claude-auth-dir: /var/lib/review-bot/claude
+          codex-auth-dir: /var/lib/review-bot/codex

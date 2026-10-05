@@ -161,8 +161,12 @@ required check; findings do not fail it, a tool that could not run does.
 `.forgejo/workflows/review.yml` posts an advisory review-bot review when a PR
 opens and whenever `review/default`, `review/claude` or `review/codex` is
 added; `review/none` suppresses it. `.review/review.md` is its project brief;
-keep it current when a rule here or in `design.md` changes. Issues and PRs
-carry `area/`, `type/` and `complexity/` labels; `.forgejo/scripts/labels.sh`
+keep it current when a rule here or in `design.md` changes.
+`.forgejo/workflows/audit.yml` runs a weekly read-only code audit, or manually
+with a selected ref and scope, using `.review/audit.md`. It discovers or creates
+one recurring report issue; findings are advisory and never a required check.
+Keep triage in issue comments so report updates preserve it.
+Issues and PRs carry `area/`, `type/` and `complexity/` labels; `.forgejo/scripts/labels.sh`
 creates the scheme. Push the branch and let CI verify instead of running the
 full suite locally first.
 

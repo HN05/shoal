@@ -87,7 +87,10 @@ environments without a service manager. The service captures the installing shel
 `PATH`.
 
 Advisory repository reviews default to Codex, retaining configured agent overrides
-and automatic fallback.
+and automatic fallback. Repository code audits inspect existing code read-only
+and maintain one recurring report issue with triage in comments. Failed or
+incomplete attempts retain the last successful findings; audit results are
+advisory and do not gate merges.
 
 Distribution is a Homebrew formula in the shared HN05 tap: releases install
 checksummed prebuilt Linux and macOS binaries on x86_64 and arm64; `--HEAD`
