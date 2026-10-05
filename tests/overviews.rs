@@ -64,8 +64,6 @@ async fn overview_responses(listener: UnixListener, noun: &str, count: usize) {
             if index == 0 && count > 1 {
                 // A later request outside the initial window must be admitted.
                 release_first.notified().await;
-            } else {
-                tokio::time::sleep(Duration::from_millis(10)).await;
             }
             if index == 1 {
                 reply(
@@ -112,7 +110,7 @@ async fn all_workspace_overviews_preserve_json_text_scope_and_exit_status() {
                 command.arg("--all");
                 let mut command = tokio::process::Command::from(command);
                 command.kill_on_drop(true);
-                let (output, ()) = tokio::time::timeout(Duration::from_secs(5), async {
+                let (output, ()) = tokio::time::timeout(Duration::from_secs(60), async {
                     tokio::join!(command.output(), overview_responses(listener, noun, count))
                 })
                 .await

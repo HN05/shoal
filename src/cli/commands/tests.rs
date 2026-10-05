@@ -112,7 +112,7 @@ async fn empty_workspace_overviews_make_no_requests() {
     assert!(overviews.is_empty());
 }
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn workspace_overviews_account_for_request_timeouts() {
     let workspaces = workspaces(WORKSPACE_OVERVIEW_CONCURRENCY * 2);
     let overviews = collect_workspace_overviews(&workspaces, async |workspace| {

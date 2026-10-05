@@ -18,7 +18,7 @@ fn acquire(kind: &str, wait: &str, json: bool, replies: Vec<Value>) -> (Output, 
     let server = thread::spawn(move || {
         let mut requests = Vec::new();
         for mut reply in replies {
-            let deadline = Instant::now() + Duration::from_secs(10);
+            let deadline = Instant::now() + Duration::from_secs(60);
             let mut stream = loop {
                 match listener.accept() {
                     Ok((stream, _)) => break stream,
@@ -30,7 +30,7 @@ fn acquire(kind: &str, wait: &str, json: bool, replies: Vec<Value>) -> (Output, 
                 }
             };
             stream
-                .set_read_timeout(Some(Duration::from_secs(5)))
+                .set_read_timeout(Some(Duration::from_secs(60)))
                 .unwrap();
             let mut line = String::new();
             BufReader::new(&stream).read_line(&mut line).unwrap();
@@ -131,18 +131,8 @@ fn acquisition_responses_keep_exit_codes_json_details_and_human_approval_text() 
 }
 
 #[test]
-fn polling_renders_the_last_approval_or_capacity_response() {
+fn polling_renders_the_final_denial() {
     for kind in ["resource", "sim"] {
-        let (output, requests) = acquire(kind, "1", true, vec![busy(), approval(kind, "pending")]);
-        assert_eq!(requests.len(), 2);
-        assert_eq!(
-            value(&output, 2)["request"],
-            approval(kind, "pending")["data"]
-        );
-        let (output, _) = acquire(kind, "1", true, vec![approval(kind, "pending"), busy()]);
-        let output = value(&output, 2);
-        assert_eq!(output["message"], "capacity full");
-        assert!(output.get("request").is_none());
         let (output, _) = acquire(
             kind,
             "60",

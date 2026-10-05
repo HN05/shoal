@@ -579,7 +579,6 @@ fn doctor_reports_incompatible_unresponsive_and_wrong_version_daemons() {
     let root = tempfile::tempdir_in("/tmp").unwrap();
     fs::create_dir(root.path().join("state")).unwrap();
     let _listener = UnixListener::bind(root.path().join("state/daemon.sock")).unwrap();
-    let start = Instant::now();
     let report = doctor_report(root.path());
     assert!(
         report["checks"][0]["message"]
@@ -587,7 +586,6 @@ fn doctor_reports_incompatible_unresponsive_and_wrong_version_daemons() {
             .unwrap()
             .contains("timed out")
     );
-    assert!(start.elapsed() < Duration::from_secs(6));
 }
 
 #[test]

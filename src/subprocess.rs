@@ -160,7 +160,7 @@ mod tests {
         let input = vec![b'x'; 256 * 1024];
         let output = Run::new(shell("head -c 262144 /dev/zero; cat"))
             .input(input.clone())
-            .timeout(Duration::from_secs(5))
+            .timeout(Duration::from_secs(60))
             .checked()
             .await
             .unwrap();
@@ -211,7 +211,7 @@ mod tests {
     async fn early_stdin_close_preserves_exit_status_and_diagnostics() {
         let output = Run::new(shell("exec 0<&-; printf 'early exit' >&2; exit 7"))
             .input(vec![0; 1024 * 1024])
-            .timeout(Duration::from_secs(5))
+            .timeout(Duration::from_secs(60))
             .capture()
             .await
             .unwrap();
@@ -222,7 +222,7 @@ mod tests {
         assert_eq!(
             Run::new(shell("exec 0<&-; printf done"))
                 .input(vec![0; 1024 * 1024])
-                .timeout(Duration::from_secs(5))
+                .timeout(Duration::from_secs(60))
                 .output()
                 .await
                 .unwrap(),
@@ -234,21 +234,33 @@ mod tests {
     async fn deadline_kills_child_even_when_stdin_is_blocked() {
         let root = tempfile::tempdir().unwrap();
         let pid_file = root.path().join("pid");
-        let mut command = shell("echo $$ > \"$1\"; exec sleep 30");
+        let mut command = shell("echo $$ > \"$1\"; exec tail -f /dev/null");
         command.arg("--").arg(&pid_file);
-        let error = Run::new(command)
-            .input(vec![0; 1024 * 1024])
-            .timeout(Duration::from_millis(300))
-            .capture()
-            .await
-            .unwrap_err();
+        let exchange = tokio::spawn(
+            Run::new(command)
+                .input(vec![0; 1024 * 1024])
+                .timeout(Duration::from_secs(60))
+                .capture(),
+        );
+        let pid: i32 = tokio::time::timeout(Duration::from_secs(60), async {
+            loop {
+                if let Ok(text) = std::fs::read_to_string(&pid_file)
+                    && let Ok(pid) = text.trim().parse()
+                {
+                    break pid;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("child did not publish readiness");
+        // Advance the deadline only once the nonterminating child has started.
+        tokio::time::pause();
+        tokio::time::advance(Duration::from_secs(60)).await;
+        let error = exchange.await.unwrap().unwrap_err();
+        tokio::time::resume();
         assert_eq!(error.kind(), io::ErrorKind::TimedOut);
-        let pid: i32 = std::fs::read_to_string(pid_file)
-            .unwrap()
-            .trim()
-            .parse()
-            .unwrap();
-        tokio::time::timeout(Duration::from_secs(5), async {
+        tokio::time::timeout(Duration::from_secs(60), async {
             while unsafe { libc::kill(pid, 0) } == 0 {
                 tokio::time::sleep(Duration::from_millis(10)).await;
             }

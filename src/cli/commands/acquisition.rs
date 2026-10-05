@@ -112,7 +112,7 @@ mod tests {
         result
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn no_wait_preserves_every_outcome() {
         assert!(matches!(
             sequence(0, vec![Acquisition::Acquired(7)]).await,
@@ -135,7 +135,7 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn timeout_preserves_the_latest_busy_or_pending_outcome() {
         let expected = to_value(approval(DecisionStatus::Pending)).unwrap();
         let outcome = sequence(
@@ -161,7 +161,7 @@ mod tests {
         assert!(matches!(outcome, Acquisition::Busy(message) if message == "now full"));
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn pending_finishes_on_denial_or_acquisition_before_timeout() {
         let outcome = sequence(
             60,
@@ -191,7 +191,7 @@ mod tests {
         ));
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn errors_stop_polling() {
         let mut attempts = 0;
         let error = retry::<()>(60, async || {
