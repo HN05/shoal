@@ -13135,6 +13135,39 @@ fn herdr_labels_name_issues_by_repository_and_number() {
 }
 
 #[test]
+fn herdr_plans_carry_issue_urls_instead_of_bodies() {
+    let fixture = Fixture::new();
+    fixture.add_github_origin();
+    install_fake_herdr(&fixture);
+    // Larger than one Linux argument may be, so it cannot ride in the tab's --env.
+    let body = "x".repeat(256 * 1024);
+    let response = fixture.root.path().join("issue-response");
+    fs::write(
+        &response,
+        serde_json::json!({"state": "OPEN", "number": 34, "title": "Large", "body": body})
+            .to_string(),
+    )
+    .unwrap();
+    install_test_script(
+        &fixture.root.path().join("bin/gh"),
+        &format!("#!/bin/sh\ncat '{}'\n", response.display()),
+    );
+    let repo = fixture.repo.to_str().unwrap();
+    let args = [
+        "issue", "34", "--repo", repo, "--agent", "codex", "--base", "HEAD",
+    ];
+    let (caller, transcript) = herdr_call(&fixture, &args, "");
+    assert!(caller.status.success(), "{caller:?} {transcript}");
+    let calls = herdr_calls(&fixture);
+    let plan = calls[0]
+        .iter()
+        .find_map(|arg| arg.strip_prefix("SHOAL_HERDR_PLAN="))
+        .unwrap();
+    let plan: Value = serde_json::from_str(plan).unwrap();
+    assert_eq!(plan["issue"], "https://github.com/team/project/issues/34");
+}
+
+#[test]
 fn herdr_focus_defaults_follow_the_resolved_agent_and_allow_overrides() {
     for (focus, agent, expected) in [
         (None, None, "--focus"),

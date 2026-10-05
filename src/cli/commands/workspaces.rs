@@ -165,14 +165,14 @@ pub(super) async fn add(
         repository: target.selector.clone(),
         creation,
         tab_label,
-        issue,
+        issue: issue.as_ref().map(|issue| issue.url.clone()),
         agent,
         args,
     };
     if crate::cli::herdr::handoff(ctx, &plan, here).await? {
         return Ok(0);
     }
-    execute_add_with_target(ctx, plan, target).await
+    execute_add_with_target(ctx, plan, target, issue).await
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -180,7 +180,9 @@ pub(in crate::cli) struct AddPlan {
     pub repository: String,
     pub creation: Creation,
     tab_label: Option<String>,
-    issue: Option<super::issues::Issue>,
+    /// The found issue's URL; its body can exceed what a Herdr tab's
+    /// environment carries, so the worker looks it up again.
+    issue: Option<String>,
     agent: ResolvedAddAgent,
     args: Vec<OsString>,
 }
@@ -204,15 +206,24 @@ pub(in crate::cli) async fn execute_add(ctx: &Context, plan: AddPlan) -> Result<
         selector: plan.repository.clone(),
         repositories: tokio::sync::OnceCell::new(),
     };
-    execute_add_with_target(ctx, plan, target).await
+    let issue = match &plan.issue {
+        Some(url) => Some(super::issues::load(target.repository(ctx).await?, url).await?),
+        None => None,
+    };
+    execute_add_with_target(ctx, plan, target, issue).await
 }
 
-async fn execute_add_with_target(ctx: &Context, plan: AddPlan, target: AddTarget) -> Result<i32> {
+async fn execute_add_with_target(
+    ctx: &Context,
+    plan: AddPlan,
+    target: AddTarget,
+    issue: Option<super::issues::Issue>,
+) -> Result<i32> {
     let AddPlan {
         repository: _,
         creation,
         tab_label: _,
-        issue,
+        issue: _,
         agent,
         args,
     } = plan;
