@@ -12916,6 +12916,10 @@ fn herdr_picks_before_handoff_and_retains_lookup_errors() {
     fixture.add_github_origin();
     install_fake_herdr(&fixture);
     install_test_script(
+        &fixture.root.path().join("bin/codex"),
+        "#!/bin/sh\nexit 0\n",
+    );
+    install_test_script(
         &fixture.root.path().join("bin/gh"),
         "#!/bin/sh\necho lookup-failed >&2\nexit 1\n",
     );
