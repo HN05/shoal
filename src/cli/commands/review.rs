@@ -47,7 +47,17 @@ pub(super) async fn pull_request(
 ) -> Result<i32> {
     let mut repos = client::repositories(&ctx.paths).await?;
     let repository = match repository {
-        Some(repository) => ui::repository_selector(repository)?,
+        Some(repository) => {
+            let selector = ui::repository_selector(repository)?;
+            match super::repositories::offer_unregistered(ctx, &selector).await? {
+                Some(repo) => {
+                    let id = repo.id.clone();
+                    repos.push(repo);
+                    id
+                }
+                None => selector,
+            }
+        }
         None if input.starts_with("https://") || input.starts_with("http://") => {
             super::issues::registered_remote(
                 ctx,

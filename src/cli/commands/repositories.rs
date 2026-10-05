@@ -12,6 +12,7 @@ use crate::{
         ui,
     },
     config::repo::LocalConfig,
+    forge::repository,
     model::{Repository, RepositoryRemoval},
     protocol::Method,
 };
@@ -159,6 +160,28 @@ pub(super) async fn offer_registration(ctx: &Context, source: &str) -> Result<Op
         ui::repository_label(&repo, Palette::stderr(ctx.json))
     );
     Ok(Some(repo))
+}
+
+/// Offer to register an explicit checkout or URL that matches no registered
+/// repository, so the command can continue with the new registration.
+pub(super) async fn offer_unregistered(
+    ctx: &Context,
+    selector: &str,
+) -> Result<Option<Repository>> {
+    if !ctx.interactive() || !repository::registrable(selector) {
+        return Ok(None);
+    }
+    let repos = client::repositories(&ctx.paths).await?;
+    match repository::select(&repos, selector).await {
+        Err(error) if error.is::<repository::NotRegistered>() => {
+            match offer_registration(ctx, selector).await? {
+                Some(repo) => Ok(Some(repo)),
+                None => Err(error),
+            }
+        }
+        // Other selection failures surface where the selector is used.
+        _ => Ok(None),
+    }
 }
 
 /// Expand `~` and resolve relative paths against the caller's directory.

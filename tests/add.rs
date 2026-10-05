@@ -94,29 +94,36 @@ fn add_reuses_resolution_requests_without_reordering_failures() {
 }
 
 #[test]
-fn unregistered_issue_remotes_are_registered_on_confirmation() {
+fn unregistered_repositories_are_registered_on_confirmation() {
     use std::io::Read;
-    for (answer, expected, diagnostic) in [
+    let registered = vec![
+        "list_repositories",
+        "register_repository https://other.example/team/repo",
+        "layered_config registered",
+    ];
+    let url_args: &[&str] = &["issue", "https://other.example/team/repo/issues/7"];
+    let explicit_args: &[&str] = &["issue", "0", "--repo", "https://other.example/team/repo"];
+    for (args, answer, expected, diagnostic) in [
+        (url_args, "y\n", registered.clone(), "unknown agent"),
         (
-            "y\n",
-            vec![
-                "list_repositories",
-                "register_repository https://other.example/team/repo",
-                "layered_config registered",
-            ],
-            "unknown agent",
-        ),
-        (
+            url_args,
             "n\n",
             vec!["list_repositories"],
             "shoal repo add https://other.example/team/repo",
+        ),
+        (explicit_args, "y\n", registered, "unknown agent"),
+        (
+            explicit_args,
+            "n\n",
+            vec!["list_repositories"],
+            "repository is not registered",
         ),
     ] {
         let daemon = FakeDaemon::start();
         let (mut master, slave) = pty::open();
         let mut child = daemon
             .command()
-            .args(["issue", "https://other.example/team/repo/issues/7"])
+            .args(args)
             .args(["--agent", "missing"])
             .stdin(slave.try_clone().unwrap())
             .stderr(slave.try_clone().unwrap())
@@ -136,8 +143,8 @@ fn unregistered_issue_remotes_are_registered_on_confirmation() {
         };
         let _ = master.read_to_end(&mut transcript);
         let transcript = String::from_utf8_lossy(&transcript);
-        assert_eq!(daemon.methods(), expected, "{transcript}");
-        assert!(!status.success(), "{transcript}");
+        assert_eq!(daemon.methods(), expected, "{args:?}: {transcript}");
+        assert!(!status.success(), "{args:?}: {transcript}");
         assert!(
             transcript.contains("Register https://other.example/team/repo with Shoal? [y/N]"),
             "{transcript}"

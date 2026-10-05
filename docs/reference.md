@@ -181,6 +181,8 @@ Agent names select built-in launchers or entries in `[commands]`.
 Closed issues are rejected before workspace creation; reopen the issue first.
 Issue-based workspaces retain their issue URL across restarts, visible in `status`
 and `inspect`; associations cannot be replaced with a different issue.
+A repository argument to `add`, `issue` or `pr review` that names an unregistered
+checkout or clone URL is likewise offered for registration in an interactive terminal.
 
 ```sh
 shoal repo add /path/to/repo             # Or a Git clone URL; register once

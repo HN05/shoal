@@ -1,5 +1,5 @@
 //! Repository naming and identity derived from a source path or URL.
-use anyhow::{Result, bail, ensure};
+use anyhow::{Result, ensure};
 use std::path::Path;
 
 use crate::{git, model::Repository};
@@ -110,7 +110,28 @@ pub async fn select<'a>(repositories: &'a [Repository], selector: &str) -> Resul
     if let Some(repo) = find_by_identity(repositories, selector).await? {
         return Ok(repo);
     }
-    bail!("repository is not registered: {selector}; run `shoal repo add <path-or-url>`")
+    Err(NotRegistered(selector.to_owned()).into())
+}
+
+/// No registered repository matches the selector.
+#[derive(Debug)]
+pub struct NotRegistered(String);
+
+impl std::fmt::Display for NotRegistered {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "repository is not registered: {}; run `shoal repo add <path-or-url>`",
+            self.0
+        )
+    }
+}
+
+impl std::error::Error for NotRegistered {}
+
+/// A local checkout or clone URL that registration can accept.
+pub fn registrable(selector: &str) -> bool {
+    Path::new(selector).exists() || RemoteUrl::parse(selector).is_some()
 }
 
 pub async fn find_by_identity<'a>(

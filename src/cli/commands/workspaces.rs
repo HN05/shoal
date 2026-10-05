@@ -250,7 +250,12 @@ async fn resolve_add_target(
     // Load on first use so explicit targets keep their original failure order.
     let mut repositories = None;
     let selector = match repository {
-        Some(repo) => ui::repository_selector(repo)?,
+        Some(repo) => {
+            let selector = ui::repository_selector(repo)?;
+            super::repositories::offer_unregistered(ctx, &selector)
+                .await?
+                .map_or(selector, |repo| repo.id)
+        }
         None => {
             let repos = repositories.insert(client::repositories(&ctx.paths).await?);
             let issue_command = matches!(agent, AgentLaunch::IssueDefault(_));
