@@ -342,7 +342,7 @@ mod tests {
                 .unwrap()
                 .unwrap()
                 .path,
-            repo
+            repo.canonicalize().unwrap()
         );
         assert!(checkout_of(&repo, "feature", run).await.unwrap().is_none());
         git(&repo, &["checkout", "--detach"]);

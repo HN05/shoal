@@ -179,6 +179,8 @@ mod tests {
         );
     }
 
+    // macOS filesystems reject non-UTF-8 directory names.
+    #[cfg(target_os = "linux")]
     #[tokio::test]
     async fn origin_lookup_accepts_non_utf8_checkout_paths() {
         use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
