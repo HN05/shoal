@@ -173,7 +173,8 @@ use the current registered checkout or managed workspace, falling back to the
 repository picker interactively; otherwise pass `--repo`. URLs select by remote
 unless `--repo` is explicit, in which case it must match. The command starts
 `--agent`, else `default_agent` from the repository or global config, else an
-interactive picker. Choosing “No agent” creates the workspace without a launch.
+interactive picker listing agents whose executables are on PATH (Happy agents
+need `happy` and the agent). Choosing “No agent” creates the workspace without a launch.
 Agent names select built-in launchers or entries in `[commands]`.
 Closed issues are rejected before workspace creation; reopen the issue first.
 Issue-based workspaces retain their issue URL across restarts, visible in `status`

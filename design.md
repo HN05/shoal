@@ -246,9 +246,9 @@ picker; a deleted current directory provides no workspace context. Explicit miss
 fail without fallback; noninteractive and JSON calls
 without a current workspace require a target. Scope remains daemon-enforced.
 Bare `cd` always picks; all-workspace operations retain their scope.
-`config show` never opens a picker. Agent pickers offer
-“No agent” to continue without launching one. `config show` reports
-effective repository values with their winning layers and uses a registered checkout
+`config show` never opens a picker. Agent pickers list only agents whose
+executables are installed and offer “No agent” to continue without launching
+one. `config show` reports effective repository values with their winning layers and uses a registered checkout
 before a workspace exists. `status` combines lifecycle, fork-point changes, active work and
 leases in one workspace view. Human output uses `Display` for enum values and a shared
 semantic palette at the CLI presentation layer; machine output and stored values
