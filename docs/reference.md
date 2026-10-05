@@ -135,8 +135,10 @@ stays connected while the agent is stopped and automatically runs that command
 after healthy readings persist for the recovery interval. Recovery requires
 headroom below each enabled signal’s recovery threshold; thresholds must be
 positive and below their stop thresholds. Agents restore one at a time, each with
-a fresh healthy interval. Missing readings, manual stop/removal, lost connections,
-uncertain surviving processes, or changed workspace ownership prevent recovery.
+a fresh healthy interval, which a reload changing `[overload]` restarts. Missing
+readings, manual stop/removal, lost connections, uncertain surviving processes, or
+changed workspace ownership prevent recovery. Reloading with recovery disabled
+finishes waiting agents at once, keeping their records for `shoal resume`.
 
 `shoal pause [workspace]` stops connected tracked agents through
 their wrappers and saves recovery records, retaining work and resource leases.
