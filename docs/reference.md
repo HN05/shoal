@@ -324,6 +324,11 @@ focus = true            # Focus the new tab
 close_when_done = true  # Close after a tracked agent exits, including cleanup stops
 ```
 
+Failures before agent execution leave the tab open. `add` without an agent (or
+choosing “No agent”) opens an interactive shell in the ready workspace and leaves
+the tab open. Detached Happy agents close it when their tracked execution finishes;
+desktop handoffs leave it open because their agent lifetime is untracked.
+
 Custom agents use `[commands]` with normal repository/global precedence:
 
 ```toml

@@ -470,7 +470,10 @@ impl ResolvedAddAgent {
         args: Vec<OsString>,
     ) -> Result<i32> {
         let Some(agent) = self.agent else {
-            return Ok(0);
+            return match &ctx.herdr_tab {
+                Some(tab) => tab.shell(&workspace.path).await,
+                None => Ok(0),
+            };
         };
         // Use the ready worktree's settings: setup may have changed its template.
         let prompt = if let Some(issue) = issue {

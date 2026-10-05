@@ -1,5 +1,5 @@
 //! Herdr terminal handoffs; workspace ownership stays with the daemon.
-use std::{ffi::OsString, path::Path};
+use std::{ffi::OsString, path::Path, time::Duration};
 
 use anyhow::{Context as _, Result, ensure};
 use serde::Deserialize;
@@ -13,7 +13,10 @@ use super::{
 };
 use crate::{config::Config, env, protocol::ConfigTarget, subprocess::Run};
 
-pub struct Tab;
+pub struct Tab {
+    id: String,
+    close_when_done: bool,
+}
 
 pub(super) async fn handoff(ctx: &Context, plan: &AddPlan, here: bool) -> Result<bool> {
     if here
@@ -129,11 +132,76 @@ fn shell_command(argv: &[OsString]) -> Result<String> {
 
 pub async fn worker(
     mut ctx: Context,
-    _id: String,
-    _close_when_done: bool,
+    id: String,
+    close_when_done: bool,
     payload: &str,
 ) -> Result<i32> {
     let plan = serde_json::from_str(payload).context("invalid Herdr workspace plan")?;
-    ctx.herdr_tab = Some(Tab);
+    ctx.herdr_tab = Some(Tab {
+        id,
+        close_when_done,
+    });
     execute_add(&ctx, plan).await
+}
+
+impl Tab {
+    pub async fn close(&self) {
+        if !self.close_when_done {
+            return;
+        }
+        let mut close = Command::new("herdr");
+        close.args(["tab", "close"]).arg(&self.id);
+        if let Err(error) = Run::new(close).checked().await {
+            eprintln!("warning: cannot close Herdr tab {}: {error:#}", self.id);
+        }
+    }
+
+    pub async fn shell(&self, cwd: &Path) -> Result<i32> {
+        let shell = std::env::var_os("SHELL")
+            .filter(|shell| !shell.is_empty())
+            .unwrap_or_else(|| "/bin/sh".into());
+        let status = Command::new(shell)
+            .arg("-i")
+            .current_dir(cwd)
+            .env_remove(env::SHELL_DIRECTIVE)
+            .status()
+            .await
+            .context("open workspace shell")?;
+        Ok(crate::execution::exit_code(status))
+    }
+
+    pub async fn wait_for_detached(
+        &self,
+        ctx: &Context,
+        workspace: &str,
+        execution: &str,
+    ) -> Result<()> {
+        if !self.close_when_done {
+            return Ok(());
+        }
+        loop {
+            let active = match client::inspect(&ctx.paths, workspace.into()).await {
+                Ok(inspection) => inspection
+                    .executions
+                    .iter()
+                    .any(|item| item.id == execution),
+                Err(error) => {
+                    // Removal may finish between polls. Other failures do not prove exit.
+                    if client::workspaces(&ctx.paths)
+                        .await?
+                        .iter()
+                        .any(|item| item.id == workspace)
+                    {
+                        return Err(error);
+                    }
+                    false
+                }
+            };
+            if !active {
+                self.close().await;
+                return Ok(());
+            }
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+    }
 }

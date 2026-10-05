@@ -230,10 +230,13 @@ needs an unscoped caller.
 Nested executions keep scope.
 
 Root help groups built-in commands by task; configured commands are discovered
-through `run`. The CLI owns Herdr tab handoffs after interactive workspace and
+through `run`.
+
+The CLI owns Herdr tab handoffs after interactive workspace and
 agent choices. It carries a resolved launch plan to the new pane, preserving
 state/config selection and literal arguments without hook scripts or state files.
-Preparation failures retain the tab.
+Tracked agent completion closes its tab, including cleanup stops; preparation
+failures and shell or untracked desktop handoffs retain it.
 
 Single-workspace actions select an explicit target, otherwise the caller's scoped
 workspace or the workspace containing the current directory, then an interactive

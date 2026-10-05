@@ -152,5 +152,9 @@ pub(in crate::cli) async fn happy(
             "happy_daemon_recorded": daemon_recorded,
         }),
     )?;
+    if let Some(tab) = &ctx.herdr_tab {
+        tab.wait_for_detached(ctx, &workspace.id, &launch.execution_id)
+            .await?;
+    }
     Ok(0)
 }

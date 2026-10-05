@@ -12820,7 +12820,10 @@ fn herdr_handoff_preserves_choices_and_literal_arguments() {
         b"two words\0quote ' ; $(touch injected)\0"
     );
     assert!(!fixture.root.path().join("injected").exists());
-    assert_eq!(herdr_calls(&fixture).len(), 2);
+    assert_eq!(
+        herdr_calls(&fixture).last().unwrap(),
+        &["tab", "close", "w1:t9"]
+    );
 }
 
 #[test]
@@ -12851,6 +12854,37 @@ fn herdr_picks_before_handoff_and_retains_lookup_errors() {
     assert!(!transcript.contains("Agent>"));
     assert_eq!(herdr_calls(&fixture).len(), 2);
     assert!(fixture.ok(&["ls"]).as_array().unwrap().is_empty());
+}
+
+#[test]
+fn herdr_no_agent_opens_workspace_shell_and_honors_focus_setting() {
+    let fixture = Fixture::with_config(Some("[herdr]\nfocus = false\n"));
+    install_fake_herdr(&fixture);
+    let (caller, _) = herdr_call(
+        &fixture,
+        &["add", fixture.repo.to_str().unwrap(), "herdr-shell"],
+        "",
+    );
+    assert!(caller.status.success());
+    assert!(
+        herdr_calls(&fixture)[0]
+            .iter()
+            .any(|arg| arg == "--no-focus")
+    );
+    let shell = fixture.root.path().join("bin/test-shell");
+    install_test_script(&shell, "#!/bin/sh\npwd > \"$HOME/shell-cwd\"\n");
+    let argv = herdr_worker(&fixture);
+    let (worker, transcript) =
+        fixture.interactive_command(fixture.command().args(&argv[1..]).env("SHELL", shell), "");
+    assert!(worker.status.success(), "{worker:?} {transcript}");
+    let workspace = fixture.ok(&["inspect", "herdr-shell"]);
+    assert_eq!(
+        fs::read_to_string(fixture.root.path().join("shell-cwd"))
+            .unwrap()
+            .trim(),
+        workspace["workspace"]["path"].as_str().unwrap()
+    );
+    assert_eq!(herdr_calls(&fixture).len(), 2);
 }
 
 fn install_test_script(path: &Path, script: &str) {
@@ -12899,4 +12933,154 @@ fn herdr_opt_out_and_noninteractive_calls_stay_in_place() {
     );
     assert!(disabled.status.success(), "{disabled:?}");
     assert!(!fixture.root.path().join("herdr-calls").exists());
+}
+
+#[test]
+fn herdr_retains_setup_failures_and_can_disable_completion_closure() {
+    let fixture = Fixture::with_config(Some(
+        "[herdr]\nclose_when_done = false\n[commands]\npi = ['sh', '-c', 'exit 0']\n",
+    ));
+    install_fake_herdr(&fixture);
+    let (caller, _) = herdr_call(
+        &fixture,
+        &[
+            "add",
+            fixture.repo.to_str().unwrap(),
+            "retain",
+            "--agent",
+            "pi",
+        ],
+        "",
+    );
+    assert!(caller.status.success());
+    let argv = herdr_worker(&fixture);
+    assert!(!argv.iter().any(|arg| arg == "--close-when-done"));
+    let (worker, _) = fixture.interactive(
+        &argv[1..].iter().map(String::as_str).collect::<Vec<_>>(),
+        "",
+    );
+    assert!(worker.status.success(), "{worker:?}");
+    assert_eq!(herdr_calls(&fixture).len(), 2);
+    // Enable closure, then fail setup before the agent can start.
+    fs::write(
+        fixture.repo.join(".shoal.toml"),
+        "setup_cmd = 'fail-setup'\n[herdr]\nclose_when_done = true\n",
+    )
+    .unwrap();
+    fs::write(fixture.repo.join("fail-setup"), "#!/bin/sh\nexit 17\n").unwrap();
+    fs::set_permissions(
+        fixture.repo.join("fail-setup"),
+        fs::Permissions::from_mode(0o755),
+    )
+    .unwrap();
+    git(&fixture.repo, &["add", ".shoal.toml", "fail-setup"]);
+    git(
+        &fixture.repo,
+        &[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "-m",
+            "setup",
+        ],
+    );
+    install_test_script(
+        &fixture.root.path().join("bin/fzf"),
+        "#!/bin/sh\ngrep 'Keep'\n",
+    );
+    let (caller, _) = herdr_call(
+        &fixture,
+        &[
+            "add",
+            fixture.repo.to_str().unwrap(),
+            "failed-setup",
+            "--agent",
+            "pi",
+        ],
+        "",
+    );
+    assert!(caller.status.success());
+    let argv = herdr_worker(&fixture);
+    let (worker, _) = fixture.interactive(
+        &argv[1..].iter().map(String::as_str).collect::<Vec<_>>(),
+        "\n",
+    );
+    assert_eq!(worker.status.code(), Some(1));
+    assert_eq!(herdr_calls(&fixture).len(), 4);
+}
+
+#[test]
+fn herdr_closes_when_done_cleanup_terminates_the_agent() {
+    let fixture = Fixture::with_config(Some(
+        "[commands]\npi = ['sh', '-c', '\"$SHOAL_TEST_BINARY\" done --cleanup; exec sleep 600']\n",
+    ));
+    install_fake_herdr(&fixture);
+    let (caller, _) = herdr_call(
+        &fixture,
+        &[
+            "add",
+            fixture.repo.to_str().unwrap(),
+            "done-tab",
+            "--agent",
+            "pi",
+        ],
+        "",
+    );
+    assert!(caller.status.success());
+    let argv = herdr_worker(&fixture);
+    let (worker, transcript) = fixture.interactive_command(
+        fixture
+            .command()
+            .args(&argv[1..])
+            .env("SHOAL_TEST_BINARY", env!("CARGO_BIN_EXE_shoal")),
+        "",
+    );
+    assert_eq!(worker.status.code(), Some(143), "{worker:?} {transcript}");
+    assert_eq!(
+        herdr_calls(&fixture).last().unwrap(),
+        &["tab", "close", "w1:t9"]
+    );
+    wait_until("done cleanup", || {
+        fixture.ok(&["ls"]).as_array().unwrap().is_empty()
+    });
+}
+
+#[test]
+fn herdr_closes_after_detached_happy_execution_finishes() {
+    let fixture = Fixture::new();
+    install_fake_herdr(&fixture);
+    install_test_script(
+        &fixture.root.path().join("bin/happy"),
+        "#!/bin/sh\nexit 7\n",
+    );
+    let (caller, _) = herdr_call(
+        &fixture,
+        &[
+            "add",
+            fixture.repo.to_str().unwrap(),
+            "happy-tab",
+            "--agent",
+            "happy-claude",
+        ],
+        "",
+    );
+    assert!(caller.status.success());
+    let argv = herdr_worker(&fixture);
+    let (worker, transcript) = fixture.interactive(
+        &argv[1..].iter().map(String::as_str).collect::<Vec<_>>(),
+        "",
+    );
+    assert!(worker.status.success(), "{worker:?} {transcript}");
+    assert_eq!(
+        herdr_calls(&fixture).last().unwrap(),
+        &["tab", "close", "w1:t9"]
+    );
+    assert!(
+        fixture.ok(&["inspect", "happy-tab"])["executions"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
 }
