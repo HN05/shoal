@@ -141,6 +141,10 @@ impl ForgeRepo {
         ItemRoute::Issue.repository(url)
     }
 
+    pub fn repository_url(&self) -> String {
+        format!("{}://{}/{}", self.web_scheme, self.host, self.path)
+    }
+
     pub fn issue(&self, input: &str) -> Result<(u64, String)> {
         ItemRoute::Issue.resolve(self, input)
     }

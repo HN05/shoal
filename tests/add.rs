@@ -36,7 +36,25 @@ fn add_reuses_resolution_requests_without_reordering_failures() {
         (
             vec!["issue", "https://other.example/team/repo/issues/0"],
             vec!["list_repositories"],
-            "no registered repository",
+            "shoal repo add https://other.example/team/repo",
+        ),
+        (
+            vec![
+                "add",
+                "--issue",
+                "https://other.example/team/repo/issues/7#comment",
+            ],
+            vec!["list_repositories"],
+            "shoal repo add https://other.example/team/repo",
+        ),
+        (
+            vec![
+                "pr",
+                "review",
+                "http://other.example:3000/team/repo/pulls/7",
+            ],
+            vec!["list_repositories"],
+            "shoal repo add http://other.example:3000/team/repo",
         ),
         (
             vec!["add", "test", "new"],
@@ -137,8 +155,14 @@ fn add_reuses_resolution_requests_without_reordering_failures() {
         writeln!(sentinel).unwrap();
         assert_eq!(server.join().unwrap(), expected, "{args:?}: {output:?}");
         assert!(!output.status.success(), "{args:?}");
+        assert!(output.stdout.is_empty(), "{args:?}: {output:?}");
+        let error: Value = serde_json::from_slice(&output.stderr).unwrap();
+        assert_eq!(error["error"]["code"], "command_failed");
         assert!(
-            String::from_utf8_lossy(&output.stderr).contains(diagnostic),
+            error["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains(diagnostic),
             "{args:?}: {output:?}"
         );
     }

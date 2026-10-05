@@ -63,9 +63,10 @@ pub(super) async fn repository_with_remote<'a>(
     match matches.as_slice() {
         [repo] => Ok(repo),
         [] => bail!(
-            "no registered repository has the remote {}/{}; run `shoal repo add <path-or-url>`",
+            "no registered repository has the remote {}/{}; register it with `shoal repo add {}` and retry",
             forge.host,
-            forge.path
+            forge.path,
+            forge.repository_url()
         ),
         _ => bail!(
             "several registered repositories share the remote {}/{}; use `{retry}`",
@@ -185,12 +186,42 @@ mod tests {
             .await
             .unwrap_err()
             .to_string();
-        assert!(error.contains("shoal repo add"), "{error}");
+        assert!(
+            error.contains("shoal repo add https://github.com/team/other"),
+            "{error}"
+        );
         assert!(
             repository_for(&repos, "https://github.com/team/repo/pull/7")
                 .await
                 .is_err()
         );
+    }
+
+    #[tokio::test]
+    async fn missing_repositories_suggest_the_repository_url() {
+        for (url, repository) in [
+            (
+                "https://github.com/team/repo/issues/7#issuecomment-1",
+                "https://github.com/team/repo",
+            ),
+            (
+                "http://FORGE.example:3000/team/Repo.git/issues/7/?query#comment",
+                "http://forge.example:3000/team/Repo",
+            ),
+            (
+                "https://user:secret@forge.example/team/repo/issues/7",
+                "https://forge.example/team/repo",
+            ),
+        ] {
+            let error = repository_for(&[], url).await.unwrap_err().to_string();
+            assert_eq!(
+                error,
+                format!(
+                    "no registered repository has the remote {}; register it with `shoal repo add {repository}` and retry",
+                    repository.split_once("://").unwrap().1,
+                )
+            );
+        }
     }
 
     #[test]

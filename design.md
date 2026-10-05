@@ -316,7 +316,9 @@ be replaced. Status and inspection expose them.
 login, derives a portable name, and renders issue context from a plain-text
 template for CLI agents; initial lookup runs in the CLI with no Shoal credentials
 or forge configuration. An issue URL may select the single registered repository
-by remote identity when `add` omits it, never cloning. `issue <number-or-url>`
+by remote identity when `add` omits it, never cloning. Unregistered issue or PR
+URLs fail with a concrete repository registration command to run before retrying.
+`issue <number-or-url>`
 invokes that same path with the configured `default_agent` standing in for
 `--agent`. Numbers use an explicit `--repo`, the current registered checkout or
 managed workspace, or an interactive repository picker; URLs keep remote matching.

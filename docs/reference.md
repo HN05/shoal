@@ -159,8 +159,9 @@ task prompt is never replayed.
 for github.com or `fj` for Forgejo remotes. Install the appropriate CLI and use
 its existing login (`gh auth login` or `fj auth login`); no Shoal forge config or
 tokens are needed. The repository may be omitted for a URL, which selects the
-single registered repository with the same remote; unregistered or duplicated
-remotes fail. Explicit repositories must match the URL. Lookup failures create nothing.
+single registered repository with the same remote. Unregistered remotes fail with
+a `shoal repo add` command for the repository URL; duplicated remotes require an
+explicit repository. Explicit repositories must match the URL. Lookup failures create nothing.
 Names default to `issue-<number>-<title-slug>`; the optional branch argument
 overrides this. `add` starts an agent only with `--agent`, regardless of
 `default_agent`. When starting an agent, `issue-template.md` supplies the initial
