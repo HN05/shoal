@@ -314,7 +314,9 @@ Codex's default mode is a config value read at launch; `--cli` and `--app`
 override it.
 
 Issue-based workspace opening requires an open issue and persists its canonical
-URL before tracked setup or agent launch. Associations are idempotent and cannot
+URL before tracked setup or agent launch. An existing local branch with the
+derived name is reopened as an existing branch rather than suffixed, and
+conflicts that prevent reopening it fail before the agent picker. Associations are idempotent and cannot
 be replaced. Status and inspection expose them.
 
 `add --issue` resolves issue numbers/URLs using the remote and existing gh/fj

@@ -155,8 +155,8 @@ pub(super) async fn add(
         Some(input) => Some(super::issues::load(target.repository(ctx).await?, &input).await?),
         None => None,
     };
-    let agent = resolve_add_agent(ctx, &settings, agent, issue.is_some()).await?;
     let creation = select_add_creation(ctx, &target, creation, issue.as_ref()).await?;
+    let agent = resolve_add_agent(ctx, &settings, agent, issue.is_some()).await?;
     let tab_label = match &issue {
         Some(issue) => Some(issue.tab_label(target.repository(ctx).await?)),
         None => None,
@@ -374,8 +374,7 @@ async fn select_add_creation(
         return Ok(creation);
     }
     if let Some(issue) = issue {
-        creation.branch = Some(issue.branch_name());
-        return Ok(creation);
+        return issue_creation(ctx, target, creation, issue.branch_name()).await;
     }
     if creation.base.is_none() && ctx.interactive() {
         #[derive(Clone, Copy)]
@@ -404,6 +403,36 @@ async fn select_add_creation(
             Err(error) => eprintln!("{error:#}"),
         }
     });
+    Ok(creation)
+}
+
+/// Reopen the local branch or workspace that earlier work on the issue left
+/// instead of suffixing a new branch, failing here when it cannot be reopened.
+async fn issue_creation(
+    ctx: &Context,
+    target: &AddTarget,
+    mut creation: Creation,
+    name: String,
+) -> Result<Creation> {
+    let repo = target.repository(ctx).await?;
+    if let Some(workspace) = client::workspaces(&ctx.paths)
+        .await?
+        .into_iter()
+        .find(|workspace| workspace.repository_id == repo.id && workspace.branch == name)
+    {
+        ensure!(
+            workspace.state == WorkspaceState::Ready,
+            "workspace {} is {}; inspect or set it up before reopening",
+            workspace.name,
+            workspace.state
+        );
+    } else if git::ref_exists(&repo.path, &git::local_ref(&name), git::isolated_command).await? {
+        git::existing_branch::ensure_not_checked_out(&repo.path, &name).await?;
+    } else {
+        creation.branch = Some(name);
+        return Ok(creation);
+    }
+    creation.existing = Some(name);
     Ok(creation)
 }
 

@@ -102,8 +102,9 @@ when behavior changes, distinguishing decisions from proposals.
   URL clones live as `.checkout`, never moved; refuse roots inside state or checkouts.
 - Accept literal Git branch names and derive portable workspace names separately.
   Suffix conflicting branch components with `-2`, `-3`, etc.; keep derived workspace
-  names/directories unchanged; serialize allocation per repo. Existing branches get
-  unsuffixed worktrees or reopen owned ones; other checkouts require explicit adoption.
+  names/directories unchanged; serialize allocation per repo. Existing branches,
+  including an issue's derived local branch, get unsuffixed worktrees or reopen
+  owned ones; other checkouts require explicit adoption.
   Adopt only linked, unlocked worktree roots on local branches, preserving files and
   settings without setup; record identity and readiness atomically under normal cleanup.
   Reject ownership/name collisions and never use adoption to repair moved worktrees.

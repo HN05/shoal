@@ -91,8 +91,9 @@ removal, check it against the rule those files state before judging it.
   reserved names get a leaf suffix on creation and an error on opening; suffixes
   never change derived workspace names or directories. Adapter outcomes preserve
   unfamiliar strings without treating them as confirmed branch deletion.
-- Existing branches use unsuffixed worktrees; reopen verified owned workspaces,
-  require explicit adoption for other linked checkouts, never adopt the main checkout,
+- Existing branches, including an issue's derived local branch, use unsuffixed
+  worktrees; reopen verified owned workspaces, require explicit adoption for other
+  linked checkouts, never adopt the main checkout,
   and keep the default branch on removal unless deletion was explicit. Adoption records
   identity and readiness atomically without setup, hooks, or Git setting changes;
   it takes normal cleanup ownership and cannot repair moved managed worktrees.

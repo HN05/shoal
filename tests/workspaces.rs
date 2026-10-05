@@ -8673,6 +8673,54 @@ fn issue_lookup_errors_never_create_a_workspace() {
 }
 
 #[test]
+fn issues_reopen_their_branch_and_report_conflicts_before_picking_an_agent() {
+    let fixture = Fixture::with_config(Some("[commands]\npi = ['sh', '-c', 'exit 0']\n"));
+    fixture.add_github_origin();
+    install_test_script(
+        &fixture.root.path().join("bin/gh"),
+        "#!/bin/sh\necho '{\"state\":\"OPEN\",\"number\":34,\"title\":\"Fix API timeout\",\"body\":\"\"}'\n",
+    );
+    let repo = fixture.repo.to_str().unwrap();
+    let issue = ["issue", "34", "--repo", repo, "--agent", "pi"];
+    let branch = "issue-34-fix-api-timeout";
+    let branches = |fixture: &Fixture| -> Vec<Value> {
+        fixture
+            .ok(&["ls"])
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|w| w["branch"].clone())
+            .collect()
+    };
+    let created = fixture.ok(&[&issue[..], &["--base", "HEAD"]].concat());
+    let reopened = fixture.ok(&issue);
+    assert_eq!(reopened["id"], created["id"]);
+    assert_eq!(branches(&fixture), [branch]);
+
+    fixture.ok(&["rm", branch, "--keep-branch", "--yes"]);
+    let elsewhere = fixture.root.path().join("elsewhere");
+    git(
+        &fixture.repo,
+        &["worktree", "add", "-q", elsewhere.to_str().unwrap(), branch],
+    );
+    // Without --agent the picker would fail next; the conflict is reported first.
+    let output = fixture.run(&issue[..4]);
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("already checked out"),
+        "{output:?}"
+    );
+    assert!(branches(&fixture).is_empty());
+
+    git(
+        &fixture.repo,
+        &["worktree", "remove", elsewhere.to_str().unwrap()],
+    );
+    fixture.ok(&issue);
+    assert_eq!(branches(&fixture), [branch]);
+}
+
+#[test]
 fn add_existing_branch_runs_setup_once_and_denies_scoped_creation() {
     let fixture = Fixture::new();
     for hook in ["setup", "post"] {

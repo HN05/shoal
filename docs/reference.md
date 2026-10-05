@@ -166,7 +166,9 @@ interactive terminal asks whether to register the repository URL and continue;
 otherwise the command fails with the `shoal repo add` command to run. Duplicated
 remotes require an explicit repository. Explicit repositories must match the URL. Lookup failures create nothing.
 Names default to `issue-<number>-<title-slug>`; the optional branch argument
-overrides this. `add` starts an agent only with `--agent`, regardless of
+overrides this. When the default name is already a local branch, the command
+reopens it, or the workspace that owns it, as `--existing` would; a checkout
+elsewhere or an unready workspace fails before the agent picker. `add` starts an agent only with `--agent`, regardless of
 `default_agent`. When starting an agent, `issue-template.md` supplies the initial
 prompt, substituting
 `{number}`, `{title}`, `{url}` and `{body}` once as literal text (forward agent
