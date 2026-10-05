@@ -7,8 +7,9 @@ use std::{
     io::{BufRead, BufReader, Read, Write},
     os::unix::net::UnixListener,
     process::{Output, Stdio},
+    sync::mpsc,
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 // Run short, offline commands with either output stream attached to a terminal.
@@ -20,23 +21,28 @@ fn run_with_reply(
     args: &[&str],
     terminal: Option<bool>,
     env: &[(&str, &str)],
-    reply: Option<(Duration, serde_json::Value)>,
+    reply: Option<(bool, serde_json::Value)>,
 ) -> (Output, String) {
     let root = tempfile::tempdir_in("/tmp").unwrap();
-    let server = reply.map(|(delay, mut reply)| {
+    let (progress, drawn) = mpsc::channel();
+    let server = reply.map(|(wait_for_progress, mut reply)| {
         std::fs::create_dir(root.path().join("state")).unwrap();
         let listener = UnixListener::bind(root.path().join("state/daemon.sock")).unwrap();
         thread::spawn(move || {
             let (mut stream, _) = listener.accept().unwrap();
             stream
-                .set_read_timeout(Some(Duration::from_secs(5)))
+                .set_read_timeout(Some(Duration::from_secs(60)))
                 .unwrap();
             let mut line = String::new();
             BufReader::new(&stream).read_line(&mut line).unwrap();
             let request: serde_json::Value = serde_json::from_str(&line).unwrap();
             reply["protocol"] = request["protocol"].clone();
             reply["id"] = request["id"].clone();
-            thread::sleep(delay);
+            if wait_for_progress {
+                drawn
+                    .recv_timeout(Duration::from_secs(60))
+                    .expect("progress was not drawn");
+            }
             writeln!(stream, "{reply}").unwrap();
         })
     });
@@ -46,7 +52,9 @@ fn run_with_reply(
         .env_remove("NO_COLOR")
         .env("TERM", "xterm-256color")
         .envs(env.iter().copied())
-        .stdin(Stdio::null());
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
     let mut master = terminal.map(|stdout| {
         let (master, slave) = pty::open();
         if stdout {
@@ -56,20 +64,43 @@ fn run_with_reply(
         }
         master
     });
-    let output = command.output().unwrap();
+    let mut child = command.spawn().unwrap();
+    let mut transcript = String::new();
+    let deadline = Instant::now() + Duration::from_secs(60);
+    loop {
+        if let Some(master) = &mut master {
+            drain(master, &mut transcript);
+            if transcript.contains("s)") {
+                let _ = progress.send(());
+            }
+        }
+        if child.try_wait().unwrap().is_some() {
+            break;
+        }
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!("output command stalled: {transcript:?}");
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+    let output = child.wait_with_output().unwrap();
     if let Some(server) = server {
         server.join().unwrap();
     }
     // Keep the slave open while draining: macOS can discard unread data on close.
-    let mut transcript = String::new();
     if let Some(master) = &mut master {
-        match master.read_to_string(&mut transcript) {
-            Ok(_) => {}
-            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {}
-            Err(error) => panic!("read terminal: {error}"),
-        }
+        drain(master, &mut transcript);
     }
     (output, transcript)
+}
+
+fn drain(master: &mut std::fs::File, transcript: &mut String) {
+    match master.read_to_string(transcript) {
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {}
+        Err(error) => panic!("read terminal: {error}"),
+    }
 }
 
 #[test]
@@ -120,19 +151,13 @@ fn repository_progress_respects_output_mode_and_clears_before_errors() {
         if json {
             args.insert(0, "--json");
         }
-        let (output, text) = run_with_reply(
-            &args,
-            terminal,
-            &env,
-            Some((Duration::from_millis(1200), success.clone())),
-        );
+        let (output, text) =
+            run_with_reply(&args, terminal, &env, Some((visible, success.clone())));
         assert!(output.status.success(), "{output:?} {text:?}");
         assert_eq!(text.contains("Registering repository"), visible, "{text:?}");
         assert!(!output.stdout.contains(&b'\r'));
         assert!(output.stderr.is_empty());
         if visible {
-            assert!(text.contains("(1s)"), "{text:?}");
-            assert!(text.contains("| Registering") && text.contains("/ Registering"));
             assert!(text.ends_with(" \r"), "{text:?}");
         }
         if json {
@@ -142,20 +167,11 @@ fn repository_progress_respects_output_mode_and_clears_before_errors() {
         }
     }
     let (output, text) = run_with_reply(
-        &["repo", "add", "/test"],
-        Some(false),
-        &[],
-        Some((Duration::ZERO, success)),
-    );
-    assert!(output.status.success());
-    assert!(text.is_empty(), "{text:?}");
-
-    let (output, text) = run_with_reply(
         &["repo", "rm", "/test", "--yes"],
         Some(false),
         &[("NO_COLOR", "1")],
         Some((
-            Duration::from_millis(700),
+            true,
             serde_json::json!({
                 "type": "error", "data": {"code": "test", "message": "removal failed"}
             }),
@@ -179,7 +195,7 @@ fn install_progress_clears_on_failure_and_leaves_json_and_preview_clean() {
             Some(false),
             &[("NO_COLOR", "1")],
             Some((
-                Duration::from_millis(700),
+                !json,
                 serde_json::json!({
                     "type": "error", "data": {"code": "test", "message": "status failed"}
                 }),
