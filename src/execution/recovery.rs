@@ -108,7 +108,7 @@ pub(crate) fn record_path(paths: &Paths, workspace_id: &str, id: &str) -> PathBu
 }
 
 pub(super) async fn wait(
-    stream: &mut tokio::net::UnixStream,
+    stream: &mut tokio::io::BufReader<tokio::net::UnixStream>,
 ) -> Result<Option<Vec<crate::model::PortReservation>>> {
     use crate::protocol::{self, Control};
     use tokio::signal::unix::{SignalKind, signal};
@@ -116,7 +116,7 @@ pub(super) async fn wait(
     let mut terminate = signal(SignalKind::terminate())?;
     let mut quit = signal(SignalKind::quit())?;
     tokio::select! {
-        control = protocol::read::<Control>(stream) => match control? {
+        control = protocol::read_buffered::<Control>(stream) => match control? {
             Control::Resume { ports } => Ok(Some(ports)),
             Control::Stop => Ok(None),
             _ => anyhow::bail!("unexpected recovery control"),

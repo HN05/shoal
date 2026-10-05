@@ -272,10 +272,13 @@ async fn run_tracked(
         agent,
         recover: recovery.as_ref().is_some_and(|recovery| recovery.automatic),
     };
-    let (mut stream, body) = timeout(kind.start_timeout(), client::open(paths, method))
+    let (stream, body) = timeout(kind.start_timeout(), client::open(paths, method))
         .await
         .context("daemon did not start the execution in time")??;
     let mut plan = ExecutionPlan::try_from(body)?;
+    // A start acknowledgement and stop request may arrive in one socket read.
+    // Keep read-ahead bytes for the entire execution, including recovery.
+    let mut stream = BufReader::new(stream);
     let command = if let Some(land) = &plan.land {
         internal_command(
             paths,
@@ -324,7 +327,7 @@ async fn run_tracked(
                         Err(error) => eprintln!("warning: cannot save recovery command: {error:#}"),
                     }
                     if recover && recovery.automatic {
-                        protocol::write(&mut stream, &ExecutionEvent::Paused).await?;
+                        protocol::write(stream.get_mut(), &ExecutionEvent::Paused).await?;
                         eprintln!("shoal: waiting for healthy load before restoring agent session");
                         if let Some(ports) = recovery::wait(&mut stream).await? {
                             plan.ports = ports;
@@ -365,7 +368,7 @@ enum Outcome {
 /// Launch the command, register its process group, and wait for it to exit or
 /// for a stop request.
 async fn supervise(
-    stream: &mut UnixStream,
+    stream: &mut BufReader<UnixStream>,
     paths: &Paths,
     plan: &ExecutionPlan,
     command: &[OsString],
@@ -382,15 +385,18 @@ async fn supervise(
     let mut child = spawn(paths, plan, command, mode, auth)?;
     let group = ProcessGroup(child.id().context("child PID unavailable")? as i32);
     protocol::write(
-        stream,
+        stream.get_mut(),
         &ExecutionEvent::Started {
             child: process::identity::capture(group.pid())?,
             group_id: group.pid(),
         },
     )
     .await?;
-    let acknowledged =
-        timeout(timing::START_ACK_TIMEOUT, protocol::read::<Control>(stream)).await??;
+    let acknowledged = timeout(
+        timing::START_ACK_TIMEOUT,
+        protocol::read_buffered::<Control>(stream),
+    )
+    .await??;
     ensure!(
         matches!(acknowledged, Control::Started),
         "daemon did not acknowledge process registration"
@@ -414,7 +420,7 @@ async fn supervise(
     // The child may have been stopped by SIGTTIN/SIGTTOU before it became the
     // foreground group.
     group.send(libc::SIGCONT);
-    let control = protocol::read::<Control>(stream);
+    let control = protocol::read_buffered::<Control>(stream);
     tokio::pin!(control);
     let mut recovery = None;
     let status = tokio::select! {
@@ -515,11 +521,21 @@ fn configure_environment(process: &mut Command, paths: &Paths, plan: &ExecutionP
         .env(env::RESERVED_PORT_ENV, exported.join(":"));
 }
 
-async fn report_completion(stream: &mut UnixStream, code: i32, mode: &Mode) -> Result<bool> {
+async fn report_completion(
+    stream: &mut BufReader<UnixStream>,
+    code: i32,
+    mode: &Mode,
+) -> Result<bool> {
     let exchange = async {
-        protocol::write(stream, &ExecutionEvent::Finished { exit_code: code }).await?;
+        protocol::write(
+            stream.get_mut(),
+            &ExecutionEvent::Finished { exit_code: code },
+        )
+        .await?;
         loop {
-            if let Control::Finished { complete } = protocol::read::<Control>(stream).await? {
+            if let Control::Finished { complete } =
+                protocol::read_buffered::<Control>(stream).await?
+            {
                 if !complete {
                     eprintln!(
                         "warning: execution has surviving or unverified processes; run shoal doctor to inspect it"
@@ -701,3 +717,6 @@ impl Terminal {
         );
     }
 }
+
+#[cfg(test)]
+mod tests;

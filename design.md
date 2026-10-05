@@ -45,8 +45,9 @@ wire format; unfamiliar codes are preserved verbatim for version compatibility.
 Internal CLI workers are built through one typed argument builder that explicitly
 passes the resolved state directory and output mode.
 The execution wrapper owns terminal I/O, environment delivery, exit codes, and
-command process groups. After commands and interactive hooks it restores the caller's
-foreground group and OS terminal settings. When `TERM` is nonempty and not `dumb`,
+command process groups. It retains buffered daemon controls across start, stop,
+and recovery transitions so adjacent frames cannot be lost. After commands and
+interactive hooks it restores the caller's foreground group and OS terminal settings. When `TERM` is nonempty and not `dumb`,
 it also resets emulator input modes for the shell, writing best-effort cleanup directly
 to the terminal even when output is redirected. It registers through one request carrying its execution kind,
 and gives the entire command process group a shared grace period on stop requests,
