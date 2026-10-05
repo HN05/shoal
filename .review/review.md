@@ -15,7 +15,8 @@ removal, check it against the rule those files state before judging it.
 - Safety of user work: removal goes through the one shared path, preserves
   work and leases on failure, never adopts moved or replaced worktrees, and
   never signals a process whose recorded identity was not verified. Unreadable
-  inventory entries block ownership proof only while their recorded identity is live.
+  inventory entries block ownership proof only while their recorded identity is live;
+  recovery polls incomplete proof within the stop budget without weakening it.
   Worktree ownership is proven by the owner marker in the Git admin directory; the recorded
   inode/birth-time identity proves only unmarked records, which gain a marker only
   after it still matches. Only an explicit `doctor --repair --reclaim` may

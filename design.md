@@ -497,7 +497,9 @@ unknown executions, or releases leases.
 Survivors are signaled only after verifying PID birth identity and same-user
 ownership; acknowledgement cannot override visible live processes. Recheck
 unreadable process identities before treating visibility as incomplete; an
-identity that has exited no longer blocks the ownership proof. Moved
+identity that has exited no longer blocks the ownership proof. Recovery polls
+incomplete proof within the workspace stop budget and still refuses live or
+unverifiable survivors. Moved
 worktrees stay unresolved until restored. Any other ownership failure is
 recoverable by explicit reclaim, which a human requests after checking the
 worktree: it re-marks a linked worktree of the recorded repository at the

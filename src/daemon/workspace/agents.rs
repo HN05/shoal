@@ -148,16 +148,7 @@ impl Manager {
             .into_iter()
             .find(|execution| execution.id == id)
             .ok_or_else(|| anyhow::anyhow!("execution no longer exists"))?;
-        let scan = crate::process::identity::scan(std::collections::HashSet::from([id.to_owned()]))
-            .await?;
-        let processes = crate::process::execution::Processes::inspect(&record, &scan).await?;
-        anyhow::ensure!(
-            scan.processes.is_empty()
-                && processes.owned.is_empty()
-                && processes.group_candidates.is_empty()
-                && processes.visibility_complete(),
-            "cannot resume an execution whose processes are not proven stopped"
-        );
+        self.verify_agent_processes_stopped(&record).await?;
         let id = id.to_owned();
         self.store
             .run(move |db| {
@@ -168,6 +159,22 @@ impl Manager {
                 Ok(())
             })
             .await
+    }
+
+    async fn verify_agent_processes_stopped(
+        &self,
+        record: &crate::model::Execution,
+    ) -> anyhow::Result<()> {
+        await_process_proof(|| async {
+            let ids = std::collections::HashSet::from([record.id.clone()]);
+            let scan = crate::process::identity::scan(ids).await?;
+            let processes = crate::process::execution::Processes::inspect(record, &scan).await?;
+            Ok(scan.processes.is_empty()
+                && processes.owned.is_empty()
+                && processes.group_candidates.is_empty()
+                && processes.visibility_complete())
+        })
+        .await
     }
 
     pub(crate) async fn resume_agent_execution(&self, id: &str) -> anyhow::Result<bool> {
@@ -367,6 +374,56 @@ impl Manager {
         )
         .await;
         true
+    }
+}
+
+async fn await_process_proof<F>(mut probe: impl FnMut() -> F) -> anyhow::Result<()>
+where
+    F: std::future::Future<Output = anyhow::Result<bool>>,
+{
+    let deadline = tokio::time::Instant::now() + timing::WORKSPACE_STOP_TIMEOUT;
+    loop {
+        if probe().await? {
+            return Ok(());
+        }
+        anyhow::ensure!(
+            tokio::time::Instant::now() < deadline,
+            "cannot resume an execution whose processes are not proven stopped"
+        );
+        tokio::time::sleep(timing::WORKSPACE_STOP_POLL_INTERVAL).await;
+    }
+}
+
+#[cfg(test)]
+mod process_proof_tests {
+    use super::*;
+
+    #[tokio::test(start_paused = true)]
+    async fn transient_incomplete_visibility_is_rechecked() {
+        let attempts = std::sync::atomic::AtomicUsize::new(0);
+        await_process_proof(|| async {
+            Ok(attempts.fetch_add(1, std::sync::atomic::Ordering::Relaxed) == 1)
+        })
+        .await
+        .unwrap();
+        assert_eq!(attempts.load(std::sync::atomic::Ordering::Relaxed), 2);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn persistent_incomplete_visibility_still_refuses_recovery() {
+        let started = tokio::time::Instant::now();
+        let error = await_process_proof(|| async { Ok(false) })
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("not proven stopped"));
+        assert_eq!(
+            tokio::time::Instant::now() - started,
+            timing::WORKSPACE_STOP_TIMEOUT
+        );
+        let error = await_process_proof(|| async { anyhow::bail!("inventory failed") })
+            .await
+            .unwrap_err();
+        assert_eq!(error.to_string(), "inventory failed");
     }
 }
 
