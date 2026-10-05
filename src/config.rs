@@ -188,7 +188,14 @@ impl Config {
     }
 
     pub fn path_for_home(home: &std::path::Path) -> PathBuf {
-        std::env::var_os("XDG_CONFIG_HOME")
+        // Unit tests inherit the developer's environment; keep them in their
+        // temporary home instead of the real config.
+        let config_home = if cfg!(test) {
+            None
+        } else {
+            std::env::var_os("XDG_CONFIG_HOME")
+        };
+        config_home
             .map(PathBuf::from)
             .filter(|p| p.is_absolute())
             .unwrap_or_else(|| home.join(".config"))
