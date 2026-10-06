@@ -13398,6 +13398,76 @@ fn herdr_labels_name_issues_by_repository_and_number() {
 }
 
 #[test]
+fn herdr_tab_name_templates_survive_handoff_and_use_the_allocated_branch() {
+    let fixture = Fixture::with_config(Some(
+        "[commands]\npi = ['sh', '-c', 'exit 0']\n[herdr]\ntab_name = 'global'\n",
+    ));
+    fixture.add_github_origin();
+    fixture.ok(&["repo", "rename", fixture.repo.to_str().unwrap(), "project"]);
+    fs::write(
+        fixture.repo.join(".shoal.toml"),
+        "[herdr]\ntab_name = 'worktree'\n",
+    )
+    .unwrap();
+    install_fake_herdr(&fixture);
+    install_test_script(
+        &fixture.root.path().join("bin/gh"),
+        "#!/bin/sh\necho '{\"state\":\"OPEN\",\"number\":34,\"title\":\"Literal {branch} $(touch injected)\",\"body\":\"Details\"}'\n",
+    );
+    git(&fixture.repo, &["branch", "topic"]);
+    for (issue, initial, renamed) in [
+        (
+            Some("https://github.com/team/project/issues/34"),
+            "project topic #34: Literal {branch} $(touch injected)",
+            "project topic-2 #34: Literal {branch} $(touch injected)",
+        ),
+        (None, "project topic #: ", "project topic-3 #: "),
+    ] {
+        fixture.ok(&[
+            "config",
+            "set",
+            "herdr.tab_name",
+            "'{repo} {branch} #{issue_number}: {issue_title}'",
+            "--repo",
+            fixture.repo.to_str().unwrap(),
+        ]);
+        let mut args = vec![
+            "add",
+            fixture.repo.to_str().unwrap(),
+            "topic",
+            "--base",
+            "HEAD",
+            "--agent",
+            "pi",
+        ];
+        if let Some(url) = issue {
+            args.extend(["--issue", url]);
+        }
+        let (caller, transcript) = herdr_call(&fixture, &args, "");
+        assert!(caller.status.success(), "{caller:?} {transcript}");
+        let calls = herdr_calls(&fixture);
+        let create = &calls[calls.len() - 2];
+        let label = create.iter().position(|arg| arg == "--label").unwrap();
+        assert_eq!(create[label + 1], initial);
+        fixture.ok(&[
+            "config",
+            "set",
+            "herdr.tab_name",
+            "'changed after handoff'",
+            "--repo",
+            fixture.repo.to_str().unwrap(),
+        ]);
+        let (worker, transcript) =
+            fixture.interactive_command(&mut herdr_worker_command(&fixture), "");
+        assert!(worker.status.success(), "{worker:?} {transcript}");
+        let calls = herdr_calls(&fixture);
+        assert_eq!(calls[calls.len() - 2], ["tab", "rename", "w1:t9", renamed]);
+        assert!(!fixture.root.path().join("injected").exists());
+        fixture.ok(&["rm", "topic", "--keep-branch", "--yes"]);
+    }
+}
+
+#[test]
 fn herdr_plans_carry_issue_urls_instead_of_bodies() {
     let fixture = Fixture::new();
     fixture.add_github_origin();

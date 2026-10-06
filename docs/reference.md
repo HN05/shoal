@@ -335,20 +335,27 @@ the issue and resolve repository, branch, and agent choices in the caller's pane
 then open a tab in `HERDR_WORKSPACE_ID` and return once the command is submitted
 there. Setup and agent execution run in that tab, which reads the issue again and
 is labeled `<repo>#<number>` for an issue (such as `shoal#375`) and with the
-allocated workspace branch otherwise. `--here` keeps the command in the current
-pane; JSON, help, and noninteractive calls run in place.
+allocated workspace branch otherwise, unless `tab_name` supplies a template.
+`--here` keeps the command in the current pane; JSON, help, and noninteractive
+calls run in place.
 
 The `[herdr]` table in global or repository config uses normal per-option
 precedence. New tabs focus by default when opening a workspace shell and stay
 in the background when launching an agent; an explicit `focus` overrides this.
-The other options default to true:
+`new_tab` and `close_when_done` default to true:
 
 ```toml
 [herdr]
 new_tab = true          # Enable the handoff inside Herdr
 # focus = true          # Always focus the new tab
+# tab_name = "{repo}: {branch}" # Customize the tab name
 close_when_done = true  # Close after a tracked agent exits, including cleanup stops
 ```
+
+`tab_name` supports `{repo}`, `{branch}`, `{issue_number}`, and `{issue_title}`,
+or a literal name. Issue fields are empty without an issue; unknown placeholders
+stay literal and inserted values are never expanded again. `{branch}` uses the
+requested branch when the tab opens and the allocated branch after creation.
 
 Failures before agent execution leave the tab open. `add` without an agent (or
 choosing “No agent”) opens an interactive shell in the ready workspace and leaves

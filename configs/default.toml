@@ -67,6 +67,7 @@ new_tab = true
 # Focus workspace shells by default, leaving agent launches in the background.
 # focus = true # Override the default for every new tab.
 close_when_done = true
+# tab_name = "{repo}: {branch}"
 
 [codex]
 # `shoal codex` without --cli/--app: "cli" or "app".

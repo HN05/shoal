@@ -116,9 +116,9 @@ async fn repository_with_remote<'a>(
     }
 }
 
-pub(super) struct Issue {
-    number: u64,
-    title: String,
+pub(in crate::cli) struct Issue {
+    pub(in crate::cli) number: u64,
+    pub(in crate::cli) title: String,
     pub(super) url: String,
     details: String,
 }

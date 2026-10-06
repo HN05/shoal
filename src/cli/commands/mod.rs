@@ -3,7 +3,7 @@
 mod access;
 mod acquisition;
 mod configuration;
-mod issues;
+pub(super) mod issues;
 mod menu;
 mod notifications;
 mod ports;

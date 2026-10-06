@@ -241,9 +241,12 @@ through `run`.
 
 The CLI owns Herdr tab handoffs after issue lookup and interactive workspace and
 agent choices and labels the tab `<repo>#<number>` for an issue, otherwise with the
-allocated workspace branch. It carries a resolved launch plan to the new pane in
-the tab's environment, naming a found issue by URL rather than carrying its
-unbounded body, and preserving
+allocated workspace branch by default. An optional `herdr.tab_name` template
+follows normal configuration precedence, substitutes repository, branch and issue
+fields once, and updates the branch after allocation. The resolved template travels
+with the launch plan so the worker preserves the caller's naming choice.
+The plan travels in the tab's environment, naming a found issue by URL rather
+than carrying its unbounded body, and preserving
 state/config selection and literal arguments without hook scripts or state files.
 By default, workspace shells receive focus and agent launches stay in the
 background; an explicit focus setting overrides this choice.

@@ -152,6 +152,7 @@ impl Effective {
             git_profile: merged.git_profile,
             default_agent: merged.default_agent,
             herdr: config::Herdr {
+                tab_name: merged.herdr.tab_name,
                 new_tab: built_in(merged.herdr.new_tab, "herdr.new_tab")?,
                 focus: merged.herdr.focus,
                 close_when_done: built_in(merged.herdr.close_when_done, "herdr.close_when_done")?,
@@ -208,6 +209,7 @@ fn built_in() -> RepoConfig {
     RepoConfig {
         commands: named_commands::defaults(),
         herdr: config::repo::Herdr {
+            tab_name: None,
             new_tab: Some(true),
             focus: None,
             close_when_done: Some(true),
@@ -422,6 +424,7 @@ fn build_fields() -> Vec<Box<dyn Field + Send + Sync>> {
         scalar!(default_agent),
         scalar!(codex.default_mode),
         scalar!(herdr.new_tab),
+        scalar!(herdr.tab_name),
         scalar!(herdr.focus),
         scalar!(herdr.close_when_done),
     ];
@@ -462,7 +465,7 @@ issue_template = 'issue'\nagent_template = 'agent'\ngit_profile = 'work'\n\
 default_agent = 'claude'\nsetup_cmd = 'setup'\npre_setup_cmd = 'pre-setup'\n\
 post_remove_cmd = 'post-remove'\npost_done_cmd = 'post-done'\npost_agent_exit_cmd = 'agent-exit'\npost_resource_acquire_cmd = 'acquire'\n\
 pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd = 'detach'\n\
-[commands]\nreview = ['review']\n[agent_resume]\nreview = ['review', '--resume']\n[agent_auth]\nfj = '/fj'\ngh = '/gh'\n[codex]\ndefault_mode = 'app'\n[herdr]\nnew_tab = false\nfocus = false\nclose_when_done = false\n\
+[commands]\nreview = ['review']\n[agent_resume]\nreview = ['review', '--resume']\n[agent_auth]\nfj = '/fj'\ngh = '/gh'\n[codex]\ndefault_mode = 'app'\n[herdr]\ntab_name = '{branch}'\nnew_tab = false\nfocus = false\nclose_when_done = false\n\
 [ports]\non_conflict = 'auto'\nstart = 3000\nend = 3100\n[ports.web]\nport = 3000\n\
 [resources.lock]\ncapacity = 1\n[resource_pools.devices]\ncapacity = 2\n\
 [resource_pools.devices.resources.phone]\ncapacity = 1\n\
@@ -487,6 +490,7 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
         let defaults = stack("", "", "").resolve().unwrap().herdr;
         assert!(defaults.new_tab && defaults.close_when_done);
         assert_eq!(defaults.focus, None);
+        assert_eq!(defaults.tab_name, None);
         let settings = stack(
             "[herdr]\nnew_tab = false\nfocus = false\n",
             "[herdr]\nnew_tab = true\nclose_when_done = false\n",
@@ -505,6 +509,48 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
                 .focus,
             Some(false)
         );
+    }
+
+    #[test]
+    fn herdr_tab_names_resolve_and_report_the_winning_layer() {
+        for (global, worktree, saved, expected, layer) in [
+            ("", "", "", None, Layer::BuiltInDefault),
+            (
+                "[herdr]\ntab_name = '{branch}'",
+                "",
+                "",
+                Some("{branch}"),
+                Layer::GlobalConfig,
+            ),
+            (
+                "[herdr]\ntab_name = '{branch}'",
+                "[herdr]\ntab_name = '{repo}'",
+                "[herdr]\nfocus = true",
+                Some("{repo}"),
+                Layer::WorktreeFile,
+            ),
+            (
+                "[herdr]\ntab_name = '{branch}'",
+                "[herdr]\ntab_name = '{repo}'",
+                "[herdr]\ntab_name = 'Work'",
+                Some("Work"),
+                Layer::SavedRepositoryConfig,
+            ),
+        ] {
+            let stack = stack(global, worktree, saved);
+            assert_eq!(
+                stack.clone().resolve().unwrap().herdr.tab_name.as_deref(),
+                expected
+            );
+            let entry = stack
+                .report()
+                .unwrap()
+                .into_iter()
+                .find(|entry| entry.key == "herdr.tab_name")
+                .unwrap();
+            assert_eq!(entry.value, json(&expected));
+            assert_eq!(entry.layer, layer);
+        }
     }
 
     #[test]
@@ -552,6 +598,7 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
             git_profile.is_some(),
             default_agent.is_some(),
             codex.default_mode.is_some(),
+            herdr.tab_name.is_some(),
             herdr.new_tab.is_some(),
             herdr.focus.is_some(),
             herdr.close_when_done.is_some(),

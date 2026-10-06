@@ -349,7 +349,7 @@ impl Config {
             git_profile: self.git_profile.clone(),
             default_agent: self.default_agent.clone(),
             codex: self.codex,
-            herdr: self.herdr,
+            herdr: self.herdr.clone(),
             pre_setup_cmd: self.pre_setup_cmd.clone(),
             post_setup_cmd: self.post_setup_cmd.clone(),
             pre_remove_cmd: self.pre_remove_cmd.clone(),
@@ -426,6 +426,7 @@ pub const PACKAGED: &[(&str, &str)] = include!(concat!(env!("OUT_DIR"), "/packag
 
 #[derive(Debug, Serialize)]
 pub struct Herdr {
+    pub tab_name: Option<String>,
     pub new_tab: bool,
     pub focus: Option<bool>,
     pub close_when_done: bool,

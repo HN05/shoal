@@ -2,12 +2,15 @@
 use std::{ffi::OsString, path::Path, time::Duration};
 
 use anyhow::{Context as _, Result, ensure};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tokio::process::Command;
 
 use super::{
     client,
-    commands::workspaces::{AddPlan, execute_add},
+    commands::{
+        issues::Issue,
+        workspaces::{AddPlan, execute_add},
+    },
     context::Context,
     internal,
 };
@@ -18,7 +21,40 @@ pub struct Tab {
     close_when_done: bool,
 }
 
-pub(super) async fn handoff(ctx: &Context, plan: &AddPlan, here: bool) -> Result<bool> {
+#[derive(Serialize, Deserialize)]
+pub(in crate::cli) struct TabName {
+    template: String,
+    repo: String,
+    issue_number: Option<u64>,
+    issue_title: Option<String>,
+}
+
+impl TabName {
+    pub fn render(&self, branch: &str) -> String {
+        crate::config::templates::render(
+            &self.template,
+            &[
+                ("{repo}", &self.repo),
+                ("{branch}", branch),
+                (
+                    "{issue_number}",
+                    &self.issue_number.map(|n| n.to_string()).unwrap_or_default(),
+                ),
+                (
+                    "{issue_title}",
+                    self.issue_title.as_deref().unwrap_or_default(),
+                ),
+            ],
+        )
+    }
+}
+
+pub(super) async fn handoff(
+    ctx: &Context,
+    plan: &mut AddPlan,
+    issue: Option<&Issue>,
+    here: bool,
+) -> Result<bool> {
     if here
         || ctx.herdr_tab.is_some()
         || !ctx.interactive()
@@ -39,6 +75,16 @@ pub(super) async fn handoff(ctx: &Context, plan: &AddPlan, here: bool) -> Result
         "workspace processes cannot allocate workspaces"
     );
     let focus = settings.herdr.focus.unwrap_or(!plan.launches_agent());
+    if let Some(template) = settings.herdr.tab_name {
+        let repos = client::repositories(&ctx.paths).await?;
+        let repo = crate::forge::repository::select(&repos, &plan.repository).await?;
+        plan.tab_name = Some(TabName {
+            template,
+            repo: crate::forge::repository::name(repo).to_owned(),
+            issue_number: issue.map(|issue| issue.number),
+            issue_title: issue.map(|issue| issue.title.clone()),
+        });
+    }
     let created = create_tab(ctx, plan, focus).await?;
     submit_worker(ctx, created, settings.herdr.close_when_done).await?;
     Ok(true)

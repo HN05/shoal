@@ -161,15 +161,16 @@ pub(super) async fn add(
         Some(issue) => Some(issue.tab_label(target.repository(ctx).await?)),
         None => None,
     };
-    let plan = AddPlan {
+    let mut plan = AddPlan {
         repository: target.selector.clone(),
         creation,
         tab_label,
+        tab_name: None,
         issue: issue.as_ref().map(|issue| issue.url.clone()),
         agent,
         args,
     };
-    if crate::cli::herdr::handoff(ctx, &plan, here).await? {
+    if crate::cli::herdr::handoff(ctx, &mut plan, issue.as_ref(), here).await? {
         return Ok(0);
     }
     execute_add_with_target(ctx, plan, target, issue).await
@@ -180,6 +181,8 @@ pub(in crate::cli) struct AddPlan {
     pub repository: String,
     pub creation: Creation,
     tab_label: Option<String>,
+    #[serde(default)]
+    pub tab_name: Option<crate::cli::herdr::TabName>,
     /// The found issue's URL; its body can exceed what a Herdr tab's
     /// environment carries, so the worker looks it up again.
     issue: Option<String>,
@@ -192,12 +195,17 @@ impl AddPlan {
         self.agent.agent.is_some()
     }
 
-    pub fn label(&self) -> &str {
-        self.tab_label
+    pub fn label(&self) -> String {
+        let branch = self
+            .creation
+            .branch
             .as_deref()
-            .or(self.creation.branch.as_deref())
             .or(self.creation.existing.as_deref())
-            .unwrap_or("shoal add")
+            .unwrap_or("shoal add");
+        if let Some(name) = &self.tab_name {
+            return name.render(branch);
+        }
+        self.tab_label.as_deref().unwrap_or(branch).to_owned()
     }
 }
 
@@ -223,15 +231,19 @@ async fn execute_add_with_target(
         repository: _,
         creation,
         tab_label: _,
+        tab_name,
         issue: _,
         agent,
         args,
     } = plan;
     let opened = open_add_workspace(ctx, &target, creation).await?;
     if let Some(tab) = &ctx.herdr_tab {
-        let label = match &issue {
-            Some(issue) => issue.tab_label(target.repository(ctx).await?),
-            None => opened.workspace.branch.clone(),
+        let label = match tab_name {
+            Some(name) => name.render(&opened.workspace.branch),
+            None => match &issue {
+                Some(issue) => issue.tab_label(target.repository(ctx).await?),
+                None => opened.workspace.branch.clone(),
+            },
         };
         tab.rename(&label).await;
     }

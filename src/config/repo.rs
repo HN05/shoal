@@ -309,9 +309,10 @@ mod tests {
     }
 }
 
-#[derive(Debug, Default, Clone, Copy, Deserialize, Serialize)]
+#[derive(Debug, Default, Clone, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Herdr {
+    pub tab_name: Option<String>,
     pub new_tab: Option<bool>,
     pub focus: Option<bool>,
     pub close_when_done: Option<bool>,
