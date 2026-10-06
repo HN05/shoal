@@ -93,24 +93,33 @@ pub(super) async fn run(
 
 fn describe(lease: &ResourceLease, palette: Palette) -> String {
     format!(
-        "{}/{} -> {} [{}] ({})",
+        "{}/{} -> {} [{}] ({}){}",
         palette.paint(Style::Heading, &lease.pool),
         lease.name,
         lease.resource,
         lease.mode,
-        lease.id
+        lease.id,
+        repository_path(lease)
     )
 }
 
 fn describe_short(lease: &ResourceLease, palette: Palette) -> String {
     format!(
-        "{}/{} -> {} [{}]{}",
+        "{}/{} -> {} [{}]{}{}",
         palette.paint(Style::Heading, &lease.pool),
         lease.name,
         lease.resource,
         lease.mode,
-        optional(lease.reason.as_deref(), |r| format!(" ({r})"))
+        optional(lease.reason.as_deref(), |r| format!(" ({r})")),
+        repository_path(lease)
     )
+}
+
+pub(super) fn repository_path(lease: &ResourceLease) -> String {
+    lease
+        .repository
+        .as_ref()
+        .map_or_else(String::new, |repo| format!(" -> {}", repo.path.display()))
 }
 
 async fn overview(ctx: &Context, scope: WorkspaceScope) -> Result<i32> {
@@ -170,7 +179,12 @@ fn render_overview(overview: &Overview, palette: Palette) {
                     resource.name, resource.approval_lifetime
                 );
             }
-            if resource.kind == ResourceKind::Rwlock {
+            if resource.kind == ResourceKind::Repo {
+                println!(
+                    "  {}: {} readers; read available: {}",
+                    resource.name, resource.readers, resource.read_available
+                );
+            } else if resource.kind == ResourceKind::Rwlock {
                 println!(
                     "  {}: {} readers, {} writers; read available: {}, write available: {}",
                     resource.name,

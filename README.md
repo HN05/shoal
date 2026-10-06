@@ -199,6 +199,19 @@ env = "PORT"
 capacity = 1
 requires_approval = true
 approval_lifetime = "lease"    # Or "workspace"
+
+[resources.server]
+kind = "repo"
+repo = "saldoir-server"       # Registered repository name
+```
+
+Acquire a related repository with `shoal resource acquire server`. Use its
+checkout path in a project override, for example:
+
+```sh
+server=$(shoal --json resource acquire server | jq -r '.repository.path')
+SALDOIR_SERVER_REPO="$server" Scripts/sync-contract.sh
+shoal resource release server
 ```
 
 Agents request protected resources with `acquire --reason "purpose"`. Review

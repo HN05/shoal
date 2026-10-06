@@ -818,8 +818,12 @@ fn render_status(status: &WorkspaceStatus, json: bool) {
     println!("Resources:     {}", inspection.resources.len());
     for resource in &inspection.resources {
         println!(
-            "  {}/{} -> {} [{}]",
-            resource.pool, resource.name, resource.resource, resource.mode
+            "  {}/{} -> {} [{}]{}",
+            resource.pool,
+            resource.name,
+            resource.resource,
+            resource.mode,
+            super::resources::repository_path(resource)
         );
     }
 

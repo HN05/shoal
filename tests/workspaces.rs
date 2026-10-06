@@ -11658,6 +11658,15 @@ fn repository_resources_return_checkouts_and_preserve_them_on_cleanup() {
     assert_eq!(lease["mode"], "read");
     assert_eq!(lease["repository"]["id"], registration["id"]);
     assert_eq!(lease["repository"]["path"], related.to_str().unwrap());
+    for args in [
+        vec!["resource", "acquire", "server", "consumer"],
+        vec!["resource", "consumer"],
+        vec!["inspect", "consumer"],
+    ] {
+        let rendered = fixture.run(&args);
+        assert!(rendered.status.success());
+        assert!(String::from_utf8_lossy(&rendered.stdout).contains(related.to_str().unwrap()));
+    }
     assert_eq!(
         fs::read_to_string(related.join("DESIGN.MD")).unwrap(),
         "server design\n"

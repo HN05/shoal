@@ -699,13 +699,13 @@ pub enum AccessCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum ResourceCommand {
-    /// Acquire a permit or reader/writer lock for an available or specific member.
+    /// Acquire a permit, reader/writer lock, or related repository path.
     Acquire {
         pool: String,
         workspace: Option<String>,
         #[arg(long)]
         resource: Option<String>,
-        /// Lock mode (defaults to permit for semaphores, write for rwlocks).
+        /// Lock mode (defaults to permit for semaphores, write for rwlocks, read for repos).
         #[arg(long, value_enum)]
         mode: Option<crate::daemon::resources::LockMode>,
         /// Stable lease name; use different names to request multiple permits.
