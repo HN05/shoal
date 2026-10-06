@@ -207,8 +207,8 @@ Post-remove runs after ownership is released,
 from the repository checkout with its copy of the executable, retaining the old
 workspace path in the environment. Its command is selected before removal.
 It is best-effort: failure is a warning and notification, never a failed removal
-or restored ownership. Missing-worktree
-cleanup skips hooks; post-remove events are not durably queued or replayed.
+or restored ownership. Cleanup of deleted worktrees tolerates missing ancestors
+and skips hooks; post-remove events are not durably queued or replayed.
 
 `diff` compares against the recorded base's fork point (merge-base fallback, fixed
 commits stay fixed) with native Git settings, so advancing the base is never shown

@@ -6418,6 +6418,61 @@ fn deleted_worktrees_are_forgotten_with_their_resources_but_moved_ones_are_kept(
     let result = fixture.ok(&["rm", "explicit"]);
     assert_eq!(result["branch_deleted"], false);
     assert!(!git(&fixture.repo, &["rev-parse", "refs/heads/explicit"]).is_empty());
+
+    let missing_parent = fixture.add("missing-parent");
+    let missing_path = PathBuf::from(missing_parent["path"].as_str().unwrap());
+    fixture.ok(&["port", "acquire", "web", "missing-parent"]);
+    fixture.ok(&["resource", "acquire", "lock", "missing-parent"]);
+    git(
+        &fixture.repo,
+        &["worktree", "remove", missing_path.to_str().unwrap()],
+    );
+    fs::remove_dir_all(missing_path.parent().unwrap()).unwrap();
+    let result = fixture.ok(&["rm", "missing-parent"]);
+    assert_eq!(result["branch_deleted"], false);
+    assert!(!git(&fixture.repo, &["rev-parse", "refs/heads/missing-parent"]).is_empty());
+
+    let automatic = fixture.add("automatic-missing-parent");
+    let automatic_path = PathBuf::from(automatic["path"].as_str().unwrap());
+    fixture.ok(&["port", "acquire", "web", "automatic-missing-parent"]);
+    fixture.ok(&["resource", "acquire", "lock", "automatic-missing-parent"]);
+    fs::remove_dir_all(automatic_path.parent().unwrap()).unwrap();
+    fixture.restart();
+    let deadline = Instant::now() + Duration::from_secs(60);
+    while fixture
+        .run(&["inspect", "automatic-missing-parent"])
+        .status
+        .success()
+    {
+        assert!(
+            Instant::now() < deadline,
+            "deleted worktree was not forgotten"
+        );
+        thread::sleep(Duration::from_millis(20));
+    }
+    assert!(
+        !git(
+            &fixture.repo,
+            &["rev-parse", "refs/heads/automatic-missing-parent"],
+        )
+        .is_empty()
+    );
+    assert_eq!(
+        fixture
+            .ok(&["port", "list", "--all"])
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(
+        fixture
+            .ok(&["resource", "list", "--all"])
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
 }
 
 fn wait_registered_execution(fixture: &Fixture, workspace: &str) -> Value {

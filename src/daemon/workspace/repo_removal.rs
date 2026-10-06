@@ -1,7 +1,7 @@
 //! Explicit repository deletion, retaining ownership and progress for retries.
 use super::{
     Manager,
-    paths::{canonical_parent_only, contains_protected_directory, real_directory_identity},
+    paths::{canonical_parent_with_missing, contains_protected_directory, real_directory_identity},
 };
 use crate::{
     daemon::{resources::Scope, store},
@@ -313,7 +313,8 @@ async fn check_checkout(repo: &Repository, workspaces: &[Workspace]) -> Result<(
             }
         }
         let owned = workspaces.iter().any(|w| {
-            w.path == tree.path || canonical_parent_only(&w.path).is_ok_and(|p| p == tree.path)
+            w.path == tree.path
+                || canonical_parent_with_missing(&w.path).is_ok_and(|p| p == tree.path)
         });
         ensure!(
             tree.path == repo.path || owned,

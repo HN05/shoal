@@ -42,12 +42,13 @@ pub(super) fn canonical_with_missing_tail(path: &Path) -> Result<PathBuf> {
     Ok(result)
 }
 
-/// The path with its parent canonicalized, so a missing leaf still compares
-/// against Git's absolute worktree records. The parent must exist; the leaf is
-/// preserved even if it is a symlink.
-pub(super) fn canonical_parent_only(path: &Path) -> Result<PathBuf> {
-    let parent = fs::canonicalize(path.parent().context("missing workspace parent")?)?;
-    Ok(parent.join(path.file_name().context("missing workspace name")?))
+/// Normalize a recorded path for comparison with Git even when one or more
+/// ancestors were deleted, preserving the leaf instead of resolving it.
+pub(super) fn canonical_parent_with_missing(path: &Path) -> Result<PathBuf> {
+    let leaf = path.file_name().context("missing workspace name")?;
+    let parent = path.parent().context("missing workspace parent")?;
+    let parent = canonical_with_missing_tail(parent)?;
+    Ok(parent.join(leaf))
 }
 
 /// `device:inode` of a directory, stable across renames but not replacement.
@@ -171,11 +172,21 @@ mod tests {
         let alias = root.join("alias");
         symlink(&root, &alias)?;
         assert_eq!(
-            canonical_parent_only(&alias.join("missing"))?,
+            canonical_parent_with_missing(&alias.join("missing"))?,
             root.join("missing")
         );
-        assert_eq!(canonical_parent_only(&alias)?, alias);
-        assert!(canonical_parent_only(&root.join("missing/leaf")).is_err());
+        assert_eq!(canonical_parent_with_missing(&alias)?, alias);
+        Ok(())
+    }
+
+    #[test]
+    fn parent_with_missing_normalizes_deleted_ancestors() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let root = fs::canonicalize(temp.path())?;
+        let path = root.join("removed/parent/workspace");
+        assert_eq!(canonical_parent_with_missing(&path)?, path);
+        fs::create_dir_all(root.join("removed/parent"))?;
+        assert_eq!(canonical_parent_with_missing(&path)?, path);
         Ok(())
     }
 
