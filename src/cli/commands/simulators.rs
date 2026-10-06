@@ -134,7 +134,11 @@ fn render_overview(overview: &SimulatorOverview, palette: Palette) {
             "{}: {} / {}{}",
             palette.paint(Style::Heading, name),
             profile.device,
-            profile.runtime,
+            if profile.runtime.is_empty() {
+                "latest iOS"
+            } else {
+                &profile.runtime
+            },
             preferred
         );
     }

@@ -36,9 +36,13 @@ overrides = root / 'sim-state-overrides.json'
 states = json.loads(overrides.read_text()) if overrides.exists() else {}
 runtime = 'com.apple.CoreSimulator.SimRuntime.iOS-Test'
 if command == 'list':
+    runtime_config = root / 'sim-runtimes.json'
+    runtimes = json.loads(runtime_config.read_text()) if runtime_config.exists() else [
+        {'name': 'iOS Test', 'identifier': runtime, 'version': '26.0', 'isAvailable': True}
+    ]
     print(json.dumps({
         'devicetypes': [{'name': n, 'identifier': 'type.' + n} for n in ['Phone', 'Tablet', 'Watch']],
-        'runtimes': [{'name': 'iOS Test', 'identifier': runtime, 'isAvailable': True}],
+        'runtimes': runtimes,
         'devices': {runtime: devices},
     }))
     sys.exit(0)

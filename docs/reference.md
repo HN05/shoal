@@ -1032,12 +1032,14 @@ default = "phone"
 
 [simulators.profiles.phone]
 device = "iPhone 17"
-runtime = "iOS 26.5"
+# runtime = "iOS 26.5"  # Optional pin
 ```
 
-`shoal sim catalog` lists installed device types and runtimes; nothing is
-downloaded. Repository config may set `[simulators] preferred = ["phone"]`;
-flags override it, and `allow_any = true` permits `--device`/`--runtime`
+Omitting `runtime` from a profile or `--runtime` with `--device` selects the latest
+installed, available iOS runtime compatible with the device. `shoal sim catalog`
+lists installed device types and runtimes; nothing is downloaded.
+Repository config may set `[simulators] preferred = ["phone"]`;
+flags override it, and `allow_any = true` permits unconfigured `--device`
 requests with a `--reason`.
 
 ```sh

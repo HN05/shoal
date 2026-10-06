@@ -150,18 +150,18 @@ pub(super) fn resolve_request(
 ) -> Result<Profile> {
     ensure!(
         request.profile.is_none() || (request.device.is_none() && request.runtime.is_none()),
-        "use either --profile or --device with --runtime"
+        "use either --profile or --device with optional --runtime"
     );
     let resolve = |profile: &Profile| resolve_profile(inventory, profile);
     let profile = if request.device.is_some() || request.runtime.is_some() {
-        let (Some(device), Some(runtime)) = (&request.device, &request.runtime) else {
-            bail!("--device and --runtime are required together");
+        let Some(device) = &request.device else {
+            bail!("--runtime requires --device");
         };
         Profile {
             requires_approval: false,
             approval_lifetime: crate::daemon::access::Lifetime::Lease,
             device: device.clone(),
-            runtime: runtime.clone(),
+            runtime: request.runtime.clone().unwrap_or_default(),
         }
     } else {
         let names = if let Some(name) = &request.profile {
@@ -242,37 +242,54 @@ fn resolve_profile(inventory: &Inventory, profile: &Profile) -> Result<Profile> 
         .iter()
         .filter(|d| d.identifier == profile.device || d.name == profile.device)
         .collect();
-    let runtimes: Vec<_> = inventory
-        .runtimes
-        .iter()
-        .filter(|r| {
-            r.is_available && (r.identifier == profile.runtime || r.name == profile.runtime)
-        })
-        .collect();
     ensure!(
         devices.len() == 1,
         "device type is unavailable or ambiguous: {}",
         profile.device
     );
+    let runtime = resolve_runtime(inventory, devices[0], &profile.runtime)?;
+    Ok(Profile {
+        device: devices[0].identifier.clone(),
+        runtime: runtime.identifier.clone(),
+        ..profile.clone()
+    })
+}
+
+fn resolve_runtime<'a>(
+    inventory: &'a Inventory,
+    device: &super::simctl::DeviceType,
+    requested: &str,
+) -> Result<&'a super::simctl::Runtime> {
+    if requested.is_empty() {
+        return inventory
+            .runtimes
+            .iter()
+            .filter(|r| r.is_available && r.supports(device))
+            .filter_map(|r| r.ios_version().map(|version| (version, r)))
+            .max_by(|(a, ar), (b, br)| a.cmp(b).then_with(|| ar.identifier.cmp(&br.identifier)))
+            .map(|(_, runtime)| runtime)
+            .ok_or_else(|| anyhow::anyhow!(
+                "no installed/available iOS runtime supports device type {}; Shoal does not download runtimes",
+                device.name
+            ));
+    }
+    let runtimes: Vec<_> = inventory
+        .runtimes
+        .iter()
+        .filter(|r| r.is_available && (r.identifier == requested || r.name == requested))
+        .collect();
     ensure!(
         runtimes.len() == 1,
         "runtime is not installed/available or is ambiguous: {}; Shoal does not download runtimes",
-        profile.runtime
+        requested
     );
     ensure!(
-        runtimes[0]
-            .supported_device_types
-            .as_ref()
-            .is_none_or(|types| types.iter().any(|d| d.identifier == devices[0].identifier)),
+        runtimes[0].supports(device),
         "device type {} is incompatible with runtime {}",
-        profile.device,
-        profile.runtime
+        device.name,
+        requested
     );
-    Ok(Profile {
-        device: devices[0].identifier.clone(),
-        runtime: runtimes[0].identifier.clone(),
-        ..profile.clone()
-    })
+    Ok(runtimes[0])
 }
 
 #[cfg(test)]
@@ -524,6 +541,66 @@ mod tests {
         inventory.devices.get_mut("ios").unwrap()[0].is_available = true;
         sim.state = SimulatorState::Failed;
         assert!(check_existing_device(&sim, &inventory).is_err());
+    }
+
+    #[test]
+    fn omitted_runtime_selects_latest_compatible_available_ios_and_keeps_approval() {
+        let mut inventory = inventory();
+        inventory.runtimes = serde_json::from_value(json!([
+            {"identifier": "com.apple.CoreSimulator.SimRuntime.iOS-26-9", "name": "iOS 26.9", "version": "26.9", "isAvailable": true},
+            {"identifier": "com.apple.CoreSimulator.SimRuntime.iOS-9-3", "name": "iOS 9.3", "version": "9.3", "isAvailable": true},
+            {"identifier": "com.apple.CoreSimulator.SimRuntime.iOS-26-10-1", "name": "iOS 26.10.1", "version": "26.10.1", "isAvailable": true},
+            {"identifier": "com.apple.CoreSimulator.SimRuntime.iOS-26-10", "name": "iOS 26.10", "version": "26.10", "isAvailable": true},
+            {"identifier": "com.apple.CoreSimulator.SimRuntime.iOS-27-0", "name": "iOS 27", "version": "27.0", "isAvailable": false},
+            {"identifier": "com.apple.CoreSimulator.SimRuntime.iOS-28-0", "name": "iOS 28", "version": "28.0", "isAvailable": true, "supportedDeviceTypes": [{"identifier": "tablet", "name": "Tablet"}]},
+            {"identifier": "com.apple.CoreSimulator.SimRuntime.tvOS-29-0", "name": "tvOS 29", "version": "29.0", "isAvailable": true},
+            {"identifier": "com.apple.CoreSimulator.SimRuntime.iOS-Unknown", "name": "iOS Unknown", "version": "invalid", "isAvailable": true}
+        ])).unwrap();
+        let mut config = SimConfig::default();
+        let unpinned: Profile = toml::from_str(
+            "device = 'Phone'\nrequires_approval = true\napproval_lifetime = 'workspace'",
+        )
+        .unwrap();
+        assert!(unpinned.runtime.is_empty());
+        config.profiles.insert("phone".into(), unpinned);
+        config.default = Some("phone".into());
+        config.validate().unwrap();
+        let repo = Simulators::default();
+        let newest = "com.apple.CoreSimulator.SimRuntime.iOS-26-10-1";
+        let mut direct = request();
+        direct.device = Some("Phone".into());
+        for request in [request(), direct] {
+            let resolved = resolve_request(&config, &repo, &request, &inventory).unwrap();
+            assert_eq!(resolved.runtime, newest);
+            assert!(resolved.requires_approval);
+            assert_eq!(resolved.approval_lifetime, Lifetime::Workspace);
+        }
+        config.allow_any = true;
+        let mut explicit = request();
+        explicit.device = Some("Phone".into());
+        explicit.runtime = Some("iOS 26.9".into());
+        explicit.reason = Some("pinned runtime".into());
+        assert_eq!(
+            resolve_request(&config, &repo, &explicit, &inventory)
+                .unwrap()
+                .runtime,
+            "com.apple.CoreSimulator.SimRuntime.iOS-26-9"
+        );
+        explicit.runtime = Some("iOS 27".into());
+        assert!(resolve_request(&config, &repo, &explicit, &inventory).is_err());
+        explicit.runtime = Some("iOS 28".into());
+        assert!(resolve_request(&config, &repo, &explicit, &inventory).is_err());
+        for runtime in &mut inventory.runtimes {
+            if runtime.supports(&inventory.devicetypes[0]) && runtime.ios_version().is_some() {
+                runtime.is_available = false;
+            }
+        }
+        assert!(
+            resolve_request(&config, &repo, &request(), &inventory)
+                .unwrap_err()
+                .to_string()
+                .contains("no installed/available iOS runtime supports")
+        );
     }
 
     #[test]

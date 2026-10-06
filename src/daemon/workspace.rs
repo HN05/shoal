@@ -662,13 +662,13 @@ mod tests {
         let path = Config::path(&manager.paths);
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         let before = manager.config();
-        fs::write(&path, "[simulators.profiles.phone]\ndevice = 'iPhone 17'\n").unwrap();
+        fs::write(&path, "[simulators.profiles.phone]\nruntime = 'iOS 27'\n").unwrap();
         assert!(manager.reload_config().await.is_err());
         assert!(Arc::ptr_eq(&manager.config(), &before));
         fs::write(
             &path,
             "[simulators]\ndefault = 'phone'\n\
-             [simulators.profiles.phone]\ndevice = 'iPhone 17'\nruntime = 'iOS 27'\n",
+             [simulators.profiles.phone]\ndevice = 'iPhone 17'\n",
         )
         .unwrap();
         manager.reload_config().await.unwrap();

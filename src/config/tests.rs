@@ -287,11 +287,11 @@ fn dependent_global_edits_validate_together() {
     let home = tempfile::tempdir().unwrap();
     let paths = Paths::for_test(home.path());
     let profile = [
-        change("simulators.profiles.phone.device", Some("iPhone 17")),
         change("simulators.profiles.phone.runtime", Some("iOS 27")),
         change("simulators.default", Some("phone")),
+        change("simulators.profiles.phone.device", Some("iPhone 17")),
     ];
-    for single in &profile {
+    for single in &profile[..2] {
         assert!(Config::edit(&paths, std::slice::from_ref(single)).is_err());
     }
     assert!(!Config::path(&paths).exists());

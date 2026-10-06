@@ -655,8 +655,9 @@ pub enum SimCommand {
         name: String,
         #[arg(long, conflicts_with_all = ["device", "runtime"])]
         profile: Option<String>,
-        #[arg(long, requires = "runtime")]
+        #[arg(long)]
         device: Option<String>,
+        /// Installed runtime; defaults to the latest compatible iOS runtime.
         #[arg(long, requires = "device")]
         runtime: Option<String>,
         #[arg(long)]

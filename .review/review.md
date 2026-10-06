@@ -65,6 +65,8 @@ instructions instead of the PR delivery guidance below.
   recorded ownership and live capacity under the simulator gate. Indexed workspace
   lookups use current ownership, falling back to last ownership only when unclaimed;
   malformed ownership must not disappear from filtered results.
+  Omitted runtimes select the latest installed, available compatible iOS version;
+  explicit runtimes stay pinned and existing leases keep their runtime.
 - Allocation is atomic and persisted before the external mutation (simctl,
   Worktrunk). Leases survive restart and failed removal and are released only
   with successful removal. Active permits block automatic cleanup. Permit hooks

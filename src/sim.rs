@@ -30,6 +30,8 @@ pub struct Profile {
     #[serde(default)]
     pub approval_lifetime: crate::daemon::access::Lifetime,
     pub device: String,
+    /// Empty selects the latest available compatible iOS runtime.
+    #[serde(default)]
     pub runtime: String,
 }
 
@@ -85,8 +87,8 @@ impl SimConfig {
         for (name, profile) in &self.profiles {
             validate::name("simulator profile", name)?;
             ensure!(
-                !profile.device.is_empty() && !profile.runtime.is_empty(),
-                "simulator profile {name} requires a device and runtime"
+                !profile.device.is_empty(),
+                "simulator profile {name} requires a device"
             );
         }
         Ok(())

@@ -23,8 +23,29 @@ pub struct Runtime {
     pub identifier: String,
     pub name: String,
     pub is_available: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
     #[serde(default, skip_serializing)]
     pub supported_device_types: Option<Vec<DeviceType>>,
+}
+
+impl Runtime {
+    pub fn supports(&self, device: &DeviceType) -> bool {
+        self.supported_device_types
+            .as_ref()
+            .is_none_or(|types| types.iter().any(|d| d.identifier == device.identifier))
+    }
+
+    pub fn ios_version(&self) -> Option<Vec<u64>> {
+        self.identifier
+            .strip_prefix("com.apple.CoreSimulator.SimRuntime.iOS-")?;
+        self.version
+            .as_deref()?
+            .split('.')
+            .map(str::parse)
+            .collect::<Result<_, _>>()
+            .ok()
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]

@@ -3495,6 +3495,51 @@ runtime = "iOS Test"
 
 #[test]
 #[cfg(target_os = "macos")]
+fn simulator_omitted_runtime_uses_latest_ios_and_preserves_existing_lease() {
+    let config = SIM_CONFIG.replace("runtime = \"iOS Test\"", "");
+    let fixture = Fixture::with_tools(Some(&config), true);
+    let set_runtimes = |newer_available| {
+        fs::write(
+            fixture.root.path().join("sim-runtimes.json"),
+            serde_json::json!([
+                {"name": "iOS 26.9", "identifier": "com.apple.CoreSimulator.SimRuntime.iOS-26-9", "version": "26.9", "isAvailable": true},
+                {"name": "iOS 26.10", "identifier": "com.apple.CoreSimulator.SimRuntime.iOS-26-10", "version": "26.10", "isAvailable": true},
+                {"name": "iOS 27", "identifier": "com.apple.CoreSimulator.SimRuntime.iOS-27-0", "version": "27.0", "isAvailable": newer_available},
+                {"name": "tvOS 28", "identifier": "com.apple.CoreSimulator.SimRuntime.tvOS-28-0", "version": "28.0", "isAvailable": true}
+            ]).to_string(),
+        ).unwrap();
+    };
+    set_runtimes(false);
+    fixture.add("worker");
+    let overview = fixture.run(&["sim", "worker"]);
+    assert!(overview.status.success());
+    assert!(String::from_utf8_lossy(&overview.stdout).contains("latest iOS"));
+    let first = fixture.ok(&["sim", "acquire", "worker"]);
+    assert_eq!(
+        first["runtime"],
+        "com.apple.CoreSimulator.SimRuntime.iOS-26-10"
+    );
+    set_runtimes(true);
+    assert_eq!(fixture.ok(&["sim", "acquire", "worker"]), first);
+    fixture.ok(&["sim", "release", "default", "worker"]);
+    let next = fixture.ok(&["sim", "acquire", "worker", "--device", "Phone"]);
+    assert_eq!(
+        next["runtime"],
+        "com.apple.CoreSimulator.SimRuntime.iOS-27-0"
+    );
+    let events = fs::read_to_string(fixture.root.path().join("sim-events")).unwrap();
+    let creates: Vec<Value> = events
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).unwrap())
+        .filter(|event| event[0] == "create")
+        .collect();
+    assert_eq!(creates.len(), 2);
+    assert_eq!(creates[0][3], first["runtime"]);
+    assert_eq!(creates[1][3], next["runtime"]);
+}
+
+#[test]
+#[cfg(target_os = "macos")]
 fn simulator_exclusivity_wait_reuse_scope_and_removal() {
     let fixture = Fixture::with_tools(Some(SIM_CONFIG), true);
     fixture.add("first");
