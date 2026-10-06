@@ -3521,6 +3521,14 @@ fn simulator_omitted_runtime_uses_latest_ios_and_preserves_existing_lease() {
     );
     set_runtimes(true);
     assert_eq!(fixture.ok(&["sim", "acquire", "worker"]), first);
+    assert_eq!(
+        fixture.ok(&["sim", "acquire", "worker", "--device", "Phone"]),
+        first
+    );
+    assert_eq!(
+        fixture.ok(&["sim", "acquire", "worker", "--profile", "phone"]),
+        first
+    );
     fixture.ok(&["sim", "release", "default", "worker"]);
     let next = fixture.ok(&["sim", "acquire", "worker", "--device", "Phone"]);
     assert_eq!(

@@ -373,8 +373,14 @@ impl Manager {
             None
         } else {
             Some(
-                self.resolve_profile(&config, &workspace, &request, &inventory)
-                    .await?,
+                self.resolve_profile(
+                    &config,
+                    &workspace,
+                    &request,
+                    &inventory,
+                    existing.map(|index| records[index].runtime.as_str()),
+                )
+                .await?,
             )
         };
         if let Some(index) = existing {
@@ -580,9 +586,16 @@ impl Manager {
         workspace: &Workspace,
         request: &SimRequest,
         inventory: &Inventory,
+        existing_runtime: Option<&str>,
     ) -> Result<Profile> {
         let settings = self.workspace_settings_from(config, workspace).await?;
-        planning::resolve_request(&config.simulators, &settings.simulators, request, inventory)
+        planning::resolve_request(
+            &config.simulators,
+            &settings.simulators,
+            request,
+            inventory,
+            existing_runtime,
+        )
     }
 
     pub async fn release_simulator(&self, selector: &str, name: String) -> Result<()> {

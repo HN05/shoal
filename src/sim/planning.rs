@@ -147,12 +147,13 @@ pub(super) fn resolve_request(
     repo: &Simulators,
     request: &SimRequest,
     inventory: &Inventory,
+    existing_runtime: Option<&str>,
 ) -> Result<Profile> {
     ensure!(
         request.profile.is_none() || (request.device.is_none() && request.runtime.is_none()),
         "use either --profile or --device with optional --runtime"
     );
-    let resolve = |profile: &Profile| resolve_profile(inventory, profile);
+    let resolve = |profile: &Profile| resolve_profile(inventory, profile, existing_runtime);
     let profile = if request.device.is_some() || request.runtime.is_some() {
         let Some(device) = &request.device else {
             bail!("--runtime requires --device");
@@ -236,7 +237,11 @@ pub(super) fn resolve_request(
 
 /// Match a profile's device/runtime names or identifiers against what is
 /// installed, returning canonical identifiers.
-fn resolve_profile(inventory: &Inventory, profile: &Profile) -> Result<Profile> {
+fn resolve_profile(
+    inventory: &Inventory,
+    profile: &Profile,
+    existing_runtime: Option<&str>,
+) -> Result<Profile> {
     let devices: Vec<_> = inventory
         .devicetypes
         .iter()
@@ -247,7 +252,12 @@ fn resolve_profile(inventory: &Inventory, profile: &Profile) -> Result<Profile> 
         "device type is unavailable or ambiguous: {}",
         profile.device
     );
-    let runtime = resolve_runtime(inventory, devices[0], &profile.runtime)?;
+    let requested = if profile.runtime.is_empty() {
+        existing_runtime.unwrap_or_default()
+    } else {
+        &profile.runtime
+    };
+    let runtime = resolve_runtime(inventory, devices[0], requested)?;
     Ok(Profile {
         device: devices[0].identifier.clone(),
         runtime: runtime.identifier.clone(),
@@ -570,10 +580,23 @@ mod tests {
         let mut direct = request();
         direct.device = Some("Phone".into());
         for request in [request(), direct] {
-            let resolved = resolve_request(&config, &repo, &request, &inventory).unwrap();
+            let resolved = resolve_request(&config, &repo, &request, &inventory, None).unwrap();
             assert_eq!(resolved.runtime, newest);
             assert!(resolved.requires_approval);
             assert_eq!(resolved.approval_lifetime, Lifetime::Workspace);
+            let retained = resolve_request(
+                &config,
+                &repo,
+                &request,
+                &inventory,
+                Some("com.apple.CoreSimulator.SimRuntime.iOS-26-9"),
+            )
+            .unwrap();
+            assert_eq!(
+                retained.runtime,
+                "com.apple.CoreSimulator.SimRuntime.iOS-26-9"
+            );
+            assert!(retained.requires_approval);
         }
         config.allow_any = true;
         let mut explicit = request();
@@ -581,22 +604,22 @@ mod tests {
         explicit.runtime = Some("iOS 26.9".into());
         explicit.reason = Some("pinned runtime".into());
         assert_eq!(
-            resolve_request(&config, &repo, &explicit, &inventory)
+            resolve_request(&config, &repo, &explicit, &inventory, None)
                 .unwrap()
                 .runtime,
             "com.apple.CoreSimulator.SimRuntime.iOS-26-9"
         );
         explicit.runtime = Some("iOS 27".into());
-        assert!(resolve_request(&config, &repo, &explicit, &inventory).is_err());
+        assert!(resolve_request(&config, &repo, &explicit, &inventory, None).is_err());
         explicit.runtime = Some("iOS 28".into());
-        assert!(resolve_request(&config, &repo, &explicit, &inventory).is_err());
+        assert!(resolve_request(&config, &repo, &explicit, &inventory, None).is_err());
         for runtime in &mut inventory.runtimes {
             if runtime.supports(&inventory.devicetypes[0]) && runtime.ios_version().is_some() {
                 runtime.is_available = false;
             }
         }
         assert!(
-            resolve_request(&config, &repo, &request(), &inventory)
+            resolve_request(&config, &repo, &request(), &inventory, None)
                 .unwrap_err()
                 .to_string()
                 .contains("no installed/available iOS runtime supports")
@@ -622,7 +645,7 @@ mod tests {
             requires_approval: false,
             ..Default::default()
         };
-        let resolved = resolve_request(&config, &repo, &request(), &inventory).unwrap();
+        let resolved = resolve_request(&config, &repo, &request(), &inventory, None).unwrap();
         assert!(resolved.requires_approval);
         assert_eq!(resolved.approval_lifetime, Lifetime::Workspace);
         repo.requires_approval = true;
@@ -630,12 +653,12 @@ mod tests {
         let mut explicit = request();
         explicit.device = Some("Phone".into());
         explicit.runtime = Some("iOS".into());
-        let resolved = resolve_request(&config, &repo, &explicit, &inventory).unwrap();
+        let resolved = resolve_request(&config, &repo, &explicit, &inventory, None).unwrap();
         assert_eq!(resolved.device, "phone");
         assert!(resolved.requires_approval);
         assert_eq!(resolved.approval_lifetime, Lifetime::Lease);
         inventory.runtimes[0].is_available = false;
-        let error = resolve_request(&config, &repo, &request(), &inventory).unwrap_err();
+        let error = resolve_request(&config, &repo, &request(), &inventory, None).unwrap_err();
         assert!(
             error
                 .to_string()
