@@ -34,8 +34,10 @@ instructions instead of the PR delivery guidance below.
 - Untracked hooks use global defaults below repository config.
   Pre-setup hooks run untracked in the daemon after ownership and execution
   checks, with a timeout; failure gates readiness even without a setup command.
-  Lifecycle and permit changes are excluded while the hook runs. Post-remove
-  runs from the repository checkout after ownership is released; failure is a
+  Lifecycle and permit changes are excluded while the hook runs. Removal rechecks
+  ownership and policy after hooks before selecting branch deletion; idle cleanup
+  requires unchanged HEAD and activity, and manual Auto removal requires unchanged HEAD.
+  Post-remove runs from the repository checkout after ownership is released; failure is a
   warning and notification, never restored ownership. Already-missing worktrees
   skip hooks, and post-remove events are not replayed on restart. Post-done runs
   after completion persists and before cleanup, including issue and PR completion;

@@ -90,6 +90,9 @@ impl Removal<'_> {
             (Removal::Automatic { .. }, Stage::AfterStop) => {
                 ensure!(check.safe(), "workspace changed while stopping commands")
             }
+            (Removal::Automatic { .. }, Stage::AfterHooks) => {
+                ensure!(check.safe(), "workspace changed during removal hooks")
+            }
             (
                 Removal::Manual {
                     choice: BranchChoice::Auto,
@@ -111,17 +114,28 @@ impl Removal<'_> {
                 !check.needs_choice(),
                 "workspace changed while stopping commands; choose whether to keep or delete the branch"
             ),
+            (
+                Removal::Manual {
+                    choice: BranchChoice::Auto,
+                    ..
+                },
+                Stage::AfterHooks,
+            ) => ensure!(
+                !check.needs_choice(),
+                "workspace changed during removal hooks; choose whether to keep or delete the branch"
+            ),
             (Removal::Manual { .. } | Removal::Deleted, _) => {}
         }
         Ok(())
     }
 }
 
-/// The removal checks run twice: before and after stopping commands.
+/// Recheck safety after operations that can change the worktree.
 #[derive(Clone, Copy)]
 enum Stage {
     Initial,
     AfterStop,
+    AfterHooks,
 }
 
 impl Manager {
@@ -355,8 +369,10 @@ impl Manager {
                 "HEAD changed while stopping commands"
             );
         }
-        let (files, branch) =
-            worktrunk_removal_options(&repo.path, &check, removal.choice()).await?;
+        // Validate explicit choices before hooks, then derive the actual
+        // adapter options again from the final inspection.
+        worktrunk_removal_options(&repo.path, &check, removal.choice()).await?;
+        let head_before_hooks = crate::forge::pr::current_head(workspace).await?;
         // The hook sees the worktree intact; a failing hook retains it.
         if let Some(command) = self.workspace_hook(workspace, HookKind::PreRemove).await? {
             hooks::run_detached(Hook::PreRemove, workspace, &command, &self.paths).await?;
@@ -368,18 +384,36 @@ impl Manager {
             self.run_resource_release_hook(workspace, &lease, release_hook.as_deref())
                 .await?;
         }
+        let check = self
+            .check_removal(&workspace.id, removal.inspection())
+            .await?;
+        if let Removal::Automatic { snapshot } = removal {
+            ensure!(
+                self.cleanup_snapshot(&workspace.id).await? == Some(snapshot),
+                "workspace changed during removal hooks"
+            );
+        }
         if let Removal::Merged { head } | Removal::Completed { head } = removal {
             ensure!(
                 crate::forge::pr::current_head(workspace).await? == head,
                 "HEAD changed during removal hooks"
             );
-            removal.verify(
-                &self
-                    .check_removal(&workspace.id, removal.inspection())
-                    .await?,
-                Stage::AfterStop,
-            )?;
         }
+        if matches!(
+            removal,
+            Removal::Manual {
+                choice: BranchChoice::Auto,
+                ..
+            }
+        ) {
+            ensure!(
+                crate::forge::pr::current_head(workspace).await? == head_before_hooks,
+                "HEAD changed during removal hooks; choose whether to keep or delete the branch"
+            );
+        }
+        removal.verify(&check, Stage::AfterHooks)?;
+        let (files, branch) =
+            worktrunk_removal_options(&repo.path, &check, removal.choice()).await?;
         // Live resources are removed before the directory; failed cleanup
         // retains their ownership records so removal can be retried.
         self.remove_simulators(&workspace.id).await?;

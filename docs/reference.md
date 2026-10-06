@@ -784,7 +784,9 @@ Both choices discard uncommitted and untracked files. `--keep-branch`/`--delete-
 skips the picker; add `--yes` to skip confirmation. `--yes` alone cannot choose for dirty/differing work.
 
 Manual removal stops tracked commands and verified survivors, leaving unrelated
-processes alone. Ignored files go; shared caches stay; Worktrunk hooks are disabled.
+processes alone. Ownership and removal policy are checked again after removal hooks;
+changed HEAD requires an explicit branch choice. Ignored files go; shared caches
+stay; Worktrunk hooks are disabled.
 Git protects other checkouts. Failed ancestry or exact-ref checks stop removal
 with the Git diagnostic, as they do branch selection and refresh; a missing ref
 is a negative answer. Shell integration returns to `<root_dir>/<repo>`.

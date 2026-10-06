@@ -4,7 +4,7 @@ use crate::{
     process::identity,
     test_support::{git, manager, repository},
 };
-use std::{fs, sync::Arc};
+use std::{fs, os::unix::fs::PermissionsExt, sync::Arc};
 
 async fn fixture() -> (tempfile::TempDir, Arc<Manager>, Workspace) {
     let (root, manager) = manager().await;
@@ -18,6 +18,92 @@ async fn fixture() -> (tempfile::TempDir, Arc<Manager>, Workspace) {
         .await
         .unwrap();
     (root, manager, workspace)
+}
+
+async fn fixture_with_removal_hook(script: &str) -> (tempfile::TempDir, Arc<Manager>, Workspace) {
+    let (root, manager) = manager().await;
+    let path = repository(root.path(), "repo");
+    let hook = root.path().join("remove-hook.sh");
+    fs::write(&hook, format!("#!/bin/sh\nset -eu\n{script}\n")).unwrap();
+    fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).unwrap();
+    fs::write(
+        path.join(".shoal.toml"),
+        format!("pre_remove_cmd = '{}'\n", hook.display()),
+    )
+    .unwrap();
+    fs::write(path.join(".gitignore"), "ignored/\n").unwrap();
+    git(&path, &["add", ".gitignore"]);
+    crate::test_support::commit(&path, ".shoal.toml");
+    let repo = manager
+        .register_repository(path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "policy".into(), None, None, None)
+        .await
+        .unwrap();
+    (root, manager, workspace)
+}
+
+#[tokio::test]
+async fn idle_removal_rechecks_head_and_ignored_activity_after_hooks() {
+    for script in [
+        "git commit --allow-empty -m 'hook work'",
+        "git reset --hard HEAD^",
+        "mkdir -p ignored; echo activity > ignored/new",
+    ] {
+        let (_root, manager, workspace) = fixture_with_removal_hook(script).await;
+        let snapshot = manager
+            .cleanup_snapshot(&workspace.id)
+            .await
+            .unwrap()
+            .unwrap();
+        let error = manager
+            .remove_idle(&workspace.id, snapshot)
+            .await
+            .unwrap_err();
+        assert!(
+            error.to_string().contains("during removal hooks"),
+            "{error:#}"
+        );
+        assert!(workspace.path.exists());
+        assert!(manager.workspace(&workspace.id).await.is_ok());
+        assert!(!git(&workspace.path, &["rev-parse", "refs/heads/policy"]).is_empty());
+    }
+}
+
+#[tokio::test]
+async fn every_removal_mode_reverifies_ownership_after_hooks() {
+    let script = r#"common=$(git rev-parse --path-format=absolute --git-common-dir)
+branch=$(git symbolic-ref --short HEAD)
+cd /
+git --git-dir="$common" worktree remove --force "$SHOAL_WORKSPACE_PATH"
+git --git-dir="$common" worktree add "$SHOAL_WORKSPACE_PATH" "$branch""#;
+    for choice in [
+        None,
+        Some(BranchChoice::Auto),
+        Some(BranchChoice::KeepBranch),
+        Some(BranchChoice::DeleteBranch),
+    ] {
+        let (_root, manager, workspace) = fixture_with_removal_hook(script).await;
+        let removal = match choice {
+            None => Removal::Automatic {
+                snapshot: manager
+                    .cleanup_snapshot(&workspace.id)
+                    .await
+                    .unwrap()
+                    .unwrap(),
+            },
+            Some(choice) => Removal::Manual {
+                choice,
+                inspection: InspectionPolicy::GitOnly,
+            },
+        };
+        let error = manager.remove(&workspace.id, removal).await.unwrap_err();
+        assert!(error.to_string().contains("ownership"), "{error:#}");
+        assert!(workspace.path.exists());
+        assert!(manager.workspace(&workspace.id).await.is_ok());
+    }
 }
 
 #[tokio::test]

@@ -9401,6 +9401,62 @@ fn merged_rechecks_head_after_removal_hooks() {
 }
 
 #[test]
+fn manual_auto_removal_rechecks_safety_after_hooks() {
+    for key in ["pre_remove_cmd", "pre_resource_release_cmd"] {
+        let fixture = Fixture::new();
+        fs::write(
+            fixture.repo.join(".shoal.toml"),
+            format!("{key} = 'hook.sh'\n[resources.signing]\n"),
+        )
+        .unwrap();
+        fs::write(
+            fixture.repo.join("hook.sh"),
+            concat!(
+                "#!/bin/sh\n",
+                "git -c user.name=Test -c user.email=test@example.invalid ",
+                "commit --allow-empty -m 'hook work'\n",
+            ),
+        )
+        .unwrap();
+        fs::set_permissions(
+            fixture.repo.join("hook.sh"),
+            fs::Permissions::from_mode(0o755),
+        )
+        .unwrap();
+        git(&fixture.repo, &["add", "."]);
+        git(
+            &fixture.repo,
+            &[
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.invalid",
+                "commit",
+                "-m",
+                "hook",
+            ],
+        );
+        let workspace = fixture.add("hook");
+        if key == "pre_resource_release_cmd" {
+            fixture.ok(&["resource", "acquire", "signing", "hook"]);
+        }
+        let removal = fixture.run(&["rm", "hook", "--yes"]);
+        assert!(!removal.status.success());
+        assert!(String::from_utf8_lossy(&removal.stderr).contains("HEAD changed"));
+        assert!(Path::new(workspace["path"].as_str().unwrap()).exists());
+        if key == "pre_resource_release_cmd" {
+            assert_eq!(
+                fixture.ok(&["resource", "hook"])["leases"]
+                    .as_array()
+                    .unwrap()
+                    .len(),
+                1
+            );
+        }
+    }
+}
+
+#[test]
 fn land_merges_into_main_without_a_remote_and_is_denied_to_scoped_processes() {
     let fixture = Fixture::new();
     let worker = fixture.add("worker");
