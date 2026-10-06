@@ -9,6 +9,10 @@ use std::{
 };
 use uuid::Uuid;
 
+mod repositories;
+pub use repositories::RepositoryView;
+pub(crate) use repositories::ensure_no_external_leases;
+
 use crate::{
     daemon::{
         access::{self, AccessRequest, ResourceSpecification, Specification, Target},
@@ -175,6 +179,8 @@ pub fn definitions(
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ResourceLease {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repository: Option<RepositoryView>,
     pub mode: LockMode,
     pub id: String,
     pub workspace_id: String,
@@ -239,10 +245,21 @@ pub struct WorkspaceOverview {
     pub overview: Overview,
 }
 
-const LEASE_COLUMNS: &str = "id,workspace_id,scope,pool,name,resource,reason,created_at,mode";
+const LEASE_COLUMNS: &str = "id,workspace_id,scope,pool,name,resource,reason,created_at,mode,
+    (SELECT repository_id FROM repository_resource_leases WHERE lease_id=resource_leases.id) AS repository_id,
+    (SELECT path FROM repository_resource_leases WHERE lease_id=resource_leases.id) AS repository_path";
 
 fn row_lease(row: &rusqlite::Row<'_>) -> rusqlite::Result<ResourceLease> {
     Ok(ResourceLease {
+        repository: row
+            .get::<_, Option<String>>("repository_id")?
+            .map(|id| {
+                Ok::<_, rusqlite::Error>(RepositoryView {
+                    id,
+                    path: row.get::<_, String>("repository_path")?.into(),
+                })
+            })
+            .transpose()?,
         id: row.get("id")?,
         workspace_id: row.get("workspace_id")?,
         scope: row.get("scope")?,
@@ -451,6 +468,7 @@ impl ResourceConfig {
             (ResourceKind::Semaphore, None | Some(LockMode::Permit)) => Some(LockMode::Permit),
             (ResourceKind::Rwlock, None | Some(LockMode::Write)) => Some(LockMode::Write),
             (ResourceKind::Rwlock, Some(LockMode::Read)) => Some(LockMode::Read),
+            (ResourceKind::Repo, None | Some(LockMode::Read)) => Some(LockMode::Read),
             _ => None,
         }
     }
@@ -460,7 +478,7 @@ impl ResourceConfig {
             (ResourceKind::Semaphore, LockMode::Permit) => {
                 used.slots() < self.capacity && pool_available > 0
             }
-            (ResourceKind::Rwlock, LockMode::Read) => {
+            (ResourceKind::Rwlock | ResourceKind::Repo, LockMode::Read) => {
                 used.writers == 0 && (used.readers > 0 || pool_available > 0)
             }
             (ResourceKind::Rwlock, LockMode::Write) => used.slots() == 0 && pool_available > 0,
@@ -493,7 +511,7 @@ fn select_member<'a>(
         .collect();
     ensure!(
         !eligible.is_empty(),
-        "requested mode is incompatible with the selected resource(s); read/write require kind = rwlock, permit requires semaphore"
+        "requested mode is incompatible with the selected resource(s); read/write require kind = rwlock, repo grants read only, permit requires semaphore"
     );
     let load = |slots: u32, capacity: u32| u64::from(slots) * u64::from(capacity);
     Ok(eligible
@@ -777,8 +795,14 @@ fn acquire_lease(
     let Some((resource, settings, mode)) = selected else {
         return busy();
     };
+    let repository = settings
+        .repo
+        .as_deref()
+        .map(|selector| repositories::resolve(&tx, selector))
+        .transpose()?;
     if scoped && settings.requires_approval {
         let bound = ResourceSpecification {
+            repository: repository.clone(),
             definition: definition.clone(),
             member: resource.clone(),
             mode,
@@ -800,6 +824,7 @@ fn acquire_lease(
         return busy();
     }
     let lease = ResourceLease {
+        repository,
         mode,
         id: Uuid::new_v4().to_string(),
         workspace_id,
@@ -814,6 +839,7 @@ fn acquire_lease(
         created_at: i64::try_from(crate::time::unix_seconds())?,
     };
     insert_lease(&tx, &lease)?;
+    repositories::record(&tx, &lease)?;
     tx.commit()?;
     Ok(Allocation::Granted(lease))
 }
@@ -945,7 +971,8 @@ mod tests {
         let db = Connection::open_in_memory()?;
         // Deliberately use a physical order different from LEASE_COLUMNS.
         db.execute_batch(
-            "CREATE TABLE resource_leases AS SELECT
+            "CREATE TABLE repository_resource_leases (lease_id TEXT, repository_id TEXT, path TEXT);
+            CREATE TABLE resource_leases AS SELECT
             'read' AS mode, 123 AS created_at, NULL AS reason, 'member' AS resource,
             'default' AS name, 'pool' AS pool, 'global' AS scope,
             'workspace' AS workspace_id, 'lease' AS id;",
@@ -971,6 +998,7 @@ mod tests {
     fn allocation_reads_only_the_named_lease_and_selected_pool() -> Result<()> {
         let mut db = Connection::open_in_memory()?;
         db.execute_batch(include_str!("../../tests/fixtures/schema_v17.sql"))?;
+        db.execute_batch("CREATE TABLE repository_resource_leases (lease_id TEXT, repository_id TEXT, path TEXT);")?;
         db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('a','/a','a',0),('b','/b','b',0);
              INSERT INTO workspaces(id,repository_id,name,path,branch,state) VALUES

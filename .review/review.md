@@ -194,6 +194,9 @@ instructions instead of the PR delivery guidance below.
   typed daemon error codes and messages without changing the wire format; unfamiliar
   codes survive verbatim for version compatibility.
   Resource protocol methods use domain-then-verb names matching the CLI operations.
+  Repo resources bind a registered checkout ID and path for cooperative read access,
+  including in approvals; external leases block repository deletion. Workspace
+  cleanup and release never modify the borrowed checkout.
   Independent per-workspace overview reads use bounded concurrency, preserve
   workspace order and account for failures without blocking other reads.
 - Persistence: SQLite work stays on its dedicated thread, with one connection and

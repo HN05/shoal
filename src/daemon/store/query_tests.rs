@@ -7,6 +7,7 @@ fn populated_database() -> Result<Connection> {
     db.execute_batch(include_str!("../../../tests/fixtures/schema_v17.sql"))?;
     db.execute_batch(
         "PRAGMA foreign_keys=ON;
+        CREATE TABLE repository_resource_leases (lease_id TEXT PRIMARY KEY, repository_id TEXT, path TEXT);
         INSERT INTO resource_pools VALUES ('global','pool','{}');",
     )?;
     add_owners(&db, 0, 10)?;

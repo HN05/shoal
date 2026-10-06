@@ -91,6 +91,8 @@ pub enum Specification {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ResourceSpecification {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repository: Option<crate::daemon::resources::RepositoryView>,
     pub definition: Definition,
     /// The pool member the decision selects.
     pub member: String,
@@ -345,6 +347,7 @@ mod tests {
             )]),
         };
         Specification::Resource(ResourceSpecification {
+            repository: None,
             definition,
             member: "lock".into(),
             mode,

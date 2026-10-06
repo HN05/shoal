@@ -423,7 +423,13 @@ the latest installed, available iOS version compatible with the requested device
 explicit runtimes stay pinned and existing leases keep their runtime. Generic permits consume
 pool and member capacity in one transaction; rwlock members allow unlimited readers sharing one slot or one
 writer, default to write, and require release to change mode. Definition drift
-blocks new claims but never revokes permits. Optional daemon hooks run after a
+blocks new claims but never revokes permits. `kind = "repo"` resources return a
+registered checkout's path with cooperative read access; readers share one slot.
+The lease binds its repository ID and path, including for approval, survives
+restart, and prevents repository deletion while borrowed by another repository's
+workspace. Release and workspace cleanup only drop the lease; they never modify
+the borrowed checkout. The view is live, with no automatic fetch or pinned ref.
+Optional daemon hooks run after a
 permit is persisted and before it is released; failure retains ownership.
 Repeated acquisition reruns its hook against the same lease, so scripts must be
 idempotent. Hooks receive lease JSON, use normal config precedence and executable

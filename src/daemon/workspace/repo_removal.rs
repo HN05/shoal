@@ -47,6 +47,10 @@ impl Manager {
         let _registry = self.registry_gate.lock().await;
         let repo = self.repository(selector).await?;
         let _git = self.lock_repository_git(&repo.id).await;
+        let id = repo.id.clone();
+        self.store
+            .run(move |db| crate::daemon::resources::ensure_no_external_leases(db, &id))
+            .await?;
         let workspaces: Vec<_> = self
             .list_workspaces()
             .await?
@@ -180,10 +184,13 @@ impl Manager {
         let (id, recorded_identity) = (repo.id.clone(), identity.map(str::to_owned));
         self.store
             .run(move |db| {
-                db.execute(
+                let tx = db.transaction()?;
+                crate::daemon::resources::ensure_no_external_leases(&tx, &id)?;
+                tx.execute(
                     "INSERT INTO repository_removals(repository_id,directory_id) VALUES (?1,?2) ON CONFLICT(repository_id) DO NOTHING",
                     params![id, recorded_identity],
                 )?;
+                tx.commit()?;
                 Ok(())
             })
             .await?;

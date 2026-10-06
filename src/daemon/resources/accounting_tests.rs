@@ -2,6 +2,7 @@ use super::*;
 
 fn lease(scope: Scope, pool: &str, resource: &str, mode: LockMode) -> ResourceLease {
     ResourceLease {
+        repository: None,
         mode,
         id: Uuid::new_v4().to_string(),
         workspace_id: "owner".into(),

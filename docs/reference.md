@@ -1118,6 +1118,31 @@ drain. Leases survive command exit and restarts, block automatic cleanup, and ar
 released by successful removal. Shoal accounts for permits only; stop using a
 resource before releasing it.
 
+### Related repository paths
+
+Declare a registered repository as a resource in global or repository config:
+
+```toml
+[resources.server]
+kind = "repo"
+repo = "saldoir-server"        # Registered name or ID
+```
+
+`shoal resource acquire server` returns a read lease with `repository.id` and
+`repository.path` in JSON. Scoped callers can acquire it without repository
+administration access. New leases default to `read`; other modes are rejected.
+Capacity must be 1, and readers share one pool slot. Resource approvals and hooks
+apply normally; approvals bind the resolved repository ID and path.
+
+The path is the registered checkout's live working tree, with cooperative read
+access. Shoal does not enforce filesystem permissions, fetch, select a ref, or
+create a sibling path. Use the returned path in a project's repository override;
+use Git to read committed files at a chosen ref. Missing checkouts and repositories
+being removed cannot be acquired. Repeated acquisition preserves the recorded
+binding even if configuration changes. A lease prevents repository deletion while
+another repository's workspace holds it; release and workspace removal only
+discard the lease, leaving the related checkout untouched.
+
 ### Resource hooks
 
 Global or repository config can name `post_resource_acquire_cmd` and

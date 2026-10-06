@@ -11630,6 +11630,173 @@ fn scoped_command(fixture: &Fixture, workspace: &str, args: &[&str]) -> Output {
         .unwrap()
 }
 
+#[test]
+fn repository_resources_return_checkouts_and_preserve_them_on_cleanup() {
+    let mut fixture = Fixture::new();
+    let related = init_repo(
+        fixture.root.path(),
+        "server",
+        &[("DESIGN.MD", "server design\n")],
+    );
+    let registration = fixture.ok(&["repo", "add", related.to_str().unwrap(), "--name", "server"]);
+    set_repository_toml(&fixture, "[resources.server]\nkind='repo'\nrepo='server'\n");
+    fixture.add("consumer");
+    fixture.add("other-consumer");
+    assert!(
+        fixture.ok(&["resource", "consumer"])["leases"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    let output = scoped_command(&fixture, "consumer", &["resource", "acquire", "server"]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let lease: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(lease["mode"], "read");
+    assert_eq!(lease["repository"]["id"], registration["id"]);
+    assert_eq!(lease["repository"]["path"], related.to_str().unwrap());
+    assert_eq!(
+        fs::read_to_string(related.join("DESIGN.MD")).unwrap(),
+        "server design\n"
+    );
+    fixture.ok(&["resource", "acquire", "server", "other-consumer"]);
+    let overview = fixture.ok(&["resource", "consumer"]);
+    assert_eq!(overview["pools"][0]["used"], 1);
+    assert_eq!(overview["pools"][0]["resources"][0]["readers"], 2);
+    assert_eq!(
+        overview["pools"][0]["resources"][0]["write_available"],
+        false
+    );
+    let write = fixture.run(&[
+        "resource", "acquire", "server", "consumer", "--mode", "write", "--name", "writer",
+    ]);
+    assert!(!write.status.success());
+    fixture.restart();
+    assert_eq!(
+        fixture.ok(&["resource", "acquire", "server", "consumer"]),
+        lease
+    );
+    let removal = fixture.run(&["repo", "rm", "server", "--yes"]);
+    assert!(!removal.status.success());
+    assert!(String::from_utf8_lossy(&removal.stderr).contains("borrowed"));
+    assert!(related.join("DESIGN.MD").exists());
+    // Definition edits do not change the recorded checkout on renewal or release.
+    set_repository_toml(
+        &fixture,
+        "[resources.server]\nkind='repo'\nrepo='missing'\n",
+    );
+    assert_eq!(
+        fixture.ok(&["resource", "acquire", "server", "consumer"]),
+        lease
+    );
+    set_repository_toml(&fixture, "[resources.server]\nkind='repo'\nrepo='server'\n");
+    let before = git(&related, &["status", "--porcelain"]);
+    let head = git(&related, &["rev-parse", "HEAD"]);
+    let worktrees = git(&related, &["worktree", "list", "--porcelain"]);
+    fixture.ok(&["rm", "consumer", "--yes"]);
+    assert_eq!(git(&related, &["status", "--porcelain"]), before);
+    assert_eq!(git(&related, &["rev-parse", "HEAD"]), head);
+    assert_eq!(
+        git(&related, &["worktree", "list", "--porcelain"]),
+        worktrees
+    );
+    fixture.ok(&["resource", "release", "server", "other-consumer"]);
+    fixture.ok(&["repo", "rm", "server", "--yes"]);
+    assert!(!related.exists());
+}
+
+#[test]
+fn repository_resources_validate_targets_before_claiming_and_bind_approvals() {
+    let fixture = Fixture::new();
+    let related = init_repo(fixture.root.path(), "server", &[("tracked", "server\n")]);
+    fixture.ok(&["repo", "add", related.to_str().unwrap(), "--name", "server"]);
+    set_repository_toml(
+        &fixture,
+        "[resources.server]\nkind='repo'\nrepo='server'\nrequires_approval=true\n",
+    );
+    fixture.add("consumer");
+    set_repository_toml(
+        &fixture,
+        "[resources.server]\nkind='repo'\nrepo='missing'\n",
+    );
+    let missing = fixture.run(&["resource", "acquire", "server", "consumer"]);
+    assert!(!missing.status.success());
+    assert!(String::from_utf8_lossy(&missing.stderr).contains("unknown related repository"));
+    assert!(
+        fixture.ok(&["inspect", "consumer"])["resources"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    set_repository_toml(
+        &fixture,
+        "[resources.server]\nkind='repo'\nrepo='server'\nrequires_approval=true\n",
+    );
+    let moved = fixture.root.path().join("moved-server");
+    fs::rename(&related, &moved).unwrap();
+    let unavailable = fixture.run(&["resource", "acquire", "server", "consumer"]);
+    assert!(!unavailable.status.success());
+    assert!(String::from_utf8_lossy(&unavailable.stderr).contains("checkout is unavailable"));
+    fs::rename(&moved, &related).unwrap();
+    let pending = pending_access(scoped_command(
+        &fixture,
+        "consumer",
+        &[
+            "resource",
+            "acquire",
+            "server",
+            "--reason",
+            "Read server contract",
+        ],
+    ));
+    assert_eq!(
+        pending["specification"]["repository"]["path"],
+        related.to_str().unwrap()
+    );
+    fixture.ok(&["access", "approve", pending["id"].as_str().unwrap()]);
+    // Reusing the configured name for another registration cannot reuse approval.
+    fixture.ok(&["repo", "rm", "server", "--yes"]);
+    let replacement = init_repo(
+        fixture.root.path(),
+        "replacement",
+        &[("tracked", "other\n")],
+    );
+    fixture.ok(&[
+        "repo",
+        "add",
+        replacement.to_str().unwrap(),
+        "--name",
+        "server",
+    ]);
+    let changed = scoped_command(&fixture, "consumer", &["resource", "acquire", "server"]);
+    assert!(!changed.status.success());
+    assert!(String::from_utf8_lossy(&changed.stderr).contains("settings changed"));
+    fixture.ok(&["resource", "release", "server", "consumer"]);
+    let pending = pending_access(scoped_command(
+        &fixture,
+        "consumer",
+        &[
+            "resource",
+            "acquire",
+            "server",
+            "--reason",
+            "Read replacement contract",
+        ],
+    ));
+    fixture.ok(&["access", "approve", pending["id"].as_str().unwrap()]);
+    let granted = scoped_command(&fixture, "consumer", &["resource", "acquire", "server"]);
+    assert!(
+        granted.status.success(),
+        "{}",
+        String::from_utf8_lossy(&granted.stderr)
+    );
+    let lease: Value = serde_json::from_slice(&granted.stdout).unwrap();
+    assert_eq!(lease["repository"]["path"], replacement.to_str().unwrap());
+}
+
 fn pending_access(output: Output) -> Value {
     assert_eq!(
         output.status.code(),

@@ -12,7 +12,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 22;
+const SCHEMA_VERSION: i64 = 23;
 
 #[cfg(test)]
 mod benchmark;
@@ -262,6 +262,15 @@ const MIGRATIONS: &[(i64, &str, Option<Precondition>)] = &[
         );",
         None,
     ),
+    (
+        23,
+        "CREATE TABLE IF NOT EXISTS repository_resource_leases (
+            lease_id TEXT PRIMARY KEY REFERENCES resource_leases(id) ON DELETE CASCADE,
+            repository_id TEXT NOT NULL REFERENCES repositories(id), path TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS repository_resource_owner ON repository_resource_leases(repository_id);",
+        None,
+    ),
 ];
 
 fn migrate(db: &mut Connection) -> Result<()> {
@@ -501,6 +510,15 @@ mod tests {
                     workspace_id TEXT PRIMARY KEY REFERENCES workspaces(id) ON DELETE CASCADE,
                     url TEXT NOT NULL, error TEXT
                 );",
+            )?;
+        }
+        if version >= 23 {
+            db.execute_batch(
+                "CREATE TABLE repository_resource_leases (
+                    lease_id TEXT PRIMARY KEY REFERENCES resource_leases(id) ON DELETE CASCADE,
+                    repository_id TEXT NOT NULL REFERENCES repositories(id), path TEXT NOT NULL
+                );
+                CREATE INDEX repository_resource_owner ON repository_resource_leases(repository_id);",
             )?;
         }
         if version >= 21 {
