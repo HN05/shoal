@@ -217,3 +217,91 @@ async fn completion_rechecks_work_after_removal_hooks() {
         "preserve me"
     );
 }
+
+#[tokio::test]
+async fn continuation_cancels_completion_and_blocks_idle_and_merge_cleanup() {
+    let (_root, manager, workspace) = fixture().await;
+    assert!(!manager.manual_completion(&workspace.id).await.unwrap());
+    manager.mark_done(&workspace.id, Some(true)).await.unwrap();
+    manager.continue_workspace(&workspace.id).await.unwrap();
+    manager.continue_workspace(&workspace.id).await.unwrap();
+    assert!(
+        manager
+            .cleanup_snapshot(&workspace.id)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    manager
+        .set_pr(&workspace.id, Action::Acknowledge)
+        .await
+        .unwrap();
+    let reopened = Manager::open(manager.paths.clone()).await.unwrap();
+    let inspection = reopened.inspect_workspace(&workspace.id).await.unwrap();
+    assert!(inspection.manual_completion);
+    assert!(inspection.completion.is_none());
+    assert!(
+        reopened
+            .cleanup_snapshot(&workspace.id)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    reopened.sweep_completed().await.unwrap();
+    reopened.sweep_prs().await.unwrap();
+    assert!(workspace.path.exists());
+    assert!(reopened.completion(&workspace.id).await.unwrap().is_none());
+    reopened.mark_done(&workspace.id, Some(true)).await.unwrap();
+    assert!(!reopened.manual_completion(&workspace.id).await.unwrap());
+    reopened.sweep_prs().await.unwrap();
+    assert!(!workspace.path.exists());
+    assert!(!reopened.manual_completion(&workspace.id).await.unwrap());
+    reopened.store.shutdown().await;
+}
+
+#[tokio::test]
+async fn continuation_defers_issue_and_confirmed_watch_completion_until_done() {
+    let (_root, manager, workspace) = fixture().await;
+    let head = crate::forge::pr::current_head(&workspace).await.unwrap();
+    let id = workspace.id.clone();
+    let record = serde_json::json!({
+        "url": "https://github.com/team/repo/pull/1",
+        "head": null,
+        "merged_head": head,
+        "error": null,
+    })
+    .to_string();
+    manager
+        .store
+        .run(move |db| {
+            // A confirmed watch needs no network. The issue has no matching origin,
+            // so a lookup would fail if continuation did not pause the issue sweep.
+            db.execute(
+                "INSERT INTO pr_cleanup(workspace_id,record) VALUES (?1,?2)",
+                rusqlite::params![id, record],
+            )?;
+            db.execute(
+                "INSERT INTO workspace_issue(workspace_id,url) VALUES (?1,?2)",
+                rusqlite::params![id, "https://github.com/team/repo/issues/1"],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    manager.continue_workspace(&workspace.id).await.unwrap();
+    manager.sweep_issues().await.unwrap();
+    manager.sweep_prs().await.unwrap();
+    let inspection = manager.inspect_workspace(&workspace.id).await.unwrap();
+    assert!(inspection.completion.is_none());
+    assert!(inspection.issue.unwrap().error.is_none());
+    assert!(inspection.pr_cleanup.unwrap().error.is_none());
+    assert!(manager.notifications(true, 100).await.unwrap().is_empty());
+    // Explicit completion still applies its keep/cleanup choice and merge checks.
+    manager.mark_done(&workspace.id, Some(false)).await.unwrap();
+    manager.sweep_issues().await.unwrap();
+    manager.sweep_prs().await.unwrap();
+    assert!(workspace.path.exists());
+    manager.mark_done(&workspace.id, Some(true)).await.unwrap();
+    manager.sweep_prs().await.unwrap();
+    assert!(!workspace.path.exists());
+}

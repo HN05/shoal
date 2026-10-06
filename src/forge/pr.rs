@@ -266,7 +266,9 @@ impl Manager {
     pub async fn sweep_prs(&self) -> Result<()> {
         let _guard = self.pr_gate.lock().await;
         for workspace in self.list_workspaces().await? {
-            if workspace.state != crate::state::WorkspaceState::Ready {
+            if workspace.state != crate::state::WorkspaceState::Ready
+                || self.manual_completion(&workspace.id).await?
+            {
                 continue;
             }
             let mut registration = match self.pr_registration(&workspace.id).await {

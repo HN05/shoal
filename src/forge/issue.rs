@@ -116,7 +116,9 @@ impl Manager {
         let Some(issue) = self.issue_registration(&workspace.id).await? else {
             return Ok(());
         };
-        if self.completion(&workspace.id).await?.is_some() {
+        if self.manual_completion(&workspace.id).await?
+            || self.completion(&workspace.id).await?.is_some()
+        {
             return Ok(());
         }
         self.verify_worktree(workspace).await?;

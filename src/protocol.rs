@@ -149,6 +149,9 @@ pub enum Method {
         path: std::path::PathBuf,
     },
     ListWorkspaces,
+    WorkspaceContinue {
+        workspace: String,
+    },
     WorkspaceDone {
         workspace: String,
         cleanup: Option<bool>,

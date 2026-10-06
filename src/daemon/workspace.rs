@@ -246,6 +246,11 @@ impl Manager {
         self.store
             .run(move |db| {
                 Ok(Inspection {
+                    manual_completion: store::exists(
+                        db,
+                        "SELECT 1 FROM workspace_continuation WHERE workspace_id=?1",
+                        [&workspace.id],
+                    )?,
                     issue,
                     completion,
                     pr_cleanup,

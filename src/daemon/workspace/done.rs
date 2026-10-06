@@ -29,6 +29,43 @@ impl Manager {
             .await
     }
 
+    pub async fn manual_completion(&self, id: &str) -> Result<bool> {
+        let id = id.to_owned();
+        self.store
+            .run(move |db| {
+                store::exists(
+                    db,
+                    "SELECT 1 FROM workspace_continuation WHERE workspace_id=?1",
+                    [id],
+                )
+            })
+            .await
+    }
+
+    /// Keep an unfinished assignment alive until an explicit done signal.
+    pub async fn continue_workspace(&self, selector: &str) -> Result<()> {
+        let _guard = self.pr_gate.lock().await;
+        let workspace = self.workspace(selector).await?;
+        self.verify_worktree(&workspace).await?;
+        self.store
+            .run(move |db| {
+                let tx = db.transaction()?;
+                store::require_ready(&tx, &workspace.id)?;
+                tx.execute(
+                    "INSERT INTO workspace_continuation(workspace_id) VALUES (?1)
+                     ON CONFLICT(workspace_id) DO NOTHING",
+                    [&workspace.id],
+                )?;
+                tx.execute(
+                    "DELETE FROM workspace_completion WHERE workspace_id=?1",
+                    [&workspace.id],
+                )?;
+                tx.commit()?;
+                Ok(())
+            })
+            .await
+    }
+
     pub async fn mark_done(&self, selector: &str, cleanup: Option<bool>) -> Result<Completion> {
         // Serialize keep/cleanup choices with automatic completion sweeps.
         let _guard = self.pr_gate.lock().await;
@@ -75,6 +112,10 @@ impl Manager {
                  ON CONFLICT(workspace_id) DO UPDATE SET record=excluded.record",
                     rusqlite::params![id, record],
                 )?;
+                tx.execute(
+                    "DELETE FROM workspace_continuation WHERE workspace_id=?1",
+                    [&id],
+                )?;
                 tx.commit()?;
                 Ok(())
             })
@@ -112,6 +153,9 @@ impl Manager {
     /// A keep choice also blocks older PR watches. A completion must never
     /// authorize removal of a later revision of the assignment.
     pub(crate) async fn completion_allows_cleanup(&self, workspace: &Workspace) -> Result<bool> {
+        if self.manual_completion(&workspace.id).await? {
+            return Ok(false);
+        }
         let Some(completion) = self.completion(&workspace.id).await? else {
             return Ok(true);
         };

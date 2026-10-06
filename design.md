@@ -231,7 +231,7 @@ Commands launched through Shoal inherit a daemon-validated scope token that
 confines them to their own workspace: status, inspect, execute, setup, merge, and resources.
 `land`, creation, removal, reconciliation, other workspaces, repository
 administration, and service control need an unscoped caller. PR registration,
-manual merge acknowledgement, and completion signals are own-workspace exceptions.
+manual merge acknowledgement, and assignment continuation/completion are own-workspace exceptions.
 Effective configuration may be read for the caller's own workspace; changing it
 needs an unscoped caller.
 Nested executions keep scope.
@@ -464,7 +464,10 @@ reads use bounded concurrency, retain workspace order and report every failure.
 Workspace completion uses `[done] cleanup` (default true), resolved through the
 normal configuration layers with explicit keep and cleanup overrides. Completion
 is persisted separately from lifecycle readiness, binds to HEAD, and notifies the
-user; it does not assert that work was merged. The daemon runs `post_done_cmd`
+user; it does not assert that work was merged. Own-workspace continuation cancels
+pending completion and defers issue, PR and idle cleanup until explicit completion,
+persisting across restarts while preserving associations and merge requirements.
+The daemon runs `post_done_cmd`
 after persisting explicit or automatic completion and before cleanup, using normal
 config precedence and the worktree's hook identity plus the keep/cleanup choice.
 It is bounded, excludes lifecycle and permit changes, and reports failure through

@@ -37,7 +37,7 @@ when behavior changes, distinguishing decisions from proposals.
 - Workspace commands inherit a scope token. Enforce own-worktree resource access
   in the daemon and deny workspace allocation/removal/recovery and shared
   repository/service administration; own-workspace setup, PR watches, and merge
-  acknowledgements and completion signals are allowed.
+  acknowledgements and assignment continuation/completion are allowed.
   Scope is cooperative, not a boundary against hostile same-user processes.
 - Notifications are daemon records the CLI shows: record them where the daemon
   decides (busy resources, port conflicts, agent-shortcut exits, its own
@@ -56,7 +56,9 @@ when behavior changes, distinguishing decisions from proposals.
   cleanup, retaining the default branch unless explicitly deleted. PR cleanup is
   on by default: all watched PRs must merge and cover HEAD, then record completion
   using its configured cleanup default or existing choice. Cleanup stops tracked
-  agents, verifies clean merged HEAD, and uses that path.
+  agents, verifies clean merged HEAD, and uses that path. Assignment continuation
+  cancels pending completion and defers issue, PR and idle cleanup until explicit
+  completion, persisting across restarts and preserving associations and merge checks.
   Completion cleanup without a PR registration requires every commit pushed or
   on the local default branch, retaining dirty or newer work through the same
   removal path; a keep choice suppresses idle and PR cleanup. Associated issues

@@ -47,7 +47,7 @@ instructions instead of the PR delivery guidance below.
 - Scope: workspace commands carry a scope token and get own-worktree access
   only; workspace allocation/removal/recovery and shared repository/service
   administration stay denied, while own-workspace setup, PR registration,
-  merge acknowledgements, completion signals and effective-configuration reads are allowed;
+  merge acknowledgements, assignment continuation/completion and effective-configuration reads are allowed;
   notifications are read by the unscoped user only and never fail the
   operation they record. PR cleanup defaults on,
   completes the workspace only after every watched PR merges and the set contains
@@ -119,6 +119,8 @@ instructions instead of the PR delivery guidance below.
   repository's remote; unregistered issue or PR URLs offer interactive callers to
   register the repository URL and otherwise name the registration command. Lookup failures or already-closed issues create nothing. The
   canonical URL persists before tracked setup or agent launch and cannot be replaced.
+  Assignment continuation cancels pending completion and defers issue, PR and idle
+  cleanup until explicit done, across restarts, preserving associations and merge checks.
   Associated issues suppress idle cleanup and complete the assignment once confirmed
   closed, without replacing an existing completion or bypassing removal checks.
   Lookup failures and changed origin identity never count as closure.
