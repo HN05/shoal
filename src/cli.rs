@@ -159,6 +159,8 @@ pub enum Command {
     },
     /// Run or retry workspace setup.
     Setup { workspace: Option<String> },
+    /// Continue working until explicit done, deferring issue, PR and idle cleanup.
+    Continue { workspace: Option<String> },
     /// Mark the assignment finished; by default stop tracked commands and clean up safely.
     Done {
         workspace: Option<String>,

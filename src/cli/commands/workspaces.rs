@@ -845,6 +845,9 @@ fn render_status(status: &WorkspaceStatus, json: bool) {
             println!("  {}", palette.paint(Style::Warning, error));
         }
     }
+    if inspection.manual_completion {
+        println!("Completion:    waiting for explicit done");
+    }
     if let Some(completion) = &inspection.completion {
         println!(
             "Completion:    done ({})",
@@ -1048,6 +1051,13 @@ pub(super) async fn exec(
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     execution::run(&ctx.paths, workspace, command, None).await
+}
+
+pub(super) async fn continue_work(ctx: &Context, workspace: Option<String>) -> Result<i32> {
+    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    request::<()>(&ctx.paths, Method::WorkspaceContinue { workspace }).await?;
+    ctx.emit("Assignment continues; call shoal done when finished.", ())?;
+    Ok(0)
 }
 
 pub(super) async fn done(

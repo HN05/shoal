@@ -367,7 +367,9 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
             "{args:?}"
         );
     }
-    for command in ["rm", "cd", "exec", "diff", "status", "inspect", "done"] {
+    for command in [
+        "rm", "cd", "exec", "diff", "status", "inspect", "continue", "done",
+    ] {
         assert!(
             complete(&[command, "fi"], fixture.root.path()).contains(&"first".into()),
             "{command}"
@@ -3403,6 +3405,7 @@ fn execution_scope_limits_management_and_expires() {
         vec!["setup", "other"],
         vec!["pr", "watch", "42", "other"],
         vec!["pr", "unwatch", "other"],
+        vec!["continue", "other"],
         vec!["done", "other", "--keep"],
         vec!["done", "other", "--cleanup"],
         vec!["config", "show", "other"],
@@ -13757,4 +13760,70 @@ fn herdr_closes_after_detached_happy_execution_finishes() {
             .unwrap()
             .is_empty()
     );
+}
+
+#[test]
+fn scoped_continuation_survives_restart_and_explicit_done_cleans_up() {
+    for tool in ["gh", "fj"] {
+        let mut fixture = issue_completion_fixture(tool, true);
+        let hook = install_done_hook(&fixture);
+        set_repository_toml(&fixture, &format!("post_done_cmd = '{}'\n", hook.display()));
+        fixture.ok(&[
+            "exec",
+            "issue-work",
+            "--",
+            env!("CARGO_BIN_EXE_shoal"),
+            "--json",
+            "continue",
+        ]);
+        write_issue_state(&fixture, tool, "Closed");
+        fixture.restart();
+        // Repeating the request leaves the persisted choice intact.
+        fixture.ok(&["continue", "issue-work"]);
+        let inspection = fixture.ok(&["inspect", "issue-work"]);
+        assert_eq!(inspection["manual_completion"], true);
+        assert!(inspection["completion"].is_null());
+        assert!(!fixture.root.path().join("done-events").exists());
+        let status = fixture
+            .command()
+            .args(["status", "issue-work"])
+            .output()
+            .unwrap();
+        assert!(status.status.success());
+        assert!(String::from_utf8_lossy(&status.stdout).contains("waiting for explicit done"));
+        // Merged watches remain registered without completing the assignment.
+        let path = Path::new(inspection["workspace"]["path"].as_str().unwrap());
+        let head = git(path, &["rev-parse", "HEAD"]).trim().to_owned();
+        let response = if tool == "gh" {
+            serde_json::json!({
+                "number": 1, "state": "MERGED", "headRefName": "issue-work",
+                "commits": [{"oid": head}],
+            })
+            .to_string()
+        } else {
+            "Title #1\nBy user — Merged — +1 -0\nFrom `issue-work` into `main`\n".into()
+        };
+        fs::write(fixture.root.path().join("pr-response"), response).unwrap();
+        fs::write(
+            fixture.root.path().join("commits"),
+            format!("commit {head} (+1, -0)\nAuthor: Test\n"),
+        )
+        .unwrap();
+        fs::write(fixture.root.path().join("bin").join(tool),
+            "#!/bin/sh\nfor arg; do if [ \"$arg\" = pr ]; then pr=true; fi; last=$arg; done\nif [ \"$last\" = commits ]; then cat \"$HOME/commits\"; elif [ \"$pr\" = true ]; then cat \"$HOME/pr-response\"; else cat \"$HOME/issue-response\"; fi\n"
+        ).unwrap();
+        fixture.ok(&["pr", "watch", "1", "issue-work"]);
+        fixture.restart();
+        fixture.ok(&["continue", "issue-work"]);
+        assert!(fixture.ok(&["inspect", "issue-work"])["completion"].is_null());
+        fixture.ok(&["done", "issue-work"]);
+        wait_removed(&fixture, "issue-work");
+        assert_eq!(
+            fs::read_to_string(fixture.root.path().join("done-events"))
+                .unwrap()
+                .lines()
+                .count(),
+            1
+        );
+    }
 }

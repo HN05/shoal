@@ -315,6 +315,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
                 review::pull_request(&ctx, url, repository, reviewer, args).await
             }
         },
+        Command::Continue { workspace } => workspaces::continue_work(&ctx, workspace).await,
         Command::Done {
             workspace,
             keep,

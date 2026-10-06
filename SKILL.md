@@ -51,8 +51,14 @@ workspaces; the human or console session does.
 
 Register each PR with `shoal pr watch <number-or-url>`. Watches accumulate per
 workspace; all must merge, and the merged set must contain current HEAD, before
-Shoal marks the assignment done automatically. `shoal pr unwatch --pr <number-or-url>`
-cancels one watch; omit `--pr` to cancel all. Closed, unmerged PRs keep waiting.
+Shoal marks the assignment done automatically unless waiting for explicit `done`.
+`shoal pr unwatch --pr <number-or-url>` cancels one watch; omit `--pr` to cancel
+all. Closed, unmerged PRs keep waiting.
+
+If you receive more work, call `shoal continue` before closing the issue or
+merging a watched PR. It cancels pending completion and defers issue, PR and idle
+cleanup until you explicitly call `shoal done`, persisting across restarts and
+preserving issue associations and watch merge requirements.
 
 To finish without waiting for watches, first cancel them and call `shoal done`
 as your last command. It defaults to cleanup, which may stop your execution.

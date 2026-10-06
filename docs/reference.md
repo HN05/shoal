@@ -793,6 +793,14 @@ either direction and cannot be combined. The setting follows normal repository
 and worktree configuration precedence. Scoped agents may mark only their own
 workspace done; completion does not verify or assert a merge.
 
+`shoal continue [workspace]` cancels pending completion and defers issue, PR and
+idle cleanup until an explicit `shoal done`. Scoped agents may continue only their
+own workspace. The choice persists across restarts, leaves tracked commands
+running, and is shown as `manual_completion` in `status` and `inspect`. Issue
+associations and PR watches remain registered; `done` still applies their merge
+requirements and its usual keep/cleanup choice. Call `continue` before closing
+the issue or merging the PR to prevent cleanup from starting.
+
 `post_done_cmd` runs in the daemon after recording completion, before cleanup,
 with the worktree as its working directory, no terminal, and a 60-second limit.
 It follows normal global and repository configuration precedence and receives the
@@ -817,9 +825,9 @@ hook may signal `done` only when no `post_done_cmd` is configured; otherwise the
 completion hook would conflict with its lifecycle/permit guard.
 
 For workspaces opened with `--issue` or `shoal issue`, the daemon polls the saved
-issue URL every ~30 seconds using its `gh`/`fj` login. Confirmed closure records
-`done` with the configured default, preserving any existing completion. Issue
-associations suppress idle cleanup; failed lookups retain the workspace and appear
+issue URL every ~30 seconds using its `gh`/`fj` login unless waiting for explicit
+`done`. Confirmed closure records `done` with the configured default, preserving
+any existing completion. Issue associations suppress idle cleanup; failed lookups retain the workspace and appear
 in `status` and `inspect`. Reopening an issue does not undo completion.
 
 Cleanup runs in the daemon without an idle delay, stopping tracked commands and
@@ -844,10 +852,10 @@ origin remote; URLs must match it, and each PR must name the recorded branch.
 Shoal stores no forge credentials. Watches poll every ~30 seconds and suppress
 idle cleanup.
 
-Once every watched PR has merged and at least one contains current HEAD, Shoal
-records `done` automatically. It uses `[done] cleanup`, preserving any previously
-recorded completion choice. A confirmed set survives restart without completing
-again. Cleanup uses normal branch retention and resource release, retaining dirty
+Unless waiting for explicit `done`, once every watched PR has merged and at least
+one contains current HEAD, Shoal records `done` automatically. It uses
+`[done] cleanup`, preserving any previously recorded completion choice. A confirmed
+set survives restart without completing again. Cleanup uses normal branch retention and resource release, retaining dirty
 or newer work. `status` lists watched URLs; `inspect` shows lookup and removal
 errors in `pr_cleanup`. Invalid registrations retain the workspace.
 
