@@ -400,8 +400,12 @@ option: saved config, worktree file, global config, then the built-in default.
 One option table defines both the merge and its provenance, so a reported layer
 is the one whose value is in use; the daemon resolves a workspace's settings
 once per request and every use site reads them rather than layering on its own.
-Prompt templates follow the same precedence, with repository-root Markdown files
-and global files beside `config.toml` below inline TOML values at each level.
+Prompt templates select repository additions by saved/worktree precedence and
+append them to global guidance, using the bundled issue template when no global
+issue template is configured. Empty repository values suppress only the addition.
+Repository-root Markdown files and global files beside `config.toml` sit below
+inline TOML values at each level; provenance names the highest configured layer
+and reports the combined text.
 `install` adds missing templates from the bundled repository-root defaults;
 rendering substitutes known fields once without evaluating their contents.
 Before a workspace exists, the registered checkout's file stands in for the

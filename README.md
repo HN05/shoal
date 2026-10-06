@@ -84,7 +84,7 @@ a detached [Happy](https://github.com/slopus/happy) session that appears in the
 Happy app. `shoal issue` takes the same `--agent`, or `default_agent = "codex"`
 from the repository or global config. Edit `~/.config/shoal/issue-template.md`
 to customize issue prompts and `agent-template.md` for general instructions;
-put those files in a repository root to override them for that project.
+put those files in a repository root to append project-specific guidance.
 New workspaces branch from the repository's default branch unless `--base REF`
 is supplied to `add` or `issue`. With shell integration, `shoal add` enters the
 workspace.

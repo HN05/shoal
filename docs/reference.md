@@ -470,12 +470,16 @@ for GitHub.com; configure the corresponding token for each enterprise host you u
 ### Prompt templates
 
 `issue_template` and `agent_template` in the saved repository TOML win over
-the worktree's TOML values or root `issue-template.md` and `agent-template.md`,
-then the global TOML values or corresponding files beside `config.toml`.
-Omitted values fall through; empty values override. Without an issue template,
-Shoal uses its bundled default; without an agent template, it adds no general
-instructions. Unknown placeholders stay literal. Templates are read at launch
-without a daemon restart.
+the worktree's TOML values or root `issue-template.md` and `agent-template.md`.
+The selected repository template is appended after the global TOML value or
+corresponding file beside `config.toml`, with a blank line between nonempty
+templates. Inline TOML wins over Markdown at each level. An empty repository
+value suppresses local additions while preserving global guidance; an empty
+global value suppresses its base text. Without a global issue template, Shoal
+uses its bundled default as the base; without a global agent template, it adds
+no base instructions. `config show` reports the combined text and the highest
+layer that configured it. Unknown placeholders stay literal. Templates are
+read at launch without a daemon restart.
 
 The agent template supplies general instructions, with `{workspace}`, `{branch}`
 and `{path}` from the target worktree. Claude receives `--append-system-prompt`,

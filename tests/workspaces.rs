@@ -2600,12 +2600,16 @@ fn agent_templates_resolve_per_launch_and_reach_native_instruction_options() {
         format!("repo {}", path.display()),
         "saved \"quotes\"\n$(false) {unknown}".to_owned(),
         String::new(),
+        String::new(),
     ]
     .into_iter()
     .enumerate()
     {
         if index == 1 {
             fs::write(path.join("agent-template.md"), "repo {path}").unwrap();
+        }
+        if index == 4 {
+            fs::write(config_dir.join("agent-template.md"), "").unwrap();
         }
         if index >= 2 {
             let local = fixture.root.path().join("local.toml");
@@ -2622,6 +2626,13 @@ fn agent_templates_resolve_per_launch_and_reach_native_instruction_options() {
                 local.to_str().unwrap(),
             ]);
         }
+        let expected = if index == 4 {
+            String::new()
+        } else if index == 0 || expected.is_empty() {
+            "global instructions instructions".to_owned()
+        } else {
+            format!("global instructions instructions\n\n{expected}")
+        };
         for agent in ["codex", "claude"] {
             let mut command = fixture.command();
             command.arg(agent);
@@ -8234,7 +8245,7 @@ fn add_from_issue_uses_existing_forge_cli_and_passes_context_to_agents() {
 }
 
 #[test]
-fn issue_templates_resolve_saved_config_then_worktree_then_global() {
+fn issue_templates_append_saved_or_worktree_context_to_global() {
     let fixture = Fixture::new();
     let config_dir = fixture.root.path().join(".config/shoal");
     fs::create_dir_all(&config_dir).unwrap();
@@ -8261,13 +8272,17 @@ printf '%s' '{"state":"OPEN","number":44,"title":"Literal {body}","body":"$(fals
     fixture.add_github_origin();
     for (index, expected) in [
         "global 44: Literal {body} $(false)",
-        "repo Literal {body}",
-        "saved $(false)",
+        "global 44: Literal {body} $(false)\n\nrepo Literal {body}",
+        "global 44: Literal {body} $(false)\n\nsaved $(false)",
+        "global 44: Literal {body} $(false)",
         "",
     ]
     .into_iter()
     .enumerate()
     {
+        if index == 4 {
+            fs::write(config_dir.join("issue-template.md"), "").unwrap();
+        }
         if index == 1 {
             fs::write(fixture.repo.join("issue-template.md"), "repo {title}").unwrap();
             git(&fixture.repo, &["add", "issue-template.md"]);

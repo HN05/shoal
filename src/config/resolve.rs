@@ -14,8 +14,7 @@ use crate::{
     hooks::HookKind,
 };
 
-/// Settings a repository may set, after every layer: a repository value
-/// wins, an omitted one keeps the global value or the built-in default.
+/// Settings after every layer, including repository additions to global templates.
 #[derive(Debug, Serialize)]
 pub struct Effective {
     pub commands: named_commands::Commands,
@@ -84,7 +83,7 @@ impl Stack {
         // concern, so a conflict there never blocks the workspace's settings.
         crate::daemon::resources::definitions(&repository.resources, &repository.resource_pools)
             .context("layered repository config")?;
-        Effective::from_merged(repository.over(global.over(built_in)))
+        Effective::from_merged(repository.over_global(global.over(built_in)))
     }
 
     /// Every option with its value and winning layer, in configuration order.
@@ -126,6 +125,13 @@ impl RepoConfig {
     pub fn over(mut self, mut base: Self) -> Self {
         for field in fields() {
             field.layer(&mut self, &mut base);
+        }
+        base
+    }
+
+    fn over_global(mut self, mut base: Self) -> Self {
+        for field in fields() {
+            field.layer_repository(&mut self, &mut base);
         }
         base
     }
@@ -207,6 +213,7 @@ fn built_in() -> RepoConfig {
     let simulators = Simulators::default();
     let auto_cleanup = AutoCleanup::default();
     RepoConfig {
+        issue_template: Some(config::templates::ISSUE_DEFAULT.into()),
         commands: named_commands::defaults(),
         herdr: config::repo::Herdr {
             tab_name: None,
@@ -246,6 +253,10 @@ fn built_in() -> RepoConfig {
 trait Field {
     /// Move `top`'s value for this option onto `base` where `top` sets it.
     fn layer(&self, top: &mut RepoConfig, base: &mut RepoConfig);
+    /// Apply the selected repository value to the global/default value.
+    fn layer_repository(&self, top: &mut RepoConfig, base: &mut RepoConfig) {
+        self.layer(top, base);
+    }
     /// Append the effective value(s) with the layer each came from.
     fn entries(&self, sources: &[(&RepoConfig, Layer)], entries: &mut Vec<Entry>) -> Result<()>;
 }
@@ -278,6 +289,58 @@ impl<T: Serialize> Field for Scalar<T> {
             layer,
         });
         Ok(())
+    }
+}
+
+/// Repository templates select one local addition to the global/default text.
+struct Template(Scalar<String>);
+
+impl Field for Template {
+    fn layer(&self, top: &mut RepoConfig, base: &mut RepoConfig) {
+        self.0.layer(top, base);
+    }
+
+    fn layer_repository(&self, top: &mut RepoConfig, base: &mut RepoConfig) {
+        let addition = (self.0.get_mut)(top).take();
+        let value = (self.0.get_mut)(base);
+        *value = append_template(value.take(), addition);
+    }
+
+    fn entries(&self, sources: &[(&RepoConfig, Layer)], entries: &mut Vec<Entry>) -> Result<()> {
+        let find = |repository| {
+            sources.iter().find_map(|(config, layer)| {
+                let is_repository =
+                    matches!(layer, Layer::WorktreeFile | Layer::SavedRepositoryConfig);
+                if is_repository != repository {
+                    return None;
+                }
+                (self.0.get)(config).as_ref().map(|value| (value, *layer))
+            })
+        };
+        let base = find(false);
+        let addition = find(true);
+        entries.push(Entry {
+            key: self.0.key.into(),
+            value: serde_json::to_value(append_template(
+                base.map(|(value, _)| value.clone()),
+                addition.map(|(value, _)| value.clone()),
+            ))?,
+            layer: addition
+                .or(base)
+                .map_or(Layer::BuiltInDefault, |(_, layer)| layer),
+        });
+        Ok(())
+    }
+}
+
+fn append_template(base: Option<String>, addition: Option<String>) -> Option<String> {
+    match (base, addition) {
+        (Some(base), Some(addition)) if !base.is_empty() && !addition.is_empty() => {
+            Some(format!("{base}\n\n{addition}"))
+        }
+        (Some(base), Some(addition)) if base.is_empty() => Some(addition),
+        (Some(base), _) => Some(base),
+        (None, addition) => addition,
     }
 }
 
@@ -416,8 +479,16 @@ fn build_fields() -> Vec<Box<dyn Field + Send + Sync>> {
     let mut fields: Vec<Box<dyn Field + Send + Sync>> = vec![
         named!("commands", commands),
         named!("agent_resume", agent_resume),
-        scalar!(issue_template),
-        scalar!(agent_template),
+        Box::new(Template(Scalar {
+            key: "issue_template",
+            get: |config| &config.issue_template,
+            get_mut: |config| &mut config.issue_template,
+        })),
+        Box::new(Template(Scalar {
+            key: "agent_template",
+            get: |config| &config.agent_template,
+            get_mut: |config| &mut config.agent_template,
+        })),
         scalar!(agent_auth.fj),
         scalar!(agent_auth.gh),
         scalar!(git_profile),
@@ -483,6 +554,106 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
             saved_repository_config: parse(saved).unwrap(),
         };
         Stack::new(&global, &layers)
+    }
+
+    #[test]
+    fn templates_append_one_repository_value_and_report_the_composed_text() {
+        for key in ["issue_template", "agent_template"] {
+            let default = (key == "issue_template").then_some(config::templates::ISSUE_DEFAULT);
+            let config = |value: Option<&str>| {
+                value.map_or_else(String::new, |value| {
+                    format!("{key} = {}", toml::Value::String(value.into()))
+                })
+            };
+            for (global, worktree, saved, expected, layer) in [
+                (
+                    None,
+                    None,
+                    None,
+                    default.map(str::to_owned),
+                    Layer::BuiltInDefault,
+                ),
+                (
+                    Some("global"),
+                    None,
+                    None,
+                    Some("global".into()),
+                    Layer::GlobalConfig,
+                ),
+                (
+                    Some("global"),
+                    Some("file"),
+                    None,
+                    Some("global\n\nfile".into()),
+                    Layer::WorktreeFile,
+                ),
+                (
+                    Some("global"),
+                    Some("file"),
+                    Some("saved"),
+                    Some("global\n\nsaved".into()),
+                    Layer::SavedRepositoryConfig,
+                ),
+                (
+                    Some("global"),
+                    Some("file"),
+                    Some(""),
+                    Some("global".into()),
+                    Layer::SavedRepositoryConfig,
+                ),
+                (
+                    Some("global"),
+                    Some(""),
+                    None,
+                    Some("global".into()),
+                    Layer::WorktreeFile,
+                ),
+                (
+                    Some(""),
+                    Some("file"),
+                    None,
+                    Some("file".into()),
+                    Layer::WorktreeFile,
+                ),
+                (
+                    Some(""),
+                    None,
+                    None,
+                    Some(String::new()),
+                    Layer::GlobalConfig,
+                ),
+                (
+                    None,
+                    Some("file"),
+                    None,
+                    Some(default.map_or_else(|| "file".into(), |base| format!("{base}\n\nfile"))),
+                    Layer::WorktreeFile,
+                ),
+                (
+                    None,
+                    Some("file"),
+                    Some(""),
+                    default.map(str::to_owned).or(Some(String::new())),
+                    Layer::SavedRepositoryConfig,
+                ),
+            ] {
+                let stack = stack(&config(global), &config(worktree), &config(saved));
+                let effective = json(&stack.clone().resolve().unwrap());
+                assert_eq!(
+                    effective[key],
+                    json(&expected),
+                    "{key}: {global:?}, {worktree:?}, {saved:?}"
+                );
+                let entry = stack
+                    .report()
+                    .unwrap()
+                    .into_iter()
+                    .find(|entry| entry.key == key)
+                    .unwrap();
+                assert_eq!(entry.value, effective[key]);
+                assert_eq!(entry.layer, layer);
+            }
+        }
     }
 
     #[test]
