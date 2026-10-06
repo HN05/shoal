@@ -57,6 +57,7 @@ states!(
         #[default]
         Semaphore => "semaphore",
         Rwlock => "rwlock",
+        Repo => "repo",
     }
 );
 
@@ -72,6 +73,8 @@ pub struct ResourceConfig {
     pub requires_approval: bool,
     pub approval_lifetime: crate::daemon::access::Lifetime,
     pub kind: ResourceKind,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub repo: Option<String>,
     pub capacity: u32,
     pub reason: Option<String>,
 }
@@ -82,6 +85,7 @@ impl Default for ResourceConfig {
             requires_approval: false,
             approval_lifetime: crate::daemon::access::Lifetime::Lease,
             kind: ResourceKind::Semaphore,
+            repo: None,
             capacity: 1,
             reason: None,
         }
@@ -153,6 +157,7 @@ pub fn definitions(
             "capacity must be between 1 and {MAX_CAPACITY}"
         );
         for (name, resource) in &definition.resources {
+            resource.validate_repository(name)?;
             validate::lowercase_name("resource", name)?;
             validate::reason("resource", resource.reason.as_deref())?;
             ensure!(
@@ -423,6 +428,22 @@ fn grouped_usage<'a>(
 }
 
 impl ResourceConfig {
+    fn validate_repository(&self, name: &str) -> Result<()> {
+        match (self.kind, self.repo.as_deref()) {
+            (ResourceKind::Repo, Some(repo)) => {
+                validate::name("repository", repo)?;
+                ensure!(
+                    self.capacity == 1,
+                    "repo resource {name} must use capacity 1; readers share its one slot"
+                );
+            }
+            (ResourceKind::Repo, None) => bail!("repo resource {name} requires repo"),
+            (_, Some(_)) => bail!("repo is only valid for kind = repo on resource {name}"),
+            (_, None) => {}
+        }
+        Ok(())
+    }
+
     /// The lock mode this member grants for `requested`, or `None` when the
     /// mode does not apply to its kind.
     fn mode(&self, requested: Option<LockMode>) -> Option<LockMode> {
@@ -1045,6 +1066,11 @@ mod tests {
             "[resource_pools.p.resources.a]\ncapacity=65536",
             "[resources.x]\nreason='  '",
             "[resources.cache]\nkind='rwlock'\ncapacity=2",
+            "[resources.server]\nkind='repo'",
+            "[resources.server]\nkind='repo'\nrepo=''",
+            "[resources.server]\nkind='repo'\nrepo='../server'",
+            "[resources.server]\nkind='repo'\nrepo='server'\ncapacity=2",
+            "[resources.server]\nrepo='server'",
         ] {
             let config: crate::config::repo::RepoConfig = toml::from_str(text).unwrap();
             assert!(
@@ -1059,5 +1085,24 @@ mod tests {
             toml::from_str::<crate::config::repo::RepoConfig>("[resources.x]\nkind='unknown'")
                 .is_err()
         );
+    }
+
+    #[test]
+    fn repository_resources_validate_and_layer_by_name() -> Result<()> {
+        let base = crate::config::repo::parse(
+            "[resources.server]\nkind='repo'\nrepo='server'\nrequires_approval=true",
+        )?;
+        let local =
+            crate::config::repo::parse("[resources.server]\nkind='repo'\nrepo='other-server'")?;
+        let merged = local.over(base);
+        assert_eq!(
+            merged.resources["server"].repo.as_deref(),
+            Some("other-server")
+        );
+        assert!(!merged.resources["server"].requires_approval);
+        let json = serde_json::to_value(&merged.resources["server"])?;
+        let restored: ResourceConfig = serde_json::from_value(json)?;
+        assert_eq!(restored, merged.resources["server"]);
+        Ok(())
     }
 }

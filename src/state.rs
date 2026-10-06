@@ -178,6 +178,7 @@ mod tests {
         assert_spellings(&[
             (ResourceKind::Semaphore, "semaphore"),
             (ResourceKind::Rwlock, "rwlock"),
+            (ResourceKind::Repo, "repo"),
         ]);
         assert_spellings(&[
             (LockMode::Permit, "permit"),
