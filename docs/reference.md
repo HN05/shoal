@@ -1011,8 +1011,7 @@ cleanup sweep or `shoal rm`, retaining the branch. Ownership is proven by a
 `shoal-workspace` marker in the worktree's Git admin directory, so it survives
 reboots, device renumbering and restores. Workspaces recorded before markers
 gain one once their recorded filesystem identity verifies at startup or with
-`doctor --repair`. When ownership still cannot be verified, whether the
-metadata was replaced or its recorded identity changed, check the worktree at
+`doctor --repair`. When neither proof verifies ownership, check the worktree at
 the recorded path yourself and add `--reclaim`: it re-marks a linked worktree of
 the recorded repository on the recorded branch that no other workspace owns,
 then repairs as usual.

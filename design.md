@@ -157,7 +157,8 @@ is therefore accepted as the same worktree. The inode and birth time (statx on
 Linux independently of libc; device/inode without birth time) are still recorded
 and prove only unmarked records, which gain a marker during startup audit or
 explicit repair once that identity matches; an already changed device cannot be
-verified from an inode alone. Moved or replaced directories are never adopted silently.
+verified from an inode alone. Records with neither proof require explicit reclaim.
+Moved or replaced directories are never adopted silently.
 Existing-branch selection creates a worktree without suffixing; remote heads are
 discovered live and become local tracking branches. Local selection preserves
 commits; remote selection fast-forwards matching tracking branches. Ready owned

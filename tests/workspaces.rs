@@ -1217,6 +1217,41 @@ fn dirty_workspace_is_retained_and_failed_creation_can_be_removed() {
 }
 
 #[test]
+fn failed_creation_cannot_adopt_an_unrelated_worktree_at_its_reserved_path() {
+    let fixture = Fixture::new();
+    let failed = fixture.run(&[
+        "add",
+        fixture.repo.to_str().unwrap(),
+        "reserved",
+        "--base",
+        "does-not-exist",
+    ]);
+    assert!(!failed.status.success());
+    let reserved = PathBuf::from(
+        fixture.ok(&["inspect", "reserved"])["workspace"]["path"]
+            .as_str()
+            .unwrap(),
+    );
+    git(
+        &fixture.repo,
+        &[
+            "worktree",
+            "add",
+            "-b",
+            "unrelated",
+            reserved.to_str().unwrap(),
+            "main",
+        ],
+    );
+    let report = recovery_report(&fixture, &["doctor", "reserved", "--repair"]);
+    assert_eq!(report[0]["directory"], "unverified");
+    assert!(report[0]["issues"].to_string().contains("ownership"));
+    let removal = fixture.run(&["rm", "reserved", "--yes"]);
+    assert!(!removal.status.success());
+    assert!(reserved.exists());
+}
+
+#[test]
 fn removal_requires_branch_choice_for_differences_but_not_external_processes() {
     let fixture = Fixture::new();
     let workspace = fixture.add("unpushed");

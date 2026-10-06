@@ -51,9 +51,10 @@ pub(super) fn verify_owner(
             "Git worktree metadata is marked as another Shoal workspace's; ownership cannot be verified"
         ),
         None => {
-            if let Some(identity) = recorded {
-                verify_directory_identity(git_dir, identity)?;
-            }
+            let identity = recorded.context(
+                "Git worktree ownership is unverified; run doctor --repair --reclaim after checking the recorded worktree",
+            )?;
+            verify_directory_identity(git_dir, identity)?;
         }
     }
     Ok(())
@@ -161,7 +162,7 @@ mod tests {
         let current = directory_identity(git_dir)?;
         verify_owner(git_dir, "workspace", Some(&current))?;
         assert!(verify_owner(git_dir, "workspace", Some(stale)).is_err());
-        verify_owner(git_dir, "workspace", None)?;
+        assert!(verify_owner(git_dir, "workspace", None).is_err());
         mark_owner(git_dir, "workspace")?;
         assert_eq!(marked_owner(git_dir)?.as_deref(), Some("workspace"));
         verify_owner(git_dir, "workspace", Some(stale))?;

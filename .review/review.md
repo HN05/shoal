@@ -21,7 +21,8 @@ instructions instead of the PR delivery guidance below.
   recovery polls incomplete proof within the stop budget without weakening it.
   Worktree ownership is proven by the owner marker in the Git admin directory; the recorded
   inode/birth-time identity proves only unmarked records, which gain a marker only
-  after it still matches. Only an explicit `doctor --repair --reclaim` may
+  after it still matches; missing proofs never establish ownership.
+  Only an explicit `doctor --repair --reclaim` may
   re-establish ownership that failed verification, and only at the recorded path,
   repository and branch. Any new
   path that deletes a directory, kills a process or mutates a simulator
