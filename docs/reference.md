@@ -849,6 +849,20 @@ Keeping persists across restarts and suppresses idle and PR cleanup until a new
 With cleanup requested, shell integration leaves a clean, preserved workspace for
 `<root_dir>/<repo>`; keeping or visibly unsafe work leaves the current directory.
 
+### Workspace holds
+
+Holds are caller-named claims of workspace use, independent of assignment completion.
+They persist across command exits and daemon restarts and block automatic removal
+while the worktree exists. Issue and PR completion still record `done`; releasing
+the last hold lets cleanup recheck its usual conditions. Idle cleanup restarts its
+timer after release. Explicit removal and deleted-directory cleanup release holds.
+
+Reacquiring a name returns the original hold, including its reason. Acquisition
+requires a ready, verified worktree; hold mutations are excluded while a resource
+hook runs. Scoped callers manage only their own workspace. `status`, `inspect`,
+and `ls --json` show holds on the workspace record. `rm` lists holders before
+confirmation and includes them in its JSON result; `--yes` skips confirmation.
+
 ### PR watches and cleanup
 
 `shoal pr watch <number-or-url> [workspace]` adds a GitHub/Forgejo PR to the
@@ -895,7 +909,7 @@ Deleted directories are forgotten even when disabled, releasing resources and
 retaining branches; moved worktrees or recorded commands need manual recovery.
 File changes (including ignored files), HEAD and commands reset the timer.
 Running/unknown commands, directory users (including shells), dirty/unpushed work,
-simulator leases, permits and failed checks block cleanup. Pushed means reachable
+simulator leases, permits, holds and failed checks block cleanup. Pushed means reachable
 from locally known remote branches or the local default branch; no fetch.
 Sweeps run about every 30 seconds; timers reset on restart. The daemon needs `lsof` on PATH.
 

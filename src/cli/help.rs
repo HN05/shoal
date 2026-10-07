@@ -7,7 +7,8 @@ const GROUPS: &[(&str, &[&str])] = &[
     (
         "Workspaces",
         &[
-            "add", "issue", "ls", "cd", "status", "setup", "adopt", "continue", "done", "rm",
+            "add", "issue", "ls", "hold", "cd", "status", "setup", "adopt", "continue", "done",
+            "rm",
         ],
     ),
     (

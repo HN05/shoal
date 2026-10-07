@@ -242,8 +242,15 @@ its branch and uncommitted work. `shoal stop` keeps the workspace.
 
 Automatic cleanup removes idle, clean, pushed or landed workspaces after 10 minutes,
 and forgets workspaces whose directory you deleted yourself, keeping the branch.
-Disable it when using desktop agents whose activity Shoal cannot track. Set this
-in a repository's `.shoal.toml`, or for every repository in
+An app hosting an external session can hold its workspace while the session is open:
+
+```sh
+shoal hold acquire fix-login --name quay-thread-42 --reason "Quay thread"
+shoal hold fix-login
+shoal hold release fix-login --name quay-thread-42
+```
+
+Configure idle cleanup in a repository's `.shoal.toml`, or for every repository in
 `~/.config/shoal/config.toml` followed by `shoal daemon reload`:
 
 ```toml

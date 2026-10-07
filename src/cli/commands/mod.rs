@@ -3,6 +3,7 @@
 mod access;
 mod acquisition;
 mod configuration;
+mod holds;
 pub(super) mod issues;
 mod menu;
 mod notifications;
@@ -271,6 +272,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         } => super::herdr::worker(ctx, close_when_done, &plan).await,
         Command::Setup { workspace } => workspaces::setup(&ctx, workspace).await,
         Command::Ls => workspaces::list(&ctx).await,
+        Command::Hold { command, scope } => holds::run(&ctx, command, scope).await,
         Command::Status { workspace } => workspaces::status(&ctx, workspace).await,
         Command::Cd { workspace } => workspaces::cd(&ctx, workspace).await,
         Command::Diff { workspace } => workspaces::diff(&ctx, workspace).await,

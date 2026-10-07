@@ -821,6 +821,16 @@ fn render_status(status: &WorkspaceStatus, json: bool) {
     if let Some(error) = &workspace.error {
         println!("Error:         {}", palette.paint(Style::Error, error));
     }
+    println!("Holds:         {}", inspection.workspace.holds.len());
+    for hold in &inspection.workspace.holds {
+        println!(
+            "  {}{}",
+            hold.name,
+            hold.reason
+                .as_deref()
+                .map_or(String::new(), |r| format!(" ({r})"))
+        );
+    }
 
     println!("Executions:    {}", inspection.executions.len());
     for execution in &inspection.executions {
@@ -985,7 +995,12 @@ pub(super) async fn remove(
         );
         ui::choose_removal(ctx, &check)?
     };
-    if !yes && (check.needs_choice() || keep_branch || delete_branch) {
+    if !yes
+        && (check.needs_choice()
+            || keep_branch
+            || delete_branch
+            || !check.workspace.holds.is_empty())
+    {
         confirm_removal(ctx, &check, choice)?;
     }
     // Leave the directory before it disappears under the shell.
@@ -1008,7 +1023,9 @@ pub(super) async fn remove(
     if let Some(error) = &result.hook_error {
         eprintln!("warning: {error}");
     }
-    ctx.emit_styled(Style::Success, &removal_message(&result), &result)?;
+    let mut output = serde_json::to_value(&result)?;
+    output["holds"] = serde_json::to_value(&check.workspace.holds)?;
+    ctx.emit_styled(Style::Success, &removal_message(&result), &output)?;
     Ok(0)
 }
 
@@ -1016,13 +1033,23 @@ fn confirm_removal(ctx: &Context, check: &RemovalCheck, choice: BranchChoice) ->
     let branch_action = match choice {
         BranchChoice::KeepBranch => "keep",
         BranchChoice::DeleteBranch => "delete (including unpushed commits)",
-        BranchChoice::Auto => "delete (redundant)",
+        BranchChoice::Auto => "delete if redundant; retain the default branch",
     };
     let mut action = format!(
         "Remove workspace: {}\nFiles:  delete, including uncommitted changes\nBranch: {} — {branch_action}",
         check.workspace.name,
         check.branch.as_deref().unwrap_or("none")
     );
+    if !check.workspace.holds.is_empty() {
+        action.push_str("\nHolds:");
+        for hold in &check.workspace.holds {
+            action.push_str("\n  ");
+            action.push_str(&hold.name);
+            if let Some(reason) = &hold.reason {
+                action.push_str(&format!(" ({reason})"));
+            }
+        }
+    }
     if ctx.interactive() && (!check.changed_files.is_empty() || check.changed_files_omitted > 0) {
         action.push_str("\nUncommitted changes and untracked files (Git status):");
         for file in &check.changed_files {

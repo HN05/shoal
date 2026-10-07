@@ -171,6 +171,14 @@ pub enum Command {
         #[arg(long)]
         cleanup: bool,
     },
+    /// Hold a workspace against automatic cleanup.
+    #[command(args_conflicts_with_subcommands = true)]
+    Hold {
+        #[command(subcommand)]
+        command: Option<HoldCommand>,
+        #[command(flatten)]
+        scope: WorkspaceScope,
+    },
     /// List workspaces.
     Ls,
     /// Show workspace activity, changes, and resources.
@@ -395,6 +403,29 @@ pub enum Command {
     Daemon {
         #[command(subcommand)]
         command: DaemonCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum HoldCommand {
+    /// Keep a workspace while an external session is open.
+    Acquire {
+        workspace: Option<String>,
+        #[arg(long)]
+        name: String,
+        #[arg(long)]
+        reason: Option<String>,
+    },
+    /// Release one named hold.
+    Release {
+        workspace: Option<String>,
+        #[arg(long)]
+        name: String,
+    },
+    /// List holds on a workspace, or every workspace with --all.
+    List {
+        #[command(flatten)]
+        scope: WorkspaceScope,
     },
 }
 

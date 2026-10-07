@@ -14227,3 +14227,138 @@ fn exported_tokens_expire_on_revocation_and_successful_removal() {
     assert!(!inspect(second_token).status.success());
     assert!(fixture.ok(&["env", "external"])["SHOAL_SCOPE_TOKEN"].is_string());
 }
+
+#[test]
+fn holds_are_visible_and_manual_removal_confirms_holders() {
+    let mut fixture = Fixture::new();
+    let workspace = fixture.add("held");
+    let hold = fixture.ok(&[
+        "hold",
+        "acquire",
+        "held",
+        "--name",
+        "app-thread",
+        "--reason",
+        "Open thread",
+    ]);
+    assert_eq!(hold["workspace_id"], workspace["id"]);
+    let expected = serde_json::json!([hold]);
+    for command in ["status", "inspect"] {
+        assert_eq!(
+            fixture.ok(&[command, "held"])["workspace"]["holds"],
+            expected
+        );
+    }
+    assert_eq!(fixture.ok(&["ls"])[0]["holds"], expected);
+    assert_eq!(fixture.ok(&["hold", "held"]), expected);
+    assert_eq!(fixture.ok(&["hold", "list", "held"]), expected);
+    assert_eq!(fixture.ok(&["hold", "--all"])[0]["holds"], expected);
+    assert!(
+        String::from_utf8_lossy(&fixture.run(&["status", "held"]).stdout)
+            .contains("app-thread (Open thread)")
+    );
+    fixture.ok(&[
+        "exec",
+        "held",
+        "--",
+        env!("CARGO_BIN_EXE_shoal"),
+        "--json",
+        "hold",
+        "acquire",
+        "--name",
+        "scoped",
+    ]);
+    fixture.ok(&[
+        "exec",
+        "held",
+        "--",
+        env!("CARGO_BIN_EXE_shoal"),
+        "--json",
+        "hold",
+        "release",
+        "--name",
+        "scoped",
+    ]);
+    fixture.restart();
+    assert_eq!(fixture.ok(&["hold", "held"]), expected);
+    let (no, prompt) = fixture.interactive(&["rm", "held"], "n\n");
+    assert!(!no.status.success());
+    assert!(
+        prompt.find("app-thread (Open thread)").unwrap()
+            < prompt.find("Are you sure? [y/N]").unwrap()
+    );
+    let removed = fixture.ok(&["rm", "held", "--yes"]);
+    assert_eq!(removed["holds"], expected);
+    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+    assert_eq!(
+        db.query_row("SELECT count(*) FROM workspace_holds", [], |row| row
+            .get::<_, i64>(0))
+            .unwrap(),
+        0
+    );
+    let missing = fixture.add("missing-held");
+    fixture.ok(&["hold", "acquire", "missing-held", "--name", "app"]);
+    fs::remove_dir_all(missing["path"].as_str().unwrap()).unwrap();
+    fixture.restart();
+    wait_removed(&fixture, "missing-held");
+    assert!(!git(&fixture.repo, &["branch", "--list", "missing-held"]).is_empty());
+    assert_eq!(
+        db.query_row("SELECT count(*) FROM workspace_holds", [], |row| row
+            .get::<_, i64>(0))
+            .unwrap(),
+        0
+    );
+}
+
+#[test]
+fn holds_allow_closed_issues_to_record_completion_before_cleanup() {
+    let mut fixture = issue_completion_fixture("gh", true);
+    fixture.ok(&["hold", "acquire", "issue-work", "--name", "thread"]);
+    write_issue_state(&fixture, "gh", "Closed");
+    fixture.restart();
+    let inspection = wait_issue_field(&fixture, "/completion/head", "");
+    assert_eq!(inspection["completion"]["cleanup"], true);
+    assert!(inspection["completion"]["error"].is_null());
+    let path = PathBuf::from(inspection["workspace"]["path"].as_str().unwrap());
+    assert!(path.exists());
+    let completion = inspection["completion"].clone();
+    fixture.restart();
+    assert_eq!(
+        fixture.ok(&["inspect", "issue-work"])["completion"],
+        completion
+    );
+    fixture.ok(&["hold", "release", "issue-work", "--name", "thread"]);
+    wait_removed(&fixture, "issue-work");
+}
+
+#[test]
+fn holds_allow_watched_prs_to_record_completion_before_cleanup() {
+    let mut fixture = Fixture::new();
+    let workspace = fixture.add("watched-held");
+    fixture.ok(&["hold", "acquire", "watched-held", "--name", "thread"]);
+    fixture.add_github_origin();
+    let bin = fixture.root.path().join("bin");
+    fs::create_dir(&bin).unwrap();
+    fs::write(bin.join("gh"), "#!/bin/sh\ncat \"$HOME/pr-response\"\n").unwrap();
+    fs::set_permissions(bin.join("gh"), fs::Permissions::from_mode(0o755)).unwrap();
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    let head = git(path, &["rev-parse", "HEAD"]);
+    fs::write(fixture.root.path().join("pr-response"), serde_json::json!({"number":1,"state":"MERGED","headRefName":"watched-held","commits":[{"oid":head.trim()}]}).to_string()).unwrap();
+    fixture.ok(&["pr", "watch", "1", "watched-held"]);
+    fixture.restart();
+    wait_until("held PR completion", || {
+        fixture.ok(&["inspect", "watched-held"])["pr_cleanup"]["merged_head"] == head.trim()
+    });
+    let inspection = fixture.ok(&["inspect", "watched-held"]);
+    assert_eq!(inspection["completion"]["head"], head.trim());
+    assert_eq!(inspection["completion"]["cleanup"], true);
+    assert!(inspection["pr_cleanup"]["error"].is_null());
+    assert!(path.exists());
+    fixture.restart();
+    assert_eq!(
+        fixture.ok(&["inspect", "watched-held"])["completion"],
+        inspection["completion"]
+    );
+    fixture.ok(&["hold", "release", "watched-held", "--name", "thread"]);
+    wait_removed(&fixture, "watched-held");
+}
