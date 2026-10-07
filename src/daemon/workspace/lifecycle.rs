@@ -396,6 +396,15 @@ impl Manager {
         let check = self
             .check_removal(&workspace.id, removal.inspection())
             .await?;
+        if matches!(
+            removal,
+            Removal::Automatic { .. } | Removal::Merged { .. } | Removal::Completed { .. }
+        ) {
+            ensure!(
+                check.workspace.holds.is_empty(),
+                "workspace is held; retaining it"
+            );
+        }
         if let Removal::Automatic { snapshot } = removal {
             ensure!(
                 self.cleanup_snapshot(&workspace.id).await? == Some(snapshot),
