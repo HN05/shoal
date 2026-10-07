@@ -922,6 +922,32 @@ idle_minutes = 10
 Reload the daemon after changing this globally; the same table in a
 repository config applies to that repository's workspaces on the next sweep.
 
+### Workspace events
+
+```sh
+shoal events --follow --json              # stream lifecycle changes
+shoal events --follow --json --since 123   # replay after an event ID
+```
+
+The daemon retains the newest 1,000 events independently of notifications;
+reading them never marks notifications read. Without `--since`, events replay
+all retained history; without `--follow`, the command exits after that backlog.
+Scoped callers cannot read events.
+
+Each JSON line has `type: "event"`, an increasing `id`, Unix-seconds `created_at`,
+workspace and repository UUIDs (`workspace_id`, `repository_id`), `name`, `path`,
+`branch`, `kind`, `cause`, and `error`. Kinds are `created`, `ready`, `setup_failed`,
+`completed`, `continued`, `removed`, `retained`, and `branch_changed`. Causes are
+`manual`, `idle`, `issue`, `pr`, `completion`, or `missing_directory`, and null
+when inapplicable; `error` describes setup or cleanup failures. Branch changes
+are observed during daemon sweeps; detached HEAD has a null branch, and the
+recorded workspace branch remains unchanged.
+
+A `type: "gap"` line gives `since`, `oldest_id`, and `latest_id` when a cursor
+falls outside retained history, then replay continues with retained events.
+Resync with `shoal ls --json` after a gap or on first connection: the journal
+starts when the daemon upgrades and does not reconstruct older changes.
+
 ### Notifications
 
 ```sh

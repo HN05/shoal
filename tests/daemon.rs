@@ -779,3 +779,61 @@ fn cli_typed_response_errors_preserve_output_and_exit_contracts() {
         }
     }
 }
+
+#[test]
+fn event_cli_preserves_adjacent_frames_and_finishes_an_empty_listing() {
+    for count in [0, 205] {
+        let root = tempfile::tempdir_in("/tmp").unwrap();
+        fs::create_dir(root.path().join("state")).unwrap();
+        let listener = UnixListener::bind(root.path().join("state/daemon.sock")).unwrap();
+        let daemon = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(60)))
+                .unwrap();
+            let mut line = String::new();
+            BufReader::new(&stream).read_line(&mut line).unwrap();
+            let request: Value = serde_json::from_str(&line).unwrap();
+            assert_eq!(
+                request["method"]["watch_workspace_events"],
+                json!({"since": 0, "follow": false})
+            );
+            let response = |body: Value| {
+                let mut body = body;
+                body["protocol"] = request["protocol"].clone();
+                body["id"] = request["id"].clone();
+                format!("{}\n", serde_json::to_string(&body).unwrap())
+            };
+            let mut frames = response(json!({"type": "ok"}));
+            for id in 1..=count {
+                frames.push_str(&response(json!({"type": "event_item", "data": {
+                    "type": "event", "id": id, "created_at": 0, "kind": "ready",
+                    "workspace_id": "w", "repository_id": "r", "name": "worker",
+                    "path": "/work", "branch": "worker", "cause": null, "error": null
+                }})));
+            }
+            frames.push_str(&response(json!({"type": "ok"})));
+            stream.write_all(frames.as_bytes()).unwrap();
+        });
+        let output = command(root.path())
+            .args(["events", "--json", "--since", "0"])
+            .output()
+            .unwrap();
+        daemon.join().unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let output = String::from_utf8(output.stdout).unwrap();
+        let ids: Vec<_> = output
+            .lines()
+            .map(|line| {
+                serde_json::from_str::<Value>(line).unwrap()["id"]
+                    .as_i64()
+                    .unwrap()
+            })
+            .collect();
+        assert_eq!(ids, (1..=count).collect::<Vec<_>>());
+    }
+}

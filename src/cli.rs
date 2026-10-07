@@ -288,6 +288,15 @@ pub enum Command {
     },
     /// Show detailed workspace and execution records.
     Inspect { workspace: Option<String> },
+    /// Stream durable workspace lifecycle events without consuming notifications.
+    Events {
+        /// Keep the stream open as the daemon records new events.
+        #[arg(long)]
+        follow: bool,
+        /// Replay events after this event ID.
+        #[arg(long, value_parser = clap::value_parser!(i64).range(0..))]
+        since: Option<i64>,
+    },
     /// Show resource conflicts, finished agents, and automatic cleanup.
     Notifications {
         /// Include notifications already shown.

@@ -4,6 +4,7 @@ use std::io;
 
 use anyhow::{Context, Result, ensure};
 use tokio::{
+    io::BufReader,
     net::UnixStream,
     time::{Instant, sleep, timeout},
 };
@@ -29,6 +30,12 @@ impl std::error::Error for ProtocolMismatch {}
 /// Send `method` and return the open stream with the daemon's first reply,
 /// including [`Body::Error`]. Executions keep using the stream; [`call`] drops it.
 pub async fn open(paths: &Paths, method: Method) -> Result<(UnixStream, Body)> {
+    let (reader, body) = open_buffered(paths, method).await?;
+    Ok((reader.into_inner(), body))
+}
+
+/// Preserve frames read alongside the initial reply for long-lived streams.
+pub async fn open_buffered(paths: &Paths, method: Method) -> Result<(BufReader<UnixStream>, Body)> {
     let mut stream = UnixStream::connect(&paths.socket).await.with_context(|| {
         format!(
             "connect to {}; run `shoal install` or `shoal daemon start`",
@@ -37,7 +44,8 @@ pub async fn open(paths: &Paths, method: Method) -> Result<(UnixStream, Body)> {
     })?;
     let request = Request::new(method);
     protocol::write(&mut stream, &request).await?;
-    let reply: Response = protocol::read(&mut stream).await?;
+    let mut stream = BufReader::new(stream);
+    let reply: Response = protocol::read_buffered(&mut stream).await?;
     if reply.protocol != protocol::VERSION {
         return Err(ProtocolMismatch.into());
     }
