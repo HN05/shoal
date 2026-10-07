@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 
 use super::strip_bidi_isolates;
 
+mod queries;
+
 crate::state::states!(UpdateKind {
     Comment => "comment",
     CiCompleted => "ci_completed",
@@ -23,7 +25,7 @@ pub struct Update {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub(super) struct Snapshot {
+pub(crate) struct Snapshot {
     comments: BTreeMap<String, String>,
     checks: BTreeMap<String, Check>,
     conflict: Option<bool>,
