@@ -12,6 +12,7 @@ type Job = Box<dyn FnOnce(&mut Option<Connection>, &Path) + Send>;
 pub(super) struct Worker {
     sender: Mutex<Option<mpsc::Sender<Job>>>,
     stopped: watch::Receiver<()>,
+    pub(super) changed: watch::Sender<()>,
     #[cfg(test)]
     pub(super) opens: Arc<std::sync::atomic::AtomicU64>,
 }
@@ -42,6 +43,7 @@ impl Worker {
         Ok(Arc::new(Self {
             sender: Mutex::new(Some(sender)),
             stopped,
+            changed: watch::channel(()).0,
             #[cfg(test)]
             opens: Arc::default(),
         }))
@@ -52,6 +54,7 @@ impl Worker {
         operation: impl FnOnce(&mut Connection) -> Result<T> + Send + 'static,
     ) -> Result<T> {
         let (send, receive) = oneshot::channel();
+        let changed = self.changed.clone();
         #[cfg(test)]
         let opens = self.opens.clone();
         let job = Box::new(move |connection: &mut Option<Connection>, path: &Path| {
@@ -61,7 +64,13 @@ impl Worker {
                     #[cfg(test)]
                     opens.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 }
-                operation(connection.as_mut().expect("connection was opened"))
+                let db = connection.as_mut().expect("connection was opened");
+                let before = db.total_changes();
+                let result = operation(db);
+                if db.total_changes() != before {
+                    changed.send_replace(());
+                }
+                result
             })();
             let _ = send.send(result);
         });

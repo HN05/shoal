@@ -78,6 +78,10 @@ impl Store {
         self.worker.run(operation).await
     }
 
+    pub(crate) fn watch_changes(&self) -> tokio::sync::watch::Receiver<()> {
+        self.worker.changed.subscribe()
+    }
+
     pub async fn shutdown(&self) {
         self.worker.shutdown().await;
     }

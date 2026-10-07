@@ -4,8 +4,8 @@ pub mod access;
 pub mod allocation;
 mod cleanup;
 pub mod doctor;
-mod execution_recovery;
 pub mod events;
+mod execution_recovery;
 pub mod notifications;
 mod overload;
 #[cfg(test)]
@@ -216,6 +216,9 @@ async fn serve(mut stream: UnixStream, server: Server) -> Result<()> {
         Method::WatchNotifications => {
             return watch_notifications(stream, request.id, server.manager).await;
         }
+        Method::WatchWorkspaceEvents { since, follow } => {
+            return watch_workspace_events(stream, request.id, server.manager, since, follow).await;
+        }
         Method::PrWait {
             workspace,
             timeout_secs,
@@ -254,6 +257,7 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         | Method::Shutdown
         | Method::Execute { .. }
         | Method::WatchNotifications
+        | Method::WatchWorkspaceEvents { .. }
         | Method::PrWait { .. } => {
             anyhow::bail!("unsupported operation")
         }
@@ -532,6 +536,69 @@ async fn watch_notifications(
         tokio::select! {
             recorded = changed.changed() => recorded?,
             // The client never writes; a read completes only when it hangs up.
+            _ = tokio::io::AsyncReadExt::read(&mut reader, &mut closed) => return Ok(()),
+        }
+    }
+}
+
+async fn watch_workspace_events(
+    mut stream: UnixStream,
+    request_id: u64,
+    manager: Arc<Manager>,
+    since: Option<i64>,
+    follow: bool,
+) -> Result<()> {
+    use crate::daemon::events::EventItem;
+    if since.is_some_and(|id| id < 0) {
+        return protocol::write(
+            &mut stream,
+            &Response::new(
+                request_id,
+                Body::error(
+                    ErrorCode::InvalidRequest,
+                    "event cursor must be nonnegative",
+                ),
+            ),
+        )
+        .await;
+    }
+    // Subscribe before the first read so a concurrent commit cannot be missed.
+    let mut changed = manager.store.watch_changes();
+    let end = manager.latest_workspace_event_id().await?;
+    protocol::write(&mut stream, &Response::new(request_id, Body::Ok)).await?;
+    let (mut reader, mut writer) = stream.split();
+    let mut cursor = since;
+    loop {
+        let items = manager.workspace_events(cursor, 100).await?;
+        let mut delivered = false;
+        for item in items {
+            match &item {
+                EventItem::Event(event) => {
+                    if !follow && event.id > end {
+                        break;
+                    }
+                    cursor = Some(event.id);
+                    delivered = true;
+                }
+                EventItem::Gap { oldest_id, .. } => cursor = Some(oldest_id - 1),
+            }
+            protocol::write(
+                &mut writer,
+                &Response::new(request_id, Body::EventItem(item)),
+            )
+            .await?;
+        }
+        // Drain the complete backlog before waiting for another commit.
+        if delivered && (follow || cursor.is_some_and(|id| id < end)) {
+            continue;
+        }
+        if !follow {
+            protocol::write(&mut writer, &Response::new(request_id, Body::Ok)).await?;
+            return Ok(());
+        }
+        let mut closed = [0u8; 1];
+        tokio::select! {
+            result = changed.changed() => result?,
             _ = tokio::io::AsyncReadExt::read(&mut reader, &mut closed) => return Ok(()),
         }
     }

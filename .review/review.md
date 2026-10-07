@@ -56,7 +56,8 @@ instructions instead of the PR delivery guidance below.
   ready, verified worktree; tokens persist across restart until revocation or
   workspace removal, without execution tracking or cleanup protection.
   Notifications are read by the unscoped user only and never fail the
-  operation they record. PR cleanup defaults on,
+  operation they record. Workspace events are an unscoped, durable lifecycle
+  stream with replay gaps, independent of notification read state. PR cleanup defaults on,
   completes the workspace only after every watched PR merges and the set contains
   HEAD; completion honors the done default and explicit keep choices before
   stopping tracked agents with clean files and unchanged merged HEAD. PR

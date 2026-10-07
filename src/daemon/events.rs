@@ -1,6 +1,9 @@
 //! Durable lifecycle records, independent of notification delivery and read state.
-use anyhow::Result;
+use std::path::PathBuf;
+
+use anyhow::{Result, ensure};
 use rusqlite::{Connection, params};
+use serde::{Deserialize, Serialize};
 
 use super::workspace::Manager;
 use crate::state::states;
@@ -24,6 +27,38 @@ states!(EventCause {
     Completion => "completion",
     MissingDirectory => "missing_directory",
 });
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EventDetails {
+    pub kind: EventKind,
+    pub workspace_id: String,
+    pub repository_id: String,
+    pub name: String,
+    pub path: PathBuf,
+    /// Observed branch for branch changes; null for a detached HEAD.
+    pub branch: Option<String>,
+    pub cause: Option<EventCause>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkspaceEvent {
+    pub id: i64,
+    pub created_at: i64,
+    #[serde(flatten)]
+    pub details: EventDetails,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum EventItem {
+    Event(WorkspaceEvent),
+    Gap {
+        since: i64,
+        oldest_id: i64,
+        latest_id: i64,
+    },
+}
 
 /// Append in the transaction that owns the transition, before deleting ownership.
 pub(crate) fn record(
@@ -69,6 +104,45 @@ impl Manager {
         }).await
     }
 
+    pub(crate) async fn latest_workspace_event_id(&self) -> Result<i64> {
+        self.store
+            .run(|db| {
+                Ok(db.query_row(
+                    "SELECT COALESCE(MAX(id),0) FROM workspace_events",
+                    [],
+                    |r| r.get(0),
+                )?)
+            })
+            .await
+    }
+
+    /// A consistent replay batch, including an explicit expired or future cursor.
+    pub async fn workspace_events(&self, since: Option<i64>, limit: u32) -> Result<Vec<EventItem>> {
+        ensure!(
+            since.is_none_or(|id| id >= 0),
+            "event cursor must be nonnegative"
+        );
+        self.store.run(move |db| {
+            let (oldest, latest): (Option<i64>, Option<i64>) = db.query_row(
+                "SELECT MIN(id),MAX(id) FROM workspace_events", [], |r| Ok((r.get(0)?,r.get(1)?))
+            )?;
+            let latest = latest.unwrap_or(0);
+            let oldest = oldest.unwrap_or(1);
+            let cursor = since.unwrap_or(oldest - 1);
+            let mut items = Vec::new();
+            let cursor = if cursor < oldest - 1 || cursor > latest {
+                items.push(EventItem::Gap { since: cursor, oldest_id: oldest, latest_id: latest });
+                oldest - 1
+            } else { cursor };
+            let mut stmt = db.prepare("SELECT id,created_at,record FROM workspace_events WHERE id>?1 ORDER BY id LIMIT ?2")?;
+            for row in stmt.query_map(params![cursor,limit], |r| Ok((r.get::<_,i64>(0)?,r.get::<_,i64>(1)?,r.get::<_,String>(2)?)))? {
+                let (id,created_at,record) = row?;
+                items.push(EventItem::Event(WorkspaceEvent { id,created_at,details:serde_json::from_str(&record)? }));
+            }
+            Ok(items)
+        }).await
+    }
+
     pub(crate) async fn retain_workspace(
         &self,
         id: &str,
@@ -105,3 +179,6 @@ impl Manager {
             .await
     }
 }
+
+#[cfg(test)]
+mod tests;

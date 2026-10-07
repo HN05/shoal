@@ -8,6 +8,7 @@ use crate::{
     config::repo::{ConfigLayers, LocalConfig},
     daemon::{
         allocation::Allocation,
+        events::EventItem,
         notifications::Notification,
         ports::PortRequest,
         recovery::{ReconcileOptions, Report},
@@ -24,7 +25,7 @@ use crate::{
     sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
 };
 
-pub const VERSION: u32 = 57;
+pub const VERSION: u32 = 58;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -263,6 +264,10 @@ pub enum Method {
     /// Long-lived: unread notifications, then new ones as they are recorded,
     /// each as a [`Body::Notification`] response and marked read on delivery.
     WatchNotifications,
+    WatchWorkspaceEvents {
+        since: Option<i64>,
+        follow: bool,
+    },
     // Ports.
     PortAcquire {
         workspace: String,
@@ -462,6 +467,7 @@ response_bodies! {
     PulledBranch(PulledBranch),
     Notifications(Vec<Notification>),
     Notification(Notification),
+    EventItem(EventItem),
     PrUpdates(crate::forge::pr::wait::Updates),
     Port(PortReservation),
     PortSuggestion(PortSuggestion),
