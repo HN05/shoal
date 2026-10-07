@@ -244,6 +244,7 @@ instructions instead of the PR delivery guidance below.
   capacity. Schema and state-file changes need a compatibility
   story for existing daemons. `install` preserves compatible daemons and commands,
   deferring service changes until restart; incompatible daemons restart.
+  The shell initialization hint is omitted when a startup file already initializes Shoal.
   Config key edits preserve unrelated settings and comments and validate one command's
   changes together before saving;
   repository edits serialize read/modify/write in the daemon and leave worktree files alone.

@@ -443,6 +443,48 @@ fn daemon_start_offers_to_install_a_missing_service() {
 }
 
 #[test]
+fn install_only_shows_shell_hint_without_startup_initialization() {
+    let manager = FakeServiceManager::new();
+    let check_hint = |expected, zdotdir: &std::path::Path| {
+        let output = manager
+            .command()
+            .env("ZDOTDIR", zdotdir)
+            .arg("install")
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+        let text = String::from_utf8(output.stdout).unwrap();
+        assert_eq!(text.contains("Add this line"), expected, "{text}");
+    };
+    let home = manager.root.path();
+    check_hint(true, home);
+    for (file, contents, expected) in [
+        (".bashrc", "# source <(shoal shell init)\n", true),
+        (".zshrc", "echo 'source <(shoal shell init)'\n", true),
+        (".bashrc", "source <(shoal shell init)\n", false),
+        (".zshrc", "  source <(shoal  shell\tinit) # Shoal\n", false),
+        (".bashrc", "eval \"$(shoal shell init)\"\n", false),
+        (".zshrc", "source <(command shoal shell init);\n", false),
+        (".zshrc", "eval \"$(command shoal shell init)\"\n", false),
+    ] {
+        let path = home.join(file);
+        fs::write(&path, contents).unwrap();
+        check_hint(expected, home);
+        fs::remove_file(path).unwrap();
+    }
+    let zdotdir = home.join("zsh-config");
+    fs::create_dir(&zdotdir).unwrap();
+    fs::write(home.join(".zshrc"), "source <(shoal shell init)\n").unwrap();
+    check_hint(true, &zdotdir);
+    fs::write(zdotdir.join(".zshrc"), "source <(shoal shell init)\n").unwrap();
+    check_hint(false, &zdotdir);
+    // An unreadable startup file must not turn a successful install into failure.
+    fs::remove_file(zdotdir.join(".zshrc")).unwrap();
+    fs::create_dir(zdotdir.join(".zshrc")).unwrap();
+    check_hint(true, &zdotdir);
+}
+
+#[test]
 fn install_is_repeatable_and_service_controls_work_with_an_isolated_manager() {
     let manager = FakeServiceManager::new();
     let root = &manager.root;

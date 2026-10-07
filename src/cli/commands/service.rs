@@ -81,10 +81,13 @@ pub(super) async fn install(
         if config_created {
             println!("Wrote the defaults to {}", config.display());
         }
-        println!(
-            "\nAdd this line to ~/.zshrc or ~/.bashrc for directory navigation and tab completion:\n\n{}",
-            shell::INIT_COMMAND
-        );
+        let zsh_directory = std::env::var_os("ZDOTDIR").map(PathBuf::from);
+        if !shell::init_configured(&ctx.paths.home, zsh_directory.as_deref()) {
+            println!(
+                "\nAdd this line to ~/.zshrc or ~/.bashrc for directory navigation and tab completion:\n\n{}",
+                shell::INIT_COMMAND
+            );
+        }
     }
     Ok(0)
 }

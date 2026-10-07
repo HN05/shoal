@@ -72,7 +72,9 @@ tools first. It also creates `~/.config/shoal/config.toml` (or
 [configs/default.toml](../configs/default.toml), which states every default,
 and installs the root [issue-template.md](../issue-template.md) and
 [agent-template.md](../agent-template.md) beside it,
-never touching an existing file; `--dry-run` writes nothing. `shoal config
+never touching an existing file; `--dry-run` writes nothing. Installation prints
+the shell initialization hint only when neither `.bashrc` nor `.zshrc` (under
+`ZDOTDIR` when set) contains an active initialization command. `shoal config
 install <name>` replaces the entire global file with a packaged template;
 `shoal config reset` installs `default`. Both move the current file to
 `config.toml.backup` (replacing an older backup) without asking. Templates are

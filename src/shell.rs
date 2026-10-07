@@ -8,6 +8,35 @@ use crate::cli::{
 
 pub const INIT_COMMAND: &str = "source <(shoal shell init)";
 
+/// Best-effort detection of the documented initialization forms; never execute
+/// startup files or let an unreadable one fail service installation.
+pub fn init_configured(home: &Path, zsh_directory: Option<&Path>) -> bool {
+    [
+        home.join(".bashrc"),
+        zsh_directory.unwrap_or(home).join(".zshrc"),
+    ]
+    .iter()
+    .filter_map(|path| std::fs::read_to_string(path).ok())
+    .any(|contents| contents.lines().any(is_init_line))
+}
+
+fn is_init_line(line: &str) -> bool {
+    let command = line
+        .split('#')
+        .next()
+        .unwrap_or_default()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    matches!(
+        command.trim_end_matches(';').trim_end(),
+        INIT_COMMAND
+            | "source <(command shoal shell init)"
+            | "eval \"$(shoal shell init)\""
+            | "eval \"$(command shoal shell init)\""
+    )
+}
+
 /// Directory changes use a private data file, never shell code evaluated from
 /// a repository path or command output. The wrapper works in Bash and Zsh.
 pub const INIT: &str = r#"_shoal_recover_directory() {

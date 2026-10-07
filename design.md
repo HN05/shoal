@@ -291,6 +291,8 @@ without evaluating repository code. If cleanup removes the current directory or
 a pending navigation destination, shell integration recovers to its nearest surviving
 ancestor after the command or at the next prompt, preserving the command status.
 Recovery needs no daemon and is disabled for scoped callers.
+Service installation prints the shell initialization hint only while neither
+startup file contains an active initialization command.
 Confirmations show the action and ask `[y/N]`, cancel on Enter, `n`, EOF or
 Ctrl-C (also after a tracked execution), and are bypassed only by
 explicit flags such as `-y`/`--yes`. Removal's branch choice stays separate from
