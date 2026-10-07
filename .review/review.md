@@ -47,11 +47,15 @@ instructions instead of the PR delivery guidance below.
   the exit result or marking completion; removal uses its own hooks.
 - Doctor reports current issues before falling back to the recorded
   failure and repair guidance; repair remains an explicit choice.
-- Scope: workspace commands carry a scope token and get own-worktree access
+- Scope: tracked executions and externally launched processes with exported
+  environments carry a scope token and get own-worktree access
   only; workspace allocation/removal/recovery and shared repository/service
   administration stay denied, while own-workspace setup, PR registration,
   merge acknowledgements, assignment continuation/completion and effective-configuration reads are allowed;
-  notifications are read by the unscoped user only and never fail the
+  only unscoped callers export or revoke environment tokens. Export requires a
+  ready, verified worktree; tokens persist across restart until revocation or
+  workspace removal, without execution tracking or cleanup protection.
+  Notifications are read by the unscoped user only and never fail the
   operation they record. PR cleanup defaults on,
   completes the workspace only after every watched PR merges and the set contains
   HEAD; completion honors the done default and explicit keep choices before

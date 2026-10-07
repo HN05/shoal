@@ -232,14 +232,18 @@ own-branch checks.
 
 ## Scope and user interfaces
 
-Commands launched through Shoal inherit a daemon-validated scope token that
+Tracked executions and processes started with exported workspace environments
+inherit a daemon-validated scope token that
 confines them to their own workspace: status, inspect, execute, setup, merge, and resources.
 `land`, creation, removal, reconciliation, other workspaces, repository
 administration, and service control need an unscoped caller. PR registration,
 manual merge acknowledgement, and assignment continuation/completion are own-workspace exceptions.
 Effective configuration may be read for the caller's own workspace; changing it
 needs an unscoped caller.
-Nested executions keep scope.
+Nested executions keep scope. Unscoped callers may export a ready, verified
+workspace's identity, current port variables and a fresh token through `env`.
+Exported tokens persist across restarts until explicitly revoked or the workspace
+is removed; they register no execution and do not prevent cleanup.
 
 Root help groups built-in commands by task; configured commands are discovered
 through `run`.
@@ -570,8 +574,7 @@ commands Shoal cannot verify stopped.
 Implementation order: CLI/daemon, workspaces, ports, simulators, lifecycle
 polish, then filesystem restrictions. Open items:
 
-- **External sessions:** a generic attach/hold contract before promising
-  tracking or cleanup for GUI agents.
+- **External sessions:** holds for cleanup protection of untracked processes.
 - **Storage policy:** ownership and retention for run data outside the
   worktree, caches, logs, and audit history.
 - **Distribution:** stable service identity across

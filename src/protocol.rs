@@ -24,7 +24,7 @@ use crate::{
     sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
 };
 
-pub const VERSION: u32 = 55;
+pub const VERSION: u32 = 56;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -175,6 +175,13 @@ pub enum Method {
     },
     InspectWorkspace {
         workspace: String,
+    },
+    WorkspaceEnv {
+        workspace: String,
+    },
+    RevokeWorkspaceEnv {
+        workspace: String,
+        token: String,
     },
     WorkspaceStatus {
         workspace: String,
@@ -429,6 +436,7 @@ response_bodies! {
     Inspection(Inspection),
     Completion(crate::model::Completion),
     WorkspaceStatus(WorkspaceStatus),
+    WorkspaceEnv(std::collections::BTreeMap<String, String>),
     Diagnostics(Vec<crate::daemon::doctor::Check>),
     Doctor(Vec<Report>),
     Execution(ExecutionPlan),

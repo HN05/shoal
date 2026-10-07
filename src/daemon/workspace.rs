@@ -2,6 +2,7 @@
 mod adoption;
 mod agents;
 mod done;
+mod environment;
 mod executions;
 pub(super) mod identity;
 mod lifecycle;
@@ -185,10 +186,6 @@ impl Manager {
                 .map(|guard| ResourceGuard::Operation { _guard: guard }),
         };
         guard.context("workspace resource operation is in progress; retry when its hook finishes")
-    }
-
-    pub(crate) async fn caller(&self, token: &str) -> Result<Option<Caller>> {
-        Ok(self.scopes.lock().await.get(token).cloned())
     }
 
     /// Bind a scope token to the execution it was issued to.

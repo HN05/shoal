@@ -327,6 +327,15 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::InspectWorkspace { workspace } => {
             Body::Inspection(manager.inspect_workspace(&workspace).await?)
         }
+        Method::WorkspaceEnv { workspace } => {
+            Body::WorkspaceEnv(manager.workspace_environment(&workspace).await?)
+        }
+        Method::RevokeWorkspaceEnv { workspace, token } => {
+            manager
+                .revoke_workspace_environment(&workspace, token)
+                .await?;
+            Body::Ok
+        }
         Method::WorkspaceStatus { workspace } => {
             Body::WorkspaceStatus(manager.workspace_status(&workspace).await?)
         }
