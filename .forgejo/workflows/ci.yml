@@ -138,3 +138,15 @@ jobs:
           # tests cannot catch musl's unsupported Metadata::created().
           musl_target="$(rustc -vV | sed -n 's/^host: //p' | sed 's/-gnu$/-musl/')"
           cargo-zigbuild test --locked --target "$musl_target" --bin shoal daemon::workspace::identity
+
+      - name: Cross-build release binaries (manual CI runs)
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          RUSTFLAGS: '-D warnings'
+        run: |
+          set -euo pipefail
+          . .forgejo/scripts/lock-target-dir.sh
+          cargo clean -p shoal
+          for target in x86_64-unknown-linux-musl aarch64-unknown-linux-musl x86_64-apple-darwin aarch64-apple-darwin; do
+            .forgejo/scripts/cross-build.sh "$target"
+          done

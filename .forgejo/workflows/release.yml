@@ -170,6 +170,11 @@ jobs:
           set -eu
           curl -fsS "${FORGEJO_SERVER%/}/$REPOSITORY/raw/commit/$WORKFLOW_SHA/.forgejo/scripts/checkout-release.sh" -o checkout-release.sh
           sh checkout-release.sh
+          # Build helpers follow the workflow commit when resuming an older tag.
+          for helper in cross-build.sh zig-wrapper.py; do
+            curl -fsS "${FORGEJO_SERVER%/}/$REPOSITORY/raw/commit/$WORKFLOW_SHA/.forgejo/scripts/$helper" -o "$helper"
+            chmod +x "$helper"
+          done
       - name: Cross-build release binaries (holding a /ci-target slot)
         run: |
           set -euo pipefail
@@ -187,8 +192,7 @@ jobs:
               aarch64-apple-darwin) platform=macos-arm64 ;;
               *) echo "Unknown release target: $target" >&2; exit 1 ;;
             esac
-            cargo clean -p shoal --release --target "$target"
-            cargo zigbuild --locked --release --target "$target"
+            ../cross-build.sh "$target"
             tar --sort=name --mtime="@$epoch" --owner=0 --group=0 --numeric-owner \
               -C "$CARGO_TARGET_DIR/$target/release" -cf - shoal \
               -C "$PWD" SKILL.md \
