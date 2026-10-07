@@ -108,7 +108,8 @@ fn render(notification: &Notification, palette: Palette) -> String {
 
 /// `YYYY-MM-DD HH:MM` in the local time zone.
 fn local_time(unix_seconds: i64) -> String {
-    let time: libc::time_t = unix_seconds as libc::time_t;
+    // Infer the ABI type from localtime_r; libc deprecates its musl time_t alias.
+    let time = unix_seconds as _;
     // SAFETY: localtime_r writes only into the zeroed `tm` passed to it.
     let tm = unsafe {
         let mut tm: libc::tm = std::mem::zeroed();
