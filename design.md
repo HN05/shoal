@@ -128,8 +128,9 @@ in-place checkout placed as `~/shoal/<name>/<x>` adopts that directory, and
 `--path` clones elsewhere. Registration is idempotent by normalized origin URL,
 then canonical path, never fetches, and keeps a stable UUID separate from the
 display name. Repository selectors preserve the caller's argument alongside its
-canonical path; a registered name survives unrelated path collisions, while a
-name and path matching different registrations require disambiguation.
+canonical path. IDs and sources win before path lookup; a registered name survives
+unrelated path collisions, while a name and path matching different registrations
+require disambiguation.
 `repo rm` binds confirmation to the resolved registration and shows
 its source and checkout path; it deletes the directory only once it is empty.
 

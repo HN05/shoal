@@ -28,7 +28,8 @@ instructions instead of the PR delivery guidance below.
   path that deletes a directory, kills a process or mutates a simulator
   without those checks is a blocker. Repository deletion confirms the resolved
   registration, source and checkout path, preserving that target across renames.
-  Repository names survive unrelated caller-path collisions; a name and path
+  Repository IDs and sources win before path lookup. Names survive unrelated
+  caller-path collisions; a name and path
   matching different registrations are ambiguous and list both candidates.
   Workspace removal confirmations list uncommitted changes
   and untracked files with Git status codes, bounding the preview and reporting omitted

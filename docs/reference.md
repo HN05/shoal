@@ -584,7 +584,8 @@ Registration is idempotent by normalized `origin` URL (HTTPS/SSH forms and
 `.git` suffixes match) or canonical local path, and never fetches. Clone URLs
 lose trailing slashes so worktrees get a remote forge CLIs recognize. Names from
 `--name` or `repo rename` are unique and work as selectors alongside IDs, paths,
-and source URLs; inferred names work when unambiguous. A name still resolves when
+and source URLs; inferred names work when unambiguous. IDs and sources take
+precedence over paths. A name still resolves when
 an unrelated path has the same spelling in the caller's directory; if that path
 is another registered checkout, the selector is ambiguous and lists both matches.
 

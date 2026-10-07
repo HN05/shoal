@@ -147,10 +147,16 @@ pub async fn select(
 ) -> Result<&Repository> {
     let selector = selector.into();
     let value = selector.value();
+    if let Some(repo) = repositories
+        .iter()
+        .find(|repo| repo.id == value || repo.source == value)
+    {
+        return Ok(repo);
+    }
     let canonical = selector.path();
-    let exact = repositories.iter().find(|repo| {
-        repo.id == value || repo.source == value || repo.name.as_deref() == Some(value)
-    });
+    let exact = repositories
+        .iter()
+        .find(|repo| repo.name.as_deref() == Some(value));
     let mut matches: Vec<_> = repositories
         .iter()
         .filter(|repo| {
@@ -248,19 +254,19 @@ mod tests {
 
     #[tokio::test]
     async fn typed_name_wins_over_a_colliding_caller_path() {
-        let repositories = [repository(
-            "registered",
-            "/tmp/registered",
-            Some("saldoir-server"),
-        )];
-        let selector = Selector::Path {
-            value: "saldoir-server".into(),
-            path: "/tmp/unrelated/saldoir-server".into(),
-        };
-        assert_eq!(
-            select(&repositories, selector).await.unwrap().id,
-            "registered"
-        );
+        for explicit_name in [Some("saldoir-server"), None] {
+            let mut repo = repository("registered", "/tmp/registered", explicit_name);
+            repo.source = "https://example.test/team/saldoir-server".into();
+            let repositories = [repo];
+            let selector = Selector::Path {
+                value: "saldoir-server".into(),
+                path: "/tmp/unrelated/saldoir-server".into(),
+            };
+            assert_eq!(
+                select(&repositories, selector).await.unwrap().id,
+                "registered"
+            );
+        }
     }
 
     #[tokio::test]
@@ -278,6 +284,24 @@ mod tests {
             .unwrap_err()
             .to_string();
         assert!(error.contains("named") && error.contains("path"), "{error}");
+    }
+
+    #[tokio::test]
+    async fn ids_and_sources_take_precedence_over_a_colliding_path() {
+        let repositories = [
+            repository("registered", "/tmp/one", None),
+            repository("other", "/tmp/checkout", None),
+        ];
+        for value in [&repositories[0].id, &repositories[0].source] {
+            let selector = Selector::Path {
+                value: value.clone(),
+                path: "/tmp/checkout".into(),
+            };
+            assert_eq!(
+                select(&repositories, selector).await.unwrap().id,
+                "registered"
+            );
+        }
     }
 
     #[tokio::test]
