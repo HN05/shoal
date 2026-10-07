@@ -523,8 +523,10 @@ user removes it. Completion
 cleanup without a PR registration requires clean files and every commit pushed or
 on the local default branch; an existing PR registration keeps its merge checks.
 The daemon stops tracked executions through shared removal and rechecks files and
-HEAD, including after hooks. Changed HEAD retains the workspace until a new
-completion signal; failed cleanup retains ownership and reports why.
+HEAD, including after hooks. Tracked agent exits wake the cleanup sweep after
+their exit hook, without waiting for the polling interval. Changed HEAD retains
+the workspace until a new completion signal; failed cleanup retains ownership
+and reports why.
 Issue associations suppress idle cleanup. The daemon polls their repository-bound
 URLs using its existing forge login and records completion once closure is
 confirmed, honoring the done default without replacing an existing completion.

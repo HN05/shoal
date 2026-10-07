@@ -857,8 +857,9 @@ issue URL every ~30 seconds using its `gh`/`fj` login unless waiting for explici
 any existing completion. Issue associations suppress idle cleanup; failed lookups retain the workspace and appear
 in `status` and `inspect`. Reopening an issue does not undo completion.
 
-Cleanup runs in the daemon without an idle delay, stopping tracked commands and
-using normal branch retention and resource release. Without a PR registration,
+Cleanup runs in the daemon without an idle delay; tracked agent exits trigger a
+sweep after their exit hook instead of waiting for the next poll. It stops tracked
+commands using normal branch retention and resource release. Without a PR registration,
 files must be clean and all commits pushed or on the local default branch; an
 existing registration keeps its merge requirements. Files and the completed HEAD
 are checked again after stopping and removal hooks. Failure retains ownership;

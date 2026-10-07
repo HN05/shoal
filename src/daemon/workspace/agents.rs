@@ -67,6 +67,9 @@ impl Manager {
             )
             .await;
         }
+        // A completion or forge transition may have happened while the agent
+        // was running. Retry cleanup once the exit hook is finished.
+        self.cleanup_notify.notify_one();
     }
 
     async fn run_agent_exit_hook(
@@ -434,6 +437,7 @@ mod tests {
         daemon::{ports::PortRequest, workspace::ExecutionKind},
         test_support::{manager, repository},
     };
+    use futures_util::FutureExt;
 
     #[tokio::test]
     async fn agent_exit_hook_reports_disconnects_and_skips_removing_workspaces() {
@@ -455,12 +459,14 @@ mod tests {
             .set_repository_config(&repo.id, Some("post_agent_exit_cmd = 'exited'\n".into()))
             .await
             .unwrap();
+        let cleanup_woken = manager.cleanup_notify.notified();
         manager
             .notify_agent_exit(&workspace, "helper", None, false)
             .await;
         manager
             .post_agent_exit(&workspace, "helper", None, false)
             .await;
+        assert!(cleanup_woken.now_or_never().is_some());
         assert_eq!(
             fs::read_to_string(workspace.path.join("exits")).unwrap(),
             "helper||false\n"
@@ -487,6 +493,40 @@ mod tests {
                 .iter()
                 .all(|event| event.kind == NotificationKind::AgentExited)
         );
+    }
+
+    #[tokio::test]
+    async fn agent_exit_wakes_cleanup_for_completed_workspace() {
+        let (root, manager) = manager().await;
+        let repo = repository(root.path(), "repo");
+        let repo = manager
+            .register_repository(repo.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        let workspace = manager
+            .create_workspace(&repo.id, "agent".into(), None, None, None)
+            .await
+            .unwrap();
+        let execution = manager
+            .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+            .await
+            .unwrap();
+        manager.mark_done(&workspace.id, Some(true)).await.unwrap();
+        assert!(manager.cleanup_notify.notified().now_or_never().is_some());
+        let complete = manager
+            .finish_execution(execution.plan.id, ExecutionKind::Command, Some(0))
+            .await
+            .unwrap();
+        assert!(complete);
+        manager
+            .post_agent_exit(&workspace, "helper", Some(0), complete)
+            .await;
+        assert!(manager.cleanup_notify.notified().now_or_never().is_some());
+        crate::daemon::cleanup::sweep(&manager, &mut Default::default())
+            .await
+            .unwrap();
+        assert!(!workspace.path.exists());
+        assert!(manager.workspace(&workspace.id).await.is_err());
     }
 
     #[tokio::test]

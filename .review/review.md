@@ -153,6 +153,7 @@ instructions instead of the PR delivery guidance below.
   cleanup until explicit done, across restarts, preserving associations and merge checks.
   Associated issues suppress idle cleanup and complete the assignment once confirmed
   closed, without replacing an existing completion or bypassing removal checks.
+  Tracked agent exits wake cleanup after the exit hook, retaining its usual checks.
   Lookup failures and changed origin identity never count as closure.
 - Single-workspace actions use an explicit target, then scope or current directory,
   then an interactive picker; a deleted current directory provides no workspace
