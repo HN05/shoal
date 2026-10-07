@@ -858,8 +858,8 @@ the last hold lets cleanup recheck its usual conditions. Idle cleanup restarts i
 timer after release. Explicit removal and deleted-directory cleanup release holds.
 
 Reacquiring a name returns the original hold, including its reason. Acquisition
-requires a ready, verified worktree; hold mutations are excluded while a resource
-hook runs. Scoped callers manage only their own workspace. `status`, `inspect`,
+requires a ready, verified worktree and is excluded while a resource hook runs.
+Release remains available while the workspace record exists. Scoped callers manage only their own workspace. `status`, `inspect`,
 and `ls --json` show holds on the workspace record. `rm` lists holders before
 confirmation and includes them in its JSON result; `--yes` skips confirmation.
 

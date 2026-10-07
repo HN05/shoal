@@ -141,3 +141,55 @@ async fn lifecycle_reservation_excludes_new_holds() {
             .is_empty()
     );
 }
+
+#[tokio::test]
+async fn release_remains_available_during_lifecycle_operations_and_hooks() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "worker".into(), None, None, None)
+        .await
+        .unwrap();
+    for name in ["first", "second"] {
+        manager
+            .acquire_hold(&workspace.id, name.into(), None)
+            .await
+            .unwrap();
+    }
+    manager
+        .reserve_lifecycle(&workspace.id, WorkspaceState::Removing)
+        .await
+        .unwrap();
+    let _hook = manager
+        .resource_guard(&workspace.id, GuardMode::Exclusive)
+        .await
+        .unwrap();
+    manager
+        .release_hold(&workspace.id, "first".into())
+        .await
+        .unwrap();
+    manager
+        .set_state(&workspace.id, WorkspaceState::Failed, None)
+        .await
+        .unwrap();
+    manager
+        .release_hold(&workspace.id, "second".into())
+        .await
+        .unwrap();
+    manager
+        .release_hold(&workspace.id, "second".into())
+        .await
+        .unwrap();
+    assert!(
+        manager
+            .workspace(&workspace.id)
+            .await
+            .unwrap()
+            .holds
+            .is_empty()
+    );
+}

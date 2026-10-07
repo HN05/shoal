@@ -42,19 +42,13 @@ impl Manager {
     pub async fn release_hold(&self, selector: &str, name: String) -> Result<()> {
         validate::name("hold", &name)?;
         let workspace = self.workspace(selector).await?;
-        let _guard = self
-            .resource_guard(&workspace.id, GuardMode::Shared)
-            .await?;
         let id = workspace.id.clone();
         self.store
             .run(move |db| {
-                let tx = db.transaction()?;
-                store::require_ready(&tx, &id)?;
-                tx.execute(
+                db.execute(
                     "DELETE FROM workspace_holds WHERE workspace_id=?1 AND name=?2",
                     params![id, name],
                 )?;
-                tx.commit()?;
                 Ok(())
             })
             .await?;

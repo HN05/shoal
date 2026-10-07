@@ -479,7 +479,8 @@ completion. Holds are idempotent by name and persist across restarts. They block
 automatic removal while the worktree exists, allowing issue and PR completion to
 record done; releasing the last hold restores normal cleanup eligibility. Explicit
 removal lists holders and releases holds with the workspace record; deleted-worktree
-cleanup still forgets missing worktrees. Scoped callers manage only their own workspace.
+cleanup still forgets missing worktrees. Release remains available through failed or
+active lifecycle operations and hooks. Scoped callers manage only their own workspace.
 
 Workspace completion uses `[done] cleanup` (default true), resolved through the
 normal configuration layers with explicit keep and cleanup overrides. Completion
