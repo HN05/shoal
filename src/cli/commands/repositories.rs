@@ -98,19 +98,26 @@ pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
             repository,
             confirmation,
         } => {
+            let mut repository = ui::repository_selector(repository)?;
             if !confirmation.yes {
+                let repositories = client::repositories(&ctx.paths).await?;
+                let repo = repository::select(&repositories, &repository).await?;
                 ensure!(
                     ui::confirm(
                         ctx,
                         &format!(
-                            "Delete repository: {repository}\nDeletes: checkout, all Shoal workspaces and their resources\nWork:    uncommitted and unpushed changes are permanently lost"
+                            "Delete repository: {}\nSource: {}\nCheckout: {}\nDeletes: checkout, all Shoal workspaces and their resources\nWork:    uncommitted and unpushed changes are permanently lost",
+                            repository::name(repo),
+                            repo.source,
+                            repo.path.display(),
                         ),
                         "--yes",
                     )?,
                     "repository removal canceled"
                 );
+                // A rename while the prompt is open must not redirect deletion.
+                repository = repo.id.clone();
             }
-            let repository = ui::repository_selector(repository)?;
             let result = ctx
                 .progress(
                     "Removing repository",

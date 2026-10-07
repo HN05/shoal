@@ -26,7 +26,9 @@ instructions instead of the PR delivery guidance below.
   re-establish ownership that failed verification, and only at the recorded path,
   repository and branch. Any new
   path that deletes a directory, kills a process or mutates a simulator
-  without those checks is a blocker. Removal confirmations list uncommitted changes
+  without those checks is a blocker. Repository deletion confirms the resolved
+  registration, source and checkout path, preserving that target across renames.
+  Workspace removal confirmations list uncommitted changes
   and untracked files with Git status codes, bounding the preview and reporting omitted
   entries. Doctor environment and untracked-worktree
   checks diagnose only, including when repair is requested; dependency checks use

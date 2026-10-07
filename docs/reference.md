@@ -653,8 +653,9 @@ shoal repo rm my-project -y
 Permanently deletes the checkout (including in-place local repositories with
 uncommitted or unpushed work), all its workspaces and branches, their ports,
 simulators, and leases, and the saved config, stopping managed commands first.
-Interactive calls ask `Are you sure? [y/N]`; `-y`/`--yes` skips the prompt and
-is required for scripts and `--json`. `repo remove` is an alias.
+Interactive calls identify the resolved repository, source, and checkout path before asking
+`Are you sure? [y/N]`; `-y`/`--yes` skips the prompt and is required for scripts
+and `--json`. `repo remove` is an alias.
 Linked worktrees outside Shoal must be removed first; prunable stale records do
 not block, locked worktrees do. Shoal refuses redirected paths and deletions
 that would include another registered repository or its own state. If cleanup

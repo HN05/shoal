@@ -302,6 +302,10 @@ fn displayed_repository_name_resolves_old_uuid_clones_and_rejects_ambiguity() {
     let ambiguous = fixture.run(&["repo", "rm", "saldoir-server", "--yes"]);
     assert!(!ambiguous.status.success());
     assert!(String::from_utf8_lossy(&ambiguous.stderr).contains("repository name is ambiguous"));
+    let (ambiguous, prompt) = fixture.interactive(&["repo", "rm", "saldoir-server"], "y\n");
+    assert!(!ambiguous.status.success());
+    assert!(prompt.contains("repository name is ambiguous"), "{prompt}");
+    assert!(!prompt.contains("Are you sure?"), "{prompt}");
     for repo in &clones {
         assert!(Path::new(repo["path"].as_str().unwrap()).exists());
     }
@@ -7365,6 +7369,98 @@ fn interactive_removal_confirms_and_defaults_to_no_without_affecting_scripts() {
     let (yes, prompt) = fixture.interactive(&["repo", "rm", "project"], "Y\n");
     assert!(yes.status.success(), "{prompt}");
     assert!(!fixture.repo.exists());
+}
+
+#[test]
+fn repository_removal_confirmation_identifies_the_resolved_checkout() {
+    let fixture = Fixture::new();
+    let source = fixture.root.path().join("saldoir-server.git");
+    git(
+        &fixture.repo,
+        &["clone", "--bare", ".", source.to_str().unwrap()],
+    );
+    let url = format!("file://{}", source.display());
+    let checkout = fixture.root.path().join("saldera-server/.checkout");
+    let repository = fixture.ok(&["repo", "add", &url, "--path", checkout.to_str().unwrap()]);
+    let (output, prompt) = fixture.interactive(&["repo", "rm", "saldoir-server"], "n\n");
+    assert!(!output.status.success());
+    assert!(
+        prompt.contains("Delete repository: saldoir-server"),
+        "{prompt}"
+    );
+    assert!(prompt.contains(&format!("Source: {url}")), "{prompt}");
+    assert!(
+        prompt.contains(&format!(
+            "Checkout: {}",
+            repository["path"].as_str().unwrap()
+        )),
+        "{prompt}"
+    );
+    assert!(checkout.exists());
+    assert!(fixture.repo.exists());
+}
+
+#[test]
+fn repository_removal_keeps_the_confirmed_target_when_a_name_is_reassigned() {
+    use std::io::Read;
+
+    let fixture = Fixture::new();
+    let selected = fixture.ok(&["repo", "rename", fixture.repo.to_str().unwrap(), "project"]);
+    let other = init_repo(fixture.root.path(), "other", &[("tracked", "keep\n")]);
+    let replacement = fixture.ok(&["repo", "add", other.to_str().unwrap()]);
+    let (mut master, slave) = pty::open();
+    let mut child = fixture
+        .command()
+        .args(["repo", "rm", "project"])
+        .stdin(slave.try_clone().unwrap())
+        .stderr(slave.try_clone().unwrap())
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(60);
+    let mut transcript = String::new();
+    loop {
+        let _ = master.read_to_string(&mut transcript);
+        if transcript.contains("Are you sure? [y/N]") {
+            break;
+        }
+        assert!(child.try_wait().unwrap().is_none(), "{transcript}");
+        assert!(Instant::now() < deadline, "hung confirmation: {transcript}");
+        thread::sleep(Duration::from_millis(10));
+    }
+    fixture.ok(&[
+        "repo",
+        "rename",
+        selected["id"].as_str().unwrap(),
+        "renamed",
+    ]);
+    fixture.ok(&[
+        "repo",
+        "rename",
+        replacement["id"].as_str().unwrap(),
+        "project",
+    ]);
+    master.write_all(b"y\n").unwrap();
+    loop {
+        let _ = master.read_to_string(&mut transcript);
+        if child.try_wait().unwrap().is_some() {
+            break;
+        }
+        assert!(Instant::now() < deadline, "hung removal: {transcript}");
+        thread::sleep(Duration::from_millis(10));
+    }
+    let output = child.wait_with_output().unwrap();
+    assert!(output.status.success(), "{transcript}");
+    assert!(!fixture.repo.exists());
+    assert!(other.join("tracked").exists());
+    let repositories = fixture.ok(&["repo", "list"]);
+    assert!(
+        repositories
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|repo| repo["id"] == replacement["id"])
+    );
 }
 
 #[test]
