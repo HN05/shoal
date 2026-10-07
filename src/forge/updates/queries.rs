@@ -195,7 +195,7 @@ fn github_snapshot(text: &str, number: u64, branch: &str) -> Result<Snapshot> {
 }
 
 fn forgejo_status(text: &str, snapshot: &mut Snapshot) -> Result<()> {
-    let text = strip_bidi_isolates(text);
+    let text = strip_bidi_isolates(text).replace("STYLE()", "");
     let mut lines = text.lines();
     let header = lines.next().context("missing fj PR status")?;
     ensure!(
@@ -308,6 +308,28 @@ mod tests {
         assert_eq!(snapshot.changes(&next, "pr")[0].message, "rust: Failure");
         assert!(forgejo_status("unknown", &mut next).is_err());
         assert!(forgejo_status("Open — Can be merged\n- Unknown — rust", &mut next).is_err());
+    }
+
+    #[test]
+    fn forgejo_minimal_style_placeholders_preserve_check_names() {
+        let mut snapshot = Snapshot::default();
+        forgejo_status(
+            "\u{2068}STYLE()\u{2069}Open — Can be merged\n- \u{2068}Pending\u{2069} — rust\n- \u{2068}STYLE()\u{2069}Skipped\u{2068}STYLE()\u{2069} — review / STYLE()\n",
+            &mut snapshot,
+        )
+        .unwrap();
+        assert_eq!(snapshot.conflict, Some(false));
+        let updates = Snapshot::default().changes(&snapshot, "pr");
+        assert_eq!(updates.len(), 1);
+        assert_eq!(updates[0].kind, UpdateKind::CiCompleted);
+        assert_eq!(updates[0].message, "review /: Skipped");
+        assert!(
+            forgejo_status(
+                "STYLE()Open — Can be merged\n- STYLE()UnknownSTYLE() — rust",
+                &mut snapshot
+            )
+            .is_err()
+        );
     }
 
     #[test]
