@@ -46,7 +46,7 @@ pub struct Workspace {
     /// to verify the worktree was not moved or replaced.
     pub git_dir: Option<PathBuf>,
     pub git_dir_id: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub holds: Vec<WorkspaceHold>,
 }
 
