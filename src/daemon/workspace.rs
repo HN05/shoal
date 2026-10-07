@@ -377,7 +377,7 @@ impl Manager {
                         "branch is already owned by workspace {}", workspace.name);
                 }
                 tx.execute(
-                    "INSERT INTO workspaces (id,repository_id,name,path,branch,state,git_dir,git_dir_id,base_commit,base_ref,setup_finished) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
+                    "INSERT INTO workspaces (id,repository_id,name,path,branch,state,git_dir,git_dir_id,base_commit,base_ref,setup_finished,observed_branch) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?5)",
                     params![
                         record.id,
                         record.repository_id,

@@ -4,7 +4,7 @@ use rusqlite::OptionalExtension;
 
 use super::{GuardMode, Manager};
 use crate::{
-    daemon::{notifications::NotificationKind, store},
+    daemon::{events::EventCause, notifications::NotificationKind, store},
     hooks::{self, Hook, HookKind},
     model::{Completion, Workspace},
     state::WorkspaceState,
@@ -72,7 +72,8 @@ impl Manager {
         let workspace = self.workspace(selector).await?;
         self.verify_worktree(&workspace).await?;
         let head = crate::forge::pr::current_head(&workspace).await?;
-        self.record_done(&workspace, head, cleanup).await
+        self.record_done(&workspace, head, cleanup, EventCause::Manual)
+            .await
     }
 
     /// Caller holds the PR gate and has verified ownership and this HEAD.
@@ -81,6 +82,7 @@ impl Manager {
         workspace: &Workspace,
         head: String,
         cleanup: Option<bool>,
+        cause: EventCause,
     ) -> Result<Completion> {
         let settings = self.workspace_settings(workspace).await?;
         let command = HookKind::PostDone
@@ -108,9 +110,9 @@ impl Manager {
                 let tx = db.transaction()?;
                 store::require_ready(&tx, &id)?;
                 tx.execute(
-                    "INSERT INTO workspace_completion(workspace_id,record) VALUES (?1,?2)
-                 ON CONFLICT(workspace_id) DO UPDATE SET record=excluded.record",
-                    rusqlite::params![id, record],
+                    "INSERT INTO workspace_completion(workspace_id,record,cause) VALUES (?1,?2,?3)
+                 ON CONFLICT(workspace_id) DO UPDATE SET record=excluded.record,cause=excluded.cause",
+                    rusqlite::params![id, record, cause],
                 )?;
                 tx.execute(
                     "DELETE FROM workspace_continuation WHERE workspace_id=?1",
@@ -187,6 +189,8 @@ impl Manager {
                 }
                 Ok(false) => {}
                 Err(error) => {
+                    let cause = self.completion_cause(&workspace.id).await?;
+                    self.record_retained(&workspace.id, cause, &error).await?;
                     self.record_completion_error(&workspace.id, &error).await?;
                     self.notify(
                         Some(&workspace.name),
@@ -211,9 +215,26 @@ impl Manager {
         if self.pr_registration(&workspace.id).await?.is_some() {
             return Ok(false);
         }
-        self.remove_completed(&workspace.id, &completion.head)
+        let cause = self.completion_cause(&workspace.id).await?;
+        self.remove_completed(&workspace.id, &completion.head, cause)
             .await?;
         Ok(true)
+    }
+
+    pub(super) async fn completion_cause(&self, id: &str) -> Result<EventCause> {
+        let id = id.to_owned();
+        self.store
+            .run(move |db| {
+                Ok(db
+                    .query_row(
+                        "SELECT cause FROM workspace_completion WHERE workspace_id=?1",
+                        [id],
+                        |r| r.get(0),
+                    )
+                    .optional()?
+                    .unwrap_or(EventCause::Completion))
+            })
+            .await
     }
 
     async fn record_completion_error(&self, id: &str, error: &anyhow::Error) -> Result<()> {

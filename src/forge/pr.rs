@@ -284,6 +284,12 @@ impl Manager {
                 Ok(Some(registration)) => registration,
                 Ok(None) => continue,
                 Err(error) => {
+                    self.record_retained(
+                        &workspace.id,
+                        crate::daemon::events::EventCause::Pr,
+                        &error,
+                    )
+                    .await?;
                     self.notify(
                         Some(&workspace.name),
                         NotificationKind::CleanupFailed,
@@ -342,6 +348,12 @@ impl Manager {
                 }
                 Ok(false) => {}
                 Err(error) => {
+                    self.record_retained(
+                        &workspace.id,
+                        crate::daemon::events::EventCause::Pr,
+                        error,
+                    )
+                    .await?;
                     self.notify(
                         Some(&workspace.name),
                         NotificationKind::CleanupFailed,
@@ -396,7 +408,13 @@ impl Manager {
                         "HEAD changed after the assignment was marked done; retaining workspace"
                     );
                 } else {
-                    self.record_done(workspace, head.to_owned(), None).await?;
+                    self.record_done(
+                        workspace,
+                        head.to_owned(),
+                        None,
+                        crate::daemon::events::EventCause::Pr,
+                    )
+                    .await?;
                 }
                 // Completion is persisted first; after a crash it is reused above.
                 // The latch prevents repeated forge queries and completion signals.

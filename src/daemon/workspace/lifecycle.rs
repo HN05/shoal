@@ -1,6 +1,7 @@
 //! One removal path for explicit removal and automatic cleanup.
 use super::{Manager, executions::StopPolicy};
 use crate::{
+    daemon::events::{self, EventCause, EventKind},
     git::{
         default_branch::DefaultBranchLookup,
         worktrunk::{self, BranchRemoval, FileRemoval},
@@ -22,7 +23,7 @@ enum Removal<'a> {
     /// Explicit merge completion stops tracked agents without waiting for idle.
     Merged { head: &'a str },
     /// An assignment finished; all commits must already be preserved.
-    Completed { head: &'a str },
+    Completed { head: &'a str, cause: EventCause },
     /// A user request; dirty or differing work needs an explicit branch choice.
     Manual {
         choice: BranchChoice,
@@ -36,6 +37,16 @@ enum Removal<'a> {
 }
 
 impl Removal<'_> {
+    fn cause(self) -> EventCause {
+        match self {
+            Self::Manual { .. } => EventCause::Manual,
+            Self::Automatic { .. } => EventCause::Idle,
+            Self::Merged { .. } => EventCause::Pr,
+            Self::Completed { cause, .. } => cause,
+            Self::Deleted => EventCause::MissingDirectory,
+        }
+    }
+
     fn choice(self) -> BranchChoice {
         match self {
             Removal::Manual { choice, .. } => choice,
@@ -226,8 +237,13 @@ impl Manager {
             .map(|_| ())
     }
 
-    pub(super) async fn remove_completed(&self, selector: &str, head: &str) -> Result<()> {
-        self.remove(selector, Removal::Completed { head })
+    pub(super) async fn remove_completed(
+        &self,
+        selector: &str,
+        head: &str,
+        cause: EventCause,
+    ) -> Result<()> {
+        self.remove(selector, Removal::Completed { head, cause })
             .await
             .map(|_| ())
     }
@@ -256,7 +272,15 @@ impl Manager {
                 _ => self.remove_missing_worktree(&workspace, removal).await?,
             };
             self.remove_simulators(&workspace.id).await?;
-            self.commit_workspace_removal(&workspace.id).await?;
+            self.commit_workspace_removal(
+                &workspace.id,
+                if present {
+                    removal.cause()
+                } else {
+                    EventCause::MissingDirectory
+                },
+            )
+            .await?;
             Ok((outcome, post_remove))
         }
         .await;
@@ -270,7 +294,7 @@ impl Manager {
                     Removal::Deleted if !present => WorkspaceState::Failed,
                     _ => workspace.state,
                 };
-                self.set_state(&workspace.id, state, Some(format!("{error:#}")))
+                self.retain_workspace(&workspace.id, state, removal.cause(), &error)
                     .await?;
                 Err(error)
             }
@@ -291,11 +315,12 @@ impl Manager {
     }
 
     /// Release ownership and cascading resource leases in one transaction.
-    async fn commit_workspace_removal(&self, id: &str) -> Result<()> {
+    async fn commit_workspace_removal(&self, id: &str, cause: EventCause) -> Result<()> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
                 let tx = db.transaction()?;
+                events::record(&tx, &id, EventKind::Removed, cause, None)?;
                 tx.execute("DELETE FROM executions WHERE workspace_id=?1", [&id])?;
                 tx.execute("DELETE FROM workspaces WHERE id=?1", [id])?;
                 tx.commit()?;
@@ -354,7 +379,7 @@ impl Manager {
             );
         }
         removal.verify(&check, Stage::Initial)?;
-        if let Removal::Merged { head } | Removal::Completed { head } = removal {
+        if let Removal::Merged { head } | Removal::Completed { head, .. } = removal {
             ensure!(
                 crate::forge::pr::current_head(workspace).await? == head,
                 "HEAD changed before completion cleanup"
@@ -372,7 +397,7 @@ impl Manager {
             .check_removal(&workspace.id, removal.inspection())
             .await?;
         removal.verify(&check, Stage::AfterStop)?;
-        if let Removal::Merged { head } | Removal::Completed { head } = removal {
+        if let Removal::Merged { head } | Removal::Completed { head, .. } = removal {
             ensure!(
                 crate::forge::pr::current_head(workspace).await? == head,
                 "HEAD changed while stopping commands"
@@ -411,7 +436,7 @@ impl Manager {
                 "workspace changed during removal hooks"
             );
         }
-        if let Removal::Merged { head } | Removal::Completed { head } = removal {
+        if let Removal::Merged { head } | Removal::Completed { head, .. } = removal {
             ensure!(
                 crate::forge::pr::current_head(workspace).await? == head,
                 "HEAD changed during removal hooks"

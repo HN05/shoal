@@ -5,6 +5,7 @@ pub mod allocation;
 mod cleanup;
 pub mod doctor;
 mod execution_recovery;
+pub mod events;
 pub mod notifications;
 mod overload;
 #[cfg(test)]

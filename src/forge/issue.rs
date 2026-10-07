@@ -90,6 +90,12 @@ impl Manager {
             }
             let result = self.complete_closed_issue(&workspace).await;
             if let Err(error) = &result {
+                self.record_retained(
+                    &workspace.id,
+                    crate::daemon::events::EventCause::Issue,
+                    error,
+                )
+                .await?;
                 self.notify(
                     Some(&workspace.name),
                     NotificationKind::CleanupFailed,
@@ -125,7 +131,13 @@ impl Manager {
         let head = super::pr::current_head(workspace).await?;
         let (forge, number, _) = self.issue_forge(workspace, &issue.url).await?;
         if forge.issue_closed(&workspace.path, number).await? {
-            self.record_done(workspace, head, None).await?;
+            self.record_done(
+                workspace,
+                head,
+                None,
+                crate::daemon::events::EventCause::Issue,
+            )
+            .await?;
         }
         Ok(())
     }

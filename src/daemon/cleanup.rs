@@ -12,7 +12,7 @@ use std::{
 use tokio::time::{Instant, sleep};
 
 use crate::{
-    daemon::{notifications::NotificationKind, workspace::Manager},
+    daemon::{events::EventCause, notifications::NotificationKind, workspace::Manager},
     model::Workspace,
     state::WorkspaceState,
 };
@@ -80,6 +80,14 @@ pub fn fingerprint(root: &Path, head: &str, activity: u64) -> Result<u64> {
 /// Each workspace's idle delay comes from its own layered config; a disabled
 /// one gets only deleted-directory cleanup.
 pub async fn sweep(manager: &Manager, timers: &mut Timers) -> Result<()> {
+    for workspace in manager.list_workspaces().await? {
+        if workspace.state == WorkspaceState::Ready
+            && workspace.path.is_dir()
+            && let Err(error) = manager.observe_workspace_branch(&workspace).await
+        {
+            eprintln!("branch observation skipped {}: {error:#}", workspace.name);
+        }
+    }
     manager.sweep_issues().await?;
     manager.sweep_completed().await?;
     manager.sweep_prs().await?;
@@ -114,6 +122,9 @@ pub async fn sweep(manager: &Manager, timers: &mut Timers) -> Result<()> {
                     )
                 }
                 Err(error) => {
+                    manager
+                        .record_retained(&workspace.id, EventCause::Idle, &error)
+                        .await?;
                     eprintln!("auto cleanup retained {}: {error:#}", workspace.name);
                     (
                         NotificationKind::CleanupFailed,
@@ -169,6 +180,15 @@ async fn remove_deleted(manager: &Manager, workspace: &Workspace) {
             )
         }
         Err(error) => {
+            if let Err(record_error) = manager
+                .record_retained(&workspace.id, EventCause::MissingDirectory, &error)
+                .await
+            {
+                eprintln!(
+                    "record retained workspace {}: {record_error:#}",
+                    workspace.name
+                );
+            }
             eprintln!("deleted worktree {} retained: {error:#}", workspace.name);
             (
                 NotificationKind::CleanupFailed,
