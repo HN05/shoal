@@ -688,6 +688,133 @@ fn displayed_repository_name_resolves_old_uuid_clones_and_rejects_ambiguity() {
 }
 
 #[test]
+fn repository_selectors_preserve_names_and_reject_colliding_registered_paths() {
+    let fixture = Fixture::new();
+    let named = fixture.ok(&[
+        "repo",
+        "rename",
+        fixture.repo.to_str().unwrap(),
+        "saldoir-server",
+    ]);
+    let caller = fixture.root.path().join("caller");
+    fs::create_dir(&caller).unwrap();
+    let unrelated = init_repo(&caller, "saldoir-server", &[("precious", "keep me\n")]);
+    git(
+        &unrelated,
+        &[
+            "remote",
+            "add",
+            "origin",
+            "https://example.invalid/unrelated",
+        ],
+    );
+    let command = |args: &[&str]| {
+        fixture
+            .command()
+            .current_dir(&caller)
+            .arg("--json")
+            .args(args)
+            .output()
+            .unwrap()
+    };
+    for args in [
+        vec!["repo", "add", "saldoir-server"],
+        vec!["repo", "config", "saldoir-server"],
+        vec![
+            "config",
+            "set",
+            "--repo",
+            "saldoir-server",
+            "done.cleanup",
+            "false",
+        ],
+        vec!["add", "saldoir-server", "collision"],
+    ] {
+        let output = command(&args);
+        assert!(
+            output.status.success(),
+            "{args:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let result: Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert_eq!(
+            result[if args[0] == "repo" && args[1] == "add" {
+                "id"
+            } else {
+                "repository_id"
+            }],
+            named["id"]
+        );
+    }
+    let other = fixture.ok(&[
+        "repo",
+        "add",
+        unrelated.to_str().unwrap(),
+        "--name",
+        "other",
+    ]);
+    for args in [
+        vec!["repo", "rm", "saldoir-server", "--yes"],
+        vec!["repo", "rename", "saldoir-server", "renamed"],
+    ] {
+        let output = command(&args);
+        assert!(!output.status.success());
+        let error = String::from_utf8_lossy(&output.stderr);
+        assert!(error.contains("ambiguous"), "{error}");
+        assert!(error.contains(named["id"].as_str().unwrap()), "{error}");
+        assert!(error.contains(other["id"].as_str().unwrap()), "{error}");
+    }
+    fixture.ok(&["repo", "rename", other["id"].as_str().unwrap(), "different"]);
+    // A relative path remains usable when its spelling is not a repository name.
+    let output = command(&["repo", "config", "./saldoir-server"]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let config: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(config["repository_id"], other["id"]);
+    // Replace the second registration with an unrelated directory to exercise
+    // removal by the displayed name.
+    fixture.ok(&["repo", "rm", other["id"].as_str().unwrap(), "--yes"]);
+    fs::create_dir(&unrelated).unwrap();
+    fs::write(unrelated.join("precious"), "keep me\n").unwrap();
+    let output = command(&["repo", "rm", "saldoir-server", "--yes"]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(!fixture.repo.exists());
+    assert_eq!(
+        fs::read_to_string(unrelated.join("precious")).unwrap(),
+        "keep me\n"
+    );
+}
+
+#[test]
+fn unregistered_repository_path_diagnostic_keeps_the_typed_argument() {
+    let fixture = Fixture::new();
+    let caller = fixture.root.path().join("caller");
+    fs::create_dir(&caller).unwrap();
+    let path = init_repo(&caller, "saldoir-server", &[("tracked", "unregistered\n")]);
+    let output = fixture
+        .command()
+        .current_dir(&caller)
+        .args(["repo", "rm", "saldoir-server", "--yes"])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let error = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        error.contains("repository is not registered: saldoir-server"),
+        "{error}"
+    );
+    assert!(error.contains("read as a path:"), "{error}");
+    assert!(error.contains(path.to_str().unwrap()), "{error}");
+}
+
+#[test]
 fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
     let fixture = Fixture::with_config(Some(RESOURCE_CONFIG));
     fixture.ok(&["repo", "rename", fixture.repo.to_str().unwrap(), "project"]);

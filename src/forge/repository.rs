@@ -19,10 +19,26 @@ pub enum Selector {
 }
 
 impl Selector {
+    pub fn value(&self) -> &str {
+        match self {
+            Self::Value(value) | Self::Path { value, .. } => value,
+        }
+    }
+
     pub fn source(&self) -> Result<&str> {
         match self {
             Self::Value(value) => Ok(value),
             Self::Path { path, .. } => path.to_str().context("repository path is not UTF-8"),
+        }
+    }
+
+    fn path(&self) -> Option<std::path::PathBuf> {
+        match self {
+            Self::Value(value) if Path::new(value).is_absolute() => {
+                std::fs::canonicalize(value).ok()
+            }
+            Self::Value(_) => None,
+            Self::Path { path, .. } => Some(path.clone()),
         }
     }
 }
@@ -130,50 +146,66 @@ pub async fn select(
     selector: impl Into<Selector>,
 ) -> Result<&Repository> {
     let selector = selector.into();
-    let selector = selector.source()?;
-    let canonical = std::fs::canonicalize(selector).ok();
-    if let Some(repo) = repositories.iter().find(|repo| {
-        repo.id == selector
-            || repo.source == selector
-            || repo.path.to_str() == Some(selector)
-            || canonical.as_ref() == Some(&repo.path)
-    }) {
+    let value = selector.value();
+    let canonical = selector.path();
+    let exact = repositories.iter().find(|repo| {
+        repo.id == value || repo.source == value || repo.name.as_deref() == Some(value)
+    });
+    let mut matches: Vec<_> = repositories
+        .iter()
+        .filter(|repo| {
+            exact.is_some_and(|exact| exact.id == repo.id)
+                || (exact.is_none() && name(repo) == value)
+                || repo.path.to_str() == Some(value)
+                || canonical.as_ref() == Some(&repo.path)
+        })
+        .collect();
+    ensure!(
+        matches.len() <= 1,
+        "repository name is ambiguous: {value}; matches {}; use its ID, path, or source URL",
+        matches
+            .iter()
+            .map(|repo| format!("{} ({}, {})", name(repo), repo.id, repo.path.display()))
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+    if let Some(repo) = matches.pop() {
         return Ok(repo);
     }
-    if let Some(repo) = repositories
-        .iter()
-        .find(|repo| repo.name.as_deref() == Some(selector))
+    if (canonical.is_some() || RemoteUrl::parse(value).is_some())
+        && let Some(repo) = find_by_identity(repositories, selector.source()?)
+            .await
+            .with_context(|| match &canonical {
+                Some(path) => format!(
+                    "repository selector {value} was read as a path: {}",
+                    path.display()
+                ),
+                None => format!("resolve repository selector: {value}"),
+            })?
     {
         return Ok(repo);
     }
-    let inferred: Vec<_> = repositories
-        .iter()
-        .filter(|repo| name(repo) == selector)
-        .collect();
-    ensure!(
-        inferred.len() <= 1,
-        "repository name is ambiguous: {selector}; use its ID, path, or source URL"
-    );
-    if let Some(repo) = inferred.first() {
-        return Ok(*repo);
+    Err(NotRegistered {
+        value: value.to_owned(),
+        path: canonical,
     }
-    if let Some(repo) = find_by_identity(repositories, selector).await? {
-        return Ok(repo);
-    }
-    Err(NotRegistered(selector.to_owned()).into())
+    .into())
 }
 
 /// No registered repository matches the selector.
 #[derive(Debug)]
-pub struct NotRegistered(String);
+pub struct NotRegistered {
+    value: String,
+    path: Option<std::path::PathBuf>,
+}
 
 impl std::fmt::Display for NotRegistered {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "repository is not registered: {}; run `shoal repo add <path-or-url>`",
-            self.0
-        )
+        write!(f, "repository is not registered: {}", self.value)?;
+        if let Some(path) = &self.path {
+            write!(f, " (read as a path: {})", path.display())?;
+        }
+        write!(f, "; run `shoal repo add <path-or-url>`")
     }
 }
 
@@ -202,6 +234,51 @@ pub async fn find_by_identity<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn repository(id: &str, path: &str, name: Option<&str>) -> Repository {
+        Repository {
+            id: id.into(),
+            path: path.into(),
+            source: format!("https://example.test/team/{id}"),
+            last_used: 0,
+            name: name.map(str::to_owned),
+            workspaces_dir: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn typed_name_wins_over_a_colliding_caller_path() {
+        let repositories = [repository(
+            "registered",
+            "/tmp/registered",
+            Some("saldoir-server"),
+        )];
+        let selector = Selector::Path {
+            value: "saldoir-server".into(),
+            path: "/tmp/unrelated/saldoir-server".into(),
+        };
+        assert_eq!(
+            select(&repositories, selector).await.unwrap().id,
+            "registered"
+        );
+    }
+
+    #[tokio::test]
+    async fn colliding_name_and_path_are_reported_as_ambiguous() {
+        let repositories = [
+            repository("named", "/tmp/named", Some("saldoir-server")),
+            repository("path", "/tmp/unrelated/saldoir-server", None),
+        ];
+        let selector = Selector::Path {
+            value: "saldoir-server".into(),
+            path: "/tmp/unrelated/saldoir-server".into(),
+        };
+        let error = select(&repositories, selector)
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("named") && error.contains("path"), "{error}");
+    }
 
     #[tokio::test]
     async fn source_lookup_keeps_urls_and_reads_only_origin_from_checkouts() {

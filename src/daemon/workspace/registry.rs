@@ -41,7 +41,20 @@ impl Manager {
         if let Some(name) = &name {
             validate::name("repository", name)?;
         }
-        let source = source.source()?.to_owned();
+        let _guard = self.registry_gate.lock().await;
+        let repositories = self.repositories().await?;
+        let source = match repository::select(&repositories, &source).await {
+            Ok(existing)
+                if existing.id == source.value()
+                    || existing.source == source.value()
+                    || repository::name(existing) == source.value() =>
+            {
+                existing.source.clone()
+            }
+            Ok(_) => source.source()?.to_owned(),
+            Err(error) if error.is::<repository::NotRegistered>() => source.source()?.to_owned(),
+            Err(error) => return Err(error),
+        };
         if let Some(path) = &clone_path {
             ensure!(path.is_absolute(), "repository clone path must be absolute");
             ensure!(
@@ -56,8 +69,6 @@ impl Manager {
         } else {
             source.trim_end_matches('/').to_owned()
         };
-        let _guard = self.registry_gate.lock().await;
-        let repositories = self.repositories().await?;
         if let Some(existing) = find_existing(&repositories, &source).await? {
             check_clone_path(existing, clone_path.as_deref())?;
             return match name {
