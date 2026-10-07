@@ -215,7 +215,12 @@ fn ownership_snapshot(db: &mut Connection) -> Result<Vec<Vec<Vec<rusqlite::types
     ]
     .into_iter()
     .map(|table| {
-        let mut statement = db.prepare(&format!("SELECT * FROM {table} ORDER BY rowid"))?;
+        let columns = if table == "workspaces" {
+            WORKSPACE_COLUMNS
+        } else {
+            "*"
+        };
+        let mut statement = db.prepare(&format!("SELECT {columns} FROM {table} ORDER BY rowid"))?;
         let columns = statement.column_count();
         Ok(statement
             .query_map([], |row| (0..columns).map(|i| row.get(i)).collect())?

@@ -12,10 +12,12 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 27;
+const SCHEMA_VERSION: i64 = 28;
 
 #[cfg(test)]
 mod benchmark;
+#[cfg(test)]
+mod event_tests;
 mod worker;
 
 #[derive(Clone)]
@@ -302,6 +304,11 @@ const MIGRATIONS: &[(i64, &str, Option<Precondition>)] = &[
             name TEXT NOT NULL, reason TEXT, created_at INTEGER NOT NULL,
             PRIMARY KEY(workspace_id,name)
         );",
+        None,
+    ),
+    (
+        28,
+        include_str!("store/workspace_events.sql"),
         None,
     ),
 ];
@@ -599,6 +606,9 @@ mod tests {
         if version >= 20 {
             db.execute_batch(include_str!("store/simulator_owner.sql"))?;
         }
+        if version >= 28 {
+            db.execute_batch(include_str!("store/workspace_events.sql"))?;
+        }
         db.pragma_update(None, "user_version", version)?;
         db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
@@ -854,6 +864,7 @@ mod tests {
         store.run(seed_interrupted_operations).await.unwrap();
         store
             .run(|db| {
+                event_tests::remove_schema(db)?;
                 db.execute_batch(
                     "DROP TABLE access_requests;
                 PRAGMA user_version=16;
@@ -892,6 +903,7 @@ mod tests {
         let path = root.path().join("state.db");
         let store = Store::open(path.clone()).await.unwrap();
         store.run(|db| {
+            event_tests::remove_schema(db)?;
             db.execute_batch("DROP TABLE access_requests;
                 PRAGMA user_version=16;
                 INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
@@ -986,6 +998,7 @@ mod tests {
         let path = root.path().join("state.db");
         let store = Store::open(path.clone()).await.unwrap();
         store.run(|db| {
+            event_tests::remove_schema(db)?;
             db.execute_batch("INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
                 INSERT INTO workspaces(id,repository_id,name,path,branch,state) VALUES ('workspace','repo','worker','/work','worker','ready');
                 ALTER TABLE resource_leases DROP COLUMN mode;
@@ -1048,6 +1061,7 @@ mod tests {
         let store = Store::open(path.clone()).await.unwrap();
         store
             .run(|db| {
+                event_tests::remove_schema(db)?;
                 db.execute_batch(
                     "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
                     INSERT INTO workspaces(id,repository_id,name,path,branch,state,error) VALUES

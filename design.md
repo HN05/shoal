@@ -362,6 +362,13 @@ the first message once the session is alive, keeping a copy on disk when that
 fails. Shoal reads Happy's credentials only for this and stores none. A Happy-side
 pre-spawn hook asking Shoal for a workspace was considered and not adopted.
 
+Workspace lifecycle events persist in a separate SQLite journal alongside
+lifecycle transitions and cleanup outcomes, survive ownership removal, and retain
+the newest 1,000 records with increasing IDs. Unscoped integrations replay or
+follow them without consuming notifications; expired cursors report a gap for
+resync. External branch changes are observed during daemon sweeps without
+changing recorded ownership.
+
 Notifications stay in the terminal: the daemon records what a user would
 otherwise miss (busy resources and who holds them, port conflicts, exits of
 shortcut-launched agents, workspaces it removed or retained on its own) and the
