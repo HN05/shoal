@@ -173,8 +173,8 @@ their own workspace when no other execution is recorded; unscoped renames
 require no recorded executions. The caller keeps its original environment, and
 new commands receive the renamed identity. Existing PR watches and acknowledgements
 block renaming because their recorded remote head remains the original branch.
-An interrupted rename is retained for
-`shoal doctor --repair` before the workspace can be used again.
+An interrupted rename requires `shoal doctor --repair` before reuse;
+confirmed-deleted worktrees can still be removed through normal cleanup.
 
 `add [<repository>] --issue <number-or-url>` reads the registered repository's issue using `gh`
 for github.com or `fj` for Forgejo remotes. Install the appropriate CLI and use

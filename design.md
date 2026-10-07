@@ -175,7 +175,8 @@ adoption cannot repair a moved or replaced managed worktree. Never adopt a main 
 in one durable operation; its path, identity, resources, and associations stay
 with the workspace. The default branch, a branch checked out elsewhere, or a
 name collision is refused. No execution other than the scoped caller may be
-recorded, and interrupted intent remains for explicit repair.
+recorded, and interrupted intent blocks reuse until explicit repair or verified
+deleted-worktree cleanup.
 
 Named Git profiles live in global config; repository or global `git_profile`
 selects one for newly created worktrees, overridden by `add --git-profile`.
