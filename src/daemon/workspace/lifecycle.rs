@@ -372,7 +372,7 @@ impl Manager {
         // Validate explicit choices before hooks, then derive the actual
         // adapter options again from the final inspection.
         worktrunk_removal_options(&repo.path, &check, removal.choice()).await?;
-        let head_before_hooks = crate::forge::pr::current_head(workspace).await?;
+        let head_before_hooks = crate::git::run(&workspace.path, &["rev-parse", "HEAD"]).await?;
         // The hook sees the worktree intact; a failing hook retains it.
         if let Some(command) = self.workspace_hook(workspace, HookKind::PreRemove).await? {
             hooks::run_detached(Hook::PreRemove, workspace, &command, &self.paths).await?;
@@ -407,7 +407,8 @@ impl Manager {
             }
         ) {
             ensure!(
-                crate::forge::pr::current_head(workspace).await? == head_before_hooks,
+                crate::git::run(&workspace.path, &["rev-parse", "HEAD"]).await?
+                    == head_before_hooks,
                 "HEAD changed during removal hooks; choose whether to keep or delete the branch"
             );
         }
