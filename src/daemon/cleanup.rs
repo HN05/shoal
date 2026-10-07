@@ -209,6 +209,56 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn deleted_parent_sweep_releases_leases_and_retains_branch() {
+        use crate::{
+            daemon::{ports::PortRequest, resources::ResourceRequest},
+            test_support::{git, manager, repository},
+        };
+        let (temp, manager) = manager().await;
+        let checkout = repository(temp.path(), "repo");
+        fs::write(checkout.join(".shoal.toml"), "[resources.lock]\n").unwrap();
+        crate::test_support::commit(&checkout, ".shoal.toml");
+        let repo = manager
+            .register_repository(checkout.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        let workspace = manager
+            .create_workspace(&repo.id, "deleted-parent".into(), None, None, None)
+            .await
+            .unwrap();
+        manager
+            .acquire_port(&workspace.id, "web".into(), PortRequest::default(), None)
+            .await
+            .unwrap();
+        manager
+            .acquire_resource(
+                &workspace.id,
+                ResourceRequest {
+                    mode: None,
+                    pool: "lock".into(),
+                    name: "lock".into(),
+                    resource: None,
+                    reason: None,
+                },
+                None,
+            )
+            .await
+            .unwrap();
+        fs::remove_dir_all(workspace.path.parent().unwrap()).unwrap();
+
+        sweep(&manager, &mut Timers::default()).await.unwrap();
+
+        assert!(manager.workspace(&workspace.id).await.is_err());
+        assert!(manager.list_ports(None).await.unwrap().is_empty());
+        assert!(manager.list_resources(None).await.unwrap().is_empty());
+        assert!(!git(&checkout, &["rev-parse", "refs/heads/deleted-parent"]).is_empty());
+        assert!(
+            !git(&checkout, &["worktree", "list", "--porcelain"])
+                .contains(workspace.path.to_str().unwrap())
+        );
+    }
+
+    #[tokio::test]
     async fn invalid_pr_record_does_not_block_other_workspace_cleanup() {
         use crate::{
             forge::pr::Action,
