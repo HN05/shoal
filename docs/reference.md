@@ -162,6 +162,20 @@ task prompt is never replayed.
 
 ## Workspaces
 
+`shoal rename [WORKSPACE] BRANCH` renames a ready workspace's checked-out Git
+branch and its derived workspace name while keeping the worktree path and
+owned resources and settings. Dirty files are preserved;
+Git keeps the branch's upstream and reflog. Remotes and open PR head branches
+are unchanged. Names must be available locally and as a derived workspace name;
+rename does not choose a suffix. The default branch, branches checked out
+elsewhere, and Worktrunk-reserved names are refused. Scoped callers may rename
+their own workspace when no other execution is recorded; unscoped renames
+require no recorded executions. The caller keeps its original environment, and
+new commands receive the renamed identity. Existing PR watches and acknowledgements
+block renaming because their recorded remote head remains the original branch.
+An interrupted rename is retained for
+`shoal doctor --repair` before the workspace can be used again.
+
 `add [<repository>] --issue <number-or-url>` reads the registered repository's issue using `gh`
 for github.com or `fj` for Forgejo remotes. Install the appropriate CLI and use
 its existing login (`gh auth login` or `fj auth login`); no Shoal forge config or
@@ -171,8 +185,9 @@ interactive terminal asks whether to register the repository URL and continue;
 otherwise the command fails with the `shoal repo add` command to run. Duplicated
 remotes require an explicit repository. Explicit repositories must match the URL. Lookup failures create nothing.
 Names default to `issue-<number>-<title-slug>`; the optional branch argument
-overrides this. When the default name is already a local branch, the command
-reopens it, or the workspace that owns it, as `--existing` would; a checkout
+overrides this. An existing issue association selects its workspace even after
+renaming; otherwise a local branch with the default name reopens as `--existing`
+would. A checkout
 elsewhere or an unready workspace fails before the agent picker. `add` starts an agent only with `--agent`, regardless of
 `default_agent`. When starting an agent, `issue-template.md` supplies the initial
 prompt, substituting

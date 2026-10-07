@@ -36,7 +36,7 @@ when behavior changes, distinguishing decisions from proposals.
   explicit conflicts.
 - Workspace commands inherit a scope token. Enforce own-worktree resource access
   in the daemon and deny workspace allocation/removal/recovery and shared
-  repository/service administration; own-workspace setup, PR watches, and merge
+  repository/service administration; own-workspace setup, rename, PR watches, and merge
   acknowledgements and assignment continuation/completion are allowed.
   Scope is cooperative, not a boundary against hostile same-user processes.
 - Notifications are daemon records the CLI shows: record them where the daemon

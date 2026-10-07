@@ -295,6 +295,7 @@ impl Manager {
             }
             ExecutionKind::Setup => {
                 let git_guard = self.lock_repository_git(&workspace.repository_id).await;
+                self.ensure_no_pending_rename(&workspace.id).await?;
                 let setup_cmd = self.workspace_hook(workspace, HookKind::Setup).await?;
                 let pre_setup = self.workspace_hook(workspace, HookKind::PreSetup).await?;
                 ensure!(

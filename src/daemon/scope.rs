@@ -49,6 +49,7 @@ pub async fn authorize(
         Method::HoldAcquire { workspace, .. }
         | Method::HoldRelease { workspace, .. }
         | Method::HoldList { workspace }
+        | Method::RenameWorkspace { workspace, .. }
         | Method::WorkspaceContinue { workspace }
         | Method::WorkspaceDone { workspace, .. }
         | Method::SetPr { workspace, .. }

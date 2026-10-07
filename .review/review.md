@@ -52,7 +52,7 @@ instructions instead of the PR delivery guidance below.
 - Scope: tracked executions and externally launched processes with exported
   environments carry a scope token and get own-worktree access
   only; workspace allocation/removal/recovery and shared repository/service
-  administration stay denied, while own-workspace setup, PR registration,
+  administration stay denied, while own-workspace setup, rename, PR registration,
   merge acknowledgements, assignment continuation/completion and effective-configuration reads are allowed;
   only unscoped callers export or revoke environment tokens. Export requires a
   ready, verified worktree; tokens persist across restart until revocation or
@@ -113,6 +113,11 @@ instructions instead of the PR delivery guidance below.
   reserved names get a leaf suffix on creation and an error on opening; suffixes
   never change derived workspace names or directories. Adapter outcomes preserve
   unfamiliar strings without treating them as confirmed branch deletion.
+- Workspace rename preserves the recorded path and ownership while changing the
+  checked-out branch and derived name. Existing PR watches block rename because
+  their remote head remains the original branch. Reserve intent before changing Git;
+  no execution other than the scoped caller may be recorded.
+  explicit repair reconciles interrupted intent without replaying the mutation.
 - Existing branches, including an issue's derived local branch, use unsuffixed
   worktrees; reopen verified owned workspaces, require explicit adoption for other
   linked checkouts, never adopt the main checkout,
@@ -140,6 +145,7 @@ instructions instead of the PR delivery guidance below.
   repository's remote; unregistered issue or PR URLs offer interactive callers to
   register the repository URL and otherwise name the registration command. Lookup failures or already-closed issues create nothing. The
   canonical URL persists before tracked setup or agent launch and cannot be replaced.
+  Reopening follows the issue association before its derived local branch name.
   Assignment continuation cancels pending completion and defers issue, PR and idle
   cleanup until explicit done, across restarts, preserving associations and merge checks.
   Associated issues suppress idle cleanup and complete the assignment once confirmed

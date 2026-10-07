@@ -11,6 +11,7 @@ mod location;
 mod ownership;
 mod paths;
 mod registry;
+mod rename;
 mod repo_configuration;
 mod repo_removal;
 mod status;
@@ -361,6 +362,10 @@ impl Manager {
                     !store::exists(&tx, "SELECT 1 FROM workspaces WHERE name=?1", [&record.name])?,
                     "workspace name already exists: {}", record.name
                 );
+                ensure!(
+                    !store::exists(&tx, "SELECT 1 FROM workspace_renames WHERE name=?1", [&record.name])?,
+                    "workspace name is reserved by an unfinished rename: {}", record.name
+                );
                 let workspaces = tx.prepare(&format!("SELECT {} FROM workspaces", store::WORKSPACE_COLUMNS))?
                     .query_map([], store::workspace)?
                     .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -569,6 +574,12 @@ impl Manager {
         let id = id.to_owned();
         self.store
             .run(move |db| {
+                if state != WorkspaceState::Reconciling {
+                    ensure!(
+                        !store::exists(db, "SELECT 1 FROM workspace_renames WHERE workspace_id=?1", [&id])?,
+                        "workspace has an unfinished rename; run shoal doctor --repair first"
+                    );
+                }
                 let changed = db.execute(
                     "UPDATE workspaces SET state=?2 WHERE id=?1 AND state IN (?3,?4)",
                     params![id, state, WorkspaceState::Ready, WorkspaceState::Failed],

@@ -120,6 +120,13 @@ pub enum Command {
         /// Existing worktree root; files and Git settings are preserved, setup is skipped.
         path: PathBuf,
     },
+    /// Rename a workspace's Git branch and derived workspace name.
+    #[command(allow_missing_positional = true)]
+    Rename {
+        workspace: Option<String>,
+        /// New literal Git branch name.
+        branch: String,
+    },
     /// Open an issue workspace and start an agent.
     Issue {
         /// Run in the current pane instead of opening a Herdr tab.

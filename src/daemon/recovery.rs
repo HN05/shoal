@@ -186,6 +186,21 @@ impl Manager {
         options: ReconcileOptions,
         report: &mut Report,
     ) -> Result<()> {
+        let workspace = if options.repair {
+            if self
+                .finish_workspace_rename(workspace, options.reclaim)
+                .await?
+            {
+                report
+                    .changes
+                    .push("Reconciled interrupted branch rename".into());
+            }
+            self.workspace(&workspace.id).await?
+        } else {
+            self.ensure_no_pending_rename(&workspace.id).await?;
+            workspace.clone()
+        };
+        let workspace = &workspace;
         self.reconcile_directory(workspace, options, report).await?;
         let executions = self.inspect_workspace(&workspace.id).await?.executions;
         let ids: HashSet<_> = executions.iter().map(|e| e.id.clone()).collect();

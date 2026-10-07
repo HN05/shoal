@@ -171,6 +171,12 @@ conflict, preserving dirty files and Git settings and recording it ready without
 setup or hooks. It takes normal cleanup ownership. Reopening verifies its record;
 adoption cannot repair a moved or replaced managed worktree. Never adopt a main checkout.
 
+`shoal rename` changes a ready workspace's checked-out branch and derived name
+in one durable operation; its path, identity, resources, and associations stay
+with the workspace. The default branch, a branch checked out elsewhere, or a
+name collision is refused. No execution other than the scoped caller may be
+recorded, and interrupted intent remains for explicit repair.
+
 Named Git profiles live in global config; repository or global `git_profile`
 selects one for newly created worktrees, overridden by `add --git-profile`.
 Apply it before setup using Git's
@@ -332,9 +338,9 @@ Codex's default mode is a config value read at launch; `--cli` and `--app`
 override it.
 
 Issue-based workspace opening requires an open issue and persists its canonical
-URL before tracked setup or agent launch. An existing local branch with the
-derived name is reopened as an existing branch rather than suffixed, and
-conflicts that prevent reopening it fail before the agent picker. Associations are idempotent and cannot
+URL before tracked setup or agent launch. Reopening first follows the issue
+association, then an existing local branch with the derived name, rather than
+suffixing a new branch; conflicts fail before the agent picker. Associations are idempotent and cannot
 be replaced. Status and inspection expose them.
 
 `add --issue` resolves issue numbers/URLs using the remote and existing gh/fj

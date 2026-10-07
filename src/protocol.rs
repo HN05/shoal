@@ -149,6 +149,10 @@ pub enum Method {
         repository: String,
         path: std::path::PathBuf,
     },
+    RenameWorkspace {
+        workspace: String,
+        branch: String,
+    },
     ListWorkspaces,
     HoldAcquire {
         workspace: String,

@@ -65,6 +65,23 @@ pub(super) async fn land(ctx: &Context, workspace: Option<String>) -> Result<i32
     execution::land(&ctx.paths, workspace, ctx.json).await
 }
 
+pub(super) async fn rename(
+    ctx: &Context,
+    workspace: Option<String>,
+    branch: String,
+) -> Result<i32> {
+    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    let renamed =
+        request::<Workspace>(&ctx.paths, Method::RenameWorkspace { workspace, branch }).await?;
+    ctx.show(&renamed, |workspace| {
+        println!(
+            "Renamed workspace to {} ({})",
+            workspace.name, workspace.branch
+        )
+    })?;
+    Ok(0)
+}
+
 pub(super) async fn land_worker(ctx: &Context, plan: String) -> Result<i32> {
     anyhow::ensure!(env::is_scoped(), "land worker requires a tracked execution");
     request::<()>(&ctx.paths, Method::CheckLanding).await?;
@@ -425,7 +442,7 @@ async fn select_add_creation(
         return Ok(creation);
     }
     if let Some(issue) = issue {
-        return issue_creation(ctx, target, creation, issue.branch_name()).await;
+        return issue_creation(ctx, target, creation, issue.branch_name(), &issue.url).await;
     }
     if creation.base.is_none() && ctx.interactive() {
         #[derive(Clone, Copy)]
@@ -464,10 +481,35 @@ async fn issue_creation(
     target: &AddTarget,
     mut creation: Creation,
     name: String,
+    issue_url: &str,
 ) -> Result<Creation> {
     let repo = target.repository(ctx).await?;
-    if let Some(workspace) = client::workspaces(&ctx.paths)
-        .await?
+    let workspaces = client::workspaces(&ctx.paths).await?;
+    let mut associated = None;
+    for workspace in workspaces
+        .iter()
+        .filter(|workspace| workspace.repository_id == repo.id)
+    {
+        let inspection = client::inspect(&ctx.paths, workspace.id.clone()).await?;
+        if inspection.issue.is_some_and(|issue| issue.url == issue_url) {
+            ensure!(
+                associated.is_none(),
+                "multiple workspaces are associated with this issue; pass an explicit branch"
+            );
+            ensure!(
+                workspace.state == WorkspaceState::Ready,
+                "workspace {} is {}; inspect or set it up before reopening",
+                workspace.name,
+                workspace.state
+            );
+            associated = Some(workspace.branch.clone());
+        }
+    }
+    if let Some(branch) = associated {
+        creation.existing = Some(branch);
+        return Ok(creation);
+    }
+    if let Some(workspace) = workspaces
         .into_iter()
         .find(|workspace| workspace.repository_id == repo.id && workspace.branch == name)
     {

@@ -68,6 +68,7 @@ shoal add my-project fix-api --base feature/api  # Branch from feature/api
 shoal add my-project --existing origin/feature/api --agent codex
 shoal add my-project quick-fix --path ../quick-fix
 shoal adopt my-project ../existing-worktree  # Take ownership, including automatic cleanup
+shoal rename fix-login fix/login             # Rename its branch and workspace together
 shoal add my-project --issue 68           # Create from an issue; completes when the issue closes
 shoal continue                          # Keep working until an explicit shoal done
 shoal add --issue https://github.com/owner/repo/issues/34  # URL finds the repository
