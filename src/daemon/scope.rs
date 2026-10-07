@@ -46,7 +46,10 @@ pub async fn authorize(
         Method::Status | Method::ListWorkspaces | Method::ListRepositories | Method::SimCatalog => {
             None
         }
-        Method::WorkspaceContinue { workspace }
+        Method::HoldAcquire { workspace, .. }
+        | Method::HoldRelease { workspace, .. }
+        | Method::HoldList { workspace }
+        | Method::WorkspaceContinue { workspace }
         | Method::WorkspaceDone { workspace, .. }
         | Method::SetPr { workspace, .. }
         | Method::PrWait { workspace, .. }

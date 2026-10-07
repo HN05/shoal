@@ -324,6 +324,16 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             }
             Body::Workspaces(workspaces)
         }
+        Method::HoldAcquire {
+            workspace,
+            name,
+            reason,
+        } => Body::Hold(manager.acquire_hold(&workspace, name, reason).await?),
+        Method::HoldRelease { workspace, name } => {
+            manager.release_hold(&workspace, name).await?;
+            Body::Ok
+        }
+        Method::HoldList { workspace } => Body::Holds(manager.workspace(&workspace).await?.holds),
         Method::InspectWorkspace { workspace } => {
             Body::Inspection(manager.inspect_workspace(&workspace).await?)
         }

@@ -4,6 +4,7 @@ mod agents;
 mod done;
 mod environment;
 mod executions;
+mod holds;
 pub(super) mod identity;
 mod lifecycle;
 mod location;
@@ -196,13 +197,17 @@ impl Manager {
     pub async fn list_workspaces(&self) -> Result<Vec<Workspace>> {
         self.store
             .run(|db| {
-                Ok(db
+                let mut workspaces = db
                     .prepare(&format!(
                         "SELECT {} FROM workspaces ORDER BY name",
                         store::WORKSPACE_COLUMNS
                     ))?
                     .query_map([], store::workspace)?
-                    .collect::<rusqlite::Result<Vec<_>>>()?)
+                    .collect::<rusqlite::Result<Vec<_>>>()?;
+                for workspace in &mut workspaces {
+                    workspace.holds = holds::list(db, &workspace.id)?;
+                }
+                Ok(workspaces)
             })
             .await
     }
@@ -212,16 +217,19 @@ impl Manager {
         let selector = selector.to_owned();
         self.store
             .run(move |db| {
-                db.query_row(
-                    &format!(
-                        "SELECT {} FROM workspaces WHERE id=?1 OR name=?1",
-                        store::WORKSPACE_COLUMNS
-                    ),
-                    [&selector],
-                    store::workspace,
-                )
-                .optional()?
-                .with_context(|| format!("unknown workspace: {selector}"))
+                let mut workspace = db
+                    .query_row(
+                        &format!(
+                            "SELECT {} FROM workspaces WHERE id=?1 OR name=?1",
+                            store::WORKSPACE_COLUMNS
+                        ),
+                        [&selector],
+                        store::workspace,
+                    )
+                    .optional()?
+                    .with_context(|| format!("unknown workspace: {selector}"))?;
+                workspace.holds = holds::list(db, &workspace.id)?;
+                Ok(workspace)
             })
             .await
     }

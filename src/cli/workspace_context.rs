@@ -56,6 +56,7 @@ mod tests {
 
     fn workspace(name: &str, path: &Path) -> Workspace {
         Workspace {
+            holds: Vec::new(),
             id: format!("id-{name}"),
             repository_id: "repo".into(),
             name: name.into(),

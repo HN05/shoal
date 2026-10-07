@@ -12,7 +12,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 26;
+const SCHEMA_VERSION: i64 = 27;
 
 #[cfg(test)]
 mod benchmark;
@@ -295,6 +295,15 @@ const MIGRATIONS: &[(i64, &str, Option<Precondition>)] = &[
         );",
         None,
     ),
+    (
+        27,
+        "CREATE TABLE IF NOT EXISTS workspace_holds (
+            workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+            name TEXT NOT NULL, reason TEXT, created_at INTEGER NOT NULL,
+            PRIMARY KEY(workspace_id,name)
+        );",
+        None,
+    ),
 ];
 
 fn migrate(db: &mut Connection) -> Result<()> {
@@ -393,6 +402,7 @@ pub const WORKSPACE_COLUMNS: &str =
 
 pub fn workspace(row: &Row<'_>) -> rusqlite::Result<Workspace> {
     Ok(Workspace {
+        holds: Vec::new(),
         id: row.get("id")?,
         repository_id: row.get("repository_id")?,
         name: row.get("name")?,
@@ -540,6 +550,15 @@ mod tests {
                 "CREATE TABLE IF NOT EXISTS workspace_scopes (
                     token TEXT PRIMARY KEY,
                     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE
+                );",
+            )?;
+        }
+        if version >= 27 {
+            db.execute_batch(
+                "CREATE TABLE IF NOT EXISTS workspace_holds (
+                    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+                    name TEXT NOT NULL, reason TEXT, created_at INTEGER NOT NULL,
+                    PRIMARY KEY(workspace_id,name)
                 );",
             )?;
         }

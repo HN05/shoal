@@ -46,6 +46,17 @@ pub struct Workspace {
     /// to verify the worktree was not moved or replaced.
     pub git_dir: Option<PathBuf>,
     pub git_dir_id: Option<String>,
+    #[serde(default)]
+    pub holds: Vec<WorkspaceHold>,
+}
+
+/// A caller-named claim that a workspace is still in use.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkspaceHold {
+    pub workspace_id: String,
+    pub name: String,
+    pub reason: Option<String>,
+    pub created_at: i64,
 }
 
 impl Workspace {
@@ -68,6 +79,7 @@ impl Workspace {
             base_ref: None,
             git_dir: None,
             git_dir_id: None,
+            holds: Vec::new(),
         }
     }
 

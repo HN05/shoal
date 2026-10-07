@@ -24,7 +24,7 @@ use crate::{
     sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
 };
 
-pub const VERSION: u32 = 56;
+pub const VERSION: u32 = 57;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -149,6 +149,18 @@ pub enum Method {
         path: std::path::PathBuf,
     },
     ListWorkspaces,
+    HoldAcquire {
+        workspace: String,
+        name: String,
+        reason: Option<String>,
+    },
+    HoldRelease {
+        workspace: String,
+        name: String,
+    },
+    HoldList {
+        workspace: String,
+    },
     WorkspaceContinue {
         workspace: String,
     },
@@ -430,6 +442,8 @@ response_bodies! {
     RepositoryConfig(LocalConfig),
     RepositoryRemoved(RepositoryRemoval),
     Workspace(Workspace),
+    Hold(crate::model::WorkspaceHold),
+    Holds(Vec<crate::model::WorkspaceHold>),
     Workspaces(Vec<Workspace>),
     Branches(Vec<crate::git::existing_branch::Branch>),
     OpenedWorkspace(crate::git::existing_branch::OpenedWorkspace),
