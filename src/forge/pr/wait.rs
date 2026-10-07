@@ -38,7 +38,7 @@ impl Manager {
     }
 
     async fn poll_pr_activity(&self, id: &str) -> Result<Vec<Update>> {
-        let _guard = self.pr_gate.lock().await;
+        let guard = self.pr_gate.lock().await;
         let workspace = self.workspace(id).await?;
         self.verify_worktree(&workspace).await?;
         current_head(&workspace).await?;
@@ -52,6 +52,7 @@ impl Manager {
         if !pending.is_empty() {
             return Ok(pending);
         }
+        drop(guard);
         let mut observations = Vec::new();
         for url in urls {
             let (forge, number, _) = self.pr_forge(&workspace, &url).await?;
@@ -70,12 +71,23 @@ impl Manager {
         id: &str,
         observations: Vec<(String, Snapshot)>,
     ) -> Result<Vec<Update>> {
+        let _guard = self.pr_gate.lock().await;
         let id = id.to_owned();
         self.store.run(move |db| {
             let tx = db.transaction()?;
             store::require_ready(&tx, &id)?;
+            let registration: Option<String> = tx.query_row(
+                "SELECT record FROM pr_cleanup WHERE workspace_id=?1", [&id], |row| row.get(0)
+            ).optional()?;
+            let registration: Option<super::Registration> = registration.map(|text| serde_json::from_str(&text)).transpose()?;
+            let Some(super::Registration { kind: RegistrationKind::Watch { urls, .. }, .. }) = registration else {
+                anyhow::bail!("no watched PRs; register one with shoal pr watch");
+            };
             let mut updates = Vec::new();
             for (url, mut snapshot) in observations {
+                if !urls.contains(&url) {
+                    continue;
+                }
                 let previous: Option<String> = tx.query_row(
                     "SELECT record FROM pr_activity WHERE workspace_id=?1 AND url=?2",
                     params![id, url], |row| row.get(0),
@@ -245,6 +257,28 @@ mod tests {
         serde_json::from_value(json!({"comments": {"one": message}, "checks": {}, "conflict": null, "state": "open", "errors": {}})).unwrap()
     }
 
+    async fn register_watch(manager: &Manager, id: &str, url: &str) {
+        let id = id.to_owned();
+        let registration = super::super::Registration {
+            kind: RegistrationKind::Watch {
+                urls: vec![url.into()],
+                merged_head: None,
+            },
+            error: None,
+        };
+        manager
+            .store
+            .run(move |db| {
+                db.execute(
+                    "INSERT OR REPLACE INTO pr_cleanup(workspace_id,record) VALUES (?1,?2)",
+                    params![id, serde_json::to_string(&registration)?],
+                )?;
+                Ok(())
+            })
+            .await
+            .unwrap();
+    }
+
     #[tokio::test(start_paused = true)]
     async fn blocked_gate_and_remote_poll_respect_the_timeout() {
         let gate = tokio::sync::Mutex::new(());
@@ -290,6 +324,8 @@ mod tests {
             .await
             .unwrap();
         let changes = || vec![("pr".into(), snapshot("first review"))];
+        register_watch(&manager, &workspace.id, "pr").await;
+        register_watch(&manager, &other.id, "pr").await;
         let first = manager
             .record_pr_activity(&workspace.id, changes())
             .await
@@ -360,14 +396,31 @@ mod tests {
                 .unwrap(),
             0
         );
-        assert_eq!(
+        assert!(
+            restarted
+                .record_pr_activity(&workspace.id, changes())
+                .await
+                .is_err()
+        );
+        register_watch(&restarted, &workspace.id, "another-pr").await;
+        assert!(
             restarted
                 .record_pr_activity(&workspace.id, changes())
                 .await
                 .unwrap()
-                .len(),
-            1
+                .is_empty()
         );
+        assert!(
+            restarted
+                .pending_pr_activity(&workspace.id)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        restarted
+            .set_pr(&workspace.id, super::super::Action::Clear)
+            .await
+            .unwrap();
         assert!(restarted.wait_prs(&workspace.id, 0).await.is_err());
         assert!(restarted.wait_prs(&workspace.id, 3601).await.is_err());
         assert!(

@@ -524,7 +524,9 @@ Ambiguous records and conflicting actions are rejected. Own-workspace `pr wait`
 polls activity independently of cleanup, reporting comments or reviews, each
 completed CI check, new merge conflicts and PR closure or merging. It shares a
 persistent cursor per workspace and PR, reporting existing activity on the first
-wait and changes between waits thereafter; cancellation discards that cursor.
+wait and changes between waits thereafter; cancelling the watch discards that cursor.
+Activity lookups run outside completion serialization; persisting results
+rechecks the watch set so cancelled watches cannot recreate their cursors.
 Unacknowledged deliveries persist with the cursor so timeout or disconnection
 cannot discard unseen updates; the CLI acknowledges after successful output.
 Unavailable activity sources are explicit failures, never successful checks or
