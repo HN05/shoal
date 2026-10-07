@@ -520,7 +520,14 @@ checks apply to each PR. Once confirmed, the daemon records completion through
 HEAD persists so restart cannot complete the same watch set again. Persisted manual
 acknowledgement binds to exactly the recorded HEAD. Registrations distinguish watches from
 acknowledgements; legacy single-watch records retain their stored and JSON shape.
-Ambiguous records and conflicting actions are rejected.
+Ambiguous records and conflicting actions are rejected. Own-workspace `pr wait`
+polls activity independently of cleanup, reporting comments or reviews, each
+completed CI check, new merge conflicts and PR closure or merging. It shares a
+persistent cursor per workspace and PR, reporting existing activity on the first
+wait and changes between waits thereafter; cancellation discards that cursor.
+Unavailable activity sources are explicit failures, never successful checks or
+proof of mergeability. Waiting does not resume stopped agents or grant merge
+permission; agent instructions direct agents to handle updates and wait again.
 When completion requests cleanup, confirmed merges stop tracked agents through shared removal,
 rechecking clean files and HEAD after stopping. Failures retain work and leases;
 registered workspaces are excluded from idle cleanup until cleared or removed.

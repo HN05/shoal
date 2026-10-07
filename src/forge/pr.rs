@@ -1,4 +1,5 @@
 //! Persisted opt-in PR watches and manual merge acknowledgements.
+pub mod wait;
 use anyhow::{Context, Result, ensure};
 use rusqlite::OptionalExtension;
 use serde::{Deserialize, Serialize};
@@ -212,10 +213,18 @@ impl Manager {
             }),
         };
         let registration = kind.map(|kind| Registration { kind, error: None });
+        let watched = match &registration {
+            Some(Registration {
+                kind: RegistrationKind::Watch { urls, .. },
+                ..
+            }) => urls.clone(),
+            _ => Vec::new(),
+        };
         let id = workspace.id;
         self.store.run(move |db| {
             let tx = db.transaction()?;
             store::require_ready(&tx, &id)?;
+            tx.execute("DELETE FROM pr_activity WHERE workspace_id=?1 AND url NOT IN (SELECT value FROM json_each(?2))", rusqlite::params![id, serde_json::to_string(&watched)?])?;
             if let Some(registration) = registration {
                 tx.execute("INSERT INTO pr_cleanup(workspace_id,record) VALUES (?1,?2) ON CONFLICT(workspace_id) DO UPDATE SET record=excluded.record", rusqlite::params![id, serde_json::to_string(&registration)?])?;
             } else { tx.execute("DELETE FROM pr_cleanup WHERE workspace_id=?1", [&id])?; }

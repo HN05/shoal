@@ -24,7 +24,7 @@ use crate::{
     sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
 };
 
-pub const VERSION: u32 = 53;
+pub const VERSION: u32 = 54;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -164,6 +164,10 @@ pub enum Method {
         workspace: String,
         #[serde(flatten)]
         action: crate::forge::pr::Action,
+    },
+    PrWait {
+        workspace: String,
+        timeout_secs: u64,
     },
     InspectWorkspace {
         workspace: String,
@@ -432,6 +436,7 @@ response_bodies! {
     PulledBranch(PulledBranch),
     Notifications(Vec<Notification>),
     Notification(Notification),
+    PrUpdates(crate::forge::pr::wait::Updates),
     Port(PortReservation),
     PortSuggestion(PortSuggestion),
     PortOverview(PortOverview),

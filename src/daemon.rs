@@ -214,6 +214,13 @@ async fn serve(mut stream: UnixStream, server: Server) -> Result<()> {
         Method::WatchNotifications => {
             return watch_notifications(stream, request.id, server.manager).await;
         }
+        Method::PrWait {
+            workspace,
+            timeout_secs,
+        } => {
+            return wait_pr_updates(stream, request.id, server.manager, workspace, timeout_secs)
+                .await;
+        }
         Method::Status => Body::Status(DaemonStatus {
             pid: std::process::id(),
             version: env!("CARGO_PKG_VERSION").into(),
@@ -241,7 +248,11 @@ async fn serve(mut stream: UnixStream, server: Server) -> Result<()> {
 /// Request/response operations. Errors become `operation_failed` replies.
 async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -> Result<Body> {
     Ok(match method {
-        Method::Status | Method::Shutdown | Method::Execute { .. } | Method::WatchNotifications => {
+        Method::Status
+        | Method::Shutdown
+        | Method::Execute { .. }
+        | Method::WatchNotifications
+        | Method::PrWait { .. } => {
             anyhow::bail!("unsupported operation")
         }
         Method::ReloadConfig => {
@@ -494,6 +505,25 @@ async fn watch_notifications(
             _ = tokio::io::AsyncReadExt::read(&mut reader, &mut closed) => return Ok(()),
         }
     }
+}
+
+async fn wait_pr_updates(
+    mut stream: UnixStream,
+    request_id: u64,
+    manager: Arc<Manager>,
+    workspace: String,
+    timeout_secs: u64,
+) -> Result<()> {
+    let mut closed = [0u8; 1];
+    let result = tokio::select! {
+        result = manager.wait_prs(&workspace, timeout_secs) => result,
+        _ = tokio::io::AsyncReadExt::read(&mut stream, &mut closed) => return Ok(()),
+    };
+    let body = match result {
+        Ok(updates) => Body::PrUpdates(updates),
+        Err(error) => Body::error(ErrorCode::OperationFailed, format!("{error:#}")),
+    };
+    protocol::write(&mut stream, &Response::new(request_id, body)).await
 }
 
 struct ExecutionContext {
