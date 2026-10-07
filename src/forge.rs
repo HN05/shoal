@@ -4,6 +4,7 @@ mod locator;
 pub mod pr;
 mod remote_url;
 pub mod repository;
+pub mod updates;
 
 use crate::tools::Tool;
 use anyhow::{Context, Result, ensure};
