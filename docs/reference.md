@@ -849,7 +849,7 @@ Keeping persists across restarts and suppresses idle and PR cleanup until a new
 With cleanup requested, shell integration leaves a clean, preserved workspace for
 `<root_dir>/<repo>`; keeping or visibly unsafe work leaves the current directory.
 
-### PR cleanup
+### PR watches and cleanup
 
 `shoal pr watch <number-or-url> [workspace]` adds a GitHub/Forgejo PR to the
 workspace's persistent watch set; registering the same PR again is idempotent.
@@ -857,6 +857,20 @@ The daemon uses its `gh`/`fj` login. Numbers resolve against the workspace's
 origin remote; URLs must match it, and each PR must name the recorded branch.
 Shoal stores no forge credentials. Watches poll every ~30 seconds and suppress
 idle cleanup.
+
+`shoal pr wait [workspace]` polls watched PR activity every ~30 seconds and returns
+on comments or reviews, each completed CI check, a new merge conflict, closure,
+or merging. Each result includes its PR URL, kind and message; `--json` returns
+an `updates` array. The first wait reports existing activity; subsequent waits
+share a cursor per workspace that survives restarts, including changes made
+between waits. Cancelling a watch discards its cursor. `--timeout <seconds>`
+bounds the wait (1–3600, default 3600); expiration returns an empty array and
+`timed_out: true`. Scoped agents can wait only in their own workspace. Waiting
+continues when automatic completion is deferred or PR cleanup is disabled.
+Activity lookup failures report an error or a `lookup_failed` update; unavailable
+sources must recover before their changes can be reported. Forgejo discussion
+and review changes are grouped, and CI results follow the contexts exposed by
+`fj pr status`.
 
 Unless waiting for explicit `done`, once every watched PR has merged and at least
 one contains current HEAD, Shoal records `done` automatically. It uses

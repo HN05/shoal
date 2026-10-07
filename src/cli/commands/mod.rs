@@ -304,6 +304,9 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
                 let action = url.map_or(Action::Clear, |url| Action::Unwatch { url });
                 workspaces::pr(&ctx, workspace, action).await
             }
+            PrCommand::Wait { workspace, timeout } => {
+                workspaces::pr_wait(&ctx, workspace, timeout).await
+            }
             PrCommand::Review {
                 url,
                 repository,

@@ -122,6 +122,7 @@ shoal done --cleanup fix-login # Override a configured keep default
 shoal rm fix-login            # Remove the workspace
 shoal pr watch 42             # Watch a PR (also accepts a URL)
 shoal pr watch 43             # Add another; all must merge before automatic done
+shoal pr wait                 # Wake on PR comments, individual CI results, or conflicts
 shoal pr unwatch --pr 43      # Cancel one watch
 shoal pr unwatch              # Cancel all watches
 ```

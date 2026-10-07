@@ -1119,3 +1119,25 @@ pub(super) async fn pr(ctx: &Context, workspace: Option<String>, action: Action)
     ctx.emit(message, value)?;
     Ok(0)
 }
+
+pub(super) async fn pr_wait(ctx: &Context, workspace: Option<String>, timeout: u64) -> Result<i32> {
+    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    let (_stream, body) = client::open(
+        &ctx.paths,
+        Method::PrWait {
+            workspace,
+            timeout_secs: timeout,
+        },
+    )
+    .await?;
+    let updates = crate::forge::pr::wait::Updates::try_from(body)?;
+    ctx.show(&updates, |updates| {
+        for update in &updates.updates {
+            println!("{} [{}]: {}", update.url, update.kind, update.message);
+        }
+        if updates.timed_out {
+            println!("No PR updates before timeout.");
+        }
+    })?;
+    Ok(0)
+}

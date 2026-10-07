@@ -407,6 +407,13 @@ pub enum PrCommand {
         #[arg(long = "pr", value_name = "NUMBER_OR_URL")]
         url: Option<String>,
     },
+    /// Wait for the next comment, completed CI check, or merge conflict update.
+    Wait {
+        workspace: Option<String>,
+        /// Stop waiting after this many seconds and return no updates.
+        #[arg(long, default_value_t = 3600)]
+        timeout: u64,
+    },
     /// Open a PR's branch in a workspace and review it manually or with an agent.
     Review {
         /// GitHub or Forgejo PR number or URL.

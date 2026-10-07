@@ -55,6 +55,16 @@ Shoal marks the assignment done automatically unless waiting for explicit `done`
 `shoal pr unwatch --pr <number-or-url>` cancels one watch; omit `--pr` to cancel
 all. Closed, unmerged PRs keep waiting.
 
+While watched PRs are open, run `shoal --json pr wait` from the workspace. Handle
+the returned `updates` by inspecting their PR URLs, then wait again. Comments
+and reviews wake the wait, as does each completed CI check or a merge conflict;
+respond to available review findings while other checks run. The first wait
+includes existing activity; later waits share a persistent cursor per workspace.
+`--timeout <seconds>` bounds the wait (default 3600, maximum 3600); `timed_out`
+with empty `updates` means no update. A `lookup_failed` entry names a failed
+activity lookup; correct its cause before relying on that source. Waiting also
+reports PR closure or merging and grants no permission to merge.
+
 If you receive more work, call `shoal continue` before closing the issue or
 merging a watched PR. It cancels pending completion and defers issue, PR and idle
 cleanup until you explicitly call `shoal done`, persisting across restarts and

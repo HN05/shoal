@@ -9393,6 +9393,131 @@ fn pr_watch_checks_forgejo_merge_and_commits_with_fixture_cli() {
 }
 
 #[test]
+fn pr_wait_wakes_for_individual_ci_reviews_and_conflicts_with_own_scope() {
+    let mut fixture = Fixture::with_config(Some("[auto_cleanup]\nenabled=false\n"));
+    let workspace = fixture.add("watch");
+    fixture.add("other");
+    fixture.add_github_origin();
+    let bin = fixture.root.path().join("bin");
+    fs::create_dir(&bin).unwrap();
+    fs::write(bin.join("gh"), "#!/bin/sh\nif [ \"$1\" = api ]; then cat \"$HOME/inline.json\"; else cat \"$HOME/pr.json\"; fi\n").unwrap();
+    fs::set_permissions(bin.join("gh"), fs::Permissions::from_mode(0o755)).unwrap();
+    let mut pull = serde_json::json!({"number":7,"state":"OPEN","headRefName":"watch","headRefOid":"head",
+    "commits":[],"comments":[],"reviews":[],"mergeable":"MERGEABLE",
+    "statusCheckRollup":[
+        {"__typename":"CheckRun","name":"rust","status":"IN_PROGRESS","conclusion":"","detailsUrl":"rust/1"},
+        {"__typename":"CheckRun","name":"review","status":"COMPLETED","conclusion":"SUCCESS","detailsUrl":"review/1"}
+    ]});
+    let response = fixture.root.path().join("pr.json");
+    fs::write(&response, pull.to_string()).unwrap();
+    fs::write(
+        fixture.root.path().join("inline.json"),
+        "[[{\"id\":1,\"body\":\"review finding\"}]]",
+    )
+    .unwrap();
+    fixture.ok(&["pr", "watch", "7", "watch"]);
+    fixture.ok(&["continue", "watch"]);
+    let binary = env!("CARGO_BIN_EXE_shoal");
+    let first = fixture.ok(&["exec", "watch", "--", binary, "--json", "pr", "wait"]);
+    assert_eq!(first["timed_out"], false);
+    let kinds: Vec<_> = first["updates"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|update| update["kind"].as_str().unwrap())
+        .collect();
+    assert_eq!(kinds, ["comment", "ci_completed"]);
+    assert_eq!(first["updates"][1]["message"], "review: SUCCESS");
+    assert_eq!(
+        first["updates"][0]["url"],
+        "https://github.com/team/project/pull/7"
+    );
+    let denied = fixture.run(&["exec", "watch", "--", binary, "pr", "wait", "other"]);
+    assert!(!denied.status.success());
+    assert!(String::from_utf8_lossy(&denied.stderr).contains("another worktree"));
+    fixture.restart();
+    // Completion being disabled does not disable activity waits.
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    fs::write(path.join(".shoal.toml"), "[pr_cleanup]\nenabled=false\n").unwrap();
+    pull["statusCheckRollup"][0]["status"] = serde_json::json!("COMPLETED");
+    pull["statusCheckRollup"][0]["conclusion"] = serde_json::json!("FAILURE");
+    pull["mergeable"] = serde_json::json!("CONFLICTING");
+    fs::write(&response, pull.to_string()).unwrap();
+    let result = fixture
+        .command()
+        .current_dir(path)
+        .args(["--json", "pr", "wait"])
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let second: Value = serde_json::from_slice(&result.stdout).unwrap();
+    assert_eq!(second["updates"].as_array().unwrap().len(), 2);
+    assert_eq!(second["updates"][0]["message"], "rust: FAILURE");
+    assert_eq!(second["updates"][1]["kind"], "merge_conflict");
+    assert!(fixture.ok(&["inspect", "watch"])["completion"].is_null());
+    fixture.ok(&["pr", "unwatch", "watch"]);
+    let missing = fixture.run(&["pr", "wait", "watch"]);
+    assert!(!missing.status.success());
+    assert!(String::from_utf8_lossy(&missing.stderr).contains("no watched PRs"));
+}
+
+#[test]
+fn pr_wait_reports_forgejo_reviews_when_status_lookup_fails() {
+    let fixture = Fixture::with_config(Some("[auto_cleanup]\nenabled=false\n"));
+    fixture.add("watch");
+    git(
+        &fixture.repo,
+        &[
+            "remote",
+            "add",
+            "origin",
+            "https://forge.example/team/repo.git",
+        ],
+    );
+    let bin = fixture.root.path().join("bin");
+    fs::create_dir(&bin).unwrap();
+    fs::write(bin.join("fj"), "#!/bin/sh\ncase \" $* \" in\n *' status '*) cat \"$HOME/status\";;\n *' review '*) cat \"$HOME/reviews\";;\n *' comments '*) cat \"$HOME/comments\";;\n *) printf 'Title #7\\nBy user — Open — +1 -0\\nFrom `watch` into `main`\\n';;\nesac\n").unwrap();
+    fs::set_permissions(bin.join("fj"), fs::Permissions::from_mode(0o755)).unwrap();
+    fs::write(
+        fixture.root.path().join("status"),
+        "Open — Can be merged\n- Success — review/default\n- Pending — rust\n",
+    )
+    .unwrap();
+    fs::write(
+        fixture.root.path().join("reviews"),
+        "Comment by review-bot\n> A finding\n",
+    )
+    .unwrap();
+    fs::write(fixture.root.path().join("comments"), "").unwrap();
+    fixture.ok(&["pr", "watch", "7", "watch"]);
+    let first = fixture.ok(&["pr", "wait", "watch"]);
+    assert_eq!(first["updates"].as_array().unwrap().len(), 2);
+    assert_eq!(first["updates"][1]["message"], "review/default: Success");
+    fs::write(fixture.root.path().join("status"), "malformed response").unwrap();
+    fs::write(
+        fixture.root.path().join("reviews"),
+        "Comment by review-bot\n> Another finding\n",
+    )
+    .unwrap();
+    let second = fixture.ok(&["pr", "wait", "watch"]);
+    assert_eq!(second["updates"][0]["kind"], "comment");
+    assert_eq!(second["updates"][1]["kind"], "lookup_failed");
+    fs::write(
+        fixture.root.path().join("status"),
+        "Open — Merge conflicts\n- Success — review/default\n- Failure — rust\n",
+    )
+    .unwrap();
+    let third = fixture.ok(&["pr", "wait", "watch"]);
+    assert_eq!(third["updates"].as_array().unwrap().len(), 2);
+    assert_eq!(third["updates"][0]["message"], "rust: Failure");
+    assert_eq!(third["updates"][1]["kind"], "merge_conflict");
+}
+
+#[test]
 fn merged_rechecks_head_after_removal_hooks() {
     for key in ["pre_remove_cmd", "pre_resource_release_cmd"] {
         let fixture = Fixture::new();
