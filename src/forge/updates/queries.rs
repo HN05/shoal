@@ -47,7 +47,7 @@ impl ForgeRepo {
             let id = comment.get("id").context("review comment has no ID")?;
             snapshot
                 .comments
-                .insert(format!("inline:{id}"), comment.to_string());
+                .insert(format!("inline:{id}"), comment_fingerprint(&comment));
         }
         Ok(snapshot)
     }
@@ -173,7 +173,7 @@ fn github_snapshot(text: &str, number: u64, branch: &str) -> Result<Snapshot> {
             let id = item.get("id").context("PR comment or review has no ID")?;
             snapshot
                 .comments
-                .insert(format!("{field}:{id}"), item.to_string());
+                .insert(format!("{field}:{id}"), comment_fingerprint(item));
         }
     }
     for item in pull["statusCheckRollup"]
@@ -210,13 +210,23 @@ fn github_snapshot(text: &str, number: u64, branch: &str) -> Result<Snapshot> {
                 state: state.into(),
                 revision: format!(
                     "{}:{}:{}",
-                    pull["headRefOid"], item["completedAt"], item["createdAt"]
+                    pull["headRefOid"], item["completedAt"], item["startedAt"]
                 ),
                 complete,
             },
         );
     }
     Ok(snapshot)
+}
+
+fn comment_fingerprint(item: &serde_json::Value) -> String {
+    serde_json::json!({
+        "id": item["id"],
+        "body": item["body"],
+        "state": item["state"],
+        "lastEditedAt": item["lastEditedAt"],
+    })
+    .to_string()
 }
 
 fn args_for_commits<'a>(id: &'a str, host: &'a str) -> [&'a str; 8] {
@@ -282,6 +292,45 @@ mod tests {
     fn github(checks: serde_json::Value) -> serde_json::Value {
         json!({"number": 7, "headRefName": "topic", "headRefOid": "abc", "state": "OPEN",
             "comments": [], "reviews": [], "statusCheckRollup": checks, "mergeable": "MERGEABLE"})
+    }
+
+    #[test]
+    fn github_status_reruns_on_the_same_head_wake_again() {
+        let mut pull = github(json!([
+            {"__typename": "StatusContext", "context": "deploy", "state": "SUCCESS",
+             "targetUrl": "deploy", "startedAt": "first"}
+        ]));
+        let before = github_snapshot(&pull.to_string(), 7, "topic").unwrap();
+        pull["statusCheckRollup"][0]["startedAt"] = json!("rerun");
+        let next = github_snapshot(&pull.to_string(), 7, "topic").unwrap();
+        let updates = before.changes(&next, "pr");
+        assert_eq!(updates.len(), 1);
+        assert_eq!(updates[0].kind, UpdateKind::CiCompleted);
+    }
+
+    #[test]
+    fn github_comment_reactions_do_not_wake_but_edits_and_review_state_do() {
+        let mut pull = github(json!([]));
+        pull["comments"] = json!([{"id": "comment", "body": "hello", "reactionGroups": []}]);
+        pull["reviews"] = json!([{"id": "review", "body": "", "state": "COMMENTED"}]);
+        let before = github_snapshot(&pull.to_string(), 7, "topic").unwrap();
+        pull["comments"][0]["reactionGroups"] = json!([{"content": "THUMBS_UP"}]);
+        let reacted = github_snapshot(&pull.to_string(), 7, "topic").unwrap();
+        assert!(before.changes(&reacted, "pr").is_empty());
+        pull["comments"][0]["body"] = json!("edited");
+        let edited = github_snapshot(&pull.to_string(), 7, "topic").unwrap();
+        assert_eq!(reacted.changes(&edited, "pr")[0].kind, UpdateKind::Comment);
+        pull["reviews"][0]["state"] = json!("APPROVED");
+        let approved = github_snapshot(&pull.to_string(), 7, "topic").unwrap();
+        assert_eq!(edited.changes(&approved, "pr")[0].kind, UpdateKind::Comment);
+        let mut inline =
+            json!({"id": 1, "body": "finding", "reactions": {}, "updated_at": "first"});
+        let original = comment_fingerprint(&inline);
+        inline["reactions"] = json!({"+1": 1});
+        inline["updated_at"] = json!("reacted");
+        assert_eq!(original, comment_fingerprint(&inline));
+        inline["body"] = json!("edited finding");
+        assert_ne!(original, comment_fingerprint(&inline));
     }
 
     #[test]
