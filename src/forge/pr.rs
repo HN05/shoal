@@ -313,7 +313,9 @@ impl Manager {
                 {
                     return Ok(false);
                 }
-                if !self.completion_allows_cleanup(&workspace).await? {
+                if self.has_holds(&workspace.id).await?
+                    || !self.completion_allows_cleanup(&workspace).await?
+                {
                     return Ok(false);
                 }
                 self.remove_merged(&workspace.id, &head).await?;

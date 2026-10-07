@@ -62,6 +62,19 @@ impl Manager {
         self.cleanup_notify.notify_one();
         Ok(())
     }
+
+    pub(crate) async fn has_holds(&self, id: &str) -> Result<bool> {
+        let id = id.to_owned();
+        self.store
+            .run(move |db| {
+                store::exists(
+                    db,
+                    "SELECT 1 FROM workspace_holds WHERE workspace_id=?1",
+                    [id],
+                )
+            })
+            .await
+    }
 }
 
 pub(super) fn list(db: &Connection, id: &str) -> Result<Vec<WorkspaceHold>> {

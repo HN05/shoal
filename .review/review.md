@@ -81,7 +81,10 @@ instructions instead of the PR delivery guidance below.
   explicit runtimes stay pinned and existing leases keep their runtime.
 - Allocation is atomic and persisted before the external mutation (simctl,
   Worktrunk). Leases survive restart and failed removal and are released only
-  with successful removal. Active permits block automatic cleanup. Permit hooks
+  with successful removal. Active permits block automatic cleanup. Caller-named workspace holds persist
+  across restarts, block automatic removal without deferring completion, and are
+  released with successful removal; deleted-worktree cleanup still forgets them.
+  Scoped callers manage holds only on their own workspace. Permit hooks
   run after persistent acquisition and before release, including removal while
   the worktree exists; failure retains leases. Retrying acquisition reruns its
   hook. Permit/lifecycle changes cannot overlap resource hooks in one workspace;

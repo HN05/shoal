@@ -305,3 +305,25 @@ async fn continuation_defers_issue_and_confirmed_watch_completion_until_done() {
     manager.sweep_prs().await.unwrap();
     assert!(!workspace.path.exists());
 }
+
+#[tokio::test]
+async fn holds_retain_completion_without_turning_it_into_an_error() {
+    let (_root, manager, workspace) = fixture().await;
+    manager
+        .acquire_hold(&workspace.id, "app".into(), None)
+        .await
+        .unwrap();
+    let completed = manager.mark_done(&workspace.id, None).await.unwrap();
+    manager.sweep_completed().await.unwrap();
+    let completion = manager.completion(&workspace.id).await.unwrap().unwrap();
+    assert_eq!(completion.head, completed.head);
+    assert!(completion.cleanup);
+    assert!(completion.error.is_none());
+    assert!(workspace.path.exists());
+    manager
+        .release_hold(&workspace.id, "app".into())
+        .await
+        .unwrap();
+    manager.sweep_completed().await.unwrap();
+    assert!(!workspace.path.exists());
+}

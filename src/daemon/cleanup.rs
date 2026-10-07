@@ -508,4 +508,74 @@ mod tests {
             ""
         );
     }
+
+    #[tokio::test]
+    async fn holds_block_idle_sweeps_and_release_restores_eligibility() {
+        use crate::test_support::{git, manager, repository};
+        let (temp, manager) = manager().await;
+        let checkout = repository(temp.path(), "repo");
+        let repo = manager
+            .register_repository(checkout.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        let workspace = manager
+            .create_workspace(&repo.id, "held".into(), None, None, None)
+            .await
+            .unwrap();
+        let snapshot = manager
+            .cleanup_snapshot(&workspace.id)
+            .await
+            .unwrap()
+            .unwrap();
+        let mut timers = Timers::default();
+        timers.idle.insert(
+            workspace.id.clone(),
+            Idle {
+                snapshot,
+                since: Instant::now() - Duration::from_secs(3600),
+            },
+        );
+        for name in ["app-one", "app-two"] {
+            manager
+                .acquire_hold(&workspace.id, name.into(), None)
+                .await
+                .unwrap();
+        }
+        sweep(&manager, &mut timers).await.unwrap();
+        assert!(workspace.path.exists());
+        assert!(!git(&checkout, &["branch", "--list", "held"]).is_empty());
+        assert!(!timers.idle.contains_key(&workspace.id));
+        manager
+            .release_hold(&workspace.id, "app-one".into())
+            .await
+            .unwrap();
+        sweep(&manager, &mut timers).await.unwrap();
+        assert!(
+            manager
+                .cleanup_snapshot(&workspace.id)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        manager
+            .release_hold(&workspace.id, "app-two".into())
+            .await
+            .unwrap();
+        let snapshot = manager
+            .cleanup_snapshot(&workspace.id)
+            .await
+            .unwrap()
+            .unwrap();
+        timers.idle.insert(
+            workspace.id.clone(),
+            Idle {
+                snapshot,
+                since: Instant::now() - Duration::from_secs(3600),
+            },
+        );
+        sweep(&manager, &mut timers).await.unwrap();
+        assert!(!workspace.path.exists());
+        assert!(git(&checkout, &["branch", "--list", "held"]).is_empty());
+        assert!(!manager.has_holds(&workspace.id).await.unwrap());
+    }
 }

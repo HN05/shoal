@@ -348,8 +348,8 @@ managed workspace, or an interactive repository picker; URLs keep remote matchin
 `add --agent` launches only after creation, setup, and the post-setup hook
 succeed, or after an explicitly ignored setup failure, and retains the
 workspace whatever the agent does. Desktop handoffs (Codex app, T3) provide no
-tracking or scope; users disable automatic cleanup when that activity cannot
-be tracked. Happy sessions are the phone-driven flow: a console session that
+tracking or scope; external hosts can hold a workspace while their session is open.
+Happy sessions are the phone-driven flow: a console session that
 Happy's daemon started in a non-workspace directory creates workspaces and starts
 sessions in them. Shoal launches `happy <agent>` with the daemon's own flags so
 the session registers with Happy and appears in the app, detached from the
@@ -474,6 +474,13 @@ reads use bounded concurrency, retain workspace order and report every failure.
 
 ## Removal and recovery
 
+External sessions acquire caller-named workspace holds independently of assignment
+completion. Holds are idempotent by name and persist across restarts. They block
+automatic removal while the worktree exists, allowing issue and PR completion to
+record done; releasing the last hold restores normal cleanup eligibility. Explicit
+removal lists holders and releases holds with the workspace record; deleted-worktree
+cleanup still forgets missing worktrees. Scoped callers manage only their own workspace.
+
 Workspace completion uses `[done] cleanup` (default true), resolved through the
 normal configuration layers with explicit keep and cleanup overrides. Completion
 is persisted separately from lifecycle readiness, binds to HEAD, and notifies the
@@ -574,7 +581,6 @@ commands Shoal cannot verify stopped.
 Implementation order: CLI/daemon, workspaces, ports, simulators, lifecycle
 polish, then filesystem restrictions. Open items:
 
-- **External sessions:** holds for cleanup protection of untracked processes.
 - **Storage policy:** ownership and retention for run data outside the
   worktree, caches, logs, and audit history.
 - **Distribution:** stable service identity across

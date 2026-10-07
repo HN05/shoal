@@ -185,7 +185,7 @@ impl Manager {
         {
             return Ok(None);
         }
-        if !self.list_resources(Some(id)).await?.is_empty() {
+        if self.has_holds(id).await? || !self.list_resources(Some(id)).await?.is_empty() {
             return Ok(None);
         }
         if self
@@ -344,6 +344,15 @@ impl Manager {
         let check = self
             .check_removal(&workspace.id, removal.inspection())
             .await?;
+        if matches!(
+            removal,
+            Removal::Automatic { .. } | Removal::Merged { .. } | Removal::Completed { .. }
+        ) {
+            ensure!(
+                check.workspace.holds.is_empty(),
+                "workspace is held; retaining it"
+            );
+        }
         removal.verify(&check, Stage::Initial)?;
         if let Removal::Merged { head } | Removal::Completed { head } = removal {
             ensure!(
