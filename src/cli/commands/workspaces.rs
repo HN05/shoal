@@ -32,6 +32,34 @@ use crate::{
     state::WorkspaceState,
 };
 
+pub(super) async fn environment(
+    ctx: &Context,
+    workspace: Option<String>,
+    revoke: Option<String>,
+) -> Result<i32> {
+    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    if let Some(token) = revoke {
+        request::<()>(&ctx.paths, Method::RevokeWorkspaceEnv { workspace, token }).await?;
+        ctx.emit_styled(
+            Style::Success,
+            "Workspace environment revoked",
+            json!({"revoked": true}),
+        )?;
+    } else {
+        let values = request::<std::collections::BTreeMap<String, String>>(
+            &ctx.paths,
+            Method::WorkspaceEnv { workspace },
+        )
+        .await?;
+        ctx.show(&values, |values| {
+            for (name, value) in values {
+                println!("{name}={value}");
+            }
+        })?;
+    }
+    Ok(0)
+}
+
 pub(super) async fn land(ctx: &Context, workspace: Option<String>) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     execution::land(&ctx.paths, workspace, ctx.json).await

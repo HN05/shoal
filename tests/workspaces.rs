@@ -14088,3 +14088,142 @@ fn scoped_continuation_survives_restart_and_explicit_done_cleans_up() {
         );
     }
 }
+
+#[test]
+fn exported_environment_delivers_ports_and_confines_external_processes() {
+    let mut fixture = Fixture::new();
+    fs::write(fixture.repo.join("setup.sh"), "#!/bin/sh\nexit 0\n").unwrap();
+    fs::set_permissions(
+        fixture.repo.join("setup.sh"),
+        fs::Permissions::from_mode(0o755),
+    )
+    .unwrap();
+    git(&fixture.repo, &["add", "setup.sh"]);
+    commit_resource_config(&fixture.repo, "setup_cmd = 'setup.sh'\n");
+    let workspace = fixture.add("external");
+    fixture.add("other");
+    let web = fixture.ok(&["port", "acquire", "web", "external"]);
+    let api = fixture.ok(&["port", "acquire", "api", "external", "--env", "API_PORT"]);
+    let exported = fixture.ok(&["env", "external"]);
+    let values: std::collections::BTreeMap<String, String> =
+        serde_json::from_value(exported.clone()).unwrap();
+    assert_eq!(exported["SHOAL_WORKSPACE_ID"], workspace["id"]);
+    assert_eq!(exported["SHOAL_RUN_ID"], workspace["id"]);
+    assert_eq!(exported["SHOAL_WORKSPACE"], "external");
+    assert_eq!(
+        exported["SHOAL_STATE_DIR"],
+        fixture.root.path().join("state").to_str().unwrap()
+    );
+    assert_eq!(exported["SHOAL_PORT_WEB"], web["port"].to_string());
+    assert_eq!(exported["API_PORT"], api["port"].to_string());
+    assert_eq!(
+        exported["SHOAL_RESERVED_PORT_ENV"],
+        "API_PORT:SHOAL_PORT_WEB"
+    );
+    assert!(!values.contains_key("SHOAL_EXECUTION_ID"));
+    let child = support::isolated(fixture.root.path(), "sh")
+        .envs(&values)
+        .args(["-c", "printf '%s|%s' \"$SHOAL_PORT_WEB\" \"$API_PORT\""])
+        .output()
+        .unwrap();
+    assert!(child.status.success());
+    assert_eq!(
+        String::from_utf8(child.stdout).unwrap(),
+        format!("{}|{}", web["port"], api["port"])
+    );
+    assert!(
+        fixture.ok(&["inspect", "external"])["executions"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    let scoped = |args: &[&str]| {
+        fixture
+            .command()
+            .envs(&values)
+            .current_dir(workspace["path"].as_str().unwrap())
+            .args(args)
+            .output()
+            .unwrap()
+    };
+    for args in [
+        vec!["status"],
+        vec!["inspect"],
+        vec!["port"],
+        vec!["setup"],
+        vec!["exec", "--", env!("CARGO_BIN_EXE_shoal"), "port"],
+    ] {
+        let output = scoped(&args);
+        assert!(output.status.success(), "{args:?}: {output:?}");
+    }
+    for args in [
+        vec!["add", fixture.repo.to_str().unwrap(), "forbidden"],
+        vec!["rm", "external", "--yes"],
+        vec!["rm", "other", "--yes"],
+        vec!["notifications"],
+        vec!["inspect", "other"],
+        vec!["env"],
+        vec!["env", "other"],
+        vec!["env", "external", "--revoke", &values["SHOAL_SCOPE_TOKEN"]],
+    ] {
+        let output = scoped(&args);
+        assert!(!output.status.success(), "{args:?}: {output:?}");
+    }
+    fixture.restart();
+    let output = fixture
+        .command()
+        .envs(&values)
+        .args(["inspect", "external"])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+}
+
+#[test]
+fn exported_tokens_expire_on_revocation_and_successful_removal() {
+    let fixture = Fixture::new();
+    let workspace = fixture.add("external");
+    fixture.add("other");
+    let first = fixture.ok(&["env", "external"]);
+    let second = fixture.ok(&["env", "external"]);
+    let first_token = first["SHOAL_SCOPE_TOKEN"].as_str().unwrap();
+    let second_token = second["SHOAL_SCOPE_TOKEN"].as_str().unwrap();
+    let inspect = |token: &str| {
+        fixture
+            .command()
+            .env("SHOAL_SCOPE_TOKEN", token)
+            .args(["inspect", "external"])
+            .output()
+            .unwrap()
+    };
+    let wrong_owner = fixture.run(&["env", "other", "--revoke", first_token]);
+    assert!(!wrong_owner.status.success());
+    assert!(inspect(first_token).status.success());
+    assert_eq!(
+        fixture.ok(&["env", "external", "--revoke", first_token])["revoked"],
+        true
+    );
+    let revoked = inspect(first_token);
+    assert!(!revoked.status.success());
+    assert!(String::from_utf8_lossy(&revoked.stderr).contains("expired or unknown"));
+    assert!(inspect(second_token).status.success());
+    fs::write(
+        Path::new(workspace["path"].as_str().unwrap()).join("dirty"),
+        "preserve\n",
+    )
+    .unwrap();
+    assert!(!fixture.run(&["rm", "external", "--yes"]).status.success());
+    assert!(inspect(second_token).status.success());
+    fixture.ok(&["rm", "external", "--yes", "--keep-branch"]);
+    let removed = inspect(second_token);
+    assert!(!removed.status.success());
+    assert!(String::from_utf8_lossy(&removed.stderr).contains("expired or unknown"));
+    fixture.ok(&[
+        "add",
+        fixture.repo.to_str().unwrap(),
+        "--existing",
+        "external",
+    ]);
+    assert!(!inspect(second_token).status.success());
+    assert!(fixture.ok(&["env", "external"])["SHOAL_SCOPE_TOKEN"].is_string());
+}

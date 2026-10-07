@@ -271,6 +271,13 @@ pub enum Command {
         #[command(flatten)]
         scope: WorkspaceScope,
     },
+    /// Export the environment for processes started in a workspace.
+    Env {
+        workspace: Option<String>,
+        /// Revoke a previously exported scope token.
+        #[arg(long)]
+        revoke: Option<String>,
+    },
     /// Show detailed workspace and execution records.
     Inspect { workspace: Option<String> },
     /// Show resource conflicts, finished agents, and automatic cleanup.

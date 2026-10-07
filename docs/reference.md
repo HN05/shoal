@@ -946,7 +946,7 @@ shoal exec fix-login -- sh -c 'my-server --port "$API_PORT"'
 Named TCP reservations belong to the worktree, persist across command exits, `stop`,
 and restarts, and are released by successful removal. Repeating a name returns the
 same port (`--reason` may update it); changing the number or variable requires
-release first. Later `exec`, `claude`, `codex --cli`, and `happy` commands receive
+release first. Workspace environment exports and tracked commands receive
 `SHOAL_PORT_<NAME>` or the `--env` variable; running processes keep their
 environment, and nested executions drop the parent's port variables. Automatic
 allocation uses 49152–65535, configurable with `[ports]` `start`/`end` in the global
@@ -1045,13 +1045,23 @@ checking yourself that such processes stopped, use `--repair --acknowledge-stopp
 ### Scoped workspace commands
 
 PR watches and merge acknowledgements are own-workspace scope exceptions.
-Commands launched through `exec`, `claude`, `codex --cli`, and `happy` carry a scope
-token that confines them to their own worktree: `status`, inspect, execute, `merge`,
-`diff`, `setup`, and resources. They may read effective configuration for their own
-workspace, but cannot change configuration. They cannot `land`, reach other worktrees,
-remove workspaces, read notifications, or administer repositories or the daemon
-service; nested commands keep the scope. Scope is cooperative and does not restrict
-direct filesystem or Git operations.
+Processes carrying a Shoal scope token are confined to their own worktree:
+`status`, inspect, execute, `merge`, `diff`, `setup`, and resources. They may read
+effective configuration for their own workspace, but cannot change configuration.
+They cannot `land`, reach other worktrees, create or remove workspaces, read
+notifications, or administer repositories or the daemon service; nested commands
+keep the scope. Scope is cooperative and does not restrict direct filesystem or
+Git operations.
+
+`shoal env [workspace] --json` returns an object mapping environment variable names
+to strings, using the same workspace identity and current port exports as tracked
+executions, with a fresh `SHOAL_SCOPE_TOKEN` and no `SHOAL_EXECUTION_ID`.
+Only unscoped callers can export or revoke tokens, and export requires a ready,
+verified worktree. Add the returned variables to the processes your app starts.
+Each exported token survives daemon restarts until `shoal env [workspace] --revoke
+<token>` or successful workspace removal; revoking one leaves other tokens valid.
+Running processes retain their port snapshot. These processes are untracked and
+the token provides no cleanup protection.
 
 ## Simulators (macOS)
 

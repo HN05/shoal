@@ -150,6 +150,12 @@ CLI agents run in the terminal through Shoal; Happy sessions run detached, log
 to a file Shoal names, and stop with `shoal stop`. The Codex shortcut disables
 Codex's sandbox and approval prompts; use `shoal exec fix-login -- codex` for a
 custom invocation. Shoal's resource scope is cooperative, not a filesystem sandbox.
+Apps that launch their own processes can request `shoal env fix-login --json`
+and add the returned variables to each child's environment. Revoke its scope
+with `shoal env fix-login --revoke <token>`. See
+[workspace scope](docs/reference.md#scoped-workspace-commands) for token lifetime
+and cleanup behavior.
+
 For separate agent forge logins, configure executable wrappers:
 
 ```toml

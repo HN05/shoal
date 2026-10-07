@@ -333,6 +333,9 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             };
             workspaces::done(&ctx, workspace, cleanup).await
         }
+        Command::Env { workspace, revoke } => {
+            workspaces::environment(&ctx, workspace, revoke).await
+        }
         Command::Inspect { workspace } => workspaces::inspect(&ctx, workspace).await,
         Command::Notifications { all, follow, limit } => {
             notifications::run(&ctx, all, follow, limit).await
