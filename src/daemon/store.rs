@@ -289,7 +289,7 @@ const MIGRATIONS: &[(i64, &str, Option<Precondition>)] = &[
     ),
     (
         26,
-        "CREATE TABLE workspace_scopes (
+        "CREATE TABLE IF NOT EXISTS workspace_scopes (
             token TEXT PRIMARY KEY,
             workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE
         );",
@@ -537,7 +537,7 @@ mod tests {
         }
         if version >= 26 {
             db.execute_batch(
-                "CREATE TABLE workspace_scopes (
+                "CREATE TABLE IF NOT EXISTS workspace_scopes (
                     token TEXT PRIMARY KEY,
                     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE
                 );",
