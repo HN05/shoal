@@ -166,9 +166,17 @@ async fn wait_for_updates<F: std::future::Future<Output = Result<Vec<Update>>>>(
 ) -> Result<Updates> {
     let deadline = tokio::time::Instant::now() + Duration::from_secs(seconds);
     loop {
-        // Never cancel an in-flight poll at the timeout boundary: its cursor
-        // transaction may already be admitted to SQLite.
-        let updates = poll().await?;
+        // A cancelled poll may already have committed a pending delivery. The
+        // next wait replays it, so the advertised timeout can remain strict.
+        let updates = match tokio::time::timeout_at(deadline, poll()).await {
+            Ok(updates) => updates?,
+            Err(_) => {
+                return Ok(Updates {
+                    updates: Vec::new(),
+                    timed_out: true,
+                });
+            }
+        };
         if !updates.is_empty() {
             return Ok(Updates {
                 updates,
@@ -238,21 +246,31 @@ mod tests {
     }
 
     #[tokio::test(start_paused = true)]
-    async fn a_poll_admitted_at_timeout_returns_its_updates() {
-        let waiting = tokio::spawn(wait_for_updates(1, || async {
-            tokio::time::sleep(Duration::from_secs(2)).await;
-            Ok(vec![Update {
-                url: "pr".into(),
-                kind: UpdateKind::Comment,
-                message: "committed review".into(),
-                delivery: "delivery".into(),
-            }])
-        }));
-        tokio::task::yield_now().await;
-        tokio::time::advance(Duration::from_secs(2)).await;
-        let result = waiting.await.unwrap().unwrap();
-        assert!(!result.timed_out);
-        assert_eq!(result.updates[0].message, "committed review");
+    async fn blocked_gate_and_remote_poll_respect_the_timeout() {
+        let gate = tokio::sync::Mutex::new(());
+        let held = gate.lock().await;
+        let started = tokio::time::Instant::now();
+        let result = wait_for_updates(1, || async {
+            let _guard = gate.lock().await;
+            Ok(Vec::new())
+        })
+        .await
+        .unwrap();
+        assert!(result.timed_out);
+        assert!(result.updates.is_empty());
+        assert_eq!(
+            tokio::time::Instant::now() - started,
+            Duration::from_secs(1)
+        );
+        drop(held);
+        let started = tokio::time::Instant::now();
+        let result = wait_for_updates(1, std::future::pending).await.unwrap();
+        assert!(result.timed_out);
+        assert!(result.updates.is_empty());
+        assert_eq!(
+            tokio::time::Instant::now() - started,
+            Duration::from_secs(1)
+        );
     }
 
     #[tokio::test]
