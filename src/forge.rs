@@ -41,6 +41,11 @@ pub(crate) struct ForgeRepo {
     web_scheme: &'static str,
 }
 
+pub(crate) fn commit_revision(line: &str) -> Option<String> {
+    let hash = line.strip_prefix("commit ")?.split_whitespace().next()?;
+    (hash.len() == 40 && hash.bytes().all(|byte| byte.is_ascii_hexdigit())).then(|| hash.to_owned())
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ForgeKind {
     GitHub,
@@ -226,16 +231,7 @@ impl ForgeKind {
             let mut args = args.to_vec();
             args.push("commits");
             let output = self.query(path, &args, Query::Pull(MERGED_HINT)).await?;
-            Ok(Some(
-                output
-                    .lines()
-                    .filter_map(|line| {
-                        let hash = line.strip_prefix("commit ")?.split_whitespace().next()?;
-                        (hash.len() == 40 && hash.bytes().all(|b| b.is_ascii_hexdigit()))
-                            .then(|| hash.to_owned())
-                    })
-                    .collect(),
-            ))
+            Ok(Some(output.lines().filter_map(commit_revision).collect()))
         }
     }
 }

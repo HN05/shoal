@@ -1,5 +1,5 @@
 use super::{Check, Snapshot};
-use crate::forge::{ForgeKind, ForgeRepo, Query, fj_merged, strip_bidi_isolates};
+use crate::forge::{ForgeKind, ForgeRepo, Query, commit_revision, fj_merged, strip_bidi_isolates};
 use anyhow::{Context, Result, ensure};
 use std::path::Path;
 
@@ -237,11 +237,7 @@ fn args_for_commits<'a>(id: &'a str, host: &'a str) -> [&'a str; 8] {
 
 fn forgejo_revision(text: &str) -> Result<String> {
     text.lines()
-        .find_map(|line| {
-            let hash = line.strip_prefix("commit ")?.split_whitespace().next()?;
-            (hash.len() == 40 && hash.bytes().all(|byte| byte.is_ascii_hexdigit()))
-                .then(|| hash.to_owned())
-        })
+        .find_map(commit_revision)
         .context("Forgejo PR commits did not include a revision")
 }
 
