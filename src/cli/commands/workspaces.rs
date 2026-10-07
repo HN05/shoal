@@ -1139,6 +1139,10 @@ pub(super) async fn pr_wait(ctx: &Context, workspace: Option<String>, timeout: u
             println!("No PR updates before timeout.");
         }
     })?;
+    std::io::Write::flush(&mut std::io::stdout())?;
+    if updates.updates.is_empty() {
+        return Ok(0);
+    }
     request::<()>(
         &ctx.paths,
         Method::AcknowledgePrUpdates {
