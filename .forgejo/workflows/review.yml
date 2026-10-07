@@ -1,7 +1,7 @@
 name: review
 on:
   pull_request:
-    types: [opened, reopened, labeled]
+    types: [opened, reopened, labeled, label_updated]
 
 concurrency:
   # Default requests share the configured reviewer's queue. Claude and Codex
