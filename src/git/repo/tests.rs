@@ -939,9 +939,9 @@ async fn execution_scope_preserves_role_authorization_and_expires() {
             .await
             .unwrap();
         let token = started.plan.scope_token.as_str();
-        let caller = f.manager.caller(token).await.unwrap();
-        assert_eq!(caller.kind, kind);
-        assert_eq!(caller.execution_id, started.plan.id);
+        let caller = f.manager.caller(token).await.unwrap().unwrap();
+        assert_eq!(caller.kind(), Some(kind));
+        assert_eq!(caller.execution_id(), Some(started.plan.id.as_str()));
         assert_eq!(caller.workspace_id, workspace.id);
 
         for (mut method, allowed) in [
@@ -980,7 +980,7 @@ async fn execution_scope_preserves_role_authorization_and_expires() {
                 let result = scope::authorize(&f.manager, Some(token), &mut method).await;
                 assert_eq!(result.is_ok(), allowed, "{kind:?}: {method:?}: {result:?}");
                 if allowed {
-                    assert_eq!(result.unwrap().unwrap().kind, kind);
+                    assert_eq!(result.unwrap().unwrap().kind(), Some(kind));
                     let Method::Execute {
                         workspace: target, ..
                     } = method
@@ -995,7 +995,7 @@ async fn execution_scope_preserves_role_authorization_and_expires() {
             .finish_execution(started.plan.id.clone(), kind, Some(0))
             .await
             .unwrap();
-        assert!(f.manager.caller(token).await.is_none());
+        assert!(f.manager.caller(token).await.unwrap().is_none());
         assert!(
             scope::authorize(&f.manager, Some(token), &mut Method::Status)
                 .await
@@ -1100,8 +1100,9 @@ async fn land_execution_holds_git_gate_through_completion_and_releases_on_failur
                 .caller(&started.plan.scope_token)
                 .await
                 .unwrap()
-                .kind,
-            ExecutionKind::Land
+                .unwrap()
+                .kind(),
+            Some(ExecutionKind::Land)
         );
         f.manager
             .finish_execution(started.plan.id.clone(), ExecutionKind::Land, exit)
@@ -1155,8 +1156,10 @@ async fn land_refuses_dirty_checkouts_other_branches_and_scoped_callers() {
         .issue_scope(
             "token".into(),
             scope::Caller {
-                kind: ExecutionKind::Command,
-                execution_id: "execution".into(),
+                execution: Some(scope::ScopedExecution {
+                    kind: ExecutionKind::Command,
+                    id: "execution".into(),
+                }),
                 workspace_id: workspace.id.clone(),
             },
         )
@@ -1328,9 +1331,11 @@ async fn adoption_preserves_dirty_worktree_and_persists_identity_and_readiness()
         .issue_scope(
             "adoption-test".into(),
             scope::Caller {
-                execution_id: "test".into(),
                 workspace_id: w.id,
-                kind: ExecutionKind::Command,
+                execution: Some(scope::ScopedExecution {
+                    id: "test".into(),
+                    kind: ExecutionKind::Command,
+                }),
             },
         )
         .await;

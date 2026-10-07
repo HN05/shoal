@@ -206,7 +206,8 @@ async fn serve(mut stream: UnixStream, server: Server) -> Result<()> {
                     kind,
                     agent,
                     recover,
-                    parent_execution: caller.map(|caller| caller.execution_id),
+                    parent_execution: caller
+                        .and_then(|caller| caller.execution_id().map(str::to_owned)),
                 },
             )
             .await;
@@ -396,7 +397,7 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         ),
         Method::CheckLanding => {
             ensure!(
-                caller.is_some_and(|caller| caller.kind == ExecutionKind::Land),
+                caller.is_some_and(|caller| caller.kind() == Some(ExecutionKind::Land)),
                 "landing execution required"
             );
             Body::Ok
@@ -467,7 +468,7 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             Body::Simulators(manager.list_simulators(owner.as_deref()).await?)
         }
         Method::SimAcquire { workspace, request } => {
-            let execution_id = caller.map(|c| c.execution_id.clone());
+            let execution_id = caller.and_then(|c| c.execution_id().map(str::to_owned));
             manager
                 .acquire_simulator(&workspace, request, execution_id)
                 .await?

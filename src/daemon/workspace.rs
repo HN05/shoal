@@ -187,8 +187,8 @@ impl Manager {
         guard.context("workspace resource operation is in progress; retry when its hook finishes")
     }
 
-    pub(crate) async fn caller(&self, token: &str) -> Option<Caller> {
-        self.scopes.lock().await.get(token).cloned()
+    pub(crate) async fn caller(&self, token: &str) -> Result<Option<Caller>> {
+        Ok(self.scopes.lock().await.get(token).cloned())
     }
 
     /// Bind a scope token to the execution it was issued to.

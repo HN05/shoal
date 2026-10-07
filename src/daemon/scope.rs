@@ -7,11 +7,16 @@ use crate::{
 };
 use anyhow::{Result, bail, ensure};
 
-/// The execution a scope token belongs to.
+/// The workspace and optional tracked execution a scope token belongs to.
 #[derive(Debug, Clone)]
 pub struct Caller {
-    pub execution_id: String,
     pub workspace_id: String,
+    pub execution: Option<ScopedExecution>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ScopedExecution {
+    pub id: String,
     pub kind: ExecutionKind,
 }
 
@@ -27,13 +32,13 @@ pub async fn authorize(
     };
     let caller = manager
         .caller(token)
-        .await
+        .await?
         .ok_or_else(|| anyhow::anyhow!("expired or unknown workspace scope"))?;
     let owner = &caller.workspace_id;
     let target = match method {
         Method::CheckLanding => {
             ensure!(
-                caller.kind == ExecutionKind::Land,
+                caller.kind() == Some(ExecutionKind::Land),
                 "only an authorized landing execution may run the land worker"
             );
             None
@@ -79,7 +84,7 @@ pub async fn authorize(
             ..
         } => {
             ensure!(
-                caller.kind != ExecutionKind::Setup,
+                caller.kind() != Some(ExecutionKind::Setup),
                 "a setup command cannot recursively run setup"
             );
             Some(workspace)
@@ -102,4 +107,16 @@ pub async fn authorize(
         *target = owner.clone();
     }
     Ok(Some(caller))
+}
+
+impl Caller {
+    pub fn execution_id(&self) -> Option<&str> {
+        self.execution
+            .as_ref()
+            .map(|execution| execution.id.as_str())
+    }
+
+    pub fn kind(&self) -> Option<ExecutionKind> {
+        self.execution.as_ref().map(|execution| execution.kind)
+    }
 }

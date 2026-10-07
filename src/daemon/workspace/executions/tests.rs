@@ -133,8 +133,8 @@ async fn registration_publishes_atomically_and_preserves_stop_during_pre_setup()
         (token.clone(), caller.clone())
     };
     assert_eq!(caller.workspace_id, workspace.id);
-    assert_eq!(caller.kind, ExecutionKind::Setup);
-    let mut stop = manager.connections.lock().await[&caller.execution_id].subscribe();
+    assert_eq!(caller.kind(), Some(ExecutionKind::Setup));
+    let mut stop = manager.connections.lock().await[caller.execution_id().unwrap()].subscribe();
     let stopping = {
         let manager = manager.clone();
         let id = workspace.id.clone();
@@ -150,7 +150,7 @@ async fn registration_publishes_atomically_and_preserves_stop_during_pre_setup()
     fs::write(workspace.path.join("hook-release"), "").unwrap();
     let started = bounded(starting).await.unwrap().unwrap();
     assert!(*started.stop.borrow());
-    assert_eq!(started.plan.id, caller.execution_id);
+    assert_eq!(Some(started.plan.id.as_str()), caller.execution_id());
     assert_eq!(started.plan.scope_token, token);
     assert!(
         manager
@@ -163,7 +163,7 @@ async fn registration_publishes_atomically_and_preserves_stop_during_pre_setup()
         .await
         .unwrap();
     bounded(stopping).await.unwrap().unwrap();
-    assert!(manager.caller(&token).await.is_none());
+    assert!(manager.caller(&token).await.unwrap().is_none());
 }
 
 #[tokio::test]

@@ -2,7 +2,10 @@
 //! crate::execution, in the invoking CLI process.
 use super::{GuardMode, Manager, ResourceGuard};
 use crate::{
-    daemon::{scope::Caller, store},
+    daemon::{
+        scope::{Caller, ScopedExecution},
+        store,
+    },
     hooks::HookKind,
     model::{Execution, ExecutionPlan, LandPlan, PortReservation, Workspace},
     process::{
@@ -207,8 +210,10 @@ impl Manager {
         self.issue_scope(
             scope_token.clone(),
             Caller {
-                execution_id: id.clone(),
-                kind,
+                execution: Some(ScopedExecution {
+                    id: id.clone(),
+                    kind,
+                }),
                 workspace_id: workspace.id.clone(),
             },
         )
@@ -403,7 +408,7 @@ impl Manager {
         self.scopes
             .lock()
             .await
-            .retain(|_, caller| caller.execution_id != id);
+            .retain(|_, caller| caller.execution_id() != Some(id.as_str()));
         Ok(complete)
     }
 
