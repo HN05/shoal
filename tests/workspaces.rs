@@ -9480,7 +9480,7 @@ fn pr_wait_reports_forgejo_reviews_when_status_lookup_fails() {
     );
     let bin = fixture.root.path().join("bin");
     fs::create_dir(&bin).unwrap();
-    fs::write(bin.join("fj"), "#!/bin/sh\ncase \" $* \" in\n *' status '*) cat \"$HOME/status\";;\n *' review '*) cat \"$HOME/reviews\";;\n *' comments '*) cat \"$HOME/comments\";;\n *) printf 'Title #7\\nBy user — Open — +1 -0\\nFrom `watch` into `main`\\n';;\nesac\n").unwrap();
+    fs::write(bin.join("fj"), "#!/bin/sh\ncase \" $* \" in\n *' status '*) cat \"$HOME/status\";;\n *' review '*) cat \"$HOME/reviews\";;\n *' comments '*) cat \"$HOME/comments\";;\n *' commits '*) printf 'commit 1111111111111111111111111111111111111111\\n';;\n *) printf 'Title #7\\nBy user — Open — +1 -0\\nFrom `watch` into `main`\\n';;\nesac\n").unwrap();
     fs::set_permissions(bin.join("fj"), fs::Permissions::from_mode(0o755)).unwrap();
     fs::write(
         fixture.root.path().join("status"),

@@ -19,6 +19,14 @@ pub struct Updates {
     pub timed_out: bool,
 }
 
+#[derive(Default, Serialize, Deserialize)]
+struct ActivityRecord {
+    #[serde(flatten)]
+    snapshot: Snapshot,
+    #[serde(default)]
+    pending: Vec<Update>,
+}
+
 impl Manager {
     pub async fn wait_prs(&self, selector: &str, seconds: u64) -> Result<Updates> {
         ensure!(
@@ -40,6 +48,10 @@ impl Manager {
         let RegistrationKind::Watch { urls, .. } = registration.kind else {
             anyhow::bail!("no watched PRs; register one with shoal pr watch");
         };
+        let pending = self.pending_pr_activity(id).await?;
+        if !pending.is_empty() {
+            return Ok(pending);
+        }
         let mut observations = Vec::new();
         for url in urls {
             let (forge, number, _) = self.pr_forge(&workspace, &url).await?;
@@ -68,10 +80,20 @@ impl Manager {
                     "SELECT record FROM pr_activity WHERE workspace_id=?1 AND url=?2",
                     params![id, url], |row| row.get(0),
                 ).optional()?;
-                let previous: Snapshot = previous.map(|text| serde_json::from_str(&text)).transpose()?.unwrap_or_default();
-                snapshot.retain_failed_checks(&previous);
-                updates.extend(previous.changes(&snapshot, &url));
-                tx.execute("INSERT INTO pr_activity(workspace_id,url,record) VALUES (?1,?2,?3) ON CONFLICT(workspace_id,url) DO UPDATE SET record=excluded.record", params![id, url, serde_json::to_string(&snapshot)?])?;
+                let previous: ActivityRecord = previous.map(|text| serde_json::from_str(&text)).transpose()?.unwrap_or_default();
+                if !previous.pending.is_empty() {
+                    updates.extend(previous.pending);
+                    continue;
+                }
+                snapshot.retain_failed_checks(&previous.snapshot);
+                let mut pending = previous.snapshot.changes(&snapshot, &url);
+                let delivery = uuid::Uuid::new_v4().to_string();
+                for update in &mut pending {
+                    update.delivery.clone_from(&delivery);
+                }
+                updates.extend(pending.clone());
+                let record = ActivityRecord { snapshot, pending };
+                tx.execute("INSERT INTO pr_activity(workspace_id,url,record) VALUES (?1,?2,?3) ON CONFLICT(workspace_id,url) DO UPDATE SET record=excluded.record", params![id, url, serde_json::to_string(&record)?])?;
             }
             ensure!(serde_json::to_vec(&updates)?.len() < crate::protocol::MAX_FRAME - 256,
                 "too many PR updates for one response; cancel unused watches");
@@ -79,30 +101,88 @@ impl Manager {
             Ok(updates)
         }).await
     }
+
+    async fn pending_pr_activity(&self, id: &str) -> Result<Vec<Update>> {
+        let id = id.to_owned();
+        self.store
+            .run(move |db| {
+                let mut statement =
+                    db.prepare("SELECT record FROM pr_activity WHERE workspace_id=?1")?;
+                let records = statement.query_map([id], |row| row.get::<_, String>(0))?;
+                let mut updates = Vec::new();
+                for record in records {
+                    let record: ActivityRecord = serde_json::from_str(&record?)?;
+                    updates.extend(record.pending);
+                }
+                Ok(updates)
+            })
+            .await
+    }
+
+    pub async fn acknowledge_pr_updates(
+        &self,
+        selector: &str,
+        deliveries: Vec<String>,
+    ) -> Result<()> {
+        let workspace = self.workspace(selector).await?;
+        let _guard = self.pr_gate.lock().await;
+        self.store
+            .run(move |db| {
+                let tx = db.transaction()?;
+                store::require_ready(&tx, &workspace.id)?;
+                let records = {
+                    let mut statement =
+                        tx.prepare("SELECT url, record FROM pr_activity WHERE workspace_id=?1")?;
+                    statement
+                        .query_map([&workspace.id], |row| {
+                            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                        })?
+                        .collect::<rusqlite::Result<Vec<_>>>()?
+                };
+                for (url, record) in records {
+                    let mut record: ActivityRecord = serde_json::from_str(&record)?;
+                    if record
+                        .pending
+                        .first()
+                        .is_some_and(|update| deliveries.contains(&update.delivery))
+                    {
+                        record.pending.clear();
+                        tx.execute(
+                            "UPDATE pr_activity SET record=?1 WHERE workspace_id=?2 AND url=?3",
+                            params![serde_json::to_string(&record)?, workspace.id, url],
+                        )?;
+                    }
+                }
+                tx.commit()?;
+                Ok(())
+            })
+            .await
+    }
 }
 
 async fn wait_for_updates<F: std::future::Future<Output = Result<Vec<Update>>>>(
     seconds: u64,
     mut poll: impl FnMut() -> F,
 ) -> Result<Updates> {
-    let wait = async {
-        loop {
-            let updates = poll().await?;
-            if !updates.is_empty() {
-                return Ok::<_, anyhow::Error>(updates);
-            }
-            tokio::time::sleep(POLL_INTERVAL).await;
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(seconds);
+    loop {
+        // Never cancel an in-flight poll at the timeout boundary: its cursor
+        // transaction may already be admitted to SQLite.
+        let updates = poll().await?;
+        if !updates.is_empty() {
+            return Ok(Updates {
+                updates,
+                timed_out: false,
+            });
         }
-    };
-    match tokio::time::timeout(Duration::from_secs(seconds), wait).await {
-        Ok(updates) => Ok(Updates {
-            updates: updates?,
-            timed_out: false,
-        }),
-        Err(_) => Ok(Updates {
-            updates: Vec::new(),
-            timed_out: true,
-        }),
+        let now = tokio::time::Instant::now();
+        if now >= deadline {
+            return Ok(Updates {
+                updates: Vec::new(),
+                timed_out: true,
+            });
+        }
+        tokio::time::sleep(POLL_INTERVAL.min(deadline - now)).await;
     }
 }
 
@@ -128,6 +208,7 @@ mod tests {
                         url: "pr".into(),
                         kind: UpdateKind::CiCompleted,
                         message: "review passed".into(),
+                        delivery: String::new(),
                     }]
                 },
             )
@@ -156,6 +237,24 @@ mod tests {
         serde_json::from_value(json!({"comments": {"one": message}, "checks": {}, "conflict": null, "state": "open", "errors": {}})).unwrap()
     }
 
+    #[tokio::test(start_paused = true)]
+    async fn a_poll_admitted_at_timeout_returns_its_updates() {
+        let waiting = tokio::spawn(wait_for_updates(1, || async {
+            tokio::time::sleep(Duration::from_secs(2)).await;
+            Ok(vec![Update {
+                url: "pr".into(),
+                kind: UpdateKind::Comment,
+                message: "committed review".into(),
+                delivery: "delivery".into(),
+            }])
+        }));
+        tokio::task::yield_now().await;
+        tokio::time::advance(Duration::from_secs(2)).await;
+        let result = waiting.await.unwrap().unwrap();
+        assert!(!result.timed_out);
+        assert_eq!(result.updates[0].message, "committed review");
+    }
+
     #[tokio::test]
     async fn cursors_survive_restart_are_workspace_owned_and_clear_on_unwatch() {
         let (root, manager) = manager().await;
@@ -173,21 +272,16 @@ mod tests {
             .await
             .unwrap();
         let changes = || vec![("pr".into(), snapshot("first review"))];
-        assert_eq!(
-            manager
-                .record_pr_activity(&workspace.id, changes())
-                .await
-                .unwrap()
-                .len(),
-            1
-        );
-        assert!(
-            manager
-                .record_pr_activity(&workspace.id, changes())
-                .await
-                .unwrap()
-                .is_empty()
-        );
+        let first = manager
+            .record_pr_activity(&workspace.id, changes())
+            .await
+            .unwrap();
+        assert_eq!(first.len(), 1);
+        let replay = manager
+            .record_pr_activity(&workspace.id, changes())
+            .await
+            .unwrap();
+        assert_eq!(replay, first);
         assert_eq!(
             manager
                 .record_pr_activity(&other.id, changes())
@@ -197,6 +291,22 @@ mod tests {
             1
         );
         let restarted = Manager::open(manager.paths.clone()).await.unwrap();
+        assert_eq!(
+            restarted.pending_pr_activity(&workspace.id).await.unwrap(),
+            first
+        );
+        restarted
+            .acknowledge_pr_updates(&workspace.id, vec!["stale-delivery".into()])
+            .await
+            .unwrap();
+        assert_eq!(
+            restarted.pending_pr_activity(&workspace.id).await.unwrap(),
+            first
+        );
+        restarted
+            .acknowledge_pr_updates(&workspace.id, vec![first[0].delivery.clone()])
+            .await
+            .unwrap();
         assert!(
             restarted
                 .record_pr_activity(&workspace.id, changes())

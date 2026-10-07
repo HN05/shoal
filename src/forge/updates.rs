@@ -22,6 +22,8 @@ pub struct Update {
     pub url: String,
     pub kind: UpdateKind,
     pub message: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub delivery: String,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -49,6 +51,7 @@ impl Snapshot {
                 url: url.into(),
                 kind,
                 message,
+                delivery: String::new(),
             })
         };
         if next
@@ -94,6 +97,9 @@ impl Snapshot {
         if self.errors.contains_key("CI and merge conflicts") {
             self.checks = previous.checks.clone();
             self.conflict = previous.conflict;
+        }
+        if self.errors.contains_key("revision") {
+            self.checks = previous.checks.clone();
         }
         for source in ["discussion", "reviews"] {
             if self.errors.contains_key(source)

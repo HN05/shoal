@@ -863,7 +863,9 @@ on comments or reviews, each completed CI check, a new merge conflict, closure,
 or merging. Each result includes its PR URL, kind and message; `--json` returns
 an `updates` array. The first wait reports existing activity; subsequent waits
 share a cursor per workspace that survives restarts, including changes made
-between waits. Cancelling a watch discards its cursor. `--timeout <seconds>`
+between waits. Updates remain replayable until the CLI acknowledges successful
+output; an interrupted wait may report them again. Cancelling a watch discards
+its cursor. `--timeout <seconds>`
 bounds the wait (1–3600, default 3600); expiration returns an empty array and
 `timed_out: true`. Scoped agents can wait only in their own workspace. Waiting
 continues when automatic completion is deferred or PR cleanup is disabled.

@@ -60,7 +60,8 @@ instructions instead of the PR delivery guidance below.
   Own-workspace PR waits poll activity independently of cleanup and share persistent
   cursors, returning separate completed CI contexts as well as discussion, conflict
   and PR state changes. Lookup failures must not masquerade as successful checks
-  or mergeability; agents handle updates and wait again.
+  or mergeability; agents handle updates and wait again. Pending deliveries remain
+  replayable until CLI output succeeds and is acknowledged.
   Registration variants preserve existing stored and JSON shapes and reject ambiguous
   records and conflicting actions without blocking other workspaces' cleanup;
   manual acknowledgements bind to exactly the recorded HEAD. Completion cleanup

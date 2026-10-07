@@ -75,6 +75,27 @@ impl ForgeRepo {
             .into(),
             ..Default::default()
         };
+        let revision = match self
+            .kind
+            .query(path, &args_for_commits(&id, &self.host), Query::Pull(""))
+            .await
+        {
+            Ok(output) => match forgejo_revision(&output) {
+                Ok(revision) => Some(revision),
+                Err(error) => {
+                    snapshot
+                        .errors
+                        .insert("revision".into(), format!("{error:#}"));
+                    None
+                }
+            },
+            Err(error) => {
+                snapshot
+                    .errors
+                    .insert("revision".into(), format!("{error:#}"));
+                None
+            }
+        };
         let mut args = view.to_vec();
         args.push("comments");
         snapshot.record_comments(
@@ -103,7 +124,11 @@ impl ForgeRepo {
             ];
             let result = async {
                 let output = self.kind.query(path, &args, Query::Pull("")).await?;
-                forgejo_status(&output, &mut snapshot)
+                forgejo_status(
+                    &output,
+                    &mut snapshot,
+                    revision.as_deref().unwrap_or_default(),
+                )
             }
             .await;
             if let Err(error) = result {
@@ -194,7 +219,23 @@ fn github_snapshot(text: &str, number: u64, branch: &str) -> Result<Snapshot> {
     Ok(snapshot)
 }
 
-fn forgejo_status(text: &str, snapshot: &mut Snapshot) -> Result<()> {
+fn args_for_commits<'a>(id: &'a str, host: &'a str) -> [&'a str; 8] {
+    [
+        "--style", "minimal", "pr", "view", id, "--host", host, "commits",
+    ]
+}
+
+fn forgejo_revision(text: &str) -> Result<String> {
+    text.lines()
+        .find_map(|line| {
+            let hash = line.strip_prefix("commit ")?.split_whitespace().next()?;
+            (hash.len() == 40 && hash.bytes().all(|byte| byte.is_ascii_hexdigit()))
+                .then(|| hash.to_owned())
+        })
+        .context("Forgejo PR commits did not include a revision")
+}
+
+fn forgejo_status(text: &str, snapshot: &mut Snapshot, revision: &str) -> Result<()> {
     let text = strip_bidi_isolates(text).replace("STYLE()", "");
     let mut lines = text.lines();
     let header = lines.next().context("missing fj PR status")?;
@@ -224,7 +265,7 @@ fn forgejo_status(text: &str, snapshot: &mut Snapshot) -> Result<()> {
             Check {
                 name: name.into(),
                 state: state.into(),
-                revision: String::new(),
+                revision: revision.into(),
                 complete: state != "Pending",
             },
         );
@@ -293,7 +334,7 @@ mod tests {
     #[test]
     fn forgejo_contexts_are_distinct_and_unknown_output_fails() {
         let mut snapshot = Snapshot::default();
-        forgejo_status("\u{2068}Open — Merge conflicts\u{2069}\n- Success — review/default\n- Pending — rust\n- Skipped — deploy\n", &mut snapshot).unwrap();
+        forgejo_status("\u{2068}Open — Merge conflicts\u{2069}\n- Success — review/default\n- Pending — rust\n- Skipped — deploy\n", &mut snapshot, "rev-1").unwrap();
         let updates = Snapshot::default().changes(&snapshot, "pr");
         assert_eq!(
             updates.iter().map(|u| u.kind).collect::<Vec<_>>(),
@@ -304,10 +345,12 @@ mod tests {
             ]
         );
         let mut next = snapshot.clone();
-        forgejo_status("Open — Merge conflicts\n- Success — review/default\n- Failure — rust\n- Skipped — deploy\n", &mut next).unwrap();
+        forgejo_status("Open — Merge conflicts\n- Success — review/default\n- Failure — rust\n- Skipped — deploy\n", &mut next, "rev-1").unwrap();
         assert_eq!(snapshot.changes(&next, "pr")[0].message, "rust: Failure");
-        assert!(forgejo_status("unknown", &mut next).is_err());
-        assert!(forgejo_status("Open — Can be merged\n- Unknown — rust", &mut next).is_err());
+        assert!(forgejo_status("unknown", &mut next, "rev-1").is_err());
+        assert!(
+            forgejo_status("Open — Can be merged\n- Unknown — rust", &mut next, "rev-1").is_err()
+        );
     }
 
     #[test]
@@ -316,6 +359,7 @@ mod tests {
         forgejo_status(
             "\u{2068}STYLE()\u{2069}Open — Can be merged\n- \u{2068}Pending\u{2069} — rust\n- \u{2068}STYLE()\u{2069}Skipped\u{2068}STYLE()\u{2069} — review / STYLE()\n",
             &mut snapshot,
+            "rev-1",
         )
         .unwrap();
         assert_eq!(snapshot.conflict, Some(false));
@@ -326,16 +370,34 @@ mod tests {
         assert!(
             forgejo_status(
                 "STYLE()Open — Can be merged\n- STYLE()UnknownSTYLE() — rust",
-                &mut snapshot
+                &mut snapshot,
+                "rev-1",
             )
             .is_err()
         );
     }
 
     #[test]
+    fn forgejo_same_conclusion_on_a_new_revision_wakes_again() {
+        let status = "Open — Can be merged\n- Success — rust\n";
+        let mut first = Snapshot::default();
+        forgejo_status(status, &mut first, "revision-one").unwrap();
+        let mut second = Snapshot::default();
+        forgejo_status(status, &mut second, "revision-two").unwrap();
+        let updates = first.changes(&second, "pr");
+        assert_eq!(updates.len(), 1);
+        assert_eq!(updates[0].kind, UpdateKind::CiCompleted);
+    }
+
+    #[test]
     fn failed_status_preserves_checks_and_conflicts_while_comments_wake() {
         let mut before = Snapshot::default();
-        forgejo_status("Open — Merge conflicts\n- Success — review", &mut before).unwrap();
+        forgejo_status(
+            "Open — Merge conflicts\n- Success — review",
+            &mut before,
+            "rev-1",
+        )
+        .unwrap();
         let mut failed = Snapshot::default();
         failed.errors.insert(
             "CI and merge conflicts".into(),
@@ -353,7 +415,12 @@ mod tests {
         assert!(failed.changes(&failed, "pr").is_empty());
         let mut recovered = failed.clone();
         recovered.errors.clear();
-        forgejo_status("Open — Merge conflicts\n- Success — review", &mut recovered).unwrap();
+        forgejo_status(
+            "Open — Merge conflicts\n- Success — review",
+            &mut recovered,
+            "rev-1",
+        )
+        .unwrap();
         assert!(failed.changes(&recovered, "pr").is_empty());
         let mut unknown = Snapshot::default();
         unknown.retain_failed_checks(&recovered);

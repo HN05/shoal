@@ -1125,7 +1125,7 @@ pub(super) async fn pr_wait(ctx: &Context, workspace: Option<String>, timeout: u
     let (_stream, body) = client::open(
         &ctx.paths,
         Method::PrWait {
-            workspace,
+            workspace: workspace.clone(),
             timeout_secs: timeout,
         },
     )
@@ -1139,5 +1139,17 @@ pub(super) async fn pr_wait(ctx: &Context, workspace: Option<String>, timeout: u
             println!("No PR updates before timeout.");
         }
     })?;
+    request::<()>(
+        &ctx.paths,
+        Method::AcknowledgePrUpdates {
+            workspace,
+            deliveries: updates
+                .updates
+                .iter()
+                .map(|update| update.delivery.clone())
+                .collect(),
+        },
+    )
+    .await?;
     Ok(0)
 }

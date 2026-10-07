@@ -333,6 +333,15 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             manager.continue_workspace(&workspace).await?;
             Body::Ok
         }
+        Method::AcknowledgePrUpdates {
+            workspace,
+            deliveries,
+        } => {
+            manager
+                .acknowledge_pr_updates(&workspace, deliveries)
+                .await?;
+            Body::Ok
+        }
         Method::WorkspaceDone { workspace, cleanup } => {
             Body::Completion(manager.mark_done(&workspace, cleanup).await?)
         }
