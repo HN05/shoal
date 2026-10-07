@@ -390,6 +390,44 @@ mod tests {
     }
 
     #[test]
+    fn failed_revision_on_first_poll_defers_ci_until_revision_recovers() {
+        let previous = Snapshot::default();
+        let mut snapshot = Snapshot::default();
+        forgejo_status(
+            "Open — Merge conflicts\n- Success — rust\n",
+            &mut snapshot,
+            "",
+        )
+        .unwrap();
+        snapshot
+            .errors
+            .insert("revision".into(), "unavailable".into());
+        snapshot.comments.insert("reviews".into(), "finding".into());
+        snapshot.retain_failed_checks(&previous);
+        assert!(snapshot.checks.is_empty());
+        let updates = previous.changes(&snapshot, "pr");
+        assert_eq!(
+            updates.iter().map(|update| update.kind).collect::<Vec<_>>(),
+            [
+                UpdateKind::Comment,
+                UpdateKind::MergeConflict,
+                UpdateKind::LookupFailed
+            ]
+        );
+        let mut recovered = snapshot.clone();
+        recovered.errors.clear();
+        forgejo_status(
+            "Open — Merge conflicts\n- Success — rust\n",
+            &mut recovered,
+            "rev-1",
+        )
+        .unwrap();
+        let updates = snapshot.changes(&recovered, "pr");
+        assert_eq!(updates.len(), 1);
+        assert_eq!(updates[0].kind, UpdateKind::CiCompleted);
+    }
+
+    #[test]
     fn failed_status_preserves_checks_and_conflicts_while_comments_wake() {
         let mut before = Snapshot::default();
         forgejo_status(
