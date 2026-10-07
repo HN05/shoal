@@ -255,13 +255,15 @@ impl Manager {
 
     async fn remove(&self, selector: &str, removal: Removal<'_>) -> Result<RemovalResult> {
         let workspace = self.workspace(selector).await?;
-        self.reserve_lifecycle(&workspace.id, WorkspaceState::Removing)
-            .await?;
-        // Checked only after the reservation, so a worktree restored meanwhile
-        // cannot be deleted by an unattended removal.
         let present = workspace.path.try_exists()?;
+        self.reserve_lifecycle_for_removal(&workspace.id, !present)
+            .await?;
+        // Checked again after the reservation, so a worktree restored meanwhile
+        // cannot be deleted by an unattended removal.
         let result = async {
+            let present = workspace.path.try_exists()?;
             let post_remove = if present {
+                self.ensure_no_pending_rename(&workspace.id).await?;
                 self.prepare_post_remove_hook(&workspace).await?
             } else {
                 None

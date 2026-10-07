@@ -525,6 +525,43 @@ fn interrupted_workspace_rename_requires_explicit_repair() {
 }
 
 #[test]
+fn deleted_worktree_with_interrupted_rename_can_be_removed() {
+    let fixture = Fixture::with_config(Some("[resources.lock]\n"));
+    let workspace = fixture.add("original");
+    fixture.ok(&["port", "acquire", "web", "original"]);
+    fixture.ok(&["resource", "acquire", "lock", "original"]);
+    let id = workspace["id"].as_str().unwrap();
+    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+    db.execute(
+        "INSERT INTO workspace_renames(workspace_id,name,branch) VALUES (?1,'new-topic','new/topic')",
+        [id],
+    )
+    .unwrap();
+    db.execute("UPDATE workspaces SET state='failed' WHERE id=?1", [id])
+        .unwrap();
+    fs::remove_dir_all(workspace["path"].as_str().unwrap()).unwrap();
+    drop(db);
+    let removed = fixture.ok(&["rm", "original"]);
+    assert_eq!(removed["branch_deleted"], false);
+    assert!(!fixture.run(&["inspect", "original"]).status.success());
+    assert!(
+        fixture
+            .ok(&["port", "list", "--all"])
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        fixture
+            .ok(&["resource", "list", "--all"])
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    assert!(!git(&fixture.repo, &["rev-parse", "refs/heads/original"]).is_empty());
+}
+
+#[test]
 fn named_workspace_uses_committed_history_and_deletes_redundant_branch() {
     let fixture = Fixture::new();
     let first = fixture.ok(&["repo", "list"]);

@@ -186,7 +186,11 @@ impl Manager {
         options: ReconcileOptions,
         report: &mut Report,
     ) -> Result<()> {
-        let workspace = if options.repair {
+        let workspace = if !workspace.path.try_exists()? {
+            // No HEAD remains to reconcile. Shared removal verifies deletion,
+            // releases leases and cascades the reserved rename name.
+            workspace.clone()
+        } else if options.repair {
             if self
                 .finish_workspace_rename(workspace, options.reclaim)
                 .await?

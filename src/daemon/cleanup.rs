@@ -234,48 +234,76 @@ mod tests {
             daemon::{ports::PortRequest, resources::ResourceRequest},
             test_support::{git, manager, repository},
         };
-        let (temp, manager) = manager().await;
-        let checkout = repository(temp.path(), "repo");
-        fs::write(checkout.join(".shoal.toml"), "[resources.lock]\n").unwrap();
-        crate::test_support::commit(&checkout, ".shoal.toml");
-        let repo = manager
-            .register_repository(checkout.to_str().unwrap().into(), None, None)
-            .await
-            .unwrap();
-        let workspace = manager
-            .create_workspace(&repo.id, "deleted-parent".into(), None, None, None)
-            .await
-            .unwrap();
-        manager
-            .acquire_port(&workspace.id, "web".into(), PortRequest::default(), None)
-            .await
-            .unwrap();
-        manager
-            .acquire_resource(
-                &workspace.id,
-                ResourceRequest {
-                    mode: None,
-                    pool: "lock".into(),
-                    name: "lock".into(),
-                    resource: None,
-                    reason: None,
-                },
-                None,
-            )
-            .await
-            .unwrap();
-        fs::remove_dir_all(workspace.path.parent().unwrap()).unwrap();
+        for pending_rename in [false, true] {
+            let (temp, manager) = manager().await;
+            let checkout = repository(temp.path(), "repo");
+            fs::write(checkout.join(".shoal.toml"), "[resources.lock]\n").unwrap();
+            crate::test_support::commit(&checkout, ".shoal.toml");
+            let repo = manager
+                .register_repository(checkout.to_str().unwrap().into(), None, None)
+                .await
+                .unwrap();
+            let workspace = manager
+                .create_workspace(&repo.id, "deleted-parent".into(), None, None, None)
+                .await
+                .unwrap();
+            manager
+                .acquire_port(&workspace.id, "web".into(), PortRequest::default(), None)
+                .await
+                .unwrap();
+            manager
+                .acquire_resource(
+                    &workspace.id,
+                    ResourceRequest {
+                        mode: None,
+                        pool: "lock".into(),
+                        name: "lock".into(),
+                        resource: None,
+                        reason: None,
+                    },
+                    None,
+                )
+                .await
+                .unwrap();
+            if pending_rename {
+                git(&workspace.path, &["branch", "-m", "new/topic"]);
+                let id = workspace.id.clone();
+                manager.store.run(move |db| {
+                db.execute("INSERT INTO workspace_renames(workspace_id,name,branch) VALUES (?1,'new-topic','new/topic')", [&id])?;
+                db.execute("UPDATE workspaces SET state='failed' WHERE id=?1", [&id])?;
+                Ok(())
+            }).await.unwrap();
+            }
+            fs::remove_dir_all(workspace.path.parent().unwrap()).unwrap();
 
-        sweep(&manager, &mut Timers::default()).await.unwrap();
+            sweep(&manager, &mut Timers::default()).await.unwrap();
 
-        assert!(manager.workspace(&workspace.id).await.is_err());
-        assert!(manager.list_ports(None).await.unwrap().is_empty());
-        assert!(manager.list_resources(None).await.unwrap().is_empty());
-        assert!(!git(&checkout, &["rev-parse", "refs/heads/deleted-parent"]).is_empty());
-        assert!(
-            !git(&checkout, &["worktree", "list", "--porcelain"])
-                .contains(workspace.path.to_str().unwrap())
-        );
+            assert!(manager.workspace(&workspace.id).await.is_err());
+            assert!(manager.list_ports(None).await.unwrap().is_empty());
+            assert!(manager.list_resources(None).await.unwrap().is_empty());
+            let branch = if pending_rename {
+                "refs/heads/new/topic"
+            } else {
+                "refs/heads/deleted-parent"
+            };
+            assert!(!git(&checkout, &["rev-parse", branch]).is_empty());
+            let remaining = manager
+                .store
+                .run(|db| {
+                    Ok(
+                        db.query_row("SELECT COUNT(*) FROM workspace_renames", [], |row| {
+                            row.get::<_, i64>(0)
+                        })?,
+                    )
+                })
+                .await
+                .unwrap();
+            assert_eq!(remaining, 0);
+            assert!(
+                !git(&checkout, &["worktree", "list", "--porcelain"])
+                    .contains(workspace.path.to_str().unwrap())
+            );
+        }
     }
 
     #[tokio::test]

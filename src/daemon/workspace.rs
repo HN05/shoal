@@ -570,11 +570,31 @@ impl Manager {
     /// Move a ready or failed workspace into a transient lifecycle state,
     /// excluding every other lifecycle operation until it is restored.
     pub(crate) async fn reserve_lifecycle(&self, id: &str, state: WorkspaceState) -> Result<()> {
+        self.reserve_lifecycle_inner(id, state, false).await
+    }
+
+    async fn reserve_lifecycle_for_removal(
+        &self,
+        id: &str,
+        allow_pending_rename: bool,
+    ) -> Result<()> {
+        self.reserve_lifecycle_inner(id, WorkspaceState::Removing, allow_pending_rename)
+            .await
+    }
+
+    async fn reserve_lifecycle_inner(
+        &self,
+        id: &str,
+        state: WorkspaceState,
+        allow_pending_rename: bool,
+    ) -> Result<()> {
         let _resources = self.resource_guard(id, GuardMode::Shared).await?;
         let id = id.to_owned();
         self.store
             .run(move |db| {
-                if state != WorkspaceState::Reconciling {
+                // Removal checks pending intent after reserving the lifecycle,
+                // so a confirmed-deleted worktree can release its ownership.
+                if state != WorkspaceState::Reconciling && !allow_pending_rename {
                     ensure!(
                         !store::exists(db, "SELECT 1 FROM workspace_renames WHERE workspace_id=?1", [&id])?,
                         "workspace has an unfinished rename; run shoal doctor --repair first"
