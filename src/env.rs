@@ -1,10 +1,13 @@
 //! Environment variables Shoal reads or exports. Every `SHOAL_*` name lives
 //! here so wrapper, daemon, and process scanning agree on the contract.
 use anyhow::{Result, ensure};
-use std::{ffi::OsString, path::PathBuf};
+use std::{collections::BTreeMap, ffi::OsString, path::PathBuf};
 use tokio::process::Command;
 
-use crate::{model::Workspace, paths::Paths};
+use crate::{
+    model::{PortReservation, Workspace},
+    paths::Paths,
+};
 
 pub const PREFIX: &str = "SHOAL_";
 
@@ -12,7 +15,7 @@ pub const PREFIX: &str = "SHOAL_";
 pub const STATE_DIR: &str = "SHOAL_STATE_DIR";
 /// Resolved launch plan a new Herdr tab hands its worker; removed at startup.
 pub const HERDR_PLAN: &str = "SHOAL_HERDR_PLAN";
-/// Cooperative scope token given to processes launched through the wrapper.
+/// Cooperative workspace scope for tracked or externally launched processes.
 pub const SCOPE_TOKEN: &str = "SHOAL_SCOPE_TOKEN";
 /// Execution marker used to discover owned processes during recovery.
 pub const EXECUTION_ID: &str = "SHOAL_EXECUTION_ID";
@@ -107,16 +110,49 @@ pub fn inherited_port_exports() -> Vec<OsString> {
     exports
 }
 
+/// Shared identity values for hooks, tracked executions and external processes.
+fn workspace_identity(workspace: &Workspace, paths: &Paths) -> BTreeMap<String, OsString> {
+    BTreeMap::from([
+        (WORKSPACE_ID.into(), workspace.id.clone().into()),
+        (RUN_ID.into(), workspace.id.clone().into()),
+        (WORKSPACE_NAME.into(), workspace.name.clone().into()),
+        (STATE_DIR.into(), paths.state.as_os_str().to_owned()),
+    ])
+}
+
+/// The workspace environment, without a tracked execution marker.
+pub fn workspace_environment(
+    workspace: &Workspace,
+    paths: &Paths,
+    ports: &[PortReservation],
+    token: &str,
+) -> BTreeMap<String, OsString> {
+    let mut values = workspace_identity(workspace, paths);
+    values.insert(SCOPE_TOKEN.into(), token.into());
+    values.insert(
+        RESERVED_PORT_ENV.into(),
+        ports
+            .iter()
+            .map(|port| port.env_var.as_str())
+            .collect::<Vec<_>>()
+            .join(":")
+            .into(),
+    );
+    values.extend(
+        ports
+            .iter()
+            .map(|port| (port.env_var.clone(), port.port.to_string().into())),
+    );
+    values
+}
+
 /// Set shared workspace identity and clear inherited port exports and shell state.
 pub fn apply_workspace_identity(command: &mut Command, workspace: &Workspace, paths: &Paths) {
     for name in inherited_port_exports() {
         command.env_remove(name);
     }
     command
-        .env(WORKSPACE_ID, &workspace.id)
-        .env(RUN_ID, &workspace.id)
-        .env(WORKSPACE_NAME, &workspace.name)
-        .env(STATE_DIR, &paths.state)
+        .envs(workspace_identity(workspace, paths))
         .env_remove(SHELL_DIRECTIVE);
 }
 
@@ -124,7 +160,7 @@ pub fn scope_token() -> Option<String> {
     std::env::var(SCOPE_TOKEN).ok()
 }
 
-/// True when this process runs inside a tracked workspace execution.
+/// True when this process carries cooperative workspace scope.
 pub fn is_scoped() -> bool {
     std::env::var_os(SCOPE_TOKEN).is_some()
 }

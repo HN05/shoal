@@ -513,12 +513,14 @@ fn report_launch(launch: &DetachedLaunch) -> Result<()> {
 /// variables inherited from an enclosing execution.
 fn configure_environment(process: &mut Command, paths: &Paths, plan: &ExecutionPlan) {
     env::apply_workspace_identity(process, &plan.workspace, paths);
-    let exported: Vec<_> = plan.ports.iter().map(|p| p.env_var.as_str()).collect();
     process
-        .env(env::SCOPE_TOKEN, &plan.scope_token)
-        .env(env::EXECUTION_ID, &plan.id)
-        .envs(plan.ports.iter().map(|p| (&p.env_var, p.port.to_string())))
-        .env(env::RESERVED_PORT_ENV, exported.join(":"));
+        .envs(env::workspace_environment(
+            &plan.workspace,
+            paths,
+            &plan.ports,
+            &plan.scope_token,
+        ))
+        .env(env::EXECUTION_ID, &plan.id);
 }
 
 async fn report_completion(
