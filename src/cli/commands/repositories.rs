@@ -116,7 +116,7 @@ pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
                     "repository removal canceled"
                 );
                 // A rename while the prompt is open must not redirect deletion.
-                repository = repo.id.clone();
+                repository = repo.id.clone().into();
             }
             let result = ctx
                 .progress(
@@ -142,7 +142,7 @@ pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
 
 async fn register(
     ctx: &Context,
-    source: String,
+    source: repository::Selector,
     name: Option<String>,
     path: Option<PathBuf>,
 ) -> Result<Repository> {
@@ -161,7 +161,7 @@ pub(super) async fn offer_registration(ctx: &Context, source: &str) -> Result<Op
     if !ui::offer(ctx, &format!("Register {source} with Shoal?"))? {
         return Ok(None);
     }
-    let repo = register(ctx, source.to_owned(), None, None).await?;
+    let repo = register(ctx, ui::repository_selector(source.to_owned())?, None, None).await?;
     eprintln!(
         "Registered {}",
         ui::repository_label(&repo, Palette::stderr(ctx.json))
@@ -173,15 +173,15 @@ pub(super) async fn offer_registration(ctx: &Context, source: &str) -> Result<Op
 /// repository, so the command can continue with the new registration.
 pub(super) async fn offer_unregistered(
     ctx: &Context,
-    selector: &str,
+    selector: &repository::Selector,
 ) -> Result<Option<Repository>> {
-    if !ctx.interactive() || !repository::registrable(selector) {
+    if !ctx.interactive() || !repository::registrable(selector.source()?) {
         return Ok(None);
     }
     let repos = client::repositories(&ctx.paths).await?;
     match repository::select(&repos, selector).await {
         Err(error) if error.is::<repository::NotRegistered>() => {
-            match offer_registration(ctx, selector).await? {
+            match offer_registration(ctx, selector.source()?).await? {
                 Some(repo) => Ok(Some(repo)),
                 None => Err(error),
             }

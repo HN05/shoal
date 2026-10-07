@@ -1324,7 +1324,7 @@ async fn adoption_preserves_dirty_worktree_and_persists_identity_and_readiness()
     assert!(restored.verify_worktree(&w).await.is_ok());
     assert!(f.manager.verify_worktree(&w).await.is_ok());
     let mut method = Method::AdoptWorkspace {
-        repository: f.repo_id.clone(),
+        repository: f.repo_id.clone().into(),
         path,
     };
     f.manager

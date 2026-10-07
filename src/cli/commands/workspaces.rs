@@ -223,7 +223,7 @@ pub(super) async fn add(
 
 #[derive(serde::Serialize, serde::Deserialize)]
 pub(in crate::cli) struct AddPlan {
-    pub repository: String,
+    pub repository: crate::forge::repository::Selector,
     pub creation: Creation,
     tab_label: Option<String>,
     #[serde(default)]
@@ -309,7 +309,7 @@ async fn execute_add_with_target(
 }
 
 struct AddTarget {
-    selector: String,
+    selector: crate::forge::repository::Selector,
     repositories: tokio::sync::OnceCell<Vec<Repository>>,
 }
 
@@ -336,23 +336,26 @@ async fn resolve_add_target(
             let selector = ui::repository_selector(repo)?;
             super::repositories::offer_unregistered(ctx, &selector)
                 .await?
-                .map_or(selector, |repo| repo.id)
+                .map_or(selector, |repo| repo.id.into())
         }
         None => {
             let repos = repositories.insert(client::repositories(&ctx.paths).await?);
             let issue_command = matches!(agent, AgentLaunch::IssueDefault(_));
             match issue.map(|input| (input, IssueInput::parse(input))) {
                 Some((_, IssueInput::Number)) if issue_command => {
-                    super::issues::repository_for_number(ctx, repos.clone()).await?
+                    super::issues::repository_for_number(ctx, repos.clone())
+                        .await?
+                        .into()
                 }
                 Some((url, kind)) if issue_command || kind == IssueInput::Url => {
-                    super::issues::repository_for(ctx, repos, url).await?
+                    super::issues::repository_for(ctx, repos, url).await?.into()
                 }
                 _ => ui::pick(
                     ctx,
                     "Repository> ",
                     ui::repository_choices(repos.clone()).await?,
-                )?,
+                )?
+                .into(),
             }
         }
     };
@@ -371,7 +374,7 @@ struct ResolvedAddAgent {
 /// The repository's effective settings, loaded on first use.
 struct AddSettings<'a> {
     ctx: &'a Context,
-    repository: &'a str,
+    repository: &'a crate::forge::repository::Selector,
     effective: tokio::sync::OnceCell<crate::config::Effective>,
 }
 

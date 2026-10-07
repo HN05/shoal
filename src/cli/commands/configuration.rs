@@ -129,6 +129,6 @@ async fn target(ctx: &Context, explicit: Option<String>) -> Result<ConfigTarget>
         "no current workspace or registered checkout; pass an explicit workspace"
     );
     Ok(ConfigTarget::Repository(
-        repository.expect("checked above").id.clone(),
+        repository.expect("checked above").id.clone().into(),
     ))
 }

@@ -25,7 +25,7 @@ use crate::{
     sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
 };
 
-pub const VERSION: u32 = 59;
+pub const VERSION: u32 = 60;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -105,48 +105,48 @@ pub enum Method {
     // Repositories.
     ListRepositories,
     RegisterRepository {
-        source: String,
+        source: crate::forge::repository::Selector,
         name: Option<String>,
         path: Option<std::path::PathBuf>,
     },
     RenameRepository {
-        repository: String,
+        repository: crate::forge::repository::Selector,
         name: String,
     },
     RepositoryConfig {
-        repository: String,
+        repository: crate::forge::repository::Selector,
     },
     SetRepositoryConfig {
-        repository: String,
+        repository: crate::forge::repository::Selector,
         toml: Option<String>,
     },
     EditRepositoryConfig {
-        repository: String,
+        repository: crate::forge::repository::Selector,
         changes: Vec<crate::config::edit::Change>,
     },
     RemoveRepository {
-        repository: String,
+        repository: crate::forge::repository::Selector,
     },
     // Workspaces.
     ListBranches {
-        repository: String,
+        repository: crate::forge::repository::Selector,
     },
     OpenBranch {
         path: Option<std::path::PathBuf>,
-        repository: String,
+        repository: crate::forge::repository::Selector,
         branch: String,
         git_profile: Option<String>,
         base: Option<String>,
     },
     CreateWorkspace {
         path: Option<std::path::PathBuf>,
-        repository: String,
+        repository: crate::forge::repository::Selector,
         name: String,
         base: Option<String>,
         git_profile: Option<String>,
     },
     AdoptWorkspace {
-        repository: String,
+        repository: crate::forge::repository::Selector,
         path: std::path::PathBuf,
     },
     RenameWorkspace {
@@ -353,7 +353,7 @@ impl Response {
 #[serde(rename_all = "snake_case")]
 pub enum ConfigTarget {
     Workspace(String),
-    Repository(String),
+    Repository(crate::forge::repository::Selector),
 }
 
 impl<T> Allocation<T> {

@@ -1,10 +1,55 @@
 //! Repository naming and identity derived from a source path or URL.
-use anyhow::{Result, ensure};
+use anyhow::{Context, Result, ensure};
+use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 use crate::{git, model::Repository};
 
 use super::remote_url::{RemoteUrl, source_name};
+
+/// Preserve the caller's argument alongside a path resolved in its directory.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum Selector {
+    Value(String),
+    Path {
+        value: String,
+        path: std::path::PathBuf,
+    },
+}
+
+impl Selector {
+    pub fn source(&self) -> Result<&str> {
+        match self {
+            Self::Value(value) => Ok(value),
+            Self::Path { path, .. } => path.to_str().context("repository path is not UTF-8"),
+        }
+    }
+}
+
+impl From<String> for Selector {
+    fn from(value: String) -> Self {
+        Self::Value(value)
+    }
+}
+
+impl From<&str> for Selector {
+    fn from(value: &str) -> Self {
+        value.to_owned().into()
+    }
+}
+
+impl From<&String> for Selector {
+    fn from(value: &String) -> Self {
+        value.as_str().into()
+    }
+}
+
+impl From<&Selector> for Selector {
+    fn from(value: &Selector) -> Self {
+        value.clone()
+    }
+}
 
 /// The explicit name, or the last path component of the source.
 pub fn name(repo: &crate::model::Repository) -> &str {
@@ -80,7 +125,12 @@ fn url_key(url: &str) -> String {
 }
 
 /// Resolve the same repository selectors in the CLI and daemon.
-pub async fn select<'a>(repositories: &'a [Repository], selector: &str) -> Result<&'a Repository> {
+pub async fn select(
+    repositories: &[Repository],
+    selector: impl Into<Selector>,
+) -> Result<&Repository> {
+    let selector = selector.into();
+    let selector = selector.source()?;
     let canonical = std::fs::canonicalize(selector).ok();
     if let Some(repo) = repositories.iter().find(|repo| {
         repo.id == selector

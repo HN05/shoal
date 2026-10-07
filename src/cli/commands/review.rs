@@ -53,7 +53,7 @@ pub(super) async fn pull_request(
                 Some(repo) => {
                     let id = repo.id.clone();
                     repos.push(repo);
-                    id
+                    id.into()
                 }
                 None => selector,
             }
@@ -66,8 +66,11 @@ pub(super) async fn pull_request(
                 "shoal pr review <url> --repo <repository>",
             )
             .await?
+            .into()
         }
-        None => super::issues::repository_for_number(ctx, repos.clone()).await?,
+        None => super::issues::repository_for_number(ctx, repos.clone())
+            .await?
+            .into(),
     };
     let repo = crate::forge::repository::select(&repos, &repository).await?;
     let remote = crate::forge::repository::remote_url_from_path(&repo.path)

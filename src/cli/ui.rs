@@ -549,15 +549,14 @@ pub async fn repository_choices(mut repos: Vec<Repository>) -> Result<Entries> {
         .collect())
 }
 
-/// Existing local paths become canonical so the daemon matches them by path.
-pub fn repository_selector(value: String) -> Result<String> {
+/// Preserve the argument and resolve existing paths in the caller's directory.
+pub fn repository_selector(value: String) -> Result<crate::forge::repository::Selector> {
     if Path::new(&value).exists() {
-        Ok(std::fs::canonicalize(&value)?
-            .to_str()
-            .context("repository path is not UTF-8")?
-            .to_owned())
+        let path = std::fs::canonicalize(&value)?;
+        path.to_str().context("repository path is not UTF-8")?;
+        Ok(crate::forge::repository::Selector::Path { value, path })
     } else {
-        Ok(value)
+        Ok(value.into())
     }
 }
 

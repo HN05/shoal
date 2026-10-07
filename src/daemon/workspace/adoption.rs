@@ -7,7 +7,11 @@ use anyhow::{Context, Result, ensure};
 use std::path::Path;
 
 impl Manager {
-    pub async fn adopt_workspace(&self, repository: &str, path: &Path) -> Result<Workspace> {
+    pub async fn adopt_workspace(
+        &self,
+        repository: impl Into<crate::forge::repository::Selector>,
+        path: &Path,
+    ) -> Result<Workspace> {
         let (repo, _guard) = self.lock_repository(repository).await?;
         let path = self.workspace_location(&repo, path).await?;
         let trees = git::worktrees(&repo.path, git::run).await?;

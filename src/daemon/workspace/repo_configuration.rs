@@ -13,7 +13,10 @@ use anyhow::{Context, Result};
 use rusqlite::{OptionalExtension, params};
 
 impl Manager {
-    pub async fn repository_config(&self, selector: &str) -> Result<LocalConfig> {
+    pub async fn repository_config(
+        &self,
+        selector: impl Into<crate::forge::repository::Selector>,
+    ) -> Result<LocalConfig> {
         let repo = self.repository(selector).await?;
         Ok(LocalConfig {
             toml: self.local_repository_config(&repo.id).await?,
@@ -23,7 +26,7 @@ impl Manager {
 
     pub async fn set_repository_config(
         &self,
-        selector: &str,
+        selector: impl Into<crate::forge::repository::Selector>,
         toml: Option<String>,
     ) -> Result<LocalConfig> {
         if let Some(text) = &toml {
@@ -38,7 +41,7 @@ impl Manager {
 
     pub async fn edit_repository_config(
         &self,
-        selector: &str,
+        selector: impl Into<crate::forge::repository::Selector>,
         changes: &[config::edit::Change],
     ) -> Result<LocalConfig> {
         // Hold the same gate as imports and removal across read/modify/write.

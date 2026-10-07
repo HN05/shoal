@@ -34,13 +34,14 @@ impl Manager {
     /// known source returns (and optionally renames) the existing record.
     pub async fn register_repository(
         &self,
-        source: String,
+        source: repository::Selector,
         name: Option<String>,
         clone_path: Option<PathBuf>,
     ) -> Result<Repository> {
         if let Some(name) = &name {
             validate::name("repository", name)?;
         }
+        let source = source.source()?.to_owned();
         if let Some(path) = &clone_path {
             ensure!(path.is_absolute(), "repository clone path must be absolute");
             ensure!(
@@ -207,7 +208,11 @@ impl Manager {
         Ok(directory)
     }
 
-    pub async fn rename_repository(&self, selector: &str, name: String) -> Result<Repository> {
+    pub async fn rename_repository(
+        &self,
+        selector: impl Into<crate::forge::repository::Selector>,
+        name: String,
+    ) -> Result<Repository> {
         validate::name("repository", &name)?;
         let repo = self.repository(selector).await?;
         self.store
@@ -238,7 +243,10 @@ impl Manager {
 
     /// Resolve an ID, path, source URL, explicit name, derived name, or
     /// equivalent remote to a registered repository.
-    pub(crate) async fn repository(&self, selector: &str) -> Result<Repository> {
+    pub(crate) async fn repository(
+        &self,
+        selector: impl Into<crate::forge::repository::Selector>,
+    ) -> Result<Repository> {
         Ok(repository::select(&self.repositories().await?, selector)
             .await?
             .clone())

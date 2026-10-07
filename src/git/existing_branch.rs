@@ -43,7 +43,10 @@ pub async fn ensure_not_checked_out(repo: &std::path::Path, name: &str) -> Resul
 
 impl Manager {
     /// Query advertised remote heads, including branches never fetched locally.
-    pub async fn branches(&self, repository: &str) -> Result<Vec<Branch>> {
+    pub async fn branches(
+        &self,
+        repository: impl Into<crate::forge::repository::Selector>,
+    ) -> Result<Vec<Branch>> {
         let repo = self.repository(repository).await?;
         self.ensure_repository_available(&repo.id).await?;
         let mut branches: Vec<_> = git::run_isolated(
@@ -77,7 +80,7 @@ impl Manager {
 
     pub async fn open_branch(
         &self,
-        repository: &str,
+        repository: impl Into<crate::forge::repository::Selector>,
         selector: &str,
         git_profile: Option<&str>,
         path: Option<std::path::PathBuf>,

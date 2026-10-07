@@ -41,7 +41,10 @@ impl Manager {
             .await
     }
 
-    pub async fn remove_repository(&self, selector: &str) -> Result<RepositoryRemoval> {
+    pub async fn remove_repository(
+        &self,
+        selector: impl Into<crate::forge::repository::Selector>,
+    ) -> Result<RepositoryRemoval> {
         // Registration cannot adopt or allocate a path during removal. The Git
         // gate also serializes with workspace creation, branch refresh, and reconciliation.
         let _registry = self.registry_gate.lock().await;
