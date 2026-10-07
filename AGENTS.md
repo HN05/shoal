@@ -164,6 +164,10 @@ required check; findings do not fail it, a tool that could not run does.
 opens and whenever `review/default`, `review/claude` or `review/codex` is
 added; `review/none` suppresses it. `.review/review.md` is its project brief;
 keep it current when a rule here or in `design.md` changes.
+Opening a ready PR already requests its review; never add reviewer request labels
+with its opening classification labels. Claude and Codex use independent queues,
+so one of each can run concurrently. Review and audit workflows follow review-bot's
+latest `main` commit.
 `.forgejo/workflows/audit.yml` runs a weekly read-only code audit of rotating
 focused areas, or manually with a selected ref and scope, using `.review/audit.md`.
 It discovers or creates

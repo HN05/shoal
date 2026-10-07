@@ -5,8 +5,8 @@
 #
 #   .forgejo/scripts/labels.sh            from a checkout whose origin is the repo
 #
-# `area/` allows several labels per issue; `type/`, `complexity/` and `review/`
-# are exclusive scopes. Keep .review/review.md in step when this changes.
+# `area/` allows several labels per issue; `type/` and `complexity/` are exclusive.
+# Reviewer request labels are combinable; keep .review/review.md in step when this changes.
 set -eu
 
 label() { # name colour exclusive(true/false) description
@@ -40,7 +40,7 @@ label type/bug        b91c1c true "Something built does not behave as specified"
 label type/feature    15803d true "New capability from the design"
 label type/chore      64748b true "Maintenance, cleanup, dependency and tooling work"
 label type/test       0369a1 true "Tests, regression coverage and test fixtures"
-label review/default  0075ca true "Request the repository default reviewer; consumed at run start"
-label review/claude   d876e3 true "Request Claude as primary reviewer; consumed at run start"
-label review/codex    0e8a16 true "Request Codex as primary reviewer; consumed at run start"
+label review/default  0075ca false "Request the repository default reviewer; consumed at run start"
+label review/claude   d876e3 false "Request Claude as primary reviewer; consumed at run start"
+label review/codex    0e8a16 false "Request Codex as primary reviewer; consumed at run start"
 label review/none     e4e669 true "Suppress automated review until this label is removed"

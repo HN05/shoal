@@ -259,6 +259,8 @@ changes are a valid reason for a larger commit.
 - Restating what a commit does, or style preferences not backed by `AGENTS.md`.
 
 Label conventions: `area/` allows several affected areas; `type/` and
-`complexity/` each allow one. PR review controls use the exclusive `review/`
-scope: `default` uses `REVIEW_AGENT` or Codex; reviewer requests are consumed
+`complexity/` each allow one. Reviewer request labels are combinable:
+`default` uses `REVIEW_AGENT` or Codex; reviewer requests are consumed
 at run start, while `none` persists to suppress review.
+Opening a ready PR already requests its review; do not add request labels in its
+opening classification batch.

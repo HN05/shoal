@@ -27,7 +27,7 @@ jobs:
         - /var/lib/review-bot/claude:/var/lib/review-bot/claude
         - /var/lib/review-bot/codex:/var/lib/review-bot/codex
     steps:
-      - uses: https://git.henriknordvik.com/HN05/review-bot@3897b4ffeed89f18cfe88d0591745b13d2dbdc1d
+      - uses: https://git.henriknordvik.com/HN05/review-bot@main
         with:
           mode: audit
           agent: codex
