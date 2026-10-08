@@ -312,6 +312,9 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::RemoveRepository { repository } => {
             Body::RepositoryRemoved(manager.remove_repository(&repository).await?)
         }
+        Method::SyncRepository { repository } => {
+            Body::SyncedRepository(manager.sync_repository(&repository).await?)
+        }
         Method::ListBranches { repository } => Body::Branches(manager.branches(&repository).await?),
         Method::OpenBranch {
             path,
@@ -450,9 +453,6 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
                 "landing execution required"
             );
             Body::Ok
-        }
-        Method::RefreshMergeSource { workspace, branch } => {
-            Body::PulledBranch(manager.refresh_merge_source(&workspace, &branch).await?)
         }
         Method::DiffBase { workspace } => Body::DiffBase(manager.diff_base(&workspace).await?),
         Method::WorkspaceHook { workspace, kind } => {

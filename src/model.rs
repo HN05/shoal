@@ -215,6 +215,15 @@ impl PulledBranch {
     }
 }
 
+/// A repository's remote fetched and its local default branch fast-forwarded.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SyncedRepository {
+    pub repository_id: String,
+    /// The default branch's upstream remote, absent when it has none.
+    pub remote: Option<String>,
+    pub default_branch: PulledBranch,
+}
+
 /// A workspace branch merged into its repository's default branch.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LandedBranch {

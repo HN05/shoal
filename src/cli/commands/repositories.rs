@@ -13,7 +13,7 @@ use crate::{
     },
     config::repo::LocalConfig,
     forge::repository,
-    model::{Repository, RepositoryRemoval},
+    model::{Repository, RepositoryRemoval, SyncedRepository},
     protocol::Method,
 };
 
@@ -137,6 +137,36 @@ pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
             )?;
         }
     }
+    Ok(0)
+}
+
+pub(super) async fn sync(ctx: &Context, repository: Option<String>) -> Result<i32> {
+    let repository = match repository {
+        Some(repository) => ui::repository_selector(repository)?,
+        None => super::issues::current_repository(
+            ctx,
+            client::repositories(&ctx.paths).await?,
+            "pass a repository",
+        )
+        .await?
+        .into(),
+    };
+    let synced =
+        request::<SyncedRepository>(&ctx.paths, Method::SyncRepository { repository }).await?;
+    ctx.show(&synced, |synced| {
+        if let Some(remote) = &synced.remote {
+            println!("Fetched {remote}");
+        }
+        let refresh = &synced.default_branch;
+        match (&refresh.skipped, refresh.updated) {
+            (Some(skipped), _) => println!("{skipped}"),
+            (None, true) => println!(
+                "Updated {} from its upstream ({}..{})",
+                refresh.branch, refresh.previous_commit, refresh.commit
+            ),
+            (None, false) => println!("{} is up to date with its upstream", refresh.branch),
+        }
+    })?;
     Ok(0)
 }
 

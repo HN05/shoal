@@ -106,7 +106,8 @@ pub enum Command {
         /// Create this worktree at an exact new directory instead of the repository default.
         #[arg(long)]
         path: Option<PathBuf>,
-        /// Starting Git ref (defaults to the repository's default branch, refreshed from its upstream);
+        /// Starting Git ref (defaults to the repository's default branch, refreshed from its upstream;
+        /// a remote branch such as origin/feature is fetched first);
         /// with --existing, the ref its changes are compared against.
         #[arg(long, value_name = "REF")]
         base: Option<String>,
@@ -235,16 +236,13 @@ pub enum Command {
         #[arg(last = true)]
         args: Vec<OsString>,
     },
-    /// Merge another branch into this workspace.
-    Merge {
-        branch: String,
-        workspace: Option<String>,
-        /// Fetch this branch from a specific configured remote, even if it exists locally.
-        #[arg(long)]
-        remote: Option<String>,
-        /// Merge the local branch as it is instead of fast-forwarding it from its upstream first.
-        #[arg(long, conflicts_with = "remote")]
-        local: bool,
+    /// Fetch a repository's remote and fast-forward its default branch.
+    ///
+    /// Never pushes or changes workspace branches; rebase or merge onto the
+    /// updated branch with Git.
+    Sync {
+        /// Registered repository; defaults to the current checkout or workspace.
+        repository: Option<String>,
     },
     /// Merge this workspace into the default branch locally, without pushing.
     Land { workspace: Option<String> },
@@ -259,15 +257,6 @@ pub enum Command {
     },
     #[command(name = internal::HERDR_WATCH, hide = true)]
     HerdrWatchInternal { workspace: String, tab: String },
-    /// Internal worker launched through the tracked execution wrapper.
-    #[command(name = internal::MERGE, hide = true)]
-    MergeInternal {
-        branch: String,
-        #[arg(long)]
-        remote: Option<String>,
-        #[arg(long)]
-        local: bool,
-    },
     /// Open a pull request for review.
     Pr {
         #[command(subcommand)]

@@ -1,6 +1,6 @@
 ---
 name: shoal-worker
-description: Use inside a Shoal workspace to finish assignments with `shoal done`, watch and wait on PRs, merge local or remote branches into your managed worktree, reserve ports, lease Xcode simulators, and acquire resource permits during development or testing. Applies to agents launched through Shoal or working directly in a Shoal worktree.
+description: Use inside a Shoal workspace to finish assignments with `shoal done`, watch and wait on PRs, sync the default branch from its remote, reserve ports, lease Xcode simulators, and acquire resource permits during development or testing. Applies to agents launched through Shoal or working directly in a Shoal worktree.
 ---
 
 # Shoal worker
@@ -54,37 +54,30 @@ worktree can use the same commands: Shoal resolves the workspace from the curren
 directory, but the session itself has no execution scope or lifecycle tracking.
 
 When unsure whether your checkout is managed, use `shoal --json ls` and match
-your working directory to a returned workspace `path`. In an ordinary checkout,
-use ordinary Git for merges. Shoal's resources require a managed workspace;
-do not select another agent's workspace or create one just to obtain a lease.
+your working directory to a returned workspace `path`. Shoal's resources
+require a managed workspace; do not select another agent's workspace or create
+one just to obtain a lease.
 If workspace setup failed, `shoal --json setup` reruns the configured setup
 command and post-setup hook for the current workspace.
 
-## Merge branches into your own branch
+## Update from the default branch
 
 ```sh
-shoal --json merge main
-shoal --json merge feature/api
-shoal --json merge feature/api --remote origin
-shoal --json merge origin/feature/api
+shoal --json sync
+git rebase main            # or git merge main; use your repo's branch name
 ```
 
-Stay on your workspace's recorded branch. The argument names the source branch;
-the destination is your current workspace. A local branch takes precedence.
-If absent locally, Shoal finds the branch on configured remotes and fetches it,
-including branches never fetched before. Multiple remote matches require
-`--remote <name>`. Explicit remote sources always fetch the current remote tip;
-use the unqualified branch name with `--remote`.
+`shoal sync` fetches your repository's remote and fast-forwards the local
+default branch, advancing the registered checkout when it has that branch
+checked out, where `git fetch origin main:main` is refused. It never pushes or changes your branch. Rebase or merge
+with plain Git afterwards; other pushed branches are current as
+`origin/<branch>`. After rebasing a pushed branch, push it with
+`git push --force-with-lease`.
 
-Merges can fast-forward or create a merge commit. They do not push, update main,
-switch branches, stash edits, or reset your work. Conflicts return nonzero with
-`success: false` and Git output in JSON; resolve them in your own worktree and
-finish with `git add` and `git commit`, or cancel with `git merge --abort`.
-Other failures may return an error before a merge starts; inspect the error.
-A local source such as `main` is fast-forwarded from its upstream before the
-merge, so `shoal merge main` alone brings in current upstream work. Pass
-`--local` to merge the local branch as it is.
-Agents cannot land either: when the repository has no remote, the human runs
+Branches of other workspaces are shared refs, so `git merge feature/api`
+brings in their latest commits; use `origin/feature/api` for pushed work after
+`shoal sync`. Stay on your workspace's recorded branch.
+Agents cannot land: when the repository has no remote, the human runs
 `shoal land` to merge your branch into the default branch.
 
 ## Ports

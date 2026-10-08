@@ -144,7 +144,8 @@ remote's HEAD, or the checkout's current branch without remotes, never a guessed
 `main`. The selected local default branch is fast-forwarded from its upstream first,
 preserving an ahead branch and refusing divergence, dirty or managed checkouts, and
 failed fetches. `--base REF` starts from any locally resolvable
-commit ref without refreshing, except when it names the local default branch.
+commit ref without refreshing, except when it names the local default branch or a
+configured remote's branch, which is fetched first and must succeed.
 Creation, default-branch refresh, setup, repository removal, and recovery share
 a per-repository Git gate. Daemon ref updates disable hooks, Git credential prompts,
 and SSH askpass while preserving the user's SSH transport configuration;
@@ -231,32 +232,31 @@ and skips hooks; post-remove events are not durably queued or replayed.
 
 `diff` compares against the recorded base's fork point (merge-base fallback, fixed
 commits stay fixed) with native Git settings, so advancing the base is never shown
-as work. `merge` imports any local or remote branch into the workspace's own branch,
-preferring local sources, which it first fast-forwards from their upstream while
-preserving ahead branches and refusing dirty or diverged checkouts and failed fetches,
-unless `--local`, they lack an upstream, or a managed workspace has them checked out;
-implicit remote discovery requires a missing local ref and must be unambiguous; failed
-local lookups stop the merge, and conflicts are left for ordinary Git. `land`,
+as work. `sync` fetches the default branch's remote and fast-forwards the local default
+branch under the creation refresh rules, advancing a clean registered checkout where
+`git fetch` into the checked-out branch is refused; it never pushes or moves workspace branches, so updating
+a workspace from it stays plain Git. Shoal has no merge or rebase command: Git
+already does both in a workspace. `land`,
 the local substitute for a pull request, merges the workspace branch into the default
 branch, first refreshing a configured upstream while preserving an ahead branch and
 refusing divergence or fetch failure, without pushing. The default branch cannot be
 held by a managed workspace, and any checkout of it must be clean. Land aborts a merge
-that does not apply cleanly, leaving conflicts to a `merge` of the default branch into
+that does not apply cleanly, leaving conflicts to a Git merge of the default branch into
 the workspace. Landing holds the repository Git gate for the tracked execution; the
 daemon validates and refreshes, and the CLI worker merges.
 After cancellation, the wrapper rolls back incomplete merges after stopping the
 process group, preserving completed merges and reporting unsafe recovery failures.
-Fetches use private temporary refs; merges use the tracked wrapper and cooperative
-own-branch checks.
+Refresh fetches use private temporary refs; landing merges run in the tracked wrapper.
 
 ## Scope and user interfaces
 
 Tracked executions and processes started with exported workspace environments
 inherit a daemon-validated scope token that
-confines them to their own workspace: status, inspect, execute, setup, merge, and resources.
+confines them to their own workspace: status, inspect, execute, setup, and resources.
 `land`, creation, removal, reconciliation, other workspaces, repository
 administration, and service control need an unscoped caller. PR registration,
-manual merge acknowledgement, and assignment continuation/completion are own-workspace exceptions.
+manual merge acknowledgement, assignment continuation/completion, and syncing the
+caller's own repository are own-workspace exceptions.
 Effective configuration may be read for the caller's own workspace; changing it
 needs an unscoped caller.
 Nested executions keep scope. Unscoped callers may export a ready, verified

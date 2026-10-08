@@ -43,6 +43,15 @@ pub async fn authorize(
             );
             None
         }
+        Method::SyncRepository { repository } => {
+            let own = manager.workspace(owner).await?.repository_id;
+            ensure!(
+                manager.repository(&*repository).await?.id == own,
+                "workspace processes can only sync their own repository"
+            );
+            *repository = own.into();
+            None
+        }
         Method::Status | Method::ListWorkspaces | Method::ListRepositories | Method::SimCatalog => {
             None
         }
@@ -66,7 +75,6 @@ pub async fn authorize(
         | Method::InspectWorkspace { workspace }
         | Method::WorkspaceStatus { workspace }
         | Method::DiffBase { workspace }
-        | Method::RefreshMergeSource { workspace, .. }
         | Method::Execute {
             workspace,
             kind: ExecutionKind::Command,
@@ -103,7 +111,7 @@ pub async fn authorize(
             "workspace processes cannot land into the default branch; an unscoped shoal land does that"
         ),
         _ => bail!(
-            "workspace processes can only inspect their worktree, execute or set up there, manage its resources, and merge into their own branch"
+            "workspace processes can only inspect their worktree, execute or set up there, manage its resources, and sync their repository"
         ),
     };
     if let Some(target) = target {

@@ -5,13 +5,8 @@ use anyhow::{Context, Result, bail, ensure};
 
 use crate::{
     daemon::workspace::Manager,
-    git::{
-        self,
-        default_branch::DefaultBranchLookup,
-        fetch::{self, FetchPolicy},
-        run_isolated as git_run, worktrunk,
-    },
-    model::{LandPlan, LandedBranch, PulledBranch, Repository},
+    git::{self, default_branch::DefaultBranchLookup, fetch, run_isolated as git_run, worktrunk},
+    model::{LandPlan, LandedBranch, PulledBranch, Repository, SyncedRepository},
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -139,36 +134,36 @@ impl Manager {
         })
     }
 
-    /// Fast-forward a local merge source from its upstream so `shoal merge`
-    /// imports current work. A source without an upstream, or checked out in
-    /// a managed workspace whose branch must stay untouched, is left as it is.
-    pub async fn refresh_merge_source(&self, selector: &str, branch: &str) -> Result<PulledBranch> {
-        let workspace = self.workspace(selector).await?;
-        let repo = self.repository(&workspace.repository_id).await?;
+    /// Fetch the default branch's remote, updating its remote-tracking branches,
+    /// then fast-forward the local default branch as workspace creation does.
+    pub async fn sync_repository(
+        &self,
+        selector: &crate::forge::repository::Selector,
+    ) -> Result<SyncedRepository> {
+        let repo = self.repository(selector).await?;
         let _guard = self.lock_repository_git(&repo.id).await;
-        let local_ref = git::local_ref(branch);
-        git_run(&repo.path, &["check-ref-format", &local_ref])
+        let default =
+            crate::git::default_branch::resolve(&repo.path, DefaultBranchLookup::Discover).await?;
+        let remote = upstream(&repo, &git::local_ref(&default))
+            .await?
+            .map(|(remote, _)| remote);
+        if let Some(remote) = &remote {
+            git_run(
+                &repo.path,
+                &[git::FETCH_SAFE_ARGS, &["--", remote]].concat(),
+            )
             .await
-            .context("invalid source branch name")?;
-        let commit = git_run(&repo.path, &["rev-parse", "--verify", &local_ref])
-            .await
-            .with_context(|| format!("local source branch does not exist: {branch}"))?
-            .trim()
-            .to_owned();
-        let skipped = if upstream(&repo, &local_ref).await?.is_none() {
-            Some(format!("{branch} has no upstream; merging its local state"))
-        } else {
-            self.managed_checkout(&repo, branch).await?.map(|checkout| {
-                format!("{branch} is checked out in workspace {checkout}; merging its local state")
-            })
-        };
-        match skipped {
-            Some(skipped) => Ok(PulledBranch::unchanged(&repo, branch, commit, skipped)),
-            None => {
-                self.refresh_branch(&repo, branch, UpstreamPolicy::Required)
-                    .await
-            }
+            .with_context(|| format!("could not fetch {remote}"))?;
         }
+        let default_branch = self
+            .refresh_branch(&repo, &default, UpstreamPolicy::AllowLocalOnly)
+            .await
+            .with_context(|| format!("could not refresh {default}"))?;
+        Ok(SyncedRepository {
+            repository_id: repo.id,
+            remote,
+            default_branch,
+        })
     }
 
     /// The managed workspace that has `branch` checked out, if any.
@@ -239,15 +234,8 @@ impl Manager {
         }
 
         let commit = fetch::with_temporary_ref(&repo.path, "pull", git_run, async |fetched| {
-            let commit = fetch::fetch_commit(
-                &repo.path,
-                remote,
-                reference,
-                fetched,
-                FetchPolicy::ConfiguredRefmap,
-                git_run,
-            )
-            .await?;
+            let commit =
+                fetch::fetch_commit(&repo.path, remote, reference, fetched, git_run).await?;
             let commit = commit.as_str();
             ensure!(
                 git_run(&repo.path, &["rev-parse", &local_ref])
@@ -430,7 +418,7 @@ pub async fn finish_land(plan: LandPlan) -> Result<LandedBranch> {
                 // Leave the checkout as it was; conflicts belong in the workspace.
                 let _ = git_run(&checkout, &["merge", "--abort"]).await;
                 bail!(
-                    "merging {branch} into {default} failed; run shoal merge {default} in the workspace, resolve conflicts there, and retry\n{}{}",
+                    "merging {branch} into {default} failed; run git merge {default} in the workspace, resolve conflicts there, and retry\n{}{}",
                     String::from_utf8_lossy(&output.stdout).trim_end(),
                     String::from_utf8_lossy(&output.stderr).trim_end()
                 );
@@ -439,7 +427,7 @@ pub async fn finish_land(plan: LandPlan) -> Result<LandedBranch> {
         None => {
             ensure!(
                 fast_forward,
-                "{default} is not checked out and {branch} does not fast-forward it; run shoal merge {default} in the workspace, then retry"
+                "{default} is not checked out and {branch} does not fast-forward it; run git merge {default} in the workspace, then retry"
             );
             git::fast_forward_local(&repo.path, &source, &default_ref).await?;
         }

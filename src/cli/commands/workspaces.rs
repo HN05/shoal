@@ -344,9 +344,13 @@ async fn resolve_add_target(
             let issue_command = matches!(agent, AgentLaunch::IssueDefault(_));
             match issue.map(|input| (input, IssueInput::parse(input))) {
                 Some((_, IssueInput::Number)) if issue_command => {
-                    super::issues::repository_for_number(ctx, repos.clone())
-                        .await?
-                        .into()
+                    super::issues::current_repository(
+                        ctx,
+                        repos.clone(),
+                        super::issues::REPO_OR_URL,
+                    )
+                    .await?
+                    .into()
                 }
                 Some((url, kind)) if issue_command || kind == IssueInput::Url => {
                     super::issues::repository_for(ctx, repos, url).await?.into()

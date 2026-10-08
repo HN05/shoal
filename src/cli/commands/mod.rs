@@ -298,19 +298,9 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             let reviewer = review::Reviewer::new(manual, agent);
             review::run(&ctx, workspace, reviewer, None, args).await
         }
-        Command::Merge {
-            branch,
-            workspace,
-            remote,
-            local,
-        } => crate::git::merge::run(&ctx, workspace, branch, remote, local).await,
+        Command::Sync { repository } => repositories::sync(&ctx, repository).await,
         Command::Land { workspace } => workspaces::land(&ctx, workspace).await,
         Command::LandInternal { plan } => workspaces::land_worker(&ctx, plan).await,
-        Command::MergeInternal {
-            branch,
-            remote,
-            local,
-        } => crate::git::merge::worker(&ctx, branch, remote, local).await,
         Command::Pr { command } => match command {
             PrCommand::Watch { workspace, url } => {
                 workspaces::pr(&ctx, workspace, Action::Watch { url }).await

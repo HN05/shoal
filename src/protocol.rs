@@ -18,14 +18,14 @@ use crate::{
     hooks::HookKind,
     model::{
         DiffBase, ExecutionPlan, Inspection, PortOverview, PortReservation, PortSuggestion,
-        PulledBranch, Repository, RepositoryRemoval, Workspace, WorkspaceStatus,
+        Repository, RepositoryRemoval, SyncedRepository, Workspace, WorkspaceStatus,
     },
     process::identity::Identity,
     removal::{BranchChoice, RemovalCheck, RemovalResult},
     sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
 };
 
-pub const VERSION: u32 = 61;
+pub const VERSION: u32 = 62;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -130,6 +130,10 @@ pub enum Method {
         changes: Vec<crate::config::edit::Change>,
     },
     RemoveRepository {
+        repository: crate::forge::repository::Selector,
+    },
+    /// Fetch the default branch's remote and fast-forward the local default branch.
+    SyncRepository {
         repository: crate::forge::repository::Selector,
     },
     // Workspaces.
@@ -242,11 +246,6 @@ pub enum Method {
     },
     /// Verify that this worker belongs to an unscoped caller's landing execution.
     CheckLanding,
-    /// Fast-forward a local merge source from its upstream before merging.
-    RefreshMergeSource {
-        workspace: String,
-        branch: String,
-    },
     DiffBase {
         workspace: String,
     },
@@ -482,7 +481,7 @@ response_bodies! {
     DiffBase(DiffBase),
     Hook(Option<std::path::PathBuf>),
     LayeredConfig(Box<ConfigLayers>),
-    PulledBranch(PulledBranch),
+    SyncedRepository(SyncedRepository),
     Notifications(Vec<Notification>),
     Notification(Notification),
     EventItem(EventItem),

@@ -896,7 +896,7 @@ async fn land_fast_forwards_merges_and_aborts_conflicts_without_a_remote() {
     fs::write(workspace.path.join("tracked"), "worker again\n").unwrap();
     commit(&workspace.path, "tracked");
     let error = f.manager.land_workspace("worker").await.unwrap_err();
-    assert!(error.to_string().contains("shoal merge main"), "{error:#}");
+    assert!(error.to_string().contains("git merge main"), "{error:#}");
     assert_eq!(git(&f.repo, &["rev-parse", "main"]), main);
     assert_eq!(git(&f.repo, &["status", "--porcelain"]), "");
     assert!(!f.repo.join(".git/MERGE_HEAD").exists());
@@ -1059,7 +1059,7 @@ async fn incomplete_removal_allows_refresh_recovery_and_diagnosis() {
     let error = f.manager.lock_repository(&f.repo_id).await.unwrap_err();
     assert!(error.to_string().contains("removal is incomplete"));
     f.manager
-        .refresh_merge_source(&workspace.id, "main")
+        .sync_repository(&f.repo_id.clone().into())
         .await
         .unwrap();
     let report = f

@@ -149,9 +149,11 @@ pub(super) async fn add(
             )
             .await?
             .into(),
-            None => super::issues::repository_for_number(ctx, repos.clone())
-                .await?
-                .into(),
+            None => {
+                super::issues::current_repository(ctx, repos.clone(), super::issues::REPO_OR_URL)
+                    .await?
+                    .into()
+            }
         },
     };
     let repo = crate::forge::repository::select(&repos, &repository).await?;

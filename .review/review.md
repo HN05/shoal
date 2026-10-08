@@ -58,7 +58,8 @@ instructions instead of the PR delivery guidance below.
   environments carry a scope token and get own-worktree access
   only; workspace allocation/removal/recovery and shared repository/service
   administration stay denied, while own-workspace setup, rename, PR registration,
-  merge acknowledgements, assignment continuation/completion and effective-configuration reads are allowed;
+  merge acknowledgements, assignment continuation/completion, own-repository sync and
+  effective-configuration reads are allowed;
   only unscoped callers export or revoke environment tokens. Export requires a
   ready, verified worktree; tokens persist across restart until revocation or
   workspace removal, without execution tracking or cleanup protection.
@@ -105,12 +106,12 @@ instructions instead of the PR delivery guidance below.
   validates every workspace/target candidate, including released grants. Listings
   reject invalid selected records; malformed history outside a query does not block it.
 - Explicit creation bases resolve locally and are recorded for diff; only a base
-  naming the local default branch is refreshed.
+  naming the local default branch is refreshed, and one naming a remote branch is
+  fetched first.
 - Daemon ref updates disable Git credential and SSH askpass prompts without
   overriding the user's SSH transport; interactive Git retains normal prompting.
   Ancestry and exact-ref failures stop branch selection, refresh, and removal;
-  only a documented negative exit status is a negative answer. Merge sources
-  fall back to remote discovery only for a missing local ref.
+  only a documented negative exit status is a negative answer.
 - Explicit workspace paths override only that creation; reject overlaps with state,
   checkouts, workspaces, and other repository directories; never delete their parents.
   Resolve existing symlinks and lexical `..` before checking and creating repository

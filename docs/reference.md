@@ -561,9 +561,10 @@ Before branching, Shoal fetches that local branch's upstream and fast-forwards
 it, even when the registered checkout is on another branch. A missing branch or
 upstream, failed fetch, divergence, or a dirty or managed default-branch
 checkout stops creation; an already-ahead branch is preserved. `--base REF`
-starts from any locally resolvable commit without refreshing,
-unless it names the local default branch; the resolved base is recorded for
-`shoal diff`.
+starts from any locally resolvable commit without refreshing, unless it names
+the local default branch or a remote branch such as `origin/feature/api`, which
+is fetched first, even if never fetched before; a failed fetch stops creation.
+The resolved base is recorded for `shoal diff`.
 Existing-branch workspaces diff against the local default, or their opening
 commit if on it or unavailable.
 
@@ -684,28 +685,20 @@ that would include another registered repository or its own state. If cleanup
 fails, completed steps stay done, remaining records are retained, and new
 workspace creation is blocked until the same command is retried.
 
-### Merge into your workspace branch
+### Sync a repository
 
 ```sh
-shoal merge main                           # Any local branch: fast-forwarded from upstream first
-shoal merge feature/api                    # Local, or discover a remote-only branch
-shoal merge feature/api --local            # Merge the local branch as it is, no refresh
-shoal merge feature/api --remote origin    # Fetch explicitly, even if local exists
-shoal merge origin/feature/api fix-login   # Qualified source, named destination
+shoal sync                 # Repository of the current checkout or workspace
+shoal sync app             # A registered repository
 ```
 
-The destination must be the workspace's recorded branch. Local branches take
-precedence. Unless `--local`, a local branch with an upstream is fetched and
-fast-forwarded first; a dirty checkout, divergence, or failed fetch blocks the
-merge, while an ahead branch is preserved. A local branch without an upstream,
-or checked out in a managed workspace, is merged as it is. Otherwise Shoal
-queries configured remotes and fetches the branch only when the local ref is
-absent; a failed ref or commit lookup stops the merge.
-Several matches or an unreachable remote require `--remote`. Qualified remote
-sources and full `refs/…` names always fetch fresh data. Git fast-forwards or
-creates a merge commit; conflicts stay in the worktree for `git commit` or `git
-merge --abort`, and `--json` reports `success`, `exit_code`, commits, and Git
-output. Nothing is stashed, reset, or pushed.
+Fetches the default branch's upstream remote, updating its remote-tracking
+branches, then fast-forwards the local default branch under the same rules as
+workspace creation, including in a clean registered checkout where `git fetch
+origin main:main` is refused. Shoal never pushes and never moves workspace branches:
+rebase or merge onto the updated branch with Git, for example `git rebase main`
+or `git merge origin/feature/api`. Scoped callers can sync only their own
+repository.
 
 ### Land into the default branch
 
@@ -717,7 +710,7 @@ a failed fetch. The default branch cannot be held by a managed workspace, and an
 other checkout of it must be clean. The workspace must be clean and on its recorded
 branch. Git fast-forwards or creates a merge commit in the default checkout. A
 merge that does not apply cleanly is
-aborted: run `shoal merge <default>` in the workspace, resolve there, and land
+aborted: run `git merge <default>` in the workspace, resolve there, and land
 again. Scoped agents cannot land. Landed commits count as pushed for `rm` and
 automatic cleanup.
 
@@ -1131,7 +1124,8 @@ yourself that such processes stopped, use `--repair --acknowledge-stopped`; visi
 
 PR watches and merge acknowledgements are own-workspace scope exceptions.
 Processes carrying a Shoal scope token are confined to their own worktree:
-`status`, inspect, execute, `merge`, `diff`, `setup`, and resources. They may read
+`status`, inspect, execute, `diff`, `setup`, resources, and `sync` of their
+own repository. They may read
 effective configuration for their own workspace, but cannot change configuration.
 They cannot `land`, reach other worktrees, create or remove workspaces, read
 notifications, or administer repositories or the daemon service; nested commands

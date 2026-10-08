@@ -65,6 +65,7 @@ Use `shoal add my-project` to pick a new or existing branch, or pass it explicit
 
 ```sh
 shoal add my-project fix-api --base feature/api  # Branch from feature/api
+shoal add my-project fix-api --base origin/feature/api  # Fetch the pushed branch first
 shoal add my-project --existing origin/feature/api --agent codex
 shoal add my-project quick-fix --path ../quick-fix
 shoal adopt my-project ../existing-worktree  # Take ownership, including automatic cleanup
@@ -137,8 +138,8 @@ Use `shoal <command> --help` for options.
 To move changes between your workspace and the default branch:
 
 ```sh
-shoal merge main              # Merge it into your branch; use your repo's branch name
-shoal merge feature/api       # Merge another local or remote branch
+shoal sync                    # Fetch and fast-forward the default branch
+git rebase main               # Or git merge; use your repo's branch name
 shoal land                    # Merge your branch into the default branch; no remote needed
 ```
 
