@@ -51,9 +51,12 @@ pub(super) async fn run(ctx: &Context, scope: WorkspaceScope) -> Result<i32> {
 /// failure does not keep the others running.
 async fn stop_all(ctx: &Context) -> Result<i32> {
     let mut running = Vec::new();
+    let mut failed = Vec::new();
     for workspace in client::workspaces(&ctx.paths).await? {
-        if is_running(ctx, &workspace).await? {
-            running.push(workspace);
+        match is_running(ctx, &workspace).await {
+            Ok(true) => running.push(workspace),
+            Ok(false) => {}
+            Err(error) => failed.push((workspace.name, format!("{error:#}"))),
         }
     }
     let results = join_all(running.iter().map(|workspace| {
@@ -66,11 +69,10 @@ async fn stop_all(ctx: &Context) -> Result<i32> {
     }))
     .await;
     let mut stopped = Vec::new();
-    let mut failed = Vec::new();
     for (workspace, result) in running.iter().zip(results) {
         match result {
             Ok(()) => stopped.push(workspace.name.as_str()),
-            Err(error) => failed.push((workspace.name.as_str(), format!("{error:#}"))),
+            Err(error) => failed.push((workspace.name.clone(), format!("{error:#}"))),
         }
     }
     let output = json!({
