@@ -20,7 +20,7 @@ Progress uses terminal stderr only and is suppressed with `--json` or `TERM=dumb
 - [Recovery](#recovery)
 - [Simulators](#simulators-macos)
 - [Resource pools](#cooperative-resource-pools)
-- [Agent skill](#agent-skill-outside-project-repositories)
+- [Agent skills](#agent-skills-outside-project-repositories)
 
 ## Homebrew
 
@@ -37,15 +37,16 @@ shoal install
 
 Upgrade with `brew update && brew upgrade hn05/tap/shoal` (`--fetch-HEAD` for
 `main`), then `shoal daemon restart`. The channels share one installation,
-daemon, and skill path; to switch, run `shoal daemon stop`, uninstall, install
+daemon, and skills path; to switch, run `shoal daemon stop`, uninstall, install
 the other channel, and `shoal daemon start`. State and skill links live outside
-the package and survive. Skill links follow Homebrew's stable `opt` path; a
-skill copied by an older install needs one `shoal skill install` to migrate.
-Packagers can set `SHOAL_SKILL_PATH` to an absolute skill file at runtime,
-overriding the path given in `SHOAL_BUILD_SKILL_PATH` at build time. Without either,
-an adjacent `shoal-skill` symlink can point through a stable installation prefix;
-relative targets resolve lexically against its directory. Without that link,
-installation copies the embedded skill.
+the package and survive. Skill links follow Homebrew's stable `opt` path; skills
+copied by an older install need one `shoal skill install` to migrate.
+Packagers can set `SHOAL_SKILLS_DIR` to an absolute directory holding
+`<skill>/SKILL.md` for each bundled skill at runtime, overriding the directory
+given in `SHOAL_BUILD_SKILLS_DIR` at build time. Without either, an adjacent
+`shoal-skills` symlink can point through a stable installation prefix; relative
+targets resolve lexically against its directory. Without that link,
+installation copies the embedded skills.
 
 ## Daemon
 
@@ -1331,7 +1332,7 @@ name returns its mode; changing mode requires release first, and there is no
 writer priority. `shoal resource` shows reader and writer counts with
 separate read/write availability.
 
-## Agent skill outside project repositories
+## Agent skills outside project repositories
 
 ```sh
 shoal skill install          # All configured tools, including built-in defaults
@@ -1349,14 +1350,16 @@ skill_dir = "~/.config/opencode/skills"
 ```
 
 Names are portable identifiers; `all` is reserved. `skill_dir` must be absolute
-or start with `~/`; Shoal appends `shoal/SKILL.md`. These machine settings cannot
-be set per repository. Use `[commands]` for custom launchers.
+or start with `~/`; Shoal appends `<skill>/SKILL.md`. These machine settings
+cannot be set per repository. Use `[commands]` for custom launchers.
 
-Installs the bundled `SKILL.md` at user scope with no daemon: Codex at
-`~/.agents/skills/shoal/SKILL.md`, Claude at `~/.claude/skills/shoal/SKILL.md`
+Shoal bundles two skills: `shoal-worker` for agents working in a Shoal
+workspace and `shoal-orchestrator` for console agents that create workspaces
+and coordinate their agents. Installation writes both at user scope with no
+daemon: Codex under `~/.agents/skills/`, Claude under `~/.claude/skills/`
 (honoring an absolute `CLAUDE_CONFIG_DIR`); `[ai.codex]` and `[ai.claude]` can
-override those directories. Homebrew installs symlink to the
-packaged skill so upgrades apply automatically; Cargo installs copy it, so
-rerun after upgrading. Other files in the skill directory are preserved. Run it
-outside scoped executions. `shoal skill` prints the instructions (`--json`
-returns a `skill` field).
+override those directories. Homebrew installs symlink to the packaged skills so upgrades apply
+automatically; Cargo installs copy them, so rerun after upgrading. Other files
+in each skill directory are preserved. Run it outside scoped executions.
+`shoal skill` prints the worker skill and `shoal skill orchestrator` the
+orchestrator skill (`--json` returns `name` and `skill` fields).

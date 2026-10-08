@@ -16,6 +16,31 @@ fn cli(home: &Path) -> Command {
     command
 }
 
+const WORKER: &[u8] = include_bytes!("../skills/shoal-worker/SKILL.md");
+const SKILLS: [(&str, &[u8]); 2] = [
+    ("shoal-worker", WORKER),
+    (
+        "shoal-orchestrator",
+        include_bytes!("../skills/shoal-orchestrator/SKILL.md"),
+    ),
+];
+
+fn write_skills(directory: &Path, contents: &str) {
+    for (name, _) in SKILLS {
+        fs::create_dir_all(directory.join(name)).unwrap();
+        fs::write(directory.join(name).join("SKILL.md"), contents).unwrap();
+    }
+}
+
+fn assert_installed(directory: &Path) {
+    for (name, contents) in SKILLS {
+        assert_eq!(
+            fs::read(directory.join(name).join("SKILL.md")).unwrap(),
+            contents
+        );
+    }
+}
+
 fn success(output: Output) -> Vec<u8> {
     assert!(
         output.status.success(),
@@ -38,7 +63,7 @@ fn copy_executable(home: &Path, destination: &Path) {
 }
 
 #[test]
-fn packaged_binary_runs_from_deleted_cwd_and_installs_a_stable_skill_link() {
+fn packaged_binary_runs_from_deleted_cwd_and_installs_stable_skill_links() {
     let home = tempfile::tempdir_in("/tmp").unwrap();
     let package = home.path().join("version one");
     let stable = home.path().join("opt");
@@ -46,9 +71,9 @@ fn packaged_binary_runs_from_deleted_cwd_and_installs_a_stable_skill_link() {
     fs::create_dir_all(package.join("libexec")).unwrap();
     fs::create_dir(&bin).unwrap();
     copy_executable(home.path(), &package.join("libexec/shoal"));
-    fs::write(package.join("SKILL.md"), "version one").unwrap();
+    write_skills(&package.join("skills"), "version one");
     symlink(&package, &stable).unwrap();
-    symlink(stable.join("SKILL.md"), package.join("libexec/shoal-skill")).unwrap();
+    symlink(stable.join("skills"), package.join("libexec/shoal-skills")).unwrap();
     symlink(package.join("libexec/shoal"), bin.join("shoal")).unwrap();
 
     for args in [
@@ -79,24 +104,36 @@ fn packaged_binary_runs_from_deleted_cwd_and_installs_a_stable_skill_link() {
             success(output);
         }
     }
-    let installed = home.path().join(".agents/skills/shoal/SKILL.md");
-    assert_eq!(fs::read_link(&installed).unwrap(), stable.join("SKILL.md"));
+    let installed = home.path().join(".agents/skills");
+    for (name, _) in SKILLS {
+        assert_eq!(
+            fs::read_link(installed.join(name).join("SKILL.md")).unwrap(),
+            stable.join("skills").join(name).join("SKILL.md")
+        );
+    }
     let upgraded = home.path().join("version two");
-    fs::create_dir(&upgraded).unwrap();
-    fs::write(upgraded.join("SKILL.md"), "version two").unwrap();
+    write_skills(&upgraded.join("skills"), "version two");
     fs::remove_file(&stable).unwrap();
     symlink(&upgraded, &stable).unwrap();
-    assert_eq!(fs::read_to_string(&installed).unwrap(), "version two");
+    for (name, _) in SKILLS {
+        assert_eq!(
+            fs::read_to_string(installed.join(name).join("SKILL.md")).unwrap(),
+            "version two"
+        );
+    }
 
     // The explicit runtime source still overrides the adjacent package link.
     success(
         support::isolated(home.path(), bin.join("shoal"))
-            .env("SHOAL_SKILL_PATH", package.join("SKILL.md"))
+            .env("SHOAL_SKILLS_DIR", package.join("skills"))
             .args(["skill", "install", "codex"])
             .output()
             .unwrap(),
     );
-    assert_eq!(fs::read_link(installed).unwrap(), package.join("SKILL.md"));
+    assert_eq!(
+        fs::read_link(installed.join("shoal-worker/SKILL.md")).unwrap(),
+        package.join("skills/shoal-worker/SKILL.md")
+    );
     assert!(!home.path().join("state").exists());
 }
 
@@ -106,16 +143,15 @@ fn relative_packaged_skill_link_follows_homebrew_upgrades() {
     let prefix = fs::canonicalize(home.path()).unwrap();
     let old = prefix.join("Cellar/shoal/0.5.0");
     let new = prefix.join("Cellar/shoal/0.5.1");
-    let skill = Path::new("share/shoal/skill/SKILL.md");
+    let skills = Path::new("share/shoal/skills");
     for (package, contents) in [(&old, "version one"), (&new, "version two")] {
-        fs::create_dir_all(package.join("share/shoal/skill")).unwrap();
-        fs::write(package.join(skill), contents).unwrap();
+        write_skills(&package.join(skills), contents);
     }
     fs::create_dir_all(old.join("libexec")).unwrap();
     copy_executable(home.path(), &old.join("libexec/shoal"));
     symlink(
-        "../../../../opt/shoal/share/shoal/skill/SKILL.md",
-        old.join("libexec/shoal-skill"),
+        "../../../../opt/shoal/share/shoal/skills",
+        old.join("libexec/shoal-skills"),
     )
     .unwrap();
     fs::create_dir(prefix.join("opt")).unwrap();
@@ -131,8 +167,11 @@ fn relative_packaged_skill_link_follows_homebrew_upgrades() {
             .output()
             .unwrap(),
     );
-    let installed = home.path().join(".agents/skills/shoal/SKILL.md");
-    assert_eq!(fs::read_link(&installed).unwrap(), stable.join(skill));
+    let installed = home.path().join(".agents/skills/shoal-worker/SKILL.md");
+    assert_eq!(
+        fs::read_link(&installed).unwrap(),
+        stable.join(skills).join("shoal-worker/SKILL.md")
+    );
     assert_eq!(fs::read_to_string(&installed).unwrap(), "version one");
     fs::remove_file(&stable).unwrap();
     symlink("../Cellar/shoal/0.5.1", &stable).unwrap();
@@ -143,16 +182,21 @@ fn relative_packaged_skill_link_follows_homebrew_upgrades() {
 #[test]
 fn skill_export_and_default_install_work_without_daemon_or_repository() {
     let home = tempfile::tempdir().unwrap();
-    let expected = include_bytes!("../SKILL.md");
     assert_eq!(
         success(cli(home.path()).arg("skill").output().unwrap()),
-        expected
+        WORKER
     );
-    let exported: serde_json::Value = serde_json::from_slice(&success(
-        cli(home.path()).args(["--json", "skill"]).output().unwrap(),
-    ))
-    .unwrap();
-    assert_eq!(exported["skill"].as_str().unwrap().as_bytes(), expected);
+    for (argument, (name, contents)) in ["worker", "orchestrator"].into_iter().zip(SKILLS) {
+        let exported: serde_json::Value = serde_json::from_slice(&success(
+            cli(home.path())
+                .args(["--json", "skill", argument])
+                .output()
+                .unwrap(),
+        ))
+        .unwrap();
+        assert_eq!(exported["name"], name);
+        assert_eq!(exported["skill"].as_str().unwrap().as_bytes(), contents);
+    }
     assert_eq!(fs::read_dir(home.path()).unwrap().count(), 0);
     let installed: serde_json::Value = serde_json::from_slice(&success(
         cli(home.path())
@@ -162,26 +206,24 @@ fn skill_export_and_default_install_work_without_daemon_or_repository() {
     ))
     .unwrap();
     let entries = installed["installed"].as_array().unwrap();
-    assert_eq!(entries.len(), 2);
-    for (agent, relative) in [
-        ("codex", ".agents/skills/shoal/SKILL.md"),
-        ("claude", ".claude/skills/shoal/SKILL.md"),
-    ] {
-        let path = home.path().join(relative);
-        assert_eq!(fs::read(&path).unwrap(), expected);
-        assert!(
-            entries
-                .iter()
-                .any(|entry| entry["agent"] == agent && entry["path"] == path.to_str().unwrap())
-        );
+    assert_eq!(entries.len(), 4);
+    for (agent, relative) in [("codex", ".agents/skills"), ("claude", ".claude/skills")] {
+        let directory = home.path().join(relative);
+        assert_installed(&directory);
+        for (name, _) in SKILLS {
+            let path = directory.join(name).join("SKILL.md");
+            assert!(entries.iter().any(|entry| entry["agent"] == agent
+                && entry["skill"] == name
+                && entry["path"] == path.to_str().unwrap()));
+        }
     }
     assert_eq!(fs::read_dir(home.path()).unwrap().count(), 2);
 }
 
 #[test]
-fn skill_install_refreshes_only_selected_skill_and_preserves_siblings() {
+fn skill_install_refreshes_only_selected_tool_and_preserves_siblings() {
     let home = tempfile::tempdir().unwrap();
-    let directory = home.path().join(".agents/skills/shoal");
+    let directory = home.path().join(".agents/skills/shoal-worker");
     fs::create_dir_all(&directory).unwrap();
     let source = home.path().join("source-skill.md");
     fs::write(&source, "personal source\n").unwrap();
@@ -194,10 +236,7 @@ fn skill_install_refreshes_only_selected_skill_and_preserves_siblings() {
                 .output()
                 .unwrap(),
         );
-        assert_eq!(
-            fs::read(directory.join("SKILL.md")).unwrap(),
-            include_bytes!("../SKILL.md")
-        );
+        assert_eq!(fs::read(directory.join("SKILL.md")).unwrap(), WORKER);
         assert_eq!(fs::read_to_string(&source).unwrap(), "personal source\n");
         assert_eq!(
             fs::read_to_string(directory.join("notes.md")).unwrap(),
@@ -221,10 +260,7 @@ fn skill_install_honors_claude_override_and_rejects_invalid_paths_before_writes(
             .output()
             .unwrap(),
     );
-    assert_eq!(
-        fs::read(config.join("skills/shoal/SKILL.md")).unwrap(),
-        include_bytes!("../SKILL.md")
-    );
+    assert_installed(&config.join("skills"));
     assert!(!home.path().join(".claude").exists());
     assert!(!home.path().join(".agents").exists());
     let invalid = cli(home.path())
@@ -235,7 +271,7 @@ fn skill_install_honors_claude_override_and_rejects_invalid_paths_before_writes(
     assert!(!invalid.status.success());
     assert!(String::from_utf8_lossy(&invalid.stderr).contains("must be an absolute path"));
     assert!(!home.path().join(".agents").exists());
-    let directory = config.join("skills/shoal/SKILL.md");
+    let directory = config.join("skills/shoal-worker/SKILL.md");
     fs::remove_file(&directory).unwrap();
     fs::create_dir(&directory).unwrap();
     fs::write(directory.join("keep"), "keep").unwrap();
@@ -269,7 +305,7 @@ fn scoped_processes_can_export_but_cannot_install_skills() {
                 .output()
                 .unwrap()
         ),
-        include_bytes!("../SKILL.md")
+        WORKER
     );
     assert_eq!(fs::read_dir(home.path()).unwrap().count(), 0);
 }
@@ -295,16 +331,13 @@ fn configured_ai_tools_install_selected_or_all_skills_and_override_defaults() {
             .unwrap()
     };
     let installed: serde_json::Value = serde_json::from_slice(&success(run("pi"))).unwrap();
-    assert_eq!(installed["installed"].as_array().unwrap().len(), 1);
+    assert_eq!(installed["installed"].as_array().unwrap().len(), 2);
     assert_eq!(installed["installed"][0]["agent"], "pi");
     assert!(!home.path().join("custom codex").exists());
     let installed: serde_json::Value = serde_json::from_slice(&success(run("all"))).unwrap();
-    assert_eq!(installed["installed"].as_array().unwrap().len(), 3);
+    assert_eq!(installed["installed"].as_array().unwrap().len(), 6);
     for directory in ["pi skills", "custom codex", ".claude/skills"] {
-        assert_eq!(
-            fs::read(home.path().join(directory).join("shoal/SKILL.md")).unwrap(),
-            include_bytes!("../SKILL.md")
-        );
+        assert_installed(&home.path().join(directory));
     }
     assert!(!home.path().join(".agents").exists());
     let unknown = run("unknown");

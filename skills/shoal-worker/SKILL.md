@@ -1,19 +1,15 @@
 ---
-name: shoal
-description: Use Shoal to finish assignments with `shoal done`, watch and wait on PRs, merge local or remote branches into your managed worktree, reserve ports, lease Xcode simulators, and acquire resource permits during development or testing. Applies to agents launched through Shoal or working directly in a Shoal worktree.
+name: shoal-worker
+description: Use inside a Shoal workspace to finish assignments with `shoal done`, watch and wait on PRs, merge local or remote branches into your managed worktree, reserve ports, lease Xcode simulators, and acquire resource permits during development or testing. Applies to agents launched through Shoal or working directly in a Shoal worktree.
 ---
 
-# Shoal
+# Shoal worker
 
 Use `--json`, omit targets for the current context, and request only needed resources.
 When acquisition returns `approval_pending`, give the user the request ID and wait
 for an unscoped `shoal access approve <id>` or `deny <id>`. Supply `--reason` for
 protected access; inspect your requests with `shoal access`. Retry after approval,
 and stop on `approval_denied`. Never remove scope to approve your own request.
-
-`shoal skill install` refreshes user-level instructions for all configured tools.
-Homebrew links follow upgrades; Cargo installs need refreshing. Run installation
-outside a scoped execution; an optional tool name selects one.
 
 ## Completion
 
@@ -63,24 +59,6 @@ use ordinary Git for merges. Shoal's resources require a managed workspace;
 do not select another agent's workspace or create one just to obtain a lease.
 If workspace setup failed, `shoal --json setup` reruns the configured setup
 command and post-setup hook for the current workspace.
-
-## Happy sessions from a console agent
-
-A Happy session outside any managed workspace (a console session on the user's
-machine) can hand work to a new session that appears in the Happy app:
-
-```sh
-shoal --json add https://github.com/owner/repo/issues/34 --agent happy-codex
-shoal --json happy codex fix-login --prompt "Fix the login bug" -- --yolo
-```
-
-Shoal returns once the launch is recorded (`execution_id`, `pid`, `log`); the
-session runs detached and `shoal stop` or `shoal rm` ends it. Issue and `--prompt`
-text reaches the agent as its first message (Codex through Happy's server, which
-needs this machine's Happy login). Check `prompt_delivered`; when false, the text
-is in `prompt_file` and the user must send it from the app. Sessions launched
-through Shoal are scoped and cannot create workspaces or start sessions in other
-workspaces; the human or console session does.
 
 ## Merge branches into your own branch
 

@@ -26,7 +26,7 @@ label area/cli        1d4ed8 false "Command-line interface, execution wrapper, t
 label area/daemon     0f766e false "Daemon, persisted state, lifecycle, reconciliation and service setup"
 label area/workspaces 7c3aed false "Worktrees, branches, merge, diff, pull and automatic cleanup"
 label area/resources  c2410c false "Ports, simulator leases and semaphore permits"
-label area/agents     0e7490 false "SKILL.md, agent prompts and forge-issue workspace creation"
+label area/agents     0e7490 false "Agent skills, agent prompts and forge-issue workspace creation"
 label area/docs       6b7280 false "README, reference, design and contributor documentation"
 label area/infra      b45309 false "Developer tooling, CI, releases, Homebrew taps and hosting"
 label blocked         000000 false "Cannot proceed until something outside the issue happens"

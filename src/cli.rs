@@ -62,7 +62,11 @@ pub enum Command {
     #[command(external_subcommand)]
     Custom(Vec<OsString>),
     /// Show or install Shoal instructions for agents.
+    #[command(args_conflicts_with_subcommands = true)]
     Skill {
+        /// Skill to show: worker for agents in a workspace, orchestrator for console agents.
+        #[arg(value_enum, default_value_t = SkillName::Worker)]
+        name: SkillName,
         #[command(subcommand)]
         command: Option<SkillCommand>,
     },
@@ -609,9 +613,15 @@ impl clap::builder::TypedValueParser for AgentParser {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum SkillName {
+    Worker,
+    Orchestrator,
+}
+
 #[derive(Debug, Subcommand)]
 pub enum SkillCommand {
-    /// Install or refresh the bundled skill for configured AI tools (no daemon needed).
+    /// Install or refresh the bundled skills for configured AI tools (no daemon needed).
     Install {
         /// Install for one AI tool, or all configured tools by default.
         #[arg(default_value = "all")]

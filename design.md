@@ -402,16 +402,19 @@ and daemon hook rules with the agent name, reported code, and process-completion
 status. Failure notifies without changing the exit result or marking completion;
 removal uses its own hooks. Desktop or push delivery was considered and not adopted.
 
-The skill is installed at user scope, independent of the daemon and never from
-a scoped execution; its availability registers nothing. Global `[ai.<name>]`
-settings name skill directories for user-configured tools, with Codex and Claude
-defaults. Skill directories describe the machine and cannot be set per repository;
-custom launchers use named commands without tool-specific integrations.
-Packaged skills resolve the runtime `SHOAL_SKILL_PATH`, build-time path, then
-an adjacent `shoal-skill` symlink to an existing file. Explicit paths must be
-absolute; relative link targets resolve lexically against the link's directory.
-Preserve stable installation prefixes so upgrades apply; unpackaged binaries
-install the embedded copy. Homebrew launches the binary directly, without a shell.
+Skills are split by role: `shoal-worker` covers an agent's own workspace and
+`shoal-orchestrator` covers unscoped coordination from a console, so neither
+role loads the other's commands. Both are installed together at user scope,
+independent of the daemon and never from a scoped execution; their availability
+registers nothing. Global `[ai.<name>]` settings name skill directories for
+user-configured tools, with Codex and Claude defaults. Skill directories describe
+the machine and cannot be set per repository; custom launchers use named
+commands without tool-specific integrations. Packaged skills resolve the runtime
+`SHOAL_SKILLS_DIR`, build-time directory, then an adjacent `shoal-skills` symlink
+to a directory holding every bundled skill. Explicit paths must be absolute;
+relative link targets resolve lexically against the link's directory. Preserve
+stable installation prefixes so upgrades apply; unpackaged binaries install the
+embedded copies. Homebrew launches the binary directly, without a shell.
 
 ## Resource ownership
 

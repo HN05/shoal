@@ -275,10 +275,11 @@ configured command for another agent, plus proven child
   file, and never stop agents.
   Packaged config installation replaces global TOML only on explicit request,
   keeps a backup, and uses templates embedded in the binary.
-  Packaged skills use the runtime `SHOAL_SKILL_PATH`, then the build-time path,
-  then an adjacent `shoal-skill` symlink. Explicit paths must be absolute;
-  relative link targets resolve lexically against the link's directory. The
-  source must exist and stays uncanonicalized so stable prefixes follow upgrades.
+  Packaged skills use the runtime `SHOAL_SKILLS_DIR`, then the build-time
+  directory, then an adjacent `shoal-skills` symlink. Explicit paths must be
+  absolute; relative link targets resolve lexically against the link's
+  directory. The source must hold every bundled skill and stays uncanonicalized
+  so stable prefixes follow upgrades.
 - Tests run in temporary state directories and repositories without the launching
   environment's Shoal variables or configuration locations, use the isolated
   xcrun fixture, and never install services or touch personal simulators.

@@ -195,7 +195,7 @@ jobs:
             ../cross-build.sh "$target"
             tar --sort=name --mtime="@$epoch" --owner=0 --group=0 --numeric-owner \
               -C "$CARGO_TARGET_DIR/$target/release" -cf - shoal \
-              -C "$PWD" SKILL.md \
+              -C "$PWD" skills \
               | gzip -n -9 > "dist/shoal-$RELEASE_TAG-$platform.tar.gz"
           done
           (cd dist && sha256sum shoal-*.tar.gz > SHA256SUMS && cat SHA256SUMS)

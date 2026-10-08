@@ -23,15 +23,15 @@ class Shoal < Formula
                      "--jobs", ENV.make_jobs.to_s
     else
       libexec.install "shoal"
-      (share/"shoal/skill").install "SKILL.md"
-      (libexec/"shoal-skill").make_symlink opt_share/"shoal/skill/SKILL.md"
+      (share/"shoal").install "skills"
+      (libexec/"shoal-skills").make_symlink opt_share/"shoal/skills"
       bin.install_symlink libexec/"shoal"
     end
   end
 
   def caveats
     <<~EOS
-      Install the agent skill once (it follows future Homebrew upgrades):
+      Install the agent skills once (they follow future Homebrew upgrades):
         #{opt_bin}/shoal skill install
 
       Register the per-user daemon:
@@ -44,13 +44,16 @@ class Shoal < Formula
 
   test do
     assert_match "shoal", shell_output("#{bin}/shoal --version")
-    assert_match "name: shoal", shell_output("#{bin}/shoal skill")
+    assert_match "name: shoal-worker", shell_output("#{bin}/shoal skill")
+    assert_match "name: shoal-orchestrator", shell_output("#{bin}/shoal skill orchestrator")
     ENV["HOME"] = testpath.to_s
     ENV.delete "SHOAL_SCOPE_TOKEN"
     system bin/"shoal", "skill", "install", "codex"
-    installed = testpath/".agents/skills/shoal/SKILL.md"
-    assert_predicate installed, :symlink?
-    assert_equal (opt_share/"shoal/skill/SKILL.md").to_s, installed.readlink.to_s
-    assert_equal (share/"shoal/skill/SKILL.md").read, installed.read
+    %w[shoal-worker shoal-orchestrator].each do |skill|
+      installed = testpath/".agents/skills/#{skill}/SKILL.md"
+      assert_predicate installed, :symlink?
+      assert_equal (opt_share/"shoal/skills/#{skill}/SKILL.md").to_s, installed.readlink.to_s
+      assert_equal (share/"shoal/skills/#{skill}/SKILL.md").read, installed.read
+    end
   end
 end

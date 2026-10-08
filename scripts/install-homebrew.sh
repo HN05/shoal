@@ -13,7 +13,9 @@ stable_prefix=$2
 shift 2
 cd "$(dirname "$0")/.."
 
-export SHOAL_BUILD_SKILL_PATH="$stable_prefix/share/shoal/skill/SKILL.md"
+export SHOAL_BUILD_SKILLS_DIR="$stable_prefix/share/shoal/skills"
 cargo install --locked --path . --root "$install_prefix" --no-track "$@"
-install -d "$install_prefix/share/shoal/skill"
-install -m 644 SKILL.md "$install_prefix/share/shoal/skill/SKILL.md"
+for skill in skills/*/SKILL.md; do
+  install -d "$install_prefix/share/shoal/$(dirname "$skill")"
+  install -m 644 "$skill" "$install_prefix/share/shoal/$skill"
+done

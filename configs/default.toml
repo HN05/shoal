@@ -57,7 +57,7 @@ codex = ["codex", "{args}", "--sandbox", "danger-full-access", "--ask-for-approv
 # gh = "~/bin/gh-agent"
 
 # User-level skill locations for additional AI tools: shoal skill install pi.
-# Shoal adds shoal/SKILL.md beneath skill_dir. Launchers belong in [commands].
+# Shoal adds <skill>/SKILL.md beneath skill_dir. Launchers belong in [commands].
 # [ai.pi]
 # skill_dir = "~/.pi/agent/skills"
 

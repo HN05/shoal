@@ -163,8 +163,8 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         return Ok(0);
     }
     // Skill delivery is independent of daemon state and socket-path limits.
-    if let Some(Command::Skill { command }) = &cli.command {
-        return skill::run(command.as_ref(), cli.json);
+    if let Some(Command::Skill { name, command }) = &cli.command {
+        return skill::run(*name, command.as_ref(), cli.json);
     }
     if let Some(path) = menu_path(cli.command.as_ref())
         && !Context::is_interactive(cli.json)
@@ -194,7 +194,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             None => crate::config::named_commands::list(&ctx).await,
         },
         Command::Custom(args) => crate::config::named_commands::invoke(&ctx, args).await,
-        Command::Skill { command } => skill::run(command.as_ref(), ctx.json),
+        Command::Skill { name, command } => skill::run(name, command.as_ref(), ctx.json),
         Command::Completions { shell } => {
             let script = shell::completions(shell)?;
             ctx.emit(&script, json!({"script": script}))?;

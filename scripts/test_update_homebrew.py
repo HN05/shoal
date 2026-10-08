@@ -34,7 +34,7 @@ end
         self.assertEqual(result.count('depends_on "rust"'), 1)
         self.assertIn('if build.head?', result)
         self.assertIn('libexec.install "shoal"', result)
-        self.assertIn('(libexec/"shoal-skill").make_symlink opt_share/"shoal/skill/SKILL.md"', result)
+        self.assertIn('(libexec/"shoal-skills").make_symlink opt_share/"shoal/skills"', result)
         self.assertIn('bin.install_symlink libexec/"shoal"', result)
         self.assertNotIn("write_env_script", result)
         upgraded = self.update(result, "0.3.0", "b" * 40)

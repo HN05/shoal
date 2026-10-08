@@ -13,7 +13,7 @@ pub const BUILT_INS: [&str; 2] = ["codex", "claude"];
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Agent {
-    /// Parent directory in which Shoal installs `shoal/SKILL.md`.
+    /// Parent directory in which Shoal installs `<skill>/SKILL.md`.
     pub skill_dir: PathBuf,
 }
 

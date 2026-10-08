@@ -9,16 +9,34 @@ use std::{
 use anyhow::{Context, Result, ensure};
 use serde_json::json;
 
-use crate::cli::SkillCommand;
+use crate::cli::{SkillCommand, SkillName};
 
-const SKILL: &str = include_str!("../../../SKILL.md");
+/// Bundled skills by name; a packaged directory holds `<name>/SKILL.md` for each.
+const SKILLS: [(&str, &str); 2] = [
+    (
+        "shoal-worker",
+        include_str!("../../../skills/shoal-worker/SKILL.md"),
+    ),
+    (
+        "shoal-orchestrator",
+        include_str!("../../../skills/shoal-orchestrator/SKILL.md"),
+    ),
+];
 
-pub(super) fn run(command: Option<&SkillCommand>, json_output: bool) -> Result<i32> {
+pub(super) fn run(
+    name: SkillName,
+    command: Option<&SkillCommand>,
+    json_output: bool,
+) -> Result<i32> {
     let Some(SkillCommand::Install { agent }) = command else {
+        let (name, contents) = match name {
+            SkillName::Worker => SKILLS[0],
+            SkillName::Orchestrator => SKILLS[1],
+        };
         if json_output {
-            println!("{}", json!({"skill": SKILL}));
+            println!("{}", json!({"name": name, "skill": contents}));
         } else {
-            print!("{SKILL}");
+            print!("{contents}");
         }
         return Ok(0);
     };
@@ -46,23 +64,24 @@ pub(super) fn run(command: Option<&SkillCommand>, json_output: bool) -> Result<i
                     .join("skills"),
                 None => home.join(".agents/skills"),
             };
-            Ok((name, directory.join("shoal/SKILL.md")))
+            Ok((name, directory))
         })
         .collect::<Result<Vec<_>>>()?;
     let mut installed = Vec::new();
-    let configured_source = std::env::var_os(crate::env::SKILL_PATH)
+    let configured_source = std::env::var_os(crate::env::SKILLS_DIR)
         .map(PathBuf::from)
-        .or_else(|| crate::env::COMPILED_SKILL_PATH.map(PathBuf::from));
+        .or_else(|| crate::env::COMPILED_SKILLS_DIR.map(PathBuf::from));
     let source = packaged_source(configured_source, &std::env::current_exe()?)?;
-    for (agent, path) in destinations {
-        let directory = path.parent().context("missing skill directory")?;
-        fs::create_dir_all(directory)
-            .with_context(|| format!("create skill directory {}", directory.display()))?;
-        install(&path, source.as_deref())?;
-        if !json_output {
-            println!("Installed {agent} skill at {}", path.display());
+    for (agent, directory) in destinations {
+        for (name, contents) in SKILLS {
+            let path = skill_file(&directory, name);
+            let packaged = source.as_ref().map(|source| skill_file(source, name));
+            install(&path, packaged.as_deref(), contents)?;
+            if !json_output {
+                println!("Installed {agent} skill {name} at {}", path.display());
+            }
+            installed.push(json!({"agent": agent, "skill": name, "path": path}));
         }
-        installed.push(json!({"agent": agent, "path": path}));
     }
     if json_output {
         println!("{}", json!({"installed": installed}));
@@ -76,34 +95,44 @@ fn packaged_source(configured: Option<PathBuf>, executable: &Path) -> Result<Opt
         None => packaged_link_source(executable)?,
     };
     if let Some(source) = &source {
-        ensure!(source.is_absolute(), "packaged skill path must be absolute");
         ensure!(
-            source.is_file(),
-            "packaged skill is missing: {}",
-            source.display()
+            source.is_absolute(),
+            "packaged skills directory must be absolute"
         );
+        for (name, _) in SKILLS {
+            let file = skill_file(source, name);
+            ensure!(
+                file.is_file(),
+                "packaged skill is missing: {}",
+                file.display()
+            );
+        }
     }
     Ok(source)
+}
+
+fn skill_file(directory: &Path, name: &str) -> PathBuf {
+    directory.join(name).join("SKILL.md")
 }
 
 fn packaged_link_source(executable: &Path) -> Result<Option<PathBuf>> {
     let link = fs::canonicalize(executable)
         .context("resolve packaged executable")?
-        .with_file_name("shoal-skill");
+        .with_file_name("shoal-skills");
     let target = match fs::read_link(&link) {
         Ok(target) => target,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => return Err(error).context("read packaged shoal-skill link"),
+        Err(error) => return Err(error).context("read packaged shoal-skills link"),
     };
     if target.is_absolute() {
         return Ok(Some(target));
     }
     let absolute = link
         .parent()
-        .context("missing packaged skill directory")?
+        .context("missing packaged skills link directory")?
         .join(target);
     // Homebrew relativizes this link. Resolve it lexically so the installed
-    // skill follows the stable opt prefix rather than a versioned Cellar path.
+    // skills follow the stable opt prefix rather than a versioned Cellar path.
     let mut source = PathBuf::new();
     for component in absolute.components() {
         if component == std::path::Component::ParentDir {
@@ -115,8 +144,10 @@ fn packaged_link_source(executable: &Path) -> Result<Option<PathBuf>> {
     Ok(Some(source))
 }
 
-fn install(path: &Path, source: Option<&Path>) -> Result<()> {
+fn install(path: &Path, source: Option<&Path>, contents: &str) -> Result<()> {
     let directory = path.parent().context("missing skill directory")?;
+    fs::create_dir_all(directory)
+        .with_context(|| format!("create skill directory {}", directory.display()))?;
     // Replace only SKILL.md atomically, never following its previous symlink.
     if let Some(source) = source {
         let temporary = tempfile::tempdir_in(directory)?;
@@ -126,7 +157,7 @@ fn install(path: &Path, source: Option<&Path>) -> Result<()> {
     } else {
         fsutil::replace_atomically(
             path,
-            SKILL.as_bytes(),
+            contents.as_bytes(),
             ReplaceOptions {
                 permissions: Permissions::Mode(0o644),
                 sync: false,
@@ -150,9 +181,9 @@ mod tests {
         fs::write(&source, "personal").unwrap();
         fs::set_permissions(&source, fs::Permissions::from_mode(0o600)).unwrap();
         symlink(&source, &path).unwrap();
-        install(&path, None).unwrap();
+        install(&path, None, "embedded").unwrap();
         assert!(!path.is_symlink());
-        assert_eq!(fs::read_to_string(&path).unwrap(), SKILL);
+        assert_eq!(fs::read_to_string(&path).unwrap(), "embedded");
         assert_eq!(
             fs::metadata(&path).unwrap().permissions().mode() & 0o777,
             0o644
@@ -161,14 +192,19 @@ mod tests {
     }
 
     #[test]
-    fn packaged_skill_link_is_optional_and_explicit_paths_take_precedence() {
+    fn packaged_skills_link_is_optional_and_explicit_paths_take_precedence() {
         let root = tempfile::tempdir().unwrap();
         let executable = root.path().join("shoal");
-        let link = root.path().join("shoal-skill");
-        let source = root.path().join("SKILL.md");
-        let missing = root.path().join("missing.md");
+        let link = root.path().join("shoal-skills");
+        let source = root.path().join("skills");
+        let incomplete = root.path().join("incomplete");
         fs::write(&executable, "binary").unwrap();
-        fs::write(&source, "packaged").unwrap();
+        for (name, _) in SKILLS {
+            fs::create_dir_all(source.join(name)).unwrap();
+            fs::write(skill_file(&source, name), "packaged").unwrap();
+        }
+        fs::create_dir_all(incomplete.join(SKILLS[0].0)).unwrap();
+        fs::write(skill_file(&incomplete, SKILLS[0].0), "packaged").unwrap();
         assert_eq!(packaged_source(None, &executable).unwrap(), None);
         symlink(&source, &link).unwrap();
         assert_eq!(
@@ -185,16 +221,17 @@ mod tests {
         );
         // Preserve the stable symlink target instead of canonicalizing it to a
         // versioned package path that disappears on upgrade.
-        let stable = root.path().join("stable.md");
+        let stable = root.path().join("stable");
         symlink(&source, &stable).unwrap();
         assert_eq!(
             packaged_source(Some(stable.clone()), &executable).unwrap(),
             Some(stable)
         );
         for invalid in [
-            PathBuf::from("relative.md"),
-            missing,
-            root.path().to_owned(),
+            PathBuf::from("relative"),
+            root.path().join("missing"),
+            incomplete,
+            executable.clone(),
         ] {
             assert!(packaged_source(Some(invalid.clone()), &executable).is_err());
             fs::remove_file(&link).unwrap();
@@ -217,7 +254,7 @@ mod tests {
         fs::write(&source, "version one").unwrap();
         symlink(&old, &destination).unwrap();
         for _ in 0..2 {
-            install(&destination, Some(&source)).unwrap();
+            install(&destination, Some(&source), "embedded").unwrap();
             assert_eq!(fs::read_link(&destination).unwrap(), source);
             assert_eq!(fs::read_to_string(&old).unwrap(), "personal");
         }
@@ -226,7 +263,7 @@ mod tests {
         fs::remove_file(&destination).unwrap();
         fs::create_dir(&destination).unwrap();
         fs::write(destination.join("keep"), "keep").unwrap();
-        assert!(install(&destination, Some(&source)).is_err());
+        assert!(install(&destination, Some(&source), "embedded").is_err());
         assert_eq!(
             fs::read_to_string(destination.join("keep")).unwrap(),
             "keep"
