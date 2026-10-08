@@ -442,7 +442,9 @@ issue template is configured. Empty repository values suppress only the addition
 Repository-root Markdown files and global files beside `config.toml` sit below
 inline TOML values at each level; provenance names the highest configured layer
 and reports the combined text.
-`install` adds missing templates from the bundled repository-root defaults;
+`install` adds missing templates from the bundled repository-root defaults and
+updates a regular file that still matches an earlier bundled default, since agent
+guidance must reach existing installs; edited or linked files stay untouched;
 rendering substitutes known fields once without evaluating their contents.
 Before a workspace exists, the registered checkout's file stands in for the
 worktree's. Repository config is read per request, so changes need no restart

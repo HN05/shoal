@@ -11,6 +11,15 @@ pub const ISSUE_FILE: &str = "issue-template.md";
 pub const ISSUE_DEFAULT: &str = include_str!("../../issue-template.md");
 pub const AGENT_FILE: &str = "agent-template.md";
 pub const AGENT_DEFAULT: &str = include_str!("../../agent-template.md");
+/// Earlier shipped agent defaults. An installed copy that still matches one was
+/// never edited, so `install` replaces it; add the old text here when changing it.
+const AGENT_RETIRED: &[&str] = &[
+    include_str!("templates/retired/agent-1.md"),
+    include_str!("templates/retired/agent-2.md"),
+    include_str!("templates/retired/agent-3.md"),
+    include_str!("templates/retired/agent-4.md"),
+    include_str!("templates/retired/agent-5.md"),
+];
 
 pub fn read(directory: &Path, name: &str) -> Result<Option<String>> {
     let path = directory.join(name);
@@ -24,7 +33,10 @@ pub fn install(paths: &Paths) -> Result<()> {
 
 fn install_at(directory: &Path) -> Result<()> {
     fs::create_dir_all(directory)?;
-    for (name, contents) in [(ISSUE_FILE, ISSUE_DEFAULT), (AGENT_FILE, AGENT_DEFAULT)] {
+    for (name, contents, retired) in [
+        (ISSUE_FILE, ISSUE_DEFAULT, &[][..]),
+        (AGENT_FILE, AGENT_DEFAULT, AGENT_RETIRED),
+    ] {
         let path = directory.join(name);
         match fs::OpenOptions::new()
             .write(true)
@@ -32,9 +44,32 @@ fn install_at(directory: &Path) -> Result<()> {
             .open(&path)
         {
             Ok(mut file) => file.write_all(contents.as_bytes())?,
-            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                refresh_unedited(&path, contents, retired)?
+            }
             Err(error) => return Err(error).with_context(|| format!("create {}", path.display())),
         }
+    }
+    Ok(())
+}
+
+/// Replace a regular file that still holds a retired default; symlinks and
+/// edited files belong to the user.
+fn refresh_unedited(path: &Path, contents: &str, retired: &[&str]) -> Result<()> {
+    if !fs::symlink_metadata(path)?.is_file() {
+        return Ok(());
+    }
+    let installed = fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
+    if retired.contains(&installed.as_str()) {
+        crate::fsutil::replace_atomically(
+            path,
+            contents.as_bytes(),
+            crate::fsutil::ReplaceOptions {
+                permissions: crate::fsutil::Permissions::Preserve,
+                sync: false,
+            },
+        )
+        .with_context(|| format!("update {}", path.display()))?;
     }
     Ok(())
 }
@@ -89,6 +124,30 @@ mod tests {
         fs::write(&agent, "custom agent").unwrap();
         install_at(directory.path()).unwrap();
         assert_eq!(fs::read_to_string(agent).unwrap(), "custom agent");
+    }
+
+    #[test]
+    fn install_refreshes_only_unedited_retired_agent_templates() {
+        let directory = tempfile::tempdir().unwrap();
+        let agent = directory.path().join(AGENT_FILE);
+        for retired in AGENT_RETIRED {
+            assert_ne!(*retired, AGENT_DEFAULT);
+            fs::write(&agent, retired).unwrap();
+            install_at(directory.path()).unwrap();
+            assert_eq!(fs::read_to_string(&agent).unwrap(), AGENT_DEFAULT);
+        }
+        let edited = format!("{}Project note.\n", AGENT_RETIRED[0]);
+        fs::write(&agent, &edited).unwrap();
+        install_at(directory.path()).unwrap();
+        assert_eq!(fs::read_to_string(&agent).unwrap(), edited);
+        // A linked template belongs to the user even when it holds a default.
+        let linked = directory.path().join("dotfiles-agent.md");
+        fs::write(&linked, AGENT_RETIRED[0]).unwrap();
+        fs::remove_file(&agent).unwrap();
+        std::os::unix::fs::symlink(&linked, &agent).unwrap();
+        install_at(directory.path()).unwrap();
+        assert!(fs::symlink_metadata(&agent).unwrap().is_symlink());
+        assert_eq!(fs::read_to_string(&linked).unwrap(), AGENT_RETIRED[0]);
     }
 
     #[test]
