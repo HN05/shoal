@@ -31,7 +31,8 @@ respond to available review findings while other checks run. The first wait
 includes existing activity; later waits share a persistent cursor per workspace.
 `--timeout <seconds>` bounds the wait (default 3600, maximum 3600); `timed_out`
 with empty `updates` means no update. A `lookup_failed` entry names a failed
-activity lookup; correct its cause before relying on that source. Waiting also
+activity lookup and repeats every 10 minutes while it persists; until that source
+recovers, check what it covers yourself, such as merge conflicts. Waiting also
 reports PR closure or merging and grants no permission to merge.
 
 `shoal done` defaults to cleanup, which may stop your execution. Use

@@ -8,6 +8,10 @@ use super::strip_bidi_isolates;
 
 mod queries;
 
+/// How long a lookup may keep failing with the same error before it is
+/// reported again, so a failing source cannot silence a wait indefinitely.
+const FAILURE_REPORT_INTERVAL: u64 = 600;
+
 crate::state::states!(UpdateKind {
     Comment => "comment",
     CiCompleted => "ci_completed",
@@ -34,6 +38,9 @@ pub(crate) struct Snapshot {
     conflict: Option<bool>,
     state: String,
     errors: BTreeMap<String, String>,
+    /// Unix seconds when each failing source was last reported.
+    #[serde(default)]
+    reported: BTreeMap<String, u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -92,7 +99,9 @@ impl Snapshot {
             }
         }
         for (source, error) in &next.errors {
-            if self.errors.get(source) != Some(error) {
+            if self.errors.get(source) != Some(error)
+                || self.reported.get(source) != next.reported.get(source)
+            {
                 emit(
                     UpdateKind::LookupFailed,
                     format!("{source} lookup failed: {error}"),
@@ -120,6 +129,27 @@ impl Snapshot {
                 self.comments.insert(source.into(), comment.clone());
             }
         }
+    }
+
+    /// Keeps each unchanged failure's report time until the interval passes,
+    /// so `changes` reports a persisting failure again once per interval.
+    pub(super) fn schedule_failure_reports(&mut self, previous: &Self, now: u64) {
+        self.reported = self
+            .errors
+            .iter()
+            .map(|(source, error)| {
+                let reported = previous
+                    .reported
+                    .get(source)
+                    .copied()
+                    .filter(|&at| {
+                        previous.errors.get(source) == Some(error)
+                            && now.saturating_sub(at) < FAILURE_REPORT_INTERVAL
+                    })
+                    .unwrap_or(now);
+                (source.clone(), reported)
+            })
+            .collect();
     }
 
     fn record_comments(&mut self, source: &str, result: Result<String>) {
@@ -181,6 +211,40 @@ mod tests {
         closed.state = "closed".into();
         assert_eq!(reviewed.changes(&closed, "pr")[0].kind, UpdateKind::Closed);
     }
+
+    #[test]
+    fn persisting_lookup_failures_are_reported_again_after_the_interval() {
+        let failing = |error: &str| {
+            let mut snapshot = Snapshot::default();
+            snapshot
+                .errors
+                .insert("CI and merge conflicts".into(), error.into());
+            snapshot
+        };
+        let poll = |previous: &Snapshot, error: &str, now| {
+            let mut next = failing(error);
+            next.schedule_failure_reports(previous, now);
+            let kinds = previous
+                .changes(&next, "pr")
+                .iter()
+                .map(|update| update.kind)
+                .collect::<Vec<_>>();
+            (next, kinds)
+        };
+        let (first, kinds) = poll(&Snapshot::default(), "unparsable", 1000);
+        assert_eq!(kinds, [UpdateKind::LookupFailed]);
+        let (quiet, kinds) = poll(&first, "unparsable", 1000 + FAILURE_REPORT_INTERVAL - 1);
+        assert!(kinds.is_empty());
+        let (again, kinds) = poll(&quiet, "unparsable", 1000 + FAILURE_REPORT_INTERVAL);
+        assert_eq!(kinds, [UpdateKind::LookupFailed]);
+        let (changed, kinds) = poll(&again, "timed out", 1000 + FAILURE_REPORT_INTERVAL + 1);
+        assert_eq!(kinds, [UpdateKind::LookupFailed]);
+        let mut recovered = Snapshot::default();
+        recovered.schedule_failure_reports(&changed, 5000);
+        assert!(changed.changes(&recovered, "pr").is_empty());
+        assert!(recovered.reported.is_empty());
+    }
+
     #[test]
     fn issue_closure_and_reopening_have_item_messages() {
         let mut opened = Snapshot {

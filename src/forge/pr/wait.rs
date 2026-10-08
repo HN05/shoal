@@ -195,6 +195,7 @@ impl Manager {
                     continue;
                 }
                 snapshot.retain_failed_checks(&previous.snapshot);
+                snapshot.schedule_failure_reports(&previous.snapshot, crate::time::unix_seconds());
                 let mut pending = previous.snapshot.changes(&snapshot, &url);
                 let delivery = uuid::Uuid::new_v4().to_string();
                 for update in &mut pending {

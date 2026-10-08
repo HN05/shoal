@@ -924,7 +924,8 @@ CLI acknowledges successful output. Unlinking discards that item's cursor.
 `--timeout <seconds>` bounds the wait (1–3600, default 3600); expiration returns
 an empty array and `timed_out: true`. Scoped callers can watch only in their own
 workspace. Activity polling continues when completion is deferred or PR cleanup
-is disabled. Lookup failures report errors or `lookup_failed` updates. Forgejo
+is disabled. Lookup failures report errors or `lookup_failed` updates; a source
+that keeps failing with the same error is reported again every 10 minutes. Forgejo
 comment and review changes are grouped; CI results follow `fj pr status` contexts.
 
 Once every linked PR has merged and at least one contains current HEAD, a

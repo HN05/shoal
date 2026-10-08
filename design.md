@@ -608,8 +608,10 @@ rechecks the watch set so cancelled watches cannot recreate their cursors.
 Unacknowledged deliveries persist with the cursor so timeout or disconnection
 cannot discard unseen updates; the CLI acknowledges after successful output.
 Unavailable activity sources are explicit failures, never successful checks or
-proof of mergeability. Waiting does not resume stopped agents or grant merge
-permission; agent instructions direct agents to handle updates and wait again.
+proof of mergeability; a persisting failure is reported again on an interval so it
+cannot silence a wait while hiding a new conflict. Waiting does not resume stopped
+agents or grant merge permission; agent instructions direct agents to handle
+updates and wait again.
 When completion requests cleanup, confirmed merges stop tracked agents through shared removal,
 rechecking clean files and HEAD after stopping. Failures retain work and leases;
 registered workspaces are excluded from idle cleanup until cleared or removed.
