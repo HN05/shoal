@@ -14,6 +14,7 @@ use crate::{
         ui::{self, Fallback},
     },
     daemon::{
+        access::{AccessRequest, Specification, Target},
         ports::PortRequest,
         resources::{LockMode, Overview, ResourceKind, ResourceRequest},
     },
@@ -101,8 +102,9 @@ fn resource_request(
     }
 }
 
-/// One lease a workspace holds, named as its release request needs it.
-#[derive(Debug, Serialize)]
+/// One lease or active access request a workspace holds, named as its
+/// release request needs it.
+#[derive(Debug, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "lowercase")]
 enum Held {
     Port { name: String },
@@ -194,17 +196,28 @@ async fn select_held(
             }
         }
     });
-    let selected: Vec<_> = ports
-        .chain(simulators)
-        .chain(resources)
-        .filter(|held| matches_kind(held, kind.as_ref()))
-        .collect();
+    let requests = client::request::<Vec<AccessRequest>>(
+        &ctx.paths,
+        Method::ListAccess {
+            workspace: Some(workspace.to_owned()),
+        },
+    )
+    .await?
+    .into_iter()
+    .filter(|request| request.active)
+    .map(requested);
+    let mut selected = Vec::new();
+    for held in ports.chain(simulators).chain(resources).chain(requests) {
+        if matches_kind(&held, kind.as_ref()) && !selected.contains(&held) {
+            selected.push(held);
+        }
+    }
     if let Some(ReleaseKind::Resource { selection } | ReleaseKind::Repo { selection }) = &kind
         && let (Some(pool), Some(lease)) = (&selection.pool, &selection.lease)
     {
         ensure!(
             !selected.is_empty(),
-            "no {} lease {pool}/{lease} in this workspace",
+            "no {} lease or request {pool}/{lease} in this workspace",
             if matches!(kind, Some(ReleaseKind::Repo { .. })) {
                 "repo"
             } else {
@@ -213,6 +226,21 @@ async fn select_held(
         );
     }
     Ok(selected)
+}
+
+/// Release cancels a pending or denied request even without a lease.
+fn requested(request: AccessRequest) -> Held {
+    let name = request.name;
+    match (request.target, request.specification) {
+        (Target::Port(_), _) => Held::Port { name },
+        (Target::Simulator, _) => Held::Sim { name },
+        (Target::Resource { pool, .. }, Specification::Resource(bound))
+            if bound.repository.is_some() =>
+        {
+            Held::Repo { pool, name }
+        }
+        (Target::Resource { pool, .. }, _) => Held::Resource { pool, name },
+    }
 }
 
 fn matches_kind(held: &Held, kind: Option<&ReleaseKind>) -> bool {

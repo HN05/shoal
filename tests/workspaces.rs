@@ -4943,7 +4943,9 @@ fn release_narrows_from_every_lease_to_one_kind_or_item() {
         "first",
     ]);
     assert!(!mismatch.status.success());
-    assert!(String::from_utf8_lossy(&mismatch.stderr).contains("no repo lease devices/a"));
+    assert!(
+        String::from_utf8_lossy(&mismatch.stderr).contains("no repo lease or request devices/a")
+    );
     assert_eq!(
         released(&["resource", "devices", "--name", "a"]),
         serde_json::json!([{"kind": "resource", "pool": "devices", "name": "a"}])
@@ -12960,6 +12962,46 @@ fn pending_access(output: Output) -> Value {
     let value: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(value["code"], "approval_pending");
     value["request"].clone()
+}
+
+#[test]
+fn release_cancels_pending_requests_without_leases() {
+    let fixture = Fixture::with_config(Some("[resources.signing]\nrequires_approval=true\n"));
+    set_repository_toml(&fixture, "[ports.web]\nrequires_approval=true\n");
+    fixture.add("agent");
+    for args in [
+        ["acquire", "resource", "signing", "--reason", "sign build"],
+        ["acquire", "port", "web", "--reason", "serve preview"],
+    ] {
+        pending_access(scoped_command(&fixture, "agent", &args));
+    }
+    assert_eq!(fixture.ok(&["access"]).as_array().unwrap().len(), 2);
+    let released = fixture.ok(&[
+        "release",
+        "resource",
+        "signing",
+        "--name",
+        "default",
+        "--workspace",
+        "agent",
+    ]);
+    assert_eq!(
+        released["released"],
+        serde_json::json!([{"kind": "resource", "pool": "signing", "name": "default"}])
+    );
+    let released = fixture.ok(&["release", "--workspace", "agent"]);
+    assert_eq!(
+        released["released"],
+        serde_json::json!([{"kind": "port", "name": "web"}])
+    );
+    assert!(
+        fixture
+            .ok(&["access"])
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|request| request["active"] == false)
+    );
 }
 
 #[test]

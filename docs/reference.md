@@ -1023,8 +1023,8 @@ Simulator, resource, and repository leases take `--name` (default `default`) to
 hold several, `--reason`, and `--wait` to poll up to 3600 seconds for capacity
 or approval. `acquire repo` selects only `kind = "repo"` members.
 
-`shoal release` releases every lease the workspace holds, in order, and stops at
-the first failure. A kind narrows it to that kind, a resource or repository name
+`shoal release` releases every lease and active access request the workspace
+holds, in order, and stops at the first failure. A kind narrows it to that kind, a resource or repository name
 to its pool, and `--name` or a port name to one lease. Holds are released
 separately.
 
