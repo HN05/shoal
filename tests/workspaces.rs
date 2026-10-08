@@ -2260,7 +2260,7 @@ fn review_runs_the_configured_command_or_prompts_an_agent() {
 }
 
 #[test]
-fn pr_review_opens_the_head_against_its_base_and_reuses_the_owner() {
+fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
     let fixture = Fixture::with_config(Some(
         "default_agent = 'reviewer'\n[commands]\nreviewer = ['printf', '%s', '{prompt}']\n",
     ));
@@ -2325,16 +2325,18 @@ fn pr_review_opens_the_head_against_its_base_and_reuses_the_owner() {
     .unwrap();
     fs::set_permissions(bin.join("fj"), fs::Permissions::from_mode(0o755)).unwrap();
     let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap());
-    let review = |input: &str| {
+    let review = |target: &[&str]| {
         fixture
             .command()
-            .args(["pr", "review", input, "--agent", "reviewer"])
+            .arg("review")
+            .args(target)
+            .args(["--agent", "reviewer"])
             .current_dir(&fixture.repo)
             .env("PATH", &path)
             .output()
             .unwrap()
     };
-    let output = review("7");
+    let output = review(&["--pr", "7"]);
     assert!(output.status.success(), "{output:?}");
     let stdout = String::from_utf8(output.stdout).unwrap();
     assert!(
@@ -2378,13 +2380,13 @@ fn pr_review_opens_the_head_against_its_base_and_reuses_the_owner() {
         git(&author, &["rev-parse", "stack/base"])
     );
 
-    let output = review("https://forge.example/team/project/pulls/7");
+    let output = review(&["https://forge.example/team/project/pulls/7"]);
     assert!(output.status.success(), "{output:?}");
     assert!(
         String::from_utf8_lossy(&output.stderr).contains("Reviewing PR #7 in workspace stack-top"),
         "{output:?}"
     );
-    let output = review("https://forge.example/other/project/pulls/7");
+    let output = review(&["https://forge.example/other/project/pulls/7"]);
     assert!(!output.status.success());
 }
 

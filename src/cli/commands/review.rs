@@ -1,7 +1,7 @@
 //! Review a workspace's changes with the configured `review` command or an agent.
 use std::ffi::OsString;
 
-use anyhow::{Context as _, Result, bail};
+use anyhow::{Context as _, Result, bail, ensure};
 
 use crate::{
     agent::{Agent, CodexMode},
@@ -10,7 +10,7 @@ use crate::{
         context::Context,
         ui::{self, Fallback},
     },
-    forge::{ForgeRepo, PullRequest},
+    forge::{ForgeRepo, IssueInput, PullRequest},
     git,
     model::Workspace,
     protocol::ConfigTarget,
@@ -26,6 +26,57 @@ pub(super) enum Reviewer {
     Agent(Option<Agent>),
 }
 
+/// What `shoal review` reviews.
+pub(super) enum Target {
+    Workspace(Option<String>),
+    Pull {
+        input: String,
+        repository: Option<String>,
+    },
+}
+
+impl Target {
+    /// A URL in the workspace position names a PR; `--repo` selects a PR's repository.
+    pub fn new(
+        workspace: Option<String>,
+        pr: Option<String>,
+        repository: Option<String>,
+    ) -> Result<Self> {
+        let pasted = workspace
+            .as_deref()
+            .is_some_and(|input| IssueInput::parse(input) == IssueInput::Url);
+        match (pr, pasted) {
+            (Some(input), _) => Ok(Target::Pull { input, repository }),
+            (None, true) => Ok(Target::Pull {
+                input: workspace.unwrap(),
+                repository,
+            }),
+            (None, false) => {
+                ensure!(
+                    repository.is_none(),
+                    "--repo selects a PR's repository; pass --pr or a PR URL"
+                );
+                Ok(Target::Workspace(workspace))
+            }
+        }
+    }
+}
+
+/// Review the target with the chosen reviewer, forwarding `args` to it.
+pub(super) async fn start(
+    ctx: &Context,
+    target: Target,
+    reviewer: Reviewer,
+    args: Vec<OsString>,
+) -> Result<i32> {
+    match target {
+        Target::Workspace(workspace) => run(ctx, workspace, reviewer, None, args).await,
+        Target::Pull { input, repository } => {
+            pull_request(ctx, input, repository, reviewer, args).await
+        }
+    }
+}
+
 impl Reviewer {
     pub fn new(manual: bool, agent: Option<Agent>) -> Self {
         match (manual, agent) {
@@ -38,7 +89,7 @@ impl Reviewer {
 
 /// Review a PR in the workspace that owns its head branch, opening one from
 /// origin that is compared against the PR's base when none does.
-pub(super) async fn pull_request(
+async fn pull_request(
     ctx: &Context,
     input: String,
     repository: Option<String>,
@@ -63,7 +114,7 @@ pub(super) async fn pull_request(
                 ctx,
                 &mut repos,
                 ForgeRepo::from_pull_url(&input)?,
-                "shoal pr review <url> --repo <repository>",
+                "shoal review <url> --repo <repository>",
             )
             .await?
             .into()
@@ -149,7 +200,7 @@ pub(super) async fn fetch_pull_base(path: &std::path::Path, base: &str) -> Resul
     Ok(tracking)
 }
 
-pub(super) async fn run(
+async fn run(
     ctx: &Context,
     workspace: Option<String>,
     reviewer: Reviewer,
@@ -219,4 +270,34 @@ fn prompt(workspace: &Workspace, pull: Option<&PullRequest>) -> String {
          or state that triggers it. Do not edit files, commit, push, or comment on the \
          forge unless asked."
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn urls_and_pr_flags_select_a_pr_and_repo_requires_one() {
+        let url = "https://forge.example/team/repo/pulls/7";
+        for (workspace, pr) in [(Some(url), None), (None, Some("7"))] {
+            let target = Target::new(
+                workspace.map(String::from),
+                pr.map(String::from),
+                Some("repo".into()),
+            )
+            .unwrap();
+            assert!(matches!(
+                target,
+                Target::Pull {
+                    repository: Some(_),
+                    ..
+                }
+            ));
+        }
+        assert!(matches!(
+            Target::new(Some("fix-login".into()), None, None).unwrap(),
+            Target::Workspace(Some(name)) if name == "fix-login"
+        ));
+        assert!(Target::new(Some("fix-login".into()), None, Some("repo".into())).is_err());
+    }
 }

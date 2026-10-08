@@ -340,7 +340,7 @@ built-ins and never open a picker. Workspace fields expand once within individua
 arguments; a standalone `{args}` places the caller's literal arguments.
 `{diff_base}` lazily uses `diff`'s daemon lookup. Built-in `review` chooses
 between the `review` command and an agent prompted to report, not change, the
-work. `pr review` resolves a same-repository PR with the user's forge login and
+work. A PR target, named by URL or `--pr`, resolves a same-repository PR with the user's forge login and
 reviews its head branch against the PR base, reusing the owning workspace. Review tools own review storage, exports, and forge authentication, with
 explicit feedback handoff to agents.
 

@@ -299,12 +299,15 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         Command::Diff { workspace } => workspaces::diff(&ctx, workspace).await,
         Command::Review {
             workspace,
+            pr,
+            repository,
             manual,
             agent,
             args,
         } => {
+            let target = review::Target::new(workspace, pr, repository)?;
             let reviewer = review::Reviewer::new(manual, agent);
-            review::run(&ctx, workspace, reviewer, None, args).await
+            review::start(&ctx, target, reviewer, args).await
         }
         Command::Sync { repository } => repositories::sync(&ctx, repository).await,
         Command::Land { workspace } => workspaces::land(&ctx, workspace).await,
@@ -319,16 +322,6 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             }
             PrCommand::Wait { workspace, timeout } => {
                 workspaces::pr_wait(&ctx, workspace, timeout).await
-            }
-            PrCommand::Review {
-                url,
-                repository,
-                manual,
-                agent,
-                args,
-            } => {
-                let reviewer = review::Reviewer::new(manual, agent);
-                review::pull_request(&ctx, url, repository, reviewer, args).await
             }
         },
         Command::Continue { workspace } => workspaces::continue_work(&ctx, workspace).await,

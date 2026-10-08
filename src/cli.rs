@@ -256,9 +256,16 @@ pub enum Command {
     Cd { workspace: Option<String> },
     /// Show changes since the branch's fork point.
     Diff { workspace: Option<String> },
-    /// Start a review tool or agent to review workspace changes.
+    /// Start a review tool or agent to review workspace or PR changes.
     Review {
+        /// Workspace to review, or a PR URL.
         workspace: Option<String>,
+        /// Review this PR in the workspace that owns its head branch, opening one when none does.
+        #[arg(long, value_name = "NUMBER_OR_URL", conflicts_with = "workspace")]
+        pr: Option<String>,
+        /// Registered repository of the PR; defaults to the URL's repository or the current checkout/workspace.
+        #[arg(long = "repo")]
+        repository: Option<String>,
         /// Run the configured `review` command without asking.
         #[arg(long, conflicts_with = "agent")]
         manual: bool,
@@ -290,7 +297,8 @@ pub enum Command {
     },
     #[command(name = internal::HERDR_WATCH, hide = true)]
     HerdrWatchInternal { workspace: String, tab: String },
-    /// Open a pull request for review.
+    /// Superseded PR watch commands; use link and watch.
+    #[command(hide = true)]
     Pr {
         #[command(subcommand)]
         command: PrCommand,
@@ -560,24 +568,6 @@ pub enum PrCommand {
         /// Stop waiting after this many seconds and return no updates.
         #[arg(long, default_value_t = 3600)]
         timeout: u64,
-    },
-    /// Open a PR's branch in a workspace and review it manually or with an agent.
-    Review {
-        /// GitHub or Forgejo PR number or URL.
-        #[arg(value_name = "NUMBER_OR_URL")]
-        url: String,
-        /// Registered repository; defaults to the URL's repository or the current checkout/workspace.
-        #[arg(long = "repo")]
-        repository: Option<String>,
-        /// Run the configured `review` command without asking.
-        #[arg(long, conflicts_with = "agent")]
-        manual: bool,
-        /// Start this agent with a review prompt without asking.
-        #[arg(long, value_parser = AgentParser)]
-        agent: Option<Agent>,
-        /// Arguments forwarded to the review command or agent.
-        #[arg(last = true)]
-        args: Vec<OsString>,
     },
 }
 
@@ -1250,15 +1240,21 @@ mod tests {
                 Some(Command::Pr { command: PrCommand::Unwatch { workspace, url } })
                 if workspace.as_deref() == Some("workspace") && url.as_deref() == expected));
         }
-        let review = Cli::try_parse_from(["shoal", "pr", "review", "7", "--agent", "claude"]);
+    }
+
+    #[test]
+    fn review_selects_a_workspace_or_a_pr() {
+        let review = Cli::try_parse_from(["shoal", "review", "--pr", "7", "--agent", "claude"]);
         assert!(matches!(review.unwrap().command,
-            Some(Command::Pr { command: PrCommand::Review { url, agent: Some(Agent::Claude), .. } }) if url == "7"));
-        assert!(
-            Cli::try_parse_from([
-                "shoal", "pr", "review", "7", "--manual", "--agent", "claude"
-            ])
-            .is_err()
-        );
+            Some(Command::Review { workspace: None, pr: Some(pr), agent: Some(Agent::Claude), .. }) if pr == "7"));
+        for args in [
+            vec![
+                "shoal", "review", "--pr", "7", "--manual", "--agent", "claude",
+            ],
+            vec!["shoal", "review", "workspace", "--pr", "7"],
+        ] {
+            assert!(Cli::try_parse_from(args).is_err());
+        }
     }
 
     #[test]
