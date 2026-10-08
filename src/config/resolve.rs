@@ -19,6 +19,8 @@ use crate::{
 #[derive(Debug, Serialize)]
 pub struct Effective {
     pub commands: named_commands::Commands,
+    /// AI tools that run as agents; machine config, so no layer overrides it.
+    pub providers: std::collections::BTreeSet<String>,
     pub agent_resume: named_commands::Commands,
     pub issue_template: Option<String>,
     pub agent_template: Option<String>,
@@ -154,6 +156,7 @@ impl Effective {
         ports.validate()?;
         Ok(Self {
             commands: merged.commands,
+            providers: Default::default(),
             agent_resume: merged.agent_resume,
             issue_template: merged.issue_template,
             agent_template: merged.agent_template,

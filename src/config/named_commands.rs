@@ -45,22 +45,7 @@ pub enum BareName {
 }
 
 pub fn defaults() -> Commands {
-    [
-        ("claude", vec!["claude"]),
-        (
-            "codex",
-            vec![
-                "codex",
-                "{args}",
-                "--sandbox",
-                "danger-full-access",
-                "--ask-for-approval=never",
-            ],
-        ),
-    ]
-    .into_iter()
-    .map(|(name, argv)| (name.into(), argv.into_iter().map(String::from).collect()))
-    .collect()
+    crate::ai::default_commands()
 }
 
 pub fn validate(commands: &Commands) -> Result<()> {

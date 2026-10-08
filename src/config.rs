@@ -358,7 +358,12 @@ impl Config {
     /// repository's own; machine-only settings stay out of it.
     pub fn repository_layer(&self) -> RepoConfig {
         RepoConfig {
-            commands: self.commands.clone(),
+            commands: self
+                .commands
+                .clone()
+                .into_iter()
+                .chain(crate::ai::commands(&self.ai))
+                .collect(),
             agent_resume: self.agent_resume.clone(),
             issue_template: self.issue_template.clone(),
             agent_template: self.agent_template.clone(),
@@ -398,7 +403,7 @@ impl Config {
 
     fn parse(text: &str, paths: &Paths) -> Result<Self> {
         let config: Self = toml::from_str(text)?;
-        crate::ai::validate(&config.ai, &paths.home)?;
+        crate::ai::validate(&config.ai, &config.commands, &paths.home)?;
         config.root_dir(paths)?;
         if let Some(minutes) = config.auto_cleanup.idle_minutes {
             validate_idle_minutes(minutes)?;
@@ -428,7 +433,9 @@ impl Config {
     /// The settings in effect for a target whose repository layers are
     /// `layers`: those over this machine's, then the built-in defaults.
     pub fn resolve(&self, layers: &ConfigLayers) -> Result<Effective> {
-        resolve::Stack::new(self, layers).resolve()
+        let mut effective = resolve::Stack::new(self, layers).resolve()?;
+        effective.providers = crate::ai::providers(&self.ai);
+        Ok(effective)
     }
 }
 

@@ -52,27 +52,22 @@ pub(super) fn run(
     );
     let home = crate::fsutil::home_dir()?;
     ensure!(home.is_absolute(), "HOME must be an absolute path");
-    let configured = crate::ai::load(&home)?;
-    let mut names = std::collections::BTreeSet::from(crate::ai::BUILT_INS);
-    names.extend(configured.keys().map(String::as_str));
-    ensure!(
-        agent == "all" || names.contains(agent.as_str()),
-        "unknown AI tool {agent:?}; configure [ai.{agent}] with skill_dir in global Shoal config"
-    );
-    let destinations = names
-        .into_iter()
-        .filter(|name| agent == "all" || agent == name)
-        .map(|name| {
-            let directory = match configured.get(name) {
-                Some(settings) => crate::ai::skill_dir(settings, &home)?,
-                None if name == "claude" => crate::env::claude_config_dir()?
-                    .unwrap_or_else(|| home.join(".claude"))
-                    .join("skills"),
-                None => home.join(".agents/skills"),
-            };
-            Ok((name, directory))
-        })
-        .collect::<Result<Vec<_>>>()?;
+    let directories = crate::ai::skill_dirs(&crate::ai::load(&home)?, &home)?;
+    let destinations: Vec<_> = if agent == "all" {
+        // A provider without a skill directory takes no part in installing all.
+        directories
+            .into_iter()
+            .filter_map(|(name, directory)| Some((name, directory?)))
+            .collect()
+    } else {
+        let directory = directories.get(agent.as_str()).with_context(|| {
+            format!("unknown AI tool {agent:?}; configure [ai.{agent}] with skill_dir in global Shoal config")
+        })?;
+        let directory = directory.clone().with_context(|| {
+            format!("AI tool {agent:?} has no skill directory; set [ai.{agent}] skill_dir in global Shoal config")
+        })?;
+        vec![(agent.clone(), directory)]
+    };
     let mut installed = Vec::new();
     let configured_source = std::env::var_os(crate::env::SKILLS_DIR)
         .map(PathBuf::from)
