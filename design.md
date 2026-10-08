@@ -144,7 +144,8 @@ remote's HEAD, or the checkout's current branch without remotes, never a guessed
 `main`. The selected local default branch is fast-forwarded from its upstream first,
 preserving an ahead branch and refusing divergence, dirty or managed checkouts, and
 failed fetches. `--base REF` starts from any locally resolvable
-commit ref without refreshing, except when it names the local default branch.
+commit ref without refreshing, except when it names the local default branch or a
+configured remote's branch, which is fetched first and must succeed.
 Creation, default-branch refresh, setup, repository removal, and recovery share
 a per-repository Git gate. Daemon ref updates disable hooks, Git credential prompts,
 and SSH askpass while preserving the user's SSH transport configuration;

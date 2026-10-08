@@ -5620,11 +5620,6 @@ fn add_base_accepts_branches_tags_commits_and_revision_expressions() {
             source.trim(),
             Some("refs/heads/feature/source"),
         ),
-        (
-            "origin/topic",
-            source.trim(),
-            Some("refs/remotes/origin/topic"),
-        ),
         ("v1", source.trim(), Some("refs/tags/v1")),
         (source.trim(), source.trim(), None),
         ("feature/source~1", initial.trim(), None),
@@ -5645,8 +5640,51 @@ fn add_base_accepts_branches_tags_commits_and_revision_expressions() {
         assert!(diff.contains("workspace change"));
         assert!(!diff.contains("source-only"));
     }
+    // A remote branch base is fetched first, so an unreachable remote stops
+    // creation instead of starting from a stale tracking ref.
+    let output = fixture.run(&[
+        "add",
+        fixture.repo.to_str().unwrap(),
+        "from-remote",
+        "--base",
+        "origin/topic",
+    ]);
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("could not fetch origin/topic"), "{stderr}");
+    assert_eq!(
+        fixture.ok(&["inspect", "from-remote"])["workspace"]["state"],
+        "failed"
+    );
     assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), initial);
     assert_eq!(git(&fixture.repo, &["rev-parse", "feature/source"]), source);
+}
+
+#[test]
+fn add_fetches_a_remote_branch_base_before_creating_the_worktree() {
+    let fixture = Fixture::new();
+    let author = upstream_remote(&fixture);
+    let main = git(&fixture.repo, &["rev-parse", "main"]);
+    git(&author, &["switch", "-c", "feature/api"]);
+    for (index, contents) in ["first\n", "second\n"].into_iter().enumerate() {
+        merge_commit(&author, "api", contents);
+        git(&author, &["push", "origin", "feature/api"]);
+        let expected = git(&author, &["rev-parse", "HEAD"]);
+        let name = format!("on-api-{index}");
+        let workspace = fixture.ok(&[
+            "add",
+            fixture.repo.to_str().unwrap(),
+            &name,
+            "--base",
+            "origin/feature/api",
+        ]);
+        let path = Path::new(workspace["path"].as_str().unwrap());
+        assert_eq!(git(path, &["rev-parse", "HEAD"]), expected);
+        assert_eq!(workspace["base_ref"], "refs/remotes/origin/feature/api");
+        assert_eq!(workspace["base_commit"], expected.trim());
+    }
+    // Only the named branch is fetched; the local default stays as it was.
+    assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), main);
 }
 
 #[test]

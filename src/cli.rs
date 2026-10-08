@@ -102,7 +102,8 @@ pub enum Command {
         /// Create this worktree at an exact new directory instead of the repository default.
         #[arg(long)]
         path: Option<PathBuf>,
-        /// Starting Git ref (defaults to the repository's default branch, refreshed from its upstream);
+        /// Starting Git ref (defaults to the repository's default branch, refreshed from its upstream;
+        /// a remote branch such as origin/feature is fetched first);
         /// with --existing, the ref its changes are compared against.
         #[arg(long, value_name = "REF")]
         base: Option<String>,

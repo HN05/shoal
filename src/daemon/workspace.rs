@@ -439,7 +439,8 @@ impl Manager {
         Ok(settings.setup_cmd.is_some() || settings.pre_setup_cmd.is_some())
     }
 
-    /// Select the effective base and refresh the local default only for new branches.
+    /// Select the effective base and, for new branches only, refresh the local
+    /// default or fetch a named remote branch.
     async fn resolve_worktree_base(
         &self,
         repo: &Repository,
@@ -459,7 +460,7 @@ impl Manager {
         };
         let default = crate::git::default_branch::resolve(&repo.path, lookup).await;
         // An explicit ref remains an escape hatch when remote default-branch
-        // discovery is unavailable. It does not implicitly refresh another ref.
+        // discovery is unavailable; only a remote branch it names is fetched.
         let default = if base.is_none() {
             Some(default?)
         } else {
@@ -480,6 +481,20 @@ impl Manager {
             )
             .await
             .context("could not refresh the default branch before creating workspace")?;
+        } else if !existing
+            && let Some((remote, branch)) = git::remote_branch(&repo.path, base).await?
+        {
+            let tracking = git::remote_ref(&remote, &branch);
+            let refspec = format!("+{}:{tracking}", git::local_ref(&branch));
+            git::run_isolated(
+                &repo.path,
+                &[git::FETCH_SAFE_ARGS, &["--", &remote, &refspec]].concat(),
+            )
+            .await
+            .with_context(|| {
+                format!("could not fetch {remote}/{branch} before creating workspace; pass a commit to start from the local state")
+            })?;
+            return Ok(tracking);
         }
         let base = if refresh {
             default_ref.as_deref().unwrap()

@@ -560,9 +560,10 @@ Before branching, Shoal fetches that local branch's upstream and fast-forwards
 it, even when the registered checkout is on another branch. A missing branch or
 upstream, failed fetch, divergence, or a dirty or managed default-branch
 checkout stops creation; an already-ahead branch is preserved. `--base REF`
-starts from any locally resolvable commit without refreshing,
-unless it names the local default branch; the resolved base is recorded for
-`shoal diff`.
+starts from any locally resolvable commit without refreshing, unless it names
+the local default branch or a remote branch such as `origin/feature/api`, which
+is fetched first, even if never fetched before; a failed fetch stops creation.
+The resolved base is recorded for `shoal diff`.
 Existing-branch workspaces diff against the local default, or their opening
 commit if on it or unavailable.
 

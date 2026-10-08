@@ -106,7 +106,8 @@ instructions instead of the PR delivery guidance below.
   validates every workspace/target candidate, including released grants. Listings
   reject invalid selected records; malformed history outside a query does not block it.
 - Explicit creation bases resolve locally and are recorded for diff; only a base
-  naming the local default branch is refreshed.
+  naming the local default branch is refreshed, and one naming a remote branch is
+  fetched first.
 - Daemon ref updates disable Git credential and SSH askpass prompts without
   overriding the user's SSH transport; interactive Git retains normal prompting.
   Ancestry and exact-ref failures stop branch selection, refresh, and removal;

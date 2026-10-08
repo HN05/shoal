@@ -46,6 +46,34 @@ pub fn strip_remote(reference: &str) -> Option<&str> {
     reference.strip_prefix(REMOTE_REFS)
 }
 
+/// The configured remote and branch a base such as `origin/feature` names,
+/// including a branch never fetched. Revision expressions, `HEAD`, and local
+/// branches or tags that Git would resolve first are not remote branches.
+/// The longest remote wins, since remote names may contain slashes.
+pub async fn remote_branch(repo: &Path, base: &str) -> Result<Option<(String, String)>> {
+    let short = base.strip_prefix("remotes/");
+    let qualified = strip_remote(base).or(short);
+    if qualified.is_none() {
+        for prefix in [LOCAL_REFS, "refs/tags/"] {
+            let shadow = format!("{prefix}{base}");
+            if ref_exists(repo, &shadow, isolated_command).await? {
+                return Ok(None);
+            }
+        }
+    }
+    let qualified = qualified.unwrap_or(base);
+    if qualified.contains(['~', '^', ':', '?', '*', '[', '\\', ' ']) || qualified.contains("@{") {
+        return Ok(None);
+    }
+    let remotes = run_isolated(repo, &["remote"]).await?;
+    let mut remotes: Vec<&str> = remotes.lines().collect();
+    remotes.sort_by_key(|remote| std::cmp::Reverse(remote.len()));
+    Ok(remotes.into_iter().find_map(|remote| {
+        let branch = qualified.strip_prefix(&format!("{remote}/"))?;
+        (!branch.is_empty() && branch != "HEAD").then(|| (remote.to_owned(), branch.to_owned()))
+    }))
+}
+
 /// `git -C <repo>` with the caller's normal configuration and hooks.
 pub fn command(repo: &Path) -> Command {
     let mut command = Command::new(Tool::Git.program());
