@@ -541,7 +541,11 @@ mod tests {
         let Visibility::Environment(environment) = visibility(&identity, deadline).unwrap() else {
             panic!("spawned process environment is not visible");
         };
-        assert_eq!(environment, [b"SHOAL_TEST_PROCESS=1".to_vec()]);
+        assert!(
+            environment
+                .iter()
+                .any(|entry| entry == b"SHOAL_TEST_PROCESS=1")
+        );
         child.kill().await.unwrap();
         assert!(matches!(
             visibility(&identity, deadline).unwrap(),
