@@ -413,3 +413,29 @@ async fn setup_preserves_inventory_failure_in_its_retained_diagnostic() {
             .contains("process inventory failed: inventory fixture refused")
     );
 }
+
+#[tokio::test]
+async fn shutdown_stops_connected_executions_and_refuses_new_ones() {
+    let (_root, manager, workspace) = fixture("true").await;
+    let mut running = manager
+        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .await
+        .unwrap();
+    let id = running.plan.id.clone();
+    let shutdown = tokio::spawn({
+        let manager = manager.clone();
+        async move { manager.stop_for_shutdown().await }
+    });
+    bounded(running.stop.wait_for(|stop| *stop)).await.unwrap();
+    assert!(manager.stop_saves_records(&id).await);
+    let error = manager
+        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("shutting down"), "{error:#}");
+    manager
+        .finish_execution(id, ExecutionKind::Command, Some(0))
+        .await
+        .unwrap();
+    bounded(shutdown).await.unwrap();
+}

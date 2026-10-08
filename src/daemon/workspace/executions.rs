@@ -20,6 +20,7 @@ use rusqlite::{OptionalExtension, Transaction, TransactionBehavior, params};
 use std::{
     collections::HashSet,
     path::{Path, PathBuf},
+    sync::atomic::Ordering,
     time::Duration,
 };
 use tokio::{
@@ -187,6 +188,10 @@ impl Manager {
         // Coordinate registration and stop notification without holding the map
         // during any external command or lifetime of the agent.
         let mut connections = self.connections.lock().await;
+        ensure!(
+            !self.shutting_down.load(Ordering::Relaxed),
+            "the daemon is shutting down; retry once it restarts"
+        );
         let workspace = self.workspace(workspace_id).await?;
         ensure!(workspace.path.is_dir(), "workspace directory is missing");
         self.verify_worktree(&workspace).await?;
@@ -501,11 +506,13 @@ impl Manager {
 
     /// Before the daemon exits, stop every connected execution as `shoal stop`
     /// does, so a restart leaves resumable records instead of disconnected
-    /// executions. Wrappers that miss the bound are left for the startup audit.
+    /// executions. Requests already accepted cannot register afterwards, and
+    /// wrappers that miss the bound are left for the startup audit.
     pub async fn stop_for_shutdown(&self) {
         let deadline = Instant::now() + timing::WORKSPACE_STOP_TIMEOUT;
         {
             let connections = self.connections.lock().await;
+            self.shutting_down.store(true, Ordering::Relaxed);
             let mut agents = self.agents.lock().await;
             let mut saving = self.resumable_stops.lock().await;
             for (id, sender) in connections.iter().filter(|(_, sender)| !sender.is_closed()) {
