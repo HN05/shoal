@@ -1026,16 +1026,20 @@ or approval. `acquire repo` selects only `kind = "repo"` members.
 `shoal release` releases every lease the workspace holds, in order, and stops at
 the first failure. A kind narrows it to that kind, a resource or repository name
 to its pool, and `--name` or a port name to one lease. Holds are released
-separately. The earlier `acquire` and `release` subcommands of `port`, `sim`,
-and `resource` remain accepted.
+separately.
+
+`shoal leases` shows every kind's capacity and leases; a kind shows
+only that kind, with repositories listed apart from other resources, and `--all`
+covers every workspace. The earlier `port`, `sim`, and `resource` commands
+remain accepted.
 
 ### Port reservations
 
 ```sh
 shoal acquire port web --workspace fix-login --reason "Frontend dev server"
 shoal acquire port api --port 3001 --env API_PORT --reason "HTTP API"
-shoal port fix-login                   # Configured names and current leases
-shoal port --all                       # Every workspace
+shoal leases port --workspace fix-login  # Configured names and current leases
+shoal leases port --all                 # Every workspace
 shoal release port web --workspace fix-login
 shoal exec fix-login -- sh -c 'my-server --port "$API_PORT"'
 ```
@@ -1196,7 +1200,7 @@ requests with a `--reason`.
 ```sh
 shoal acquire sim                   # Current worktree, configured preference
 shoal acquire sim --profile phone --name tests --wait 60
-shoal sim                           # Profiles, capacity, and managed devices; --all for all
+shoal leases sim                    # Profiles, capacity, and managed devices; --all for all
 shoal release sim --name tests     # Or every simulator lease
 ```
 
@@ -1250,11 +1254,11 @@ members. Names are lowercase letters, digits, `_`, or `-`, starting with a
 letter, at most 64 characters; capacities are 1–65535.
 
 ```sh
-shoal resource                               # Capacities and own leases
+shoal leases resource                        # Capacities and own leases
 shoal acquire resource devices               # Any available member
 shoal acquire resource devices --member beta --name tests --reason "Integration tests"
 shoal acquire resource signing --wait 60
-shoal resource --all                         # Every workspace
+shoal leases resource --all                  # Every workspace
 shoal release resource devices --name tests
 ```
 
@@ -1353,7 +1357,7 @@ Set `kind = "rwlock"` on a standalone resource or pool member and acquire with
 use `permit`). Readers coexist and share one pool slot, freed by the last
 release; a writer excludes everyone. Capacity must be 1. Repeating a lease
 name returns its mode; changing mode requires release first, and there is no
-writer priority. `shoal resource` shows reader and writer counts with
+writer priority. `shoal leases resource` shows reader and writer counts with
 separate read/write availability.
 
 ## Agent skill outside project repositories

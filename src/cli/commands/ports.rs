@@ -134,7 +134,7 @@ fn describe(port: &PortReservation, palette: Palette) -> String {
     )
 }
 
-async fn overview(ctx: &Context, scope: WorkspaceScope) -> Result<i32> {
+pub(super) async fn overview(ctx: &Context, scope: WorkspaceScope) -> Result<i32> {
     if scope.all {
         return workspace_overviews(
             ctx,
@@ -162,7 +162,7 @@ async fn overview(ctx: &Context, scope: WorkspaceScope) -> Result<i32> {
     Ok(0)
 }
 
-fn render_overview(overview: &PortOverview, palette: Palette) {
+pub(super) fn render_overview(overview: &PortOverview, palette: Palette) {
     for port in &overview.reserved {
         println!("{}", describe(port, palette));
     }

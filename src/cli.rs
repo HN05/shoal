@@ -290,6 +290,16 @@ pub enum Command {
         #[arg(long, global = true)]
         workspace: Option<String>,
     },
+    /// Show capacity and leases for every kind, or one.
+    Leases {
+        kind: Option<LeaseKind>,
+        /// Workspace to show; defaults to the current workspace or picker.
+        #[arg(long)]
+        workspace: Option<String>,
+        /// Show every managed workspace.
+        #[arg(long, conflicts_with = "workspace")]
+        all: bool,
+    },
     /// Reserve and release workspace TCP ports.
     #[command(
         args_conflicts_with_subcommands = true,
@@ -814,6 +824,14 @@ pub enum SimCommand {
         name: String,
         workspace: Option<String>,
     },
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum LeaseKind {
+    Port,
+    Sim,
+    Resource,
+    Repo,
 }
 
 /// Options shared by leases that a workspace may hold several of.

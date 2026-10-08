@@ -117,7 +117,7 @@ pub(super) async fn acquire(
     )
 }
 
-async fn overview(ctx: &Context, scope: WorkspaceScope) -> Result<i32> {
+pub(super) async fn overview(ctx: &Context, scope: WorkspaceScope) -> Result<i32> {
     let workspace = ui::select_workspace_filter(ctx, scope).await?;
     let overview =
         request::<SimulatorOverview>(&ctx.paths, Method::SimOverview { workspace }).await?;
@@ -127,7 +127,7 @@ async fn overview(ctx: &Context, scope: WorkspaceScope) -> Result<i32> {
     Ok(0)
 }
 
-fn render_overview(overview: &SimulatorOverview, palette: Palette) {
+pub(super) fn render_overview(overview: &SimulatorOverview, palette: Palette) {
     println!(
         "Capacity: {} booted, {} devices",
         overview.policy.max_booted, overview.policy.max_devices

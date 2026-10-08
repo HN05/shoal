@@ -185,7 +185,7 @@ From a managed workspace:
 
 ```sh
 shoal acquire port web --reason "Development server"
-shoal port
+shoal leases                  # Every kind, with capacity
 shoal release port web
 
 shoal acquire sim --wait 60   # macOS; requires configured simulator profiles

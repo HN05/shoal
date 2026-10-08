@@ -34,7 +34,7 @@ use serde_json::json;
 use crate::{
     agent::CodexMode,
     cli::{
-        Cli, Command, ConfigCommand, PrCommand, ShellCommand, agents, client,
+        Cli, Command, ConfigCommand, PrCommand, ShellCommand, WorkspaceScope, agents, client,
         context::Context,
         output::{Palette, Style},
     },
@@ -414,6 +414,11 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         }
         Command::Acquire { kind, workspace } => leases::acquire(&ctx, kind, workspace).await,
         Command::Release { kind, workspace } => leases::release(&ctx, kind, workspace).await,
+        Command::Leases {
+            kind,
+            workspace,
+            all,
+        } => leases::show(&ctx, kind, WorkspaceScope { workspace, all }).await,
         Command::Port { command, scope } => ports::run(&ctx, command, scope).await,
         Command::Access { command } => access::run(&ctx, command).await,
         Command::Resource { command, scope } => resources::run(&ctx, command, scope).await,

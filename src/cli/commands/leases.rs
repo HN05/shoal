@@ -5,21 +5,21 @@ use anyhow::{Context as _, Result};
 use serde::Serialize;
 use serde_json::json;
 
-use super::{ports, resources, simulators};
+use super::{ports, resources, resources::Members, simulators, workspace_overviews};
 use crate::{
     cli::{
-        AcquireKind, LeaseOptions, PoolSelection, ReleaseKind, client,
+        AcquireKind, LeaseKind, LeaseOptions, PoolSelection, ReleaseKind, WorkspaceScope, client,
         context::Context,
-        output::Style,
+        output::{Palette, Style},
         ui::{self, Fallback},
     },
     daemon::{
         ports::PortRequest,
-        resources::{LockMode, ResourceKind, ResourceRequest},
+        resources::{LockMode, Overview, ResourceKind, ResourceRequest},
     },
-    model::Inspection,
+    model::{Inspection, PortOverview},
     protocol::Method,
-    sim::SimRequest,
+    sim::{SimRequest, SimulatorOverview},
 };
 
 pub(super) async fn acquire(
@@ -256,4 +256,78 @@ async fn release_one(ctx: &Context, workspace: &str, held: &Held) -> Result<()> 
         },
     };
     client::request::<()>(&ctx.paths, method).await
+}
+
+/// Every kind's configuration and leases for one workspace.
+#[derive(Debug, Serialize)]
+struct Leases {
+    ports: PortOverview,
+    simulators: SimulatorOverview,
+    resources: Overview,
+}
+
+pub(super) async fn show(
+    ctx: &Context,
+    kind: Option<LeaseKind>,
+    scope: WorkspaceScope,
+) -> Result<i32> {
+    match kind {
+        Some(LeaseKind::Port) => ports::overview(ctx, scope).await,
+        Some(LeaseKind::Sim) => simulators::overview(ctx, scope).await,
+        Some(LeaseKind::Resource) => resources::overview(ctx, scope, Members::Locks).await,
+        Some(LeaseKind::Repo) => resources::overview(ctx, scope, Members::Repositories).await,
+        None if scope.all => {
+            workspace_overviews(
+                ctx,
+                async |workspace| fetch_leases(ctx, &workspace.id).await,
+                render_leases,
+            )
+            .await
+        }
+        None => {
+            let workspace =
+                ui::select_workspace(ctx, scope.workspace, Fallback::CurrentDirectory).await?;
+            let leases = fetch_leases(ctx, &workspace).await?;
+            ctx.show(&leases, |leases| {
+                render_leases(leases, Palette::stdout(ctx.json))
+            })?;
+            Ok(0)
+        }
+    }
+}
+
+async fn fetch_leases(ctx: &Context, workspace: &str) -> Result<Leases> {
+    let ports = client::request::<PortOverview>(
+        &ctx.paths,
+        Method::PortOverview {
+            workspace: workspace.to_owned(),
+        },
+    )
+    .await?;
+    let simulators = client::request::<SimulatorOverview>(
+        &ctx.paths,
+        Method::SimOverview {
+            workspace: Some(workspace.to_owned()),
+        },
+    )
+    .await?;
+    let resources = resources::fetch_overview(ctx, workspace.to_owned(), Members::All).await?;
+    Ok(Leases {
+        ports,
+        simulators,
+        resources,
+    })
+}
+
+/// Simulators appear only where profiles are configured or devices exist.
+fn render_leases(leases: &Leases, palette: Palette) {
+    println!("{}", palette.paint(Style::Heading, "Ports"));
+    ports::render_overview(&leases.ports, palette);
+    let simulators = &leases.simulators;
+    if !simulators.policy.profiles.is_empty() || !simulators.simulators.is_empty() {
+        println!("{}", palette.paint(Style::Heading, "Simulators"));
+        simulators::render_overview(simulators, palette);
+    }
+    println!("{}", palette.paint(Style::Heading, "Resources"));
+    resources::render_overview(&leases.resources, palette);
 }

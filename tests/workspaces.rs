@@ -4868,8 +4868,27 @@ fn acquire_selects_the_lease_kind() {
     let repo = fixture.run(&["acquire", "repo", "signing", "--workspace", "first"]);
     assert!(!repo.status.success());
     assert!(String::from_utf8_lossy(&repo.stderr).contains("incompatible"));
-    let overview = fixture.ok(&["resource", "first"]);
-    assert_eq!(overview["leases"].as_array().unwrap().len(), 1);
+    let leases = fixture.ok(&["leases", "--workspace", "first"]);
+    assert_eq!(leases["ports"]["reserved"][0]["name"], "web");
+    assert_eq!(leases["resources"]["leases"].as_array().unwrap().len(), 1);
+    assert_eq!(leases["resources"]["leases"][0]["name"], "tests");
+    let count = |args: &[&str], key: &str| {
+        fixture.ok(&[&["leases"], args, &["--workspace", "first"]].concat())[key]
+            .as_array()
+            .unwrap()
+            .len()
+    };
+    assert_eq!(count(&["resource"], "pools"), 2);
+    assert_eq!(count(&["repo"], "pools"), 0);
+    assert_eq!(count(&["repo"], "leases"), 0);
+    assert_eq!(
+        fixture.ok(&["leases", "--all"]).as_array().unwrap().len(),
+        1
+    );
+    let text = fixture.run(&["leases", "--workspace", "first"]);
+    let text = String::from_utf8_lossy(&text.stdout);
+    assert!(text.contains("Ports") && text.contains("web=") && text.contains("devices/tests"));
+    assert!(!text.contains("Simulators"));
 }
 
 #[test]
@@ -12789,6 +12808,9 @@ fn repository_resources_select_registrations_by_remote_url() {
     let lease = fixture.ok(&["acquire", "repo", "server", "--workspace", "consumer"]);
     assert_eq!(lease["repository"]["id"], registration["id"]);
     assert_eq!(lease["repository"]["path"], related.to_str().unwrap());
+    let repos = fixture.ok(&["leases", "repo", "--workspace", "consumer"]);
+    assert_eq!(repos["pools"][0]["name"], "server");
+    assert_eq!(repos["leases"][0]["id"], lease["id"]);
     fixture.ok(&["resource", "release", "server", "consumer"]);
     set_repository_toml(
         &fixture,

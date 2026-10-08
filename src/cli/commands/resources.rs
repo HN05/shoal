@@ -67,8 +67,8 @@ pub(super) async fn run(
             )?;
             Ok(0)
         }
-        Some(ResourceCommand::List { scope }) => overview(ctx, scope).await,
-        None => overview(ctx, scope).await,
+        Some(ResourceCommand::List { scope }) => overview(ctx, scope, Members::All).await,
+        None => overview(ctx, scope, Members::All).await,
     }
 }
 
@@ -133,18 +133,59 @@ pub(super) fn repository_path(lease: &ResourceLease) -> String {
         .map_or_else(String::new, |repo| format!(" -> {}", repo.path.display()))
 }
 
-async fn overview(ctx: &Context, scope: WorkspaceScope) -> Result<i32> {
+/// Which pool members an overview shows: related repositories are listed
+/// apart from permits and locks.
+#[derive(Clone, Copy)]
+pub(super) enum Members {
+    All,
+    Locks,
+    Repositories,
+}
+
+impl Members {
+    fn includes(self, kind: ResourceKind) -> bool {
+        match self {
+            Self::All => true,
+            Self::Locks => kind != ResourceKind::Repo,
+            Self::Repositories => kind == ResourceKind::Repo,
+        }
+    }
+
+    pub(super) fn retain(self, overview: &mut Overview) {
+        for pool in &mut overview.pools {
+            pool.resources
+                .retain(|resource| self.includes(resource.kind));
+        }
+        overview.pools.retain(|pool| !pool.resources.is_empty());
+        overview.leases.retain(|lease| match self {
+            Self::All => true,
+            Self::Locks => lease.repository.is_none(),
+            Self::Repositories => lease.repository.is_some(),
+        });
+    }
+}
+
+pub(super) async fn fetch_overview(
+    ctx: &Context,
+    workspace: String,
+    members: Members,
+) -> Result<Overview> {
+    let mut overview =
+        request::<Overview>(&ctx.paths, Method::ResourceOverview { workspace }).await?;
+    members.retain(&mut overview);
+    Ok(overview)
+}
+
+pub(super) async fn overview(
+    ctx: &Context,
+    scope: WorkspaceScope,
+    members: Members,
+) -> Result<i32> {
     if scope.all {
         return workspace_overviews(
             ctx,
             async |workspace| {
-                let overview = request::<Overview>(
-                    &ctx.paths,
-                    Method::ResourceOverview {
-                        workspace: workspace.id.clone(),
-                    },
-                )
-                .await?;
+                let overview = fetch_overview(ctx, workspace.id.clone(), members).await?;
                 Ok(WorkspaceOverview {
                     workspace: workspace.clone(),
                     overview,
@@ -156,8 +197,7 @@ async fn overview(ctx: &Context, scope: WorkspaceScope) -> Result<i32> {
     } else {
         let workspace =
             ui::select_workspace(ctx, scope.workspace, Fallback::CurrentDirectory).await?;
-        let overview =
-            request::<Overview>(&ctx.paths, Method::ResourceOverview { workspace }).await?;
+        let overview = fetch_overview(ctx, workspace, members).await?;
         ctx.show(&overview, |overview| {
             render_overview(overview, Palette::stdout(ctx.json))
         })?;
@@ -165,7 +205,7 @@ async fn overview(ctx: &Context, scope: WorkspaceScope) -> Result<i32> {
     Ok(0)
 }
 
-fn render_overview(overview: &Overview, palette: Palette) {
+pub(super) fn render_overview(overview: &Overview, palette: Palette) {
     for pool in &overview.pools {
         println!(
             "{} ({}) {}/{} in use, {} available{}",
