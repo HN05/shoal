@@ -49,10 +49,12 @@ pub mod timing {
     pub const PREPARED_EXECUTION_START_TIMEOUT: Duration = Duration::from_secs(120);
     /// Wait for the daemon to persist the spawned child's process group.
     pub const START_ACK_TIMEOUT: Duration = Duration::from_secs(10);
-    /// Leave room beyond PROCESS_INVENTORY_TIMEOUT for ownership checks and persistence.
+    /// Leave room beyond the process scan budgets for ownership checks and persistence.
     pub const COMPLETION_ACK_TIMEOUT: Duration = Duration::from_secs(20);
     /// Bound the ps inventory subprocess used by the daemon's completion scan.
     pub const PROCESS_INVENTORY_TIMEOUT: Duration = Duration::from_secs(10);
+    /// Wait within one scan for processes caught mid-exec to publish their environment.
+    pub const PROCESS_SETTLE_TIMEOUT: Duration = Duration::from_secs(2);
     /// Cover ordinary EXECUTION_START_TIMEOUT plus START_ACK_TIMEOUT and wrapper startup.
     pub const DETACHED_LAUNCH_TIMEOUT: Duration = Duration::from_secs(60);
     /// Collect a failed detached wrapper's exit status without waiting indefinitely.
@@ -65,7 +67,10 @@ pub mod timing {
     pub const WORKSPACE_STOP_POLL_INTERVAL: Duration = Duration::from_millis(50);
 
     const _: () = {
-        assert!(COMPLETION_ACK_TIMEOUT.as_millis() > PROCESS_INVENTORY_TIMEOUT.as_millis());
+        assert!(
+            COMPLETION_ACK_TIMEOUT.as_millis()
+                > PROCESS_INVENTORY_TIMEOUT.as_millis() + PROCESS_SETTLE_TIMEOUT.as_millis()
+        );
         assert!(
             DETACHED_LAUNCH_TIMEOUT.as_millis()
                 > EXECUTION_START_TIMEOUT.as_millis() + START_ACK_TIMEOUT.as_millis()

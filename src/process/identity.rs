@@ -66,6 +66,7 @@ pub async fn scan(ids: HashSet<String>) -> Result<Scan> {
     let marker = format!("{}=", crate::env::EXECUTION_ID).into_bytes();
     tokio::task::spawn_blocking(move || {
         let mut scan = Scan::default();
+        let settle_deadline = std::time::Instant::now() + timing::PROCESS_SETTLE_TIMEOUT;
         for line in output.lines() {
             let fields: Vec<_> = line.split_whitespace().collect();
             ensure!(fields.len() == 2, "invalid process inventory");
@@ -81,8 +82,8 @@ pub async fn scan(ids: HashSet<String>) -> Result<Scan> {
             let Some(identity) = capture(pid)? else {
                 continue;
             };
-            match environment(pid) {
-                Ok(environment) if !environment.is_empty() => {
+            match visibility(&identity, settle_deadline)? {
+                Visibility::Environment(environment) => {
                     if let Some(id) = environment
                         .iter()
                         .find_map(|entry| entry.strip_prefix(marker.as_slice()))
@@ -96,14 +97,71 @@ pub async fn scan(ids: HashSet<String>) -> Result<Scan> {
                         });
                     }
                 }
-                Ok(_) | Err(_) if alive(&identity)? => scan.unreadable.push(identity),
-                Ok(_) | Err(_) => {}
+                Visibility::Unreadable => scan.unreadable.push(identity),
+                Visibility::Gone => {}
             }
         }
         Ok(scan)
     })
     .await
     .context("process inventory worker failed")?
+}
+
+enum Visibility {
+    Environment(Vec<Vec<u8>>),
+    Unreadable,
+    Gone,
+}
+
+// Only Linux exposes transient images; macOS reports every image settled.
+#[cfg_attr(target_os = "macos", allow(dead_code))]
+enum Image {
+    Settled,
+    /// Replacing its image: the new environment is not published yet.
+    Loading,
+    /// Exiting or a kernel thread: it runs no more user code.
+    Ended,
+}
+
+/// Linux reads an empty environment while a process replaces its image and
+/// after an exiting process releases its memory; neither is evidence about
+/// ownership. Wait for loading images, then confirm a settled empty read.
+fn visibility(identity: &Identity, deadline: std::time::Instant) -> Result<Visibility> {
+    loop {
+        let read = environment(identity.pid);
+        if !alive(identity)? {
+            return Ok(Visibility::Gone);
+        }
+        match read {
+            Ok(environment) if !environment.is_empty() => {
+                return Ok(Visibility::Environment(environment));
+            }
+            Err(_) => return Ok(Visibility::Unreadable),
+            Ok(_) => {}
+        }
+        match image(identity.pid)? {
+            Image::Ended => return Ok(Visibility::Gone),
+            Image::Loading if std::time::Instant::now() < deadline => {
+                std::thread::sleep(Duration::from_millis(1));
+            }
+            Image::Loading => return Ok(Visibility::Unreadable),
+            // The image may have settled after the empty read.
+            Image::Settled => {
+                return Ok(match environment(identity.pid) {
+                    Ok(environment) if !environment.is_empty() => {
+                        Visibility::Environment(environment)
+                    }
+                    _ if alive(identity)? => Visibility::Unreadable,
+                    _ => Visibility::Gone,
+                });
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn image(_pid: u32) -> Result<Image> {
+    Ok(Image::Settled)
 }
 
 #[cfg(target_os = "macos")]
@@ -202,12 +260,7 @@ fn platform_identity(pid: u32) -> Result<Option<Identity>> {
     let Some(stat) = read_process_stat(&format!("{path}/stat"))? else {
         return Ok(None);
     };
-    let fields: Vec<_> = stat
-        .rsplit_once(')')
-        .context("invalid process stat")?
-        .1
-        .split_whitespace()
-        .collect();
+    let fields = stat_fields(&stat)?;
     ensure!(fields.len() > 19, "incomplete process stat");
     if fields[0] == "Z" || fields[0] == "X" {
         return Ok(None);
@@ -218,6 +271,44 @@ fn platform_identity(pid: u32) -> Result<Option<Identity>> {
         birth: format!("{}:{}", boot.trim(), fields[19]),
     }))
 }
+
+#[cfg(target_os = "linux")]
+fn image(pid: u32) -> Result<Image> {
+    match read_process_stat(&format!("/proc/{pid}/stat"))? {
+        Some(stat) => stat_image(&stat),
+        None => Ok(Image::Ended),
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn stat_image(stat: &str) -> Result<Image> {
+    const PF_EXITING: u64 = 0x4;
+    const PF_KTHREAD: u64 = 0x0020_0000;
+    let fields = stat_fields(stat)?;
+    // Field 9 is flags and field 51 env_end, which stays 0 until exec
+    // publishes the new environment.
+    ensure!(fields.len() > 48, "incomplete process stat");
+    if fields[6].parse::<u64>()? & (PF_EXITING | PF_KTHREAD) != 0 {
+        return Ok(Image::Ended);
+    }
+    Ok(if fields[48] == "0" {
+        Image::Loading
+    } else {
+        Image::Settled
+    })
+}
+
+/// Fields after the parenthesized command name, starting with the state.
+#[cfg(target_os = "linux")]
+fn stat_fields(stat: &str) -> Result<Vec<&str>> {
+    Ok(stat
+        .rsplit_once(')')
+        .context("invalid process stat")?
+        .1
+        .split_whitespace()
+        .collect())
+}
+
 #[cfg(target_os = "linux")]
 fn read_process_stat(path: &str) -> Result<Option<String>> {
     match std::fs::read_to_string(path) {
@@ -400,6 +491,57 @@ mod tests {
         );
         assert!(read_process_stat(&path).unwrap().is_none());
         assert!(capture(pid).unwrap().is_none());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn empty_environment_waits_only_for_a_loading_image() {
+        let stat = |flags: u64, env_end: u64| {
+            let mut fields = vec![0; 50];
+            fields[6] = flags;
+            fields[48] = env_end;
+            let fields: Vec<_> = fields.iter().map(u64::to_string).collect();
+            format!("7 (odd) name) S {}", fields[1..].join(" "))
+        };
+        assert!(matches!(stat_image(&stat(0, 0)).unwrap(), Image::Loading));
+        assert!(matches!(
+            stat_image(&stat(0, 4096)).unwrap(),
+            Image::Settled
+        ));
+        assert!(matches!(stat_image(&stat(0x4, 0)).unwrap(), Image::Ended));
+        assert!(matches!(
+            stat_image(&stat(0x20_0000, 0)).unwrap(),
+            Image::Ended
+        ));
+    }
+
+    #[tokio::test]
+    async fn spawned_process_environment_is_visible_until_it_exits() {
+        let mut child = tokio::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "process::identity::tests::marked_child",
+                "--ignored",
+            ])
+            .stdout(std::process::Stdio::null())
+            .env_clear()
+            .env("SHOAL_TEST_PROCESS", "1")
+            .kill_on_drop(true)
+            .spawn()
+            .unwrap();
+        let identity = capture(child.id().unwrap()).unwrap().unwrap();
+        let deadline = std::time::Instant::now() + timing::PROCESS_SETTLE_TIMEOUT;
+        // Spawning returns once exec is committed, possibly before the new
+        // environment is published.
+        let Visibility::Environment(environment) = visibility(&identity, deadline).unwrap() else {
+            panic!("spawned process environment is not visible");
+        };
+        assert_eq!(environment, [b"SHOAL_TEST_PROCESS=1".to_vec()]);
+        child.kill().await.unwrap();
+        assert!(matches!(
+            visibility(&identity, deadline).unwrap(),
+            Visibility::Gone
+        ));
     }
 
     #[tokio::test]
