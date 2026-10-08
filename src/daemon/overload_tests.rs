@@ -466,6 +466,34 @@ async fn manual_stop_cancels_waiting_recovery_and_leaves_a_restore_record() {
 }
 
 #[tokio::test]
+async fn shutdown_finishes_an_agent_waiting_for_overload_recovery() {
+    let (_root, manager, workspace, serving) = fixture().await;
+    let launched = launch(&manager, &workspace);
+    wait_started(&workspace).await;
+    assert!(
+        manager
+            .stop_agent_for_overload("test memory pressure")
+            .await
+    );
+    wait_paused(&manager, &workspace).await;
+    // The stop watch already holds `true`; sending it again must still wake
+    // the waiting recovery so the wrapper finishes before shutdown completes.
+    bounded(manager.stop_for_shutdown()).await;
+    bounded(launched).await.unwrap().unwrap();
+    assert!(
+        manager
+            .inspect_workspace(&workspace.id)
+            .await
+            .unwrap()
+            .executions
+            .is_empty()
+    );
+    assert!(!workspace.path.join("restored").exists());
+    assert!(crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
+    serving.abort();
+}
+
+#[tokio::test]
 async fn failed_restore_expansion_does_not_block_launch_or_manual_recovery_record() {
     let (_root, manager, workspace, serving) = fixture().await;
     let id = workspace.id.clone();
