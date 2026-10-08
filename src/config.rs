@@ -41,7 +41,7 @@ pub struct Config {
     pub root_dir: Option<PathBuf>,
     /// Former name of `root_dir`; still accepted so existing configs load.
     pub repositories_dir: Option<PathBuf>,
-    /// Agent `shoal issue` starts when `--agent` is omitted.
+    /// Agent an issue workspace starts when `--agent` is omitted.
     pub default_agent: Option<crate::agent::Agent>,
     pub codex: repo::Codex,
     pub herdr: repo::Herdr,

@@ -168,27 +168,6 @@ pub enum Command {
         /// New literal Git branch name.
         branch: String,
     },
-    /// Open an issue workspace and start an agent.
-    #[command(hide = true)]
-    Issue {
-        /// Run in the current pane instead of opening a Herdr tab.
-        #[arg(long)]
-        here: bool,
-        /// Forge issue number or URL.
-        issue: String,
-        /// Registered repository; defaults to the URL's repository or the current checkout/workspace.
-        #[arg(long = "repo")]
-        repository: Option<String>,
-        /// Agent to start; defaults to the repository or global `default_agent`.
-        #[arg(long, value_parser = AgentParser)]
-        agent: Option<Agent>,
-        /// Starting Git ref (defaults to the repository's default branch, refreshed from its upstream).
-        #[arg(long, value_name = "REF")]
-        base: Option<String>,
-        /// Arguments forwarded to the agent.
-        #[arg(last = true)]
-        args: Vec<OsString>,
-    },
     /// Stop tracked agents and save their sessions for manual resume.
     Pause {
         workspace: Option<String>,
@@ -1140,7 +1119,7 @@ mod tests {
         for args in [
             vec!["shoal", "add", "repo", "topic", "--base", "release/v1"],
             vec!["shoal", "add", "repo", "--issue", "122", "--base", "v1.0"],
-            vec!["shoal", "issue", "122", "--base", "HEAD~1"],
+            vec!["shoal", "add", "122", "--base", "HEAD~1"],
             vec![
                 "shoal",
                 "add",
@@ -1154,7 +1133,7 @@ mod tests {
             let expected = *args.last().unwrap();
             let parsed = Cli::try_parse_from(args).unwrap();
             let base = match parsed.command.unwrap() {
-                Command::Add { base, .. } | Command::Issue { base, .. } => base,
+                Command::Add { base, .. } => base,
                 _ => panic!("wrong command"),
             };
             assert_eq!(base.as_deref(), Some(expected));

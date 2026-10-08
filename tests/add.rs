@@ -18,28 +18,24 @@ use std::{
 fn add_reuses_resolution_requests_without_reordering_failures() {
     let url = "https://forge.example/team/repo/issues/0";
     for (args, expected, diagnostic) in [
-        (
-            vec!["issue", url],
-            vec!["list_repositories", "layered_config test"],
-            "issue number must be positive",
-        ),
+        (vec!["add", url], vec![], "issue number must be positive"),
         (
             vec!["add", "--issue", url, "--agent", "custom"],
             vec!["list_repositories", "layered_config test"],
             "issue number must be positive",
         ),
         (
-            vec!["issue", "0", "--repo", "test"],
+            vec!["add", "0", "--repo", "test"],
             vec!["layered_config test", "list_repositories"],
             "issue number must be positive",
         ),
         (
-            vec!["issue", "0", "--repo", "test", "--agent", "missing"],
+            vec!["add", "0", "--repo", "test", "--agent", "missing"],
             vec!["layered_config test"],
             "unknown agent",
         ),
         (
-            vec!["issue", "https://other.example/team/repo/issues/0"],
+            vec!["add", "https://other.example/team/repo/issues/7"],
             vec!["list_repositories"],
             "shoal repo add https://other.example/team/repo",
         ),
@@ -98,8 +94,8 @@ fn unregistered_repositories_are_registered_on_confirmation() {
         "register_repository https://other.example/team/repo",
         "layered_config registered",
     ];
-    let url_args: &[&str] = &["issue", "https://other.example/team/repo/issues/7"];
-    let explicit_args: &[&str] = &["issue", "0", "--repo", "https://other.example/team/repo"];
+    let url_args: &[&str] = &["add", "https://other.example/team/repo/issues/7"];
+    let explicit_args: &[&str] = &["add", "0", "--repo", "https://other.example/team/repo"];
     for (args, answer, expected, diagnostic) in [
         (url_args, "y\n", registered.clone(), "unknown agent"),
         (

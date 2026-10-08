@@ -119,7 +119,7 @@ fn decorate(command: Command, parent: &str, typed: Arc<Typed>) -> Command {
             let target = match (arg.get_id().as_str(), parent, name.as_str()) {
                 ("id", "access", "approve" | "deny") => Some(Target::AccessRequests),
                 ("name", _, "run") => Some(Target::Commands),
-                ("repository", _, _) => Some(Target::Repositories),
+                ("repository" | "repository_override", _, _) => Some(Target::Repositories),
                 ("workspace", _, _) => Some(Target::Workspaces),
                 ("pool", "resource", _) => Some(Target::Pools),
                 ("resource", "resource", _) => Some(Target::Members),
@@ -141,8 +141,7 @@ fn decorate(command: Command, parent: &str, typed: Arc<Typed>) -> Command {
                 arg.add(ArgValueCompleter::new(move |current: &OsStr| {
                     typed.complete(target, current)
                 }))
-            } else if matches!(name.as_str(), "add" | "issue" | "review") && arg.get_id() == "agent"
-            {
+            } else if matches!(name.as_str(), "add" | "review") && arg.get_id() == "agent" {
                 let typed = typed.clone();
                 arg.add(ArgValueCompleter::new(move |current: &OsStr| {
                     let mut names = crate::agent::Agent::possible_values();

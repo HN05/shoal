@@ -373,7 +373,7 @@ fn workspace_rename_issue_reopens_the_associated_workspace() {
         "#!/bin/sh\necho '{\"state\":\"OPEN\",\"number\":34,\"title\":\"Fix API timeout\",\"body\":\"\"}'\n",
     );
     let repo = fixture.repo.to_str().unwrap();
-    let issue = ["issue", "34", "--repo", repo, "--agent", "pi"];
+    let issue = ["add", "34", "--repo", repo, "--agent", "pi"];
     let created = fixture.ok(&[&issue[..], &["--base", "HEAD"]].concat());
     let renamed = fixture.ok(&["rename", "issue-34-fix-api-timeout", "renamed-issue"]);
     let reopened = fixture.ok(&issue);
@@ -851,7 +851,7 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
         vec!["repo", "config", "pr"],
         vec!["repo", "rename", "pr"],
         vec!["add", "pr"],
-        vec!["issue", "103", "--repo", "pr"],
+        vec!["add", "103", "--repo", "pr"],
     ] {
         assert!(
             complete(&args, fixture.root.path()).contains(&"project".into()),
@@ -9445,7 +9445,7 @@ awk -F '\t' -v choice="$choice" '$2 == choice {print}' "$HOME/picker-input"
         fs::write(fixture.root.path().join("choice"), choice).unwrap();
         let (output, transcript) = fixture.interactive(
             &[
-                "issue",
+                "add",
                 "https://github.com/team/project/issues/298",
                 "--base",
                 "HEAD",
@@ -9495,7 +9495,7 @@ fn issue_number_picks_a_repository_before_lookup_interactively() {
         fs::write(&path, script).unwrap();
         fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
     }
-    let (output, transcript) = fixture.interactive(&["issue", "103", "--base", "HEAD"], "");
+    let (output, transcript) = fixture.interactive(&["add", "103", "--base", "HEAD"], "");
     assert!(!output.status.success(), "{output:?}\n{transcript}");
     assert!(
         transcript.contains(&format!("lookup in {}", fixture.repo.display())),
@@ -9585,17 +9585,24 @@ fn issue_lookup_errors_never_create_a_workspace() {
         ),
         (vec!["add", "--issue", "4"], "missing argument"),
         (
-            vec!["issue", "https://github.com/team/project/issues/4"],
+            vec!["add", "https://github.com/team/project/issues/4"],
             "no agent selected",
         ),
-        (vec!["issue", "4", "--agent", "codex"], "pass --repo"),
+        (vec!["add", "4", "--agent", "codex"], "pass --repo"),
         (
-            vec!["issue", "not-an-issue", "--agent", "codex"],
-            "expected an issue URL",
+            vec![
+                "add",
+                fixture.repo.to_str().unwrap(),
+                "--issue",
+                "not-an-issue",
+                "--agent",
+                "codex",
+            ],
+            "a positive number or an issue URL",
         ),
         (
             vec![
-                "issue",
+                "add",
                 "0",
                 "--repo",
                 fixture.repo.to_str().unwrap(),
@@ -9605,12 +9612,12 @@ fn issue_lookup_errors_never_create_a_workspace() {
             "must be positive",
         ),
         (
-            vec!["issue", "4", "--repo", "unknown", "--agent", "codex"],
+            vec!["add", "4", "--repo", "unknown", "--agent", "codex"],
             "not registered",
         ),
         (
             vec![
-                "issue",
+                "add",
                 "https://github.com/team/other/issues/4",
                 "--repo",
                 fixture.repo.to_str().unwrap(),
@@ -9621,7 +9628,7 @@ fn issue_lookup_errors_never_create_a_workspace() {
         ),
         (
             vec![
-                "issue",
+                "add",
                 "https://github.com/team/other/issues/4",
                 "--agent",
                 "codex",
@@ -9630,7 +9637,9 @@ fn issue_lookup_errors_never_create_a_workspace() {
         ),
         (
             vec![
-                "issue",
+                "add",
+                fixture.repo.to_str().unwrap(),
+                "--issue",
                 "https://github.com/team/project/pull/4",
                 "--agent",
                 "codex",
@@ -9662,7 +9671,7 @@ fn issues_reopen_their_branch_and_report_conflicts_before_picking_an_agent() {
         "#!/bin/sh\necho '{\"state\":\"OPEN\",\"number\":34,\"title\":\"Fix API timeout\",\"body\":\"\"}'\n",
     );
     let repo = fixture.repo.to_str().unwrap();
-    let issue = ["issue", "34", "--repo", repo, "--agent", "pi"];
+    let issue = ["add", "34", "--repo", repo, "--agent", "pi"];
     let branch = "issue-34-fix-api-timeout";
     let branches = |fixture: &Fixture| -> Vec<Value> {
         fixture
@@ -12490,7 +12499,7 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
     ]);
     let output = fixture.run(&[
         "--json",
-        "issue",
+        "add",
         "37",
         "--repo",
         fixture.repo.to_str().unwrap(),
@@ -14833,7 +14842,7 @@ fn herdr_reports_issue_lookup_errors_before_the_agent_picker() {
         &fixture.root.path().join("bin/fzf"),
         "#!/bin/sh\necho \"$*\" >&2\nhead -n 1\n",
     );
-    let (caller, transcript) = herdr_call(&fixture, &["issue", "34"], "");
+    let (caller, transcript) = herdr_call(&fixture, &["add", "34"], "");
     assert!(!caller.status.success(), "{caller:?} {transcript}");
     assert!(transcript.contains("Repository>"), "{transcript}");
     assert!(transcript.contains("lookup-failed"), "{transcript}");
@@ -14856,7 +14865,7 @@ fn herdr_labels_name_issues_by_repository_and_number() {
     for (mut args, initial, renamed, fail_rename) in [
         (
             vec![
-                "issue",
+                "add",
                 "34",
                 "--repo",
                 fixture.repo.to_str().unwrap(),
@@ -14869,7 +14878,7 @@ fn herdr_labels_name_issues_by_repository_and_number() {
         ),
         (
             vec![
-                "issue",
+                "add",
                 url,
                 "--repo",
                 fixture.repo.to_str().unwrap(),
@@ -15027,7 +15036,7 @@ fn herdr_plans_carry_issue_urls_instead_of_bodies() {
     );
     let repo = fixture.repo.to_str().unwrap();
     let args = [
-        "issue", "34", "--repo", repo, "--agent", "codex", "--base", "HEAD",
+        "add", "34", "--repo", repo, "--agent", "codex", "--base", "HEAD",
     ];
     let (caller, transcript) = herdr_call(&fixture, &args, "");
     assert!(caller.status.success(), "{caller:?} {transcript}");
@@ -15076,7 +15085,7 @@ fn herdr_focus_defaults_follow_the_resolved_agent_and_allow_overrides() {
     );
     let (caller, transcript) = herdr_call(
         &fixture,
-        &["issue", "34", "--repo", fixture.repo.to_str().unwrap()],
+        &["add", "34", "--repo", fixture.repo.to_str().unwrap()],
         "",
     );
     assert!(caller.status.success(), "{caller:?} {transcript}");
@@ -15146,7 +15155,7 @@ fn herdr_opt_out_and_noninteractive_calls_stay_in_place() {
         };
         assert!(output.status.success(), "{output:?}");
     }
-    let (help, _) = herdr_call(&fixture, &["issue", "--help"], "");
+    let (help, _) = herdr_call(&fixture, &["add", "--help"], "");
     assert!(help.status.success());
     assert!(!fixture.root.path().join("herdr-calls").exists());
     fs::write(

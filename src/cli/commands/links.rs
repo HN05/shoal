@@ -206,6 +206,21 @@ pub(super) async fn add(
         "an item or branch link cannot be combined with a branch, --existing or --issue"
     );
     let link = pasted.then(|| Link::parse(positional)).transpose()?;
+    let target = link.as_ref().map(|link| &link.target);
+    let issue = matches!(target, None | Some(LinkTarget::Issue));
+    if issue && input.repository.is_some() {
+        // Resolve like --issue, which offers to register an unknown repository.
+        return workspaces::add(
+            ctx,
+            input.repository,
+            creation,
+            Some(positional.into()),
+            AgentLaunch::IssueDefault(agent),
+            args,
+            here,
+        )
+        .await;
+    }
     let mut repos = client::repositories(&ctx.paths).await?;
     let repository = match input.repository {
         Some(repository) => ui::repository_selector(repository)?,
@@ -226,8 +241,7 @@ pub(super) async fn add(
         },
     };
     let repo = crate::forge::repository::select(&repos, &repository).await?;
-    let target = link.as_ref().map(|link| &link.target);
-    if matches!(target, None | Some(LinkTarget::Issue)) {
+    if issue {
         return workspaces::add(
             ctx,
             Some(repo.id.clone()),

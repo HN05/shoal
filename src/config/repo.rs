@@ -57,7 +57,7 @@ pub struct RepoConfig {
     pub agent_template: Option<String>,
     pub agent_auth: crate::agent_auth::Config,
     pub git_profile: Option<String>,
-    /// Agent `shoal issue` starts when `--agent` is omitted.
+    /// Agent an issue workspace starts when `--agent` is omitted.
     pub default_agent: Option<Agent>,
     pub codex: Codex,
     pub herdr: Herdr,

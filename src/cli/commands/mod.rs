@@ -259,31 +259,6 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         Command::Unready { items } => links::unready(&ctx, items).await,
         Command::Adopt { path, repository } => workspaces::adopt(&ctx, path, repository).await,
         Command::Rename { workspace, branch } => workspaces::rename(&ctx, workspace, branch).await,
-        Command::Issue {
-            here,
-            issue,
-            repository,
-            agent,
-            base,
-            args,
-        } => {
-            workspaces::add(
-                &ctx,
-                repository,
-                workspaces::Creation {
-                    path: None,
-                    branch: None,
-                    existing: None,
-                    base,
-                    git_profile: None,
-                },
-                Some(issue),
-                workspaces::AgentLaunch::IssueDefault(agent),
-                args,
-                here,
-            )
-            .await
-        }
         Command::HerdrInternal {
             close_when_done,
             plan,

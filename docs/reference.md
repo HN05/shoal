@@ -210,8 +210,7 @@ GitHub's `/tree/<branch>` or Forgejo's `/src/branch/<branch>` route and open the
 origin branch, preserving slashes and decoding URL escapes. Setup, hooks and
 existing-branch ownership checks apply. These forms launch an agent with `--agent`.
 `add <repository> --issue <number-or-url>` remains available with an optional
-branch name and launches an agent only with `--agent`. The previous `issue`
-command remains accepted for compatibility.
+branch name and launches an agent only with `--agent`.
 
 ```sh
 shoal repo add /path/to/repo             # Or a Git clone URL; register once

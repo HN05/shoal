@@ -11,7 +11,7 @@
 # Parent of every repository's workspaces and URL clones.
 root_dir = "~/shoal"
 
-# Agent `shoal issue <url>` starts when --agent is omitted (no default):
+# Agent `shoal add <issue-url>` starts when --agent is omitted (no default):
 # A built-in launcher or a name defined in [commands].
 # default_agent = "codex"
 
