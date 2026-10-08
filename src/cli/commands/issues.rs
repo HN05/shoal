@@ -129,7 +129,7 @@ pub(in crate::cli) struct Issue {
     pub(in crate::cli) number: u64,
     pub(in crate::cli) title: String,
     pub(super) url: String,
-    details: String,
+    pub(super) details: String,
 }
 
 impl Issue {

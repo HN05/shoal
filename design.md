@@ -344,7 +344,9 @@ work. An agent reviewing a forge item posts its findings there as one comment
 unless `[review] post` or `--no-post` keeps them local; workspace reviews stay
 local. A PR target, named by URL or `--pr`, resolves a same-repository PR with the user's forge login and
 reviews its head branch against the PR base, reusing the owning workspace after
-fast-forwarding it to the pushed head; local commits ahead stay, divergence is refused. Review tools own review storage, exports, and forge authentication, with
+fast-forwarding it to the pushed head; local commits ahead stay, divergence is refused.
+An issue target asks an agent to refine the issue before implementation, in the
+workspace `add --issue` would continue, opening it when missing. Review tools own review storage, exports, and forge authentication, with
 explicit feedback handoff to agents.
 
 Custom `--agent` and `default_agent` names select named commands through the

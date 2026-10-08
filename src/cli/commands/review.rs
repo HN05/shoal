@@ -7,12 +7,16 @@ use crate::{
     agent::{Agent, CodexMode},
     cli::{
         client,
+        commands::issues::Issue,
         context::Context,
         ui::{self, Fallback},
     },
-    forge::{ForgeRepo, IssueInput, PullRequest},
+    forge::{
+        ForgeRepo, IssueInput, PullRequest,
+        link::{ItemKind, Link, LinkTarget},
+    },
     git,
-    model::Workspace,
+    model::{Repository, Workspace},
     protocol::ConfigTarget,
 };
 
@@ -29,7 +33,8 @@ pub(super) enum Reviewer {
 /// What `shoal review` reviews.
 pub(super) enum Target {
     Workspace(Option<String>),
-    Pull {
+    Item {
+        kind: ItemKind,
         input: String,
         repository: Option<String>,
         /// `--post` or `--no-post`; otherwise `[review] post` decides.
@@ -38,40 +43,43 @@ pub(super) enum Target {
 }
 
 impl Target {
-    /// A URL in the workspace position names a PR; `--repo` and posting apply
-    /// only to forge items.
+    /// A URL in the workspace position names a PR or issue; `--repo` and
+    /// posting apply only to those forge items.
     pub fn new(
         workspace: Option<String>,
-        pr: Option<String>,
+        item: Option<(ItemKind, String)>,
         repository: Option<String>,
         post: Option<bool>,
     ) -> Result<Self> {
-        let pasted = workspace
-            .as_deref()
-            .is_some_and(|input| IssueInput::parse(input) == IssueInput::Url);
-        match (pr, pasted) {
-            (Some(input), _) => Ok(Target::Pull {
-                input,
-                repository,
-                post,
-            }),
-            (None, true) => Ok(Target::Pull {
-                input: workspace.unwrap(),
-                repository,
-                post,
-            }),
-            (None, false) => {
+        let item = match (item, workspace) {
+            (Some(item), _) => Some(item),
+            (None, Some(input)) if IssueInput::parse(&input) == IssueInput::Url => {
+                let kind = match Link::parse(&input)?.target {
+                    LinkTarget::Pr => ItemKind::Pr,
+                    LinkTarget::Issue => ItemKind::Issue,
+                    LinkTarget::Branch(_) => bail!("expected a PR or issue URL"),
+                };
+                Some((kind, input))
+            }
+            (None, workspace) => {
                 ensure!(
                     repository.is_none(),
-                    "--repo selects a PR's repository; pass --pr or a PR URL"
+                    "--repo selects the repository of a PR or issue; pass --pr, --issue or a URL"
                 );
                 ensure!(
                     post.is_none(),
-                    "--post and --no-post apply to PR reviews; workspace reviews stay local"
+                    "--post and --no-post apply to PR and issue reviews; workspace reviews stay local"
                 );
-                Ok(Target::Workspace(workspace))
+                return Ok(Target::Workspace(workspace));
             }
-        }
+        };
+        let (kind, input) = item.unwrap();
+        Ok(Target::Item {
+            kind,
+            input,
+            repository,
+            post,
+        })
     }
 }
 
@@ -80,6 +88,10 @@ enum Subject {
     Changes,
     Pull {
         pull: PullRequest,
+        post: Option<bool>,
+    },
+    Issue {
+        issue: Issue,
         post: Option<bool>,
     },
 }
@@ -93,11 +105,18 @@ pub(super) async fn start(
 ) -> Result<i32> {
     match target {
         Target::Workspace(workspace) => run(ctx, workspace, reviewer, Subject::Changes, args).await,
-        Target::Pull {
+        Target::Item {
+            kind,
             input,
             repository,
             post,
-        } => pull_request(ctx, input, repository, reviewer, post, args).await,
+        } => {
+            let repo = item_repository(ctx, kind, &input, repository).await?;
+            match kind {
+                ItemKind::Pr => pull_request(ctx, &repo, &input, reviewer, post, args).await,
+                ItemKind::Issue => issue(ctx, &repo, &input, reviewer, post, args).await,
+            }
+        }
     }
 }
 
@@ -111,16 +130,14 @@ impl Reviewer {
     }
 }
 
-/// Review a PR in the workspace that owns its head branch, opening one from
-/// origin that is compared against the PR's base when none does.
-async fn pull_request(
+/// The registered repository of a PR or issue, from `--repo`, its URL, or the
+/// current checkout, offering to register one that is missing.
+async fn item_repository(
     ctx: &Context,
-    input: String,
+    kind: ItemKind,
+    input: &str,
     repository: Option<String>,
-    reviewer: Reviewer,
-    post: Option<bool>,
-    args: Vec<OsString>,
-) -> Result<i32> {
+) -> Result<Repository> {
     let mut repos = client::repositories(&ctx.paths).await?;
     let repository = match repository {
         Some(repository) => {
@@ -134,11 +151,15 @@ async fn pull_request(
                 None => selector,
             }
         }
-        None if input.starts_with("https://") || input.starts_with("http://") => {
+        None if IssueInput::parse(input) == IssueInput::Url => {
+            let forge = match kind {
+                ItemKind::Pr => ForgeRepo::from_pull_url(input)?,
+                ItemKind::Issue => ForgeRepo::from_issue_url(input)?,
+            };
             super::issues::registered_remote(
                 ctx,
                 &mut repos,
-                ForgeRepo::from_pull_url(&input)?,
+                forge,
                 "shoal review <url> --repo <repository>",
             )
             .await?
@@ -148,12 +169,26 @@ async fn pull_request(
             .await?
             .into(),
     };
-    let repo = crate::forge::repository::select(&repos, &repository).await?;
+    Ok(crate::forge::repository::select(&repos, &repository)
+        .await?
+        .clone())
+}
+
+/// Review a PR in the workspace that owns its head branch, opening one from
+/// origin that is compared against the PR's base when none does.
+async fn pull_request(
+    ctx: &Context,
+    repo: &Repository,
+    input: &str,
+    reviewer: Reviewer,
+    post: Option<bool>,
+    args: Vec<OsString>,
+) -> Result<i32> {
     let remote = crate::forge::repository::remote_url_from_path(&repo.path)
         .await?
         .context("PR review needs an origin remote")?;
     let pull = ForgeRepo::parse(&remote)?
-        .pull_request(&repo.path, &input)
+        .pull_request(&repo.path, input)
         .await?;
     let owner = client::workspaces(&ctx.paths)
         .await?
@@ -202,6 +237,88 @@ async fn pull_request(
     };
     let subject = Subject::Pull { pull, post };
     run(ctx, Some(workspace), reviewer, subject, args).await
+}
+
+/// Refine an issue before implementation in the workspace that works on it,
+/// opening the one `shoal add --issue` would continue when none does.
+async fn issue(
+    ctx: &Context,
+    repo: &Repository,
+    input: &str,
+    reviewer: Reviewer,
+    post: Option<bool>,
+    args: Vec<OsString>,
+) -> Result<i32> {
+    ensure!(
+        !matches!(reviewer, Reviewer::Manual),
+        "an issue review needs an agent; drop --manual"
+    );
+    let issue = super::issues::load(repo, input).await?;
+    let workspace = match issue_workspace(ctx, repo, &issue).await? {
+        Some(workspace) => workspace,
+        None => {
+            let creation = super::workspaces::Creation {
+                path: None,
+                branch: None,
+                existing: None,
+                base: None,
+                git_profile: None,
+            };
+            let code = super::workspaces::add(
+                ctx,
+                Some(repo.id.clone()),
+                creation,
+                Some(issue.url.clone()),
+                super::workspaces::AgentLaunch::Explicit(None),
+                Vec::new(),
+                true,
+            )
+            .await?;
+            if code != 0 {
+                return Ok(code);
+            }
+            issue_workspace(ctx, repo, &issue)
+                .await?
+                .context("the opened issue workspace is missing")?
+        }
+    };
+    eprintln!(
+        "Reviewing issue #{} in workspace {}",
+        issue.number, workspace.name
+    );
+    let reviewer = match reviewer {
+        Reviewer::Ask => Reviewer::Agent(None),
+        reviewer => reviewer,
+    };
+    let subject = Subject::Issue { issue, post };
+    run(ctx, Some(workspace.id), reviewer, subject, args).await
+}
+
+/// The workspace associated with the issue, otherwise the one on its derived branch.
+async fn issue_workspace(
+    ctx: &Context,
+    repo: &Repository,
+    issue: &Issue,
+) -> Result<Option<Workspace>> {
+    let branch = issue.branch_name();
+    let mut derived = None;
+    let workspaces = client::workspaces(&ctx.paths).await?;
+    for workspace in workspaces
+        .into_iter()
+        .filter(|workspace| workspace.repository_id == repo.id)
+    {
+        let inspection = client::inspect(&ctx.paths, workspace.id.clone()).await?;
+        if inspection
+            .issue
+            .is_some_and(|linked| linked.url == issue.url)
+        {
+            return Ok(Some(workspace));
+        }
+        if workspace.branch == branch {
+            derived = Some(workspace);
+        }
+    }
+    Ok(derived)
 }
 
 /// Fast-forward a reused workspace to the PR's pushed head so the review sees
@@ -274,7 +391,7 @@ async fn run(
     let settings = client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.clone())).await?;
     let post = match &subject {
         Subject::Changes => None,
-        Subject::Pull { post, .. } => *post,
+        Subject::Pull { post, .. } | Subject::Issue { post, .. } => *post,
     };
     let reviewer = match reviewer {
         // Only an agent posts, so choosing whether to post chooses the agent.
@@ -328,6 +445,24 @@ async fn run(
 
 fn prompt(workspace: &Workspace, subject: &Subject, post: bool) -> String {
     let (subject, delivery) = match subject {
+        Subject::Issue { issue, .. } => {
+            let delivery = if post {
+                format!(
+                    "Post this as one comment on issue #{} without editing the issue. Do not \
+                     edit files, commit, or push.",
+                    issue.number
+                )
+            } else {
+                LOCAL.to_owned()
+            };
+            return format!(
+                "Review issue #{}: {}\n{}\n\n{}\n\nRefine the issue before implementation \
+                 starts; this workspace is on branch {}. Check it against the code and report \
+                 what is unclear, missing, inconsistent or already done, the code it affects, \
+                 open questions, and a suggested approach. {delivery}",
+                issue.number, issue.title, issue.url, issue.details, workspace.branch
+            );
+        }
         Subject::Pull { pull, .. } => (
             format!(
                 "Review pull request #{}: {}\n{}\n\nIts changes are on branch {}",
@@ -363,24 +498,35 @@ mod tests {
     use super::*;
 
     #[test]
-    fn urls_and_pr_flags_select_a_pr_and_forge_options_require_one() {
+    fn urls_and_item_flags_select_a_forge_item_and_forge_options_require_one() {
         let url = "https://forge.example/team/repo/pulls/7";
         for (workspace, pr) in [(Some(url), None), (None, Some("7"))] {
             let target = Target::new(
                 workspace.map(String::from),
-                pr.map(String::from),
+                pr.map(|pr| (ItemKind::Pr, pr.to_owned())),
                 Some("repo".into()),
                 Some(false),
             )
             .unwrap();
             assert!(matches!(
                 target,
-                Target::Pull {
+                Target::Item {
+                    kind: ItemKind::Pr,
                     repository: Some(_),
                     ..
                 }
             ));
         }
+        let issue = "https://forge.example/team/repo/issues/12";
+        assert!(matches!(
+            Target::new(Some(issue.into()), None, None, None).unwrap(),
+            Target::Item {
+                kind: ItemKind::Issue,
+                ..
+            }
+        ));
+        let branch = "https://forge.example/team/repo/src/branch/main";
+        assert!(Target::new(Some(branch.into()), None, None, None).is_err());
         assert!(matches!(
             Target::new(Some("fix-login".into()), None, None, None).unwrap(),
             Target::Workspace(Some(name)) if name == "fix-login"

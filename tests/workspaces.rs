@@ -2259,13 +2259,10 @@ fn review_runs_the_configured_command_or_prompts_an_agent() {
     assert!(String::from_utf8_lossy(&output.stdout).contains("branch agent-only"));
 }
 
-#[test]
-fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
-    let fixture = Fixture::with_config(Some(
-        "default_agent = 'reviewer'\n[commands]\nreviewer = ['printf', '%s', '{prompt}']\n",
-    ));
-    let author = upstream_remote(&fixture);
-    // Serve the local bare origin over a forge-shaped ssh URL.
+/// An upstream remote served at ssh://git@forge.example/team/project.git;
+/// returns the author's clone.
+fn forge_origin(fixture: &Fixture) -> PathBuf {
+    let author = upstream_remote(fixture);
     let remote = fixture.root.path().join("origin.git");
     let ssh = fixture.root.path().join("ssh");
     fs::write(
@@ -2290,6 +2287,106 @@ fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
             "ssh://git@forge.example/team/project.git",
         ],
     );
+    author
+}
+
+#[test]
+fn review_refines_an_issue_in_the_workspace_add_continues() {
+    let fixture = Fixture::with_config(Some(
+        "default_agent = 'reviewer'\n[commands]\nreviewer = ['printf', '%s', '{prompt}']\n",
+    ));
+    forge_origin(&fixture);
+    let bin = fixture.root.path().join("issue-bin");
+    fs::create_dir(&bin).unwrap();
+    fs::write(
+        bin.join("fj"),
+        "#!/bin/sh\nprintf '\\342\\201\\250Clarify retries\\342\\201\\251 #\\342\\201\\25012\\342\\201\\251\\nBy user \\342\\200\\224 Open\\n\\n> Retry failed uploads.\\n\\n0 comments\\n'\n",
+    )
+    .unwrap();
+    fs::set_permissions(bin.join("fj"), fs::Permissions::from_mode(0o755)).unwrap();
+    let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap());
+    let review = |target: &[&str]| {
+        fixture
+            .command()
+            .arg("review")
+            .args(target)
+            .current_dir(&fixture.repo)
+            .env("PATH", &path)
+            .output()
+            .unwrap()
+    };
+    let name = "issue-12-clarify-retries";
+    let output = review(&["--issue", "12"]);
+    assert!(output.status.success(), "{output:?}");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    for expected in [
+        "Review issue #12: Clarify retries\nhttps://forge.example/team/project/issues/12",
+        "Retry failed uploads.",
+        "Refine the issue before implementation starts; this workspace is on branch issue-12-clarify-retries.",
+        "Post this as one comment on issue #12 without editing the issue.",
+    ] {
+        assert!(stdout.contains(expected), "{stdout}");
+    }
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains(&format!("Reviewing issue #12 in workspace {name}")),
+        "{output:?}"
+    );
+    assert_eq!(
+        fixture.ok(&["inspect", name])["issue"]["url"],
+        "https://forge.example/team/project/issues/12"
+    );
+
+    let output = review(&["https://forge.example/team/project/issues/12", "--no-post"]);
+    assert!(output.status.success(), "{output:?}");
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("or comment on the forge unless asked"),
+        "{output:?}"
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains(&format!("Reviewing issue #12 in workspace {name}")),
+        "{output:?}"
+    );
+    let output = review(&["https://forge.example/team/project/issues/12", "--manual"]);
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("an issue review needs an agent"),
+        "{output:?}"
+    );
+    let added = fixture
+        .command()
+        .args([
+            "--json",
+            "add",
+            "https://forge.example/team/project/issues/12",
+            "--agent",
+            "reviewer",
+        ])
+        .current_dir(&fixture.repo)
+        .env("PATH", &path)
+        .output()
+        .unwrap();
+    assert!(added.status.success(), "{added:?}");
+    assert_eq!(
+        serde_json::from_str::<Value>(
+            String::from_utf8_lossy(&added.stdout)
+                .lines()
+                .next()
+                .unwrap()
+        )
+        .unwrap()["name"],
+        name
+    );
+    assert_eq!(fixture.ok(&["ls"]).as_array().unwrap().len(), 1);
+}
+
+#[test]
+fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
+    let fixture = Fixture::with_config(Some(
+        "default_agent = 'reviewer'\n[commands]\nreviewer = ['printf', '%s', '{prompt}']\n",
+    ));
+    let author = forge_origin(&fixture);
     let commit = |message: &str| {
         fs::write(author.join(message), "change\n").unwrap();
         git(&author, &["add", message]);

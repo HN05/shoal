@@ -343,8 +343,15 @@ with your `gh`/`fj` login and reviews it the same way in the workspace that owns
 its head branch, fast-forwarded to the pushed head and refused when diverged, or
 opens one from origin whose base is the PR's refreshed `origin/<base>`; fork PRs
 are refused. `--repo` selects the PR's repository,
-which otherwise follows `shoal add`. An agent reviewing a PR posts its findings as
-one comment, without approving or requesting changes, unless `[review] post` is
+which otherwise follows `shoal add`.
+`shoal review <issue-url>` or `shoal review --issue <number-or-url>` has an agent
+refine the issue before implementation: it checks the issue against the code and
+reports what is unclear, missing or already done, open questions and a suggested
+approach. It runs in the workspace associated with the issue or on its derived
+branch, opening the one `shoal add --issue` continues when none exists; `--manual`
+is refused.
+An agent reviewing a PR or issue posts its findings there as one comment, without
+approving, requesting changes or editing the issue, unless `[review] post` is
 false; `--post` or `--no-post` overrides that for one run and selects the agent.
 
 ```toml

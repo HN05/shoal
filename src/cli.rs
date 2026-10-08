@@ -256,17 +256,20 @@ pub enum Command {
     Cd { workspace: Option<String> },
     /// Show changes since the branch's fork point.
     Diff { workspace: Option<String> },
-    /// Start a review tool or agent to review workspace or PR changes.
+    /// Review workspace or PR changes, or refine an issue, with a review tool or agent.
     Review {
-        /// Workspace to review, or a PR URL.
+        /// Workspace to review, or a PR or issue URL.
         workspace: Option<String>,
         /// Review this PR in the workspace that owns its head branch, opening one when none does.
         #[arg(long, value_name = "NUMBER_OR_URL", conflicts_with = "workspace")]
         pr: Option<String>,
-        /// Registered repository of the PR; defaults to the URL's repository or the current checkout/workspace.
+        /// Have an agent refine this issue before implementation, in the workspace that works on it.
+        #[arg(long, value_name = "NUMBER_OR_URL", conflicts_with_all = ["workspace", "pr", "manual"])]
+        issue: Option<String>,
+        /// Registered repository of the PR or issue; defaults to the URL's repository or the current checkout/workspace.
         #[arg(long = "repo")]
         repository: Option<String>,
-        /// Have the agent post its findings on the PR, overriding [review] post.
+        /// Have the agent post its findings on the PR or issue, overriding [review] post.
         #[arg(long, overrides_with = "no_post", conflicts_with = "manual")]
         post: bool,
         /// Keep the agent's findings local, overriding [review] post.

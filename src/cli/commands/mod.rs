@@ -39,7 +39,7 @@ use crate::{
         output::{Palette, Style},
     },
     env,
-    forge::pr::Action,
+    forge::{link::ItemKind, pr::Action},
     model::Workspace,
     paths::Paths,
     shell,
@@ -300,6 +300,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         Command::Review {
             workspace,
             pr,
+            issue,
             repository,
             post,
             no_post,
@@ -307,8 +308,11 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             agent,
             args,
         } => {
+            let item = pr
+                .map(|pr| (ItemKind::Pr, pr))
+                .or(issue.map(|issue| (ItemKind::Issue, issue)));
             let post = (post || no_post).then_some(post);
-            let target = review::Target::new(workspace, pr, repository, post)?;
+            let target = review::Target::new(workspace, item, repository, post)?;
             let reviewer = review::Reviewer::new(manual, agent);
             review::start(&ctx, target, reviewer, args).await
         }
