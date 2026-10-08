@@ -4927,6 +4927,18 @@ fn release_narrows_from_every_lease_to_one_kind_or_item() {
     let released = |args: &[&str]| {
         fixture.ok(&[&["release", "--workspace", "first"], args].concat())["released"].clone()
     };
+    // A named lease must match the requested kind.
+    let mismatch = fixture.run(&[
+        "release",
+        "repo",
+        "devices",
+        "--name",
+        "a",
+        "--workspace",
+        "first",
+    ]);
+    assert!(!mismatch.status.success());
+    assert!(String::from_utf8_lossy(&mismatch.stderr).contains("no repo lease devices/a"));
     assert_eq!(
         released(&["resource", "devices", "--name", "a"]),
         serde_json::json!([{"kind": "resource", "pool": "devices", "name": "a"}])

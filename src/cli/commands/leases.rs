@@ -1,7 +1,7 @@
 //! Typed acquisition and release across ports, simulators, and resources.
 use std::fmt;
 
-use anyhow::{Context as _, Result};
+use anyhow::{Context as _, Result, ensure};
 use serde::Serialize;
 use serde_json::json;
 
@@ -148,40 +148,22 @@ pub(super) async fn release(
     Ok(0)
 }
 
-/// An explicit lease is released as named; a kind or no kind expands to the
-/// workspace's current leases.
+/// A named port or simulator lease is released as named; anything else
+/// expands to the workspace's current leases, so a named resource lease must
+/// also be of the requested kind.
 async fn select_held(
     ctx: &Context,
     workspace: &str,
     kind: Option<ReleaseKind>,
 ) -> Result<Vec<Held>> {
-    let explicit = match &kind {
-        Some(ReleaseKind::Port { name: Some(name) }) => Some(Held::Port { name: name.clone() }),
-        Some(ReleaseKind::Sim { name: Some(name) }) => Some(Held::Sim { name: name.clone() }),
-        Some(ReleaseKind::Resource {
-            selection:
-                PoolSelection {
-                    pool: Some(pool),
-                    lease: Some(name),
-                },
-        }) => Some(Held::Resource {
-            pool: pool.clone(),
-            name: name.clone(),
-        }),
-        Some(ReleaseKind::Repo {
-            selection:
-                PoolSelection {
-                    pool: Some(pool),
-                    lease: Some(name),
-                },
-        }) => Some(Held::Repo {
-            pool: pool.clone(),
-            name: name.clone(),
-        }),
-        _ => None,
-    };
-    if let Some(held) = explicit {
-        return Ok(vec![held]);
+    match &kind {
+        Some(ReleaseKind::Port { name: Some(name) }) => {
+            return Ok(vec![Held::Port { name: name.clone() }]);
+        }
+        Some(ReleaseKind::Sim { name: Some(name) }) => {
+            return Ok(vec![Held::Sim { name: name.clone() }]);
+        }
+        _ => {}
     }
     let inspection = client::request::<Inspection>(
         &ctx.paths,
@@ -212,27 +194,45 @@ async fn select_held(
             }
         }
     });
-    Ok(ports
+    let selected: Vec<_> = ports
         .chain(simulators)
         .chain(resources)
         .filter(|held| matches_kind(held, kind.as_ref()))
-        .collect())
+        .collect();
+    if let Some(ReleaseKind::Resource { selection } | ReleaseKind::Repo { selection }) = &kind
+        && let (Some(pool), Some(lease)) = (&selection.pool, &selection.lease)
+    {
+        ensure!(
+            !selected.is_empty(),
+            "no {} lease {pool}/{lease} in this workspace",
+            if matches!(kind, Some(ReleaseKind::Repo { .. })) {
+                "repo"
+            } else {
+                "resource"
+            }
+        );
+    }
+    Ok(selected)
 }
 
 fn matches_kind(held: &Held, kind: Option<&ReleaseKind>) -> bool {
-    let in_pool = |pool: &str, selection: &PoolSelection| {
+    let selects = |pool: &str, name: &str, selection: &PoolSelection| {
         selection
             .pool
             .as_deref()
             .is_none_or(|wanted| wanted == pool)
+            && selection
+                .lease
+                .as_deref()
+                .is_none_or(|wanted| wanted == name)
     };
     match (held, kind) {
         (_, None)
         | (Held::Port { .. }, Some(ReleaseKind::Port { .. }))
         | (Held::Sim { .. }, Some(ReleaseKind::Sim { .. })) => true,
-        (Held::Resource { pool, .. }, Some(ReleaseKind::Resource { selection }))
-        | (Held::Repo { pool, .. }, Some(ReleaseKind::Repo { selection })) => {
-            in_pool(pool, selection)
+        (Held::Resource { pool, name }, Some(ReleaseKind::Resource { selection }))
+        | (Held::Repo { pool, name }, Some(ReleaseKind::Repo { selection })) => {
+            selects(pool, name, selection)
         }
         _ => false,
     }
