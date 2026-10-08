@@ -264,6 +264,19 @@ impl Saved {
     }
 }
 
+/// Whether any workspace has stopped work; readable while the daemon is down.
+pub fn any_pending(paths: &Paths) -> bool {
+    let Ok(entries) = std::fs::read_dir(paths.state.join("workspaces")) else {
+        return false;
+    };
+    entries.flatten().any(|entry| {
+        entry
+            .file_name()
+            .to_str()
+            .is_some_and(|id| pending(paths, id).unwrap_or(false))
+    })
+}
+
 /// Pending recovery is unfinished work even when its Git tree is clean.
 pub fn pending(paths: &Paths, workspace_id: &str) -> Result<bool> {
     let entries = match std::fs::read_dir(paths.workspace_state(workspace_id)) {

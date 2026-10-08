@@ -3737,6 +3737,7 @@ fn daemon_shutdown_saves_running_agents_and_commands_for_resume() {
     }
     let output = fixture.run(&["daemon", "stop"]);
     assert!(output.status.success(), "{output:?}");
+    assert!(String::from_utf8_lossy(&output.stdout).contains("shoal resume --all"));
     fixture.daemon.child.wait().unwrap();
     for mut child in children {
         child.wait().unwrap();

@@ -169,7 +169,7 @@ pub(super) async fn run(
         }
         DaemonCommand::Stop => {
             ctx.progress("Stopping daemon", stop(&ctx.paths)).await?;
-            ctx.emit_styled(Style::Success, "Daemon stopped", json!({"running": false}))?;
+            emit_stopped_work(&ctx, "Daemon stopped", false)?;
         }
         DaemonCommand::Reload => {
             ensure!(
@@ -195,10 +195,25 @@ pub(super) async fn run(
             }
             ctx.progress("Stopping daemon", stop(&ctx.paths)).await?;
             start(&ctx).await?;
-            ctx.emit_styled(Style::Success, "Daemon restarted", json!({"running": true}))?;
+            emit_stopped_work(&ctx, "Daemon restarted", true)?;
         }
     }
     Ok(0)
+}
+
+/// Shutdown saves running agents and commands; point to restoring them.
+fn emit_stopped_work(ctx: &Context, message: &str, running: bool) -> Result<()> {
+    let stopped = crate::execution::recovery::any_pending(&ctx.paths);
+    let message = if stopped {
+        format!("{message}; restore stopped work with shoal resume --all")
+    } else {
+        message.to_owned()
+    };
+    ctx.emit_styled(
+        Style::Success,
+        &message,
+        json!({"running": running, "stopped_work": stopped}),
+    )
 }
 
 async fn start(ctx: &Context) -> Result<()> {
