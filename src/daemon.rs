@@ -454,9 +454,6 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             );
             Body::Ok
         }
-        Method::RefreshMergeSource { workspace, branch } => {
-            Body::PulledBranch(manager.refresh_merge_source(&workspace, &branch).await?)
-        }
         Method::DiffBase { workspace } => Body::DiffBase(manager.diff_base(&workspace).await?),
         Method::WorkspaceHook { workspace, kind } => {
             let workspace = manager.workspace(&workspace).await?;

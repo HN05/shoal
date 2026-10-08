@@ -1,9 +1,8 @@
-//! Git invocations shared by workspace creation, removal, branch refreshes, and merges.
+//! Git invocations shared by workspace creation, removal, branch refreshes, and landing.
 pub mod default_branch;
 mod diff;
 pub mod existing_branch;
 pub mod fetch;
-pub mod merge;
 mod predicates;
 pub use predicates::{is_ancestor, ref_exists};
 pub mod repo;

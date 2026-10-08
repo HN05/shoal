@@ -18,7 +18,7 @@ use crate::{
     hooks::HookKind,
     model::{
         DiffBase, ExecutionPlan, Inspection, PortOverview, PortReservation, PortSuggestion,
-        PulledBranch, Repository, RepositoryRemoval, SyncedRepository, Workspace, WorkspaceStatus,
+        Repository, RepositoryRemoval, SyncedRepository, Workspace, WorkspaceStatus,
     },
     process::identity::Identity,
     removal::{BranchChoice, RemovalCheck, RemovalResult},
@@ -246,11 +246,6 @@ pub enum Method {
     },
     /// Verify that this worker belongs to an unscoped caller's landing execution.
     CheckLanding,
-    /// Fast-forward a local merge source from its upstream before merging.
-    RefreshMergeSource {
-        workspace: String,
-        branch: String,
-    },
     DiffBase {
         workspace: String,
     },
@@ -486,7 +481,6 @@ response_bodies! {
     DiffBase(DiffBase),
     Hook(Option<std::path::PathBuf>),
     LayeredConfig(Box<ConfigLayers>),
-    PulledBranch(PulledBranch),
     SyncedRepository(SyncedRepository),
     Notifications(Vec<Notification>),
     Notification(Notification),

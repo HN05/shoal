@@ -1,18 +1,10 @@
-//! Private fetch refs shared by branch refreshes and tracked merges.
+//! Private fetch refs for branch refreshes.
 use std::path::Path;
 
 use anyhow::{Context, Result};
 use uuid::Uuid;
 
 use super::{FETCH_SAFE_ARGS, resolve_commit};
-
-#[derive(Clone, Copy)]
-pub enum FetchPolicy {
-    /// Allow Git to update tracking refs selected by the remote's configuration.
-    ConfiguredRefmap,
-    /// Update only the private destination, regardless of configured refspecs.
-    PrivateOnly,
-}
 
 /// Keep a unique ref alive for the whole operation, then delete it even when
 /// fetching, resolving, or consuming it fails. The operation's error wins over
@@ -32,21 +24,18 @@ pub async fn with_temporary_ref<T>(
     Ok(value)
 }
 
-/// Fetch and resolve a commit without reading or writing shared FETCH_HEAD.
+/// Fetch and resolve a commit without reading or writing shared FETCH_HEAD;
+/// Git still updates the tracking refs the remote's configuration selects.
 /// The caller supplies a ref owned by `with_temporary_ref` and its Git runner.
 pub async fn fetch_commit(
     repo: &Path,
     remote: &str,
     source: &str,
     destination: &str,
-    policy: FetchPolicy,
     run: impl AsyncFn(&Path, &[&str]) -> Result<String>,
 ) -> Result<String> {
     let refspec = format!("{source}:{destination}");
     let mut args = FETCH_SAFE_ARGS.to_vec();
-    if matches!(policy, FetchPolicy::PrivateOnly) {
-        args.push("--refmap=");
-    }
     args.extend(["--", remote, &refspec]);
     run(repo, &args).await?;
     resolve_commit(repo, destination, run).await
@@ -76,15 +65,7 @@ mod tests {
                     "resolve" => "refs/test/tree",
                     _ => "refs/heads/main",
                 };
-                fetch_commit(
-                    &repo,
-                    ".",
-                    source,
-                    fetched,
-                    FetchPolicy::PrivateOnly,
-                    run_isolated,
-                )
-                .await?;
+                fetch_commit(&repo, ".", source, fetched, run_isolated).await?;
                 anyhow::bail!("operation failed")
             })
             .await
@@ -108,15 +89,7 @@ mod tests {
             let mut lock = None;
             let mut reference = String::new();
             let result = with_temporary_ref(&repo, "test", run_isolated, async |fetched| {
-                fetch_commit(
-                    &repo,
-                    ".",
-                    "HEAD",
-                    fetched,
-                    FetchPolicy::PrivateOnly,
-                    run_isolated,
-                )
-                .await?;
+                fetch_commit(&repo, ".", "HEAD", fetched, run_isolated).await?;
                 let lock_path = repo.join(".git").join(format!("{fetched}.lock"));
                 fs::write(&lock_path, "locked").unwrap();
                 lock = Some(lock_path);
@@ -148,15 +121,7 @@ mod tests {
         fs::write(&fetch_head, "sentinel\n").unwrap();
         let operation = async || {
             with_temporary_ref(&repo, "test", run_isolated, async |fetched| {
-                let commit = fetch_commit(
-                    &repo,
-                    ".",
-                    "HEAD",
-                    fetched,
-                    FetchPolicy::ConfiguredRefmap,
-                    run_isolated,
-                )
-                .await?;
+                let commit = fetch_commit(&repo, ".", "HEAD", fetched, run_isolated).await?;
                 barrier.wait().await;
                 let refs = git(
                     &repo,

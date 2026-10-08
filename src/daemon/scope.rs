@@ -75,7 +75,6 @@ pub async fn authorize(
         | Method::InspectWorkspace { workspace }
         | Method::WorkspaceStatus { workspace }
         | Method::DiffBase { workspace }
-        | Method::RefreshMergeSource { workspace, .. }
         | Method::Execute {
             workspace,
             kind: ExecutionKind::Command,
@@ -112,7 +111,7 @@ pub async fn authorize(
             "workspace processes cannot land into the default branch; an unscoped shoal land does that"
         ),
         _ => bail!(
-            "workspace processes can only inspect their worktree, execute or set up there, manage its resources, sync their repository, and merge into their own branch"
+            "workspace processes can only inspect their worktree, execute or set up there, manage its resources, and sync their repository"
         ),
     };
     if let Some(target) = target {

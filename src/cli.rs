@@ -240,17 +240,6 @@ pub enum Command {
         /// Registered repository; defaults to the current checkout or workspace.
         repository: Option<String>,
     },
-    /// Merge another branch into this workspace.
-    Merge {
-        branch: String,
-        workspace: Option<String>,
-        /// Fetch this branch from a specific configured remote, even if it exists locally.
-        #[arg(long)]
-        remote: Option<String>,
-        /// Merge the local branch as it is instead of fast-forwarding it from its upstream first.
-        #[arg(long, conflicts_with = "remote")]
-        local: bool,
-    },
     /// Merge this workspace into the default branch locally, without pushing.
     Land { workspace: Option<String> },
     #[command(name = internal::LAND, hide = true)]
@@ -264,15 +253,6 @@ pub enum Command {
     },
     #[command(name = internal::HERDR_WATCH, hide = true)]
     HerdrWatchInternal { workspace: String, tab: String },
-    /// Internal worker launched through the tracked execution wrapper.
-    #[command(name = internal::MERGE, hide = true)]
-    MergeInternal {
-        branch: String,
-        #[arg(long)]
-        remote: Option<String>,
-        #[arg(long)]
-        local: bool,
-    },
     /// Open a pull request for review.
     Pr {
         #[command(subcommand)]

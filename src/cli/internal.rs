@@ -6,7 +6,6 @@ use crate::paths::Paths;
 
 pub const HERDR: &str = "herdr-internal";
 pub const HERDR_WATCH: &str = "herdr-watch-internal";
-pub const MERGE: &str = "merge-internal";
 pub const LAND: &str = "land-internal";
 pub const DETACHED: &str = "detached-internal";
 
@@ -14,11 +13,6 @@ pub enum InternalCommand<'a> {
     HerdrWatch {
         workspace: &'a str,
         tab: &'a str,
-    },
-    Merge {
-        branch: &'a str,
-        remote: Option<&'a str>,
-        local: bool,
     },
     Land {
         plan: &'a str,
@@ -48,19 +42,6 @@ pub fn internal_command(
     match command {
         InternalCommand::HerdrWatch { workspace, tab } => {
             args.extend([HERDR_WATCH.into(), workspace.into(), tab.into()]);
-        }
-        InternalCommand::Merge {
-            branch,
-            remote,
-            local,
-        } => {
-            args.extend([MERGE.into(), branch.into()]);
-            if let Some(remote) = remote {
-                args.extend(["--remote".into(), remote.into()]);
-            }
-            if local {
-                args.push("--local".into());
-            }
         }
         InternalCommand::Land { plan } => args.extend([LAND.into(), plan.into()]),
         InternalCommand::Detached {
@@ -119,32 +100,6 @@ mod tests {
             };
             assert_eq!(workspace, "workspace-id");
             assert_eq!(tab, "w1:t9");
-        }
-    }
-
-    #[test]
-    fn merge_round_trips_options_and_globals() {
-        for json in [false, true] {
-            for (remote, local) in [(None, false), (Some("upstream"), false), (None, true)] {
-                let Command::MergeInternal {
-                    branch,
-                    remote: parsed_remote,
-                    local: parsed_local,
-                } = parse(
-                    InternalCommand::Merge {
-                        branch: "feature/topic",
-                        remote,
-                        local,
-                    },
-                    json,
-                )
-                else {
-                    panic!("expected merge worker");
-                };
-                assert_eq!(branch, "feature/topic");
-                assert_eq!(parsed_remote.as_deref(), remote);
-                assert_eq!(parsed_local, local);
-            }
         }
     }
 

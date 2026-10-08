@@ -699,29 +699,6 @@ rebase or merge onto the updated branch with Git, for example `git rebase main`
 or `git merge origin/feature/api`. Scoped callers can sync only their own
 repository.
 
-### Merge into your workspace branch
-
-```sh
-shoal merge main                           # Any local branch: fast-forwarded from upstream first
-shoal merge feature/api                    # Local, or discover a remote-only branch
-shoal merge feature/api --local            # Merge the local branch as it is, no refresh
-shoal merge feature/api --remote origin    # Fetch explicitly, even if local exists
-shoal merge origin/feature/api fix-login   # Qualified source, named destination
-```
-
-The destination must be the workspace's recorded branch. Local branches take
-precedence. Unless `--local`, a local branch with an upstream is fetched and
-fast-forwarded first; a dirty checkout, divergence, or failed fetch blocks the
-merge, while an ahead branch is preserved. A local branch without an upstream,
-or checked out in a managed workspace, is merged as it is. Otherwise Shoal
-queries configured remotes and fetches the branch only when the local ref is
-absent; a failed ref or commit lookup stops the merge.
-Several matches or an unreachable remote require `--remote`. Qualified remote
-sources and full `refs/…` names always fetch fresh data. Git fast-forwards or
-creates a merge commit; conflicts stay in the worktree for `git commit` or `git
-merge --abort`, and `--json` reports `success`, `exit_code`, commits, and Git
-output. Nothing is stashed, reset, or pushed.
-
 ### Land into the default branch
 
 `shoal land [workspace]` merges the workspace's recorded branch into the
@@ -732,7 +709,7 @@ a failed fetch. The default branch cannot be held by a managed workspace, and an
 other checkout of it must be clean. The workspace must be clean and on its recorded
 branch. Git fast-forwards or creates a merge commit in the default checkout. A
 merge that does not apply cleanly is
-aborted: run `shoal merge <default>` in the workspace, resolve there, and land
+aborted: run `git merge <default>` in the workspace, resolve there, and land
 again. Scoped agents cannot land. Landed commits count as pushed for `rm` and
 automatic cleanup.
 
@@ -1146,7 +1123,7 @@ yourself that such processes stopped, use `--repair --acknowledge-stopped`; visi
 
 PR watches and merge acknowledgements are own-workspace scope exceptions.
 Processes carrying a Shoal scope token are confined to their own worktree:
-`status`, inspect, execute, `merge`, `diff`, `setup`, resources, and `sync` of their
+`status`, inspect, execute, `diff`, `setup`, resources, and `sync` of their
 own repository. They may read
 effective configuration for their own workspace, but cannot change configuration.
 They cannot `land`, reach other worktrees, create or remove workspaces, read

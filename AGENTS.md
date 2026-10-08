@@ -43,13 +43,6 @@ when behavior changes, distinguishing decisions from proposals.
   decides (busy resources, port conflicts, agent-shortcut exits, its own
   removals), never fail the operation for one, collapse repeated polled events
   until read, and deny them to scoped callers.
-- Agents may merge any local or remote branch into their own recorded workspace
-  branch with `shoal merge`. A local source is first fast-forwarded from its
-  upstream by the daemon, preserving an ahead branch and refusing a dirty or
-  diverged checkout or failed fetch, except sources without an upstream or checked
-  out in a managed workspace; `--local` skips the refresh.
-  Keep merges in the tracked execution wrapper; fetch remote-only sources
-  without updating other branches or relying on FETCH_HEAD.
 - `shoal sync` fetches the default branch's remote and fast-forwards the local
   default branch under the creation refresh rules. It never pushes or moves
   workspace branches; agents update their branch from it with plain Git.
