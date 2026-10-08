@@ -3,6 +3,7 @@
 //! with Ctrl-C; non-interactive callers must pass explicit flags instead.
 use crate::tools::Tool;
 use std::{
+    collections::HashSet,
     io::{self, Write},
     path::Path,
     process::{Command, Stdio},
@@ -18,6 +19,7 @@ use crate::{
         workspace_context::{ScopeOrder, WorkspaceContext},
     },
     model::{Repository, Workspace},
+    paths::Paths,
     removal::{BranchChoice, RemovalCheck},
     state::WorkspaceState,
 };
@@ -416,7 +418,8 @@ pub async fn workspace_picker(ctx: &Context) -> Result<String> {
 }
 
 fn pick_workspace(ctx: &Context, workspaces: Vec<Workspace>) -> Result<String> {
-    let rows = workspace_rows(&workspaces, &[], true, Palette::stderr(ctx.json));
+    let stopped = stopped_workspaces(&ctx.paths, &workspaces);
+    let rows = workspace_rows(&workspaces, &[], &stopped, true, Palette::stderr(ctx.json));
     pick(
         ctx,
         "Workspace> ",
@@ -424,17 +427,25 @@ fn pick_workspace(ctx: &Context, workspaces: Vec<Workspace>) -> Result<String> {
     )
 }
 
-/// One aligned row per workspace: a state marker and the name, then only the
-/// columns that tell rows apart. Repositories (`(id, name)` pairs) appear when
-/// the rows span several, a branch where it differs from the name, and the
-/// state unless the workspace is ready.
-/// Non-ready states, or a ready workspace's ready-for-review marks.
-fn state_cell(workspace: &Workspace) -> (String, Option<Style>) {
+/// Workspaces with agents or commands saved by `shoal stop` for `shoal resume`.
+pub fn stopped_workspaces(paths: &Paths, workspaces: &[Workspace]) -> HashSet<String> {
+    workspaces
+        .iter()
+        .filter(|w| crate::execution::recovery::pending(paths, &w.id).unwrap_or(false))
+        .map(|w| w.id.clone())
+        .collect()
+}
+
+/// Non-ready states, then a ready workspace's stopped work or ready-for-review marks.
+fn state_cell(workspace: &Workspace, stopped: bool) -> (String, Option<Style>) {
     if workspace.state != WorkspaceState::Ready {
         return (
             workspace.state.to_string(),
             Some(workspace_state_style(workspace.state)),
         );
+    }
+    if stopped {
+        return ("stopped".into(), Some(Style::Warning));
     }
     if workspace.review.is_empty() {
         return (String::new(), None);
@@ -446,9 +457,14 @@ fn state_cell(workspace: &Workspace) -> (String, Option<Style>) {
     }
 }
 
+/// One aligned row per workspace: a state marker and the name, then only the
+/// columns that tell rows apart. Repositories (`(id, name)` pairs) appear when
+/// the rows span several, a branch where it differs from the name, and the
+/// state cell when it is not empty.
 pub fn workspace_rows(
     workspaces: &[Workspace],
     repositories: &[(String, String)],
+    stopped: &HashSet<String>,
     path: bool,
     palette: Palette,
 ) -> Vec<String> {
@@ -461,7 +477,7 @@ pub fn workspace_rows(
     let several_repositories = workspaces
         .iter()
         .map(repository)
-        .collect::<std::collections::HashSet<_>>()
+        .collect::<HashSet<_>>()
         .len()
         > 1;
     let shown = |show: bool, text: String| if show { text } else { String::new() };
@@ -472,7 +488,7 @@ pub fn workspace_rows(
                 (w.name.clone(), Some(Style::Heading)),
                 (shown(several_repositories, repository(w).to_owned()), None),
                 (shown(w.branch != w.name, w.branch.clone()), None),
-                state_cell(w),
+                state_cell(w, stopped.contains(&w.id)),
                 (
                     shown(path, w.path.display().to_string()),
                     Some(Style::Muted),
@@ -598,9 +614,15 @@ mod tests {
             workspace("a", "new", "new", WorkspaceState::Preparing),
         ];
         assert_eq!(
-            workspace_rows(&workspaces, &[("a".into(), "shoal".into())], false, plain),
+            workspace_rows(
+                &workspaces,
+                &[("a".into(), "shoal".into())],
+                &HashSet::from([workspaces[0].id.clone(), workspaces[1].id.clone()]),
+                false,
+                plain
+            ),
             [
-                "● fix-login",
+                "● fix-login             stopped",
                 "✗ x          feature/x  failed",
                 "◌ new                   preparing",
             ]
@@ -611,7 +633,7 @@ mod tests {
             workspace("b", "y", "y", WorkspaceState::Ready),
         ];
         assert_eq!(
-            workspace_rows(&workspaces, &repositories, true, plain),
+            workspace_rows(&workspaces, &repositories, &HashSet::new(), true, plain),
             [
                 "● fix-login  shoal  /work/fix-login",
                 "● y          app    /work/y",

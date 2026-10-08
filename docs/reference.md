@@ -248,7 +248,9 @@ Bare `shoal` opens an fzf list of workspaces (`shoal --help`, or bare `shoal`
 without a terminal, prints commands grouped by task and a starting workflow).
 Its rows, like `shoal ls` and workspace pickers, are aligned and marked ● ready,
 ◌ in progress or ✗ failed, naming the branch only where it differs from the
-workspace name and the state unless ready; the menu names repositories when
+workspace name and the state unless ready, or `stopped` when `shoal stop` saved
+agents or commands for `shoal resume`, which replaces a ready-for-review mark; the
+menu names repositories when
 workspaces span several.
 Enter enters the selection; Ctrl-D deletes, Ctrl-E
 runs Claude/Codex CLI, starts a Happy session, opens Codex/T3 apps, or runs a shell command, Ctrl-A adds,

@@ -904,8 +904,9 @@ async fn ignore_setup_failure(ctx: &Context, workspace: &Workspace) -> Result<()
 
 pub(super) async fn list(ctx: &Context) -> Result<i32> {
     let workspaces = client::workspaces(&ctx.paths).await?;
+    let stopped = ui::stopped_workspaces(&ctx.paths, &workspaces);
     ctx.show(&workspaces, |workspaces| {
-        for row in ui::workspace_rows(workspaces, &[], true, Palette::stdout(ctx.json)) {
+        for row in ui::workspace_rows(workspaces, &[], &stopped, true, Palette::stdout(ctx.json)) {
             println!("{row}");
         }
     })?;
