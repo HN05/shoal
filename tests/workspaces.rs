@@ -4906,6 +4906,11 @@ fn acquire_selects_the_lease_kind() {
         fixture.ok(&["leases", "--all"]).as_array().unwrap().len(),
         1
     );
+    assert_eq!(
+        fixture.ok(&["leases", "--all"])[0]["workspace"]["name"],
+        "first"
+    );
+    assert_eq!(leases["workspace"]["name"], "first");
     let text = fixture.run(&["leases", "--workspace", "first"]);
     let text = String::from_utf8_lossy(&text.stdout);
     assert!(text.contains("Ports") && text.contains("web=") && text.contains("devices/tests"));

@@ -17,7 +17,7 @@ use crate::{
         ports::PortRequest,
         resources::{LockMode, Overview, ResourceKind, ResourceRequest},
     },
-    model::{Inspection, PortOverview},
+    model::{Inspection, PortOverview, Workspace},
     protocol::Method,
     sim::{SimRequest, SimulatorOverview},
 };
@@ -261,6 +261,7 @@ async fn release_one(ctx: &Context, workspace: &str, held: &Held) -> Result<()> 
 /// Every kind's configuration and leases for one workspace.
 #[derive(Debug, Serialize)]
 struct Leases {
+    workspace: Workspace,
     ports: PortOverview,
     simulators: SimulatorOverview,
     resources: Overview,
@@ -313,6 +314,7 @@ async fn fetch_leases(ctx: &Context, workspace: &str) -> Result<Leases> {
     .await?;
     let resources = resources::fetch_overview(ctx, workspace.to_owned(), Members::All).await?;
     Ok(Leases {
+        workspace: ports.workspace.clone(),
         ports,
         simulators,
         resources,
