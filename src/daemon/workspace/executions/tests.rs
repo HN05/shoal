@@ -159,7 +159,12 @@ async fn registration_publishes_atomically_and_preserves_stop_during_pre_setup()
             .is_ok()
     );
     manager
-        .finish_execution(started.plan.id, ExecutionKind::Setup, Some(1))
+        .finish_execution_after_scan(
+            started.plan.id,
+            ExecutionKind::Setup,
+            Some(1),
+            Some(process::Scan::default()),
+        )
         .await
         .unwrap();
     bounded(stopping).await.unwrap().unwrap();
@@ -183,13 +188,17 @@ async fn pre_setup_failure_and_identity_change_close_registration() {
         assert!(!setup_finished(&manager, &workspace).await);
         assert_eq!(after.error.as_deref(), Some(format!("{error:#}").as_str()));
         let id = workspace.id.clone();
+        // Real process visibility may be incomplete on the host. Failure still
+        // closes the connection/scope, retaining any uncertain record as unknown.
+        let executions = manager
+            .store
+            .run(move |db| store::executions(db, &id))
+            .await
+            .unwrap();
         assert!(
-            manager
-                .store
-                .run(move |db| store::executions(db, &id))
-                .await
-                .unwrap()
-                .is_empty()
+            executions
+                .iter()
+                .all(|execution| execution.state == ExecutionState::Unknown)
         );
         assert!(manager.connections.lock().await.is_empty());
         assert!(manager.scopes.lock().await.is_empty());
@@ -198,6 +207,158 @@ async fn pre_setup_failure_and_identity_change_close_registration() {
                 .resource_guard(&workspace.id, GuardMode::Exclusive)
                 .await
                 .is_ok()
+        );
+    }
+}
+
+fn waiting_process() -> tokio::process::Child {
+    tokio::process::Command::new("cat")
+        .env_clear()
+        .env("PATH", std::env::var_os("PATH").unwrap_or_default())
+        .env("SHOAL_TEST_PROCESS", "1")
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::null())
+        .process_group(0)
+        .kill_on_drop(true)
+        .spawn()
+        .unwrap()
+}
+
+#[tokio::test]
+async fn unreadable_process_keeps_finished_execution_unknown() {
+    for kind in [ExecutionKind::Command, ExecutionKind::Setup] {
+        let (_root, manager, workspace) = fixture("exit 0").await;
+        let started = manager
+            .begin_execution(&workspace.id, None, kind, None)
+            .await
+            .unwrap();
+        fs::remove_file(workspace.path.join(".shoal.toml")).unwrap();
+        fs::remove_file(workspace.path.join("before.sh")).unwrap();
+        let mut child = waiting_process();
+        let identity = crate::process::identity::capture(child.id().unwrap())
+            .unwrap()
+            .unwrap();
+        let scan = || crate::process::identity::Scan {
+            unreadable: vec![identity.clone()],
+            ..Default::default()
+        };
+        assert!(
+            !manager
+                .finish_execution_after_scan(started.plan.id.clone(), kind, Some(0), Some(scan()))
+                .await
+                .unwrap()
+        );
+        let query_id = started.plan.id.clone();
+        let execution = manager
+            .store
+            .run(move |db| store::find_execution(db, &query_id))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(execution.state, ExecutionState::Unknown);
+        assert!(!manager.execution_connected(&execution.id).await);
+        assert!(
+            manager
+                .caller(&started.plan.scope_token)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            manager
+                .cleanup_snapshot(&workspace.id)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        if kind == ExecutionKind::Setup {
+            assert_eq!(
+                manager.workspace(&workspace.id).await.unwrap().state,
+                WorkspaceState::Failed
+            );
+            assert!(!setup_finished(&manager, &workspace).await);
+        }
+        child.kill().await.unwrap();
+        child.wait().await.unwrap();
+        assert!(
+            manager
+                .finish_execution_after_scan(started.plan.id.clone(), kind, Some(0), Some(scan()))
+                .await
+                .unwrap()
+        );
+        let query_id = started.plan.id;
+        assert!(
+            manager
+                .store
+                .run(move |db| store::find_execution(db, &query_id))
+                .await
+                .unwrap()
+                .is_none()
+        );
+        if kind == ExecutionKind::Command {
+            assert!(
+                manager
+                    .cleanup_snapshot(&workspace.id)
+                    .await
+                    .unwrap()
+                    .is_some()
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn recorded_child_and_unverified_group_block_completion_without_markers() {
+    for recorded_child in [true, false] {
+        let (_root, manager, workspace) = fixture("exit 0").await;
+        let started = manager
+            .begin_execution(
+                &workspace.id,
+                process::capture(std::process::id()).unwrap(),
+                ExecutionKind::Setup,
+                None,
+            )
+            .await
+            .unwrap();
+        let mut child = waiting_process();
+        let identity = process::capture(child.id().unwrap()).unwrap().unwrap();
+        manager
+            .record_execution_child(
+                started.plan.id.clone(),
+                recorded_child.then_some(identity.clone()),
+                identity.pid,
+            )
+            .await
+            .unwrap();
+        assert!(
+            !manager
+                .finish_execution_after_scan(
+                    started.plan.id.clone(),
+                    ExecutionKind::Setup,
+                    Some(0),
+                    Some(process::Scan::default())
+                )
+                .await
+                .unwrap()
+        );
+        assert_eq!(
+            manager.workspace(&workspace.id).await.unwrap().state,
+            WorkspaceState::Failed
+        );
+        assert!(!setup_finished(&manager, &workspace).await);
+        child.kill().await.unwrap();
+        child.wait().await.unwrap();
+        // The reporting wrapper is still alive but its command/group is gone.
+        assert!(
+            manager
+                .finish_execution_after_scan(
+                    started.plan.id,
+                    ExecutionKind::Setup,
+                    Some(0),
+                    Some(process::Scan::default())
+                )
+                .await
+                .unwrap()
         );
     }
 }

@@ -73,6 +73,13 @@ impl Processes {
         self.launch_recorded && self.unreadable == 0
     }
 
+    /// A connected wrapper's exit report proves its command ended, including
+    /// failure before launch. The wrapper stays alive awaiting acknowledgement;
+    /// child/group survivors and incomplete environment visibility still block.
+    pub fn command_stopped(&self) -> bool {
+        self.owned.is_empty() && self.group_candidates.is_empty() && self.unreadable == 0
+    }
+
     /// Only verified identities are signal targets. Return whether there were
     /// targets, not whether the execution can now be forgotten.
     pub async fn stop(&self) -> Result<bool> {

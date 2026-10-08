@@ -223,7 +223,10 @@ instructions instead of the PR delivery guidance below.
   best-effort cleanup to the terminal rather than redirected output; stop requests
   give the entire command process group a shared grace period, even after its leader exits. The daemon owns
   state and prepares each execution kind before shared registration through one
-  request. CLI styles, enum `Display` formatting and transient progress belong at presentation
+  request. Reported exits clear executions and permit setup readiness only after
+  marker, child and group survivors are gone and environment visibility is complete;
+  the reporting wrapper may remain alive awaiting acknowledgement.
+  CLI styles, enum `Display` formatting and transient progress belong at presentation
   sites; machine output and stored values stay plain. Progress clears before results and stays off for JSON,
   redirected stderr and dumb terminals.
 - Client response extraction reports expected and received variants and preserves

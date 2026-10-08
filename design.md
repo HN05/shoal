@@ -588,7 +588,10 @@ unknown executions, or releases leases.
 Survivors are signaled only after verifying PID birth identity and same-user
 ownership; acknowledgement cannot override visible live processes. Recheck
 unreadable process identities before treating visibility as incomplete; an
-identity that has exited no longer blocks the ownership proof. Recovery polls
+identity that has exited no longer blocks the ownership proof. A reported command
+exit clears its execution and permits setup readiness only when marker, child and
+group evidence has no survivors and environment visibility is complete; the
+reporting wrapper may remain alive awaiting acknowledgement. Recovery polls
 incomplete proof within the workspace stop budget and still refuses live or
 unverifiable survivors. Moved
 worktrees stay unresolved until restored. Any other ownership failure is

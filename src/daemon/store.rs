@@ -1,7 +1,7 @@
 //! SQLite persistence: schema migrations, row mappers, and the small
 //! guards every mutation shares.
 use anyhow::{Context, Result, ensure};
-use rusqlite::{Connection, Params, Row};
+use rusqlite::{Connection, OptionalExtension, Params, Row};
 use serde::{Serialize, de::DeserializeOwned};
 use std::{path::PathBuf, time::Duration};
 
@@ -475,6 +475,16 @@ fn execution(row: &Row<'_>) -> rusqlite::Result<Execution> {
 
 fn executions_query() -> String {
     format!("SELECT {EXECUTION_COLUMNS} FROM executions WHERE workspace_id=?1")
+}
+
+pub fn find_execution(db: &Connection, id: &str) -> Result<Option<Execution>> {
+    Ok(db
+        .query_row(
+            &format!("SELECT {EXECUTION_COLUMNS} FROM executions WHERE id=?1"),
+            [id],
+            execution,
+        )
+        .optional()?)
 }
 
 pub fn executions(db: &Connection, workspace_id: &str) -> Result<Vec<Execution>> {

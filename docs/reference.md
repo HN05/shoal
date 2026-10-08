@@ -1101,8 +1101,10 @@ inherit `SHOAL_EXECUTION_ID`, which recovery uses with live ancestry to find
 survivors; identities are rechecked before signaling, and unverified candidates are
 never killed. Stopping gives the entire command process group a shared grace period
 before forced termination, even if its leader exits first. Detection is cooperative:
-hidden environments, cleared markers, and old records can leave it uncertain. After
-checking yourself that such processes stopped, use `--repair --acknowledge-stopped`; visible live processes still block.
+hidden environments, cleared markers, and old records can leave it uncertain.
+A reported command exit retains an unknown execution and prevents setup readiness
+while child/group survivors or live unreadable environments remain. After checking
+yourself that such processes stopped, use `--repair --acknowledge-stopped`; visible live processes still block.
 
 ### Scoped workspace commands
 

@@ -350,19 +350,43 @@ impl Manager {
 
     /// Close an execution. `exit_code` is `None` when the wrapper disconnected
     /// without reporting; such executions stay recorded as unknown. Returns
-    /// whether every owned process is verifiably gone.
+    /// whether the command's processes are verifiably gone. The reporting
+    /// wrapper remains alive until its completion acknowledgement.
     pub async fn finish_execution(
         &self,
         id: String,
         kind: ExecutionKind,
         exit_code: Option<i32>,
     ) -> Result<bool> {
-        let complete = match exit_code {
-            Some(_) => match process::scan(HashSet::from([id.clone()])).await {
-                Ok(scan) => scan.processes.is_empty(),
-                Err(_) => false,
-            },
-            None => false,
+        let scan = match exit_code {
+            Some(_) => process::scan(HashSet::from([id.clone()])).await.ok(),
+            None => None,
+        };
+        self.finish_execution_after_scan(id, kind, exit_code, scan)
+            .await
+    }
+
+    async fn finish_execution_after_scan(
+        &self,
+        id: String,
+        kind: ExecutionKind,
+        exit_code: Option<i32>,
+        scan: Option<process::Scan>,
+    ) -> Result<bool> {
+        let complete = if let Some(scan) = scan {
+            let query_id = id.clone();
+            match self
+                .store
+                .run(move |db| store::find_execution(db, &query_id))
+                .await?
+            {
+                Some(execution) => Processes::inspect(&execution, &scan)
+                    .await
+                    .is_ok_and(|processes| processes.command_stopped()),
+                None => false,
+            }
+        } else {
+            false
         };
         let mut connections = self.connections.lock().await;
         let record_id = id.clone();
