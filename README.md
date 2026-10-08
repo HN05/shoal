@@ -173,8 +173,9 @@ Memory overload protection stops tracked agents by default while retaining their
 workspaces and leases. To opt out, run `shoal config set overload.memory.enabled
 false`. See [overload protection](docs/reference.md#overload-protection)
 for thresholds and timing. Pause agents manually with `shoal pause`, then restore
-a stopped session with `shoal resume`; configure `[agent_resume]` for automatic
-recovery after overload when load recovers.
+a stopped session with `shoal resume`. Codex and Claude automatically continue
+the workspace session after load recovers; `[agent_resume]` overrides their restore
+command or enables recovery for other agents.
 
 ## Share resources
 

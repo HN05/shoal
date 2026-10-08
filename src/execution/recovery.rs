@@ -63,7 +63,7 @@ impl Recovery {
                         &settings.commands,
                         &name,
                         workspace,
-                        vec!["resume".into()],
+                        vec!["resume".into(), "--last".into()],
                     )
                     .await?
                 }
@@ -73,7 +73,7 @@ impl Recovery {
                         &settings.commands,
                         &name,
                         workspace,
-                        vec!["--resume".into()],
+                        vec!["--continue".into()],
                     )
                     .await?
                 }

@@ -79,6 +79,66 @@ async fn fixture() -> (
     )
 }
 
+#[tokio::test]
+async fn built_in_agents_resume_without_configuration_or_a_session_picker() {
+    let root = tempfile::tempdir().unwrap();
+    let mut command = crate::test_support::isolated_test(
+        root.path(),
+        "daemon::overload_tests::built_in_restore_child",
+    );
+    assert!(bounded(command.status()).await.unwrap().success());
+}
+
+#[tokio::test]
+#[ignore = "isolated recovery lookup launched by built-in restore test"]
+async fn built_in_restore_child() {
+    if std::env::var_os("SHOAL_TEST_HELPER").is_none() {
+        return;
+    }
+    use crate::execution::recovery::Recovery;
+    let (_root, manager, workspace, serving) = fixture().await;
+    fs::write(
+        workspace.path.join(".shoal.toml"),
+        "[commands]\ncodex = ['codex-fixture', '{args}']\nclaude = ['claude-fixture', '{args}']\n",
+    )
+    .unwrap();
+    for (agent, expected) in [
+        ("codex", vec!["codex-fixture", "resume", "--last"]),
+        ("claude", vec!["claude-fixture", "--continue"]),
+    ] {
+        let recovery = Recovery::resolve(&manager.paths, &workspace, agent)
+            .await
+            .unwrap();
+        assert!(recovery.automatic);
+        assert_eq!(
+            recovery.command,
+            expected
+                .iter()
+                .map(std::ffi::OsString::from)
+                .collect::<Vec<_>>()
+        );
+    }
+    let unsupported = Recovery::resolve(&manager.paths, &workspace, "custom")
+        .await
+        .unwrap();
+    assert!(!unsupported.automatic);
+    assert!(unsupported.command.is_empty());
+    fs::write(
+        workspace.path.join(".shoal.toml"),
+        "[agent_resume]\ncodex = ['saved-session', 'specific-id']\n",
+    )
+    .unwrap();
+    let overridden = Recovery::resolve(&manager.paths, &workspace, "codex")
+        .await
+        .unwrap();
+    assert!(overridden.automatic);
+    assert_eq!(
+        overridden.command,
+        ["saved-session", "specific-id"].map(std::ffi::OsString::from)
+    );
+    serving.abort();
+}
+
 async fn wait_started(workspace: &crate::model::Workspace) {
     bounded(async {
         while !workspace.path.join("started").is_file() {

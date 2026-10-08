@@ -131,8 +131,9 @@ memory protection remains independent of CPU readings.
 Resume commands are argument arrays in `[agent_resume]`, keyed by the tracked
 agent name. They use the same workspace substitutions and repository layering as
 `[commands]`; they must restore a session without repeating the initial prompt.
-Codex and Claude use their built-in session resume commands by default; other
-agents need an entry in `[agent_resume]`. A failed command lookup warns and
+Codex and Claude automatically continue the latest session in the workspace by
+default, without a session picker; other agents need an entry in `[agent_resume]`.
+A failed command lookup warns and
 disables automatic recovery for that launch. Overload notifications include the
 pressure reason, execution ID, and automatic or manual recovery path. Shoal saves
 the agent identity and pressure reason before signaling the wrapper, so a wrapper killed
@@ -159,9 +160,9 @@ Use `--discard` to forget the selected stopped agent's recovery record without
 launching it, allowing normal idle cleanup again.
 The selected execution must stop or be reconciled first; unrelated executions may
 keep running. The command uses
-the current resume configuration; without one, built-in terminal agents open
-their session picker. Other agents require a configured restore command. Resume
-shows the saved pressure reason. Records
+the current resume configuration; without one, built-in terminal agents continue
+the latest session in the workspace. Other agents require a configured restore
+command. Resume shows the saved pressure reason. Records
 survive daemon restart and suppress idle cleanup until the replacement process
 is registered or the workspace is removed. A failed launch retains its record;
 a later pause or overload creates a record for the replacement execution. The original
