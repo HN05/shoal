@@ -88,7 +88,7 @@ Agents cannot land: when the repository has no remote, the human runs
 
 ```sh
 shoal --json port
-shoal --json port acquire web
+shoal --json acquire port web
 shoal port release web
 ```
 
@@ -105,11 +105,11 @@ environment: pass the number to the server explicitly.
 
 ```sh
 shoal --json resource
-shoal --json resource acquire devices --wait 60
+shoal --json acquire resource devices --wait 60
 shoal resource release devices
 ```
 
-Use the returned `resource`; `--resource <name>` requests a specific member.
+Use the returned `resource`; `--member <name>` requests a specific member.
 Standalone resources use the same commands. Each semaphore lease consumes one permit.
 The same `--name` returns the same lease; use distinct names for additional
 permits and pass that name on release. Busy requests exit 2. Actual use is cooperative.
@@ -123,7 +123,7 @@ Release before changing mode; there are no atomic upgrades or writer priority.
 
 ```sh
 shoal --json sim
-shoal --json sim acquire --wait 60
+shoal --json acquire sim --wait 60
 shoal sim release
 ```
 
@@ -136,7 +136,7 @@ Normal reuse preserves apps, data, and settings. Only request a clean device
 when the task specifically requires pristine state:
 
 ```sh
-shoal --json sim acquire --clean --reason "Verify first-launch permission prompts"
+shoal --json acquire sim --clean --reason "Verify first-launch permission prompts"
 ```
 
 Give the actual task-specific reason; clean requests and their outcomes are

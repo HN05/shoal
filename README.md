@@ -184,14 +184,14 @@ command or enables recovery for other agents.
 From a managed workspace:
 
 ```sh
-shoal port acquire web --reason "Development server"
+shoal acquire port web --reason "Development server"
 shoal port
 shoal port release web
 
-shoal sim acquire --wait 60   # macOS; requires configured simulator profiles
+shoal acquire sim --wait 60   # macOS; requires configured simulator profiles
 shoal sim release
 
-shoal resource acquire signing --wait 60
+shoal acquire resource signing --wait 60
 shoal resource release signing
 ```
 
@@ -218,11 +218,11 @@ kind = "repo"
 repo = "saldoir-server"       # Registered repository name or remote URL
 ```
 
-Acquire a related repository with `shoal resource acquire server`. Use its
+Acquire a related repository with `shoal acquire repo server`. Use its
 checkout path in a project override, for example:
 
 ```sh
-server=$(shoal --json resource acquire server | jq -r '.repository.path')
+server=$(shoal --json acquire repo server | jq -r '.repository.path')
 SALDOIR_SERVER_REPO="$server" Scripts/sync-contract.sh
 shoal resource release server
 ```

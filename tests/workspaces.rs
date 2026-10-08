@@ -4846,6 +4846,33 @@ capacity = 2
 "#;
 
 #[test]
+fn acquire_selects_the_lease_kind() {
+    let fixture = Fixture::with_config(Some(RESOURCE_CONFIG));
+    fixture.add("first");
+    let port = fixture.ok(&["acquire", "port", "web", "--workspace", "first"]);
+    assert_eq!(port["name"], "web");
+    let lease = fixture.ok(&[
+        "acquire",
+        "resource",
+        "devices",
+        "--member",
+        "beta",
+        "--name",
+        "tests",
+        "--workspace",
+        "first",
+    ]);
+    assert_eq!(lease["resource"], "beta");
+    assert_eq!(lease["name"], "tests");
+    // A repo acquisition never selects another kind of member.
+    let repo = fixture.run(&["acquire", "repo", "signing", "--workspace", "first"]);
+    assert!(!repo.status.success());
+    assert!(String::from_utf8_lossy(&repo.stderr).contains("incompatible"));
+    let overview = fixture.ok(&["resource", "first"]);
+    assert_eq!(overview["leases"].as_array().unwrap().len(), 1);
+}
+
+#[test]
 fn resources_enforce_pool_and_member_capacity_and_named_permits() {
     let fixture = Fixture::with_config(Some(RESOURCE_CONFIG));
     fixture.add("first");
@@ -12722,7 +12749,7 @@ fn repository_resources_select_registrations_by_remote_url() {
         "[resources.server]\nkind='repo'\nrepo='git@example.test:team/server.git'\n",
     );
     fixture.add("consumer");
-    let lease = fixture.ok(&["resource", "acquire", "server", "consumer"]);
+    let lease = fixture.ok(&["acquire", "repo", "server", "--workspace", "consumer"]);
     assert_eq!(lease["repository"]["id"], registration["id"]);
     assert_eq!(lease["repository"]["path"], related.to_str().unwrap());
     fixture.ok(&["resource", "release", "server", "consumer"]);

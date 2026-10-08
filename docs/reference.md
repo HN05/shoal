@@ -1015,11 +1015,20 @@ Scoped commands cannot read notifications but may notify about their own
 workspace. Read entries older than the newest
 500 are dropped; unread ones stay.
 
+### Leases
+
+`shoal acquire <kind>` reserves a port, simulator, resource permit, or related
+repository for the current workspace, or the one named by `--workspace`.
+Simulator, resource, and repository leases take `--name` (default `default`) to
+hold several, `--reason`, and `--wait` to poll up to 3600 seconds for capacity
+or approval. `acquire repo` selects only `kind = "repo"` members. The
+`port acquire`, `sim acquire`, and `resource acquire` spellings remain accepted.
+
 ### Port reservations
 
 ```sh
-shoal port acquire web fix-login --reason "Frontend dev server"
-shoal port acquire api --port 3001 --env API_PORT --reason "HTTP API"
+shoal acquire port web --workspace fix-login --reason "Frontend dev server"
+shoal acquire port api --port 3001 --env API_PORT --reason "HTTP API"
 shoal port fix-login                   # Configured names and current leases
 shoal port --all                       # Every workspace
 shoal port release web fix-login
@@ -1052,7 +1061,7 @@ reason = "Frontend dev server"
 ```
 
 `on_conflict`, `start` and `end` are keys of the table itself, so no port can
-take those names. `shoal port acquire web` allocates on request; CLI flags override. A conflict
+take those names. `shoal acquire port web` allocates on request; CLI flags override. A conflict
 suggests a free port: fzf offers to accept it, `--json` returns `reserved:
 false` with exit 2, and `--port <suggested>` or `--on-conflict auto` accepts.
 
@@ -1180,8 +1189,8 @@ flags override it, and `allow_any = true` permits unconfigured `--device`
 requests with a `--reason`.
 
 ```sh
-shoal sim acquire                   # Current worktree, configured preference
-shoal sim acquire --profile phone --name tests --wait 60
+shoal acquire sim                   # Current worktree, configured preference
+shoal acquire sim --profile phone --name tests --wait 60
 shoal sim                           # Profiles, capacity, and managed devices; --all for all
 shoal sim release tests             # Or the default lease
 ```
@@ -1199,7 +1208,7 @@ for retry. Only the default CoreSimulator device set and one daemon are covered.
 ### Clean devices and audit history
 
 ```sh
-shoal sim acquire --clean --reason "Verify first-launch permission prompts"
+shoal acquire sim --clean --reason "Verify first-launch permission prompts"
 shoal sim history                  # --all, --limit 50, --before <id>
 ```
 
@@ -1237,9 +1246,9 @@ letter, at most 64 characters; capacities are 1–65535.
 
 ```sh
 shoal resource                               # Capacities and own leases
-shoal resource acquire devices               # Any available member
-shoal resource acquire devices --resource beta --name tests --reason "Integration tests"
-shoal resource acquire signing --wait 60
+shoal acquire resource devices               # Any available member
+shoal acquire resource devices --member beta --name tests --reason "Integration tests"
+shoal acquire resource signing --wait 60
 shoal resource --all                         # Every workspace
 shoal resource release devices --name tests
 ```
@@ -1269,7 +1278,7 @@ A URL keeps tracked config independent of local registration names. It matches
 the registration with the same remote over any transport, and is never cloned:
 register it first with `shoal repo add <url>`.
 
-`shoal resource acquire server` returns a read lease with `repository.id` and
+`shoal acquire repo server` returns a read lease with `repository.id` and
 `repository.path` in JSON. Scoped callers can acquire it without repository
 administration access. New leases default to `read`; other modes are rejected.
 Capacity must be 1, and readers share one pool slot. Resource approvals and hooks

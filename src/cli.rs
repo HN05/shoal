@@ -274,6 +274,14 @@ pub enum Command {
         #[command(subcommand)]
         command: PrCommand,
     },
+    /// Acquire a port, simulator, resource permit, or related repository.
+    Acquire {
+        #[command(subcommand)]
+        kind: AcquireKind,
+        /// Workspace to use; defaults to the current workspace or picker.
+        #[arg(long, global = true)]
+        workspace: Option<String>,
+    },
     /// Reserve and release workspace TCP ports.
     #[command(
         args_conflicts_with_subcommands = true,
@@ -797,6 +805,76 @@ pub enum SimCommand {
         #[arg(default_value = "default")]
         name: String,
         workspace: Option<String>,
+    },
+}
+
+/// Options shared by leases that a workspace may hold several of.
+#[derive(Debug, Args)]
+pub struct LeaseOptions {
+    /// Stable lease name; use different names to hold several leases.
+    #[arg(long, default_value = "default")]
+    pub name: String,
+    /// Explain what the lease is used for.
+    #[arg(long)]
+    pub reason: Option<String>,
+    /// Wait this many seconds for capacity or approval (0 returns immediately).
+    #[arg(long, default_value_t = 0, value_parser = clap::value_parser!(u64).range(0..=3600))]
+    pub wait: u64,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum AcquireKind {
+    /// Reserve a named TCP port, or return the existing reservation.
+    Port {
+        name: String,
+        #[arg(long)]
+        port: Option<u16>,
+        /// Environment variable exported to subsequent exec/claude/codex commands.
+        #[arg(long)]
+        env: Option<String>,
+        /// Explain what the reservation is used for.
+        #[arg(long)]
+        reason: Option<String>,
+        /// Override the repo's conflict behavior (default: suggest).
+        #[arg(long, value_enum)]
+        on_conflict: Option<crate::config::repo::ConflictPolicy>,
+    },
+    /// Lease an Xcode simulator; repeated requests return the same named lease.
+    Sim {
+        #[command(flatten)]
+        lease: LeaseOptions,
+        /// Configured simulator profile.
+        #[arg(long, conflicts_with_all = ["device", "runtime"])]
+        profile: Option<String>,
+        /// Device type name or identifier.
+        #[arg(long)]
+        device: Option<String>,
+        /// Installed runtime; defaults to the latest compatible iOS runtime.
+        #[arg(long, requires = "device")]
+        runtime: Option<String>,
+        /// Require a fresh or erased device; a reason is mandatory and audited.
+        #[arg(long, requires = "reason")]
+        clean: bool,
+    },
+    /// Acquire a permit or reader/writer lock from a configured pool.
+    Resource {
+        pool: String,
+        /// Pool member to acquire instead of any available one.
+        #[arg(long)]
+        member: Option<String>,
+        /// Lock mode (defaults to permit for semaphores, write for rwlocks).
+        #[arg(long, value_enum)]
+        mode: Option<crate::daemon::resources::LockMode>,
+        #[command(flatten)]
+        lease: LeaseOptions,
+    },
+    /// Borrow a configured related repository's checkout for reading.
+    Repo {
+        /// Configured `kind = "repo"` resource name.
+        #[arg(value_name = "NAME")]
+        resource: String,
+        #[command(flatten)]
+        lease: LeaseOptions,
     },
 }
 

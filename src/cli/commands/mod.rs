@@ -6,6 +6,7 @@ mod configuration;
 mod events;
 mod holds;
 pub(super) mod issues;
+mod leases;
 mod links;
 mod menu;
 mod notifications;
@@ -411,6 +412,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         } => {
             crate::execution::run_detached_wrapper(&ctx.paths, workspace, log, command, agent).await
         }
+        Command::Acquire { kind, workspace } => leases::acquire(&ctx, kind, workspace).await,
         Command::Port { command, scope } => ports::run(&ctx, command, scope).await,
         Command::Access { command } => access::run(&ctx, command).await,
         Command::Resource { command, scope } => resources::run(&ctx, command, scope).await,
