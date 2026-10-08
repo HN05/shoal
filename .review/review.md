@@ -59,7 +59,7 @@ instructions instead of the PR delivery guidance below.
   failure and repair guidance; repair remains an explicit choice.
 - Scope: tracked executions and externally launched processes with exported
   environments carry a scope token and get own-worktree access
-  only; workspace allocation/removal/recovery and shared repository/service
+  only (CLI refusals also follow ancestry for the same state directory); workspace allocation/removal/recovery and shared repository/service
   administration stay denied, while own-workspace setup, rename, PR registration,
   merge acknowledgements, messages to the user, ready-for-review marks,
   assignment continuation/completion,

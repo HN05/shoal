@@ -67,7 +67,7 @@ pub(super) async fn handoff(
         return Ok(false);
     }
     ensure!(
-        !env::is_scoped(),
+        !env::inherits_scope(&ctx.paths),
         "workspace processes cannot allocate workspaces"
     );
     let focus = settings.herdr.focus.unwrap_or(!plan.launches_agent());

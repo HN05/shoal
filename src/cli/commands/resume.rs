@@ -21,7 +21,7 @@ pub async fn run(
     discard: bool,
 ) -> Result<i32> {
     ensure!(
-        !crate::env::is_scoped(),
+        !crate::env::inherits_scope(&ctx.paths),
         "resume agents outside scoped executions"
     );
     let id = ui::select_workspace(ctx, selector, Fallback::CurrentDirectory).await?;
@@ -140,7 +140,7 @@ fn discard_saved(saved: &Saved, active: impl Fn(&str) -> bool) -> Result<Vec<Str
 /// tabs where available, and otherwise each is listed for its own terminal.
 pub async fn run_all(ctx: &Context, discard: bool) -> Result<i32> {
     ensure!(
-        !crate::env::is_scoped(),
+        !crate::env::inherits_scope(&ctx.paths),
         "resume agents outside scoped executions"
     );
     let mut stopped = Vec::new();

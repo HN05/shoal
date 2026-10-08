@@ -273,7 +273,9 @@ manual merge acknowledgement, assignment continuation/completion, and syncing th
 caller's own repository are own-workspace exceptions.
 Effective configuration may be read for the caller's own workspace; changing it
 needs an unscoped caller.
-Nested executions keep scope. Unscoped callers may export a ready, verified
+Nested executions keep scope, and the CLI refuses scoped operations to a process
+whose ancestor carries scope for the same state directory, so removing the token
+from a descendant's environment does not lift them. Unscoped callers may export a ready, verified
 workspace's identity, current port variables and a fresh token through `env`.
 Exported tokens persist across restarts until explicitly revoked or the workspace
 is removed; they register no execution and do not prevent cleanup.

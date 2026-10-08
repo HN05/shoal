@@ -1240,7 +1240,9 @@ Processes carrying a Shoal scope token are confined to their own worktree:
 effective configuration for their own workspace, but cannot change configuration.
 They cannot `land`, reach other worktrees, create or remove workspaces, read
 notifications, or administer repositories or the daemon service; nested commands
-keep the scope. Scope is cooperative and does not restrict direct filesystem or
+keep the scope. A command whose ancestor carries scope for the same state directory
+gets the CLI's scoped refusals even after the token is removed from its
+environment. Scope is cooperative and does not restrict direct filesystem or
 Git operations.
 
 `shoal env [workspace] --json` returns an object mapping environment variable names

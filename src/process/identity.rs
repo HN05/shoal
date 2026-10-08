@@ -1,10 +1,16 @@
 //! Same-user process ownership for cooperative recovery. Never expose process
-//! arguments/environment; only the explicit execution marker leaves this module.
+//! arguments/environment; only the explicit execution marker and scoped
+//! ancestors' state directories leave this module.
 use crate::protocol::timing;
 use crate::tools::Tool;
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashSet, time::Duration};
+use std::{
+    collections::HashSet, ffi::OsStr, os::unix::ffi::OsStrExt, path::PathBuf, time::Duration,
+};
+
+/// Deeper chains are not plausible process trees; stop rather than loop.
+const MAX_ANCESTRY: usize = 64;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Identity {
@@ -15,6 +21,35 @@ pub struct Identity {
 pub fn capture(pid: u32) -> Result<Option<Identity>> {
     ensure!(pid > 1 && pid <= i32::MAX as u32, "invalid process ID");
     platform_identity(pid)
+}
+
+/// State directories of this process's ancestors that started with workspace
+/// scope, nearest first. Ancestors keep their initial environment when a
+/// descendant clears its own; only reparenting (daemonizing) leaves the chain.
+/// Unreadable ancestors are skipped, so this is cooperative, not a boundary.
+pub fn scoped_ancestor_state_dirs() -> Vec<PathBuf> {
+    let token = format!("{}=", crate::env::SCOPE_TOKEN).into_bytes();
+    let state = format!("{}=", crate::env::STATE_DIR).into_bytes();
+    let mut dirs = Vec::new();
+    let mut pid = std::os::unix::process::parent_id();
+    for _ in 0..MAX_ANCESTRY {
+        if pid <= 1 {
+            break;
+        }
+        if let Ok(environment) = environment(pid)
+            && environment.iter().any(|entry| entry.starts_with(&token))
+            && let Some(dir) = environment
+                .iter()
+                .find_map(|entry| entry.strip_prefix(state.as_slice()))
+        {
+            dirs.push(PathBuf::from(OsStr::from_bytes(dir)));
+        }
+        let Some(next) = parent(pid) else {
+            break;
+        };
+        pid = next;
+    }
+    dirs
 }
 
 pub fn alive(identity: &Identity) -> Result<bool> {
@@ -171,6 +206,26 @@ fn image(_pid: u32) -> Result<Image> {
 
 #[cfg(target_os = "macos")]
 fn platform_identity(pid: u32) -> Result<Option<Identity>> {
+    let Some(info) = bsd_info(pid)? else {
+        return Ok(None);
+    };
+    // BSD SZOMB = 5. Zombies cannot execute or hold resources.
+    if info.pbi_uid != unsafe { libc::geteuid() } || info.pbi_status == 5 {
+        return Ok(None);
+    }
+    Ok(Some(Identity {
+        pid,
+        birth: format!("{}:{}", info.pbi_start_tvsec, info.pbi_start_tvusec),
+    }))
+}
+
+#[cfg(target_os = "macos")]
+fn parent(pid: u32) -> Option<u32> {
+    bsd_info(pid).ok().flatten().map(|info| info.pbi_ppid)
+}
+
+#[cfg(target_os = "macos")]
+fn bsd_info(pid: u32) -> Result<Option<libc::proc_bsdinfo>> {
     let mut info = std::mem::MaybeUninit::<libc::proc_bsdinfo>::zeroed();
     let size = std::mem::size_of::<libc::proc_bsdinfo>();
     let result = unsafe {
@@ -190,15 +245,7 @@ fn platform_identity(pid: u32) -> Result<Option<Identity>> {
         return Err(error).context("inspect process identity");
     }
     ensure!(result as usize == size, "incomplete process identity");
-    let info = unsafe { info.assume_init() };
-    // BSD SZOMB = 5. Zombies cannot execute or hold resources.
-    if info.pbi_uid != unsafe { libc::geteuid() } || info.pbi_status == 5 {
-        return Ok(None);
-    }
-    Ok(Some(Identity {
-        pid,
-        birth: format!("{}:{}", info.pbi_start_tvsec, info.pbi_start_tvusec),
-    }))
+    Ok(Some(unsafe { info.assume_init() }))
 }
 
 #[cfg(target_os = "macos")]
@@ -275,6 +322,12 @@ fn platform_identity(pid: u32) -> Result<Option<Identity>> {
         pid,
         birth: format!("{}:{}", boot.trim(), fields[19]),
     }))
+}
+
+#[cfg(target_os = "linux")]
+fn parent(pid: u32) -> Option<u32> {
+    let stat = read_process_stat(&format!("/proc/{pid}/stat")).ok()??;
+    stat_fields(&stat).ok()?.get(1)?.parse().ok()
 }
 
 #[cfg(target_os = "linux")]

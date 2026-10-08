@@ -36,7 +36,8 @@ when behavior changes, distinguishing decisions from proposals.
   config, then default; the CLI reads the global file at launch and asks the
   daemon for the repository layer. Named ports are lazy, with CLI overrides and
   explicit conflicts.
-- Workspace commands inherit a scope token. Enforce own-worktree resource access
+- Workspace commands inherit a scope token; CLI refusals also follow process
+  ancestry for the same state directory, so a cleared token does not unscope. Enforce own-worktree resource access
   in the daemon and deny workspace allocation/removal/recovery and shared
   repository/service administration; own-workspace setup, rename, issue/PR links and watches, merge
   acknowledgements, messages to the user, ready-for-review marks, assignment continuation/completion and own-repository

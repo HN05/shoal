@@ -185,8 +185,8 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         None => menu::choose(&ctx).await?,
     };
     ensure!(
-        !(env::is_scoped() && command.is_administrative()),
-        "workspace processes cannot administer Shoal"
+        !(command.is_administrative() && env::inherits_scope(&ctx.paths)),
+        "workspace processes cannot administer Shoal; ask the user to run this command"
     );
     match command {
         Command::BuildInfo => unreachable!("build metadata needs no daemon or paths"),

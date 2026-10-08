@@ -1,5 +1,5 @@
 //! Review daemon-owned access requests and render allocation decisions.
-use anyhow::Result;
+use anyhow::{Result, ensure};
 use serde_json::json;
 
 use super::EXIT_BUSY;
@@ -12,6 +12,10 @@ use crate::{
 pub(super) async fn run(ctx: &Context, command: Option<AccessCommand>) -> Result<i32> {
     match command {
         Some(command @ (AccessCommand::Approve { .. } | AccessCommand::Deny { .. })) => {
+            ensure!(
+                !crate::env::inherits_scope(&ctx.paths),
+                "workspace processes cannot decide access requests; ask the user to run this command"
+            );
             let approve = matches!(command, AccessCommand::Approve { .. });
             let (AccessCommand::Approve { id } | AccessCommand::Deny { id }) = command else {
                 unreachable!()
