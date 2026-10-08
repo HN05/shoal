@@ -330,8 +330,8 @@ async fn run_tracked(
                         }
                         Err(error) => eprintln!("warning: cannot save recovery command: {error:#}"),
                     }
+                    protocol::write(stream.get_mut(), &ExecutionEvent::Paused).await?;
                     if recover && recovery.automatic {
-                        protocol::write(stream.get_mut(), &ExecutionEvent::Paused).await?;
                         eprintln!("shoal: waiting for healthy load before restoring agent session");
                         if let Some(ports) = recovery::wait(&mut stream).await? {
                             plan.ports = ports;

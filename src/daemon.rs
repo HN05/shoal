@@ -687,6 +687,7 @@ async fn execute(
     let (events, mut incoming) = tokio::sync::mpsc::channel(4);
     let mut readers = JoinSet::new();
     readers.spawn(read_execution_events(reader, events));
+    let mut handoff_claimed = false;
     let result = async {
         protocol::write(
             &mut writer,
@@ -732,6 +733,10 @@ async fn execute(
                 }
                 ExecutionEvent::Finished { exit_code } => break Ok(exit_code),
                 ExecutionEvent::Paused => {
+                    handoff_claimed = true;
+                    if !recovering {
+                        continue;
+                    }
                     use execution_recovery::Action;
                     match execution_recovery::pause(
                         &manager,
@@ -744,6 +749,7 @@ async fn execute(
                     .await?
                     {
                         Action::Resume(ports) => {
+                            handoff_claimed = false;
                             awaiting_started = true;
                             sent_stop = false;
                             protocol::write(&mut writer, &Control::Resume { ports }).await?;
@@ -757,7 +763,7 @@ async fn execute(
     }
     .await;
     readers.abort_all();
-    let overload_reason = if agent.is_some() {
+    let mut overload_reason = if agent.is_some() {
         manager.agent_overload_reason(&execution_id).await
     } else {
         None
@@ -765,6 +771,16 @@ async fn execute(
     let complete = manager
         .finish_execution(execution_id.clone(), kind, result.as_ref().ok().copied())
         .await?;
+    if overload_reason.is_some() && !handoff_claimed && complete {
+        let record =
+            crate::execution::recovery::record_path(&manager.paths, &workspace_id, &execution_id);
+        if let Err(error) = std::fs::remove_file(&record)
+            && error.kind() != std::io::ErrorKind::NotFound
+        {
+            eprintln!("unused overload recovery handoff not removed: {error:#}");
+        }
+        overload_reason = None;
+    }
     if let Some(agent) = &agent {
         manager
             .notify_agent_exit(
