@@ -55,11 +55,7 @@ pub(super) async fn handoff(
     issue: Option<&Issue>,
     here: bool,
 ) -> Result<bool> {
-    if here
-        || ctx.herdr_tab.is_some()
-        || !ctx.interactive()
-        || std::env::var("HERDR_ENV").as_deref() != Ok("1")
-    {
+    if here || !available(ctx) {
         return Ok(false);
     }
     let settings = client::settings(
@@ -90,8 +86,36 @@ pub(super) async fn handoff(
     Ok(true)
 }
 
+/// Whether this terminal can hand Shoal work to new Herdr tabs.
+pub(in crate::cli) fn available(ctx: &Context) -> bool {
+    ctx.herdr_tab.is_none() && ctx.interactive() && std::env::var("HERDR_ENV").as_deref() == Ok("1")
+}
+
+/// Run Shoal with `args` in a new background tab at `cwd`.
+pub(in crate::cli) async fn run_in_tab(
+    ctx: &Context,
+    cwd: &Path,
+    label: &str,
+    args: &[OsString],
+) -> Result<()> {
+    let created = created(tab_command(ctx, cwd, label, false)?).await?;
+    let mut argv = shoal_argv(&ctx.paths)?;
+    argv.extend_from_slice(args);
+    run_in_pane(&created, &argv).await
+}
+
 // The tab environment carries the plan, keeping the typed command short.
 async fn create_tab(ctx: &Context, plan: &AddPlan, focus: bool) -> Result<CreatedResult> {
+    let mut create = tab_command(ctx, &std::env::current_dir()?, &plan.label(), focus)?;
+    create.arg("--env").arg(format!(
+        "{}={}",
+        env::HERDR_PLAN,
+        serde_json::to_string(plan)?
+    ));
+    created(create).await
+}
+
+fn tab_command(ctx: &Context, cwd: &Path, label: &str, focus: bool) -> Result<Command> {
     let workspace = std::env::var_os("HERDR_WORKSPACE_ID")
         .filter(|id| !id.is_empty())
         .context("Herdr did not provide HERDR_WORKSPACE_ID")?;
@@ -100,9 +124,9 @@ async fn create_tab(ctx: &Context, plan: &AddPlan, focus: bool) -> Result<Create
         .args(["tab", "create", "--workspace"])
         .arg(workspace)
         .arg("--cwd")
-        .arg(std::env::current_dir()?)
+        .arg(cwd)
         .arg("--label")
-        .arg(plan.label())
+        .arg(label)
         .arg(if focus { "--focus" } else { "--no-focus" });
     // Preserve this CLI's config location, independently of the Herdr server's environment.
     let config = Config::path(&ctx.paths);
@@ -116,11 +140,10 @@ async fn create_tab(ctx: &Context, plan: &AddPlan, focus: bool) -> Result<Create
     create
         .arg("--env")
         .arg(format!("XDG_CONFIG_HOME={}", config_home.display()));
-    create.arg("--env").arg(format!(
-        "{}={}",
-        env::HERDR_PLAN,
-        serde_json::to_string(plan)?
-    ));
+    Ok(create)
+}
+
+async fn created(create: Command) -> Result<CreatedResult> {
     let output = Run::new(create).checked().await?;
     let created: Created =
         serde_json::from_slice(&output.stdout).context("invalid Herdr tab creation response")?;
@@ -128,11 +151,19 @@ async fn create_tab(ctx: &Context, plan: &AddPlan, focus: bool) -> Result<Create
 }
 
 async fn submit_worker(ctx: &Context, created: CreatedResult, close_when_done: bool) -> Result<()> {
-    let argv = worker_argv(&ctx.paths, close_when_done)?;
+    let mut argv = shoal_argv(&ctx.paths)?;
+    argv.push(internal::HERDR.into());
+    if close_when_done {
+        argv.push("--close-when-done".into());
+    }
+    run_in_pane(&created, &argv).await
+}
+
+async fn run_in_pane(created: &CreatedResult, argv: &[OsString]) -> Result<()> {
     let mut run = Command::new("herdr");
     run.args(["pane", "run"])
         .arg(&created.root_pane.pane_id)
-        .arg(shell_command(&argv)?);
+        .arg(shell_command(argv)?);
     Run::new(run)
         .checked()
         .await
@@ -141,14 +172,10 @@ async fn submit_worker(ctx: &Context, created: CreatedResult, close_when_done: b
 }
 
 // The tab inherits HOME, so only a non-default state directory needs naming.
-fn worker_argv(paths: &Paths, close_when_done: bool) -> Result<Vec<OsString>> {
+fn shoal_argv(paths: &Paths) -> Result<Vec<OsString>> {
     let mut argv = vec![std::env::current_exe()?.into_os_string()];
     if !paths.is_default_state() {
         argv.extend(["--state-dir".into(), paths.state.clone().into_os_string()]);
-    }
-    argv.push(internal::HERDR.into());
-    if close_when_done {
-        argv.push("--close-when-done".into());
     }
     Ok(argv)
 }
@@ -375,24 +402,17 @@ mod tests {
     }
 
     #[test]
-    fn worker_argv_names_only_a_non_default_state_directory() {
+    fn shoal_argv_names_only_a_non_default_state_directory() {
         let custom = Paths::for_test("/home");
         let default = Paths {
             state: "/home/.local/state/shoal".into(),
             ..custom.clone()
         };
-        let tail = |paths: &Paths| worker_argv(paths, true).unwrap()[1..].to_vec();
-        assert_eq!(tail(&default), ["herdr-internal", "--close-when-done"]);
+        assert_eq!(shoal_argv(&default).unwrap().len(), 1);
         assert_eq!(
-            tail(&custom),
-            [
-                "--state-dir",
-                "/home/state",
-                "herdr-internal",
-                "--close-when-done"
-            ]
+            shoal_argv(&custom).unwrap()[1..],
+            ["--state-dir", "/home/state"]
         );
-        assert_eq!(worker_argv(&default, false).unwrap().len(), 2);
     }
 
     #[test]

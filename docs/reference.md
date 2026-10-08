@@ -167,8 +167,12 @@ Stopped commands become the restored session's first prompt, asking the agent to
 rerun the ones still needed: built-in agents receive it as their prompt argument,
 and `[agent_resume]` commands through `{prompt}`. Otherwise, and when no agent was
 stopped, resume prints them as `shoal exec` commands. Either way they are reported once.
-Use `--discard` to forget the workspace's stopped agents and commands, or the
-`--execution` one, without launching anything, allowing normal idle cleanup again.
+`--all` resumes every workspace: it reports commands without an agent, restores a
+single agent in the current terminal, and in an interactive Herdr pane opens a
+background tab per agent where `herdr.new_tab` allows; it lists the remaining agents
+as `shoal resume` commands to run in separate terminals.
+Use `--discard` to forget the workspace's stopped agents and commands, every
+workspace's with `--all`, or the `--execution` one, without launching anything, allowing normal idle cleanup again.
 The selected execution must stop or be reconciled first; unrelated executions may
 keep running. The command uses
 the current resume configuration; without one, built-in terminal agents continue

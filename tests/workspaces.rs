@@ -3554,6 +3554,22 @@ fn stop_all_stops_running_workspaces_and_marks_them_stopped() {
     for line in listed.lines() {
         assert_eq!(line.contains("stopped"), !line.contains("idle"), "{listed}");
     }
+    // Without agents, every workspace's commands are reported once.
+    let resumed = fixture.ok(&["resume", "--all"]);
+    assert_eq!(
+        resumed["commands"].as_array().unwrap().len(),
+        2,
+        "{resumed}"
+    );
+    assert!(resumed["agents"].as_array().unwrap().is_empty());
+    let listed = fixture.run(&["ls"]);
+    assert!(!String::from_utf8_lossy(&listed.stdout).contains("stopped"));
+    assert!(
+        fixture.ok(&["resume", "--all"])["commands"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[test]
@@ -3650,6 +3666,12 @@ fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
         })
         .count();
     assert_eq!(commands, 1);
+    // Several agents without a terminal are listed for separate resumes.
+    let all = fixture.ok(&["resume", "--all"]);
+    let agents = all["agents"].as_array().unwrap();
+    assert_eq!(agents.len(), 2, "{all}");
+    assert!(agents.iter().all(|agent| agent["tab"] == false));
+    assert!(all["commands"].as_array().unwrap().is_empty());
     let output = fixture.run(&["resume", "stopped"]);
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("--execution"));
@@ -14927,6 +14949,49 @@ fn herdr_handoff_preserves_choices_and_literal_arguments() {
     );
     assert!(!fixture.root.path().join("injected").exists());
     assert_eq!(herdr_calls(&fixture).len(), 3);
+}
+
+#[test]
+fn herdr_resume_all_opens_a_background_tab_per_stopped_agent() {
+    let fixture = Fixture::new();
+    install_fake_herdr(&fixture);
+    let mut expected = Vec::new();
+    for name in ["first", "second"] {
+        let workspace = fixture.add(name);
+        let id = workspace["id"].as_str().unwrap();
+        let state = fixture.root.path().join("state/workspaces").join(id);
+        fs::create_dir_all(&state).unwrap();
+        fs::write(
+            state.join(format!("{name}-agent.recovery.json")),
+            r#"{"agent":"claude"}"#,
+        )
+        .unwrap();
+        expected.push((
+            workspace["path"].as_str().unwrap().to_owned(),
+            id.to_owned(),
+            format!("{name}-agent"),
+        ));
+    }
+    let (output, transcript) = herdr_call(&fixture, &["resume", "--all"], "");
+    assert!(output.status.success(), "{output:?} {transcript}");
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("Resuming 2 agents in new Herdr tabs"),
+        "{output:?}"
+    );
+    let calls = herdr_calls(&fixture);
+    assert_eq!(calls.len(), 4, "{calls:?}");
+    for ((path, id, execution), pair) in expected.iter().zip(calls.chunks(2)) {
+        let create = &pair[0];
+        assert_eq!(create[..2], ["tab", "create"]);
+        let cwd = create.iter().position(|arg| arg == "--cwd").unwrap();
+        assert_eq!(&create[cwd + 1], path);
+        assert!(create.iter().any(|arg| arg == "--no-focus"));
+        let worker = pair[1][3].split(' ').collect::<Vec<_>>();
+        assert_eq!(
+            worker[worker.len() - 4..],
+            ["resume", id.as_str(), "--execution", execution.as_str()]
+        );
+    }
 }
 
 #[test]

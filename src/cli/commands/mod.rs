@@ -326,10 +326,16 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             notifications::run(&ctx, all, follow, limit).await
         }
         Command::Resume {
-            workspace,
+            scope,
             execution,
             discard,
-        } => resume::run(&ctx, workspace, execution, discard).await,
+        } => {
+            if scope.all {
+                resume::run_all(&ctx, discard).await
+            } else {
+                resume::run(&ctx, scope.workspace, execution, discard).await
+            }
+        }
         Command::Stop { scope } => stop::run(&ctx, scope).await,
         Command::Rm {
             workspace,
