@@ -153,22 +153,27 @@ finishes waiting agents at once, keeping their records for `shoal resume`.
 
 `shoal stop [workspace]` stops tracked agents and commands through their wrappers,
 retaining work and resource leases. Agents save recovery records; commands started
-with `exec` or `run` save their arguments without being rerun. Setup, landing and other internal commands save nothing.
+with `exec` or `run` save their arguments, which `shoal resume` reports and never
+reruns. Setup, landing and other internal commands save nothing.
 Disconnected executions require `shoal doctor`. Stopping cancels a waiting automatic
 restore and requires explicit resume even with `[agent_resume]` configured.
 Run stop and resume outside scoped executions.
 
 `shoal resume [workspace]` restores a saved agent recovery record after its
 wrapper exits; use `--execution <id>` when several agents stopped in one workspace.
-Use `--discard` to forget the selected stopped agent's recovery record without
-launching it, allowing normal idle cleanup again.
+Stopped commands become the restored session's first prompt, asking the agent to
+rerun the ones still needed: built-in agents receive it as their prompt argument,
+and `[agent_resume]` commands through `{prompt}`. Otherwise, and when no agent was
+stopped, resume prints them as `shoal exec` commands. Either way they are reported once.
+Use `--discard` to forget the workspace's stopped agents and commands, or the
+`--execution` one, without launching anything, allowing normal idle cleanup again.
 The selected execution must stop or be reconciled first; unrelated executions may
 keep running. The command uses
 the current resume configuration; without one, built-in terminal agents continue
 the latest session in the workspace. Other agents require a configured restore
 command. Resume shows the saved pressure reason. Records
 survive daemon restart and suppress idle cleanup until the replacement process
-is registered or the workspace is removed. A failed launch retains its record;
+is registered or the workspace is removed. A failed launch retains its records;
 a later stop or overload creates a record for the replacement execution. The original
 task prompt is never replayed.
 

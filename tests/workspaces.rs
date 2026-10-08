@@ -3511,7 +3511,7 @@ fn stop_and_manual_removal_terminate_connected_executions() {
 #[test]
 fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
     let fixture = Fixture::with_config(Some(
-        "[commands]\nclaude = ['sh', './agent.sh']\n[agent_resume]\nclaude = ['sh', './resume.sh']\n",
+        "[commands]\nclaude = ['sh', './agent.sh']\n[agent_resume]\nclaude = ['sh', './resume.sh', '{prompt}']\n",
     ));
     let workspace = fixture.add("stopped");
     let path = Path::new(workspace["path"].as_str().unwrap());
@@ -3520,7 +3520,7 @@ fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
         "touch started-$SHOAL_EXECUTION_ID\ntrap 'exit 0' TERM\nwhile :; do sleep 1; done\n",
     )
     .unwrap();
-    fs::write(path.join("resume.sh"), "printf restored >> restored\n").unwrap();
+    fs::write(path.join("resume.sh"), "printf '%s|' \"$1\" >> restored\n").unwrap();
     let spawn = |args: &[&str]| {
         fixture
             .command()
@@ -3614,10 +3614,16 @@ fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
         );
         assert!(!state.join(format!("{id}.recovery.json")).exists());
     }
-    assert_eq!(
-        fs::read_to_string(path.join("restored")).unwrap(),
-        "restoredrestored"
+    // The stopped command reaches the first restored session only.
+    let restored = fs::read_to_string(path.join("restored")).unwrap();
+    let prompts = restored.split('|').collect::<Vec<_>>();
+    assert_eq!(prompts.len(), 3, "{restored}");
+    assert!(
+        prompts[0].contains("- sh -c 'touch command-started; while :; do sleep 1; done'"),
+        "{restored}"
     );
+    assert_eq!(prompts[1], "");
+    assert!(!state.exists() || fs::read_dir(&state).unwrap().next().is_none());
     let output = fixture.run(&["exec", "stopped", "--", env!("CARGO_BIN_EXE_shoal"), "stop"]);
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("workspace processes can only"));

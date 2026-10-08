@@ -1,7 +1,7 @@
 //! Restore commands omit the original task and remain available after wrapper exit.
 use std::{ffi::OsString, path::PathBuf};
 
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -18,6 +18,8 @@ pub(crate) struct Recovery {
     pub agent: String,
     pub command: Vec<OsString>,
     pub automatic: bool,
+    /// Whether `command` carries the handoff message as the agent's prompt.
+    pub handoff_delivered: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -33,7 +35,7 @@ impl Recovery {
             let workspace = client::inspect(paths, workspace_id.to_owned())
                 .await?
                 .workspace;
-            Self::resolve(paths, &workspace, agent).await
+            Self::resolve(paths, &workspace, agent, None).await
         }
         .await;
         resolved.unwrap_or_else(|error| {
@@ -42,48 +44,60 @@ impl Recovery {
                 agent: agent.replace(' ', "-"),
                 command: vec![],
                 automatic: false,
+                handoff_delivered: false,
             }
         })
     }
 
-    pub(crate) async fn resolve(paths: &Paths, workspace: &Workspace, agent: &str) -> Result<Self> {
+    /// `handoff` becomes the restored session's first prompt where the restore
+    /// command accepts one: built-in agents and `{prompt}` in `[agent_resume]`.
+    pub(crate) async fn resolve(
+        paths: &Paths,
+        workspace: &Workspace,
+        agent: &str,
+        handoff: Option<&str>,
+    ) -> Result<Self> {
         let settings =
             client::settings(paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
         let name = agent.replace(' ', "-");
-        let configured = settings.agent_resume.contains_key(&name);
+        let configured = settings.agent_resume.get(&name);
         let builtin = matches!(name.as_str(), "codex" | "claude");
-        let automatic = configured || builtin;
-        let command = if configured {
-            named_commands::expand(paths, &settings.agent_resume, &name, workspace, vec![]).await?
+        let automatic = configured.is_some() || builtin;
+        let prompt = std::ffi::OsStr::new(handoff.unwrap_or_default());
+        let (command, handoff_delivered) = if let Some(argv) = configured {
+            let command = named_commands::expand_with_fields(
+                paths,
+                &settings.agent_resume,
+                &name,
+                workspace,
+                vec![],
+                &[("{prompt}", prompt)],
+            )
+            .await?;
+            (command, argv.iter().any(|arg| arg.contains("{prompt}")))
         } else {
-            match name.as_str() {
-                "codex" => {
-                    named_commands::expand(
-                        paths,
-                        &settings.commands,
-                        &name,
-                        workspace,
-                        vec!["resume".into(), "--last".into()],
-                    )
-                    .await?
-                }
-                "claude" => {
-                    named_commands::expand(
-                        paths,
-                        &settings.commands,
-                        &name,
-                        workspace,
-                        vec!["--continue".into()],
-                    )
-                    .await?
-                }
+            let mut args: Vec<OsString> = match name.as_str() {
+                "codex" => vec!["resume".into(), "--last".into()],
+                "claude" => vec!["--continue".into()],
                 _ => vec![],
+            };
+            if builtin {
+                if handoff.is_some() {
+                    args.push(prompt.to_owned());
+                }
+                let command =
+                    named_commands::expand(paths, &settings.commands, &name, workspace, args)
+                        .await?;
+                (command, true)
+            } else {
+                (vec![], false)
             }
         };
         Ok(Self {
             agent: name,
             command,
             automatic,
+            handoff_delivered: handoff_delivered && handoff.is_some(),
         })
     }
 
@@ -186,6 +200,70 @@ pub(super) async fn wait(
     }
 }
 
+/// What `shoal stop` or overload protection saved for one workspace.
+#[derive(Debug, Default)]
+pub(crate) struct Saved {
+    /// Agent recovery records by execution ID.
+    pub agents: Vec<(String, PathBuf)>,
+    pub commands: Vec<SavedCommand>,
+}
+
+#[derive(Debug)]
+pub(crate) struct SavedCommand {
+    pub id: String,
+    pub path: PathBuf,
+    pub argv: Vec<String>,
+}
+
+impl Saved {
+    pub fn load(paths: &Paths, workspace_id: &str) -> Result<Self> {
+        let mut saved = Self::default();
+        let entries = match std::fs::read_dir(paths.workspace_state(workspace_id)) {
+            Ok(entries) => entries,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(saved),
+            Err(error) => return Err(error.into()),
+        };
+        for entry in entries {
+            let path = entry?.path();
+            let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+                continue;
+            };
+            if let Some(id) = name.strip_suffix(AGENT_SUFFIX) {
+                saved.agents.push((id.to_owned(), path));
+            } else if let Some(id) = name.strip_suffix(COMMAND_SUFFIX) {
+                let record: CommandRecord = serde_json::from_slice(&std::fs::read(&path)?)
+                    .with_context(|| format!("read {}", path.display()))?;
+                saved.commands.push(SavedCommand {
+                    id: id.to_owned(),
+                    path,
+                    argv: record.argv,
+                });
+            }
+        }
+        saved.agents.sort();
+        saved.commands.sort_by(|a, b| a.id.cmp(&b.id));
+        Ok(saved)
+    }
+
+    /// Keep only the record of execution `id`; a selected agent keeps the
+    /// workspace's commands too when `with_commands`, so it receives them.
+    pub fn retain_execution(&mut self, id: &str, with_commands: bool) {
+        if self.agents.iter().any(|(agent, _)| agent == id) {
+            self.agents.retain(|(agent, _)| agent == id);
+            if !with_commands {
+                self.commands.clear();
+            }
+        } else {
+            self.agents.clear();
+            self.commands.retain(|command| command.id == id);
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.agents.is_empty() && self.commands.is_empty()
+    }
+}
+
 /// Pending recovery is unfinished work even when its Git tree is clean.
 pub fn pending(paths: &Paths, workspace_id: &str) -> Result<bool> {
     let entries = match std::fs::read_dir(paths.workspace_state(workspace_id)) {
@@ -204,7 +282,7 @@ pub fn pending(paths: &Paths, workspace_id: &str) -> Result<bool> {
     Ok(false)
 }
 
-pub(super) fn consume(path: &std::path::Path) -> Result<()> {
+pub(crate) fn consume(path: &std::path::Path) -> Result<()> {
     match std::fs::remove_file(path) {
         Ok(()) => Ok(()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),

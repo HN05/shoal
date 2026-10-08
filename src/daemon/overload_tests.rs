@@ -103,14 +103,25 @@ async fn built_in_restore_child() {
         "[commands]\ncodex = ['codex-fixture', '{args}']\nclaude = ['claude-fixture', '{args}']\n",
     )
     .unwrap();
-    for (agent, expected) in [
-        ("codex", vec!["codex-fixture", "resume", "--last"]),
-        ("claude", vec!["claude-fixture", "--continue"]),
+    for (agent, handoff, expected) in [
+        ("codex", None, vec!["codex-fixture", "resume", "--last"]),
+        ("claude", None, vec!["claude-fixture", "--continue"]),
+        (
+            "codex",
+            Some("handoff"),
+            vec!["codex-fixture", "resume", "--last", "handoff"],
+        ),
+        (
+            "claude",
+            Some("handoff"),
+            vec!["claude-fixture", "--continue", "handoff"],
+        ),
     ] {
-        let recovery = Recovery::resolve(&manager.paths, &workspace, agent)
+        let recovery = Recovery::resolve(&manager.paths, &workspace, agent, handoff)
             .await
             .unwrap();
         assert!(recovery.automatic);
+        assert_eq!(recovery.handoff_delivered, handoff.is_some());
         assert_eq!(
             recovery.command,
             expected
@@ -119,7 +130,7 @@ async fn built_in_restore_child() {
                 .collect::<Vec<_>>()
         );
     }
-    let unsupported = Recovery::resolve(&manager.paths, &workspace, "custom")
+    let unsupported = Recovery::resolve(&manager.paths, &workspace, "custom", None)
         .await
         .unwrap();
     assert!(!unsupported.automatic);
@@ -129,13 +140,27 @@ async fn built_in_restore_child() {
         "[agent_resume]\ncodex = ['saved-session', 'specific-id']\n",
     )
     .unwrap();
-    let overridden = Recovery::resolve(&manager.paths, &workspace, "codex")
+    let overridden = Recovery::resolve(&manager.paths, &workspace, "codex", Some("handoff"))
         .await
         .unwrap();
     assert!(overridden.automatic);
+    assert!(!overridden.handoff_delivered);
     assert_eq!(
         overridden.command,
         ["saved-session", "specific-id"].map(std::ffi::OsString::from)
+    );
+    fs::write(
+        workspace.path.join(".shoal.toml"),
+        "[agent_resume]\ncodex = ['saved-session', '--', '{prompt}']\n",
+    )
+    .unwrap();
+    let prompted = Recovery::resolve(&manager.paths, &workspace, "codex", Some("handoff"))
+        .await
+        .unwrap();
+    assert!(prompted.handoff_delivered);
+    assert_eq!(
+        prompted.command,
+        ["saved-session", "--", "handoff"].map(std::ffi::OsString::from)
     );
     serving.abort();
 }
@@ -301,8 +326,13 @@ async fn stop_saves_agents_and_commands_preserving_work_and_leases() {
     manager.recovery_ready.send_replace(Some(0));
     assert!(!workspace.path.join("restored").exists());
     fs::write(
+        workspace.path.join("resume.sh"),
+        "#!/bin/sh\nprintf '%s' \"$1\" > restored\n",
+    )
+    .unwrap();
+    fs::write(
         workspace.path.join(".shoal.toml"),
-        "[agent_resume]\nfixture = ['./resume.sh']\n",
+        "[agent_resume]\nfixture = ['./resume.sh', '{prompt}']\n",
     )
     .unwrap();
     assert_eq!(
@@ -316,7 +346,37 @@ async fn stop_saves_agents_and_commands_preserving_work_and_leases() {
         .unwrap(),
         0
     );
-    assert!(workspace.path.join("restored").exists());
+    let handoff = fs::read_to_string(workspace.path.join("restored")).unwrap();
+    assert!(handoff.contains("\n- sh -c 'trap"), "{handoff}");
+    assert!(!crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
+    serving.abort();
+}
+
+#[tokio::test]
+async fn resume_without_an_agent_reports_stopped_commands_once() {
+    let (_root, manager, workspace, serving) = fixture().await;
+    let command = launch_child(
+        &manager,
+        &workspace,
+        "daemon::overload_tests::tracked_command_child",
+    );
+    bounded(async {
+        while !workspace.path.join("command-started").is_file() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await;
+    bounded(manager.stop_workspace(&workspace.id, StopRecords::Save))
+        .await
+        .unwrap();
+    bounded(command).await.unwrap().unwrap();
+    assert!(crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
+    let ctx = crate::cli::context::Context::new(manager.paths.clone(), true);
+    let resume =
+        || crate::cli::commands::resume::run(&ctx, Some(workspace.id.clone()), None, false);
+    assert_eq!(bounded(resume()).await.unwrap(), 0);
+    assert!(!crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
+    assert!(bounded(resume()).await.is_err());
     serving.abort();
 }
 

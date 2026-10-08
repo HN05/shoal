@@ -70,8 +70,9 @@ unfinished work until restored or explicitly discarded.
 Agent metadata is transient, so restart cannot select disconnected survivors.
 Manual stop ends connected tracked executions through their wrappers, preserving
 work and leases. Agents save session recovery for explicit resume; user commands
-save their arguments to be reported on resume, never rerun, because replaying an
-arbitrary command is not known to be safe. Scoped callers cannot stop executions.
+save their arguments, which resume reports once, as the restored agent's first
+prompt or else to the user, and never reruns, because replaying an arbitrary
+command is not known to be safe. Scoped callers cannot stop executions.
 
 Use short transactions for atomic claims. Closed Shoal enums with matching display and
 wire names use one macro to share explicit spellings across conversions and reject

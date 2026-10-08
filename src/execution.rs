@@ -77,8 +77,9 @@ enum Mode {
     Command {
         record: bool,
     },
+    /// A restored agent session; `records` are consumed once it starts.
     Recovery {
-        record: PathBuf,
+        records: Vec<PathBuf>,
     },
     /// A caller-chosen command without a terminal: no stdin, output appended
     /// to `log`, and the launch reported on stdout for the spawning CLI.
@@ -141,21 +142,21 @@ pub async fn run_command(paths: &Paths, workspace: String, command: Vec<OsString
     .await
 }
 
-/// Consume the selected recovery record only after the replacement process is
+/// Consume the selected recovery records only after the replacement process is
 /// recorded, so failed launches remain recoverable without duplicating sessions.
 pub async fn run_recovery(
     paths: &Paths,
     workspace: String,
     command: Vec<OsString>,
     agent: String,
-    record: PathBuf,
+    records: Vec<PathBuf>,
 ) -> Result<i32> {
     ensure!(!command.is_empty(), "a restore command is required");
     run_tracked(
         paths,
         workspace,
         command,
-        Mode::Recovery { record },
+        Mode::Recovery { records },
         Some(agent),
     )
     .await
@@ -463,8 +464,10 @@ async fn supervise(
         matches!(acknowledged, Control::Started),
         "daemon did not acknowledge process registration"
     );
-    if let Mode::Recovery { record } = mode {
-        recovery::consume(record)?;
+    if let Mode::Recovery { records } = mode {
+        for record in records {
+            recovery::consume(record)?;
+        }
     }
     if let Some(record) = recovery_record {
         recovery::consume(record)?;
