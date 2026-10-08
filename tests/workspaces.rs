@@ -14015,6 +14015,8 @@ elif args[:2] == ['pane', 'run']:
     (root / 'herdr-worker').write_text(json.dumps(shlex.split(args[3])))
 elif args[:2] == ['tab', 'rename'] and (root / 'fail-rename').exists():
     sys.exit('rename-failed')
+elif args[:2] == ['tab', 'get']:
+    print(json.dumps({'result': {'tab_id': args[2]}}))
 print('{}') if args[:2] != ['tab', 'create'] else None
 "#,
     );

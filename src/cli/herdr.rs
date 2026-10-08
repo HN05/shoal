@@ -218,6 +218,12 @@ impl Tab {
         }
     }
 
+    async fn exists(&self) -> bool {
+        let mut get = Command::new("herdr");
+        get.args(["tab", "get"]).arg(&self.id);
+        Run::new(get).checked().await.is_ok()
+    }
+
     pub async fn shell(&self, cwd: &Path) -> Result<i32> {
         let shell = std::env::var_os("SHELL")
             .filter(|shell| !shell.is_empty())
@@ -278,7 +284,9 @@ pub async fn watch(ctx: &Context, workspace: String, tab: String) -> Result<i32>
     // Retain the observer across daemon restarts, but not deletion of its state.
     while ctx.paths.state.exists() {
         if workspace_finished(ctx, &workspace).await.unwrap_or(false) {
-            tab.close().await;
+            if tab.exists().await {
+                tab.close().await;
+            }
             break;
         }
         tokio::time::sleep(Duration::from_millis(500)).await;
