@@ -8,6 +8,26 @@ use crate::cli::{
 
 pub const INIT_COMMAND: &str = "source <(shoal shell init)";
 
+/// Shell text for `words`, quoting each word that is not plainly literal.
+pub fn quote<S: AsRef<str>>(words: &[S]) -> String {
+    words
+        .iter()
+        .map(|word| {
+            let word = word.as_ref();
+            let literal = !word.is_empty()
+                && word
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || "/._-+:=@%,".contains(c));
+            if literal {
+                word.to_owned()
+            } else {
+                format!("'{}'", word.replace('\'', "'\\''"))
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 /// Best-effort detection of the documented initialization forms; never execute
 /// startup files or let an unreadable one fail service installation.
 pub fn init_configured(home: &Path, zsh_directory: Option<&Path>) -> bool {

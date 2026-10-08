@@ -166,23 +166,13 @@ struct CreatedPane {
     pane_id: String,
 }
 
-// Herdr's pane API sends shell text. Quote words that are not plainly literal.
+// Herdr's pane API sends shell text.
 fn shell_command(argv: &[OsString]) -> Result<String> {
-    argv.iter()
-        .map(|arg| {
-            let arg = arg.to_str().context("Herdr command path is not UTF-8")?;
-            let literal = !arg.is_empty()
-                && arg
-                    .chars()
-                    .all(|c| c.is_ascii_alphanumeric() || "/._-+:=@%,".contains(c));
-            Ok(if literal {
-                arg.to_owned()
-            } else {
-                format!("'{}'", arg.replace('\'', "'\\''"))
-            })
-        })
-        .collect::<Result<Vec<_>>>()
-        .map(|words| words.join(" "))
+    let words = argv
+        .iter()
+        .map(|arg| arg.to_str().context("Herdr command path is not UTF-8"))
+        .collect::<Result<Vec<_>>>()?;
+    Ok(crate::shell::quote(&words))
 }
 
 pub async fn worker(mut ctx: Context, close_when_done: bool, payload: &str) -> Result<i32> {
