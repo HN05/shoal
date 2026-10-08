@@ -227,3 +227,58 @@ async fn scoped_callers_mark_only_their_own_workspace() {
         }
     }
 }
+
+#[tokio::test]
+async fn post_ready_hook_receives_marks_and_its_failure_keeps_them() {
+    use std::os::unix::fs::PermissionsExt;
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "hooked".into(), None, None, None)
+        .await
+        .unwrap();
+    let record = temp.path().join("marks");
+    let hook = temp.path().join("post-ready");
+    std::fs::write(
+        &hook,
+        format!(
+            "#!/bin/sh\nprintf '%s %s' \"$SHOAL_HOOK\" \"$SHOAL_REVIEW_MARKS\" > '{}'\nexit 3\n",
+            record.display()
+        ),
+    )
+    .unwrap();
+    std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
+    manager
+        .set_repository_config(
+            &repo.id,
+            Some(format!("post_ready_cmd = '{}'\n", hook.display())),
+        )
+        .await
+        .unwrap();
+    let marks = manager
+        .mark_ready(&workspace.id, Selection::default())
+        .await
+        .unwrap();
+    let recorded = std::fs::read_to_string(&record).unwrap();
+    let (name, json) = recorded.split_once(' ').unwrap();
+    assert_eq!(name, "post_ready");
+    assert_eq!(
+        serde_json::from_str::<Vec<ReviewMark>>(json).unwrap(),
+        marks
+    );
+    assert_eq!(
+        manager.workspace(&workspace.id).await.unwrap().review.len(),
+        1
+    );
+    let notifications = manager.notifications(true, 10).await.unwrap();
+    assert!(notifications.iter().any(|notification| {
+        notification.kind == NotificationKind::HookFailed
+            && notification
+                .message
+                .contains("post_ready_cmd exited with 3")
+    }));
+}

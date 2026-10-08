@@ -4,13 +4,14 @@
 use anyhow::{Result, ensure};
 use rusqlite::{Connection, params};
 
-use super::Manager;
+use super::{GuardMode, Manager};
 use crate::{
-    daemon::store,
+    daemon::{notifications::NotificationKind, store},
     forge::{
         link::{ItemKind, Selection},
         pr::{current_head, wait::linked_items},
     },
+    hooks::{self, Hook, HookKind},
     model::{ReviewMark, Workspace},
 };
 
@@ -46,7 +47,7 @@ pub(crate) fn forget(db: &Connection, id: &str, urls: &[String]) -> Result<()> {
 impl Manager {
     /// Mark the selected linked items ready at HEAD, or the workspace itself
     /// when nothing is linked and nothing was selected. Marking again moves
-    /// the mark to the current HEAD.
+    /// the mark to the current HEAD and reruns `post_ready_cmd`.
     pub async fn mark_ready(
         &self,
         selector: &str,
@@ -54,10 +55,46 @@ impl Manager {
     ) -> Result<Vec<ReviewMark>> {
         let _guard = self.pr_gate.lock().await;
         let workspace = self.workspace(selector).await?;
+        let command = HookKind::PostReady
+            .command(&self.workspace_settings(&workspace).await?)
+            .map(|path| workspace.path.join(path));
+        // Like post_done_cmd, the hook excludes lifecycle and permit changes.
+        let _resources = match command {
+            Some(_) => Some(
+                self.resource_guard(&workspace.id, GuardMode::Exclusive)
+                    .await?,
+            ),
+            None => None,
+        };
         self.verify_worktree(&workspace).await?;
         let head = current_head(&workspace).await?;
         let explicit = self.explicit_item(&workspace, &selection).await?;
-        let id = workspace.id;
+        let marks = self
+            .record_marks(&workspace.id, selection, explicit, head)
+            .await?;
+        if let Some(command) = command
+            && let Err(error) =
+                hooks::run_detached(Hook::PostReady(&marks), &workspace, &command, &self.paths)
+                    .await
+        {
+            self.notify(
+                Some(&workspace.name),
+                NotificationKind::HookFailed,
+                format!("marked ready for review; {error:#}"),
+            )
+            .await;
+        }
+        Ok(marks)
+    }
+
+    async fn record_marks(
+        &self,
+        id: &str,
+        selection: Selection,
+        explicit: Option<(String, ItemKind)>,
+        head: String,
+    ) -> Result<Vec<ReviewMark>> {
+        let id = id.to_owned();
         let created_at = i64::try_from(crate::time::unix_seconds())?;
         self.store
             .run(move |db| {

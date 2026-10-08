@@ -65,6 +65,7 @@ pub struct RepoConfig {
     pub pre_setup_cmd: Option<String>,
     pub post_remove_cmd: Option<String>,
     pub post_done_cmd: Option<String>,
+    pub post_ready_cmd: Option<String>,
     pub post_agent_exit_cmd: Option<String>,
     pub post_resource_acquire_cmd: Option<String>,
     pub pre_resource_release_cmd: Option<String>,

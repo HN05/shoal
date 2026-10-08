@@ -37,6 +37,8 @@ pub const WORKSPACE_PATH: &str = "SHOAL_WORKSPACE_PATH";
 pub const RESOURCE_LEASE: &str = "SHOAL_RESOURCE_LEASE";
 /// Requested completion policy passed to post-done hooks: `keep` or `cleanup`.
 pub const DONE_CHOICE: &str = "SHOAL_DONE_CHOICE";
+/// JSON array of the ready-for-review marks passed to post-ready hooks.
+pub const REVIEW_MARKS: &str = "SHOAL_REVIEW_MARKS";
 /// Shortcut or configured agent name passed to agent-exit hooks.
 pub const AGENT: &str = "SHOAL_AGENT";
 /// Reported exit code, empty when the agent disconnected without reporting.

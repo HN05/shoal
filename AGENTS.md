@@ -27,6 +27,8 @@ when behavior changes, distinguishing decisions from proposals.
   or blocking cleanup. Explicit completion reruns it; restart does not replay it.
   `post_agent_exit_cmd` exposes tracked-agent exits while ready under the same
   daemon hook rules without marking completion; removal uses its own hooks.
+  `post_ready_cmd` follows the same rules after ready-for-review marks persist;
+  failure notifies without removing them, and each explicit mark reruns it.
   Missing-worktree cleanup skips hooks. Optional local repository config lives
   in daemon state, layers per option over the worktree config, and is deleted
   with its registration. Every option that does not describe the machine may
@@ -37,7 +39,7 @@ when behavior changes, distinguishing decisions from proposals.
 - Workspace commands inherit a scope token. Enforce own-worktree resource access
   in the daemon and deny workspace allocation/removal/recovery and shared
   repository/service administration; own-workspace setup, rename, issue/PR links and watches, merge
-  acknowledgements, messages to the user, assignment continuation/completion and own-repository
+  acknowledgements, messages to the user, ready-for-review marks, assignment continuation/completion and own-repository
   sync are allowed.
   Scope is cooperative, not a boundary against hostile same-user processes.
 - Notifications are daemon records the CLI shows: record them where the daemon

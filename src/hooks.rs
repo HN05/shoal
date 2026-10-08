@@ -90,6 +90,7 @@ hook_kinds! {
     PreRemove => (pre_remove_cmd, "pre_remove", true, Worktree),
     PostRemove => (post_remove_cmd, "post_remove", true, Checkout),
     PostDone => (post_done_cmd, "post_done", true, Worktree),
+    PostReady => (post_ready_cmd, "post_ready", true, Worktree),
     PostAgentExit => (post_agent_exit_cmd, "post_agent_exit", true, Worktree),
     PostResourceAcquire => (post_resource_acquire_cmd, "post_resource_acquire", true, Worktree),
     PreResourceRelease => (pre_resource_release_cmd, "pre_resource_release", true, Worktree),
@@ -102,6 +103,7 @@ pub enum Hook<'a> {
     PreRemove,
     PostRemove(&'a Path),
     PostDone(&'a crate::model::Completion),
+    PostReady(&'a [crate::model::ReviewMark]),
     PostAgentExit {
         agent: &'a str,
         exit_code: Option<i32>,
@@ -119,6 +121,7 @@ impl Hook<'_> {
             Hook::PreRemove => HookKind::PreRemove,
             Hook::PostRemove(_) => HookKind::PostRemove,
             Hook::PostDone(_) => HookKind::PostDone,
+            Hook::PostReady(_) => HookKind::PostReady,
             Hook::PostAgentExit { .. } => HookKind::PostAgentExit,
             Hook::PostResourceAcquire(_) => HookKind::PostResourceAcquire,
             Hook::PreResourceRelease(_) => HookKind::PreResourceRelease,
@@ -148,6 +151,7 @@ fn command(
         .env_remove(env::AGENT_EXIT_CODE)
         .env_remove(env::AGENT_EXIT_COMPLETE)
         .env_remove(env::DONE_CHOICE)
+        .env_remove(env::REVIEW_MARKS)
         .env_remove(env::RESOURCE_LEASE)
         .env_remove(env::SCOPE_TOKEN)
         .env_remove(env::EXECUTION_ID)
@@ -156,6 +160,9 @@ fn command(
         .kill_on_drop(true);
     if let Hook::PostResourceAcquire(lease) | Hook::PreResourceRelease(lease) = hook {
         command.env(env::RESOURCE_LEASE, serde_json::to_string(lease)?);
+    }
+    if let Hook::PostReady(marks) = hook {
+        command.env(env::REVIEW_MARKS, serde_json::to_string(marks)?);
     }
     if let Hook::PostDone(completion) = hook {
         command.env(

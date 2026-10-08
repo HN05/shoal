@@ -409,6 +409,16 @@ and daemon hook rules with the agent name, reported code, and process-completion
 status. Failure notifies without changing the exit result or marking completion;
 removal uses its own hooks. Desktop or push delivery was considered and not adopted.
 
+Ready-for-review marks are the agent's status signal for integrations, separate
+from messages and completion: they never notify, complete, or change cleanup. A
+mark covers a linked issue or PR, or the workspace when nothing is linked, and
+binds to HEAD; new commits make it outdated rather than removing it, so marking
+again is an explicit statement about the new revision. Unlinking an item
+withdraws its mark and removal deletes all marks. Marks and withdrawals are
+journal events, and `post_ready_cmd` runs after each explicit mark under the
+completion hook rules; failure notifies and keeps the marks. Shoal does not act
+on the forge for a mark. Proposal: an opt-in that undrafts a linked PR (#454).
+
 Skills are split by role: `shoal-worker` covers an agent's own workspace and
 `shoal-orchestrator` covers unscoped coordination from a console, so neither
 role loads the other's commands. Both are installed together at user scope,
