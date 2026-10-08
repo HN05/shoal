@@ -901,6 +901,27 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
     assert!(complete(&["review", "fi"], fixture.root.path()).contains(&"first".into()));
     assert!(complete(&["port", "release", "w"], cwd).contains(&"web".into()));
     assert!(complete(&["resource", "acquire", "d"], cwd).contains(&"devices".into()));
+    assert!(complete(&["acquire", "port", "w"], cwd).contains(&"web".into()));
+    assert!(complete(&["release", "port", "w"], cwd).contains(&"web".into()));
+    assert!(complete(&["acquire", "resource", "d"], cwd).contains(&"devices".into()));
+    assert!(
+        complete(
+            &[
+                "acquire",
+                "resource",
+                "devices",
+                "--workspace",
+                "first",
+                "--member",
+                "b"
+            ],
+            fixture.root.path()
+        )
+        .contains(&"beta".into())
+    );
+    assert!(
+        complete(&["release", "resource", "devices", "--name", "t"], cwd).contains(&"tests".into())
+    );
     assert!(
         complete(
             &["resource", "acquire", "devices", "first", "--resource", "b"],

@@ -127,6 +127,13 @@ fn decorate(command: Command, parent: &str, typed: Arc<Typed>) -> Command {
                 ("name", "port", "acquire") => Some(Target::Ports),
                 ("name", "port", "release") => Some(Target::ReservedPorts),
                 ("name", "sim", "release") => Some(Target::SimNames),
+                ("name", "acquire", "port") => Some(Target::Ports),
+                ("pool", "acquire" | "release", "resource" | "repo")
+                | ("resource", "acquire", "repo") => Some(Target::Pools),
+                ("member", "acquire", "resource") => Some(Target::Members),
+                ("name", "release", "port") => Some(Target::ReservedPorts),
+                ("name", "release", "sim") => Some(Target::SimNames),
+                ("lease", "release", _) => Some(Target::ResourceNames),
                 _ => None,
             };
             if let Some(target) = target {
