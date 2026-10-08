@@ -1,6 +1,6 @@
 //! `shoal notifications`: what the daemon saw while the user was away, shown
 //! once and then marked read; `--follow` keeps the terminal on the stream and
-//! raises each entry as a terminal notification.
+//! raises each entry as a terminal notification. `shoal notify` adds one.
 use std::io::{IsTerminal, Write};
 
 use anyhow::{Context as _, Result};
@@ -10,6 +10,7 @@ use crate::{
         client::{self, request},
         context::Context,
         output::{Palette, Style},
+        ui::{self, Fallback},
     },
     daemon::notifications::Notification,
     protocol::{self, Method, Response},
@@ -52,6 +53,13 @@ pub(super) async fn run(ctx: &Context, all: bool, follow: bool, limit: u32) -> R
             }
         );
     }
+    Ok(0)
+}
+
+pub(super) async fn send(ctx: &Context, workspace: Option<String>, message: String) -> Result<i32> {
+    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    request::<()>(&ctx.paths, Method::SendMessage { workspace, message }).await?;
+    ctx.emit("Notification sent.", ())?;
     Ok(0)
 }
 

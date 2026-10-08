@@ -12565,6 +12565,42 @@ test ! -f "$HOME/fail-after" || { echo 'external cleanup failed' >&2; exit 8; }
     );
 }
 
+#[test]
+fn agents_notify_the_user_about_their_own_workspace_without_completing_it() {
+    let fixture = Fixture::new();
+    fixture.add("sender");
+    fixture.add("other");
+    let output = scoped_command(&fixture, "sender", &["notify", "PR #12 is ready to merge"]);
+    assert!(output.status.success(), "{output:?}");
+    for args in [
+        &["notify", "hello", "--workspace", "other"][..],
+        &["notify", "two\nlines"],
+        &["notifications"],
+    ] {
+        let output = scoped_command(&fixture, "sender", args);
+        assert!(
+            !output.status.success(),
+            "scoped {args:?} unexpectedly succeeded"
+        );
+    }
+    let notifications = fixture.ok(&["notifications"]);
+    let messages: Vec<_> = notifications
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|notification| notification["kind"] == "agent_message")
+        .map(|notification| (&notification["workspace"], &notification["message"]))
+        .collect();
+    assert_eq!(
+        messages,
+        [(
+            &serde_json::json!("sender"),
+            &serde_json::json!("PR #12 is ready to merge")
+        )]
+    );
+    assert!(fixture.ok(&["inspect", "sender"])["completion"].is_null());
+}
+
 fn scoped_command(fixture: &Fixture, workspace: &str, args: &[&str]) -> Output {
     fixture
         .command()

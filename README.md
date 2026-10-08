@@ -116,6 +116,7 @@ shoal happy claude fix-login   # Detached Happy session, visible in the Happy ap
 shoal diff fix-login           # Changes since the branch's fork point
 shoal inspect fix-login       # Detailed workspace and execution records
 shoal notifications           # Conflicts, finished agents, and removals you missed
+shoal notify "PR #12 is ready to merge"  # Notify the user from a workspace
 shoal events --follow --json  # Stream workspace lifecycle events
 shoal stop fix-login          # Stop managed commands; keep the workspace
 shoal pause fix-login         # Stop agents; save sessions for shoal resume

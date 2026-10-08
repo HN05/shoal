@@ -1,6 +1,6 @@
 ---
 name: shoal-worker
-description: Use inside a Shoal workspace to finish assignments with `shoal done`, watch and wait on PRs, sync the default branch from its remote, reserve ports, lease Xcode simulators, and acquire resource permits during development or testing. Applies to agents launched through Shoal or working directly in a Shoal worktree.
+description: Use inside a Shoal workspace to finish assignments with `shoal done`, notify the user, watch and wait on PRs, sync the default branch from its remote, reserve ports, lease Xcode simulators, and acquire resource permits during development or testing. Applies to agents launched through Shoal or working directly in a Shoal worktree.
 ---
 
 # Shoal worker
@@ -40,6 +40,10 @@ overrides a `[done] cleanup = false` default. Dirty or newer work is retained;
 completion without a PR watch also requires every commit pushed or on the local
 default branch. Completion does not claim a merge occurred. Inspect
 `completion.error` and `pr_cleanup.error` for cleanup or lookup failures.
+
+To get the user's attention without finishing, such as when a PR is ready to
+merge or you need a decision, run `shoal notify "<one-line message>"`. It records
+a notification for your workspace and does not affect completion or cleanup.
 
 `[done] automatic = true` also marks the assignment done when the associated
 issue closes or every watched PR merges. With it, call `shoal continue` before

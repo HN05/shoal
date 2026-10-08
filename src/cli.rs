@@ -199,6 +199,14 @@ pub enum Command {
     Setup { workspace: Option<String> },
     /// Continue working until explicit done, deferring issue, PR and idle cleanup.
     Continue { workspace: Option<String> },
+    /// Send the user a notification about a workspace without marking it done.
+    Notify {
+        /// One line of text, such as "PR #12 is ready to merge".
+        message: String,
+        /// Workspace to use; defaults to the current workspace or picker.
+        #[arg(long)]
+        workspace: Option<String>,
+    },
     /// Mark the assignment finished; by default stop tracked commands and clean up safely.
     Done {
         workspace: Option<String>,

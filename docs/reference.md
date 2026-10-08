@@ -993,6 +993,7 @@ starts when the daemon upgrades and does not reconstruct older changes.
 shoal notifications            # Oldest new ones first, then marked read; says how many remain
 shoal notifications --all      # Recent ones including read (--limit, default 50)
 shoal notifications --follow   # Keep printing, and raise terminal notifications
+shoal notify "PR #12 is ready to merge" [--workspace W]  # Add one for a workspace
 ```
 
 The daemon records what happens while you are not looking: a resource or
@@ -1000,15 +1001,18 @@ simulator request that found no capacity (naming the workspaces holding the
 pool), a preferred port in use, a tracked agent
 exiting (with its code, or a note to run `doctor` when it left processes
 behind), and workspaces it removed or retained on its own through PR, merge, or
-idle cleanup. Each line shows the local time, the workspace, and the message;
+idle cleanup. `shoal notify` adds a one-line message (at most 512 bytes, without
+control characters) for a workspace; agents use it to ask for attention without
+marking the assignment done. Each line shows the local time, the workspace, and the message;
 `--json` returns records with `kind`, `created_at`, and `read`. On a terminal,
 `--follow` also sends each entry as an OSC 9 terminal notification, which iTerm2,
 Ghostty, WezTerm, and Kitty show as a desktop notification (tmux needs
 `allow-passthrough`); other terminals ignore it. Repeated
-identical conflicts and cleanup failures collapse into one entry until read;
+identical conflicts, cleanup failures and messages collapse into one entry until read;
 every agent exit is listed. `shoal ls` and `daemon status` mention pending
 ones. Plain `exec` commands and manual `rm` are your own and record nothing.
-Scoped commands cannot read notifications. Read entries older than the newest
+Scoped commands cannot read notifications but may notify about their own
+workspace. Read entries older than the newest
 500 are dropped; unread ones stay.
 
 ### Port reservations
@@ -1131,7 +1135,7 @@ yourself that such processes stopped, use `--repair --acknowledge-stopped`; visi
 
 ### Scoped workspace commands
 
-PR watches and merge acknowledgements are own-workspace scope exceptions.
+PR watches, merge acknowledgements and `notify` are own-workspace scope exceptions.
 Processes carrying a Shoal scope token are confined to their own worktree:
 `status`, inspect, execute, `merge`, `diff`, `setup`, and resources. They may read
 effective configuration for their own workspace, but cannot change configuration.

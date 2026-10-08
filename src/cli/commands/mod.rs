@@ -329,6 +329,9 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             }
         },
         Command::Continue { workspace } => workspaces::continue_work(&ctx, workspace).await,
+        Command::Notify { message, workspace } => {
+            notifications::send(&ctx, workspace, message).await
+        }
         Command::Done {
             workspace,
             keep,
