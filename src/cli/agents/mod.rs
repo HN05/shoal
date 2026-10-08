@@ -18,6 +18,7 @@ use crate::{
     fsutil,
     model::Workspace,
     protocol::ConfigTarget,
+    tools::Tool,
 };
 
 pub(super) use desktop::open_app;
@@ -62,6 +63,13 @@ fn pick_agent(ctx: &Context, settings: &Effective) -> Result<Option<Agent>> {
         if installed(&agent, &settings.commands, &search_path) {
             choices.push((Some(agent), label));
         }
+    }
+    // A picker cannot run without fzf. Treat that as “No agent” so callers
+    // without the optional interactive dependency retain the existing flow.
+    if choices.is_empty()
+        || fsutil::find_executable(OsStr::new(Tool::Fzf.program()), &search_path).is_none()
+    {
+        return Ok(None);
     }
     choices.push((None, "No agent".into()));
     let choices: Vec<_> = choices
