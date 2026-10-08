@@ -120,9 +120,13 @@ pub(super) async fn install_config(ctx: &Context, name: Option<String>) -> Resul
     Ok(0)
 }
 
-pub(super) async fn run(ctx: Context, command: DaemonCommand) -> Result<i32> {
+pub(super) async fn run(
+    ctx: Context,
+    command: DaemonCommand,
+    handoff: Option<daemon::handoff::Handoff>,
+) -> Result<i32> {
     match command {
-        DaemonCommand::Run { managed } => daemon::run(ctx.paths, managed).await?,
+        DaemonCommand::Run { managed } => daemon::run(ctx.paths, managed, handoff).await?,
         DaemonCommand::Status => {
             let status = client::status(&ctx.paths).await?;
             let running = status.is_some();

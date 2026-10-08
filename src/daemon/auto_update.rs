@@ -35,7 +35,7 @@ fn replaced(original: &ExecutableIdentity, path: &Path) -> bool {
 }
 
 pub(super) struct Update {
-    path: PathBuf,
+    pub(super) path: PathBuf,
     original: ExecutableIdentity,
 }
 

@@ -7,6 +7,7 @@ mod cleanup;
 pub mod doctor;
 pub mod events;
 mod execution_recovery;
+pub(crate) mod handoff;
 pub mod notifications;
 mod overload;
 #[cfg(test)]
@@ -74,26 +75,41 @@ struct Server {
     shutdown: watch::Sender<bool>,
 }
 
-pub async fn run(paths: Paths, managed: bool) -> Result<()> {
+pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>) -> Result<()> {
     paths.prepare()?;
-    let lock = OpenOptions::new()
-        .create(true)
-        .truncate(false)
-        .read(true)
-        .write(true)
-        .mode(0o600)
-        .open(paths.daemon_lock())?;
+    let (lock, inherited_listener) = match handoff {
+        Some(handoff) => {
+            ensure!(managed, "daemon handoff requires managed mode");
+            handoff.verify(&paths)?;
+            (handoff.lock, Some(handoff.listener))
+        }
+        None => (
+            OpenOptions::new()
+                .create(true)
+                .truncate(false)
+                .read(true)
+                .write(true)
+                .mode(0o600)
+                .open(paths.daemon_lock())?,
+            None,
+        ),
+    };
     lock.try_lock_exclusive()
         .context("a daemon already owns this state directory")?;
-    remove_stale_socket(&paths)?;
-    let _ownership = Ownership {
+    if inherited_listener.is_none() {
+        remove_stale_socket(&paths)?;
+    }
+    let ownership = Ownership {
         paths: paths.clone(),
         _lock: lock,
     };
     let manager = Manager::open(paths.clone()).await?;
     manager.store.quarantine_interrupted_operations().await?;
     manager.audit_worktrees().await?;
-    let listener = UnixListener::bind(&paths.socket).context("bind daemon socket")?;
+    let listener = match inherited_listener {
+        Some(listener) => UnixListener::from_std(listener).context("inherit daemon socket")?,
+        None => UnixListener::bind(&paths.socket).context("bind daemon socket")?,
+    };
     fs::set_permissions(&paths.socket, fs::Permissions::from_mode(0o600))?;
     let mut terminate = signal(SignalKind::terminate())?;
     let mut interrupt = signal(SignalKind::interrupt())?;
@@ -123,7 +139,7 @@ pub async fn run(paths: Paths, managed: bool) -> Result<()> {
                     match auto_update::quiesce(&manager, clients.len()).await {
                         Ok(Some(guard)) => {
                             quiescence = Some(guard);
-                            break Err(anyhow::anyhow!("daemon executable was updated; restarting"));
+                            break Ok(());
                         }
                         Ok(None) => {},
                         Err(error) => eprintln!("daemon update check: {error:#}"),
@@ -148,7 +164,15 @@ pub async fn run(paths: Paths, managed: bool) -> Result<()> {
     background.shutdown().await;
     clients.shutdown().await;
     manager.store.shutdown().await;
-    drop(quiescence);
+    if quiescence.is_some() {
+        eprintln!("daemon executable was updated; restarting");
+        return handoff::exec(
+            &update.expect("update monitor enabled").path,
+            &paths,
+            &listener,
+            &ownership._lock,
+        );
+    }
     result
 }
 

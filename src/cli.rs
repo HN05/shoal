@@ -25,6 +25,8 @@ use crate::agent::{Agent, BuiltinAgent};
     after_help = "Start here (with a registered repository):\n  shoal add my-project fix-login\n  shoal exec fix-login -- cargo test\n  shoal status fix-login\n\nRun `shoal run` to list configured commands.\nUse `shoal <command> --help` for details."
 )]
 pub struct Cli {
+    #[arg(skip)]
+    pub(crate) daemon_handoff: Option<crate::daemon::handoff::Handoff>,
     /// Override Shoal's state directory (also isolates the daemon).
     #[arg(long, global = true, env = crate::env::STATE_DIR)]
     pub state_dir: Option<PathBuf>,

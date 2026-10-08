@@ -36,7 +36,22 @@ fn main() {
     clap_complete::CompleteEnv::with_factory(cli::completion::command)
         .var(env::COMPLETE)
         .complete();
-    let cli = Cli::parse();
+    let mut cli = Cli::parse();
+    cli.daemon_handoff = daemon::handoff::Handoff::take().unwrap_or_else(|error| {
+        eprintln!("error: {error:#}");
+        std::process::exit(1);
+    });
+    if cli.daemon_handoff.is_some()
+        && !matches!(
+            cli.command,
+            Some(cli::Command::Daemon {
+                command: cli::DaemonCommand::Run { managed: true }
+            })
+        )
+    {
+        eprintln!("error: daemon handoff requires managed daemon run");
+        std::process::exit(1);
+    }
     // SAFETY: no other threads exist before the runtime starts. The Herdr plan is
     // parsed above and must not reach the worker's children.
     unsafe { std::env::remove_var(env::HERDR_PLAN) };
