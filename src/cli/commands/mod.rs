@@ -34,12 +34,12 @@ use serde_json::json;
 use crate::{
     agent::CodexMode,
     cli::{
-        Cli, Command, ConfigCommand, PrCommand, ShellCommand, WorkspaceScope, agents, client,
+        Cli, Command, ConfigCommand, ShellCommand, WorkspaceScope, agents, client,
         context::Context,
         output::{Palette, Style},
     },
     env,
-    forge::{link::ItemKind, pr::Action},
+    forge::link::ItemKind,
     model::Workspace,
     paths::Paths,
     shell,
@@ -319,18 +319,6 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         Command::Sync { repository } => repositories::sync(&ctx, repository).await,
         Command::Land { workspace } => workspaces::land(&ctx, workspace).await,
         Command::LandInternal { plan } => workspaces::land_worker(&ctx, plan).await,
-        Command::Pr { command } => match command {
-            PrCommand::Watch { workspace, url } => {
-                workspaces::pr(&ctx, workspace, Action::Watch { url }).await
-            }
-            PrCommand::Unwatch { workspace, url } => {
-                let action = url.map_or(Action::Clear, |url| Action::Unwatch { url });
-                workspaces::pr(&ctx, workspace, action).await
-            }
-            PrCommand::Wait { workspace, timeout } => {
-                workspaces::pr_wait(&ctx, workspace, timeout).await
-            }
-        },
         Command::Continue { workspace } => workspaces::continue_work(&ctx, workspace).await,
         Command::Notify { message, workspace } => {
             notifications::send(&ctx, workspace, message).await

@@ -25,12 +25,19 @@ pub(super) async fn link(ctx: &Context, items: ItemArgs) -> Result<i32> {
         ui::select_workspace(ctx, items.workspace, ui::Fallback::CurrentDirectory).await?;
     match selected.kind.unwrap() {
         ItemKind::Pr => {
-            workspaces::pr(
-                ctx,
-                Some(workspace),
-                crate::forge::pr::Action::Watch { url: input },
+            client::request::<()>(
+                &ctx.paths,
+                Method::SetPr {
+                    workspace,
+                    action: crate::forge::pr::Action::Watch { url: input },
+                },
             )
-            .await
+            .await?;
+            ctx.emit(
+                "PR linked; run shoal watch pr for updates and shoal done once the assignment is finished.",
+                serde_json::json!({"registered": true}),
+            )?;
+            Ok(0)
         }
         ItemKind::Issue => {
             client::request::<()>(

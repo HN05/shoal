@@ -22,7 +22,7 @@ use crate::{
     forge::{
         IssueInput,
         link::Selection,
-        pr::{Action, RegistrationKind, state::PrStatus},
+        pr::{RegistrationKind, state::PrStatus},
         repository,
     },
     git::{
@@ -1383,36 +1383,6 @@ async fn done_destination(ctx: &Context, workspace: &str) -> Result<Option<PathB
         return Ok(None);
     }
     escape_destination(ctx, &check.workspace).await
-}
-
-pub(super) async fn pr(ctx: &Context, workspace: Option<String>, action: Action) -> Result<i32> {
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let (message, value) = match &action {
-        Action::Watch { .. } => (
-            "PR watch registered; run shoal pr wait for updates and shoal done once the assignment is finished.",
-            json!({"registered": true}),
-        ),
-        Action::Clear => ("All PR watches cancelled", json!({"registered": false})),
-        Action::Unwatch { url } => ("PR watch cancelled", json!({"unwatched": url})),
-        Action::Acknowledge => unreachable!("manual acknowledgement has no CLI spelling"),
-    };
-    request::<()>(&ctx.paths, Method::SetPr { workspace, action }).await?;
-    ctx.emit(message, value)?;
-    Ok(0)
-}
-
-pub(super) async fn pr_wait(ctx: &Context, workspace: Option<String>, timeout: u64) -> Result<i32> {
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    watch_items(
-        ctx,
-        workspace,
-        crate::forge::link::Selection {
-            kind: Some(crate::forge::link::ItemKind::Pr),
-            input: None,
-        },
-        timeout,
-    )
-    .await
 }
 
 pub(super) async fn watch_items(
