@@ -1,5 +1,9 @@
 use super::{Check, Snapshot};
-use crate::forge::{ForgeKind, ForgeRepo, Query, commit_revision, fj_merged, strip_bidi_isolates};
+use crate::forge::{
+    ForgeKind, ForgeRepo, Query, commit_revision, fj_merged,
+    pr::state::{CheckResult, PrState, PrStatus, Verdict, fj_reviews, github_reviews, summarize},
+    strip_bidi_isolates,
+};
 use anyhow::{Context, Result, ensure};
 use std::path::Path;
 
@@ -122,20 +126,8 @@ impl ForgeRepo {
             "--style", "minimal", "pr", "view", &id, "--host", &self.host,
         ];
         let output = self.kind.query(path, &view, Query::Pull("")).await?;
-        let merged = fj_merged(&output, &id, branch)?;
         let mut snapshot = Snapshot {
-            state: if merged {
-                "merged"
-            } else if strip_bidi_isolates(&output)
-                .lines()
-                .nth(1)
-                .is_some_and(|s| s.contains(" — Closed"))
-            {
-                "closed"
-            } else {
-                "open"
-            }
-            .into(),
+            state: forgejo_state(&output, &id, branch)?.as_str().into(),
             ..Default::default()
         };
         let revision = match self
@@ -202,6 +194,125 @@ impl ForgeRepo {
         }
         Ok(snapshot)
     }
+}
+
+impl ForgeRepo {
+    /// Each failed lookup is recorded on the result instead of failing it.
+    pub(crate) async fn pr_status(&self, path: &Path, url: &str) -> PrStatus {
+        let result = async {
+            let (number, _) = self.pull(url)?;
+            match self.kind {
+                ForgeKind::GitHub => self.github_pr_status(path, number, url).await,
+                ForgeKind::Forgejo => self.forgejo_pr_status(path, number, url).await,
+            }
+        }
+        .await;
+        result.unwrap_or_else(|error| PrStatus::failed(url.into(), &error))
+    }
+
+    async fn github_pr_status(&self, path: &Path, number: u64, url: &str) -> Result<PrStatus> {
+        let id = number.to_string();
+        let repository = format!("{}/{}", self.host, self.path);
+        let args = [
+            "pr",
+            "view",
+            &id,
+            "--repo",
+            &repository,
+            "--json",
+            "number,headRefOid,state,comments,reviews,statusCheckRollup,mergeable",
+        ];
+        let output = self.kind.query(path, &args, Query::Pull("")).await?;
+        github_status(&output, number, url)
+    }
+
+    async fn forgejo_pr_status(&self, path: &Path, number: u64, url: &str) -> Result<PrStatus> {
+        let id = number.to_string();
+        let view = [
+            "--style", "minimal", "pr", "view", &id, "--host", &self.host,
+        ];
+        let output = self.kind.query(path, &view, Query::Pull("")).await?;
+        let mut status = PrStatus::new(url.into(), Some(forgejo_state(&output, &id, None)?));
+        if status.state == Some(PrState::Open) {
+            let args = [
+                "--style", "minimal", "pr", "status", &id, "--host", &self.host,
+            ];
+            let mut snapshot = Snapshot::default();
+            let result = async {
+                let output = self.kind.query(path, &args, Query::Pull("")).await?;
+                forgejo_status(&output, &mut snapshot, "")
+            }
+            .await;
+            match result {
+                Ok(()) => {
+                    status.merge_conflicts = snapshot.conflict;
+                    status.checks = check_results(snapshot);
+                }
+                Err(error) => status
+                    .errors
+                    .push(format!("CI and merge conflicts lookup failed: {error:#}")),
+            }
+        }
+        let args = [
+            "--style", "minimal", "pr", "review", &id, "--host", &self.host, "list",
+        ];
+        let reviews = async {
+            let output = self.kind.query(path, &args, Query::Pull("")).await?;
+            fj_reviews(&output)
+        }
+        .await;
+        record_reviews(&mut status, reviews);
+        Ok(status)
+    }
+}
+
+fn github_status(text: &str, number: u64, url: &str) -> Result<PrStatus> {
+    let snapshot = github_snapshot(text, number, None)?;
+    let pull: serde_json::Value = serde_json::from_str(text)?;
+    let state = match snapshot.state.as_str() {
+        "open" => PrState::Open,
+        "merged" => PrState::Merged,
+        _ => PrState::Closed,
+    };
+    let mut status = PrStatus::new(url.into(), Some(state));
+    status.merge_conflicts = snapshot.conflict;
+    status.checks = check_results(snapshot);
+    record_reviews(&mut status, github_reviews(&pull));
+    Ok(status)
+}
+
+fn check_results(snapshot: Snapshot) -> Vec<CheckResult> {
+    snapshot
+        .checks
+        .into_values()
+        .map(|check| CheckResult {
+            name: check.name,
+            result: check.state.to_ascii_lowercase(),
+        })
+        .collect()
+}
+
+fn record_reviews(status: &mut PrStatus, reviews: Result<Vec<(String, Verdict)>>) {
+    match reviews {
+        Ok(reviews) => status.review = Some(summarize(reviews)),
+        Err(error) => status
+            .errors
+            .push(format!("reviews lookup failed: {error:#}")),
+    }
+}
+
+fn forgejo_state(text: &str, number: &str, branch: Option<&str>) -> Result<PrState> {
+    Ok(if fj_merged(text, number, branch)? {
+        PrState::Merged
+    } else if strip_bidi_isolates(text)
+        .lines()
+        .nth(1)
+        .is_some_and(|s| s.contains(" — Closed"))
+    {
+        PrState::Closed
+    } else {
+        PrState::Open
+    })
 }
 
 fn github_snapshot(text: &str, number: u64, branch: Option<&str>) -> Result<Snapshot> {
@@ -442,6 +553,50 @@ mod tests {
         assert!(github_snapshot(&pull.to_string(), 7, Some("another")).is_err());
         assert!(github_snapshot(&pull.to_string(), 7, None).is_ok());
         assert!(github_snapshot(&pull.to_string(), 8, None).is_err());
+    }
+
+    #[test]
+    fn github_pr_status_reports_state_checks_and_review() {
+        let mut pull = github(json!([
+            {"__typename": "CheckRun", "name": "rust", "status": "IN_PROGRESS", "conclusion": "", "detailsUrl": "rust/1"},
+            {"__typename": "StatusContext", "context": "deploy", "state": "SUCCESS", "targetUrl": "deploy"}
+        ]));
+        pull["mergeable"] = json!("CONFLICTING");
+        pull["reviews"] = json!([{"id": "r", "author": {"login": "a"}, "state": "APPROVED"}]);
+        let status = github_status(&pull.to_string(), 7, "url").unwrap();
+        assert_eq!(status.state, Some(PrState::Open));
+        assert_eq!(status.merge_conflicts, Some(true));
+        assert_eq!(
+            status
+                .checks
+                .iter()
+                .map(|check| (check.name.as_str(), check.result.as_str()))
+                .collect::<Vec<_>>(),
+            [("deploy", "success"), ("rust", "in_progress")]
+        );
+        assert_eq!(
+            status.review,
+            Some(crate::forge::pr::state::ReviewState::Approved)
+        );
+        assert!(status.errors.is_empty());
+
+        pull["reviews"][0]["state"] = json!("LATER");
+        let status = github_status(&pull.to_string(), 7, "url").unwrap();
+        assert_eq!(status.review, None);
+        assert_eq!(status.checks.len(), 2);
+        assert!(status.errors[0].starts_with("reviews lookup failed"));
+        assert!(github_status(&pull.to_string(), 8, "url").is_err());
+    }
+
+    #[test]
+    fn forgejo_state_distinguishes_open_closed_and_merged() {
+        let output = "Title #56\nBy user — Open — +1 -0\nFrom `feature` into `main`\n";
+        assert_eq!(forgejo_state(output, "56", None).unwrap(), PrState::Open);
+        for (word, state) in [("Closed", PrState::Closed), ("Merged", PrState::Merged)] {
+            let output = output.replace("Open", word);
+            assert_eq!(forgejo_state(&output, "56", None).unwrap(), state);
+        }
+        assert!(forgejo_state(output, "57", None).is_err());
     }
 
     #[test]

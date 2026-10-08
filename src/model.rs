@@ -160,6 +160,9 @@ pub struct WorkspaceStatus {
     pub diff: Option<DiffSummary>,
     pub diff_error: Option<String>,
     pub unread_notifications: u64,
+    /// The current state of each watched PR.
+    #[serde(default)]
+    pub prs: Vec<crate::forge::pr::state::PrStatus>,
 }
 
 /// Everything the execution wrapper needs to launch a tracked command.

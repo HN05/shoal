@@ -3,6 +3,7 @@ use anyhow::{Context, Result};
 use super::Manager;
 use crate::{
     daemon::store,
+    forge::pr,
     git,
     model::{DiffSummary, WorkspaceStatus},
 };
@@ -25,6 +26,7 @@ impl Manager {
             Ok(diff) => (Some(diff), None),
             Err(error) => (None, Some(format!("{error:#}"))),
         };
+        let prs = pr::state::watched(&inspection.workspace, inspection.pr_cleanup.as_ref()).await;
         let unread_notifications = self.unread_notifications().await?;
         let workspace_id = inspection.workspace.id.clone();
         let setup_finished = self
@@ -40,6 +42,7 @@ impl Manager {
             diff,
             diff_error,
             unread_notifications,
+            prs,
         })
     }
 }

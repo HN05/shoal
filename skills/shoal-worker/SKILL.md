@@ -33,7 +33,9 @@ includes existing activity; later waits share a persistent cursor per workspace.
 with empty `updates` means no update. A `lookup_failed` entry names a failed
 activity lookup and repeats every 10 minutes while it persists; until that source
 recovers, check what it covers yourself, such as merge conflicts. Waiting also
-reports PR closure or merging and grants no permission to merge.
+reports PR closure or merging and grants no permission to merge. For the current
+state instead of changes, `shoal --json status` lists each watched PR in `prs`
+with its state, merge conflicts, CI check results, review state and lookup errors.
 
 `shoal done` defaults to cleanup, which may stop your execution. Use
 `shoal done --keep` when the user wants to review in this workspace; `--cleanup`

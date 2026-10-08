@@ -1207,6 +1207,54 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
         "https://forge.example/team/repo/pulls/7"
     );
     assert_eq!(status["unread_notifications"], 1);
+    assert_eq!(status["prs"][0]["state"], Value::Null);
+    assert!(
+        status["prs"][0]["errors"][0]
+            .as_str()
+            .unwrap()
+            .contains("origin remote")
+    );
+
+    git(
+        &fixture.repo,
+        &["remote", "add", "origin", "https://forge.example/team/repo"],
+    );
+    let bin = fixture.root.path().join("bin");
+    fs::create_dir(&bin).unwrap();
+    fs::write(
+        bin.join("fj"),
+        r#"#!/bin/sh
+case "$*" in
+ *' pr view 7 '*) printf 'Title #7\nBy user — Open — +1 -0\nFrom `summary` into `main`\n';;
+ *' pr status 7 '*) printf 'Open — Merge conflicts\n- Success — ci / rust\n- Pending — review\n';;
+ *' pr review 7 '*) echo 'reviews unavailable' >&2; exit 1;;
+ *) exit 1;;
+esac
+"#,
+    )
+    .unwrap();
+    fs::set_permissions(bin.join("fj"), fs::Permissions::from_mode(0o755)).unwrap();
+    let status = fixture.ok(&["status", "summary"]);
+    assert_eq!(
+        status["prs"][0]["url"],
+        "https://forge.example/team/repo/pulls/7"
+    );
+    assert_eq!(status["prs"][0]["state"], "open");
+    assert_eq!(status["prs"][0]["merge_conflicts"], true);
+    assert_eq!(
+        status["prs"][0]["checks"],
+        serde_json::json!([
+            {"name": "ci / rust", "result": "success"},
+            {"name": "review", "result": "pending"}
+        ])
+    );
+    assert_eq!(status["prs"][0]["review"], Value::Null);
+    assert!(
+        status["prs"][0]["errors"][0]
+            .as_str()
+            .unwrap()
+            .contains("reviews lookup failed")
+    );
 
     let text = fixture.run(&["status", "summary"]);
     assert!(text.status.success());

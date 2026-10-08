@@ -1,4 +1,5 @@
 //! Persisted opt-in PR watches and manual merge acknowledgements.
+pub mod state;
 pub mod wait;
 use anyhow::{Context, Result, ensure};
 use rusqlite::OptionalExtension;

@@ -301,8 +301,9 @@ Bare `cd` always picks; all-workspace operations retain their scope.
 `config show` never opens a picker. Agent pickers list only agents whose
 executables are installed and offer “No agent” to continue without launching
 one. `config show` reports effective repository values with their winning layers and uses a registered checkout
-before a workspace exists. `status` combines lifecycle, fork-point changes, active work and
-leases in one workspace view. Human output uses `Display` for enum values and a shared
+before a workspace exists. `status` combines lifecycle, fork-point changes, active work,
+leases and watched PR state in one workspace view; the daemon looks PRs up on each request
+and keeps a failed lookup on its PR. Human output uses `Display` for enum values and a shared
 semantic palette at the CLI presentation layer; machine output and stored values
 stay unstyled. Progress during silent waits belongs to the CLI and shows transient elapsed-time feedback on terminal stderr,
 suppressed for JSON and dumb terminals. Rust chooses paths, including

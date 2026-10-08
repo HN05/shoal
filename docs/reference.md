@@ -265,8 +265,12 @@ management commands support JSON output, while executed commands keep their
 own stdin, stdout, stderr, and exit code.
 
 `shoal status [workspace]` summarizes one workspace's current state, changes
-since its fork point, and what it holds. `--json` returns the same data;
-`inspect` keeps the raw workspace and execution records.
+since its fork point, what it holds, and each watched PR as the forge reports it
+now: open, merged or closed, merge conflicts, each CI check's result, and a
+review state from each reviewer's latest approval or change request. A failed
+PR lookup reports its error on that PR without failing the command. `--json`
+returns the same data, with PRs in `prs`; `inspect` keeps the raw workspace and
+execution records.
 
 ### Configured commands
 
@@ -935,7 +939,7 @@ workspace marked `done` is cleaned up. With automatic completion and no
 continuation, Shoal records `done` itself, using `[done] cleanup` and preserving
 any previously recorded completion choice. A confirmed
 set survives restart without completing again. Cleanup uses normal branch retention and resource release, retaining dirty
-or newer work. `status` lists watched URLs; `inspect` shows lookup and removal
+or newer work. `inspect` shows lookup and removal
 errors in `pr_cleanup`. Invalid registrations retain the workspace.
 
 `shoal unlink` removes all associations; `unlink pr` or `unlink issue` removes
