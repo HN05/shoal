@@ -93,12 +93,11 @@ impl Manager {
                 }
                 ItemKind::Pr => {
                     let (number, _) = forge.pull(&url)?;
-                    let branch = if selection.input.is_some() {
-                        forge.pull_request(&workspace.path, &url).await?.head
-                    } else {
-                        workspace.branch.clone()
-                    };
-                    forge.activity(&workspace.path, number, &branch).await?
+                    let branch = selection
+                        .input
+                        .is_none()
+                        .then_some(workspace.branch.as_str());
+                    forge.activity(&workspace.path, number, branch).await?
                 }
             };
             observations.push((url, snapshot));

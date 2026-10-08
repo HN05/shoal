@@ -226,7 +226,7 @@ impl ForgeKind {
                 "--style", "minimal", "pr", "view", &number, "--host", &repo.host,
             ];
             let output = self.query(path, &args, Query::Pull(MERGED_HINT)).await?;
-            if !fj_merged(&output, &number, branch)? {
+            if !fj_merged(&output, &number, Some(branch))? {
                 return Ok(None);
             }
             let mut args = args.to_vec();
@@ -399,7 +399,7 @@ fn fj_pull(text: &str, number: &str) -> Result<(String, String, String)> {
     Ok((title.to_owned(), head.to_owned(), base.to_owned()))
 }
 
-fn fj_merged(text: &str, number: &str, branch: &str) -> Result<bool> {
+fn fj_merged(text: &str, number: &str, branch: Option<&str>) -> Result<bool> {
     let text = strip_bidi_isolates(text);
     let mut lines = text.lines();
     ensure!(
@@ -416,12 +416,14 @@ fn fj_merged(text: &str, number: &str, branch: &str) -> Result<bool> {
         matches!(state, "Open" | "Closed" | "Merged"),
         "unrecognized fj PR state"
     );
-    ensure!(
-        lines
-            .next()
-            .is_some_and(|s| s.starts_with(&format!("From `{branch}` into `")) && s.ends_with('`')),
-        "PR does not match the workspace branch"
-    );
+    if let Some(branch) = branch {
+        ensure!(
+            lines.next().is_some_and(
+                |s| s.starts_with(&format!("From `{branch}` into `")) && s.ends_with('`')
+            ),
+            "PR does not match the workspace branch"
+        );
+    }
     Ok(state == "Merged")
 }
 
@@ -615,12 +617,28 @@ mod tests {
             assert!(repo.pull(url).is_err());
         }
         let output = "Title #56\nBy user — Merged — +1 -0\nFrom `feature` into `main`\n\n> Merged";
-        assert!(fj_merged(output, "56", "feature").unwrap());
-        assert!(!fj_merged(&output.replacen("— Merged", "— Closed", 1), "56", "feature").unwrap());
-        assert!(!fj_merged(&output.replacen("— Merged", "— Open", 1), "56", "feature").unwrap());
-        assert!(fj_merged(output, "57", "feature").is_err());
-        assert!(fj_merged(output, "56", "other").is_err());
-        assert!(fj_merged("Merged", "56", "feature").is_err());
+        assert!(fj_merged(output, "56", Some("feature")).unwrap());
+        assert!(
+            !fj_merged(
+                &output.replacen("— Merged", "— Closed", 1),
+                "56",
+                Some("feature")
+            )
+            .unwrap()
+        );
+        assert!(
+            !fj_merged(
+                &output.replacen("— Merged", "— Open", 1),
+                "56",
+                Some("feature")
+            )
+            .unwrap()
+        );
+        assert!(fj_merged(output, "57", Some("feature")).is_err());
+        assert!(fj_merged(output, "56", Some("other")).is_err());
+        assert!(fj_merged("Merged", "56", Some("feature")).is_err());
+        assert!(fj_merged(output, "56", None).unwrap());
+        assert!(fj_merged(output, "57", None).is_err());
     }
 
     #[test]

@@ -897,7 +897,8 @@ branch. Linked items suppress idle cleanup.
 `shoal watch` polls all linked items every ~30 seconds; `watch pr` or `watch issue`
 filters by kind. `watch <url>`, `watch pr <number-or-url>` and
 `watch issue <number-or-url>` select an explicit item in the workspace's repository
-without linking it or changing completion policy. Watches return on comments,
+without linking it or changing completion policy; explicit PR watches also accept
+PRs whose head branch is in a fork. Watches return on comments,
 reviews, completed CI checks, new merge conflicts, closure, reopening or merging.
 Each update includes its item URL, kind and message; `--json` returns an `updates`
 array. The first watch reports existing activity; subsequent watches share a

@@ -61,7 +61,7 @@ impl ForgeRepo {
         &self,
         path: &Path,
         number: u64,
-        branch: &str,
+        branch: Option<&str>,
     ) -> Result<Snapshot> {
         match self.kind {
             ForgeKind::GitHub => self.github_activity(path, number, branch).await,
@@ -69,7 +69,12 @@ impl ForgeRepo {
         }
     }
 
-    async fn github_activity(&self, path: &Path, number: u64, branch: &str) -> Result<Snapshot> {
+    async fn github_activity(
+        &self,
+        path: &Path,
+        number: u64,
+        branch: Option<&str>,
+    ) -> Result<Snapshot> {
         let id = number.to_string();
 
         let repository = format!("{}/{}", self.host, self.path);
@@ -105,7 +110,12 @@ impl ForgeRepo {
         Ok(snapshot)
     }
 
-    async fn forgejo_activity(&self, path: &Path, number: u64, branch: &str) -> Result<Snapshot> {
+    async fn forgejo_activity(
+        &self,
+        path: &Path,
+        number: u64,
+        branch: Option<&str>,
+    ) -> Result<Snapshot> {
         let id = number.to_string();
 
         let view = [
@@ -194,12 +204,15 @@ impl ForgeRepo {
     }
 }
 
-fn github_snapshot(text: &str, number: u64, branch: &str) -> Result<Snapshot> {
+fn github_snapshot(text: &str, number: u64, branch: Option<&str>) -> Result<Snapshot> {
     let pull: serde_json::Value = serde_json::from_str(text)?;
-    ensure!(
-        pull["number"] == number && pull["headRefName"] == branch,
-        "PR does not match the workspace branch"
-    );
+    ensure!(pull["number"] == number, "gh returned a different PR");
+    if let Some(branch) = branch {
+        ensure!(
+            pull["headRefName"] == branch,
+            "PR does not match the workspace branch"
+        );
+    }
     let state = pull["state"]
         .as_str()
         .context("missing PR state")?
@@ -349,9 +362,9 @@ mod tests {
             {"__typename": "StatusContext", "context": "deploy", "state": "SUCCESS",
              "targetUrl": "deploy", "startedAt": "first"}
         ]));
-        let before = github_snapshot(&pull.to_string(), 7, "topic").unwrap();
+        let before = github_snapshot(&pull.to_string(), 7, Some("topic")).unwrap();
         pull["statusCheckRollup"][0]["startedAt"] = json!("rerun");
-        let next = github_snapshot(&pull.to_string(), 7, "topic").unwrap();
+        let next = github_snapshot(&pull.to_string(), 7, Some("topic")).unwrap();
         let updates = before.changes(&next, "pr");
         assert_eq!(updates.len(), 1);
         assert_eq!(updates[0].kind, UpdateKind::CiCompleted);
@@ -362,15 +375,15 @@ mod tests {
         let mut pull = github(json!([]));
         pull["comments"] = json!([{"id": "comment", "body": "hello", "reactionGroups": []}]);
         pull["reviews"] = json!([{"id": "review", "body": "", "state": "COMMENTED"}]);
-        let before = github_snapshot(&pull.to_string(), 7, "topic").unwrap();
+        let before = github_snapshot(&pull.to_string(), 7, Some("topic")).unwrap();
         pull["comments"][0]["reactionGroups"] = json!([{"content": "THUMBS_UP"}]);
-        let reacted = github_snapshot(&pull.to_string(), 7, "topic").unwrap();
+        let reacted = github_snapshot(&pull.to_string(), 7, Some("topic")).unwrap();
         assert!(before.changes(&reacted, "pr").is_empty());
         pull["comments"][0]["body"] = json!("edited");
-        let edited = github_snapshot(&pull.to_string(), 7, "topic").unwrap();
+        let edited = github_snapshot(&pull.to_string(), 7, Some("topic")).unwrap();
         assert_eq!(reacted.changes(&edited, "pr")[0].kind, UpdateKind::Comment);
         pull["reviews"][0]["state"] = json!("APPROVED");
-        let approved = github_snapshot(&pull.to_string(), 7, "topic").unwrap();
+        let approved = github_snapshot(&pull.to_string(), 7, Some("topic")).unwrap();
         assert_eq!(edited.changes(&approved, "pr")[0].kind, UpdateKind::Comment);
         let mut inline =
             json!({"id": 1, "body": "finding", "reactions": {}, "updated_at": "first"});
@@ -393,7 +406,7 @@ mod tests {
         pull["reviews"] = json!([{"id": "PRR_1", "body": "finding"}]);
         pull["mergeable"] = json!("CONFLICTING");
         let before = Snapshot::default();
-        let observed = github_snapshot(&pull.to_string(), 7, "topic").unwrap();
+        let observed = github_snapshot(&pull.to_string(), 7, Some("topic")).unwrap();
         let updates = before.changes(&observed, "pr");
         assert_eq!(
             updates.iter().map(|u| u.kind).collect::<Vec<_>>(),
@@ -408,13 +421,13 @@ mod tests {
 
         pull["statusCheckRollup"][0]["status"] = json!("COMPLETED");
         pull["statusCheckRollup"][0]["conclusion"] = json!("FAILURE");
-        let next = github_snapshot(&pull.to_string(), 7, "topic").unwrap();
+        let next = github_snapshot(&pull.to_string(), 7, Some("topic")).unwrap();
         let updates = observed.changes(&next, "pr");
         assert_eq!(updates.len(), 1);
         assert_eq!(updates[0].message, "rust: FAILURE");
 
         pull["headRefOid"] = json!("def");
-        let next_head = github_snapshot(&pull.to_string(), 7, "topic").unwrap();
+        let next_head = github_snapshot(&pull.to_string(), 7, Some("topic")).unwrap();
         assert_eq!(
             next.changes(&next_head, "pr")
                 .iter()
@@ -423,10 +436,12 @@ mod tests {
             2
         );
         pull["state"] = json!("CLOSED");
-        let closed = github_snapshot(&pull.to_string(), 7, "topic").unwrap();
+        let closed = github_snapshot(&pull.to_string(), 7, Some("topic")).unwrap();
         assert_eq!(next_head.changes(&closed, "pr")[0].kind, UpdateKind::Closed);
-        assert!(github_snapshot(&pull.to_string(), 8, "topic").is_err());
-        assert!(github_snapshot(&pull.to_string(), 7, "another").is_err());
+        assert!(github_snapshot(&pull.to_string(), 8, Some("topic")).is_err());
+        assert!(github_snapshot(&pull.to_string(), 7, Some("another")).is_err());
+        assert!(github_snapshot(&pull.to_string(), 7, None).is_ok());
+        assert!(github_snapshot(&pull.to_string(), 8, None).is_err());
     }
 
     #[test]

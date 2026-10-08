@@ -10258,6 +10258,11 @@ esac
             .status
             .success()
     );
+    let pr_file = fixture.root.path().join("pr.json");
+    let mut fork: Value = serde_json::from_str(&fs::read_to_string(&pr_file).unwrap()).unwrap();
+    fork["isCrossRepository"] = serde_json::json!(true);
+    fork["headRefName"] = serde_json::json!("fork-topic");
+    fs::write(pr_file, fork.to_string()).unwrap();
     let explicit = fixture.ok(&["watch", "pr", "7", "--workspace", "items"]);
     assert_eq!(explicit["updates"].as_array().unwrap().len(), 1);
     assert!(fixture.ok(&["inspect", "items"])["pr_cleanup"].is_null());
@@ -10272,6 +10277,50 @@ esac
             .status
             .success()
     );
+}
+
+#[test]
+fn watch_explicit_forgejo_fork_pr_without_linking_or_checkout() {
+    let fixture = Fixture::with_config(Some("[auto_cleanup]\nenabled=false\n"));
+    fixture.add("items");
+    git(
+        &fixture.repo,
+        &[
+            "remote",
+            "add",
+            "origin",
+            "https://forge.example/team/repo.git",
+        ],
+    );
+    let bin = fixture.root.path().join("bin");
+    fs::create_dir(&bin).unwrap();
+    fs::write(
+        bin.join("fj"),
+        r#"#!/bin/sh
+for arg; do last=$arg; done
+case "$*" in
+ *'pr status '*) printf 'Open — Can be merged\n- Success — rust\n';;
+ *'pr review '*) printf 'No reviews.\n';;
+ *) case "$last" in
+     commits) printf 'commit aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n';;
+     comments) printf 'reviewer said: please test forks\n';;
+     *) printf 'Fork PR #7\nBy user — Open — +1 -0\nFrom `other/repo:fork-topic` into `main`\n';;
+    esac;;
+esac
+"#,
+    )
+    .unwrap();
+    fs::set_permissions(bin.join("fj"), fs::Permissions::from_mode(0o755)).unwrap();
+    let watched = fixture.ok(&["watch", "pr", "7", "--workspace", "items"]);
+    let updates = watched["updates"].as_array().unwrap();
+    assert_eq!(updates.len(), 2);
+    assert_eq!(updates[0]["kind"], "comment");
+    assert_eq!(updates[1]["message"], "rust: Success");
+    assert_eq!(updates[0]["url"], "https://forge.example/team/repo/pulls/7");
+    let inspection = fixture.ok(&["inspect", "items"]);
+    assert!(inspection["pr_cleanup"].is_null());
+    assert!(inspection["completion"].is_null());
+    assert_eq!(inspection["workspace"]["branch"], "items");
 }
 
 #[test]
