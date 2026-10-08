@@ -45,7 +45,7 @@ instructions instead of the PR delivery guidance below.
   Post-remove runs from the repository checkout after ownership is released; failure is a
   warning and notification, never restored ownership. Already-missing worktrees
   skip hooks, and post-remove events are not replayed on restart. Post-done runs
-  after completion persists and before cleanup, including issue and PR completion;
+  after completion persists and before cleanup, including automatic completion;
   failure notifies without undoing completion or blocking cleanup. It excludes
   lifecycle and permit changes and is not replayed on restart. Agent-exit hooks
   expose tracked agent exits while ready, including disconnects, without changing
@@ -62,9 +62,10 @@ instructions instead of the PR delivery guidance below.
   workspace removal, without execution tracking or cleanup protection.
   Notifications are read by the unscoped user only and never fail the
   operation they record. Workspace events are an unscoped, durable lifecycle
-  stream with replay gaps, independent of notification read state. PR cleanup defaults on,
-  completes the workspace only after every watched PR merges and the set contains
-  HEAD; completion honors the done default and explicit keep choices before
+  stream with replay gaps, independent of notification read state. Only explicit
+  done completes an assignment unless `[done] automatic` is enabled. PR cleanup
+  defaults on and removes a completed workspace only after every watched PR merges
+  and the set contains HEAD; completion honors the done default and explicit keep choices before
   stopping tracked agents with clean files and unchanged merged HEAD. PR
   numbers resolve against the workspace's origin and persist as repository-bound URLs.
   Own-workspace PR waits poll activity independently of cleanup and share persistent
@@ -151,8 +152,9 @@ instructions instead of the PR delivery guidance below.
   Reopening follows the issue association before its derived local branch name.
   Assignment continuation cancels pending completion and defers issue, PR and idle
   cleanup until explicit done, across restarts, preserving associations and merge checks.
-  Associated issues suppress idle cleanup and complete the assignment once confirmed
-  closed, without replacing an existing completion or bypassing removal checks.
+  Associated issues suppress idle cleanup; with automatic completion they complete
+  the assignment once confirmed closed, without replacing an existing completion or
+  bypassing removal checks.
   Tracked agent exits wake cleanup after the exit hook, retaining its usual checks.
   Lookup failures and changed origin identity never count as closure.
 - Single-workspace actions use an explicit target, then scope or current directory,

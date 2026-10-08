@@ -53,17 +53,19 @@ when behavior changes, distinguishing decisions from proposals.
 - `[auto_cleanup]` has `enabled` (default true) and `idle_minutes` (default
   10), resolved per workspace on each sweep. Automatic removal is only for idle,
   clean worktrees with all commits pushed or on the local default branch, or deleted worktrees. Keep one removal path for manual and automatic
-  cleanup, retaining the default branch unless explicitly deleted. PR cleanup is
-  on by default: all watched PRs must merge and cover HEAD, then record completion
-  using its configured cleanup default or existing choice. Cleanup stops tracked
+  cleanup, retaining the default branch unless explicitly deleted. Only explicit
+  `done` records completion unless `[done] automatic` (default false) lets issue
+  closure and merged PR watches record it with the configured cleanup default or
+  existing choice. PR cleanup is on by default: all watched PRs must merge and
+  cover HEAD before a completed workspace is removed. Cleanup stops tracked
   agents, verifies clean merged HEAD, and uses that path. Assignment continuation
   cancels pending completion and defers issue, PR and idle cleanup until explicit
   completion, persisting across restarts and preserving associations and merge checks.
   Completion cleanup without a PR registration requires every commit pushed or
   on the local default branch, retaining dirty or newer work through the same
   removal path; a keep choice suppresses idle and PR cleanup. Associated issues
-  suppress idle cleanup and record completion once closure is confirmed, without
-  replacing an existing completion or bypassing PR merge requirements.
+  suppress idle cleanup; automatic completion records it once closure is confirmed,
+  without replacing an existing completion or bypassing PR merge requirements.
 - TCP port reservations are cooperative and owned by the worktree. Keep them
   across command exits and failed removal; successful removal releases them with
   the workspace record. `[ports]` `start`/`end` set the automatic range.

@@ -310,11 +310,11 @@ impl Manager {
             }
             // `Ok(true)` once the workspace is removed; `Ok(false)` while the PR is open.
             let result: Result<bool> = async {
-                settings?;
+                let automatic = settings?.done.automatic;
                 self.verify_worktree(&workspace).await?;
                 let head = current_head(&workspace).await?;
                 if !self
-                    .confirm_pr_completion(&workspace, &mut registration.kind, &head)
+                    .confirm_pr_completion(&workspace, &mut registration.kind, &head, automatic)
                     .await?
                 {
                     return Ok(false);
@@ -382,6 +382,7 @@ impl Manager {
         workspace: &Workspace,
         kind: &mut RegistrationKind,
         head: &str,
+        automatic: bool,
     ) -> Result<bool> {
         match kind {
             RegistrationKind::Acknowledgement { head: acknowledged } => {
@@ -398,11 +399,16 @@ impl Manager {
                     );
                     return Ok(true);
                 }
+                // Without automatic completion only an explicit done is waited on.
+                let completion = self.completion(&workspace.id).await?;
+                if completion.is_none() && !automatic {
+                    return Ok(false);
+                }
                 if !self.all_prs_merged(workspace, urls, head).await? {
                     return Ok(false);
                 }
                 // A manual done choice takes precedence over automatic completion.
-                if let Some(completion) = self.completion(&workspace.id).await? {
+                if let Some(completion) = completion {
                     ensure!(
                         completion.head == head,
                         "HEAD changed after the assignment was marked done; retaining workspace"

@@ -307,6 +307,54 @@ async fn continuation_defers_issue_and_confirmed_watch_completion_until_done() {
 }
 
 #[tokio::test]
+async fn issue_and_watch_completion_wait_for_explicit_done_by_default() {
+    let (_root, manager, workspace) = fixture().await;
+    let id = workspace.id.clone();
+    let record = serde_json::json!({
+        "url": "https://github.com/team/repo/pull/1",
+        "head": null,
+        "error": null,
+    })
+    .to_string();
+    manager
+        .store
+        .run(move |db| {
+            // Without an origin, any issue or PR lookup would record an error.
+            db.execute(
+                "INSERT INTO pr_cleanup(workspace_id,record) VALUES (?1,?2)",
+                rusqlite::params![id, record],
+            )?;
+            db.execute(
+                "INSERT INTO workspace_issue(workspace_id,url) VALUES (?1,?2)",
+                rusqlite::params![id, "https://github.com/team/repo/issues/1"],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    manager.sweep_issues().await.unwrap();
+    manager.sweep_prs().await.unwrap();
+    let inspection = manager.inspect_workspace(&workspace.id).await.unwrap();
+    assert!(!inspection.manual_completion);
+    assert!(inspection.completion.is_none());
+    assert!(inspection.issue.unwrap().error.is_none());
+    assert!(inspection.pr_cleanup.unwrap().error.is_none());
+    // Explicit completion applies the watch's merge checks.
+    manager.mark_done(&workspace.id, Some(true)).await.unwrap();
+    manager.sweep_prs().await.unwrap();
+    let inspection = manager.inspect_workspace(&workspace.id).await.unwrap();
+    assert!(
+        inspection
+            .pr_cleanup
+            .unwrap()
+            .error
+            .unwrap()
+            .contains("origin")
+    );
+    assert!(workspace.path.exists());
+}
+
+#[tokio::test]
 async fn holds_retain_completion_without_turning_it_into_an_error() {
     let (_root, manager, workspace) = fixture().await;
     manager

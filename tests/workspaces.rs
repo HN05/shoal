@@ -9836,7 +9836,9 @@ fn repository_config_sets_pr_cleanup_over_the_global_default() {
 
 #[test]
 fn pr_watch_checks_github_state_and_commit_and_survives_restart() {
-    let mut fixture = Fixture::with_config(Some("[auto_cleanup]\nenabled=false\n"));
+    let mut fixture = Fixture::with_config(Some(
+        "[auto_cleanup]\nenabled=false\n[done]\nautomatic=true\n",
+    ));
     let workspace = fixture.add("watch");
     let failed = fixture.run(&["pr", "watch", "56", "watch"]);
     assert!(!failed.status.success());
@@ -9973,6 +9975,9 @@ fn pr_watch_checks_forgejo_merge_and_commits_with_fixture_cli() {
     )
     .unwrap();
     fixture.ok(&["pr", "watch", "56", "fj-watch"]);
+    // A merge alone waits for the agent's explicit done.
+    assert!(fixture.ok(&["inspect", "fj-watch"])["completion"].is_null());
+    fixture.ok(&["done", "fj-watch"]);
     wait_removed(&fixture, "fj-watch");
 }
 
@@ -13672,7 +13677,7 @@ fn done_records_completion_without_claiming_dirty_work_is_merged() {
 fn multiple_prs_complete_once_only_after_every_merge_and_honor_done_policy() {
     for (cleanup, manual_keep) in [(false, false), (true, false), (true, true)] {
         let mut fixture = Fixture::with_config(Some(&format!(
-            "[auto_cleanup]\nenabled=false\n[done]\ncleanup={cleanup}\n"
+            "[auto_cleanup]\nenabled=false\n[done]\ncleanup={cleanup}\nautomatic=true\n"
         )));
         let hook = install_done_hook(&fixture);
         set_repository_toml(&fixture, &format!("post_done_cmd = '{}'\n", hook.display()));
@@ -13765,7 +13770,7 @@ fn multiple_prs_complete_once_only_after_every_merge_and_honor_done_policy() {
             // A changed default must not re-complete a kept assignment.
             fs::write(
                 root.join(".config/shoal/config.toml"),
-                "[auto_cleanup]\nenabled=false\n[done]\ncleanup=true\n",
+                "[auto_cleanup]\nenabled=false\n[done]\ncleanup=true\nautomatic=true\n",
             )
             .unwrap();
             fixture.restart();
@@ -13789,7 +13794,7 @@ fn multiple_prs_complete_once_only_after_every_merge_and_honor_done_policy() {
 
 fn issue_completion_fixture(tool: &str, cleanup: bool) -> Fixture {
     let fixture = Fixture::with_config(Some(&format!(
-        "[auto_cleanup]\nenabled=false\n[done]\ncleanup={cleanup}\n"
+        "[auto_cleanup]\nenabled=false\n[done]\ncleanup={cleanup}\nautomatic=true\n"
     )));
     git(&fixture.repo, &["config", "protocol.allow", "never"]);
     git(
@@ -14922,7 +14927,7 @@ fn holds_allow_closed_issues_to_record_completion_before_cleanup() {
 
 #[test]
 fn holds_allow_watched_prs_to_record_completion_before_cleanup() {
-    let mut fixture = Fixture::new();
+    let mut fixture = Fixture::with_config(Some("[done]\nautomatic=true\n"));
     let workspace = fixture.add("watched-held");
     fixture.ok(&["hold", "acquire", "watched-held", "--name", "thread"]);
     fixture.add_github_origin();

@@ -69,8 +69,8 @@ shoal add my-project --existing origin/feature/api --agent codex
 shoal add my-project quick-fix --path ../quick-fix
 shoal adopt my-project ../existing-worktree  # Take ownership, including automatic cleanup
 shoal rename fix-login fix/login             # Rename its branch and workspace together
-shoal add my-project --issue 68           # Create from an issue; completes when the issue closes
-shoal continue                          # Keep working until an explicit shoal done
+shoal add my-project --issue 68           # Create from an issue
+shoal continue                          # Defer automatic completion until shoal done
 shoal add --issue https://github.com/owner/repo/issues/34  # URL finds the repository
 shoal issue https://github.com/owner/repo/issues/34  # Paste an issue: finds the repository, starts the default agent
 shoal issue 34                             # Use the current repository, or pick one
@@ -123,7 +123,7 @@ shoal done --keep fix-login   # Mark finished; keep for review
 shoal done --cleanup fix-login # Override a configured keep default
 shoal rm fix-login            # Remove the workspace
 shoal pr watch 42             # Watch a PR (also accepts a URL)
-shoal pr watch 43             # Add another; all must merge before automatic done
+shoal pr watch 43             # Add another; all must merge before cleanup after done
 shoal pr wait                 # Wake on PR comments, individual CI results, or conflicts
 shoal pr unwatch --pr 43      # Cancel one watch
 shoal pr unwatch              # Cancel all watches

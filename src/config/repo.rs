@@ -187,6 +187,7 @@ pub struct AutoCleanup {
 #[serde(default, deny_unknown_fields)]
 pub struct Done {
     pub cleanup: Option<bool>,
+    pub automatic: Option<bool>,
 }
 
 /// Repository value for the global `[pr_cleanup]`.

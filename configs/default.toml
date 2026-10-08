@@ -104,7 +104,7 @@ enabled = true
 idle_minutes = 10
 
 [pr_cleanup]
-# Remove workspaces whose watched PR has merged.
+# Remove completed workspaces once every watched PR has merged.
 enabled = true
 
 [ports]
@@ -136,3 +136,5 @@ allow_any = false
 # Clean up when an agent marks its workspace done; false keeps it for review.
 [done]
 cleanup = true
+# Also mark done when the associated issue closes or every watched PR merges.
+automatic = false

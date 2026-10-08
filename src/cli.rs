@@ -242,7 +242,7 @@ pub enum Command {
         #[arg(long)]
         local: bool,
     },
-    /// Watch PRs for automatic completion, cancel watches, or review a PR.
+    /// Watch PRs, wait for their updates, cancel watches, or review a PR.
     Pr {
         #[command(subcommand)]
         command: PrCommand,
@@ -449,7 +449,7 @@ pub enum HoldCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum PrCommand {
-    /// Watch a PR; when all merge, mark done (may stop commands and remove the workspace).
+    /// Watch a PR; cleanup after done waits until every watched PR merges.
     Watch {
         /// GitHub or Forgejo PR number or URL; repeated watches accumulate.
         #[arg(value_name = "NUMBER_OR_URL")]
@@ -459,7 +459,7 @@ pub enum PrCommand {
     /// Cancel all PR watches, or only the selected PR with --pr.
     Unwatch {
         workspace: Option<String>,
-        /// Cancel only this PR; the remaining watches can still trigger completion.
+        /// Cancel only this PR; the remaining watches stay active.
         #[arg(long = "pr", value_name = "NUMBER_OR_URL")]
         url: Option<String>,
     },

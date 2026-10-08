@@ -826,20 +826,31 @@ either direction and cannot be combined. The setting follows normal repository
 and worktree configuration precedence. Scoped agents may mark only their own
 workspace done; completion does not verify or assert a merge.
 
+Only `done` completes an assignment by default, so issue closure and merged PRs
+leave the workspace in place until the agent finishes. `[done] automatic = true`
+also records completion when the associated issue closes or every watched PR
+merges, using the same configuration precedence.
+
+```toml
+[done]
+cleanup = true    # Default: true
+automatic = false # Default: false
+```
+
 `shoal continue [workspace]` cancels pending completion and defers issue, PR and
 idle cleanup until an explicit `shoal done`. Scoped agents may continue only their
 own workspace. The choice persists across restarts, leaves tracked commands
 running, and is shown as `manual_completion` in `status` and `inspect`. Issue
 associations and PR watches remain registered; `done` still applies their merge
-requirements and its usual keep/cleanup choice. Call `continue` before closing
-the issue or merging the PR to prevent cleanup from starting.
+requirements and its usual keep/cleanup choice. With automatic completion, call
+`continue` before closing the issue or merging the PR to prevent cleanup from starting.
 
 `post_done_cmd` runs in the daemon after recording completion, before cleanup,
 with the worktree as its working directory, no terminal, and a 60-second limit.
 It follows normal global and repository configuration precedence and receives the
 [hook identity environment](#workspace-setup-and-hooks) plus
-`SHOAL_DONE_CHOICE=keep` or `cleanup`. It runs for explicit `done`, issue closure,
-and PR-watch completion even when cleanup retains the workspace. Failure records
+`SHOAL_DONE_CHOICE=keep` or `cleanup`. It runs for explicit and automatic
+completion even when cleanup retains the workspace. Failure records
 a `hook_failed` notification without undoing completion or blocking cleanup.
 Lifecycle and permit changes are rejected while it runs. The hook holds the
 completion/PR gate, so it must not call Shoal commands that change completion or
@@ -857,10 +868,10 @@ hooks, and plain commands and restart do not produce agent-exit hooks. An exit
 hook may signal `done` only when no `post_done_cmd` is configured; otherwise the
 completion hook would conflict with its lifecycle/permit guard.
 
-For workspaces opened with `--issue` or `shoal issue`, the daemon polls the saved
-issue URL every ~30 seconds using its `gh`/`fj` login unless waiting for explicit
-`done`. Confirmed closure records `done` with the configured default, preserving
-any existing completion. Issue associations suppress idle cleanup; failed lookups retain the workspace and appear
+With automatic completion, the daemon polls the saved issue URL of workspaces
+opened with `--issue` or `shoal issue` every ~30 seconds using its `gh`/`fj` login
+unless waiting for explicit `done`. Confirmed closure records `done` with the
+configured default, preserving any existing completion. Issue associations suppress idle cleanup; failed lookups retain the workspace and appear
 in `status` and `inspect`. Reopening an issue does not undo completion.
 
 Cleanup runs in the daemon without an idle delay; tracked agent exits trigger a
@@ -881,7 +892,7 @@ With cleanup requested, shell integration leaves a clean, preserved workspace fo
 
 Holds are caller-named claims of workspace use, independent of assignment completion.
 They persist across command exits and daemon restarts and block automatic removal
-while the worktree exists. Issue and PR completion still record `done`; releasing
+while the worktree exists. Automatic completion still records `done`; releasing
 the last hold lets cleanup recheck its usual conditions. Idle cleanup restarts its
 timer after release. Explicit removal and deleted-directory cleanup release holds.
 
@@ -916,9 +927,10 @@ sources must recover before their changes can be reported. Forgejo discussion
 and review changes are grouped, and CI results follow the contexts exposed by
 `fj pr status`.
 
-Unless waiting for explicit `done`, once every watched PR has merged and at least
-one contains current HEAD, Shoal records `done` automatically. It uses
-`[done] cleanup`, preserving any previously recorded completion choice. A confirmed
+Once every watched PR has merged and at least one contains current HEAD, a
+workspace marked `done` is cleaned up. With automatic completion and no
+continuation, Shoal records `done` itself, using `[done] cleanup` and preserving
+any previously recorded completion choice. A confirmed
 set survives restart without completing again. Cleanup uses normal branch retention and resource release, retaining dirty
 or newer work. `status` lists watched URLs; `inspect` shows lookup and removal
 errors in `pr_cleanup`. Invalid registrations retain the workspace.

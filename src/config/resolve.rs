@@ -198,6 +198,7 @@ impl Effective {
             },
             done: Done {
                 cleanup: built_in(merged.done.cleanup, "done.cleanup")?,
+                automatic: built_in(merged.done.automatic, "done.automatic")?,
             },
             pr_cleanup: PrCleanup {
                 enabled: built_in(merged.pr_cleanup.enabled, "pr_cleanup.enabled")?,
@@ -241,6 +242,7 @@ fn built_in() -> RepoConfig {
         },
         done: config::repo::Done {
             cleanup: Some(Done::default().cleanup),
+            automatic: Some(Done::default().automatic),
         },
         pr_cleanup: config::repo::PrCleanup {
             enabled: Some(PrCleanup::default().enabled),
@@ -518,6 +520,7 @@ fn build_fields() -> Vec<Box<dyn Field + Send + Sync>> {
         scalar!(auto_cleanup.idle_minutes),
         scalar!(pr_cleanup.enabled),
         scalar!(done.cleanup),
+        scalar!(done.automatic),
     ];
     fields.extend(rest);
     fields
@@ -541,7 +544,7 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
 [resources.lock]\ncapacity = 1\n[resource_pools.devices]\ncapacity = 2\n\
 [resource_pools.devices.resources.phone]\ncapacity = 1\n\
 [simulators]\nrequires_approval = true\napproval_lifetime = 'workspace'\npreferred = ['phone']\n\
-[auto_cleanup]\nenabled = false\nidle_minutes = 30\n[pr_cleanup]\nenabled = false\n[done]\ncleanup = false\n";
+[auto_cleanup]\nenabled = false\nidle_minutes = 30\n[pr_cleanup]\nenabled = false\n[done]\ncleanup = false\nautomatic = true\n";
 
     fn json<T: Serialize>(value: &T) -> Value {
         serde_json::to_value(value).unwrap()
@@ -791,6 +794,7 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
             auto_cleanup.idle_minutes.is_some(),
             pr_cleanup.enabled.is_some(),
             done.cleanup.is_some(),
+            done.automatic.is_some(),
         ] {
             assert!(present, "the fixture must set every option");
         }
