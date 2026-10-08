@@ -14673,6 +14673,12 @@ fn herdr_retains_detached_happy_exits_and_closes_on_done_after_restart() {
     wait_until("Happy execution exit", || {
         fixture.root.path().join("happy-exited").exists()
     });
+    wait_until("Happy execution reporting", || {
+        fixture.ok(&["inspect", "happy-tab"])["executions"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    });
     assert_eq!(herdr_calls(&fixture).len(), 3);
     fixture.restart();
     fixture.ok(&["done", "happy-tab", "--keep"]);
