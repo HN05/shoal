@@ -7,6 +7,7 @@ use std::{
 };
 
 use crate::{
+    forge::pr::state::ReviewState,
     sim::SimulatorState,
     state::{ExecutionState, WorkspaceState},
 };
@@ -97,6 +98,30 @@ impl Palette {
                 SimulatorState::Failed => Style::Error,
             },
             state,
+        )
+    }
+
+    pub fn review_state(self, state: ReviewState) -> String {
+        self.paint(
+            match state {
+                ReviewState::Approved => Style::Success,
+                ReviewState::ChangesRequested => Style::Error,
+                ReviewState::Commented | ReviewState::Unreviewed => Style::Muted,
+            },
+            state,
+        )
+    }
+
+    /// Forges spell check results differently; color the common ones.
+    pub fn check_result(self, result: &str) -> String {
+        self.paint(
+            match result {
+                "success" => Style::Success,
+                "failure" | "error" | "timed_out" | "action_required" => Style::Error,
+                "pending" | "queued" | "in_progress" | "expected" | "waiting" => Style::Warning,
+                _ => Style::Muted,
+            },
+            result,
         )
     }
 

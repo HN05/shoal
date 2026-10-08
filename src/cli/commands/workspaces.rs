@@ -21,7 +21,7 @@ use crate::{
     env, execution,
     forge::{
         IssueInput,
-        pr::{Action, RegistrationKind},
+        pr::{Action, RegistrationKind, state::PrStatus},
         repository,
     },
     git::{
@@ -1035,11 +1035,17 @@ fn render_status(status: &WorkspaceStatus, json: bool) {
     }
     match &inspection.pr_cleanup {
         Some(registration) => {
-            let target = match &registration.kind {
-                RegistrationKind::Watch { urls, .. } => &urls.join("\n               "),
-                RegistrationKind::Acknowledgement { head } => head,
-            };
-            println!("PR watch:      {target}");
+            match &registration.kind {
+                RegistrationKind::Watch { urls, .. } => {
+                    for url in urls {
+                        println!("PR watch:      {url}");
+                        if let Some(pr) = status.prs.iter().find(|pr| &pr.url == url) {
+                            render_pr(pr, palette);
+                        }
+                    }
+                }
+                RegistrationKind::Acknowledgement { head } => println!("PR watch:      {head}"),
+            }
             if let Some(error) = &registration.error {
                 println!("  {}", palette.paint(Style::Warning, error));
             }
@@ -1053,6 +1059,33 @@ fn render_status(status: &WorkspaceStatus, json: bool) {
         println!("{}", super::links::review_lines(&workspace.review));
     }
     println!("Notifications: {} unread", status.unread_notifications);
+}
+
+fn render_pr(pr: &PrStatus, palette: Palette) {
+    if let Some(state) = pr.state {
+        let conflicts = match pr.merge_conflicts {
+            Some(true) => format!(", {}", palette.paint(Style::Error, "merge conflicts")),
+            Some(false) => ", no merge conflicts".into(),
+            None => String::new(),
+        };
+        println!("  State:       {state}{conflicts}");
+    }
+    if let Some(review) = pr.review {
+        println!("  Review:      {}", palette.review_state(review));
+    }
+    if pr.state.is_some() {
+        println!("  Checks:      {}", pr.checks.len());
+    }
+    for check in &pr.checks {
+        println!(
+            "    {}: {}",
+            check.name,
+            palette.check_result(&check.result)
+        );
+    }
+    for error in &pr.errors {
+        println!("  {}", palette.paint(Style::Warning, error));
+    }
 }
 
 pub(super) async fn inspect(ctx: &Context, workspace: Option<String>) -> Result<i32> {

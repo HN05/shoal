@@ -1268,7 +1268,7 @@ esac
         "Ports:         1",
         "Simulators:    0",
         "Resources:     2",
-        "PR watch:      https://forge.example/team/repo/pulls/7",
+        "PR watch:      https://forge.example/team/repo/pulls/7\n  State:       open, merge conflicts\n  Checks:      2\n    ci / rust: success\n    review: pending\n  reviews lookup failed",
         "Notifications: 1 unread",
     ] {
         assert!(text.contains(expected), "missing {expected:?} in {text:?}");
