@@ -160,6 +160,9 @@ pub enum Command {
         /// Registered repository; defaults to the one whose checkout or origin remote the worktree shares.
         #[arg(long = "repo")]
         repository: Option<String>,
+        /// Copy the work into a new worktree under the repository's Shoal directory.
+        #[arg(long)]
+        copy: bool,
     },
     /// Rename a workspace's Git branch and derived workspace name.
     #[command(allow_missing_positional = true)]

@@ -578,6 +578,11 @@ the pre-remove hook. Disable automatic cleanup
 in repository configuration before adopting work that should stay indefinitely.
 Use `shoal setup` explicitly when setup is wanted.
 
+Pass `--copy` to create a new branch worktree under the repository's Shoal
+directory, copy the source worktree's files into it, and leave the source in
+place. The copied worktree is adopted without setup and receives the next
+available branch suffix when its source branch is already checked out.
+
 ### Base branch
 New branches start from the repository's default branch: `origin/HEAD`, or the
 sole remote's HEAD without `origin` (several remotes without `origin` are

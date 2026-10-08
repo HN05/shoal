@@ -12345,6 +12345,42 @@ fn adopt_cli_preserves_work_and_uses_normal_lifecycle() {
 }
 
 #[test]
+fn adopt_copy_copies_dirty_and_untracked_work_to_the_default_directory() {
+    let fixture = Fixture::new();
+    let source = fixture.root.path().join("external worktree");
+    let repo = fixture.repo.to_str().unwrap();
+    git(
+        &fixture.repo,
+        &[
+            "worktree",
+            "add",
+            "-b",
+            "copy/topic",
+            source.to_str().unwrap(),
+        ],
+    );
+    fs::write(source.join("tracked"), "changed\n").unwrap();
+    fs::write(source.join("untracked"), "new\n").unwrap();
+    let output = fixture.ok(&["adopt", source.to_str().unwrap(), "--repo", repo, "--copy"]);
+    assert_eq!(output["branch"], "copy/topic-2");
+    let destination = PathBuf::from(output["path"].as_str().unwrap());
+    assert!(destination.starts_with(fixture.shoal_dir()));
+    assert_eq!(
+        fs::read_to_string(destination.join("tracked")).unwrap(),
+        "changed\n"
+    );
+    assert_eq!(
+        fs::read_to_string(destination.join("untracked")).unwrap(),
+        "new\n"
+    );
+    assert_eq!(
+        fs::read_to_string(source.join("tracked")).unwrap(),
+        "changed\n"
+    );
+    assert!(source.exists());
+}
+
+#[test]
 fn adopt_infers_a_checkout_with_a_separate_git_directory() {
     let fixture = Fixture::new();
     let root = fixture.root.path();

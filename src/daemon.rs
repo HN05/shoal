@@ -396,8 +396,17 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
                 .create_workspace(&repository, name, base, git_profile.as_deref(), path)
                 .await?,
         ),
-        Method::AdoptWorkspace { repository, path } => {
-            Body::Workspace(manager.adopt_workspace(&repository, &path).await?)
+        Method::AdoptWorkspace {
+            repository,
+            path,
+            copy,
+        } => {
+            let workspace = if copy {
+                manager.copy_workspace(&repository, &path).await?
+            } else {
+                manager.adopt_workspace(&repository, &path).await?
+            };
+            Body::Workspace(workspace)
         }
         Method::RenameWorkspace { workspace, branch } => Body::Workspace(
             manager

@@ -673,17 +673,34 @@ impl ResolvedAddAgent {
     }
 }
 
-pub(super) async fn adopt(ctx: &Context, path: PathBuf, repository: Option<String>) -> Result<i32> {
+pub(super) async fn adopt(
+    ctx: &Context,
+    path: PathBuf,
+    repository: Option<String>,
+    copy: bool,
+) -> Result<i32> {
     let path = super::repositories::absolute(ctx, path)?;
     let repository = match repository {
         Some(repository) => ui::repository_selector(repository)?,
         None => worktree_repository(ctx, &path).await?.into(),
     };
-    let workspace =
-        request::<Workspace>(&ctx.paths, Method::AdoptWorkspace { repository, path }).await?;
+    let workspace = request::<Workspace>(
+        &ctx.paths,
+        Method::AdoptWorkspace {
+            repository,
+            path,
+            copy,
+        },
+    )
+    .await?;
     ctx.emit(
         &format!(
-            "Adopted {} on branch {} at {} (normal cleanup applies)",
+            "{} {} on branch {} at {} (normal cleanup applies)",
+            if copy {
+                "Copied and adopted"
+            } else {
+                "Adopted"
+            },
             Palette::stdout(ctx.json).paint(Style::Heading, &workspace.name),
             workspace.branch,
             workspace.path.display()

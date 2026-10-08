@@ -7,6 +7,64 @@ use std::{
     path::{Path, PathBuf},
 };
 
+/// Copy the contents of a worktree without copying its Git administrative
+/// file. The destination may already contain the clean checkout created for
+/// the copied branch.
+pub fn copy_worktree(source: &Path, destination: &Path) -> io::Result<()> {
+    for entry in fs::read_dir(destination)? {
+        let entry = entry?;
+        if entry.file_name() != ".git" && !source.join(entry.file_name()).symlink_metadata().is_ok()
+        {
+            remove_existing(&entry.path())?;
+        }
+    }
+    for entry in fs::read_dir(source)? {
+        let entry = entry?;
+        if entry.file_name() == ".git" {
+            continue;
+        }
+        copy_entry(&entry.path(), &destination.join(entry.file_name()))?;
+    }
+    Ok(())
+}
+
+fn copy_entry(source: &Path, destination: &Path) -> io::Result<()> {
+    let metadata = fs::symlink_metadata(source)?;
+    let file_type = metadata.file_type();
+    if file_type.is_symlink() {
+        remove_existing(destination)?;
+        std::os::unix::fs::symlink(fs::read_link(source)?, destination)?;
+    } else if file_type.is_dir() {
+        if destination.is_symlink() || (destination.exists() && !destination.is_dir()) {
+            remove_existing(destination)?;
+        }
+        fs::create_dir_all(destination)?;
+        for entry in fs::read_dir(source)? {
+            let entry = entry?;
+            copy_entry(&entry.path(), &destination.join(entry.file_name()))?;
+        }
+        fs::set_permissions(destination, metadata.permissions())?;
+    } else {
+        if destination.is_dir() && !destination.is_symlink() {
+            fs::remove_dir_all(destination)?;
+        }
+        fs::copy(source, destination)?;
+        fs::set_permissions(destination, metadata.permissions())?;
+    }
+    Ok(())
+}
+
+fn remove_existing(path: &Path) -> io::Result<()> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_dir() && !metadata.file_type().is_symlink() => {
+            fs::remove_dir_all(path)
+        }
+        Ok(_) => fs::remove_file(path),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error),
+    }
+}
+
 use anyhow::Context;
 
 /// Read HOME without imposing caller-specific path validation.

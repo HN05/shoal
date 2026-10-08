@@ -157,6 +157,7 @@ pub enum Method {
     AdoptWorkspace {
         repository: crate::forge::repository::Selector,
         path: std::path::PathBuf,
+        copy: bool,
     },
     RenameWorkspace {
         workspace: String,

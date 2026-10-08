@@ -1326,6 +1326,7 @@ async fn adoption_preserves_dirty_worktree_and_persists_identity_and_readiness()
     let mut method = Method::AdoptWorkspace {
         repository: f.repo_id.clone().into(),
         path,
+        copy: false,
     };
     f.manager
         .issue_scope(
