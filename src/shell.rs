@@ -112,9 +112,9 @@ fi
 
 /// Cleanup may already have released the workspace record. Recover using only
 /// the shell's last path, without needing a daemon or a usable current directory.
-pub fn recovery_directory(path: &Path) -> Result<PathBuf> {
+pub fn recovery_directory(path: &Path, state: &Path) -> Result<PathBuf> {
     ensure!(
-        !crate::env::is_scoped(),
+        !crate::env::inherits_scope(state),
         "workspace processes cannot navigate outside their worktree"
     );
     ensure!(path.is_absolute(), "recovery path must be absolute");

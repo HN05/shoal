@@ -136,7 +136,7 @@ pub(super) async fn diff(ctx: &Context, workspace: Option<String>) -> Result<i32
 pub(super) async fn cd(ctx: &Context, workspace: Option<String>) -> Result<i32> {
     if workspace.as_deref() == Some("-") {
         let destination = shell::previous_directory()?;
-        if env::is_scoped() {
+        if env::inherits_scope(&ctx.paths.state) {
             let workspaces = client::workspaces(&ctx.paths).await?;
             ensure!(
                 workspaces.iter().any(|w| w.contains(&destination)),

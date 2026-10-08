@@ -94,6 +94,7 @@ fn clearing_scope_in_a_child_keeps_the_ancestor_scope_for_its_state() {
     for (args, refusal) in [
         (config, "cannot administer"),
         ("skill install", "cannot install user-level skills"),
+        ("shell recover /", "cannot navigate outside their worktree"),
     ] {
         let output = run(args, None);
         assert!(!output.status.success());

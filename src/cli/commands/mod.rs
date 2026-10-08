@@ -160,7 +160,8 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         command: ShellCommand::Recover { path },
     }) = &cli.command
     {
-        let destination = shell::recovery_directory(path)?;
+        let state = crate::paths::Paths::state_dir(cli.state_dir.clone())?;
+        let destination = shell::recovery_directory(path, &state)?;
         if cli.json {
             println!("{}", json!({"path": destination}));
         } else {
