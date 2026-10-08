@@ -693,8 +693,8 @@ shoal sync app             # A registered repository
 
 Fetches the default branch's upstream remote, updating its remote-tracking
 branches, then fast-forwards the local default branch under the same rules as
-workspace creation. Git refuses that update while the branch is checked out in
-the registered checkout. Shoal never pushes and never moves workspace branches:
+workspace creation, including in a clean registered checkout where `git fetch
+origin main:main` is refused. Shoal never pushes and never moves workspace branches:
 rebase or merge onto the updated branch with Git, for example `git rebase main`
 or `git merge origin/feature/api`. Scoped callers can sync only their own
 repository.

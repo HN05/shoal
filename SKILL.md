@@ -90,8 +90,8 @@ git rebase main            # or git merge main; use your repo's branch name
 ```
 
 `shoal sync` fetches your repository's remote and fast-forwards the local
-default branch, which Git refuses while that branch is checked out in the
-registered checkout. It never pushes or changes your branch. Rebase or merge
+default branch, advancing the registered checkout when it has that branch
+checked out, where `git fetch origin main:main` is refused. It never pushes or changes your branch. Rebase or merge
 with plain Git afterwards; other pushed branches are current as
 `origin/<branch>`. After rebasing a pushed branch, push it with
 `git push --force-with-lease`.

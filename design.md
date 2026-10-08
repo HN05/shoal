@@ -233,8 +233,8 @@ and skips hooks; post-remove events are not durably queued or replayed.
 `diff` compares against the recorded base's fork point (merge-base fallback, fixed
 commits stay fixed) with native Git settings, so advancing the base is never shown
 as work. `sync` fetches the default branch's remote and fast-forwards the local default
-branch under the creation refresh rules, because Git refuses to update a branch checked
-out in the registered checkout; it never pushes or moves workspace branches, so updating
+branch under the creation refresh rules, advancing a clean registered checkout where
+`git fetch` into the checked-out branch is refused; it never pushes or moves workspace branches, so updating
 a workspace from it stays plain Git. Shoal has no merge or rebase command: Git
 already does both in a workspace. `land`,
 the local substitute for a pull request, merges the workspace branch into the default
