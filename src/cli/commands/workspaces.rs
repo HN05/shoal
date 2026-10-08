@@ -21,6 +21,7 @@ use crate::{
     env, execution,
     forge::{
         IssueInput,
+        link::Selection,
         pr::{Action, RegistrationKind, state::PrStatus},
         repository,
     },
@@ -29,7 +30,7 @@ use crate::{
         existing_branch::{Branch, OpenedWorkspace},
     },
     hooks::{self, Hook, HookKind},
-    model::{Completion, DiffBase, Repository, Workspace, WorkspaceStatus},
+    model::{Completion, DiffBase, Repository, Workspace, WorkspaceStatus, WorkspaceTarget},
     protocol::{ConfigTarget, Method},
     removal::{BranchChoice, RemovalCheck, RemovalResult},
     shell,
@@ -910,12 +911,64 @@ pub(super) async fn list(ctx: &Context) -> Result<i32> {
     Ok(0)
 }
 
-pub(super) async fn status(ctx: &Context, workspace: Option<String>) -> Result<i32> {
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let status =
-        request::<WorkspaceStatus>(&ctx.paths, Method::WorkspaceStatus { workspace }).await?;
-    ctx.show(&status, |status| render_status(status, ctx.json))?;
+pub(super) async fn status(
+    ctx: &Context,
+    workspace: Option<String>,
+    item: Option<String>,
+) -> Result<i32> {
+    let Some(target) = status_target(workspace.as_deref(), item)? else {
+        let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+        let status =
+            request::<WorkspaceStatus>(&ctx.paths, Method::WorkspaceStatus { workspace }).await?;
+        ctx.show(&status, |status| render_status(status, ctx.json))?;
+        return Ok(0);
+    };
+    let workspaces =
+        request::<Vec<Workspace>>(&ctx.paths, Method::FindWorkspaces { target }).await?;
+    let mut statuses = Vec::new();
+    for workspace in workspaces {
+        let workspace = workspace.id;
+        statuses.push(
+            request::<WorkspaceStatus>(&ctx.paths, Method::WorkspaceStatus { workspace }).await?,
+        );
+    }
+    ctx.show(&statuses, |statuses| {
+        for (index, status) in statuses.iter().enumerate() {
+            if index > 0 {
+                println!();
+            }
+            render_status(status, ctx.json);
+        }
+    })?;
     Ok(0)
+}
+
+/// Items and resources find the workspaces that link or hold them; anything
+/// else selects a workspace.
+fn status_target(first: Option<&str>, item: Option<String>) -> Result<Option<WorkspaceTarget>> {
+    match first {
+        Some("resource") => Ok(Some(WorkspaceTarget::Resource {
+            name: item.context("resource needs a pool or member name")?,
+        })),
+        Some(first)
+            if matches!(first, "pr" | "issue") || IssueInput::parse(first) == IssueInput::Url =>
+        {
+            let selection = Selection::parse(Some(first.to_owned()), item)?;
+            Ok(Some(WorkspaceTarget::Item {
+                kind: selection.kind.context("expected an issue or PR")?,
+                input: selection
+                    .input
+                    .with_context(|| format!("{first} needs a number or URL"))?,
+            }))
+        }
+        _ => {
+            ensure!(
+                item.is_none(),
+                "put pr, issue or resource before a number, URL or name"
+            );
+            Ok(None)
+        }
+    }
 }
 
 fn render_status(status: &WorkspaceStatus, json: bool) {

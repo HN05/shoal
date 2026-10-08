@@ -69,6 +69,23 @@ impl Selection {
     }
 }
 
+/// The repository and number of an issue or PR URL.
+pub(crate) fn item(kind: ItemKind, url: &str) -> Result<(ForgeRepo, u64)> {
+    let (repository, (number, _)) = match kind {
+        ItemKind::Pr => {
+            let repository = ForgeRepo::from_pull_url(url)?;
+            let item = repository.pull(url)?;
+            (repository, item)
+        }
+        ItemKind::Issue => {
+            let repository = ForgeRepo::from_issue_url(url)?;
+            let item = repository.issue(url)?;
+            (repository, item)
+        }
+    };
+    Ok((repository, number))
+}
+
 pub(crate) struct Link {
     pub repository: ForgeRepo,
     pub target: LinkTarget,

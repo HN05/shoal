@@ -52,9 +52,11 @@ pub async fn authorize(
             *repository = own.into();
             None
         }
-        Method::Status | Method::ListWorkspaces | Method::ListRepositories | Method::SimCatalog => {
-            None
-        }
+        Method::Status
+        | Method::ListWorkspaces
+        | Method::FindWorkspaces { .. }
+        | Method::ListRepositories
+        | Method::SimCatalog => None,
         Method::HoldAcquire { workspace, .. }
         | Method::HoldRelease { workspace, .. }
         | Method::HoldList { workspace }

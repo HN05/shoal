@@ -25,7 +25,7 @@ use crate::{
     sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
 };
 
-pub const VERSION: u32 = 65;
+pub const VERSION: u32 = 66;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -228,6 +228,10 @@ pub enum Method {
     },
     WorkspaceStatus {
         workspace: String,
+    },
+    /// Workspaces that link an item or hold a resource.
+    FindWorkspaces {
+        target: crate::model::WorkspaceTarget,
     },
     StopWorkspace {
         workspace: String,

@@ -232,7 +232,9 @@ shoal codex fix-login --cli -- --help
 shoal codex fix-login --app              # Codex desktop app
 shoal happy codex fix-login              # Detached Happy session for the Happy app
 shoal t3 fix-login                       # Running T3 Code desktop app
-shoal status fix-login                   # Activity, changes, and held resources
+shoal status fix-login                   # Activity, changes, held resources, and PR state
+shoal status pr 12                       # Workspaces that link PR 12
+shoal status resource devices            # Workspaces that hold a devices lease
 shoal inspect fix-login
 shoal stop fix-login                     # Stop commands; keep the worktree
 shoal rm fix-login                       # Remove; choose what to keep if work differs
@@ -264,13 +266,16 @@ a new-branch prompt or existing-branch picker. Noninteractive and JSON calls nev
 management commands support JSON output, while executed commands keep their
 own stdin, stdout, stderr, and exit code.
 
-`shoal status [workspace]` summarizes one workspace's current state, changes
+`shoal status [target]` summarizes one workspace's current state, changes
 since its fork point, what it holds, and each watched PR as the forge reports it
 now: open, merged or closed, merge conflicts, each CI check's result, and a
 review state from each reviewer's latest approval or change request. A failed
 PR lookup reports its error on that PR without failing the command. `--json`
 returns the same data, with PRs in `prs`; `inspect` keeps the raw workspace and
-execution records.
+execution records. An issue or PR URL, `pr` or `issue` with a number or URL, or
+`resource` with a pool or member name shows every workspace that links or holds
+it instead, as a JSON array; a number must be linked in only one repository.
+Scoped callers find only their own workspace.
 
 ### Configured commands
 

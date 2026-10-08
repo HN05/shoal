@@ -165,6 +165,19 @@ pub struct WorkspaceStatus {
     pub prs: Vec<crate::forge::pr::state::PrStatus>,
 }
 
+/// Something a workspace links or holds, for finding that workspace.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkspaceTarget {
+    /// An issue or PR number or URL.
+    Item {
+        kind: crate::forge::link::ItemKind,
+        input: String,
+    },
+    /// A resource pool or member with a lease.
+    Resource { name: String },
+}
+
 /// Everything the execution wrapper needs to launch a tracked command.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ExecutionPlan {

@@ -1280,6 +1280,53 @@ esac
             .contains("missing argument; pass an explicit target/name")
     );
 
+    for target in [
+        vec!["pr", "7"],
+        vec!["https://forge.example/team/repo/pulls/7/"],
+        vec!["resource", "devices"],
+        vec!["resource", "signing"],
+    ] {
+        let found = fixture.ok(&[&["status"], target.as_slice()].concat());
+        let found = found.as_array().unwrap();
+        assert_eq!(found.len(), 1, "{target:?}");
+        assert_eq!(found[0]["workspace"]["name"], "summary");
+        assert_eq!(found[0]["prs"][0]["state"], "open");
+    }
+    for (target, error) in [
+        (vec!["pr", "8"], "no workspace links PR 8"),
+        (vec!["issue", "7"], "no workspace links issue 7"),
+        (
+            vec!["https://forge.example/team/other/pulls/7"],
+            "no workspace links PR",
+        ),
+        (
+            vec!["resource", "missing"],
+            "no workspace holds resource missing",
+        ),
+        (vec!["pr"], "pr needs a number or URL"),
+        (vec!["summary", "7"], "put pr, issue or resource before"),
+    ] {
+        let output = fixture.run(&[&["status"], target.as_slice()].concat());
+        assert!(!output.status.success(), "{target:?}");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains(error), "{target:?}: {stderr}");
+    }
+    let scoped = |workspace: &str| {
+        fixture
+            .command()
+            .args(["exec", workspace, "--", env!("CARGO_BIN_EXE_shoal")])
+            .args(["--json", "status", "resource", "devices"])
+            .output()
+            .unwrap()
+    };
+    let own = scoped("summary");
+    assert!(own.status.success());
+    let own: Value = serde_json::from_slice(&own.stdout).unwrap();
+    assert_eq!(own[0]["workspace"]["name"], "summary");
+    let other = scoped("waiter");
+    assert!(!other.status.success());
+    assert!(String::from_utf8_lossy(&other.stderr).contains("no workspace holds resource devices"));
+
     fs::write(finish, "done").unwrap();
     assert!(execution.wait().unwrap().success());
 }

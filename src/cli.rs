@@ -238,8 +238,18 @@ pub enum Command {
     },
     /// List workspaces.
     Ls,
-    /// Show workspace activity, changes, and resources.
-    Status { workspace: Option<String> },
+    /// Show workspace activity, changes, resources, and PR state.
+    ///
+    /// Name a workspace, or find the workspaces that link an issue or PR or
+    /// hold a resource: `status pr 12`, `status <issue-or-PR-URL>`, `status
+    /// resource <pool-or-member>`.
+    Status {
+        /// Workspace, issue or PR URL, or pr, issue or resource.
+        #[arg(value_name = "TARGET")]
+        workspace: Option<String>,
+        /// Number, URL, or resource name after pr, issue or resource.
+        item: Option<String>,
+    },
     /// Enter a workspace, or use - for the previous directory.
     ///
     /// Omit the workspace to open the picker, even inside a workspace.

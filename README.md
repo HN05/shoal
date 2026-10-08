@@ -100,7 +100,8 @@ After [configuring a custom agent](docs/reference.md#agents), run
 shoal                         # Interactive workspace menu
 shoal repo                    # Interactive repository menu
 shoal ls                      # List workspaces
-shoal status fix-login        # Workspace activity, changes, and resources
+shoal status fix-login        # Workspace activity, changes, resources, and PR state
+shoal status pr 12            # Workspaces that link PR 12; also issue or resource
 shoal config show fix-login   # Effective settings and the source of each value
 shoal config set default_agent codex
 shoal config set auto_cleanup.enabled true auto_cleanup.idle_minutes 30  # Saved together
