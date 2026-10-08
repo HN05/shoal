@@ -71,6 +71,12 @@ one just to obtain a lease.
 If workspace setup failed, `shoal --json setup` reruns the configured setup
 command and post-setup hook for the current workspace.
 
+The daemon, its service and the Shoal installation belong to the user; stopping
+or restarting the daemon stops every agent. Never administer them, clear Shoal
+variables from your environment, or run a development build of Shoal against the
+user's state directory. When a Shoal command is missing, refused or failing,
+report the error with `shoal notify` and wait instead of working around it.
+
 ## Update from the default branch
 
 ```sh

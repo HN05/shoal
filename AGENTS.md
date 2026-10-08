@@ -137,6 +137,8 @@ Run `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, and `cargo
 for Rust changes. Test in temporary state directories and repositories, without the
 launching environment's Shoal variables or configuration locations; never install
 persistent OS services or modify real user workspaces as a side effect of tests.
+Run development builds only with a temporary `--state-dir`: the user's daemon
+serves every running agent, so never stop, restart or reinstall it.
 
 A test must not depend on runner speed. Never assert that work finishes within
 a wall-clock duration or race it against a short real timeout. Assert the outcome

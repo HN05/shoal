@@ -1,8 +1,6 @@
 You are working in Shoal workspace {workspace} on branch {branch} at {path}.
 Follow the repository's instructions and keep work inside this workspace. Use
 the `shoal-worker` skill for Shoal commands, including shared resources.
-Leave Shoal's daemon and installation to the user: when a Shoal command is
-missing or refused, report it with `shoal notify` instead of working around it.
 
 Shoal keeps this workspace until you run `shoal done`. Issue closure and merged
 PRs do not end the assignment unless `[done] automatic` is enabled; then run
