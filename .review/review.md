@@ -16,7 +16,9 @@ instructions instead of the PR delivery guidance below.
   boundaries rather than function length or the number of helpers.
 - Safety of user work: removal goes through the one shared path, preserves
   work and leases on failure, never adopts moved or replaced worktrees, and
-  never signals a process whose recorded identity was not verified. Unreadable
+  never signals a process whose recorded identity was not verified. Herdr
+  completion waits for tracked executions to resolve before closing the tab;
+  removal closes it immediately. Unreadable
   inventory entries block ownership proof only while their recorded identity is live;
   recovery polls incomplete proof within the stop budget without weakening it.
   Worktree ownership is proven by the owner marker in the Git admin directory; the recorded
@@ -230,7 +232,10 @@ configured command for another agent, plus proven child
   state and prepares each execution kind before shared registration through one
   request. Reported exits clear executions and permit setup readiness only after
   marker, child and group survivors are gone and environment visibility is complete;
-  the reporting wrapper may remain alive awaiting acknowledgement.
+  a settled empty environment is readable evidence, not an unreadable process; the
+  reporting wrapper may remain alive awaiting acknowledgement.
+  Setup verification failures retain the workspace and report its exit status
+  and blocking PIDs or inspection error instead of offering to ignore uncertainty.
   CLI styles, enum `Display` formatting and transient progress belong at presentation
   sites; machine output and stored values stay plain. Progress clears before results and stays off for JSON,
   redirected stderr and dumb terminals.

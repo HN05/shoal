@@ -201,9 +201,11 @@ Hooks that run with a worktree resolve paths against it and use it as their
 working directory. Setup runs through
 the tracked wrapper with workspace scope; the daemon owns readiness and execution
 records, and `add` keeps the workspace preparing until setup exits cleanly with no
-survivors. Failures preserve files, branches, and leases; interactive callers choose
-delete, ignore (which repairs verified state first), or keep, while JSON callers get
-a nonzero exit. `setup` reruns setup explicitly; nothing retries automatically.
+survivors. Failures preserve files, branches, and leases; process-verification
+failures retain the workspace and report the command's exit status and the
+blocking evidence. Other failures let interactive callers choose delete, ignore
+(which repairs verified state first), or keep. JSON callers get a nonzero exit.
+`setup` reruns setup explicitly; nothing retries automatically.
 
 Hooks are deliberately untracked user processes with the workspace identity
 but no scope token, because their purpose is to start or stop things that
@@ -278,9 +280,10 @@ By default, workspace shells receive focus and agent launches stay in the
 background; an explicit focus setting overrides this choice.
 The worker drops the plan before starting children; a retained tab's shell keeps
 it, inert, while a non-default state directory is passed only to the worker.
-Herdr tabs remain open after tracked agent exits and close when their workspace
-is completed or removed; preparation failures and shell or untracked desktop
-handoffs retain them until that lifecycle change.
+Herdr tabs remain open after tracked agent exits. Completion closes them only
+after tracked executions have resolved; removal closes them immediately.
+Preparation failures and shell or untracked desktop handoffs retain them until
+that lifecycle change.
 
 Single-workspace actions select an explicit target, otherwise the caller's scoped
 workspace or the workspace containing the current directory, then an interactive
@@ -605,8 +608,9 @@ identity that has exited or is exiting no longer blocks the ownership proof, and
 one whose exec has not yet published its environment is read again within a
 bounded settle wait before it counts as unreadable. A reported command
 exit clears its execution and permits setup readiness only when marker, child and
-group evidence has no survivors and environment visibility is complete; the
-reporting wrapper may remain alive awaiting acknowledgement. Recovery polls
+group evidence has no survivors and environment visibility is complete; a settled
+empty environment is readable evidence. The reporting wrapper may remain alive
+awaiting acknowledgement. Recovery polls
 incomplete proof within the workspace stop budget and still refuses live or
 unverifiable survivors. Moved
 worktrees stay unresolved until restored. Any other ownership failure is

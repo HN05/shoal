@@ -8,7 +8,7 @@ pub struct Processes {
     pub wrapper: Option<process::Identity>,
     pub owned: Vec<process::Identity>,
     pub group_candidates: Vec<process::Identity>,
-    pub unreadable: usize,
+    pub unreadable: Vec<process::Identity>,
     pub launch_recorded: bool,
 }
 
@@ -36,7 +36,7 @@ impl Processes {
         }
         owned.sort_by(|a, b| a.pid.cmp(&b.pid).then(a.birth.cmp(&b.birth)));
         owned.dedup();
-        let mut unreadable = 0;
+        let mut unreadable = Vec::new();
         for identity in &scan.unreadable {
             if execution
                 .wrapper
@@ -44,7 +44,7 @@ impl Processes {
                 .is_none_or(|w| identity.not_older_than(w))
                 && process::alive(identity)?
             {
-                unreadable += 1;
+                unreadable.push(identity.clone());
             }
         }
         Ok(Self {
@@ -70,14 +70,37 @@ impl Processes {
     }
 
     pub fn visibility_complete(&self) -> bool {
-        self.launch_recorded && self.unreadable == 0
+        self.launch_recorded && self.unreadable.is_empty()
     }
 
     /// A connected wrapper's exit report proves its command ended, including
     /// failure before launch. The wrapper stays alive awaiting acknowledgement;
     /// child/group survivors and incomplete environment visibility still block.
     pub fn command_stopped(&self) -> bool {
-        self.owned.is_empty() && self.group_candidates.is_empty() && self.unreadable == 0
+        self.owned.is_empty() && self.group_candidates.is_empty() && self.unreadable.is_empty()
+    }
+
+    /// Explain incomplete proof without disclosing process arguments or environments.
+    pub fn completion_issue(&self) -> Option<String> {
+        if self.command_stopped() {
+            return None;
+        }
+        let unverified = self.unverified();
+        let mut issues = Vec::new();
+        for (label, processes) in [
+            ("owned processes still running", self.owned.as_slice()),
+            ("unverified process-group survivors", unverified.as_slice()),
+            (
+                "unreadable live process environments",
+                self.unreadable.as_slice(),
+            ),
+        ] {
+            if !processes.is_empty() {
+                let pids: Vec<_> = processes.iter().map(|p| p.pid.to_string()).collect();
+                issues.push(format!("{label} (PID {})", pids.join(", ")));
+            }
+        }
+        Some(issues.join("; "))
     }
 
     /// Only verified identities are signal targets. Return whether there were
@@ -117,12 +140,17 @@ mod tests {
             ..Default::default()
         };
         let live = Processes::inspect(&execution, &scan).await.unwrap();
-        assert_eq!(live.unreadable, 1);
+        assert_eq!(live.unreadable.len(), 1);
         assert!(!live.visibility_complete());
+        assert!(live.completion_issue().unwrap().contains(&format!(
+            "unreadable live process environments (PID {})",
+            child.id().unwrap()
+        )));
         child.kill().await.unwrap();
         child.wait().await.unwrap();
         let exited = Processes::inspect(&execution, &scan).await.unwrap();
-        assert_eq!(exited.unreadable, 0);
+        assert!(exited.unreadable.is_empty());
         assert!(exited.visibility_complete());
+        assert!(exited.completion_issue().is_none());
     }
 }

@@ -155,9 +155,7 @@ fn visibility(identity: &Identity, deadline: std::time::Instant) -> Result<Visib
             // The image may have settled after the empty read.
             Image::Settled => {
                 return Ok(match environment(identity.pid) {
-                    Ok(environment) if !environment.is_empty() => {
-                        Visibility::Environment(environment)
-                    }
+                    Ok(environment) => Visibility::Environment(environment),
                     _ if alive(identity)? => Visibility::Unreadable,
                     _ => Visibility::Gone,
                 });
@@ -549,6 +547,30 @@ mod tests {
             visibility(&identity, deadline).unwrap(),
             Visibility::Gone
         ));
+    }
+
+    #[tokio::test]
+    async fn settled_empty_environment_is_readable_and_has_no_execution_marker() {
+        let mut child = tokio::process::Command::new("cat")
+            .env_clear()
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::null())
+            .kill_on_drop(true)
+            .spawn()
+            .unwrap();
+        let identity = capture(child.id().unwrap()).unwrap().unwrap();
+        let deadline = std::time::Instant::now() + timing::PROCESS_SETTLE_TIMEOUT;
+        let Visibility::Environment(environment) = visibility(&identity, deadline).unwrap() else {
+            panic!("settled empty environment must be readable");
+        };
+        assert!(environment.is_empty());
+        let scan = scan(HashSet::from(["unrelated-execution".into()]))
+            .await
+            .unwrap();
+        assert!(!scan.unreadable.contains(&identity));
+        assert!(scan.processes.iter().all(|p| p.identity != identity));
+        child.kill().await.unwrap();
+        child.wait().await.unwrap();
     }
 
     #[tokio::test]
