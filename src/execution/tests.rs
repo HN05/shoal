@@ -44,7 +44,10 @@ async fn adjacent_controls_child() {
     let mut bytes = Vec::new();
     for control in [
         Control::Started,
-        Control::OverloadStop { recover: true },
+        Control::OverloadStop {
+            recover: true,
+            reason: "critical memory pressure".into(),
+        },
         Control::Stop,
     ] {
         protocol::write(&mut bytes, &control).await.unwrap();

@@ -572,6 +572,8 @@ pub enum Control {
     Pause,
     OverloadStop {
         recover: bool,
+        #[serde(default = "default_overload_reason")]
+        reason: String,
     },
     Resume {
         ports: Vec<crate::model::PortReservation>,
@@ -579,6 +581,10 @@ pub enum Control {
     Finished {
         complete: bool,
     },
+}
+
+fn default_overload_reason() -> String {
+    "system overload".into()
 }
 
 pub async fn read<T: DeserializeOwned>(stream: &mut (impl AsyncRead + Unpin)) -> Result<T> {
@@ -738,6 +744,15 @@ mod tests {
                 json!({"set_pr": {"workspace": "worker", "url": "7"}})
             )
             .is_err()
+        );
+    }
+
+    #[test]
+    fn older_overload_controls_use_a_generic_reason() {
+        let control: Control =
+            serde_json::from_value(json!({"type": "overload_stop", "recover": false})).unwrap();
+        assert!(
+            matches!(control, Control::OverloadStop { recover: false, reason } if reason == "system overload")
         );
     }
 

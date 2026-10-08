@@ -6,16 +6,18 @@ use tokio::sync::watch;
 use super::{GuardMode, Manager};
 use crate::{daemon::notifications::NotificationKind, protocol::timing, state::WorkspaceState};
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 enum StopReason {
-    Overload,
+    Overload(String),
     Pause,
 }
 
 pub(super) struct Agent {
     name: String,
     workspace: String,
+    workspace_id: String,
     started: Instant,
+    recover: bool,
     stop: watch::Sender<bool>,
     stop_reason: Option<StopReason>,
 }
@@ -33,13 +35,43 @@ impl Manager {
         agent: &str,
         exit_code: Option<i32>,
         complete: bool,
+        overload: Option<(&str, &str)>,
     ) {
-        let message = match exit_code {
-            Some(code) if complete => format!("{agent} exited with code {code}"),
-            Some(code) => format!(
-                "{agent} exited with code {code}, leaving processes behind; run shoal doctor"
-            ),
-            None => format!("{agent} disconnected without reporting; run shoal doctor"),
+        let message = if let Some((execution_id, reason)) = overload {
+            let status = exit_code.map_or_else(
+                || "without an exit code".into(),
+                |code| format!("with code {code}"),
+            );
+            let recovery = if crate::execution::recovery::record_path(
+                &self.paths,
+                &workspace.id,
+                execution_id,
+            )
+            .is_file()
+            {
+                format!(
+                    "restore with shoal resume {} --execution {execution_id}",
+                    workspace.name
+                )
+            } else {
+                "recovery record unavailable; inspect the workspace and relaunch the agent's saved session".into()
+            };
+            let reconcile = if complete {
+                ""
+            } else {
+                "; execution remains active or unknown; run shoal doctor before resuming"
+            };
+            format!(
+                "{agent} stopped after {reason} ({status}); {recovery}{reconcile}; workspace and resource leases retained"
+            )
+        } else {
+            match exit_code {
+                Some(code) if complete => format!("{agent} exited with code {code}"),
+                Some(code) => format!(
+                    "{agent} exited with code {code}, leaving processes behind; run shoal doctor"
+                ),
+                None => format!("{agent} disconnected without reporting; run shoal doctor"),
+            }
         };
         self.notify(
             Some(&workspace.name),
@@ -123,7 +155,14 @@ impl Manager {
             .await
     }
 
-    pub(crate) async fn track_agent(&self, id: &str, name: &str, workspace: &str) {
+    pub(crate) async fn track_agent(
+        &self,
+        id: &str,
+        name: &str,
+        workspace_id: &str,
+        workspace: &str,
+        recover: bool,
+    ) {
         let connections = self.connections.lock().await;
         if let Some(stop) = connections.get(id) {
             self.agents.lock().await.insert(
@@ -131,7 +170,9 @@ impl Manager {
                 Agent {
                     name: name.into(),
                     workspace: workspace.into(),
+                    workspace_id: workspace_id.into(),
                     started: Instant::now(),
+                    recover,
                     stop: stop.clone(),
                     stop_reason: None,
                 },
@@ -189,7 +230,7 @@ impl Manager {
         let agent = agents
             .get_mut(id)
             .ok_or_else(|| anyhow::anyhow!("agent no longer exists"))?;
-        if agent.stop_reason != Some(StopReason::Overload) {
+        if !matches!(agent.stop_reason, Some(StopReason::Overload(_))) {
             return Ok(false);
         }
         stop.send(false)?;
@@ -207,12 +248,19 @@ impl Manager {
         Ok(true)
     }
 
-    pub(crate) async fn agent_was_overloaded(&self, id: &str) -> bool {
+    pub(crate) async fn agent_overload_reason(&self, id: &str) -> Option<String> {
         self.agents
             .lock()
             .await
             .get(id)
-            .is_some_and(|agent| agent.stop_reason == Some(StopReason::Overload))
+            .and_then(|agent| match &agent.stop_reason {
+                Some(StopReason::Overload(reason)) => Some(reason.clone()),
+                _ => None,
+            })
+    }
+
+    pub(crate) async fn agent_was_overloaded(&self, id: &str) -> bool {
+        self.agent_overload_reason(id).await.is_some()
     }
 
     pub(crate) async fn agent_was_paused(&self, id: &str) -> bool {
@@ -357,23 +405,45 @@ impl Manager {
         let stopped = {
             let mut agents = self.agents.lock().await;
             let selected = agents
-                .values_mut()
-                .filter(|agent| !agent.stop.is_closed() && !*agent.stop.borrow())
-                .max_by_key(|agent| agent.started);
-            selected.and_then(|agent| {
+                .iter_mut()
+                .filter(|(_, agent)| !agent.stop.is_closed() && !*agent.stop.borrow())
+                .max_by_key(|(_, agent)| agent.started);
+            selected.and_then(|(id, agent)| {
+                let handoff = crate::execution::recovery::save_record(
+                    &self.paths,
+                    &agent.workspace_id,
+                    id,
+                    &agent.name,
+                );
+                if let Err(error) = &handoff {
+                    eprintln!("overload recovery handoff not saved: {error:#}");
+                }
+                agent.stop_reason = Some(StopReason::Overload(reason.into()));
                 agent.stop.send(true).ok()?;
-                agent.stop_reason = Some(StopReason::Overload);
-                Some((agent.name.clone(), agent.workspace.clone()))
+                Some((
+                    id.clone(),
+                    agent.name.clone(),
+                    agent.workspace.clone(),
+                    agent.recover,
+                    handoff.is_ok(),
+                ))
             })
         };
-        let Some((name, workspace)) = stopped else {
+        let Some((id, name, workspace, recover, handoff_saved)) = stopped else {
             return false;
         };
         self.reset_overload_recovery();
+        let recovery = if !recover {
+            "automatic recovery unavailable: configure [agent_resume] with a session restore command"
+        } else if !self.config().overload.recovery.enabled {
+            "automatic recovery disabled by overload.recovery.enabled"
+        } else {
+            "automatic session restore waits for healthy load"
+        };
         self.notify(
             Some(&workspace),
             NotificationKind::AgentStopped,
-            format!("Stopping {name}: {reason}; workspace and resource leases retained"),
+            format!("Stopping {name}: {reason}; {recovery}; after the wrapper exits, restore with shoal resume {workspace} --execution {id}{}; workspace and resource leases retained", if handoff_saved { "" } else { "; recovery handoff could not be saved; run shoal doctor if the wrapper exits" }),
         )
         .await;
         true
@@ -461,7 +531,7 @@ mod tests {
             .unwrap();
         let cleanup_woken = manager.cleanup_notify.notified();
         manager
-            .notify_agent_exit(&workspace, "helper", None, false)
+            .notify_agent_exit(&workspace, "helper", None, false, None)
             .await;
         manager
             .post_agent_exit(&workspace, "helper", None, false)
@@ -477,7 +547,7 @@ mod tests {
             .await
             .unwrap();
         manager
-            .notify_agent_exit(&workspace, "helper", Some(143), true)
+            .notify_agent_exit(&workspace, "helper", Some(143), true, None)
             .await;
         manager
             .post_agent_exit(&workspace, "helper", Some(143), true)
@@ -530,6 +600,86 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn overload_notifications_explain_recovery_policy_and_missing_records() {
+        let (root, manager) = manager().await;
+        let repo = repository(root.path(), "repo");
+        let repo = manager
+            .register_repository(repo.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        let workspace = manager
+            .create_workspace(&repo.id, "agent".into(), None, None, None)
+            .await
+            .unwrap();
+        for (recover, enabled, expected) in [
+            (false, true, "configure [agent_resume]"),
+            (true, false, "automatic recovery disabled"),
+            (
+                true,
+                true,
+                "automatic session restore waits for healthy load",
+            ),
+        ] {
+            let mut config = crate::config::Config::default();
+            config.overload.recovery.enabled = enabled;
+            manager.publish_config(config);
+            let execution = manager
+                .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+                .await
+                .unwrap();
+            let id = &execution.plan.id;
+            manager
+                .track_agent(id, "codex", &workspace.id, &workspace.name, recover)
+                .await;
+            assert!(
+                manager
+                    .stop_agent_for_overload("critical memory pressure")
+                    .await
+            );
+            let record = crate::execution::recovery::record_path(&manager.paths, &workspace.id, id);
+            assert!(record.is_file());
+            assert_eq!(
+                serde_json::from_slice::<serde_json::Value>(&std::fs::read(&record).unwrap())
+                    .unwrap(),
+                serde_json::json!({"agent":"codex"})
+            );
+            std::fs::remove_file(&record).unwrap();
+            let events = manager.notifications(false, 1).await.unwrap();
+            assert!(
+                events[0].message.contains(expected),
+                "{}",
+                events[0].message
+            );
+            assert!(
+                events[0]
+                    .message
+                    .contains(&format!("shoal resume {} --execution {id}", workspace.name))
+            );
+            assert_eq!(
+                manager.agent_overload_reason(id).await.as_deref(),
+                Some("critical memory pressure")
+            );
+            manager
+                .notify_agent_exit(
+                    &workspace,
+                    "codex",
+                    Some(143),
+                    false,
+                    Some((id, "critical memory pressure")),
+                )
+                .await;
+            let events = manager.notifications(false, 1).await.unwrap();
+            assert!(events[0].message.contains("critical memory pressure"));
+            assert!(events[0].message.contains("recovery record unavailable"));
+            assert!(events[0].message.contains("shoal doctor before resuming"));
+            manager
+                .finish_execution(id.clone(), ExecutionKind::Command, Some(143))
+                .await
+                .unwrap();
+        }
+    }
+
+    #[tokio::test]
     async fn overload_stops_only_one_agent_and_preserves_work_and_leases() {
         let (_root, manager) = manager().await;
         let repo = repository(_root.path(), "repo");
@@ -555,14 +705,26 @@ mod tests {
             .await
             .unwrap();
         manager
-            .track_agent(&first.plan.id, "first", &workspace.name)
+            .track_agent(
+                &first.plan.id,
+                "first",
+                &workspace.id,
+                &workspace.name,
+                false,
+            )
             .await;
         let second = manager
             .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
             .await
             .unwrap();
         manager
-            .track_agent(&second.plan.id, "second", &workspace.name)
+            .track_agent(
+                &second.plan.id,
+                "second",
+                &workspace.id,
+                &workspace.name,
+                false,
+            )
             .await;
         assert!(
             manager

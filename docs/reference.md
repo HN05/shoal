@@ -132,7 +132,10 @@ Resume commands are argument arrays in `[agent_resume]`, keyed by the tracked
 agent name. They use the same workspace substitutions and repository layering as
 `[commands]`; they must restore a session without repeating the initial prompt.
 No resume command is configured by default; a failed command lookup warns and
-disables automatic recovery for that launch. With one configured, the wrapper
+disables automatic recovery for that launch. Overload notifications include the
+pressure reason, execution ID, and automatic or manual recovery path. Shoal saves
+the minimal recovery handoff before signaling the wrapper, so a wrapper killed
+under pressure can still be resumed after reconciliation. With one configured, the wrapper
 stays connected while the agent is stopped and automatically runs that command
 after healthy readings persist for the recovery interval. Recovery requires
 headroom below each enabled signal’s recovery threshold; thresholds must be

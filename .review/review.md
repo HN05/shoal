@@ -182,12 +182,14 @@ instructions instead of the PR delivery guidance below.
 - Machine-wide memory overload protection is opt-out; sustained CPU protection is
   opt-in. Stop one connected tracked
   agent at a time through its wrapper, newest first, with configurable thresholds
-  and timing; retain work and leases, notify, and never select disconnected
+  and timing; retain work and leases, notify with the pressure reason and recovery
+  path, distinguish automatic recovery from manual or unavailable recovery, and never select disconnected
   executions. Failed readings reset the sustained timer and authorize no stop.
   Automatic recovery requires a configured session restore command, proven child
   termination, verified ready workspace ownership and sustained healthy headroom.
   Keep waiting wrappers tracked, serialize restores and honor manual stop/removal.
-  Persist manual recovery without replaying the original prompt; consume the
+  Persist overload recovery before delivering the stop, reporting save failures
+  without disabling protection. Persist manual recovery without replaying the original prompt; consume the
   selected record only after its replacement process is registered. Unrelated
   executions do not block manual recovery.
   Manual pause targets connected tracked agents, saves recovery for explicit

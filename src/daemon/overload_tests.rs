@@ -233,7 +233,13 @@ async fn manual_pause_selects_only_the_requested_connected_agent() {
         .await
         .unwrap();
     manager
-        .track_agent(&unrelated.plan.id, "other", &workspace.name)
+        .track_agent(
+            &unrelated.plan.id,
+            "other",
+            &workspace.id,
+            &workspace.name,
+            false,
+        )
         .await;
     assert!(
         manager

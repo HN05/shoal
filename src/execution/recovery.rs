@@ -101,6 +101,30 @@ impl Recovery {
     }
 }
 
+/// Save the agent identity before an overload signal is delivered. This keeps
+/// the handoff recoverable if the wrapper is terminated before it can write it.
+pub(crate) fn save_record(
+    paths: &Paths,
+    workspace_id: &str,
+    id: &str,
+    agent: &str,
+) -> Result<PathBuf> {
+    let directory = paths.workspace_state(workspace_id);
+    std::fs::create_dir_all(&directory)?;
+    let path = record_path(paths, workspace_id, id);
+    crate::fsutil::replace_atomically(
+        &path,
+        &serde_json::to_vec(&Record {
+            agent: agent.to_owned(),
+        })?,
+        ReplaceOptions {
+            permissions: Permissions::Temporary,
+            sync: true,
+        },
+    )?;
+    Ok(path)
+}
+
 pub(crate) fn record_path(paths: &Paths, workspace_id: &str, id: &str) -> PathBuf {
     paths
         .workspace_state(workspace_id)

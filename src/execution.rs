@@ -429,7 +429,10 @@ async fn supervise(
             let status = stop(&mut child, &group, libc::SIGTERM).await?;
             let control = result.context("daemon disconnected; command stopped, execution requires reconciliation")?;
             match control {
-                Control::OverloadStop { recover } => recovery = Some(recover),
+                Control::OverloadStop { recover, reason } => {
+                    eprintln!("shoal: stopping agent: {reason}; workspace and resource leases retained");
+                    recovery = Some(recover);
+                }
                 Control::Pause => recovery = Some(false),
                 Control::Stop => {},
                 _ => bail!("unexpected execution control"),

@@ -674,7 +674,13 @@ async fn execute(
         && let Some(agent) = &agent
     {
         manager
-            .track_agent(&execution_id, agent, &agent_workspace.name)
+            .track_agent(
+                &execution_id,
+                agent,
+                &agent_workspace.id,
+                &agent_workspace.name,
+                recover,
+            )
             .await;
     }
     let (reader, mut writer) = stream.into_split();
@@ -702,10 +708,10 @@ async fn execute(
                         changed = stop.changed(), if !sent_stop => {
                             changed?;
                             if *stop.borrow_and_update() {
-                                let control = if manager.agent_was_overloaded(&execution_id).await {
+                                let control = if let Some(reason) = manager.agent_overload_reason(&execution_id).await {
                                     // Read the policy now, so a reload applies to running agents.
                                     recovering = recover && manager.config().overload.recovery.enabled;
-                                    Control::OverloadStop { recover: recovering }
+                                    Control::OverloadStop { recover: recovering, reason }
                                 } else if manager.agent_was_paused(&execution_id).await {
                                     Control::Pause
                                 } else { Control::Stop };
@@ -751,8 +757,13 @@ async fn execute(
     }
     .await;
     readers.abort_all();
+    let overload_reason = if agent.is_some() {
+        manager.agent_overload_reason(&execution_id).await
+    } else {
+        None
+    };
     let complete = manager
-        .finish_execution(execution_id, kind, result.as_ref().ok().copied())
+        .finish_execution(execution_id.clone(), kind, result.as_ref().ok().copied())
         .await?;
     if let Some(agent) = &agent {
         manager
@@ -761,6 +772,9 @@ async fn execute(
                 agent,
                 result.as_ref().ok().copied(),
                 complete,
+                overload_reason
+                    .as_deref()
+                    .map(|reason| (execution_id.as_str(), reason)),
             )
             .await;
     }
