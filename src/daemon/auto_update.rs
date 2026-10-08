@@ -1,6 +1,6 @@
 //! Restart a managed daemon after its installed executable is replaced.
 use super::workspace::Manager;
-use anyhow::Result;
+use anyhow::{Result, ensure};
 use std::{
     fs,
     os::unix::fs::MetadataExt,
@@ -37,6 +37,7 @@ fn replaced(original: &ExecutableIdentity, path: &Path) -> bool {
 pub(super) struct Update {
     pub(super) path: PathBuf,
     original: ExecutableIdentity,
+    known_protocol: Option<(ExecutableIdentity, Option<u32>)>,
 }
 
 impl Update {
@@ -46,13 +47,60 @@ impl Update {
         }
         let path = crate::service::executable(None).ok()?;
         let original = identity(&path).ok()?;
-        Some(Self { path, original })
+        Some(Self {
+            path,
+            original,
+            known_protocol: None,
+        })
     }
 
     pub(super) fn pending(&self) -> bool {
         crate::fsutil::is_executable(&self.path).unwrap_or(false)
             && replaced(&self.original, &self.path)
     }
+
+    /// An older follower cannot reconnect to an incompatible wire protocol.
+    /// Cache the candidate's metadata until its executable changes again.
+    pub(super) async fn supports_followers(&mut self, clients: usize) -> Result<bool> {
+        if clients == 0 {
+            return Ok(true);
+        }
+        let candidate = identity(&self.path)?;
+        if self
+            .known_protocol
+            .as_ref()
+            .is_none_or(|(known, _)| *known != candidate)
+        {
+            let protocol = match installed_protocol(&self.path).await {
+                Ok(protocol) => Some(protocol),
+                Err(error) => {
+                    eprintln!("daemon update waits for clients: {error:#}");
+                    None
+                }
+            };
+            self.known_protocol = Some((candidate, protocol));
+        }
+        Ok(self
+            .known_protocol
+            .as_ref()
+            .is_some_and(|(_, protocol)| *protocol == Some(crate::protocol::VERSION)))
+    }
+}
+
+async fn installed_protocol(path: &Path) -> Result<u32> {
+    #[derive(serde::Deserialize)]
+    struct BuildInfo {
+        protocol: u32,
+    }
+    let mut command = tokio::process::Command::new(path);
+    command.arg("__build-info");
+    let output = crate::subprocess::Run::new(command)
+        .timeout(std::time::Duration::from_secs(15))
+        .output()
+        .await?;
+    let info: BuildInfo = serde_json::from_str(&output)?;
+    ensure!(info.protocol > 0, "invalid installed daemon protocol");
+    Ok(info.protocol)
 }
 
 /// Admission is paused in the server while checking. Existing connections

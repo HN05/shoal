@@ -53,6 +53,8 @@ pub struct WorkspaceScope {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    #[command(name = "__build-info", hide = true)]
+    BuildInfo,
     /// List or run configured commands.
     Run {
         name: Option<String>,
