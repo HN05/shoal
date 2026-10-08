@@ -1171,17 +1171,6 @@ pub(super) async fn inspect(ctx: &Context, workspace: Option<String>) -> Result<
     Ok(0)
 }
 
-pub(super) async fn stop(ctx: &Context, workspace: Option<String>) -> Result<i32> {
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    request::<()>(&ctx.paths, Method::StopWorkspace { workspace }).await?;
-    ctx.emit_styled(
-        Style::Success,
-        "Workspace processes stopped",
-        json!({"stopped": true}),
-    )?;
-    Ok(0)
-}
-
 pub(super) async fn remove(
     ctx: &Context,
     workspace: Option<String>,

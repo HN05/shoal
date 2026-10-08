@@ -397,7 +397,10 @@ pub enum Command {
         reclaim: bool,
     },
     /// Stop tracked agents and commands, saving them for `shoal resume`; keep the workspace.
-    Stop { workspace: Option<String> },
+    Stop {
+        #[command(flatten)]
+        scope: WorkspaceScope,
+    },
     /// Remove a workspace and release its resources.
     ///
     /// Redundant branches are removed; the default branch is retained unless explicitly deleted.

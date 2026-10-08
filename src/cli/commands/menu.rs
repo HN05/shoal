@@ -5,7 +5,7 @@ use anyhow::{Result, ensure};
 use crate::{
     agent::{BuiltinAgent, CodexMode},
     cli::{
-        Command, ConfirmationArgs, client,
+        Command, ConfirmationArgs, WorkspaceScope, client,
         context::Context,
         output::{Palette, Style},
         ui::{self, KeyBindings},
@@ -97,7 +97,12 @@ pub(super) async fn choose(ctx: &Context) -> Result<Command> {
             delete_branch: false,
         },
         MenuAction::Inspect => Command::Inspect { workspace },
-        MenuAction::Stop => Command::Stop { workspace },
+        MenuAction::Stop => Command::Stop {
+            scope: WorkspaceScope {
+                workspace,
+                all: false,
+            },
+        },
         MenuAction::Diff => Command::Diff { workspace },
         MenuAction::Execute => execute_command(ctx, workspace)?,
     })

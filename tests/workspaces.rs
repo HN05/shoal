@@ -3509,6 +3509,54 @@ fn stop_and_manual_removal_terminate_connected_executions() {
 }
 
 #[test]
+fn stop_all_stops_running_workspaces_and_marks_them_stopped() {
+    let fixture = Fixture::new();
+    let mut children = Vec::new();
+    for name in ["first", "second"] {
+        fixture.add(name);
+        children.push(
+            fixture
+                .command()
+                .args(["exec", name, "--", "sh", "-c", "while :; do sleep 1; done"])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .unwrap(),
+        );
+    }
+    fixture.add("idle");
+    let deadline = Instant::now() + Duration::from_secs(60);
+    for name in ["first", "second"] {
+        while fixture.ok(&["inspect", name])["executions"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+        {
+            assert!(Instant::now() < deadline);
+            thread::sleep(Duration::from_millis(10));
+        }
+    }
+    let stopped = fixture.ok(&["stop", "--all"]);
+    let mut names = stopped["stopped"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|name| name.as_str().unwrap())
+        .collect::<Vec<_>>();
+    names.sort();
+    assert_eq!(names, ["first", "second"]);
+    assert!(stopped["failed"].as_array().unwrap().is_empty());
+    for mut child in children {
+        assert!(!child.wait().unwrap().success());
+    }
+    let listed = fixture.run(&["ls"]);
+    let listed = String::from_utf8_lossy(&listed.stdout);
+    for line in listed.lines() {
+        assert_eq!(line.contains("stopped"), !line.contains("idle"), "{listed}");
+    }
+}
+
+#[test]
 fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
     let fixture = Fixture::with_config(Some(
         "[commands]\nclaude = ['sh', './agent.sh']\n[agent_resume]\nclaude = ['sh', './resume.sh', '{prompt}']\n",

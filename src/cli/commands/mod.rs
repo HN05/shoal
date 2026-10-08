@@ -20,6 +20,7 @@ mod review;
 mod service;
 mod simulators;
 mod skill;
+mod stop;
 pub(in crate::cli) mod workspaces;
 
 #[cfg(test)]
@@ -329,7 +330,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             execution,
             discard,
         } => resume::run(&ctx, workspace, execution, discard).await,
-        Command::Stop { workspace } => workspaces::stop(&ctx, workspace).await,
+        Command::Stop { scope } => stop::run(&ctx, scope).await,
         Command::Rm {
             workspace,
             confirmation,

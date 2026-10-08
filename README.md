@@ -121,6 +121,7 @@ shoal notifications           # Conflicts, finished agents, and removals you mis
 shoal notify "PR #12 is ready to merge"  # Notify the user from a workspace
 shoal events --follow --json  # Stream workspace lifecycle events
 shoal stop fix-login          # Stop agents and commands; save them for shoal resume
+shoal stop --all              # Stop every workspace, for example before a reboot
 shoal done fix-login          # Mark finished and request safe cleanup
 shoal done --keep fix-login   # Mark finished; keep for review
 shoal done --cleanup fix-login # Override a configured keep default
