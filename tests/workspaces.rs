@@ -3700,6 +3700,72 @@ fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
 }
 
 #[test]
+fn daemon_shutdown_saves_running_agents_and_commands_for_resume() {
+    let mut fixture = Fixture::with_config(Some("[commands]\nclaude = ['sh', './agent.sh']\n"));
+    let workspace = fixture.add("restarted");
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    fs::write(
+        path.join("agent.sh"),
+        "touch agent-started\ntrap 'exit 0' TERM\nwhile :; do sleep 1; done\n",
+    )
+    .unwrap();
+    let spawn = |args: &[&str]| {
+        fixture
+            .command()
+            .args(args)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap()
+    };
+    let children = [
+        spawn(&["claude", "restarted"]),
+        spawn(&[
+            "exec",
+            "restarted",
+            "--",
+            "sh",
+            "-c",
+            "touch command-started; while :; do sleep 1; done",
+        ]),
+    ];
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !(path.join("agent-started").exists() && path.join("command-started").exists()) {
+        assert!(Instant::now() < deadline, "executions did not start");
+        thread::sleep(Duration::from_millis(10));
+    }
+    let output = fixture.run(&["daemon", "stop"]);
+    assert!(output.status.success(), "{output:?}");
+    fixture.daemon.child.wait().unwrap();
+    for mut child in children {
+        child.wait().unwrap();
+    }
+    let state = fixture
+        .root
+        .path()
+        .join("state/workspaces")
+        .join(workspace["id"].as_str().unwrap());
+    let mut saved = fs::read_dir(&state)
+        .unwrap()
+        .map(|entry| {
+            let name = entry.unwrap().file_name().to_string_lossy().into_owned();
+            name[name.find('.').unwrap()..].to_owned()
+        })
+        .collect::<Vec<_>>();
+    saved.sort();
+    assert_eq!(saved, [".command.json", ".recovery.json"]);
+    fixture.restart();
+    // Nothing is left for shoal doctor to reconcile.
+    assert!(
+        fixture.ok(&["inspect", "restarted"])["executions"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
 fn registry_survives_daemon_restart() {
     let mut fixture = Fixture::new();
     let workspace = fixture.add("persistent");

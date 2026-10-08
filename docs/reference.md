@@ -39,7 +39,9 @@ Upgrade with `brew update && brew upgrade hn05/tap/shoal` (`--fetch-HEAD` for
 `main`). Managed daemons notice the replacement and restart once tracked executions
 have finished and daemon operations are idle. Followed event and notification
 streams reconnect across the handoff; use `shoal daemon restart` to apply an
-upgrade immediately. The channels share one installation,
+upgrade immediately, then `shoal resume --all`: stopping the daemon first stops
+its connected agents and commands as `shoal stop` does, within the workspace stop
+timeout. The channels share one installation,
 daemon, and skill path; to switch, run `shoal daemon stop`, uninstall, install
 the other channel, and `shoal daemon start`. State and skill links live outside
 the package and survive. Skill links follow Homebrew's stable `opt` path; a

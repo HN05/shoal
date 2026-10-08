@@ -499,6 +499,28 @@ impl Manager {
         Ok(())
     }
 
+    /// Before the daemon exits, stop every connected execution as `shoal stop`
+    /// does, so a restart leaves resumable records instead of disconnected
+    /// executions. Wrappers that miss the bound are left for the startup audit.
+    pub async fn stop_for_shutdown(&self) {
+        let deadline = Instant::now() + timing::WORKSPACE_STOP_TIMEOUT;
+        {
+            let connections = self.connections.lock().await;
+            let mut agents = self.agents.lock().await;
+            let mut saving = self.resumable_stops.lock().await;
+            for (id, sender) in connections.iter().filter(|(_, sender)| !sender.is_closed()) {
+                if let Some(agent) = agents.get_mut(id) {
+                    agent.cancel_recovery();
+                }
+                saving.insert(id.clone());
+                let _ = sender.send(true);
+            }
+        }
+        while Instant::now() < deadline && !self.connections.lock().await.is_empty() {
+            sleep(timing::WORKSPACE_STOP_POLL_INTERVAL).await;
+        }
+    }
+
     pub(crate) async fn stop_saves_records(&self, id: &str) -> bool {
         self.resumable_stops.lock().await.contains(id)
     }

@@ -166,6 +166,7 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
         }
     };
     background.shutdown().await;
+    manager.stop_for_shutdown().await;
     clients.shutdown().await;
     manager.store.shutdown().await;
     if quiescence.is_some() {

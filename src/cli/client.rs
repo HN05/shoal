@@ -169,7 +169,13 @@ pub(crate) async fn reconnect(
 
 /// Wait for the daemon to be running (or stopped).
 pub async fn wait(paths: &Paths, running: bool) -> Result<()> {
-    let deadline = Instant::now() + timing::DAEMON_WAIT_TIMEOUT;
+    // A stopping daemon first stops its connected executions.
+    let limit = if running {
+        timing::DAEMON_WAIT_TIMEOUT
+    } else {
+        timing::DAEMON_WAIT_TIMEOUT + timing::WORKSPACE_STOP_TIMEOUT
+    };
+    let deadline = Instant::now() + limit;
     loop {
         let last_error = match status(paths).await {
             Ok(status) if status.is_some() == running => return Ok(()),
@@ -180,7 +186,7 @@ pub async fn wait(paths: &Paths, running: bool) -> Result<()> {
             Instant::now() < deadline,
             "daemon did not {} within {} seconds{}",
             if running { "start" } else { "stop" },
-            timing::DAEMON_WAIT_TIMEOUT.as_secs(),
+            limit.as_secs(),
             last_error.map(|e| format!(": {e:#}")).unwrap_or_default()
         );
         sleep(timing::DAEMON_POLL_INTERVAL).await;
