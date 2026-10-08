@@ -21,6 +21,7 @@ pub(in crate::cli) async fn open_app(
     program: &str,
     args: Vec<OsString>,
 ) -> Result<i32> {
+    super::ensure_program(&format!("{program} app"), program)?;
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let inspection = client::inspect(&ctx.paths, workspace).await?;
     ensure!(
@@ -38,8 +39,6 @@ pub(in crate::cli) async fn open_app(
         .env_remove(env::SHELL_DIRECTIVE)
         .status()
         .await
-        .with_context(|| {
-            format!("launch {program} app; install {program} and make it available on PATH")
-        })?;
+        .with_context(|| format!("launch {program} app"))?;
     Ok(execution::exit_code(status))
 }

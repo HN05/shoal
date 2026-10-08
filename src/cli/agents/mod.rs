@@ -9,7 +9,7 @@ use std::{
     path::Path,
 };
 
-use anyhow::{Result, ensure};
+use anyhow::{Context as _, Result, ensure};
 
 use crate::{
     agent::{Agent, CodexMode},
@@ -33,7 +33,10 @@ pub(super) async fn default_agent(
 ) -> Result<Option<Agent>> {
     let settings = client::settings(&ctx.paths, target).await?;
     match agent.or(settings.default_agent.clone()) {
-        Some(agent) => Ok(Some(agent)),
+        Some(agent) => {
+            ensure_installed(&agent, &settings.commands)?;
+            Ok(Some(agent))
+        }
         None => pick_default_agent(ctx, &settings),
     }
 }
@@ -79,27 +82,51 @@ fn pick_agent(ctx: &Context, settings: &Effective) -> Result<Option<Agent>> {
     ui::pick_choice(ctx, "Agent> ", &choices)
 }
 
-/// Whether every executable the agent starts is available, so the picker
-/// offers only agents that can launch.
-fn installed(agent: &Agent, commands: &Commands, search_path: &OsStr) -> bool {
-    let programs = match agent {
-        Agent::Happy(agent) => vec!["happy", agent.as_str()],
+/// Whether every executable the agent starts is available, so pickers and
+/// completion offer only agents that can launch.
+pub(in crate::cli) fn installed(agent: &Agent, commands: &Commands, search_path: &OsStr) -> bool {
+    programs(agent, commands).is_some_and(|programs| {
+        programs
+            .into_iter()
+            .all(|program| program_available(program, search_path))
+    })
+}
+
+/// Refuse an agent whose executables are missing before anything starts.
+pub(in crate::cli) fn ensure_installed(agent: &Agent, commands: &Commands) -> Result<()> {
+    let name = String::from(agent.clone());
+    let programs = programs(agent, commands)
+        .with_context(|| format!("unknown agent {name:?}; define it in [commands]"))?;
+    for program in programs {
+        ensure_program(&name, program)?;
+    }
+    Ok(())
+}
+
+/// Refuse a launcher whose executable is not installed.
+pub(in crate::cli) fn ensure_program(name: &str, program: &str) -> Result<()> {
+    let search_path = std::env::var_os("PATH").unwrap_or_default();
+    ensure!(
+        program_available(program, &search_path),
+        "cannot start {name}: {program} is not installed or not on PATH"
+    );
+    Ok(())
+}
+
+/// The executables an agent starts; `None` when it has no launcher.
+fn programs<'a>(agent: &'a Agent, commands: &'a Commands) -> Option<Vec<&'a str>> {
+    match agent {
+        Agent::Happy(agent) => Some(vec!["happy", agent.as_str()]),
         Agent::Codex | Agent::Claude | Agent::Custom(_) => commands
             .get(&String::from(agent.clone()))
             .and_then(|argv| argv.first())
-            .map(String::as_str)
-            .into_iter()
-            .collect(),
-    };
-    !programs.is_empty()
-        && programs
-            .into_iter()
-            .all(|program| program_available(program, search_path))
+            .map(|program| vec![program.as_str()]),
+    }
 }
 
 /// Programs with placeholders or workspace-relative paths resolve only at
 /// launch, so they are assumed available.
-fn program_available(program: &str, search_path: &OsStr) -> bool {
+pub(in crate::cli) fn program_available(program: &str, search_path: &OsStr) -> bool {
     let path = Path::new(program);
     if path.is_absolute() {
         fsutil::is_executable(path).unwrap_or(false)
@@ -172,5 +199,18 @@ mod tests {
         assert!(installed(Agent::Custom("relative".into())));
         assert!(!installed(Agent::Custom("missing".into())));
         assert!(!installed(Agent::Custom("undefined".into())));
+    }
+
+    #[test]
+    fn launches_name_the_missing_program_or_undefined_agent() {
+        let mut commands = named_commands::defaults();
+        commands.insert("probe".into(), vec!["shoal-test-missing-program".into()]);
+        let error = ensure_installed(&Agent::Custom("probe".into()), &commands).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "cannot start probe: shoal-test-missing-program is not installed or not on PATH"
+        );
+        let error = ensure_installed(&Agent::Custom("undefined".into()), &commands).unwrap_err();
+        assert!(error.to_string().starts_with("unknown agent"), "{error}");
     }
 }

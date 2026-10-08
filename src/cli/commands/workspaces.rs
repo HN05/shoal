@@ -428,11 +428,8 @@ async fn choose_add_agent(settings: &AddSettings<'_>, agent: AgentLaunch) -> Res
             }
         }
     };
-    if let Some(Agent::Custom(name)) = &agent {
-        ensure!(
-            settings.get().await?.commands.contains_key(name),
-            "unknown agent {name:?}; define it in [commands] in Shoal config"
-        );
+    if let Some(agent) = &agent {
+        agents::ensure_installed(agent, &settings.get().await?.commands)?;
     }
     Ok(AgentChoice::Chosen(agent))
 }

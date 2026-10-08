@@ -6,7 +6,7 @@ use serde_json::json;
 
 use super::trust::{trust_claude, trust_codex};
 use crate::{
-    agent::BuiltinAgent,
+    agent::{Agent, BuiltinAgent},
     cli::{
         client,
         context::Context,
@@ -32,6 +32,7 @@ pub(in crate::cli) async fn happy(
     let workspace = client::inspect(&ctx.paths, workspace).await?.workspace;
     let settings =
         client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
+    super::ensure_installed(&Agent::Happy(agent), &settings.commands)?;
     let instructions = templates::instructions(settings.agent_template.as_deref(), &workspace);
     let prompt = if agent == BuiltinAgent::Codex && !instructions.is_empty() {
         Some(match prompt {

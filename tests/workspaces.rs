@@ -3218,23 +3218,40 @@ exit 7
     assert!(!output.status.success());
     assert!(!inspection.exists());
 
-    // A missing executable leaves a completed worktree available for retry.
+    // A missing executable is refused before any worktree is created.
     fs::remove_file(bin.join("codex")).unwrap();
     fs::write(config_dir.join("config.toml"), "").unwrap();
-    let output = fixture
-        .command()
-        .args([
-            "add",
-            fixture.repo.to_str().unwrap(),
-            "missing-agent",
-            "--agent",
-            "codex",
-        ])
-        .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
-        .output()
-        .unwrap();
+    let add = |name: &str| {
+        fixture
+            .command()
+            .args([
+                "add",
+                fixture.repo.to_str().unwrap(),
+                name,
+                "--agent",
+                "codex",
+            ])
+            .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+            .output()
+            .unwrap()
+    };
+    let output = add("missing-agent");
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("cannot start codex: codex is not installed or not on PATH"),
+        "{output:?}"
+    );
+    assert!(!fixture.run(&["inspect", "missing-agent"]).status.success());
+
+    // A launch that fails only once it starts leaves the worktree for retry.
+    fs::write(
+        config_dir.join("config.toml"),
+        "[commands]\ncodex = ['{path}/missing-codex']\n",
+    )
+    .unwrap();
+    let output = add("failed-agent");
     assert!(!output.status.success());
-    let workspace = fixture.ok(&["inspect", "missing-agent"]);
+    let workspace = fixture.ok(&["inspect", "failed-agent"]);
     assert!(
         Path::new(workspace["workspace"]["path"].as_str().unwrap())
             .join("tracked")
@@ -9723,6 +9740,7 @@ fn issue_number_picks_a_repository_before_lookup_interactively() {
     fixture.add_github_origin();
     let bin = fixture.root.path().join("bin");
     fs::create_dir(&bin).unwrap();
+    install_fake_agents(&fixture, &["claude"]);
     for (tool, script) in [
         ("fzf", "#!/bin/sh\nhead -n 1\n"),
         (
@@ -9765,6 +9783,9 @@ fn issue_lookup_errors_never_create_a_workspace() {
         .canonicalize()
         .unwrap();
     std::os::unix::fs::symlink(git, bin.join("git")).unwrap();
+    // Agents are checked before the issue lookup these cases exercise.
+    fs::write(bin.join("codex"), "#!/bin/sh\n").unwrap();
+    fs::set_permissions(bin.join("codex"), fs::Permissions::from_mode(0o700)).unwrap();
     let tool = bin.join("gh");
     for (input, script, diagnostic) in [
         ("4", None, "install it"),
@@ -11156,6 +11177,14 @@ sleep 300
     )
     .unwrap();
     fs::set_permissions(&script, fs::Permissions::from_mode(0o700)).unwrap();
+    // Happy starts these itself; launches need them on PATH.
+    for agent in ["claude", "codex"] {
+        let path = bin.join(agent);
+        if !path.exists() {
+            fs::write(&path, "#!/bin/sh\n").unwrap();
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
+        }
+    }
     fixture.root.path().join("happy-record")
 }
 
@@ -11663,22 +11692,40 @@ fn happy_codex_prompts_are_delivered_through_a_seeded_session() {
         serde_json::json!({"token": "test-token", "secret": key}).to_string(),
     )
     .unwrap();
-    fs::remove_file(fixture.root.path().join("bin/happy")).unwrap();
     fixture.add("orphan");
-    let output = fixture
-        .command()
-        .args(["--json", "happy", "codex", "orphan", "--prompt", "hello"])
-        .env("HAPPY_SERVER_URL", &server.url)
-        // Only the fixture directory and system tools: a real happy must not be found.
-        .env(
-            "PATH",
-            format!(
-                "{}:/usr/bin:/bin",
-                fixture.root.path().join("bin").display()
-            ),
-        )
-        .output()
-        .unwrap();
+    let launch_orphan = || {
+        fixture
+            .command()
+            .args(["--json", "happy", "codex", "orphan", "--prompt", "hello"])
+            .env("HAPPY_SERVER_URL", &server.url)
+            // Only the fixture directory and system tools: a real happy must not be found.
+            .env(
+                "PATH",
+                format!(
+                    "{}:/usr/bin:/bin",
+                    fixture.root.path().join("bin").display()
+                ),
+            )
+            .output()
+            .unwrap()
+    };
+    // A missing happy is refused before any session is seeded.
+    let happy = fixture.root.path().join("bin/happy");
+    fs::remove_file(&happy).unwrap();
+    let requests = server.state()["requests"].as_array().unwrap().len();
+    let output = launch_orphan();
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("happy is not installed"),
+        "{output:?}"
+    );
+    assert_eq!(
+        server.state()["requests"].as_array().unwrap().len(),
+        requests
+    );
+    // An executable that cannot start fails only after seeding.
+    fs::write(&happy, "#!/nonexistent/interpreter\n").unwrap();
+    fs::set_permissions(&happy, fs::Permissions::from_mode(0o700)).unwrap();
+    let output = launch_orphan();
     assert!(!output.status.success(), "{output:?}");
     let state = server.state();
     let methods: Vec<&str> = state["requests"]
@@ -12437,6 +12484,7 @@ fn detached_agents_use_auth_wrappers_and_invalid_wrappers_prevent_launch() {
             .contains("detached agent\ntwo words\n")
     );
     fs::remove_file(&wrapper).unwrap();
+    install_fake_agents(&fixture, &["claude"]);
     let output = fixture.run(&["claude", "detached-auth"]);
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("agent_auth.fj"));
@@ -14973,6 +15021,14 @@ fn already_closed_issues_are_rejected_before_creating_workspaces() {
     }
 }
 
+/// Agent launches need their executables on PATH, which interactive commands
+/// limit to the fixture's `bin`.
+fn install_fake_agents(fixture: &Fixture, agents: &[&str]) {
+    for agent in agents {
+        install_test_script(&fixture.root.path().join("bin").join(agent), "#!/bin/sh\n");
+    }
+}
+
 fn install_fake_herdr(fixture: &Fixture) {
     install_test_script(
         &fixture.root.path().join("bin/herdr"),
@@ -15337,6 +15393,7 @@ fn herdr_plans_carry_issue_urls_instead_of_bodies() {
     let fixture = Fixture::new();
     fixture.add_github_origin();
     install_fake_herdr(&fixture);
+    install_fake_agents(&fixture, &["codex"]);
     // Larger than one Linux argument may be, so it cannot ride in the tab's --env.
     let body = "x".repeat(256 * 1024);
     let response = fixture.root.path().join("issue-response");
@@ -15595,6 +15652,7 @@ fn herdr_closes_when_done_cleanup_terminates_the_agent() {
 fn herdr_retains_detached_happy_exits_and_closes_on_done_after_restart() {
     let mut fixture = Fixture::new();
     install_fake_herdr(&fixture);
+    install_fake_agents(&fixture, &["claude"]);
     install_test_script(
         &fixture.root.path().join("bin/happy"),
         "#!/bin/sh\nprintf done > \"$HOME/happy-exited\"\nexit 7\n",

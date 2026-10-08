@@ -1,14 +1,14 @@
 //! Terminal agents run through the tracked execution wrapper.
 use std::ffi::{OsStr, OsString};
 
-use anyhow::{Context as _, Result};
+use anyhow::Result;
 
 use super::{
-    open_app,
+    ensure_installed, open_app,
     trust::{trust_claude, trust_codex},
 };
 use crate::{
-    agent::{BuiltinAgent, CodexMode},
+    agent::{Agent, BuiltinAgent, CodexMode},
     cli::{
         client,
         context::Context,
@@ -27,6 +27,7 @@ pub(in crate::cli) async fn claude(
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let launch = ResolvedLaunch::inspect(ctx, workspace, None).await?;
+    ensure_installed(&Agent::Claude, &launch.settings.commands)?;
     trust_claude(ctx, &launch.workspace).await;
     let args = templates::instruction_args(BuiltinAgent::Claude, launch.instructions())
         .into_iter()
@@ -51,6 +52,7 @@ pub(in crate::cli) async fn codex(
         return open_app(ctx, Some(workspace), "codex", args).await;
     }
     let launch = ResolvedLaunch::inspect(ctx, workspace, Some(settings)).await?;
+    ensure_installed(&Agent::Codex, &launch.settings.commands)?;
     trust_codex(ctx, &launch.workspace).await;
     let args = templates::instruction_args(BuiltinAgent::Codex, launch.instructions())
         .into_iter()
@@ -77,11 +79,9 @@ pub(super) async fn custom_agent(
         .filter(|part| !part.is_empty())
         .collect::<Vec<_>>()
         .join("\n\n");
-    let argv = launch
-        .settings
-        .commands
-        .get(name)
-        .with_context(|| format!("unknown agent {name:?}; define it in [commands]"))?;
+    let commands = &launch.settings.commands;
+    ensure_installed(&Agent::Custom(name.into()), commands)?;
+    let argv = &commands[name];
     if !prompt.is_empty() && !argv.iter().any(|arg| arg.contains("{prompt}")) {
         args.insert(0, prompt.clone().into());
     }

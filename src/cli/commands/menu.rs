@@ -1,16 +1,17 @@
 //! The bare `shoal` invocation: an fzf menu over workspaces that turns a
 //! selection plus key binding into an ordinary [`Command`].
-use anyhow::{Result, ensure};
+use anyhow::{Context as _, Result, ensure};
 
 use crate::{
-    agent::{BuiltinAgent, CodexMode},
+    agent::{Agent, BuiltinAgent, CodexMode},
     cli::{
-        Command, ConfirmationArgs, WorkspaceScope, client,
+        Command, ConfirmationArgs, WorkspaceScope, agents, client,
         context::Context,
         output::{Palette, Style},
         ui::{self, KeyBindings},
     },
     env,
+    protocol::ConfigTarget,
 };
 
 const ADD_ENTRY: &str = "add-workspace";
@@ -104,7 +105,7 @@ pub(super) async fn choose(ctx: &Context) -> Result<Command> {
             },
         },
         MenuAction::Diff => Command::Diff { workspace },
-        MenuAction::Execute => execute_command(ctx, workspace)?,
+        MenuAction::Execute => execute_command(ctx, workspace).await?,
     })
 }
 
@@ -117,20 +118,39 @@ enum ExecuteChoice {
     Shell,
 }
 
-fn execute_command(ctx: &Context, workspace: Option<String>) -> Result<Command> {
-    let choice = ui::pick_choice(
-        ctx,
-        "Execute> ",
-        &[
-            (ExecuteChoice::Claude, "claude"),
-            (ExecuteChoice::Codex(CodexMode::Cli), "codex cli"),
-            (ExecuteChoice::Codex(CodexMode::App), "codex app"),
-            (ExecuteChoice::Happy(BuiltinAgent::Claude), "happy claude"),
-            (ExecuteChoice::Happy(BuiltinAgent::Codex), "happy codex"),
-            (ExecuteChoice::T3, "t3"),
-            (ExecuteChoice::Shell, "custom shell command"),
-        ],
-    )?;
+async fn execute_command(ctx: &Context, workspace: Option<String>) -> Result<Command> {
+    let target = workspace
+        .clone()
+        .context("select a workspace to execute in")?;
+    let settings = client::settings(&ctx.paths, ConfigTarget::Workspace(target)).await?;
+    let search_path = std::env::var_os("PATH").unwrap_or_default();
+    let installed = |choice: &ExecuteChoice| match choice {
+        ExecuteChoice::Claude => {
+            agents::installed(&Agent::Claude, &settings.commands, &search_path)
+        }
+        ExecuteChoice::Codex(CodexMode::Cli) => {
+            agents::installed(&Agent::Codex, &settings.commands, &search_path)
+        }
+        ExecuteChoice::Codex(CodexMode::App) => agents::program_available("codex", &search_path),
+        ExecuteChoice::Happy(agent) => {
+            agents::installed(&Agent::Happy(*agent), &settings.commands, &search_path)
+        }
+        ExecuteChoice::T3 => agents::program_available("t3", &search_path),
+        ExecuteChoice::Shell => true,
+    };
+    let choices: Vec<_> = [
+        (ExecuteChoice::Claude, "claude"),
+        (ExecuteChoice::Codex(CodexMode::Cli), "codex cli"),
+        (ExecuteChoice::Codex(CodexMode::App), "codex app"),
+        (ExecuteChoice::Happy(BuiltinAgent::Claude), "happy claude"),
+        (ExecuteChoice::Happy(BuiltinAgent::Codex), "happy codex"),
+        (ExecuteChoice::T3, "t3"),
+        (ExecuteChoice::Shell, "custom shell command"),
+    ]
+    .into_iter()
+    .filter(|(choice, _)| installed(choice))
+    .collect();
+    let choice = ui::pick_choice(ctx, "Execute> ", &choices)?;
     Ok(match choice {
         ExecuteChoice::Claude => Command::Claude {
             workspace,

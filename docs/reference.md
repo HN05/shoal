@@ -400,7 +400,9 @@ Interactive `shoal add` selects an agent using `--agent` or an agent picker;
 choosing “No agent” continues without a launch. Non-interactive additions launch
 only when an agent is named. `add --agent <name>` starts the agent after
 worktree creation, setup, and
-the post-setup hook succeed; arguments after `--` go to the agent. CLI agents
+the post-setup hook succeed; arguments after `--` go to the agent. Shoal refuses
+an agent whose executable is not on PATH before creating anything, and leaves
+it out of the agent picker and the workspace menu. CLI agents
 run through the tracked execution wrapper and return the
 agent's exit code, restoring OS terminal settings even after interruption. When
 `TERM` is nonempty and not `dumb`, it also resets emulator input modes for the shell;

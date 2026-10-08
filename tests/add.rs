@@ -65,6 +65,15 @@ fn add_reuses_resolution_requests_without_reordering_failures() {
         ),
     ] {
         let daemon = FakeDaemon::start();
+        // Agent launches are refused before creation when the agent is missing.
+        let bin = daemon.root.path().join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        std::fs::write(bin.join("codex"), "#!/bin/sh\n").unwrap();
+        std::fs::set_permissions(
+            bin.join("codex"),
+            std::os::unix::fs::PermissionsExt::from_mode(0o755),
+        )
+        .unwrap();
         let output = daemon
             .command()
             .arg("--json")
