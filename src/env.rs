@@ -13,6 +13,8 @@ pub const PREFIX: &str = "SHOAL_";
 
 /// Overrides the state directory; also isolates the daemon socket.
 pub const STATE_DIR: &str = "SHOAL_STATE_DIR";
+/// Private socket and lock descriptors transferred across a managed update.
+pub(crate) const DAEMON_HANDOFF: &str = "SHOAL_DAEMON_HANDOFF";
 /// Resolved launch plan a new Herdr tab hands its worker; removed at startup.
 pub const HERDR_PLAN: &str = "SHOAL_HERDR_PLAN";
 /// Cooperative workspace scope for tracked or externally launched processes.

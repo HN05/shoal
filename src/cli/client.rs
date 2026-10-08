@@ -131,6 +131,42 @@ fn is_unreachable(error: &anyhow::Error) -> bool {
         })
 }
 
+pub(crate) fn stream_closed(error: &anyhow::Error) -> bool {
+    error
+        .chain()
+        .filter_map(|e| e.downcast_ref::<io::Error>())
+        .any(|e| {
+            matches!(
+                e.kind(),
+                io::ErrorKind::UnexpectedEof
+                    | io::ErrorKind::ConnectionReset
+                    | io::ErrorKind::BrokenPipe
+            )
+        })
+}
+
+/// Only read-only followers reconnect; ordinary requests must never replay an
+/// operation whose response was lost. The normal daemon wait budget bounds a
+/// manually stopped or failed daemon while a managed update keeps its socket.
+pub(crate) async fn reconnect(
+    paths: &Paths,
+    method: impl Fn() -> Method,
+) -> Result<(BufReader<UnixStream>, Body)> {
+    timeout(timing::DAEMON_WAIT_TIMEOUT, async {
+        loop {
+            match open_buffered(paths, method()).await {
+                Ok(connection) => return Ok(connection),
+                Err(error) if is_unreachable(&error) || stream_closed(&error) => {
+                    sleep(timing::DAEMON_POLL_INTERVAL).await
+                }
+                Err(error) => return Err(error),
+            }
+        }
+    })
+    .await
+    .context("daemon did not restart for the followed stream")?
+}
+
 /// Wait for the daemon to be running (or stopped).
 pub async fn wait(paths: &Paths, running: bool) -> Result<()> {
     let deadline = Instant::now() + timing::DAEMON_WAIT_TIMEOUT;

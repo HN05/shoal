@@ -37,7 +37,8 @@ class Shoal < Formula
       Register the per-user daemon:
         shoal install
 
-      After upgrading, restart the daemon:
+      The managed daemon applies upgrades when its clients and operations are idle.
+      To apply an upgrade immediately, restart the daemon:
         #{opt_bin}/shoal daemon restart
     EOS
   end

@@ -58,7 +58,8 @@ async fn fixture() -> (
                 accepted = listener.accept() => {
                     let (stream, _) = accepted.unwrap();
                     let server = server.clone();
-                    clients.spawn(async move { serve(stream, server).await });
+                    let operation = server.manager.background_operations.clone().read_owned().await;
+                    clients.spawn(async move { serve(stream, server, operation).await });
                 }
                 Some(result) = clients.join_next(), if !clients.is_empty() => {
                     if let Err(error) = result.unwrap() {

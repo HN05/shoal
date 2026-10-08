@@ -90,9 +90,11 @@ input. Keep writable state outside the binary's directory.
 Service setup manages one per-user launchd/systemd service; foreground mode covers
 environments without a service manager. The service captures the installing shell's
 `PATH`.
-Managed daemons watch the executable behind their service path and restart at the
-first idle opportunity after a package replacement; foreground daemons keep
-explicit restart behavior.
+Managed daemons watch their stable executable path and restart after a replacement
+once tracked executions finish and daemon operations are idle.
+Retain the ownership lock and listening socket across exec so queued requests reach
+the replacement under the same service PID. Read-only streams reconnect after the
+handoff, preserving event cursors; foreground daemons keep explicit restart control.
 
 Advisory repository reviews default to Codex, retaining configured agent overrides
 and automatic fallback. Repository code audits rotate focused read-only inspections

@@ -612,6 +612,13 @@ pub async fn read_buffered<T: DeserializeOwned>(
         .take(MAX_FRAME as u64 + 1)
         .read_until(b'\n', &mut bytes)
         .await?;
+    if bytes.is_empty() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::UnexpectedEof,
+            "incomplete protocol frame",
+        )
+        .into());
+    }
     ensure!(
         bytes.len() <= MAX_FRAME,
         "protocol frame exceeds {MAX_FRAME} bytes"

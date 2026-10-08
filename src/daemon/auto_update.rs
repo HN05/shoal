@@ -58,13 +58,7 @@ impl Update {
 /// Admission is paused in the server while checking. Existing connections
 /// cover requests and connected wrappers; background readers cover hooks and
 /// mutations. Unknown executions also block restart until reconciliation.
-pub(super) async fn quiesce(
-    manager: &Manager,
-    clients: usize,
-) -> Result<Option<RwLockWriteGuard<'_, ()>>> {
-    if clients != 0 {
-        return Ok(None);
-    }
+pub(super) async fn quiesce(manager: &Manager) -> Result<Option<RwLockWriteGuard<'_, ()>>> {
     let Ok(guard) = manager.background_operations.try_write() else {
         return Ok(None);
     };
@@ -97,13 +91,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn restart_waits_for_connections_background_work_and_execution_records() {
+    async fn restart_waits_for_background_work_and_execution_records() {
         let (_root, manager) = crate::test_support::manager().await;
-        assert!(quiesce(&manager, 1).await.unwrap().is_none());
+        assert!(quiesce(&manager).await.unwrap().is_some());
         let operation = manager.background_operations.read().await;
-        assert!(quiesce(&manager, 0).await.unwrap().is_none());
+        assert!(quiesce(&manager).await.unwrap().is_none());
         drop(operation);
-        let quiet = quiesce(&manager, 0).await.unwrap().unwrap();
+        let quiet = quiesce(&manager).await.unwrap().unwrap();
         assert!(manager.background_operations.try_read().is_err());
         drop(quiet);
         manager.store.run(|db| {
@@ -115,7 +109,7 @@ mod tests {
             )?;
             Ok(())
         }).await.unwrap();
-        assert!(quiesce(&manager, 0).await.unwrap().is_none());
+        assert!(quiesce(&manager).await.unwrap().is_none());
         manager
             .store
             .run(|db| {
@@ -124,7 +118,7 @@ mod tests {
             })
             .await
             .unwrap();
-        assert!(quiesce(&manager, 0).await.unwrap().is_none());
+        assert!(quiesce(&manager).await.unwrap().is_none());
         manager
             .store
             .run(|db| {
@@ -133,6 +127,6 @@ mod tests {
             })
             .await
             .unwrap();
-        assert!(quiesce(&manager, 0).await.unwrap().is_some());
+        assert!(quiesce(&manager).await.unwrap().is_some());
     }
 }

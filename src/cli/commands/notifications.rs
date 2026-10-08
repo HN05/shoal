@@ -59,14 +59,22 @@ pub(super) async fn run(ctx: &Context, all: bool, follow: bool, limit: u32) -> R
 /// each one is also raised as a terminal notification so the emulator can show
 /// it while another window has focus.
 async fn follow_stream(ctx: &Context) -> Result<i32> {
-    let (mut stream, body) = client::open(&ctx.paths, Method::WatchNotifications).await?;
+    let (mut stream, body) = client::open_buffered(&ctx.paths, Method::WatchNotifications).await?;
     <()>::try_from(body)?;
     let palette = Palette::stdout(ctx.json);
     let raise = !ctx.json && std::io::stdout().is_terminal();
     loop {
-        let response: Response = protocol::read(&mut stream)
-            .await
-            .context("daemon closed the notification stream")?;
+        let response: Response = match protocol::read_buffered(&mut stream).await {
+            Ok(response) => response,
+            Err(error) if client::stream_closed(&error) => {
+                let (next, body) =
+                    client::reconnect(&ctx.paths, || Method::WatchNotifications).await?;
+                <()>::try_from(body)?;
+                stream = next;
+                continue;
+            }
+            Err(error) => return Err(error).context("daemon closed the notification stream"),
+        };
         let notification = Notification::try_from(response.body)?;
         ctx.show(&notification, |notification| {
             println!("{}", render(notification, palette));

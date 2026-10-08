@@ -136,7 +136,7 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
             _ = shutdown_rx.changed() => break Ok(()),
             _ = update_tick.tick(), if update.is_some() => {
                 if update.as_ref().is_some_and(auto_update::Update::pending) {
-                    match auto_update::quiesce(&manager, clients.len()).await {
+                    match auto_update::quiesce(&manager).await {
                         Ok(Some(guard)) => {
                             quiescence = Some(guard);
                             break Ok(());
@@ -153,8 +153,9 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
                     Err(error) => break Err(error.into()),
                 };
                 let server = server.clone();
+                let operation = server.manager.background_operations.clone().read_owned().await;
                 clients.spawn(async move {
-                    if let Err(error) = serve(stream, server).await {
+                    if let Err(error) = serve(stream, server, operation).await {
                         eprintln!("client connection: {error:#}");
                     }
                 });
@@ -202,7 +203,11 @@ async fn expire_simulators(manager: Arc<Manager>) {
     }
 }
 
-async fn serve(mut stream: UnixStream, server: Server) -> Result<()> {
+async fn serve(
+    mut stream: UnixStream,
+    server: Server,
+    operation_guard: tokio::sync::OwnedRwLockReadGuard<()>,
+) -> Result<()> {
     let mut request: Request =
         match timeout(timing::REQUEST_READ_TIMEOUT, protocol::read(&mut stream)).await? {
             Ok(request) => request,
@@ -256,10 +261,18 @@ async fn serve(mut stream: UnixStream, server: Server) -> Result<()> {
             .await;
         }
         Method::WatchNotifications => {
-            return watch_notifications(stream, request.id, server.manager).await;
+            return watch_notifications(stream, request.id, server.manager, operation_guard).await;
         }
         Method::WatchWorkspaceEvents { since, follow } => {
-            return watch_workspace_events(stream, request.id, server.manager, since, follow).await;
+            return watch_workspace_events(
+                stream,
+                request.id,
+                server.manager,
+                since,
+                follow,
+                operation_guard,
+            )
+            .await;
         }
         Method::PrWait {
             workspace,
@@ -586,12 +599,15 @@ async fn watch_notifications(
     mut stream: UnixStream,
     request_id: u64,
     manager: Arc<Manager>,
+    startup: tokio::sync::OwnedRwLockReadGuard<()>,
 ) -> Result<()> {
     let mut changed = manager.notifications_changed.subscribe();
     protocol::write(&mut stream, &Response::new(request_id, Body::Ok)).await?;
+    drop(startup);
     let (mut reader, mut writer) = stream.split();
     let mut delivered = 0;
     loop {
+        let operation = manager.background_operations.read().await;
         let batch = manager.notifications_after(delivered, 100).await?;
         for notification in batch {
             delivered = notification.id;
@@ -599,6 +615,7 @@ async fn watch_notifications(
             protocol::write(&mut writer, &response).await?;
             manager.mark_notifications_read(vec![delivered]).await?;
         }
+        drop(operation);
         let mut closed = [0u8; 1];
         tokio::select! {
             recorded = changed.changed() => recorded?,
@@ -614,6 +631,7 @@ async fn watch_workspace_events(
     manager: Arc<Manager>,
     since: Option<i64>,
     follow: bool,
+    startup: tokio::sync::OwnedRwLockReadGuard<()>,
 ) -> Result<()> {
     use crate::daemon::events::EventItem;
     if since.is_some_and(|id| id < 0) {
@@ -633,9 +651,16 @@ async fn watch_workspace_events(
     let mut changed = manager.store.watch_changes();
     let end = manager.latest_workspace_event_id().await?;
     protocol::write(&mut stream, &Response::new(request_id, Body::Ok)).await?;
+    let _finite_request = if follow {
+        drop(startup);
+        None
+    } else {
+        Some(startup)
+    };
     let (mut reader, mut writer) = stream.split();
     let mut cursor = since;
     loop {
+        let operation = manager.background_operations.read().await;
         let items = manager.workspace_events(cursor, 100).await?;
         let mut delivered = false;
         for item in items {
@@ -663,6 +688,7 @@ async fn watch_workspace_events(
             protocol::write(&mut writer, &Response::new(request_id, Body::Ok)).await?;
             return Ok(());
         }
+        drop(operation);
         let mut closed = [0u8; 1];
         tokio::select! {
             result = changed.changed() => result?,

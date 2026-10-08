@@ -25,8 +25,9 @@ async fn connect(
 ) -> (BufReader<UnixStream>, JoinHandle<Result<()>>) {
     let (server, client) = UnixStream::pair().unwrap();
     let mut client = BufReader::new(client);
+    let startup = manager.background_operations.clone().read_owned().await;
     let task = tokio::spawn(crate::daemon::watch_workspace_events(
-        server, 1, manager, since, follow,
+        server, 1, manager, since, follow, startup,
     ));
     assert!(matches!(receive(&mut client).await, Body::Ok));
     (client, task)

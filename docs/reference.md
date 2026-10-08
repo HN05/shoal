@@ -20,7 +20,7 @@ Progress uses terminal stderr only and is suppressed with `--json` or `TERM=dumb
 - [Recovery](#recovery)
 - [Simulators](#simulators-macos)
 - [Resource pools](#cooperative-resource-pools)
-- [Agent skills](#agent-skills-outside-project-repositories)
+- [Agent skill](#agent-skill-outside-project-repositories)
 
 ## Homebrew
 
@@ -40,16 +40,15 @@ Upgrade with `brew update && brew upgrade hn05/tap/shoal` (`--fetch-HEAD` for
 have finished and daemon operations are idle. Followed event and notification
 streams reconnect across the handoff; use `shoal daemon restart` to apply an
 upgrade immediately. The channels share one installation,
-daemon, and skills path; to switch, run `shoal daemon stop`, uninstall, install
+daemon, and skill path; to switch, run `shoal daemon stop`, uninstall, install
 the other channel, and `shoal daemon start`. State and skill links live outside
-the package and survive. Skill links follow Homebrew's stable `opt` path; skills
-copied by an older install need one `shoal skill install` to migrate.
-Packagers can set `SHOAL_SKILLS_DIR` to an absolute directory holding
-`<skill>/SKILL.md` for each bundled skill at runtime, overriding the directory
-given in `SHOAL_BUILD_SKILLS_DIR` at build time. Without either, an adjacent
-`shoal-skills` symlink can point through a stable installation prefix; relative
-targets resolve lexically against its directory. Without that link,
-installation copies the embedded skills.
+the package and survive. Skill links follow Homebrew's stable `opt` path; a
+skill copied by an older install needs one `shoal skill install` to migrate.
+Packagers can set `SHOAL_SKILL_PATH` to an absolute skill file at runtime,
+overriding the path given in `SHOAL_BUILD_SKILL_PATH` at build time. Without either,
+an adjacent `shoal-skill` symlink can point through a stable installation prefix;
+relative targets resolve lexically against its directory. Without that link,
+installation copies the embedded skill.
 
 ## Daemon
 
@@ -564,10 +563,9 @@ Before branching, Shoal fetches that local branch's upstream and fast-forwards
 it, even when the registered checkout is on another branch. A missing branch or
 upstream, failed fetch, divergence, or a dirty or managed default-branch
 checkout stops creation; an already-ahead branch is preserved. `--base REF`
-starts from any locally resolvable commit without refreshing, unless it names
-the local default branch or a remote branch such as `origin/feature/api`, which
-is fetched first, even if never fetched before; a failed fetch stops creation.
-The resolved base is recorded for `shoal diff`.
+starts from any locally resolvable commit without refreshing,
+unless it names the local default branch; the resolved base is recorded for
+`shoal diff`.
 Existing-branch workspaces diff against the local default, or their opening
 commit if on it or unavailable.
 
@@ -688,20 +686,28 @@ that would include another registered repository or its own state. If cleanup
 fails, completed steps stay done, remaining records are retained, and new
 workspace creation is blocked until the same command is retried.
 
-### Sync a repository
+### Merge into your workspace branch
 
 ```sh
-shoal sync                 # Repository of the current checkout or workspace
-shoal sync app             # A registered repository
+shoal merge main                           # Any local branch: fast-forwarded from upstream first
+shoal merge feature/api                    # Local, or discover a remote-only branch
+shoal merge feature/api --local            # Merge the local branch as it is, no refresh
+shoal merge feature/api --remote origin    # Fetch explicitly, even if local exists
+shoal merge origin/feature/api fix-login   # Qualified source, named destination
 ```
 
-Fetches the default branch's upstream remote, updating its remote-tracking
-branches, then fast-forwards the local default branch under the same rules as
-workspace creation, including in a clean registered checkout where `git fetch
-origin main:main` is refused. Shoal never pushes and never moves workspace branches:
-rebase or merge onto the updated branch with Git, for example `git rebase main`
-or `git merge origin/feature/api`. Scoped callers can sync only their own
-repository.
+The destination must be the workspace's recorded branch. Local branches take
+precedence. Unless `--local`, a local branch with an upstream is fetched and
+fast-forwarded first; a dirty checkout, divergence, or failed fetch blocks the
+merge, while an ahead branch is preserved. A local branch without an upstream,
+or checked out in a managed workspace, is merged as it is. Otherwise Shoal
+queries configured remotes and fetches the branch only when the local ref is
+absent; a failed ref or commit lookup stops the merge.
+Several matches or an unreachable remote require `--remote`. Qualified remote
+sources and full `refs/…` names always fetch fresh data. Git fast-forwards or
+creates a merge commit; conflicts stay in the worktree for `git commit` or `git
+merge --abort`, and `--json` reports `success`, `exit_code`, commits, and Git
+output. Nothing is stashed, reset, or pushed.
 
 ### Land into the default branch
 
@@ -713,7 +719,7 @@ a failed fetch. The default branch cannot be held by a managed workspace, and an
 other checkout of it must be clean. The workspace must be clean and on its recorded
 branch. Git fast-forwards or creates a merge commit in the default checkout. A
 merge that does not apply cleanly is
-aborted: run `git merge <default>` in the workspace, resolve there, and land
+aborted: run `shoal merge <default>` in the workspace, resolve there, and land
 again. Scoped agents cannot land. Landed commits count as pushed for `rm` and
 automatic cleanup.
 
@@ -1127,8 +1133,7 @@ yourself that such processes stopped, use `--repair --acknowledge-stopped`; visi
 
 PR watches and merge acknowledgements are own-workspace scope exceptions.
 Processes carrying a Shoal scope token are confined to their own worktree:
-`status`, inspect, execute, `diff`, `setup`, resources, and `sync` of their
-own repository. They may read
+`status`, inspect, execute, `merge`, `diff`, `setup`, and resources. They may read
 effective configuration for their own workspace, but cannot change configuration.
 They cannot `land`, reach other worktrees, create or remove workspaces, read
 notifications, or administer repositories or the daemon service; nested commands
@@ -1329,7 +1334,7 @@ name returns its mode; changing mode requires release first, and there is no
 writer priority. `shoal resource` shows reader and writer counts with
 separate read/write availability.
 
-## Agent skills outside project repositories
+## Agent skill outside project repositories
 
 ```sh
 shoal skill install          # All configured tools, including built-in defaults
@@ -1347,18 +1352,14 @@ skill_dir = "~/.config/opencode/skills"
 ```
 
 Names are portable identifiers; `all` is reserved. `skill_dir` must be absolute
-or start with `~/`; Shoal appends `<skill>/SKILL.md`. These machine settings
-cannot be set per repository. Use `[commands]` for custom launchers.
+or start with `~/`; Shoal appends `shoal/SKILL.md`. These machine settings cannot
+be set per repository. Use `[commands]` for custom launchers.
 
-Shoal bundles two skills: `shoal-worker` for agents working in a Shoal
-workspace, which the default agent template names, and `shoal-orchestrator` for
-console agents that create workspaces and coordinate their agents. Installation
-writes both at user scope with no daemon: Codex under `~/.agents/skills/`,
-Claude under `~/.claude/skills/` (honoring an absolute `CLAUDE_CONFIG_DIR`);
-`[ai.codex]` and `[ai.claude]` can override those directories. Homebrew installs
-symlink to the packaged skills so upgrades apply automatically; Cargo installs
-copy them, so rerun after upgrading. Other files in each skill directory are
-preserved; the `shoal/SKILL.md` that earlier versions installed is removed, with
-its directory once empty. Run it outside scoped executions. `shoal skill` prints
-the worker skill and `shoal skill orchestrator` the orchestrator skill (`--json`
-returns `name` and `skill` fields).
+Installs the bundled `SKILL.md` at user scope with no daemon: Codex at
+`~/.agents/skills/shoal/SKILL.md`, Claude at `~/.claude/skills/shoal/SKILL.md`
+(honoring an absolute `CLAUDE_CONFIG_DIR`); `[ai.codex]` and `[ai.claude]` can
+override those directories. Homebrew installs symlink to the
+packaged skill so upgrades apply automatically; Cargo installs copy it, so
+rerun after upgrading. Other files in the skill directory are preserved. Run it
+outside scoped executions. `shoal skill` prints the instructions (`--json`
+returns a `skill` field).

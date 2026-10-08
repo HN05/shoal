@@ -12,7 +12,7 @@ use std::{
 };
 use tokio::net::UnixListener;
 
-const HANDOFF_ENV: &str = "SHOAL_DAEMON_HANDOFF";
+use crate::env::DAEMON_HANDOFF;
 
 #[derive(Debug)]
 pub(crate) struct Handoff {
@@ -24,11 +24,11 @@ impl Handoff {
     /// Main consumes the private handoff before creating threads or descriptor
     /// owners. Children must not inherit the new daemon's lock or socket.
     pub(crate) fn take() -> Result<Option<Self>> {
-        let Some(value) = std::env::var_os(HANDOFF_ENV) else {
+        let Some(value) = std::env::var_os(DAEMON_HANDOFF) else {
             return Ok(None);
         };
         // SAFETY: main calls this before starting the runtime.
-        unsafe { std::env::remove_var(HANDOFF_ENV) };
+        unsafe { std::env::remove_var(DAEMON_HANDOFF) };
         let value = value.to_str().context("invalid daemon handoff")?;
         let (lock, listener) = value.split_once(',').context("invalid daemon handoff")?;
         let lock: RawFd = lock.parse()?;
@@ -95,7 +95,7 @@ pub(super) fn exec(path: &Path, paths: &Paths, listener: &UnixListener, lock: &F
         .arg(&paths.state)
         .args(["daemon", "run", "--managed"])
         .env(
-            HANDOFF_ENV,
+            DAEMON_HANDOFF,
             format!("{},{}", descriptors[0], descriptors[1]),
         );
     for fd in descriptors {

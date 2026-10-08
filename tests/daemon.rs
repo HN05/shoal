@@ -129,6 +129,101 @@ fn cli_connects_to_daemon_and_stops_it() {
 }
 
 #[test]
+fn managed_update_preserves_pid_ownership_and_queued_requests() {
+    use std::os::unix::fs::{MetadataExt, symlink};
+    let root = tempfile::tempdir_in("/tmp").unwrap();
+    let launcher = root.path().join("shoal");
+    let gate = root.path().join("replacement-started");
+    let replacement = root.path().join("replacement");
+    symlink(env!("CARGO_BIN_EXE_shoal"), &launcher).unwrap();
+    fs::write(
+        &replacement,
+        r#"#!/bin/sh
+printf ready > "$SHOAL_TEST_UPDATE_GATE"
+IFS= read -r resume
+exec "$SHOAL_TEST_REAL_BINARY" "$@"
+"#,
+    )
+    .unwrap();
+    fs::set_permissions(&replacement, fs::Permissions::from_mode(0o755)).unwrap();
+    let log = tempfile::tempfile().unwrap();
+    let mut launch = support::isolated(root.path(), &launcher);
+    launch
+        .args(["daemon", "run", "--managed"])
+        .env("SHOAL_TEST_UPDATE_GATE", &gate)
+        .env("SHOAL_TEST_REAL_BINARY", env!("CARGO_BIN_EXE_shoal"))
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(log.try_clone().unwrap());
+    let mut daemon = DaemonGuard {
+        child: launch.spawn().unwrap(),
+    };
+    // Only a hang guard: readiness and the shim's file are explicit signals.
+    let deadline = Instant::now() + Duration::from_secs(60);
+    loop {
+        assert!(
+            daemon.child.try_wait().unwrap().is_none(),
+            "daemon exited during startup"
+        );
+        if command(root.path())
+            .args(["daemon", "status"])
+            .output()
+            .unwrap()
+            .status
+            .success()
+        {
+            break;
+        }
+        assert!(Instant::now() < deadline, "daemon startup hung");
+        thread::sleep(Duration::from_millis(20));
+    }
+    let socket = root.path().join("state/daemon.sock");
+    let before = fs::metadata(&socket).unwrap();
+    let mut probe = UnixStream::connect(&socket).unwrap();
+    writeln!(probe, "{}", json!({"protocol":0,"id":1,"method":"status"})).unwrap();
+    let mut line = String::new();
+    BufReader::new(probe).read_line(&mut line).unwrap();
+    let protocol = serde_json::from_str::<Value>(&line).unwrap()["protocol"].clone();
+    let next = root.path().join("shoal-next");
+    symlink(&replacement, &next).unwrap();
+    fs::rename(next, &launcher).unwrap();
+    while !gate.exists() {
+        assert!(
+            daemon.child.try_wait().unwrap().is_none(),
+            "daemon exited before handoff"
+        );
+        assert!(Instant::now() < deadline, "replacement did not start");
+        thread::sleep(Duration::from_millis(20));
+    }
+    // The shim pauses between the two executables. The old daemon's socket and
+    // lock must still be live, although neither daemon can serve requests yet.
+    let other = command(root.path())
+        .args(["daemon", "run", "--managed"])
+        .output()
+        .unwrap();
+    assert!(!other.status.success());
+    assert!(String::from_utf8_lossy(&other.stderr).contains("a daemon already owns"));
+    let mut queued = UnixStream::connect(&socket).unwrap();
+    queued
+        .set_read_timeout(Some(Duration::from_secs(60)))
+        .unwrap();
+    writeln!(
+        queued,
+        "{}",
+        json!({"protocol":protocol,"id":42,"method":"status"})
+    )
+    .unwrap();
+    writeln!(daemon.child.stdin.as_mut().unwrap(), "resume").unwrap();
+    let mut line = String::new();
+    BufReader::new(queued).read_line(&mut line).unwrap();
+    let response: Value = serde_json::from_str(&line).unwrap();
+    assert_eq!(response["id"], 42);
+    assert_eq!(response["data"]["pid"], daemon.child.id());
+    let after = fs::metadata(socket).unwrap();
+    assert_eq!((before.dev(), before.ino()), (after.dev(), after.ino()));
+}
+
+#[test]
 fn global_config_changes_reload_a_running_daemon() {
     let daemon = Daemon::start();
     let policy = || {
