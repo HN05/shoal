@@ -176,6 +176,9 @@ Keep triage in issue comments so report updates preserve it.
 Issues and PRs carry `area/`, `type/` and `complexity/` labels; `.forgejo/scripts/labels.sh`
 creates the scheme. Push the branch and let CI verify instead of running the
 full suite locally first.
+A failed check is a defect even when a rerun passes. Read its log, then fix the
+cause in its own commit or, when it lies outside the change, open an issue with
+the failing test and log excerpt; rerun only after that, never instead of it.
 
 ## Committing
 
