@@ -22,6 +22,8 @@ const SKILLS: [(&str, &str); 2] = [
         include_str!("../../../skills/shoal-orchestrator/SKILL.md"),
     ),
 ];
+/// The single skill earlier versions installed, replaced by `SKILLS`.
+const RETIRED: &str = "shoal";
 
 pub(super) fn run(
     name: SkillName,
@@ -82,6 +84,7 @@ pub(super) fn run(
             }
             installed.push(json!({"agent": agent, "skill": name, "path": path}));
         }
+        remove_retired(&directory.join(RETIRED))?;
     }
     if json_output {
         println!("{}", json!({"installed": installed}));
@@ -166,6 +169,23 @@ fn install(path: &Path, source: Option<&Path>, contents: &str) -> Result<()> {
         .with_context(|| format!("install skill at {}", path.display()))?;
     }
     Ok(())
+}
+
+/// Remove the retired skill's `SKILL.md`, which Shoal owned, and its directory
+/// once empty; other files keep the directory.
+fn remove_retired(directory: &Path) -> Result<()> {
+    let path = directory.join("SKILL.md");
+    match fs::symlink_metadata(&path) {
+        Ok(metadata) if !metadata.is_dir() => fs::remove_file(&path)
+            .with_context(|| format!("remove retired skill {}", path.display()))?,
+        Ok(_) => return Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error).with_context(|| format!("inspect {}", path.display())),
+    }
+    match fs::remove_dir(directory) {
+        Err(error) if error.kind() == std::io::ErrorKind::DirectoryNotEmpty => Ok(()),
+        result => result.with_context(|| format!("remove {}", directory.display())),
+    }
 }
 
 #[cfg(test)]
@@ -268,5 +288,25 @@ mod tests {
             fs::read_to_string(destination.join("keep")).unwrap(),
             "keep"
         );
+    }
+
+    #[test]
+    fn retired_skill_is_removed_without_other_files() {
+        let root = tempfile::tempdir().unwrap();
+        let retired = root.path().join(RETIRED);
+        remove_retired(&retired).unwrap();
+        fs::create_dir(&retired).unwrap();
+        // A dangling link from an upgraded package is removed like a copy.
+        symlink(root.path().join("missing.md"), retired.join("SKILL.md")).unwrap();
+        fs::write(retired.join("notes.md"), "keep").unwrap();
+        remove_retired(&retired).unwrap();
+        assert_eq!(fs::read_dir(&retired).unwrap().count(), 1);
+        fs::write(retired.join("SKILL.md"), "old").unwrap();
+        fs::remove_file(retired.join("notes.md")).unwrap();
+        remove_retired(&retired).unwrap();
+        assert!(!retired.exists());
+        fs::create_dir_all(retired.join("SKILL.md")).unwrap();
+        remove_retired(&retired).unwrap();
+        assert!(retired.join("SKILL.md").is_dir());
     }
 }

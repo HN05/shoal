@@ -1358,8 +1358,10 @@ workspace and `shoal-orchestrator` for console agents that create workspaces
 and coordinate their agents. Installation writes both at user scope with no
 daemon: Codex under `~/.agents/skills/`, Claude under `~/.claude/skills/`
 (honoring an absolute `CLAUDE_CONFIG_DIR`); `[ai.codex]` and `[ai.claude]` can
-override those directories. Homebrew installs symlink to the packaged skills so upgrades apply
-automatically; Cargo installs copy them, so rerun after upgrading. Other files
-in each skill directory are preserved. Run it outside scoped executions.
-`shoal skill` prints the worker skill and `shoal skill orchestrator` the
-orchestrator skill (`--json` returns `name` and `skill` fields).
+override those directories. Homebrew installs symlink to the packaged skills so
+upgrades apply automatically; Cargo installs copy them, so rerun after
+upgrading. Other files in each skill directory are preserved; the
+`shoal/SKILL.md` that earlier versions installed is removed, with its directory
+once empty. Run it outside scoped executions. `shoal skill` prints the worker
+skill and `shoal skill orchestrator` the orchestrator skill (`--json` returns
+`name` and `skill` fields).

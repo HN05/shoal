@@ -198,6 +198,10 @@ fn skill_export_and_default_install_work_without_daemon_or_repository() {
         assert_eq!(exported["skill"].as_str().unwrap().as_bytes(), contents);
     }
     assert_eq!(fs::read_dir(home.path()).unwrap().count(), 0);
+    // The single skill earlier versions installed is replaced.
+    let retired = home.path().join(".agents/skills/shoal");
+    fs::create_dir_all(&retired).unwrap();
+    fs::write(retired.join("SKILL.md"), "retired").unwrap();
     let installed: serde_json::Value = serde_json::from_slice(&success(
         cli(home.path())
             .args(["--json", "skill", "install"])
@@ -217,6 +221,7 @@ fn skill_export_and_default_install_work_without_daemon_or_repository() {
                 && entry["path"] == path.to_str().unwrap()));
         }
     }
+    assert!(!retired.exists());
     assert_eq!(fs::read_dir(home.path()).unwrap().count(), 2);
 }
 

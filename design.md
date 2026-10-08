@@ -406,8 +406,9 @@ Skills are split by role: `shoal-worker` covers an agent's own workspace and
 `shoal-orchestrator` covers unscoped coordination from a console, so neither
 role loads the other's commands. Both are installed together at user scope,
 independent of the daemon and never from a scoped execution; their availability
-registers nothing. Global `[ai.<name>]` settings name skill directories for
-user-configured tools, with Codex and Claude defaults. Skill directories describe
+registers nothing. Installation removes the retired `shoal/SKILL.md`, which
+Shoal owned, and no other file. Global `[ai.<name>]` settings name skill
+directories for user-configured tools, with Codex and Claude defaults. Skill directories describe
 the machine and cannot be set per repository; custom launchers use named
 commands without tool-specific integrations. Packaged skills resolve the runtime
 `SHOAL_SKILLS_DIR`, build-time directory, then an adjacent `shoal-skills` symlink
