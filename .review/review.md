@@ -228,7 +228,8 @@ configured command for another agent, plus proven child
   state and prepares each execution kind before shared registration through one
   request. Reported exits clear executions and permit setup readiness only after
   marker, child and group survivors are gone and environment visibility is complete;
-  the reporting wrapper may remain alive awaiting acknowledgement.
+  a settled empty environment is readable evidence, not an unreadable process; the
+  reporting wrapper may remain alive awaiting acknowledgement.
   CLI styles, enum `Display` formatting and transient progress belong at presentation
   sites; machine output and stored values stay plain. Progress clears before results and stays off for JSON,
   redirected stderr and dumb terminals.

@@ -1111,7 +1111,8 @@ hidden environments, cleared markers, and old records can leave it uncertain.
 A reported command exit retains an unknown execution and prevents setup readiness
 while child/group survivors or live unreadable environments remain. Exiting
 processes do not count, and a process still publishing its environment after exec
-is read again for up to two seconds. After checking
+is read again for up to two seconds; a settled empty environment is readable and
+does not identify an execution. After checking
 yourself that such processes stopped, use `--repair --acknowledge-stopped`; visible live processes still block.
 
 ### Scoped workspace commands

@@ -556,10 +556,11 @@ async fn report_completion(
                     eprintln!(
                         "warning: execution has surviving or unverified processes; run shoal doctor to inspect it"
                     );
-                    ensure!(
-                        !mode.is_setup(),
-                        "setup has surviving or unverified processes"
-                    );
+                    if mode.is_setup() {
+                        bail!(
+                            "setup command completed with exit status {code}, but Shoal could not verify that all processes stopped; run `shoal doctor` to inspect the workspace"
+                        );
+                    }
                 }
                 return Ok(complete);
             }
