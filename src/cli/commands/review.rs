@@ -92,27 +92,7 @@ pub(super) async fn pull_request(
             workspace.id
         }
         None => {
-            git::check_branch_name(None, &pull.base)
-                .await
-                .with_context(|| format!("PR base {:?} is not a branch name", pull.base))?;
-            // The base is compared through its remote-tracking ref, so bring it
-            // up to date without touching local branches.
-            let tracking = git::remote_ref("origin", &pull.base);
-            git::run(
-                &repo.path,
-                &[
-                    git::FETCH_SAFE_ARGS,
-                    &[
-                        "--refmap=",
-                        "--",
-                        "origin",
-                        &format!("+{}:{tracking}", git::local_ref(&pull.base)),
-                    ],
-                ]
-                .concat(),
-            )
-            .await
-            .with_context(|| format!("could not fetch the PR base {}", pull.base))?;
+            let tracking = fetch_pull_base(&repo.path, &pull.base).await?;
             let creation = super::workspaces::Creation {
                 path: None,
                 branch: None,
@@ -144,6 +124,29 @@ pub(super) async fn pull_request(
         }
     };
     run(ctx, Some(workspace), reviewer, Some(pull), args).await
+}
+
+pub(super) async fn fetch_pull_base(path: &std::path::Path, base: &str) -> Result<String> {
+    git::check_branch_name(None, base)
+        .await
+        .with_context(|| format!("PR base {base:?} is not a branch name"))?;
+    let tracking = git::remote_ref("origin", base);
+    git::run(
+        path,
+        &[
+            git::FETCH_SAFE_ARGS,
+            &[
+                "--refmap=",
+                "--",
+                "origin",
+                &format!("+{}:{tracking}", git::local_ref(base)),
+            ],
+        ]
+        .concat(),
+    )
+    .await
+    .with_context(|| format!("could not fetch the PR base {base}"))?;
+    Ok(tracking)
 }
 
 pub(super) async fn run(
