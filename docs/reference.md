@@ -185,37 +185,30 @@ block renaming because their recorded remote head remains the original branch.
 An interrupted rename requires `shoal doctor --repair` before reuse;
 confirmed-deleted worktrees can still be removed through normal cleanup.
 
-`add [<repository>] --issue <number-or-url>` reads the registered repository's issue using `gh`
-for github.com or `fj` for Forgejo remotes. Install the appropriate CLI and use
-its existing login (`gh auth login` or `fj auth login`); no Shoal forge config or
-tokens are needed. The repository may be omitted for a URL, which selects the
-single registered repository with the same remote. For an unregistered remote, an
-interactive terminal asks whether to register the repository URL and continue;
-otherwise the command fails with the `shoal repo add` command to run. Duplicated
-remotes require an explicit repository. Explicit repositories must match the URL. Lookup failures create nothing.
-Names default to `issue-<number>-<title-slug>`; the optional branch argument
-overrides this. An existing issue association selects its workspace even after
-renaming; otherwise a local branch with the default name reopens as `--existing`
-would. A checkout
-elsewhere or an unready workspace fails before the agent picker. `add` starts an agent only with `--agent`, regardless of
-`default_agent`. When starting an agent, `issue-template.md` supplies the initial
-prompt, substituting
-`{number}`, `{title}`, `{url}` and `{body}` once as literal text (forward agent
-options after `--`, not a second prompt). Codex uses CLI mode for issue
-prompts even when its default is `app`. Ordinary setup, hooks and collision rules apply.
-`shoal issue <number-or-url> [--repo <repository>]` uses the same path. Numbers
-use the current registered checkout or managed workspace, falling back to the
-repository picker interactively; otherwise pass `--repo`. URLs select by remote
-unless `--repo` is explicit, in which case it must match. The command starts
-`--agent`, else `default_agent` from the repository or global config, else an
-interactive picker, shown once the issue is found, listing agents whose
-executables are on PATH (Happy agents need `happy` and the agent). Choosing “No agent” creates the workspace without a launch.
-Agent names select built-in launchers or entries in `[commands]`.
-Closed issues are rejected before workspace creation; reopen the issue first.
-Issue-based workspaces retain their issue URL across restarts, visible in `status`
-and `inspect`; associations cannot be replaced with a different issue.
-A repository argument to `add`, `issue` or `pr review` that names an unregistered
-checkout or clone URL is likewise offered for registration in an interactive terminal.
+`shoal add <link>` recognizes issue, PR and branch URLs. Links select the single
+registered repository with the same origin; `--repo` selects one explicitly and
+must match the link. An unregistered remote offers interactive registration,
+otherwise lookup fails with the `shoal repo add` command to run. Shoal uses your
+existing `gh` or `fj` login and stores no forge credentials.
+
+Issue links and `shoal add <number>` require an open issue and derive
+`issue-<number>-<title-slug>`. Numbers use `--repo`, the current registered checkout
+or workspace, then an interactive repository picker. An existing association
+reopens its workspace; otherwise the derived local branch reopens as `--existing`
+would. Lookup and ownership failures create nothing. The command starts
+`--agent`, else the configured `default_agent`, else an interactive agent picker.
+Choosing “No agent” creates the workspace without a launch. Issue prompts use
+`issue-template.md`, substituting `{number}`, `{title}`, `{url}` and `{body}`
+once; options after `--` go to the agent. Codex uses CLI mode for issue prompts.
+
+PR links open their head branch against the refreshed remote base, reusing an
+owned workspace when present; fork PRs cannot be opened. Branch URLs use
+GitHub's `/tree/<branch>` or Forgejo's `/src/branch/<branch>` route and open the
+origin branch, preserving slashes and decoding URL escapes. Setup, hooks and
+existing-branch ownership checks apply. These forms launch an agent with `--agent`.
+`add <repository> --issue <number-or-url>` remains available with an optional
+branch name and launches an agent only with `--agent`. The previous `issue`
+command remains accepted for compatibility.
 
 ```sh
 shoal repo add /path/to/repo             # Or a Git clone URL; register once
@@ -225,7 +218,7 @@ shoal repo list
 shoal repo                               # Interactive repository menu
 shoal add my-project fix-login
 shoal add my-project fix-api --agent codex -- "Fix the API timeout"
-shoal issue https://forge.example/team/repo/issues/34 -- --model fast
+shoal add https://forge.example/team/repo/issues/34 -- --model fast
 shoal cd                                 # Fuzzy picker, even inside a workspace
 shoal cd fix-login                       # Enter through the shell function
 shoal cd -                               # Previous directory
@@ -331,12 +324,12 @@ review-worktree = ["tuicr", "-w"]
 `--manual` or `--agent <name>` skips the question, which is required without a
 terminal. Manual review runs the `review` command (`shoal run review` also does);
 without one, the agent reviews. Choosing “No agent” returns without starting a reviewer.
-The agent is otherwise chosen as for `shoal issue` and is
+The agent is otherwise chosen as for `shoal add` and is
 prompted to report findings, not to change files, commit, push, or post.
 `shoal pr review <number-or-url>` looks up the PR with your `gh`/`fj` login and
 reviews it the same way in the workspace that owns its head branch, or opens one
 from origin whose base is the PR's refreshed `origin/<base>`; fork PRs are refused.
-Repository selection follows `shoal issue`.
+Repository selection follows `shoal add`.
 `shoal review-worktree [workspace]` reviews uncommitted changes. The committed
 range excludes working-tree changes that `shoal diff` includes. Export feedback
 from tuicr and hand it to your agent explicitly; see
@@ -354,7 +347,7 @@ the workspace is retained even when launch fails. With shell
 integration, your shell enters the new workspace after the agent exits.
 `--json` emits the workspace record first, then the agent's unmodified output.
 
-Inside Herdr (`HERDR_ENV=1`), interactive `shoal issue` and `shoal add` look up
+Inside Herdr (`HERDR_ENV=1`), interactive `shoal add` look up
 the issue and resolve repository, branch, and agent choices in the caller's pane,
 then open a tab in `HERDR_WORKSPACE_ID` and return once the command is submitted
 there. Setup and agent execution run in that tab, which reads the issue again and
@@ -871,9 +864,9 @@ hook may signal `done` only when no `post_done_cmd` is configured; otherwise the
 completion hook would conflict with its lifecycle/permit guard.
 
 With automatic completion, the daemon polls the saved issue URL of workspaces
-opened with `--issue` or `shoal issue` every ~30 seconds using its `gh`/`fj` login
-unless waiting for explicit `done`. Confirmed closure records `done` with the
-configured default, preserving any existing completion. Issue associations suppress idle cleanup; failed lookups retain the workspace and appear
+opened with an issue link every ~30 seconds using its `gh`/`fj` login unless waiting
+for explicit `done`. Confirmed closure records `done` with the configured default,
+preserving any existing completion. Issue associations suppress idle cleanup; failed lookups retain the workspace and appear
 in `status` and `inspect`. Reopening an issue does not undo completion.
 
 Cleanup runs in the daemon without an idle delay; tracked agent exits trigger a

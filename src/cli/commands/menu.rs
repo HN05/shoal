@@ -79,6 +79,7 @@ pub(super) async fn choose(ctx: &Context) -> Result<Command> {
             here: false,
             path: None,
             repository: None,
+            repository_override: None,
             branch: None,
             existing: None,
             issue: None,

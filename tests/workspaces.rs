@@ -2234,6 +2234,24 @@ fn pr_review_opens_the_head_against_its_base_and_reuses_the_owner() {
             .unwrap()
             .contains("pr\0view\x007\0--host\0forge.example\0")
     );
+    let added = fixture
+        .command()
+        .args([
+            "--json",
+            "add",
+            "https://forge.example/team/project/pulls/7",
+        ])
+        .env("PATH", &path)
+        .output()
+        .unwrap();
+    assert!(added.status.success(), "{added:?}");
+    let added: Value = serde_json::from_slice(&added.stdout).unwrap();
+    assert_eq!(added["branch"], "stack/top");
+    let branch = fixture.ok(&[
+        "add",
+        "https://forge.example/team/project/src/branch/stack%2Ftop",
+    ]);
+    assert_eq!(branch["id"], added["id"]);
     let workspace = &fixture.ok(&["inspect", "stack-top"])["workspace"];
     assert_eq!(workspace["base_ref"], "refs/remotes/origin/stack/base");
     let path_in = Path::new(workspace["path"].as_str().unwrap());
@@ -9065,7 +9083,7 @@ printf '%s' '{"state":"OPEN","number":44,"title":"Literal {body}","body":"$(fals
 }
 
 #[test]
-fn issue_command_finds_the_repository_and_starts_the_default_agent() {
+fn add_item_finds_the_repository_and_starts_the_default_agent() {
     let fixture = Fixture::with_config(Some("default_agent = 'claude'\n"));
     let other = fixture.root.path().join("other");
     git(
@@ -9144,7 +9162,7 @@ fn issue_command_finds_the_repository_and_starts_the_default_agent() {
         let url = format!("https://github.com/team/project/issues/{number}");
         let number_input = number.to_string();
         let input = if number >= 45 { &number_input } else { &url };
-        let mut args = vec!["--json", "issue", input, "--base", "HEAD"];
+        let mut args = vec!["--json", "add", input, "--base", "HEAD"];
         if number == 47 {
             args.extend(["--repo", fixture.repo.to_str().unwrap()]);
         }

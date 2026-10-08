@@ -359,15 +359,13 @@ association, then an existing local branch with the derived name, rather than
 suffixing a new branch; conflicts fail before the agent picker. Associations are idempotent and cannot
 be replaced. Status and inspection expose them.
 
-`add --issue` resolves issue numbers/URLs using the remote and existing gh/fj
-login, derives a portable name, and renders issue context from a plain-text
-template for CLI agents; initial lookup runs in the CLI with no Shoal credentials
-or forge configuration. An issue URL may select the single registered repository
-by remote identity when `add` omits it; an unregistered remote offers to register
-the repository URL. `issue <number-or-url>`
-invokes that same path with the configured `default_agent` standing in for
-`--agent`. Numbers use an explicit `--repo`, the current registered checkout or
-managed workspace, or an interactive repository picker; URLs keep remote matching.
+`add <link>` recognizes issue, PR and branch URLs and selects their registered
+repository by origin identity, offering interactive registration when missing.
+Issue links and numbers invoke issue opening with `default_agent` standing in
+for `--agent`; numbers use `--repo`, the current checkout/workspace, then a picker.
+PR links open their head against the refreshed remote base and branch links open
+an origin branch, using existing-branch ownership checks and retaining an owned
+workspace's diff base. Opening fork PR branches is refused.
 `add --agent` launches only after creation, setup, and the post-setup hook
 succeed, or after an explicitly ignored setup failure, and retains the
 workspace whatever the agent does. Desktop handoffs (Codex app, T3) provide no

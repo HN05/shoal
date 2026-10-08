@@ -6,6 +6,7 @@ mod configuration;
 mod events;
 mod holds;
 pub(super) mod issues;
+mod links;
 mod menu;
 mod notifications;
 mod ports;
@@ -216,6 +217,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             here,
             path,
             repository,
+            repository_override,
             branch,
             existing,
             issue,
@@ -224,9 +226,13 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             agent,
             args,
         } => {
-            workspaces::add(
+            links::add(
                 &ctx,
-                repository,
+                links::AddInput {
+                    positional: repository,
+                    repository: repository_override,
+                    issue,
+                },
                 workspaces::Creation {
                     path,
                     branch,
@@ -234,8 +240,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
                     base,
                     git_profile,
                 },
-                issue,
-                workspaces::AgentLaunch::Explicit(agent),
+                agent,
                 args,
                 here,
             )

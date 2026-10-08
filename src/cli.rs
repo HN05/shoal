@@ -86,8 +86,11 @@ pub enum Command {
         /// Run in the current pane instead of opening a Herdr tab.
         #[arg(long)]
         here: bool,
-        /// Registered repository; may be omitted when --issue is a URL.
+        /// Registered repository, or an issue, PR or branch URL.
         repository: Option<String>,
+        /// Repository for an issue number or a pasted link.
+        #[arg(long = "repo")]
+        repository_override: Option<String>,
         /// Git branch name; a portable workspace name is derived from it.
         branch: Option<String>,
         /// Use an existing local branch or remote/branch without creating a new branch.
@@ -110,7 +113,7 @@ pub enum Command {
         #[arg(long, value_parser = AgentParser)]
         agent: Option<Agent>,
         /// Arguments forwarded to the agent.
-        #[arg(last = true, requires = "agent")]
+        #[arg(last = true)]
         args: Vec<OsString>,
     },
     /// Bring an existing worktree under Shoal management, including cleanup.
@@ -128,6 +131,7 @@ pub enum Command {
         branch: String,
     },
     /// Open an issue workspace and start an agent.
+    #[command(hide = true)]
     Issue {
         /// Run in the current pane instead of opening a Herdr tab.
         #[arg(long)]

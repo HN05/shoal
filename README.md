@@ -69,31 +69,30 @@ shoal add my-project --existing origin/feature/api --agent codex
 shoal add my-project quick-fix --path ../quick-fix
 shoal adopt my-project ../existing-worktree  # Take ownership, including automatic cleanup
 shoal rename fix-login fix/login             # Rename its branch and workspace together
-shoal add my-project --issue 68           # Create from an issue
+shoal add https://github.com/owner/repo/issues/68 # Create from an issue
 shoal continue                          # Defer automatic completion until shoal done
-shoal add --issue https://github.com/owner/repo/issues/34  # URL finds the repository
-shoal issue https://github.com/owner/repo/issues/34  # Paste an issue: finds the repository, starts the default agent
-shoal issue 34                             # Use the current repository, or pick one
-shoal issue 34 --repo my-project          # Select the repository explicitly
+shoal add https://github.com/owner/repo/issues/34  # Add an issue, PR, or branch link
+shoal add https://github.com/owner/repo/pull/505    # Open a PR head branch
+shoal add https://github.com/owner/repo/tree/feature/api # Open a branch
 ```
 
-Inside Herdr, `issue` and `add` open a new tab after your choices; use `--here`
+Inside Herdr, `add` opens a new tab after your choices; use `--here`
 to run in the current pane. See [Herdr settings](docs/reference.md#agents).
 
 Use `--agent claude` for Claude Code, or `--agent happy-claude`/`happy-codex` for
 a detached [Happy](https://github.com/slopus/happy) session that appears in the
-Happy app. `shoal issue` takes the same `--agent`, or `default_agent = "codex"`
+Happy app. Adding an issue link uses `--agent`, or `default_agent = "codex"`
 from the repository or global config. Edit `~/.config/shoal/issue-template.md`
 to customize issue prompts and `agent-template.md` for general instructions;
 put those files in a repository root to append project-specific guidance.
 New workspaces branch from the repository's default branch unless `--base REF`
-is supplied to `add` or `issue`. With shell integration, `shoal add` enters the
+is supplied to `add`. With shell integration, `shoal add` enters the
 workspace.
 
 ## Everyday commands
 
 After [configuring a custom agent](docs/reference.md#agents), run
-`shoal add my-project fix-api --agent pi` or `shoal issue <url>`.
+`shoal add my-project fix-api --agent pi` or `shoal add <issue-url>`.
 
 ```sh
 shoal                         # Interactive workspace menu

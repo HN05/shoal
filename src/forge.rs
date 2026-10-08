@@ -1,5 +1,6 @@
 //! Forge identity and read-only issue/PR queries using the user's gh/fj login.
 pub mod issue;
+pub mod link;
 mod locator;
 pub mod pr;
 mod remote_url;
