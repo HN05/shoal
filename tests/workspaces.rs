@@ -12719,7 +12719,9 @@ fn repository_resources_validate_targets_before_claiming_and_bind_approvals() {
     );
     let missing = fixture.run(&["resource", "acquire", "server", "consumer"]);
     assert!(!missing.status.success());
-    assert!(String::from_utf8_lossy(&missing.stderr).contains("unknown related repository"));
+    assert!(
+        String::from_utf8_lossy(&missing.stderr).contains("repository is not registered: missing")
+    );
     assert!(
         fixture.ok(&["inspect", "consumer"])["resources"]
             .as_array()

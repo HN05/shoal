@@ -2,10 +2,18 @@
 use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
-use std::{fs, path::PathBuf};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fs,
+    path::PathBuf,
+};
 
-use super::ResourceLease;
-use crate::{daemon::store, forge::repository};
+use super::{Definition, ResourceLease};
+use crate::{
+    daemon::{store, workspace::Manager},
+    forge::repository,
+    model::Repository,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct RepositoryView {
@@ -13,27 +21,53 @@ pub struct RepositoryView {
     pub path: PathBuf,
 }
 
-pub(super) fn resolve(db: &Connection, selector: &str) -> Result<RepositoryView> {
-    let repositories = db
-        .prepare(&format!(
-            "SELECT {} FROM repositories",
-            store::REPOSITORY_COLUMNS
-        ))?
-        .query_map([], store::repository)?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    let matches: Vec<_> = repositories
-        .iter()
-        .filter(|repo| repo.id == selector || repository::name(repo) == selector)
-        .collect();
+/// Registered repositories named by a pool's members, keyed by selector.
+pub(super) type Related = BTreeMap<String, Result<Repository>>;
+
+impl Manager {
+    /// Resolve selectors before the claim transaction: remote identity reads
+    /// each local checkout's origin. Failures surface only if their member is chosen.
+    pub(super) async fn related_repositories(&self, definition: &Definition) -> Result<Related> {
+        let selectors: BTreeSet<_> = definition
+            .resources
+            .values()
+            .filter_map(|resource| resource.repo.as_deref())
+            .collect();
+        if selectors.is_empty() {
+            return Ok(Related::new());
+        }
+        let repositories = self.repositories().await?;
+        let mut related = Related::new();
+        for selector in selectors {
+            let repo = repository::select(&repositories, selector)
+                .await
+                .cloned()
+                .with_context(|| format!("resolve related repository {selector}"));
+            related.insert(selector.to_owned(), repo);
+        }
+        Ok(related)
+    }
+}
+
+pub(super) fn resolve(
+    db: &Connection,
+    selector: &str,
+    related: &mut Related,
+) -> Result<RepositoryView> {
+    let repo = related
+        .remove(selector)
+        .with_context(|| format!("related repository was not resolved: {selector}"))??;
     ensure!(
-        !matches.is_empty(),
-        "unknown related repository: {selector}"
+        store::exists(
+            db,
+            "SELECT 1 FROM repositories WHERE id=?1 AND path=?2",
+            params![
+                repo.id,
+                repo.path.to_str().context("repository path is not UTF-8")?
+            ]
+        )?,
+        "related repository registration changed: {selector}"
     );
-    ensure!(
-        matches.len() == 1,
-        "ambiguous related repository: {selector}; use its ID"
-    );
-    let repo = matches[0];
     ensure!(
         !store::exists(
             db,
@@ -59,8 +93,8 @@ pub(super) fn resolve(db: &Connection, selector: &str) -> Result<RepositoryView>
         "related repository checkout belongs to a managed workspace: {selector}"
     );
     Ok(RepositoryView {
-        id: repo.id.clone(),
-        path: repo.path.clone(),
+        id: repo.id,
+        path: repo.path,
     })
 }
 

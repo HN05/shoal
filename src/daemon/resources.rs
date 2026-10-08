@@ -574,6 +574,7 @@ impl Manager {
         let (scope, definition) = definitions
             .remove(&request.pool)
             .ok_or_else(|| anyhow::anyhow!("unknown resource or pool: {}", request.pool))?;
+        let related = self.related_repositories(&definition).await?;
         let hook_workspace = workspace.clone();
         let hook = self
             .workspace_hook(&workspace, crate::hooks::HookKind::PostResourceAcquire)
@@ -591,7 +592,17 @@ impl Manager {
         let scoped = caller.is_some();
         let acquisition = self
             .store
-            .run(move |db| acquire_lease(db, workspace.id, scope, definition, request, scoped))
+            .run(move |db| {
+                acquire_lease(
+                    db,
+                    workspace.id,
+                    scope,
+                    definition,
+                    request,
+                    related,
+                    scoped,
+                )
+            })
             .await?;
         if let Allocation::Granted(lease) = &acquisition
             && let Some(command) = hook
@@ -730,6 +741,7 @@ fn acquire_lease(
     scope: Scope,
     definition: Definition,
     mut request: ResourceRequest,
+    mut related: repositories::Related,
     scoped: bool,
 ) -> Result<Allocation<ResourceLease>> {
     let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
@@ -798,7 +810,7 @@ fn acquire_lease(
     let repository = settings
         .repo
         .as_deref()
-        .map(|selector| repositories::resolve(&tx, selector))
+        .map(|selector| repositories::resolve(&tx, selector, &mut related))
         .transpose()?;
     if scoped && settings.requires_approval {
         let bound = ResourceSpecification {
