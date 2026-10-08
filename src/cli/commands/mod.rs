@@ -301,11 +301,14 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             workspace,
             pr,
             repository,
+            post,
+            no_post,
             manual,
             agent,
             args,
         } => {
-            let target = review::Target::new(workspace, pr, repository)?;
+            let post = (post || no_post).then_some(post);
+            let target = review::Target::new(workspace, pr, repository, post)?;
             let reviewer = review::Reviewer::new(manual, agent);
             review::start(&ctx, target, reviewer, args).await
         }

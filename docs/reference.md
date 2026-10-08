@@ -343,7 +343,14 @@ with your `gh`/`fj` login and reviews it the same way in the workspace that owns
 its head branch, fast-forwarded to the pushed head and refused when diverged, or
 opens one from origin whose base is the PR's refreshed `origin/<base>`; fork PRs
 are refused. `--repo` selects the PR's repository,
-which otherwise follows `shoal add`.
+which otherwise follows `shoal add`. An agent reviewing a PR posts its findings as
+one comment, without approving or requesting changes, unless `[review] post` is
+false; `--post` or `--no-post` overrides that for one run and selects the agent.
+
+```toml
+[review]
+post = true # Default: true
+```
 `shoal review-worktree [workspace]` reviews uncommitted changes. The committed
 range excludes working-tree changes that `shoal diff` includes. Export feedback
 from tuicr and hand it to your agent explicitly; see

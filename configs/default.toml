@@ -138,3 +138,7 @@ allow_any = false
 cleanup = true
 # Also mark done when the associated issue closes or every watched PR merges.
 automatic = false
+
+# Agent reviews of PRs and issues post their findings; --post and --no-post override it.
+[review]
+post = true

@@ -80,6 +80,7 @@ pub struct RepoConfig {
     pub auto_cleanup: AutoCleanup,
     pub pr_cleanup: PrCleanup,
     pub done: Done,
+    pub review: Review,
 }
 
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
@@ -189,6 +190,13 @@ pub struct AutoCleanup {
 pub struct Done {
     pub cleanup: Option<bool>,
     pub automatic: Option<bool>,
+}
+
+/// Whether agent reviews of PRs and issues post their findings to the forge.
+#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Review {
+    pub post: Option<bool>,
 }
 
 /// Repository value for the global `[pr_cleanup]`.

@@ -266,6 +266,12 @@ pub enum Command {
         /// Registered repository of the PR; defaults to the URL's repository or the current checkout/workspace.
         #[arg(long = "repo")]
         repository: Option<String>,
+        /// Have the agent post its findings on the PR, overriding [review] post.
+        #[arg(long, overrides_with = "no_post", conflicts_with = "manual")]
+        post: bool,
+        /// Keep the agent's findings local, overriding [review] post.
+        #[arg(long, overrides_with = "post", conflicts_with = "manual")]
+        no_post: bool,
         /// Run the configured `review` command without asking.
         #[arg(long, conflicts_with = "agent")]
         manual: bool,

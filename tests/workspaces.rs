@@ -2347,6 +2347,10 @@ fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
     );
     assert!(stdout.contains("branch stack/top"), "{stdout}");
     assert!(
+        stdout.contains("Post them as one comment on pull request #7"),
+        "{stdout}"
+    );
+    assert!(
         fs::read_to_string(&fj_args)
             .unwrap()
             .contains("pr\0view\x007\0--host\0forge.example\0")
@@ -2382,8 +2386,12 @@ fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
 
     commit("more");
     git(&author, &["push", "origin", "stack/top"]);
-    let output = review(&["https://forge.example/team/project/pulls/7"]);
+    let output = review(&["https://forge.example/team/project/pulls/7", "--no-post"]);
     assert!(output.status.success(), "{output:?}");
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("or comment on the forge unless asked"),
+        "{output:?}"
+    );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains("Updated workspace stack-top to refs/remotes/origin/stack/top"),
