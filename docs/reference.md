@@ -953,7 +953,8 @@ shoal unready            # Withdraw all marks; select a kind or item like unlink
 A mark says the agent considers the work for a linked issue or PR, or for the
 workspace itself when nothing is linked, ready for review at the current HEAD.
 Items are selected like `link`, and a selected item must be linked; a kind with
-no linked items is an error. Marking again moves the mark to the current HEAD.
+no linked items is an error. Marking again moves the mark to the current HEAD, and
+marking linked items replaces a mark made while nothing was linked.
 Marks never notify, record completion, or affect cleanup; use `shoal notify` to
 ask for attention. New commits make a mark outdated: `ls` shows
 `ready for review (outdated)`, and `status`, `inspect` and `ls --json` list

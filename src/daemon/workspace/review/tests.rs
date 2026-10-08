@@ -92,6 +92,11 @@ async fn marks_bind_to_head_follow_links_and_record_events() {
     let mut expected = vec![issue.clone(), pr.clone()];
     expected.sort();
     assert_eq!(marked, expected);
+    // Linked-item marks replace the mark made while nothing was linked.
+    assert_eq!(
+        manager.workspace(&workspace.id).await.unwrap().review.len(),
+        2
+    );
     assert!(
         manager
             .mark_ready(&workspace.id, select(Some(ItemKind::Pr), Some("13")))
@@ -104,7 +109,7 @@ async fn marks_bind_to_head_follow_links_and_record_events() {
     std::fs::write(workspace.path.join("later"), "later\n").unwrap();
     commit(&workspace.path, "later");
     let inspection = manager.inspect_workspace(&workspace.id).await.unwrap();
-    assert_eq!(inspection.workspace.review.len(), 3);
+    assert_eq!(inspection.workspace.review.len(), 2);
     assert!(
         inspection
             .workspace
@@ -142,14 +147,20 @@ async fn marks_bind_to_head_follow_links_and_record_events() {
             .await
             .is_err()
     );
-    let remaining = manager.workspace(&workspace.id).await.unwrap().review;
-    assert_eq!((remaining.len(), remaining[0].url.as_ref()), (1, None));
+    assert!(
+        manager
+            .workspace(&workspace.id)
+            .await
+            .unwrap()
+            .review
+            .is_empty()
+    );
 
     let ready = EventKind::ReviewReady.to_string();
     let cleared = EventKind::ReviewCleared.to_string();
     let mut events = review_events(&manager).await;
     // Initial marks of the two linked items share one transaction; order them.
-    events[1..3].sort();
+    events[2..4].sort();
     let mut linked = vec![
         (ready.clone(), Some(issue.clone()), head.clone()),
         (ready.clone(), Some(pr.clone()), head.clone()),
@@ -158,7 +169,10 @@ async fn marks_bind_to_head_follow_links_and_record_events() {
     assert_eq!(
         events,
         [
-            vec![(ready.clone(), None, head.clone())],
+            vec![
+                (ready.clone(), None, head.clone()),
+                (cleared.clone(), None, head.clone()),
+            ],
             linked,
             vec![
                 (ready.clone(), Some(pr.clone()), later.clone()),
@@ -170,6 +184,10 @@ async fn marks_bind_to_head_follow_links_and_record_events() {
     );
 
     // Removal cascades marks away without reporting each as withdrawn.
+    manager
+        .mark_ready(&workspace.id, Selection::default())
+        .await
+        .unwrap();
     let id = workspace.id.clone();
     manager
         .store
@@ -179,7 +197,7 @@ async fn marks_bind_to_head_follow_links_and_record_events() {
         })
         .await
         .unwrap();
-    assert_eq!(review_events(&manager).await.len(), 6);
+    assert_eq!(review_events(&manager).await.len(), 8);
 }
 
 #[tokio::test]

@@ -121,6 +121,13 @@ impl Manager {
                         vec![(None, None)]
                     }
                 };
+                // Linked-item marks replace a mark made while nothing was linked.
+                if items.iter().any(|(url, _)| url.is_some()) {
+                    tx.execute(
+                        "DELETE FROM workspace_review WHERE workspace_id=?1 AND url=''",
+                        [&id],
+                    )?;
+                }
                 let mut marks = Vec::new();
                 for (url, kind) in items {
                     tx.execute(

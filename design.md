@@ -413,7 +413,8 @@ Ready-for-review marks are the agent's status signal for integrations, separate
 from messages and completion: they never notify, complete, or change cleanup. A
 mark covers a linked issue or PR, or the workspace when nothing is linked, and
 binds to HEAD; new commits make it outdated rather than removing it, so marking
-again is an explicit statement about the new revision. Unlinking an item
+again is an explicit statement about the new revision. Marking linked items
+replaces a workspace mark. Unlinking an item
 withdraws its mark and removal deletes all marks. Marks and withdrawals are
 journal events, and `post_ready_cmd` runs after each explicit mark under the
 completion hook rules; failure notifies and keeps the marks. Shoal does not act
