@@ -25,7 +25,7 @@ use crate::{
     sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
 };
 
-pub const VERSION: u32 = 63;
+pub const VERSION: u32 = 64;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -181,6 +181,14 @@ pub enum Method {
     WorkspaceDone {
         workspace: String,
         cleanup: Option<bool>,
+    },
+    MarkReady {
+        workspace: String,
+        selection: crate::forge::link::Selection,
+    },
+    ClearReady {
+        workspace: String,
+        selection: crate::forge::link::Selection,
     },
     SetIssue {
         workspace: String,
@@ -476,6 +484,7 @@ response_bodies! {
     OpenedWorkspace(crate::git::existing_branch::OpenedWorkspace),
     Inspection(Inspection),
     Completion(crate::model::Completion),
+    ReviewMarks(Vec<crate::model::ReviewMark>),
     WorkspaceStatus(WorkspaceStatus),
     WorkspaceEnv(std::collections::BTreeMap<String, String>),
     Diagnostics(Vec<crate::daemon::doctor::Check>),

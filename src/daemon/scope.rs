@@ -62,6 +62,8 @@ pub async fn authorize(
         | Method::WorkspaceContinue { workspace }
         | Method::WorkspaceDone { workspace, .. }
         | Method::SendMessage { workspace, .. }
+        | Method::MarkReady { workspace, .. }
+        | Method::ClearReady { workspace, .. }
         | Method::SetPr { workspace, .. }
         | Method::SetIssue { workspace, .. }
         | Method::ClearIssue { workspace, .. }

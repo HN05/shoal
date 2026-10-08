@@ -12,7 +12,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 29;
+const SCHEMA_VERSION: i64 = 30;
 
 #[cfg(test)]
 mod benchmark;
@@ -323,6 +323,7 @@ const MIGRATIONS: &[(i64, &str, Option<Precondition>)] = &[
         );",
         None,
     ),
+    (30, include_str!("store/workspace_review.sql"), None),
 ];
 
 fn migrate(db: &mut Connection) -> Result<()> {
@@ -422,6 +423,7 @@ pub const WORKSPACE_COLUMNS: &str =
 pub fn workspace(row: &Row<'_>) -> rusqlite::Result<Workspace> {
     Ok(Workspace {
         holds: Vec::new(),
+        review: Vec::new(),
         id: row.get("id")?,
         repository_id: row.get("repository_id")?,
         name: row.get("name")?,
@@ -638,6 +640,9 @@ mod tests {
         }
         if version >= 28 {
             db.execute_batch(include_str!("store/workspace_events.sql"))?;
+        }
+        if version >= 30 {
+            db.execute_batch(include_str!("store/workspace_review.sql"))?;
         }
         db.pragma_update(None, "user_version", version)?;
         db.execute_batch(

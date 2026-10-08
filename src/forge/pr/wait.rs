@@ -105,22 +105,34 @@ impl Manager {
         self.record_activity(id, observations, selection).await
     }
 
+    /// The canonical URL of an explicitly selected item, linked or not.
+    pub(crate) async fn explicit_item(
+        &self,
+        workspace: &Workspace,
+        selection: &Selection,
+    ) -> Result<Option<(String, ItemKind)>> {
+        let Some(input) = &selection.input else {
+            return Ok(None);
+        };
+        let remote = repository::remote_url_from_path(&workspace.path)
+            .await?
+            .context("item lookup needs an origin remote")?;
+        let forge = ForgeRepo::parse(&remote)?;
+        let kind = selection.kind.context("explicit items need a kind")?;
+        let (_, url) = match kind {
+            ItemKind::Pr => forge.pull(input)?,
+            ItemKind::Issue => forge.issue(input)?,
+        };
+        Ok(Some((url, kind)))
+    }
+
     async fn selected_items(
         &self,
         workspace: &Workspace,
         selection: &Selection,
     ) -> Result<Vec<(String, ItemKind)>> {
-        if let Some(input) = &selection.input {
-            let remote = repository::remote_url_from_path(&workspace.path)
-                .await?
-                .context("watch needs an origin remote")?;
-            let forge = ForgeRepo::parse(&remote)?;
-            let kind = selection.kind.context("explicit items need a kind")?;
-            let (_, url) = match kind {
-                ItemKind::Pr => forge.pull(input)?,
-                ItemKind::Issue => forge.issue(input)?,
-            };
-            return Ok(vec![(url, kind)]);
+        if let Some(item) = self.explicit_item(workspace, selection).await? {
+            return Ok(vec![item]);
         }
         let id = workspace.id.clone();
         let kind = selection.kind;
@@ -279,7 +291,7 @@ impl Manager {
     }
 }
 
-fn linked_items(
+pub(crate) fn linked_items(
     db: &rusqlite::Connection,
     id: &str,
     kind: Option<ItemKind>,

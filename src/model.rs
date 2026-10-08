@@ -48,6 +48,22 @@ pub struct Workspace {
     pub git_dir_id: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub holds: Vec<WorkspaceHold>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub review: Vec<ReviewMark>,
+}
+
+/// An agent's statement that linked work is ready for review at a commit.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReviewMark {
+    /// The linked issue or PR; both are absent when the mark covers the
+    /// workspace itself.
+    pub kind: Option<crate::forge::link::ItemKind>,
+    pub url: Option<String>,
+    pub head: String,
+    pub created_at: i64,
+    /// Whether HEAD has moved since the mark; absent when HEAD was not read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stale: Option<bool>,
 }
 
 /// A caller-named claim that a workspace is still in use.
@@ -80,6 +96,7 @@ impl Workspace {
             git_dir: None,
             git_dir_id: None,
             holds: Vec::new(),
+            review: Vec::new(),
         }
     }
 

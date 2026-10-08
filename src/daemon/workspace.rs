@@ -14,6 +14,7 @@ mod registry;
 mod rename;
 mod repo_configuration;
 mod repo_removal;
+pub(crate) mod review;
 mod status;
 
 pub use executions::ExecutionKind;
@@ -211,6 +212,7 @@ impl Manager {
                     .collect::<rusqlite::Result<Vec<_>>>()?;
                 for workspace in &mut workspaces {
                     workspace.holds = holds::list(db, &workspace.id)?;
+                    workspace.review = review::list(db, &workspace.id)?;
                 }
                 Ok(workspaces)
             })
@@ -241,6 +243,7 @@ impl Manager {
                     .optional()?
                     .with_context(|| format!("unknown workspace: {selector}"))?;
                 workspace.holds = holds::list(db, &workspace.id)?;
+                workspace.review = review::list(db, &workspace.id)?;
                 Ok(workspace)
             })
             .await
@@ -255,7 +258,8 @@ impl Manager {
     }
 
     pub async fn inspect_workspace(&self, selector: &str) -> Result<Inspection> {
-        let workspace = self.workspace(selector).await?;
+        let mut workspace = self.workspace(selector).await?;
+        self.annotate_review(&mut workspace).await;
         let simulators = self.list_simulators(Some(&workspace.id)).await?;
         let issue = self.issue_registration(&workspace.id).await?;
         let pr_cleanup = self.pr_registration(&workspace.id).await?;

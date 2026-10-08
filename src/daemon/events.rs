@@ -17,6 +17,10 @@ states!(EventKind {
     Removed => "removed",
     Retained => "retained",
     BranchChanged => "branch_changed",
+    /// A workspace process marked linked work ready for review.
+    ReviewReady => "review_ready",
+    /// A ready mark was withdrawn or its item unlinked.
+    ReviewCleared => "review_cleared",
 });
 
 states!(EventCause {
@@ -39,6 +43,17 @@ pub struct EventDetails {
     pub branch: Option<String>,
     pub cause: Option<EventCause>,
     pub error: Option<String>,
+    /// The mark a review event describes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub review: Option<ReviewEvent>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReviewEvent {
+    /// The linked issue or PR; both are null for a workspace mark.
+    pub kind: Option<crate::forge::link::ItemKind>,
+    pub url: Option<String>,
+    pub head: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

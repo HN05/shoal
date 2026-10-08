@@ -409,6 +409,9 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             if let Some(caller) = caller {
                 workspaces.retain(|w| w.id == caller.workspace_id);
             }
+            for workspace in &mut workspaces {
+                manager.annotate_review(workspace).await;
+            }
             Body::Workspaces(workspaces)
         }
         Method::HoldAcquire {
@@ -449,6 +452,14 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
                 .await?;
             Body::Ok
         }
+        Method::MarkReady {
+            workspace,
+            selection,
+        } => Body::ReviewMarks(manager.mark_ready(&workspace, selection).await?),
+        Method::ClearReady {
+            workspace,
+            selection,
+        } => Body::ReviewMarks(manager.clear_ready(&workspace, selection).await?),
         Method::WorkspaceDone { workspace, cleanup } => {
             Body::Completion(manager.mark_done(&workspace, cleanup).await?)
         }

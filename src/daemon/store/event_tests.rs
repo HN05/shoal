@@ -100,6 +100,8 @@ fn retention_is_bounded_and_ids_are_never_reused() -> Result<()> {
 
 /// Remove the current event schema when tests emulate an older database.
 pub(super) fn remove_schema(db: &Connection) -> Result<()> {
+    // Ready-for-review marks record into the journal, so they go with it.
+    db.execute_batch("DROP TABLE workspace_review;")?;
     for trigger in [
         "workspace_events_retention",
         "workspace_created",
