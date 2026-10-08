@@ -1262,8 +1262,12 @@ Declare a registered repository as a resource in global or repository config:
 ```toml
 [resources.server]
 kind = "repo"
-repo = "saldoir-server"        # Registered name or ID
+repo = "saldoir-server"        # Registered name or ID, or a remote URL
 ```
+
+A URL keeps tracked config independent of local registration names. It matches
+the registration with the same remote over any transport, and is never cloned:
+register it first with `shoal repo add <url>`.
 
 `shoal resource acquire server` returns a read lease with `repository.id` and
 `repository.path` in JSON. Scoped callers can acquire it without repository

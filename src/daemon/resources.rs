@@ -448,7 +448,9 @@ impl ResourceConfig {
     fn validate_repository(&self, name: &str) -> Result<()> {
         match (self.kind, self.repo.as_deref()) {
             (ResourceKind::Repo, Some(repo)) => {
-                validate::name("repository", repo)?;
+                if !crate::forge::repository::is_remote_url(repo) {
+                    validate::name("repository", repo)?;
+                }
                 ensure!(
                     self.capacity == 1,
                     "repo resource {name} must use capacity 1; readers share its one slot"
@@ -1109,6 +1111,7 @@ mod tests {
             "[resources.server]\nkind='repo'",
             "[resources.server]\nkind='repo'\nrepo=''",
             "[resources.server]\nkind='repo'\nrepo='../server'",
+            "[resources.server]\nkind='repo'\nrepo='https://'",
             "[resources.server]\nkind='repo'\nrepo='server'\ncapacity=2",
             "[resources.server]\nrepo='server'",
         ] {
@@ -1140,6 +1143,15 @@ mod tests {
             Some("other-server")
         );
         assert!(!merged.resources["server"].requires_approval);
+        for url in [
+            "https://example.test/team/server.git",
+            "git@example.test:team/server.git",
+        ] {
+            let config = crate::config::repo::parse(&format!(
+                "[resources.server]\nkind='repo'\nrepo='{url}'"
+            ))?;
+            definitions(&config.resources, &config.resource_pools)?;
+        }
         let json = serde_json::to_value(&merged.resources["server"])?;
         let restored: ResourceConfig = serde_json::from_value(json)?;
         assert_eq!(restored, merged.resources["server"]);

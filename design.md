@@ -480,8 +480,8 @@ the latest installed, available iOS version compatible with the requested device
 explicit runtimes stay pinned and existing leases keep their runtime. Generic permits consume
 pool and member capacity in one transaction; rwlock members allow unlimited readers sharing one slot or one
 writer, default to write, and require release to change mode. Definition drift
-blocks new claims but never revokes permits. `kind = "repo"` resources return a
-registered checkout's path with cooperative read access; readers share one slot.
+blocks new claims but never revokes permits. `kind = "repo"` resources name a registered repository, or a remote URL matching
+one, and return its checkout's path with cooperative read access; readers share one slot.
 The lease binds its repository ID and path, including for approval, survives
 restart, and prevents repository deletion while borrowed by another repository's
 workspace. Release and workspace cleanup only drop the lease; they never modify

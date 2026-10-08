@@ -101,6 +101,11 @@ pub fn host(source: &str) -> Option<&str> {
     RemoteUrl::parse(source).and_then(|remote| remote.host)
 }
 
+/// A remote URL with a host and repository path, as registration matches it.
+pub fn is_remote_url(source: &str) -> bool {
+    RemoteUrl::parse(source).is_some_and(|remote| remote.host.is_some() && remote.path.is_some())
+}
+
 /// Local checkouts use origin; clones retain their original source URL even
 /// when their checkout is temporarily unavailable. No network access is needed.
 pub async fn identity(source: &str) -> Result<Option<String>> {

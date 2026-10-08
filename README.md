@@ -215,7 +215,7 @@ approval_lifetime = "lease"    # Or "workspace"
 
 [resources.server]
 kind = "repo"
-repo = "saldoir-server"       # Registered repository name
+repo = "saldoir-server"       # Registered repository name or remote URL
 ```
 
 Acquire a related repository with `shoal resource acquire server`. Use its

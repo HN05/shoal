@@ -12704,6 +12704,38 @@ fn repository_resources_return_checkouts_and_preserve_them_on_cleanup() {
 }
 
 #[test]
+fn repository_resources_select_registrations_by_remote_url() {
+    let fixture = Fixture::new();
+    let related = init_repo(fixture.root.path(), "server", &[("tracked", "server\n")]);
+    git(
+        &related,
+        &[
+            "remote",
+            "add",
+            "origin",
+            "https://example.test/team/server.git",
+        ],
+    );
+    let registration = fixture.ok(&["repo", "add", related.to_str().unwrap(), "--name", "api"]);
+    set_repository_toml(
+        &fixture,
+        "[resources.server]\nkind='repo'\nrepo='git@example.test:team/server.git'\n",
+    );
+    fixture.add("consumer");
+    let lease = fixture.ok(&["resource", "acquire", "server", "consumer"]);
+    assert_eq!(lease["repository"]["id"], registration["id"]);
+    assert_eq!(lease["repository"]["path"], related.to_str().unwrap());
+    fixture.ok(&["resource", "release", "server", "consumer"]);
+    set_repository_toml(
+        &fixture,
+        "[resources.server]\nkind='repo'\nrepo='https://example.test/team/other.git'\n",
+    );
+    let missing = fixture.run(&["resource", "acquire", "server", "consumer"]);
+    assert!(!missing.status.success());
+    assert!(String::from_utf8_lossy(&missing.stderr).contains("shoal repo add"));
+}
+
+#[test]
 fn repository_resources_validate_targets_before_claiming_and_bind_approvals() {
     let fixture = Fixture::new();
     let related = init_repo(fixture.root.path(), "server", &[("tracked", "server\n")]);
