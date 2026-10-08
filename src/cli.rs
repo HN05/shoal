@@ -483,7 +483,7 @@ pub enum HoldCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum PrCommand {
-    /// Watch a PR; when all merge, mark done (may stop commands and remove the workspace).
+    /// Link a PR; cleanup after done waits until every linked PR merges.
     #[command(hide = true)]
     Watch {
         /// GitHub or Forgejo PR number or URL; repeated watches accumulate.

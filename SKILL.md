@@ -1,6 +1,6 @@
 ---
 name: shoal
-description: Use Shoal to merge local or remote branches into your managed worktree, reserve ports, lease Xcode simulators, and acquire resource permits during development or testing. Applies to agents launched through Shoal or working directly in a Shoal worktree.
+description: Use Shoal to finish assignments with `shoal done`, watch and wait on PRs, merge local or remote branches into your managed worktree, reserve ports, lease Xcode simulators, and acquire resource permits during development or testing. Applies to agents launched through Shoal or working directly in a Shoal worktree.
 ---
 
 # Shoal
@@ -14,6 +14,41 @@ and stop on `approval_denied`. Never remove scope to approve your own request.
 `shoal skill install` refreshes user-level instructions for all configured tools.
 Homebrew links follow upgrades; Cargo installs need refreshing. Run installation
 outside a scoped execution; an optional tool name selects one.
+
+## Completion
+
+Shoal keeps your workspace until you run `shoal done`; issue closure and merged
+PRs do not end the assignment unless `[done] automatic` is enabled (see below). Run `shoal done` as your last command once the
+assignment is finished: every watched PR merged, or no PR needed. Never end a
+session without it.
+
+Register each PR with `shoal link pr <number-or-url>`. Watches accumulate per
+workspace; after `done`, cleanup waits until all have merged and the merged set
+contains current HEAD. `shoal unlink pr <number-or-url>` unlinks one PR;
+omit its number or URL to unlink all PRs. Closed, unmerged PRs keep waiting, so cancel their
+watches before finishing without a merge.
+
+While watched PRs are open, run `shoal --json watch pr` from the workspace. Handle
+the returned `updates` by inspecting their PR URLs, then wait again. Comments
+and reviews wake the wait, as does each completed CI check or a merge conflict;
+respond to available review findings while other checks run. The first wait
+includes existing activity; later waits share a persistent cursor per workspace.
+`--timeout <seconds>` bounds the wait (default 3600, maximum 3600); `timed_out`
+with empty `updates` means no update. A `lookup_failed` entry names a failed
+activity lookup; correct its cause before relying on that source. Waiting also
+reports PR closure or merging and grants no permission to merge.
+
+`shoal done` defaults to cleanup, which may stop your execution. Use
+`shoal done --keep` when the user wants to review in this workspace; `--cleanup`
+overrides a `[done] cleanup = false` default. Dirty or newer work is retained;
+completion without a PR watch also requires every commit pushed or on the local
+default branch. Completion does not claim a merge occurred. Inspect
+`completion.error` and `pr_cleanup.error` for cleanup or lookup failures.
+
+`[done] automatic = true` also marks the assignment done when the associated
+issue closes or every watched PR merges. With it, call `shoal continue` before
+closing the issue or merging a watched PR when you receive more work; it defers
+issue, PR and idle cleanup until you explicitly call `shoal done`.
 
 ## Workspace context
 
@@ -46,38 +81,6 @@ needs this machine's Happy login). Check `prompt_delivered`; when false, the tex
 is in `prompt_file` and the user must send it from the app. Sessions launched
 through Shoal are scoped and cannot create workspaces or start sessions in other
 workspaces; the human or console session does.
-
-## Completion
-
-Register each PR with `shoal link pr <number-or-url>`. Watches accumulate per
-workspace; all must merge, and the merged set must contain current HEAD, before
-Shoal marks the assignment done automatically unless waiting for explicit `done`.
-`shoal unlink pr <number-or-url>` unlinks one PR; omit its number or URL to unlink
-all PRs. Closed, unmerged PRs keep waiting.
-
-While linked PRs are open, run `shoal --json watch pr` from the workspace. Handle
-the returned `updates` by inspecting their PR URLs, then wait again. Comments
-and reviews wake the wait, as does each completed CI check or a merge conflict;
-respond to available review findings while other checks run. The first wait
-includes existing activity; later waits share a persistent cursor per workspace.
-`--timeout <seconds>` bounds the wait (default 3600, maximum 3600); `timed_out`
-with empty `updates` means no update. A `lookup_failed` entry names a failed
-activity lookup; correct its cause before relying on that source. Waiting also
-reports PR closure or merging and grants no permission to merge.
-
-If you receive more work, call `shoal continue` before closing the issue or
-merging a watched PR. It cancels pending completion and defers issue, PR and idle
-cleanup until you explicitly call `shoal done`, persisting across restarts and
-preserving issue associations and watch merge requirements.
-
-To finish without waiting for watches, first cancel them and call `shoal done`
-as your last command. It defaults to cleanup, which may stop your execution.
-Use `shoal done --keep` when the user wants to review in this workspace;
-`--cleanup` overrides a keep default. `[done] cleanup = false` makes keeping the
-default for manual and automatic completion. Dirty or newer work is retained;
-completion without a merge also requires preserved commits. Completion does not
-claim a merge occurred. Inspect `completion.error` and `pr_cleanup.error` for
-cleanup or lookup failures. `[pr_cleanup] enabled = false` pauses PR completion.
 
 ## Merge branches into your own branch
 

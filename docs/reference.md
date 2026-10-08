@@ -72,7 +72,8 @@ tools first. It also creates `~/.config/shoal/config.toml` (or
 [configs/default.toml](../configs/default.toml), which states every default,
 and installs the root [issue-template.md](../issue-template.md) and
 [agent-template.md](../agent-template.md) beside it,
-never touching an existing file; `--dry-run` writes nothing. Installation prints
+never touching an existing file except an unedited agent template from an earlier
+release, which it updates; `--dry-run` writes nothing. Installation prints
 the shell initialization hint only when neither `.bashrc` nor `.zshrc` (under
 `ZDOTDIR` when set) contains an active initialization command. `shoal config
 install <name>` replaces the entire global file with a packaged template;
@@ -346,9 +347,9 @@ the workspace is retained even when launch fails. With shell
 integration, your shell enters the new workspace after the agent exits.
 `--json` emits the workspace record first, then the agent's unmodified output.
 
-Inside Herdr (`HERDR_ENV=1`), interactive `shoal add` look up
-the issue and resolve repository, branch, and agent choices in the caller's pane,
-then open a tab in `HERDR_WORKSPACE_ID` and return once the command is submitted
+Inside Herdr (`HERDR_ENV=1`), interactive `shoal add` looks up
+the issue and resolves repository, branch, and agent choices in the caller's pane,
+then opens a tab in `HERDR_WORKSPACE_ID` and returns once the command is submitted
 there. Setup and agent execution run in that tab, which reads the issue again and
 is labeled `<repo>#<number>` for an issue (such as `shoal#375`) and with the
 allocated workspace branch otherwise, unless `tab_name` supplies a template.
@@ -374,7 +375,8 @@ stay literal and inserted values are never expanded again. `{branch}` uses the
 requested branch when the tab opens and the allocated branch after creation.
 
 Failures before agent execution leave the tab open. Agent exits leave the tab
-open so work can continue; completion or workspace removal closes it. `add`
+open so work can continue; completion closes it after tracked executions resolve,
+and workspace removal closes it immediately. `add`
 without an agent (or choosing “No agent”) opens an interactive shell in the ready
 workspace and leaves the tab open until that workspace is completed or removed.
 
@@ -819,20 +821,31 @@ either direction and cannot be combined. The setting follows normal repository
 and worktree configuration precedence. Scoped agents may mark only their own
 workspace done; completion does not verify or assert a merge.
 
+Only `done` completes an assignment by default, so issue closure and merged PRs
+leave the workspace in place until the agent finishes. `[done] automatic = true`
+also records completion when the associated issue closes or every watched PR
+merges, using the same configuration precedence.
+
+```toml
+[done]
+cleanup = true    # Default: true
+automatic = false # Default: false
+```
+
 `shoal continue [workspace]` cancels pending completion and defers issue, PR and
 idle cleanup until an explicit `shoal done`. Scoped agents may continue only their
 own workspace. The choice persists across restarts, leaves tracked commands
 running, and is shown as `manual_completion` in `status` and `inspect`. Issue
 associations and PR watches remain registered; `done` still applies their merge
-requirements and its usual keep/cleanup choice. Call `continue` before closing
-the issue or merging the PR to prevent cleanup from starting.
+requirements and its usual keep/cleanup choice. With automatic completion, call
+`continue` before closing the issue or merging the PR to prevent cleanup from starting.
 
 `post_done_cmd` runs in the daemon after recording completion, before cleanup,
 with the worktree as its working directory, no terminal, and a 60-second limit.
 It follows normal global and repository configuration precedence and receives the
 [hook identity environment](#workspace-setup-and-hooks) plus
-`SHOAL_DONE_CHOICE=keep` or `cleanup`. It runs for explicit `done`, issue closure,
-and PR-watch completion even when cleanup retains the workspace. Failure records
+`SHOAL_DONE_CHOICE=keep` or `cleanup`. It runs for explicit and automatic
+completion even when cleanup retains the workspace. Failure records
 a `hook_failed` notification without undoing completion or blocking cleanup.
 Lifecycle and permit changes are rejected while it runs. The hook holds the
 completion/PR gate, so it must not call Shoal commands that change completion or
@@ -850,10 +863,10 @@ hooks, and plain commands and restart do not produce agent-exit hooks. An exit
 hook may signal `done` only when no `post_done_cmd` is configured; otherwise the
 completion hook would conflict with its lifecycle/permit guard.
 
-For workspaces opened with an issue link, the daemon polls the saved
-issue URL every ~30 seconds using its `gh`/`fj` login unless waiting for explicit
-`done`. Confirmed closure records `done` with the configured default, preserving
-any existing completion. Issue associations suppress idle cleanup; failed lookups retain the workspace and appear
+With automatic completion, the daemon polls the saved issue URL of workspaces
+opened with an issue link every ~30 seconds using its `gh`/`fj` login
+unless waiting for explicit `done`. Confirmed closure records `done` with the
+configured default, preserving any existing completion. Issue associations suppress idle cleanup; failed lookups retain the workspace and appear
 in `status` and `inspect`. Reopening an issue does not undo completion.
 
 Cleanup runs in the daemon without an idle delay; tracked agent exits trigger a
@@ -874,7 +887,7 @@ With cleanup requested, shell integration leaves a clean, preserved workspace fo
 
 Holds are caller-named claims of workspace use, independent of assignment completion.
 They persist across command exits and daemon restarts and block automatic removal
-while the worktree exists. Issue and PR completion still record `done`; releasing
+while the worktree exists. Automatic completion still records `done`; releasing
 the last hold lets cleanup recheck its usual conditions. Idle cleanup restarts its
 timer after release. Explicit removal and deleted-directory cleanup release holds.
 
@@ -910,12 +923,13 @@ workspace. Activity polling continues when completion is deferred or PR cleanup
 is disabled. Lookup failures report errors or `lookup_failed` updates. Forgejo
 comment and review changes are grouped; CI results follow `fj pr status` contexts.
 
-Unless waiting for explicit `done`, once every linked PR has merged and at least
-one contains current HEAD, Shoal records completion using `[done] cleanup` or an
-existing completion choice. Confirmation survives restart without completing
-again. Cleanup applies normal branch retention and resource release, retaining
-dirty or newer work. Invalid registrations and lookup failures retain the
-workspace; `status` lists URLs and `inspect` shows errors in `pr_cleanup`.
+Once every linked PR has merged and at least one contains current HEAD, a
+workspace marked `done` is cleaned up. With automatic completion and no
+continuation, Shoal records `done` itself, using `[done] cleanup` and preserving
+any previously recorded completion choice. A confirmed
+set survives restart without completing again. Cleanup uses normal branch retention and resource release, retaining dirty
+or newer work. `status` lists watched URLs; `inspect` shows lookup and removal
+errors in `pr_cleanup`. Invalid registrations retain the workspace.
 
 `shoal unlink` removes all associations; `unlink pr` or `unlink issue` removes
 one kind, and an explicit number or URL removes just that item. Removing the last
@@ -1105,7 +1119,11 @@ hidden environments, cleared markers, and old records can leave it uncertain.
 A reported command exit retains an unknown execution and prevents setup readiness
 while child/group survivors or live unreadable environments remain. Exiting
 processes do not count, and a process still publishing its environment after exec
-is read again for up to two seconds. After checking
+is read again for up to two seconds; a settled empty environment is readable and
+does not identify an execution. Setup verification failures retain the workspace
+and report the command's exit status, blocking PIDs or inspection error, and
+recovery commands. `doctor` identifies unreadable PIDs without exposing their
+arguments or environments. After checking
 yourself that such processes stopped, use `--repair --acknowledge-stopped`; visible live processes still block.
 
 ### Scoped workspace commands

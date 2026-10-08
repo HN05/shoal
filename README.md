@@ -69,8 +69,8 @@ shoal add my-project --existing origin/feature/api --agent codex
 shoal add my-project quick-fix --path ../quick-fix
 shoal adopt my-project ../existing-worktree  # Take ownership, including automatic cleanup
 shoal rename fix-login fix/login             # Rename its branch and workspace together
-shoal add https://github.com/owner/repo/issues/68 # Create from an issue; completes when it closes
-shoal continue                          # Keep working until an explicit shoal done
+shoal add https://github.com/owner/repo/issues/68 # Create from an issue
+shoal continue                          # Defer automatic completion until shoal done
 shoal add https://github.com/owner/repo/issues/34  # Add an issue, PR, or branch link
 shoal link https://github.com/owner/repo/issues/34  # Link an issue to the current workspace
 shoal unlink issue                         # Remove the linked issue
@@ -123,7 +123,7 @@ shoal done --keep fix-login   # Mark finished; keep for review
 shoal done --cleanup fix-login # Override a configured keep default
 shoal rm fix-login            # Remove the workspace
 shoal link pr 42              # Link a PR (or paste its URL)
-shoal link pr 43              # Link another; all must merge before automatic done
+shoal link pr 43              # Link another; all must merge before cleanup after done
 shoal watch                   # Wake on all linked item comments, checks, or closure
 shoal unlink pr 43            # Cancel one linked PR
 shoal unlink pr               # Cancel linked PRs
