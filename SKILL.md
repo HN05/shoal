@@ -18,7 +18,7 @@ outside a scoped execution; an optional tool name selects one.
 ## Completion
 
 Shoal keeps your workspace until you run `shoal done`; issue closure and merged
-PRs do not end the assignment. Run `shoal done` as your last command once the
+PRs do not end the assignment unless `[done] automatic` is enabled (see below). Run `shoal done` as your last command once the
 assignment is finished: every watched PR merged, or no PR needed. Never end a
 session without it.
 

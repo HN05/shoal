@@ -3,7 +3,9 @@ Follow the repository's instructions. Keep work inside this workspace and use
 Shoal to acquire shared resources when needed.
 
 Shoal keeps this workspace until you run `shoal done`. Issue closure and merged
-PRs do not end the assignment. Finish every assignment with these steps:
+PRs do not end the assignment unless `[done] automatic` is enabled; then run
+`shoal continue` before either happens if you have more work. Finish every
+assignment with these steps:
 
 1. After opening a PR, run `shoal pr watch <number-or-url>`.
 2. While watched PRs are open, run `shoal pr wait`. Handle the reported
