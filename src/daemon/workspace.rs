@@ -58,6 +58,9 @@ pub(crate) enum ResourceGuard {
 
 pub struct Manager {
     pub store: Store,
+    /// Readers cover background operations, so a writer can quiesce them
+    /// without cancelling hooks or mutations already in progress.
+    pub(super) background_operations: RwLock<()>,
     pub(crate) pr_gate: Mutex<()>,
     pub cleanup_notify: tokio::sync::Notify,
     /// The global file as last loaded; a reload replaces it for later reads
@@ -99,6 +102,7 @@ impl Manager {
             pr_gate: Mutex::new(()),
             cleanup_notify: tokio::sync::Notify::new(),
             store: Store::open(paths.database()).await?,
+            background_operations: RwLock::new(()),
             paths,
             simulator_gate: Mutex::new(()),
             registry_gate: Mutex::new(()),
@@ -210,6 +214,13 @@ impl Manager {
                 }
                 Ok(workspaces)
             })
+            .await
+    }
+
+    /// Active and unknown executions retain work across a daemon restart.
+    pub(super) async fn has_executions(&self) -> Result<bool> {
+        self.store
+            .run(|db| store::exists(db, "SELECT 1 FROM executions LIMIT 1", []))
             .await
     }
 

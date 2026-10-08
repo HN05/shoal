@@ -271,11 +271,12 @@ When something looks wrong, run `shoal doctor --all` for diagnostics or
 ```sh
 brew update
 brew upgrade hn05/tap/shoal
-shoal daemon restart
 ```
 
-For a main-channel install, use `brew upgrade --fetch-HEAD hn05/tap/shoal`. Skill
-links update automatically; reload `source <(shoal shell init)` in open terminals.
+Managed daemons restart after the upgrade when no tracked command is running. For
+a main-channel install, use `brew upgrade --fetch-HEAD hn05/tap/shoal`; run
+`shoal daemon restart` to apply an upgrade immediately. Skill links update
+automatically; reload `source <(shoal shell init)` in open terminals.
 
 ## Development
 

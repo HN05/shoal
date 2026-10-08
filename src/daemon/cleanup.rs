@@ -202,8 +202,11 @@ async fn remove_deleted(manager: &Manager, workspace: &Workspace) {
 pub async fn run(manager: Arc<Manager>) {
     let mut timers = Timers::default();
     loop {
-        if let Err(error) = sweep(&manager, &mut timers).await {
-            eprintln!("auto cleanup: {error:#}");
+        {
+            let _operation = manager.background_operations.read().await;
+            if let Err(error) = sweep(&manager, &mut timers).await {
+                eprintln!("auto cleanup: {error:#}");
+            }
         }
         tokio::select! {
             _ = sleep(SWEEP_INTERVAL) => {},

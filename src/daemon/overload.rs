@@ -91,6 +91,7 @@ pub(super) async fn run(manager: Arc<Manager>) {
         // Keep publishing recovery with both protections off: an agent stopped
         // before they were disabled still waits for it.
         tokio::time::sleep(Duration::from_secs(config.overload.poll_seconds)).await;
+        let operation = manager.background_operations.read().await;
         // Check after sleeping, so a reload during it cannot be sampled under
         // the old thresholds. Publication already withdrew readiness, and
         // earlier readings do not count toward the new thresholds.
@@ -140,6 +141,7 @@ pub(super) async fn run(manager: Arc<Manager>) {
             && manager.stop_agent_for_overload(reason).await
         {
             monitor = Monitor::default();
+            drop(operation);
             tokio::time::sleep(Duration::from_secs(settings.cooldown_seconds)).await;
         }
     }

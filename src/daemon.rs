@@ -2,6 +2,7 @@
 //! Unix socket, and runs background cleanup.
 pub mod access;
 pub mod allocation;
+mod auto_update;
 mod cleanup;
 pub mod doctor;
 pub mod events;
@@ -97,6 +98,8 @@ pub async fn run(paths: Paths, managed: bool) -> Result<()> {
     let mut terminate = signal(SignalKind::terminate())?;
     let mut interrupt = signal(SignalKind::interrupt())?;
     let (shutdown, mut shutdown_rx) = watch::channel(false);
+    let update = auto_update::Update::new(managed);
+    let mut update_tick = tokio::time::interval(Duration::from_secs(1));
     let server = Server {
         manager: manager.clone(),
         started: Instant::now(),
@@ -109,11 +112,24 @@ pub async fn run(paths: Paths, managed: bool) -> Result<()> {
     background.spawn(overload::run(manager.clone()));
     background.spawn(expire_simulators(manager.clone()));
     let mut clients = JoinSet::new();
+    let mut quiescence = None;
     let result = loop {
         tokio::select! {
             _ = terminate.recv() => break Ok(()),
             _ = interrupt.recv() => break Ok(()),
             _ = shutdown_rx.changed() => break Ok(()),
+            _ = update_tick.tick(), if update.is_some() => {
+                if update.as_ref().is_some_and(auto_update::Update::pending) {
+                    match auto_update::quiesce(&manager, clients.len()).await {
+                        Ok(Some(guard)) => {
+                            quiescence = Some(guard);
+                            break Err(anyhow::anyhow!("daemon executable was updated; restarting"));
+                        }
+                        Ok(None) => {},
+                        Err(error) => eprintln!("daemon update check: {error:#}"),
+                    }
+                }
+            },
             Some(_) = clients.join_next(), if !clients.is_empty() => {},
             accepted = listener.accept(), if clients.len() < MAX_CLIENTS => {
                 let (stream, _) = match accepted {
@@ -132,6 +148,7 @@ pub async fn run(paths: Paths, managed: bool) -> Result<()> {
     background.shutdown().await;
     clients.shutdown().await;
     manager.store.shutdown().await;
+    drop(quiescence);
     result
 }
 
@@ -154,6 +171,7 @@ fn remove_stale_socket(paths: &Paths) -> Result<()> {
 async fn expire_simulators(manager: Arc<Manager>) {
     loop {
         tokio::time::sleep(SIMULATOR_SWEEP_INTERVAL).await;
+        let _operation = manager.background_operations.read().await;
         if let Err(error) = manager.expire_simulators().await {
             eprintln!("simulator cleanup: {error:#}");
         }
