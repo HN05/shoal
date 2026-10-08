@@ -340,8 +340,9 @@ The agent is otherwise chosen as for `shoal add` and is
 prompted to report findings, not to change files, commit, push, or post.
 `shoal review <pr-url>` or `shoal review --pr <number-or-url>` looks up the PR
 with your `gh`/`fj` login and reviews it the same way in the workspace that owns
-its head branch, or opens one from origin whose base is the PR's refreshed
-`origin/<base>`; fork PRs are refused. `--repo` selects the PR's repository,
+its head branch, fast-forwarded to the pushed head and refused when diverged, or
+opens one from origin whose base is the PR's refreshed `origin/<base>`; fork PRs
+are refused. `--repo` selects the PR's repository,
 which otherwise follows `shoal add`.
 `shoal review-worktree [workspace]` reviews uncommitted changes. The committed
 range excludes working-tree changes that `shoal diff` includes. Export feedback

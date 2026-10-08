@@ -253,8 +253,9 @@ pub(super) async fn add(
                 creation.existing = Some(pull.head);
             } else {
                 if creation.base.is_none() {
-                    creation.base =
-                        Some(super::review::fetch_pull_base(&repo.path, &pull.base).await?);
+                    creation.base = Some(
+                        super::review::fetch_pull_branch(&repo.path, "base", &pull.base).await?,
+                    );
                 }
                 creation.existing = Some(git::remote_ref("origin", &pull.head));
             }

@@ -1,5 +1,5 @@
 //! Review a workspace's changes with the configured `review` command or an agent.
-use std::ffi::OsString;
+use std::{ffi::OsString, path::Path};
 
 use anyhow::{Context as _, Result, bail, ensure};
 
@@ -136,6 +136,7 @@ async fn pull_request(
         .find(|workspace| workspace.repository_id == repo.id && workspace.branch == pull.head);
     let workspace = match owner {
         Some(workspace) => {
+            update_to_head(&repo.path, &workspace, &pull.head).await?;
             eprintln!(
                 "Reviewing PR #{} in workspace {}",
                 pull.number, workspace.name
@@ -143,7 +144,7 @@ async fn pull_request(
             workspace.id
         }
         None => {
-            let tracking = fetch_pull_base(&repo.path, &pull.base).await?;
+            let tracking = fetch_pull_branch(&repo.path, "base", &pull.base).await?;
             let creation = super::workspaces::Creation {
                 path: None,
                 branch: None,
@@ -177,11 +178,47 @@ async fn pull_request(
     run(ctx, Some(workspace), reviewer, Some(pull), args).await
 }
 
-pub(super) async fn fetch_pull_base(path: &std::path::Path, base: &str) -> Result<String> {
-    git::check_branch_name(None, base)
+/// Fast-forward a reused workspace to the PR's pushed head so the review sees
+/// the author's latest commits; local commits ahead of it stay as they are.
+async fn update_to_head(repo: &Path, workspace: &Workspace, head: &str) -> Result<()> {
+    let tracking = fetch_pull_branch(repo, "head", head).await?;
+    let path = &workspace.path;
+    if git::is_ancestor(path, &tracking, "HEAD", git::isolated_command).await? {
+        return Ok(());
+    }
+    ensure!(
+        git::is_ancestor(path, "HEAD", &tracking, git::isolated_command).await?,
+        "workspace {} has diverged from {tracking}; update it before reviewing",
+        workspace.name
+    );
+    git::run_without_submodules(
+        path,
+        &[
+            "merge",
+            "--ff-only",
+            "--no-edit",
+            "--no-stat",
+            "--no-overwrite-ignore",
+            &tracking,
+        ],
+    )
+    .await
+    .with_context(|| {
+        format!(
+            "could not fast-forward workspace {} to {tracking}",
+            workspace.name
+        )
+    })?;
+    eprintln!("Updated workspace {} to {tracking}", workspace.name);
+    Ok(())
+}
+
+/// Fetch the PR's `role` (head or base) branch into its origin tracking ref.
+pub(super) async fn fetch_pull_branch(path: &Path, role: &str, branch: &str) -> Result<String> {
+    git::check_branch_name(None, branch)
         .await
-        .with_context(|| format!("PR base {base:?} is not a branch name"))?;
-    let tracking = git::remote_ref("origin", base);
+        .with_context(|| format!("PR {role} {branch:?} is not a branch name"))?;
+    let tracking = git::remote_ref("origin", branch);
     git::run(
         path,
         &[
@@ -190,13 +227,13 @@ pub(super) async fn fetch_pull_base(path: &std::path::Path, base: &str) -> Resul
                 "--refmap=",
                 "--",
                 "origin",
-                &format!("+{}:{tracking}", git::local_ref(base)),
+                &format!("+{}:{tracking}", git::local_ref(branch)),
             ],
         ]
         .concat(),
     )
     .await
-    .with_context(|| format!("could not fetch the PR base {base}"))?;
+    .with_context(|| format!("could not fetch the PR {role} {branch}"))?;
     Ok(tracking)
 }
 

@@ -2380,10 +2380,40 @@ fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
         git(&author, &["rev-parse", "stack/base"])
     );
 
+    commit("more");
+    git(&author, &["push", "origin", "stack/top"]);
     let output = review(&["https://forge.example/team/project/pulls/7"]);
     assert!(output.status.success(), "{output:?}");
+    let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        String::from_utf8_lossy(&output.stderr).contains("Reviewing PR #7 in workspace stack-top"),
+        stderr.contains("Updated workspace stack-top to refs/remotes/origin/stack/top"),
+        "{output:?}"
+    );
+    assert!(
+        stderr.contains("Reviewing PR #7 in workspace stack-top"),
+        "{output:?}"
+    );
+    assert!(path_in.join("more").exists());
+    // A diverged workspace is left for the reviewer to reconcile.
+    git(path_in, &["reset", "--hard", "HEAD~1"]);
+    fs::write(path_in.join("local"), "change\n").unwrap();
+    git(path_in, &["add", "local"]);
+    git(
+        path_in,
+        &[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "-m",
+            "local",
+        ],
+    );
+    let output = review(&["--pr", "7"]);
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("has diverged from"),
         "{output:?}"
     );
     let output = review(&["https://forge.example/other/project/pulls/7"]);
