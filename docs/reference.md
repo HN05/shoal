@@ -1021,8 +1021,13 @@ workspace. Read entries older than the newest
 repository for the current workspace, or the one named by `--workspace`.
 Simulator, resource, and repository leases take `--name` (default `default`) to
 hold several, `--reason`, and `--wait` to poll up to 3600 seconds for capacity
-or approval. `acquire repo` selects only `kind = "repo"` members. The
-`port acquire`, `sim acquire`, and `resource acquire` spellings remain accepted.
+or approval. `acquire repo` selects only `kind = "repo"` members.
+
+`shoal release` releases every lease the workspace holds, in order, and stops at
+the first failure. A kind narrows it to that kind, a resource or repository name
+to its pool, and `--name` or a port name to one lease. Holds are released
+separately. The earlier `acquire` and `release` subcommands of `port`, `sim`,
+and `resource` remain accepted.
 
 ### Port reservations
 
@@ -1031,7 +1036,7 @@ shoal acquire port web --workspace fix-login --reason "Frontend dev server"
 shoal acquire port api --port 3001 --env API_PORT --reason "HTTP API"
 shoal port fix-login                   # Configured names and current leases
 shoal port --all                       # Every workspace
-shoal port release web fix-login
+shoal release port web --workspace fix-login
 shoal exec fix-login -- sh -c 'my-server --port "$API_PORT"'
 ```
 
@@ -1192,7 +1197,7 @@ requests with a `--reason`.
 shoal acquire sim                   # Current worktree, configured preference
 shoal acquire sim --profile phone --name tests --wait 60
 shoal sim                           # Profiles, capacity, and managed devices; --all for all
-shoal sim release tests             # Or the default lease
+shoal release sim --name tests     # Or every simulator lease
 ```
 
 Acquisition returns a ready device UDID; use it explicitly with `simctl` or
@@ -1250,7 +1255,7 @@ shoal acquire resource devices               # Any available member
 shoal acquire resource devices --member beta --name tests --reason "Integration tests"
 shoal acquire resource signing --wait 60
 shoal resource --all                         # Every workspace
-shoal resource release devices --name tests
+shoal release resource devices --name tests
 ```
 
 Each lease takes one slot from the pool and the chosen member; an explicit member

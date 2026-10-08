@@ -186,13 +186,13 @@ From a managed workspace:
 ```sh
 shoal acquire port web --reason "Development server"
 shoal port
-shoal port release web
+shoal release port web
 
 shoal acquire sim --wait 60   # macOS; requires configured simulator profiles
-shoal sim release
+shoal release sim
 
 shoal acquire resource signing --wait 60
-shoal resource release signing
+shoal release resource signing
 ```
 
 Use the returned port or simulator UDID. Reservations and leases belong to the
@@ -224,7 +224,7 @@ checkout path in a project override, for example:
 ```sh
 server=$(shoal --json acquire repo server | jq -r '.repository.path')
 SALDOIR_SERVER_REPO="$server" Scripts/sync-contract.sh
-shoal resource release server
+shoal release repo server
 ```
 
 Agents request protected resources with `acquire --reason "purpose"`. Review

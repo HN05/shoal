@@ -282,6 +282,14 @@ pub enum Command {
         #[arg(long, global = true)]
         workspace: Option<String>,
     },
+    /// Release every lease, every lease of one kind, or a selected lease.
+    Release {
+        #[command(subcommand)]
+        kind: Option<ReleaseKind>,
+        /// Workspace to use; defaults to the current workspace or picker.
+        #[arg(long, global = true)]
+        workspace: Option<String>,
+    },
     /// Reserve and release workspace TCP ports.
     #[command(
         args_conflicts_with_subcommands = true,
@@ -875,6 +883,38 @@ pub enum AcquireKind {
         resource: String,
         #[command(flatten)]
         lease: LeaseOptions,
+    },
+}
+
+/// A pool, optionally narrowed to one named lease.
+#[derive(Debug, Args)]
+pub struct PoolSelection {
+    /// Configured resource or pool; omit to release every lease of this kind.
+    #[arg(value_name = "NAME")]
+    pub pool: Option<String>,
+    /// Release only this lease name.
+    #[arg(long = "name", value_name = "LEASE", requires = "pool")]
+    pub lease: Option<String>,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ReleaseKind {
+    /// Release a port reservation, or every one.
+    Port { name: Option<String> },
+    /// Release a simulator lease, or every one.
+    Sim {
+        #[arg(long)]
+        name: Option<String>,
+    },
+    /// Release resource permits and locks.
+    Resource {
+        #[command(flatten)]
+        selection: PoolSelection,
+    },
+    /// Release related repository leases.
+    Repo {
+        #[command(flatten)]
+        selection: PoolSelection,
     },
 }
 

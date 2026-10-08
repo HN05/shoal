@@ -4873,6 +4873,43 @@ fn acquire_selects_the_lease_kind() {
 }
 
 #[test]
+fn release_narrows_from_every_lease_to_one_kind_or_item() {
+    let fixture = Fixture::with_config(Some(RESOURCE_CONFIG));
+    fixture.add("first");
+    for args in [
+        vec!["acquire", "port", "web"],
+        vec!["acquire", "resource", "devices", "--name", "a"],
+        vec!["acquire", "resource", "devices", "--name", "b"],
+        vec!["acquire", "resource", "signing"],
+    ] {
+        fixture.ok(&[args, vec!["--workspace", "first"]].concat());
+    }
+    let released = |args: &[&str]| {
+        fixture.ok(&[&["release", "--workspace", "first"], args].concat())["released"].clone()
+    };
+    assert_eq!(
+        released(&["resource", "devices", "--name", "a"]),
+        serde_json::json!([{"kind": "resource", "pool": "devices", "name": "a"}])
+    );
+    assert_eq!(
+        released(&["resource", "devices"]),
+        serde_json::json!([{"kind": "resource", "pool": "devices", "name": "b"}])
+    );
+    assert_eq!(
+        released(&["port"]),
+        serde_json::json!([{"kind": "port", "name": "web"}])
+    );
+    assert_eq!(
+        released(&[]),
+        serde_json::json!([{"kind": "resource", "pool": "signing", "name": "default"}])
+    );
+    assert_eq!(released(&[]), serde_json::json!([]));
+    let inspection = fixture.ok(&["inspect", "first"]);
+    assert!(inspection["ports"].as_array().unwrap().is_empty());
+    assert!(inspection["resources"].as_array().unwrap().is_empty());
+}
+
+#[test]
 fn resources_enforce_pool_and_member_capacity_and_named_permits() {
     let fixture = Fixture::with_config(Some(RESOURCE_CONFIG));
     fixture.add("first");

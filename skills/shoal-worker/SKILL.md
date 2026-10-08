@@ -89,7 +89,7 @@ Agents cannot land: when the repository has no remote, the human runs
 ```sh
 shoal --json port
 shoal --json acquire port web
-shoal port release web
+shoal release port web
 ```
 
 Use configured names/defaults when available. Repeating a reservation returns the
@@ -106,13 +106,13 @@ environment: pass the number to the server explicitly.
 ```sh
 shoal --json resource
 shoal --json acquire resource devices --wait 60
-shoal resource release devices
+shoal release resource devices
 ```
 
 Use the returned `resource`; `--member <name>` requests a specific member.
 Standalone resources use the same commands. Each semaphore lease consumes one permit.
 The same `--name` returns the same lease; use distinct names for additional
-permits and pass that name on release. Busy requests exit 2. Actual use is cooperative.
+permits; release without `--name` frees every lease in the pool. Busy requests exit 2. Actual use is cooperative.
 
 For `kind: rwlock` resources, use `--mode read` for read-only access or `--mode write`
 for changes (new leases default to write). Readers share; writers exclude everyone
@@ -124,7 +124,7 @@ Release before changing mode; there are no atomic upgrades or writer priority.
 ```sh
 shoal --json sim
 shoal --json acquire sim --wait 60
-shoal sim release
+shoal release sim
 ```
 
 Acquisition uses configured preferences and returns an exclusive lease. Use its
