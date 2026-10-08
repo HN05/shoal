@@ -50,8 +50,10 @@ impl Recovery {
         let settings =
             client::settings(paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
         let name = agent.replace(' ', "-");
-        let automatic = settings.agent_resume.contains_key(&name);
-        let command = if automatic {
+        let configured = settings.agent_resume.contains_key(&name);
+        let builtin = matches!(name.as_str(), "codex" | "claude");
+        let automatic = configured || builtin;
+        let command = if configured {
             named_commands::expand(paths, &settings.agent_resume, &name, workspace, vec![]).await?
         } else {
             match name.as_str() {

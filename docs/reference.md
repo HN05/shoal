@@ -131,7 +131,8 @@ memory protection remains independent of CPU readings.
 Resume commands are argument arrays in `[agent_resume]`, keyed by the tracked
 agent name. They use the same workspace substitutions and repository layering as
 `[commands]`; they must restore a session without repeating the initial prompt.
-No resume command is configured by default; a failed command lookup warns and
+Codex and Claude use their built-in session resume commands by default; other
+agents need an entry in `[agent_resume]`. A failed command lookup warns and
 disables automatic recovery for that launch. Overload notifications include the
 pressure reason, execution ID, and automatic or manual recovery path. Shoal saves
 the agent identity and pressure reason before signaling the wrapper, so a wrapper killed

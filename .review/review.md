@@ -185,7 +185,8 @@ instructions instead of the PR delivery guidance below.
   and timing; retain work and leases, notify with the pressure reason and recovery
   path, distinguish automatic recovery from manual or unavailable recovery, and never select disconnected
   executions. Failed readings reset the sustained timer and authorize no stop.
-  Automatic recovery requires a configured session restore command, proven child
+  Automatic recovery uses built-in Codex and Claude session restore commands or a
+configured command for another agent, plus proven child
   termination, verified ready workspace ownership and sustained healthy headroom.
   Keep waiting wrappers tracked, serialize restores and honor manual stop/removal.
   Persist overload recovery and its reason before delivering the stop, reporting save failures
