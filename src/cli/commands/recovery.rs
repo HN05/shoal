@@ -165,6 +165,12 @@ fn render(report: &Report, palette: Palette) {
         for process in &execution.unverified_processes {
             println!("    unverified group PID {} (not signaled)", process.pid);
         }
+        for process in &execution.unreadable_processes {
+            println!(
+                "    unreadable environment PID {} (ownership unknown)",
+                process.pid
+            );
+        }
         for note in &execution.notes {
             println!("    {note}");
         }

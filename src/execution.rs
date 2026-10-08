@@ -45,6 +45,24 @@ pub struct DetachedLaunch {
     pub log: PathBuf,
 }
 
+/// The command exited, but the daemon retained its unresolved execution.
+#[derive(Debug)]
+pub struct SetupVerificationFailure {
+    pub exit_code: i32,
+}
+
+impl std::fmt::Display for SetupVerificationFailure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "setup command exited with status {}, but Shoal could not verify that all processes stopped",
+            self.exit_code
+        )
+    }
+}
+
+impl std::error::Error for SetupVerificationFailure {}
+
 /// Exit status as a shell would report it: the code, or 128 + signal.
 pub fn exit_code(status: ExitStatus) -> i32 {
     status
@@ -553,14 +571,12 @@ async fn report_completion(
                 protocol::read_buffered::<Control>(stream).await?
             {
                 if !complete {
+                    if mode.is_setup() {
+                        return Err(SetupVerificationFailure { exit_code: code }.into());
+                    }
                     eprintln!(
                         "warning: execution has surviving or unverified processes; run shoal doctor to inspect it"
                     );
-                    if mode.is_setup() {
-                        bail!(
-                            "setup command completed with exit status {code}, but Shoal could not verify that all processes stopped; run `shoal doctor` to inspect the workspace"
-                        );
-                    }
                 }
                 return Ok(complete);
             }

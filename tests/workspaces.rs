@@ -8409,6 +8409,80 @@ fn setup_failure_prompt_ignores_or_deletes_only_new_workspace() {
 }
 
 #[test]
+fn setup_verification_failure_reports_survivor_and_keeps_work_without_prompting() {
+    for json in [false, true] {
+        let fixture = Fixture::new();
+        let script = fixture.root.path().join("setup-survivor");
+        install_test_script(
+            &script,
+            r#"#!/usr/bin/env python3
+import subprocess, sys
+from pathlib import Path
+child = subprocess.Popen([sys.executable, '-c', 'import time; print("ready", flush=True); time.sleep(600)'], start_new_session=True,
+    stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+assert child.stdout.readline() == b'ready\n'
+Path('survivor-pid').write_text(str(child.pid))
+Path('setup-result').write_text('complete')
+"#,
+        );
+        commit_resource_config(
+            &fixture.repo,
+            &format!(
+                "setup_cmd = {:?}\n[commands]\npi = ['sh', '-c', 'touch agent-started']\n",
+                script.to_str().unwrap()
+            ),
+        );
+        let mut command = fixture.command();
+        command.args([
+            "add",
+            fixture.repo.to_str().unwrap(),
+            "survivor",
+            "--agent",
+            "pi",
+        ]);
+        if json {
+            command.arg("--json");
+        }
+        let (output, transcript) = fixture.interactive_command(&mut command, "");
+        let inspection = fixture.ok(&["inspect", "survivor"]);
+        let path = Path::new(inspection["workspace"]["path"].as_str().unwrap());
+        let pid = fs::read_to_string(path.join("survivor-pid")).unwrap();
+        // Reap the test-owned survivor before making assertions about the output.
+        repaired_workspaces(
+            &fixture,
+            &[
+                "doctor",
+                "survivor",
+                "--repair",
+                "--stop",
+                "--acknowledge-stopped",
+            ],
+        );
+        assert!(!output.status.success(), "{transcript}");
+        assert_eq!(inspection["workspace"]["state"], "failed");
+        assert_eq!(
+            fs::read_to_string(path.join("setup-result")).unwrap(),
+            "complete"
+        );
+        assert!(!path.join("agent-started").exists());
+        assert!(
+            transcript.contains("Setup verification incomplete"),
+            "{transcript}"
+        );
+        assert!(transcript.contains("command exit 0"), "{transcript}");
+        assert!(
+            transcript.contains(&format!("owned processes still running (PID {pid})")),
+            "{transcript}"
+        );
+        assert!(
+            transcript.contains("shoal doctor survivor --repair"),
+            "{transcript}"
+        );
+        assert!(!transcript.contains("[i]gnore"), "{transcript}");
+    }
+}
+
+#[test]
 fn setup_interruption_preserves_work_and_blocks_concurrent_execution() {
     let mut fixture = Fixture::new();
     fs::write(

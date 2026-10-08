@@ -1112,7 +1112,10 @@ A reported command exit retains an unknown execution and prevents setup readines
 while child/group survivors or live unreadable environments remain. Exiting
 processes do not count, and a process still publishing its environment after exec
 is read again for up to two seconds; a settled empty environment is readable and
-does not identify an execution. After checking
+does not identify an execution. Setup verification failures retain the workspace
+and report the command's exit status, blocking PIDs or inspection error, and
+recovery commands. `doctor` identifies unreadable PIDs without exposing their
+arguments or environments. After checking
 yourself that such processes stopped, use `--repair --acknowledge-stopped`; visible live processes still block.
 
 ### Scoped workspace commands

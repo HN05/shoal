@@ -230,6 +230,8 @@ configured command for another agent, plus proven child
   marker, child and group survivors are gone and environment visibility is complete;
   a settled empty environment is readable evidence, not an unreadable process; the
   reporting wrapper may remain alive awaiting acknowledgement.
+  Setup verification failures retain the workspace and report its exit status
+  and blocking PIDs or inspection error instead of offering to ignore uncertainty.
   CLI styles, enum `Display` formatting and transient progress belong at presentation
   sites; machine output and stored values stay plain. Progress clears before results and stays off for JSON,
   redirected stderr and dumb terminals.

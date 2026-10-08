@@ -717,38 +717,26 @@ async fn run_post_setup(ctx: &Context, workspace: &Workspace) -> Result<()> {
 /// Run the setup command, then let an interactive user decide what to do with
 /// a failed workspace. `None` means the workspace was deleted or kept as-is.
 async fn setup_workspace(ctx: &Context, workspace: &Workspace) -> Result<Option<Workspace>> {
-    let failure = match execution::setup(&ctx.paths, workspace.id.clone(), ctx.json).await {
+    let result = execution::setup(&ctx.paths, workspace.id.clone(), ctx.json).await;
+    if let Err(error) = &result
+        && let Some(failure) = error.downcast_ref::<execution::SetupVerificationFailure>()
+    {
+        return report_setup_verification_failure(ctx, workspace, failure.exit_code).await;
+    }
+    let failure = match result {
         Ok(0) => None,
         Ok(code) => Some(format!("setup command exited with status {code}")),
         Err(error) => Some(format!("{error:#}")),
     };
     if let Some(error) = failure {
         let name = &workspace.name;
-        let verification = error.contains("could not verify that all processes stopped");
-        let guidance = if verification {
-            format!(
-                "Setup command finished, but Shoal could not verify its processes stopped. The workspace was retained. Inspect with `shoal doctor {name}` and repair after checking the reported processes."
-            )
-        } else {
-            format!(
-                "setup failed for {name}: {error}; workspace retained. Retry with `shoal setup {name}`, ignore with `shoal doctor {name} --repair`, or delete with `shoal rm {name} --yes --delete-branch`"
-            )
-        };
-        ensure!(ctx.interactive(), "{guidance}");
+        ensure!(
+            ctx.interactive(),
+            "setup failed for {name}: {error}; workspace retained. Retry with `shoal setup {name}`, ignore with `shoal doctor {name} --repair`, or delete with `shoal rm {name} --yes --delete-branch`"
+        );
         eprintln!(
             "{} for {name}: {error}",
-            Palette::stderr(ctx.json).paint(
-                if verification {
-                    Style::Warning
-                } else {
-                    Style::Error
-                },
-                if verification {
-                    "Setup verification incomplete"
-                } else {
-                    "Setup failed"
-                }
-            )
+            Palette::stderr(ctx.json).paint(Style::Error, "Setup failed")
         );
         match ui::setup_failure_choice()? {
             ui::SetupFailureChoice::Delete => {
@@ -765,6 +753,32 @@ async fn setup_workspace(ctx: &Context, workspace: &Workspace) -> Result<Option<
         "workspace setup did not complete"
     );
     Ok(Some(inspection.workspace))
+}
+
+/// Process uncertainty cannot be ignored or safely stopped from the still-live
+/// reporting wrapper. Keep the worktree and expose the daemon's actual evidence.
+async fn report_setup_verification_failure(
+    ctx: &Context,
+    workspace: &Workspace,
+    code: i32,
+) -> Result<Option<Workspace>> {
+    let inspection = client::inspect(&ctx.paths, workspace.id.clone()).await?;
+    let name = &workspace.name;
+    let reason = inspection
+        .workspace
+        .error
+        .as_deref()
+        .unwrap_or("process state is unknown");
+    let message = format!(
+        "Setup verification incomplete for {name} (command exit {code}): {reason}\nWorkspace retained at {}. Inspect with `shoal doctor {name}`; repair with `shoal doctor {name} --repair` after checking the reported processes. Use `--stop` to stop verified survivors.",
+        workspace.path.display()
+    );
+    ensure!(ctx.interactive(), "{message}");
+    eprintln!(
+        "{}",
+        Palette::stderr(ctx.json).paint(Style::Warning, message)
+    );
+    Ok(None)
 }
 
 async fn delete_failed_workspace(ctx: &Context, workspace: &Workspace) -> Result<()> {
