@@ -171,7 +171,7 @@ pub(super) async fn add(
             input.repository,
             creation,
             input.issue,
-            AgentLaunch::Explicit(agent),
+            AgentLaunch::Add(agent),
             args,
             here,
         )
@@ -195,7 +195,7 @@ pub(super) async fn add(
             input.positional,
             creation,
             input.issue,
-            AgentLaunch::Explicit(agent),
+            AgentLaunch::Add(agent),
             args,
             here,
         )
@@ -292,7 +292,7 @@ pub(super) async fn add(
         Some(repo.id.clone()),
         creation,
         None,
-        AgentLaunch::Explicit(agent),
+        AgentLaunch::Add(agent),
         args,
         here,
     )

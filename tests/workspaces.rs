@@ -9633,6 +9633,21 @@ awk -F '\t' -v choice="$choice" '$2 == choice {print}' "$HOME/picker-input"
         }
         fixture.ok(&["rm", "issue-298-pick-an-agent", "--yes", "--delete-branch"]);
     }
+
+    // A regular add uses the same picker when no agent was named or configured.
+    fs::write(fixture.root.path().join("choice"), "codex").unwrap();
+    let (output, transcript) = fixture.interactive(
+        &[
+            "add",
+            fixture.repo.to_str().unwrap(),
+            "plain",
+            "--base",
+            "HEAD",
+        ],
+        "",
+    );
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(agent_args.exists());
 }
 
 #[test]

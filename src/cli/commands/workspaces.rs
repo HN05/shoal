@@ -176,6 +176,8 @@ pub(in crate::cli) struct Creation {
 
 pub(super) enum AgentLaunch {
     Explicit(Option<Agent>),
+    /// An ordinary add uses the interactive picker when no agent is named.
+    Add(Option<Agent>),
     IssueDefault(Option<Agent>),
 }
 
@@ -405,12 +407,20 @@ enum AgentChoice {
     Chosen(Option<Agent>),
     /// No agent was named or configured; the picker runs after lookups.
     Picker,
+    /// Ordinary additions pick only when attached to a terminal.
+    PickerIfInteractive,
 }
 
 /// Validate a named agent before looking up the issue or creating work.
 async fn choose_add_agent(settings: &AddSettings<'_>, agent: AgentLaunch) -> Result<AgentChoice> {
     let agent = match agent {
         AgentLaunch::Explicit(agent) => agent,
+        AgentLaunch::Add(agent) => {
+            if agent.is_none() {
+                return Ok(AgentChoice::PickerIfInteractive);
+            }
+            agent
+        }
         AgentLaunch::IssueDefault(agent) => {
             match agent.or(settings.get().await?.default_agent.clone()) {
                 Some(agent) => Some(agent),
@@ -436,6 +446,10 @@ async fn resolve_add_agent(
     let agent = match agent {
         AgentChoice::Chosen(agent) => agent,
         AgentChoice::Picker => agents::pick_default_agent(ctx, settings.get().await?)?,
+        AgentChoice::PickerIfInteractive if ctx.interactive() => {
+            agents::pick_default_agent(ctx, settings.get().await?)?
+        }
+        AgentChoice::PickerIfInteractive => None,
     };
     let codex_mode = match &agent {
         Some(Agent::Codex) if has_issue => Some(CodexMode::Cli),
