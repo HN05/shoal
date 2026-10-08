@@ -298,6 +298,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             let reviewer = review::Reviewer::new(manual, agent);
             review::run(&ctx, workspace, reviewer, None, args).await
         }
+        Command::Sync { repository } => repositories::sync(&ctx, repository).await,
         Command::Merge {
             branch,
             workspace,

@@ -231,6 +231,14 @@ pub enum Command {
         #[arg(last = true)]
         args: Vec<OsString>,
     },
+    /// Fetch a repository's remote and fast-forward its default branch.
+    ///
+    /// Never pushes or changes workspace branches; rebase or merge onto the
+    /// updated branch with Git.
+    Sync {
+        /// Registered repository; defaults to the current checkout or workspace.
+        repository: Option<String>,
+    },
     /// Merge another branch into this workspace.
     Merge {
         branch: String,

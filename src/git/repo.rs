@@ -11,7 +11,7 @@ use crate::{
         fetch::{self, FetchPolicy},
         run_isolated as git_run, worktrunk,
     },
-    model::{LandPlan, LandedBranch, PulledBranch, Repository},
+    model::{LandPlan, LandedBranch, PulledBranch, Repository, SyncedRepository},
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -136,6 +136,38 @@ impl Manager {
             checkout,
             merge_temporaries,
             default_refresh,
+        })
+    }
+
+    /// Fetch the default branch's remote, updating its remote-tracking branches,
+    /// then fast-forward the local default branch as workspace creation does.
+    pub async fn sync_repository(
+        &self,
+        selector: &crate::forge::repository::Selector,
+    ) -> Result<SyncedRepository> {
+        let repo = self.repository(selector).await?;
+        let _guard = self.lock_repository_git(&repo.id).await;
+        let default =
+            crate::git::default_branch::resolve(&repo.path, DefaultBranchLookup::Discover).await?;
+        let remote = upstream(&repo, &git::local_ref(&default))
+            .await?
+            .map(|(remote, _)| remote);
+        if let Some(remote) = &remote {
+            git_run(
+                &repo.path,
+                &[git::FETCH_SAFE_ARGS, &["--", remote]].concat(),
+            )
+            .await
+            .with_context(|| format!("could not fetch {remote}"))?;
+        }
+        let default_branch = self
+            .refresh_branch(&repo, &default, UpstreamPolicy::AllowLocalOnly)
+            .await
+            .with_context(|| format!("could not refresh {default}"))?;
+        Ok(SyncedRepository {
+            repository_id: repo.id,
+            remote,
+            default_branch,
         })
     }
 

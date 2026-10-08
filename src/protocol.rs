@@ -18,7 +18,7 @@ use crate::{
     hooks::HookKind,
     model::{
         DiffBase, ExecutionPlan, Inspection, PortOverview, PortReservation, PortSuggestion,
-        PulledBranch, Repository, RepositoryRemoval, Workspace, WorkspaceStatus,
+        PulledBranch, Repository, RepositoryRemoval, SyncedRepository, Workspace, WorkspaceStatus,
     },
     process::identity::Identity,
     removal::{BranchChoice, RemovalCheck, RemovalResult},
@@ -130,6 +130,10 @@ pub enum Method {
         changes: Vec<crate::config::edit::Change>,
     },
     RemoveRepository {
+        repository: crate::forge::repository::Selector,
+    },
+    /// Fetch the default branch's remote and fast-forward the local default branch.
+    SyncRepository {
         repository: crate::forge::repository::Selector,
     },
     // Workspaces.
@@ -483,6 +487,7 @@ response_bodies! {
     Hook(Option<std::path::PathBuf>),
     LayeredConfig(Box<ConfigLayers>),
     PulledBranch(PulledBranch),
+    SyncedRepository(SyncedRepository),
     Notifications(Vec<Notification>),
     Notification(Notification),
     EventItem(EventItem),

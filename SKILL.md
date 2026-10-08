@@ -82,6 +82,20 @@ is in `prompt_file` and the user must send it from the app. Sessions launched
 through Shoal are scoped and cannot create workspaces or start sessions in other
 workspaces; the human or console session does.
 
+## Update from the default branch
+
+```sh
+shoal --json sync
+git rebase main            # or git merge main; use your repo's branch name
+```
+
+`shoal sync` fetches your repository's remote and fast-forwards the local
+default branch, which Git refuses while that branch is checked out in the
+registered checkout. It never pushes or changes your branch. Rebase or merge
+with plain Git afterwards; other pushed branches are current as
+`origin/<branch>`. After rebasing a pushed branch, push it with
+`git push --force-with-lease`.
+
 ## Merge branches into your own branch
 
 ```sh

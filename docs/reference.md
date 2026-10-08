@@ -683,6 +683,21 @@ that would include another registered repository or its own state. If cleanup
 fails, completed steps stay done, remaining records are retained, and new
 workspace creation is blocked until the same command is retried.
 
+### Sync a repository
+
+```sh
+shoal sync                 # Repository of the current checkout or workspace
+shoal sync app             # A registered repository
+```
+
+Fetches the default branch's upstream remote, updating its remote-tracking
+branches, then fast-forwards the local default branch under the same rules as
+workspace creation. Git refuses that update while the branch is checked out in
+the registered checkout. Shoal never pushes and never moves workspace branches:
+rebase or merge onto the updated branch with Git, for example `git rebase main`
+or `git merge origin/feature/api`. Scoped callers can sync only their own
+repository.
+
 ### Merge into your workspace branch
 
 ```sh
@@ -1130,7 +1145,8 @@ yourself that such processes stopped, use `--repair --acknowledge-stopped`; visi
 
 PR watches and merge acknowledgements are own-workspace scope exceptions.
 Processes carrying a Shoal scope token are confined to their own worktree:
-`status`, inspect, execute, `merge`, `diff`, `setup`, and resources. They may read
+`status`, inspect, execute, `merge`, `diff`, `setup`, resources, and `sync` of their
+own repository. They may read
 effective configuration for their own workspace, but cannot change configuration.
 They cannot `land`, reach other worktrees, create or remove workspaces, read
 notifications, or administer repositories or the daemon service; nested commands

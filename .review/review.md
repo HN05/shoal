@@ -58,7 +58,8 @@ instructions instead of the PR delivery guidance below.
   environments carry a scope token and get own-worktree access
   only; workspace allocation/removal/recovery and shared repository/service
   administration stay denied, while own-workspace setup, rename, PR registration,
-  merge acknowledgements, assignment continuation/completion and effective-configuration reads are allowed;
+  merge acknowledgements, assignment continuation/completion, own-repository sync and
+  effective-configuration reads are allowed;
   only unscoped callers export or revoke environment tokens. Export requires a
   ready, verified worktree; tokens persist across restart until revocation or
   workspace removal, without execution tracking or cleanup protection.

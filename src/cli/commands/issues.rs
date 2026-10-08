@@ -9,7 +9,16 @@ use crate::{
     validate::MAX_NAME_LEN,
 };
 
-pub(super) async fn repository_for_number(ctx: &Context, repos: Vec<Repository>) -> Result<String> {
+/// The explicit alternative for commands that accept `--repo` or a forge URL.
+pub(super) const REPO_OR_URL: &str = "pass --repo <repository> or a forge URL";
+
+/// The registered repository of the current checkout or workspace, otherwise
+/// one chosen interactively; `hint` names the explicit alternative.
+pub(super) async fn current_repository(
+    ctx: &Context,
+    repos: Vec<Repository>,
+    hint: &str,
+) -> Result<String> {
     let cwd = std::env::current_dir()?;
     if let Ok(root) = git::run(&cwd, &["rev-parse", "--show-toplevel"]).await {
         let root = std::fs::canonicalize(root.trim_end())?;
@@ -26,7 +35,7 @@ pub(super) async fn repository_for_number(ctx: &Context, repos: Vec<Repository>)
     }
     ensure!(
         ctx.interactive(),
-        "no current registered repository; pass --repo <repository> or a forge URL"
+        "no current registered repository; {hint}"
     );
     ui::pick(ctx, "Repository> ", ui::repository_choices(repos).await?)
 }

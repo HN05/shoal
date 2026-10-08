@@ -68,7 +68,7 @@ pub(super) async fn pull_request(
             .await?
             .into()
         }
-        None => super::issues::repository_for_number(ctx, repos.clone())
+        None => super::issues::current_repository(ctx, repos.clone(), super::issues::REPO_OR_URL)
             .await?
             .into(),
     };

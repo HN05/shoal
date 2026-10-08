@@ -7317,6 +7317,66 @@ fn merge_commit(path: &Path, file: &str, contents: &str) {
 }
 
 #[test]
+fn sync_fetches_the_remote_and_fast_forwards_only_the_default_branch() {
+    let fixture = Fixture::new();
+    let worker = fixture.add("worker");
+    let path = Path::new(worker["path"].as_str().unwrap());
+    let head = git(path, &["rev-parse", "HEAD"]);
+    let stale = git(&fixture.repo, &["rev-parse", "main"]);
+    let author = upstream_remote(&fixture);
+    let upstream = git(&author, &["rev-parse", "HEAD"]);
+    git(&author, &["switch", "-c", "feature/api"]);
+    merge_commit(&author, "api", "feature\n");
+    git(&author, &["push", "origin", "feature/api"]);
+    let feature = git(&author, &["rev-parse", "HEAD"]);
+    let binary = env!("CARGO_BIN_EXE_shoal");
+    // A scoped agent syncs its own repository without moving its branch.
+    let output = fixture.run(&["exec", "worker", "--", binary, "--json", "sync"]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let result: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(result["remote"], "origin");
+    assert_eq!(result["default_branch"]["updated"], true);
+    assert_eq!(result["default_branch"]["previous_commit"], stale.trim());
+    assert_eq!(result["default_branch"]["commit"], upstream.trim());
+    assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), upstream);
+    assert_eq!(
+        git(&fixture.repo, &["rev-parse", "origin/feature/api"]),
+        feature
+    );
+    assert_eq!(git(path, &["rev-parse", "HEAD"]), head);
+    assert_eq!(git(&fixture.repo, &["for-each-ref", "refs/shoal/"]), "");
+    // A diverged default branch is reported, not rewritten.
+    merge_commit(&fixture.repo, "local", "local\n");
+    let local = git(&fixture.repo, &["rev-parse", "main"]);
+    git(&author, &["switch", "main"]);
+    merge_commit(&author, "remote", "remote\n");
+    git(&author, &["push", "origin", "main"]);
+    let output = fixture.run(&["sync", fixture.repo.to_str().unwrap()]);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("diverged"));
+    assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), local);
+    // Scoped callers cannot sync another repository.
+    let other = fixture.root.path().join("other");
+    git(fixture.root.path(), &["init", "-b", "main", "other"]);
+    merge_commit(&other, "file", "other\n");
+    fixture.ok(&["repo", "add", other.to_str().unwrap()]);
+    let output = fixture.run(&[
+        "exec",
+        "worker",
+        "--",
+        binary,
+        "sync",
+        other.to_str().unwrap(),
+    ]);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("own repository"));
+}
+
+#[test]
 fn merge_scoped_local_branch_only_changes_own_workspace() {
     let fixture = Fixture::new();
     let worker = fixture.add("worker");

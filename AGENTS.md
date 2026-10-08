@@ -37,7 +37,7 @@ when behavior changes, distinguishing decisions from proposals.
 - Workspace commands inherit a scope token. Enforce own-worktree resource access
   in the daemon and deny workspace allocation/removal/recovery and shared
   repository/service administration; own-workspace setup, rename, issue/PR links and watches, and merge
-  acknowledgements and assignment continuation/completion are allowed.
+  acknowledgements, assignment continuation/completion and own-repository sync are allowed.
   Scope is cooperative, not a boundary against hostile same-user processes.
 - Notifications are daemon records the CLI shows: record them where the daemon
   decides (busy resources, port conflicts, agent-shortcut exits, its own
@@ -50,6 +50,9 @@ when behavior changes, distinguishing decisions from proposals.
   out in a managed workspace; `--local` skips the refresh.
   Keep merges in the tracked execution wrapper; fetch remote-only sources
   without updating other branches or relying on FETCH_HEAD.
+- `shoal sync` fetches the default branch's remote and fast-forwards the local
+  default branch under the creation refresh rules. It never pushes or moves
+  workspace branches; agents update their branch from it with plain Git.
 - `[auto_cleanup]` has `enabled` (default true) and `idle_minutes` (default
   10), resolved per workspace on each sweep. Automatic removal is only for idle,
   clean worktrees with all commits pushed or on the local default branch, or deleted worktrees. Keep one removal path for manual and automatic

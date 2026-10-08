@@ -137,6 +137,7 @@ Use `shoal <command> --help` for options.
 To move changes between your workspace and the default branch:
 
 ```sh
+shoal sync                    # Fetch and fast-forward the default branch
 shoal merge main              # Merge it into your branch; use your repo's branch name
 shoal merge feature/api       # Merge another local or remote branch
 shoal land                    # Merge your branch into the default branch; no remote needed

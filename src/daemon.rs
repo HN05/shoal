@@ -312,6 +312,9 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::RemoveRepository { repository } => {
             Body::RepositoryRemoved(manager.remove_repository(&repository).await?)
         }
+        Method::SyncRepository { repository } => {
+            Body::SyncedRepository(manager.sync_repository(&repository).await?)
+        }
         Method::ListBranches { repository } => Body::Branches(manager.branches(&repository).await?),
         Method::OpenBranch {
             path,

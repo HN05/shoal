@@ -231,7 +231,10 @@ and skips hooks; post-remove events are not durably queued or replayed.
 
 `diff` compares against the recorded base's fork point (merge-base fallback, fixed
 commits stay fixed) with native Git settings, so advancing the base is never shown
-as work. `merge` imports any local or remote branch into the workspace's own branch,
+as work. `sync` fetches the default branch's remote and fast-forwards the local default
+branch under the creation refresh rules, because Git refuses to update a branch checked
+out in the registered checkout; it never pushes or moves workspace branches, so updating
+a workspace from it stays plain Git. `merge` imports any local or remote branch into the workspace's own branch,
 preferring local sources, which it first fast-forwards from their upstream while
 preserving ahead branches and refusing dirty or diverged checkouts and failed fetches,
 unless `--local`, they lack an upstream, or a managed workspace has them checked out;
@@ -256,7 +259,8 @@ inherit a daemon-validated scope token that
 confines them to their own workspace: status, inspect, execute, setup, merge, and resources.
 `land`, creation, removal, reconciliation, other workspaces, repository
 administration, and service control need an unscoped caller. PR registration,
-manual merge acknowledgement, and assignment continuation/completion are own-workspace exceptions.
+manual merge acknowledgement, assignment continuation/completion, and syncing the
+caller's own repository are own-workspace exceptions.
 Effective configuration may be read for the caller's own workspace; changing it
 needs an unscoped caller.
 Nested executions keep scope. Unscoped callers may export a ready, verified
