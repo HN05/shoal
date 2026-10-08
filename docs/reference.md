@@ -366,7 +366,7 @@ in the background when launching an agent; an explicit `focus` overrides this.
 new_tab = true          # Enable the handoff inside Herdr
 # focus = true          # Always focus the new tab
 # tab_name = "{repo}: {branch}" # Customize the tab name
-close_when_done = true  # Close after a tracked agent exits, including cleanup stops
+close_when_done = true  # Close after the workspace is completed or removed
 ```
 
 `tab_name` supports `{repo}`, `{branch}`, `{issue_number}`, and `{issue_title}`,
@@ -374,10 +374,10 @@ or a literal name. Issue fields are empty without an issue; unknown placeholders
 stay literal and inserted values are never expanded again. `{branch}` uses the
 requested branch when the tab opens and the allocated branch after creation.
 
-Failures before agent execution leave the tab open. `add` without an agent (or
-choosing “No agent”) opens an interactive shell in the ready workspace and leaves
-the tab open. Detached Happy agents close it when their tracked execution finishes;
-desktop handoffs leave it open because their agent lifetime is untracked.
+Failures before agent execution leave the tab open. Agent exits leave the tab
+open so work can continue; completion or workspace removal closes it. `add`
+without an agent (or choosing “No agent”) opens an interactive shell in the ready
+workspace and leaves the tab open until that workspace is completed or removed.
 
 Custom agents use `[commands]` with normal repository/global precedence:
 

@@ -272,6 +272,9 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             close_when_done,
             plan,
         } => super::herdr::worker(ctx, close_when_done, &plan).await,
+        Command::HerdrWatchInternal { workspace, tab } => {
+            super::herdr::watch(&ctx, workspace, tab).await
+        }
         Command::Setup { workspace } => workspaces::setup(&ctx, workspace).await,
         Command::Ls => workspaces::list(&ctx).await,
         Command::Hold { command, scope } => holds::run(&ctx, command, scope).await,

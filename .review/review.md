@@ -168,8 +168,8 @@ instructions instead of the PR delivery guidance below.
   `<repo>#<number>` for issues and the allocated workspace branch otherwise by
   default. Optional `herdr.tab_name` templates follow config precedence, substitute
   fields once and travel with the plan; branch fields update after allocation.
-  Preparation failures keep the tab readable; only
-  tracked agent completion closes it, including cleanup stops.
+  Preparation failures keep the tab readable; agent exits keep the tab open,
+  and completion or workspace removal closes it.
   Default focus follows the resolved launch: shells receive focus, agents stay
   in the background, and explicit focus settings override either default.
   JSON, help, noninteractive and `--here` calls run in place. Shell and untracked

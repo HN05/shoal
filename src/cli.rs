@@ -231,6 +231,8 @@ pub enum Command {
         #[arg(env = crate::env::HERDR_PLAN, hide_env_values = true)]
         plan: String,
     },
+    #[command(name = internal::HERDR_WATCH, hide = true)]
+    HerdrWatchInternal { workspace: String, tab: String },
     /// Internal worker launched through the tracked execution wrapper.
     #[command(name = internal::MERGE, hide = true)]
     MergeInternal {

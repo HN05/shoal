@@ -14119,10 +14119,7 @@ fn herdr_handoff_preserves_choices_and_literal_arguments() {
         "unset\n"
     );
     assert!(!fixture.root.path().join("injected").exists());
-    assert_eq!(
-        herdr_calls(&fixture).last().unwrap(),
-        &["tab", "close", "w1:t9"]
-    );
+    assert_eq!(herdr_calls(&fixture).len(), 3);
 }
 
 #[test]
@@ -14237,10 +14234,10 @@ fn herdr_labels_name_issues_by_repository_and_number() {
         assert!(worker.status.success(), "{worker:?} {transcript}");
         assert_eq!(transcript.contains("rename-failed"), fail_rename);
         let calls = herdr_calls(&fixture);
-        assert_eq!(calls[calls.len() - 2], ["tab", "rename", "w1:t9", renamed]);
-        assert_eq!(calls.last().unwrap(), &["tab", "close", "w1:t9"]);
+        assert_eq!(calls.last().unwrap(), &["tab", "rename", "w1:t9", renamed]);
         if args[1] == "34" {
             fixture.ok(&["rm", "issue-34-fix-api-timeout", "--keep-branch", "--yes"]);
+            wait_for_herdr_close(&fixture);
         }
     }
 }
@@ -14309,9 +14306,10 @@ fn herdr_tab_name_templates_survive_handoff_and_use_the_allocated_branch() {
             fixture.interactive_command(&mut herdr_worker_command(&fixture), "");
         assert!(worker.status.success(), "{worker:?} {transcript}");
         let calls = herdr_calls(&fixture);
-        assert_eq!(calls[calls.len() - 2], ["tab", "rename", "w1:t9", renamed]);
+        assert_eq!(calls.last().unwrap(), &["tab", "rename", "w1:t9", renamed]);
         assert!(!fixture.root.path().join("injected").exists());
         fixture.ok(&["rm", "topic", "--keep-branch", "--yes"]);
+        wait_for_herdr_close(&fixture);
     }
 }
 
@@ -14419,6 +14417,8 @@ fn herdr_no_agent_opens_workspace_shell_and_honors_focus_setting() {
         workspace["workspace"]["path"].as_str().unwrap()
     );
     assert_eq!(herdr_calls(&fixture).len(), 3);
+    fixture.ok(&["rm", "herdr-shell", "--yes"]);
+    wait_for_herdr_close(&fixture);
 }
 
 fn install_test_script(path: &Path, script: &str) {
@@ -14495,6 +14495,8 @@ fn herdr_retains_setup_failures_and_can_disable_completion_closure() {
     let (worker, _) = fixture.interactive_command(&mut herdr_worker_command(&fixture), "");
     assert!(worker.status.success(), "{worker:?}");
     assert_eq!(herdr_calls(&fixture).len(), 3);
+    fixture.ok(&["done", "retain", "--keep"]);
+    assert_eq!(herdr_calls(&fixture).len(), 3);
     // Enable closure, then fail setup before the agent can start.
     fs::write(
         fixture.repo.join(".shoal.toml"),
@@ -14564,22 +14566,19 @@ fn herdr_closes_when_done_cleanup_terminates_the_agent() {
         "",
     );
     assert_eq!(worker.status.code(), Some(143), "{worker:?} {transcript}");
-    assert_eq!(
-        herdr_calls(&fixture).last().unwrap(),
-        &["tab", "close", "w1:t9"]
-    );
+    wait_for_herdr_close(&fixture);
     wait_until("done cleanup", || {
         fixture.ok(&["ls"]).as_array().unwrap().is_empty()
     });
 }
 
 #[test]
-fn herdr_closes_after_detached_happy_execution_finishes() {
-    let fixture = Fixture::new();
+fn herdr_retains_detached_happy_exits_and_closes_on_done_after_restart() {
+    let mut fixture = Fixture::new();
     install_fake_herdr(&fixture);
     install_test_script(
         &fixture.root.path().join("bin/happy"),
-        "#!/bin/sh\nexit 7\n",
+        "#!/bin/sh\nprintf done > \"$HOME/happy-exited\"\nexit 7\n",
     );
     let (caller, _) = herdr_call(
         &fixture,
@@ -14595,16 +14594,20 @@ fn herdr_closes_after_detached_happy_execution_finishes() {
     assert!(caller.status.success());
     let (worker, transcript) = fixture.interactive_command(&mut herdr_worker_command(&fixture), "");
     assert!(worker.status.success(), "{worker:?} {transcript}");
-    assert_eq!(
-        herdr_calls(&fixture).last().unwrap(),
-        &["tab", "close", "w1:t9"]
-    );
-    assert!(
-        fixture.ok(&["inspect", "happy-tab"])["executions"]
-            .as_array()
-            .unwrap()
-            .is_empty()
-    );
+    wait_until("Happy execution exit", || {
+        fixture.root.path().join("happy-exited").exists()
+    });
+    assert_eq!(herdr_calls(&fixture).len(), 3);
+    fixture.restart();
+    fixture.ok(&["done", "happy-tab", "--keep"]);
+    wait_for_herdr_close(&fixture);
+    assert!(fixture.ok(&["inspect", "happy-tab"])["completion"].is_object());
+}
+
+fn wait_for_herdr_close(fixture: &Fixture) {
+    wait_until("Herdr tab closure", || {
+        herdr_calls(fixture).last().unwrap() == &["tab", "close", "w1:t9"]
+    });
 }
 
 #[test]

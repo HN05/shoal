@@ -134,13 +134,6 @@ impl ResolvedLaunch {
             &[("{prompt}", OsStr::new(prompt))],
         )
         .await?;
-        let result =
-            execution::run(&ctx.paths, self.workspace.id, command, Some(name.into())).await;
-        if result.is_ok()
-            && let Some(tab) = &ctx.herdr_tab
-        {
-            tab.close().await;
-        }
-        result
+        execution::run(&ctx.paths, self.workspace.id, command, Some(name.into())).await
     }
 }

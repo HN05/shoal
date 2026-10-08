@@ -283,6 +283,7 @@ async fn execute_add_with_target(
     } = plan;
     let opened = open_add_workspace(ctx, &target, creation).await?;
     if let Some(tab) = &ctx.herdr_tab {
+        tab.watch_workspace(ctx, &opened.workspace.id)?;
         let label = match tab_name {
             Some(name) => name.render(&opened.workspace.branch),
             None => match &issue {

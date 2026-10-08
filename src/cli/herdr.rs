@@ -1,5 +1,5 @@
 //! Herdr terminal handoffs; workspace ownership stays with the daemon.
-use std::{ffi::OsString, path::Path, time::Duration};
+use std::{ffi::OsString, path::Path, process::Stdio, time::Duration};
 
 use anyhow::{Context as _, Result, ensure};
 use serde::{Deserialize, Serialize};
@@ -232,38 +232,72 @@ impl Tab {
         Ok(crate::execution::exit_code(status))
     }
 
-    pub async fn wait_for_detached(
-        &self,
-        ctx: &Context,
-        workspace: &str,
-        execution: &str,
-    ) -> Result<()> {
+    /// Observe lifecycle separately so returning from an agent leaves the tab open.
+    pub fn watch_workspace(&self, ctx: &Context, workspace: &str) -> Result<()> {
         if !self.close_when_done {
             return Ok(());
         }
-        loop {
-            let active = match client::inspect(&ctx.paths, workspace.into()).await {
-                Ok(inspection) => inspection
-                    .executions
-                    .iter()
-                    .any(|item| item.id == execution),
-                Err(error) => {
-                    // Removal may finish between polls. Other failures do not prove exit.
-                    if client::workspaces(&ctx.paths)
-                        .await?
-                        .iter()
-                        .any(|item| item.id == workspace)
-                    {
-                        return Err(error);
-                    }
-                    false
+        let argv = internal::internal_command(
+            &ctx.paths,
+            ctx.json,
+            internal::InternalCommand::HerdrWatch {
+                workspace,
+                tab: &self.id,
+            },
+        )?;
+        let mut watcher = Command::new(&argv[0]);
+        watcher
+            .args(&argv[1..])
+            .current_dir(&ctx.paths.home)
+            .env_remove(env::SHELL_DIRECTIVE)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        // SAFETY: setsid detaches the forked child without allocating, before exec.
+        unsafe {
+            watcher.pre_exec(|| {
+                if libc::setsid() == -1 {
+                    return Err(std::io::Error::last_os_error());
                 }
-            };
-            if !active {
-                self.close().await;
-                return Ok(());
+                Ok(())
+            });
+        }
+        watcher
+            .spawn()
+            .context("watch workspace for Herdr tab closure")?;
+        Ok(())
+    }
+}
+
+pub async fn watch(ctx: &Context, workspace: String, tab: String) -> Result<i32> {
+    let tab = Tab {
+        id: tab,
+        close_when_done: true,
+    };
+    // A missing daemon or a failed query does not prove completion or removal.
+    // Retain the observer across daemon restarts, but not deletion of its state.
+    while ctx.paths.state.exists() {
+        if workspace_finished(ctx, &workspace).await.unwrap_or(false) {
+            tab.close().await;
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+    Ok(0)
+}
+
+async fn workspace_finished(ctx: &Context, workspace: &str) -> Result<bool> {
+    match client::inspect(&ctx.paths, workspace.into()).await {
+        Ok(inspection) => Ok(inspection.completion.is_some()),
+        Err(error) => {
+            if client::workspaces(&ctx.paths)
+                .await?
+                .iter()
+                .any(|item| item.id == workspace)
+            {
+                return Err(error);
             }
-            tokio::time::sleep(Duration::from_millis(500)).await;
+            Ok(true)
         }
     }
 }

@@ -5,11 +5,16 @@ use anyhow::Result;
 use crate::paths::Paths;
 
 pub const HERDR: &str = "herdr-internal";
+pub const HERDR_WATCH: &str = "herdr-watch-internal";
 pub const MERGE: &str = "merge-internal";
 pub const LAND: &str = "land-internal";
 pub const DETACHED: &str = "detached-internal";
 
 pub enum InternalCommand<'a> {
+    HerdrWatch {
+        workspace: &'a str,
+        tab: &'a str,
+    },
     Merge {
         branch: &'a str,
         remote: Option<&'a str>,
@@ -41,6 +46,9 @@ pub fn internal_command(
         args.push("--json".into());
     }
     match command {
+        InternalCommand::HerdrWatch { workspace, tab } => {
+            args.extend([HERDR_WATCH.into(), workspace.into(), tab.into()]);
+        }
         InternalCommand::Merge {
             branch,
             remote,
@@ -95,6 +103,23 @@ mod tests {
         assert_eq!(cli.state_dir, Some(paths.state));
         assert_eq!(cli.json, json);
         cli.command.unwrap()
+    }
+
+    #[test]
+    fn herdr_watch_round_trips_workspace_and_tab() {
+        for json in [false, true] {
+            let Command::HerdrWatchInternal { workspace, tab } = parse(
+                InternalCommand::HerdrWatch {
+                    workspace: "workspace-id",
+                    tab: "w1:t9",
+                },
+                json,
+            ) else {
+                panic!("expected Herdr watcher");
+            };
+            assert_eq!(workspace, "workspace-id");
+            assert_eq!(tab, "w1:t9");
+        }
     }
 
     #[test]
