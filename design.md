@@ -280,9 +280,10 @@ By default, workspace shells receive focus and agent launches stay in the
 background; an explicit focus setting overrides this choice.
 The worker drops the plan before starting children; a retained tab's shell keeps
 it, inert, while a non-default state directory is passed only to the worker.
-Herdr tabs remain open after tracked agent exits and close when their workspace
-is completed or removed; preparation failures and shell or untracked desktop
-handoffs retain them until that lifecycle change.
+Herdr tabs remain open after tracked agent exits. Completion closes them only
+after tracked executions have resolved; removal closes them immediately.
+Preparation failures and shell or untracked desktop handoffs retain them until
+that lifecycle change.
 
 Single-workspace actions select an explicit target, otherwise the caller's scoped
 workspace or the workspace containing the current directory, then an interactive

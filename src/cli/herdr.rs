@@ -296,7 +296,7 @@ pub async fn watch(ctx: &Context, workspace: String, tab: String) -> Result<i32>
 
 async fn workspace_finished(ctx: &Context, workspace: &str) -> Result<bool> {
     match client::inspect(&ctx.paths, workspace.into()).await {
-        Ok(inspection) => Ok(inspection.completion.is_some()),
+        Ok(inspection) => Ok(inspection.completion.is_some() && inspection.executions.is_empty()),
         Err(error) => {
             if client::workspaces(&ctx.paths)
                 .await?
@@ -313,6 +313,76 @@ async fn workspace_finished(ctx: &Context, workspace: &str) -> Result<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{
+        model::{Completion, Execution, Inspection, Workspace},
+        protocol::{self, Body, Method, Request, Response},
+        state::{ExecutionState, WorkspaceState},
+    };
+    use tokio::{io::BufReader, net::UnixListener};
+
+    #[tokio::test]
+    async fn completion_waits_for_running_and_unresolved_executions() {
+        for state in [ExecutionState::Running, ExecutionState::Unknown] {
+            let execution = Execution {
+                id: "agent".into(),
+                workspace_id: "workspace".into(),
+                state,
+                wrapper: None,
+                child: None,
+                group_id: None,
+            };
+            assert!(!inspect_finished(true, vec![execution]).await);
+        }
+        assert!(inspect_finished(true, vec![]).await);
+        assert!(!inspect_finished(false, vec![]).await);
+    }
+
+    async fn inspect_finished(completed: bool, executions: Vec<Execution>) -> bool {
+        let temp = tempfile::tempdir().unwrap();
+        let paths = Paths::for_test(temp.path());
+        paths.prepare().unwrap();
+        let listener = UnixListener::bind(&paths.socket).unwrap();
+        let server = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let mut stream = BufReader::new(stream);
+            let request: Request = protocol::read_buffered(&mut stream).await.unwrap();
+            assert!(
+                matches!(request.method, Method::InspectWorkspace { workspace } if workspace == "workspace")
+            );
+            let inspection = Inspection {
+                workspace: Workspace::new_record(
+                    "repo".into(),
+                    "workspace".into(),
+                    "/workspace".into(),
+                    "topic".into(),
+                    WorkspaceState::Ready,
+                ),
+                completion: completed.then(|| Completion {
+                    head: "head".into(),
+                    cleanup: false,
+                    error: None,
+                }),
+                executions,
+                manual_completion: false,
+                issue: None,
+                pr_cleanup: None,
+                ports: vec![],
+                resources: vec![],
+                simulators: vec![],
+            };
+            protocol::write(
+                stream.get_mut(),
+                &Response::new(request.id, Body::Inspection(inspection)),
+            )
+            .await
+            .unwrap();
+        });
+        let finished = workspace_finished(&Context::new(paths, true), "workspace")
+            .await
+            .unwrap();
+        server.await.unwrap();
+        finished
+    }
 
     #[test]
     fn worker_argv_names_only_a_non_default_state_directory() {

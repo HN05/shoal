@@ -381,7 +381,8 @@ stay literal and inserted values are never expanded again. `{branch}` uses the
 requested branch when the tab opens and the allocated branch after creation.
 
 Failures before agent execution leave the tab open. Agent exits leave the tab
-open so work can continue; completion or workspace removal closes it. `add`
+open so work can continue; completion closes it after tracked executions resolve,
+and workspace removal closes it immediately. `add`
 without an agent (or choosing “No agent”) opens an interactive shell in the ready
 workspace and leaves the tab open until that workspace is completed or removed.
 
