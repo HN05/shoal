@@ -12,11 +12,17 @@ use clap::{Command, CommandFactory};
 use clap_complete::engine::{ArgValueCompleter, CompletionCandidate};
 
 use crate::{
+    agent::{Agent, BuiltinAgent},
     cli::{
-        client,
+        agents, client,
         workspace_context::{ScopeOrder, WorkspaceContext},
     },
-    config::{Config, repo::ConfigLayers, resolve::Stack},
+    config::{
+        Config,
+        named_commands::{self, Commands},
+        repo::ConfigLayers,
+        resolve::Stack,
+    },
     daemon::{access::AccessRequest, resources::Overview},
     env,
     model::{PortOverview, Workspace},
@@ -32,7 +38,7 @@ struct Typed {
     workspace: Option<String>,
     pool: Option<String>,
     custom: Option<String>,
-    command_names: OnceLock<Vec<String>>,
+    commands: OnceLock<Commands>,
 }
 
 /// Live values an argument can be completed with.
@@ -104,7 +110,32 @@ pub fn command() -> Command {
                 .arg(clap::Arg::new("args").last(true).num_args(0..)),
         );
     }
+    let search_path = std::env::var_os("PATH").unwrap_or_default();
+    let commands = typed.commands();
+    let launchable = |agent: Agent| agents::installed(&agent, commands, &search_path);
+    for (name, available) in [
+        ("claude", launchable(Agent::Claude)),
+        (
+            "codex",
+            launchable(Agent::Codex) || agents::program_available("codex", &search_path),
+        ),
+        ("happy", agents::program_available("happy", &search_path)),
+        ("t3", agents::program_available("t3", &search_path)),
+    ] {
+        if !available {
+            command = withdraw(command, name);
+        }
+    }
     decorate(command, "", Arc::new(typed))
+}
+
+/// Keep a launcher whose executable is missing out of completion. Hidden
+/// subcommands still complete as the only match, so the name also changes to
+/// one no typed word can start.
+fn withdraw(command: Command, name: &str) -> Command {
+    command.mut_subcommand(name, |subcommand| {
+        subcommand.name(format!("\0{name}")).hide(true)
+    })
 }
 
 fn value(matches: &clap::ArgMatches, id: &str) -> Option<String> {
@@ -144,16 +175,41 @@ fn decorate(command: Command, parent: &str, typed: Arc<Typed>) -> Command {
             } else if matches!(name.as_str(), "add" | "review") && arg.get_id() == "agent" {
                 let typed = typed.clone();
                 arg.add(ArgValueCompleter::new(move |current: &OsStr| {
-                    let mut names = crate::agent::Agent::possible_values();
-                    names.extend(
-                        typed.command_names().into_iter().filter(|name| {
-                            matches!(name.parse(), Ok(crate::agent::Agent::Custom(_)))
-                        }),
-                    );
-                    names
+                    let search_path = std::env::var_os("PATH").unwrap_or_default();
+                    let commands = typed.commands();
+                    Agent::possible_values()
                         .into_iter()
+                        .chain(commands.keys().cloned())
                         .filter(|name| name.starts_with(current.to_string_lossy().as_ref()))
+                        .filter(|name| {
+                            name.parse::<Agent>().is_ok_and(|agent| {
+                                agents::installed(&agent, commands, &search_path)
+                            })
+                        })
+                        .collect::<BTreeSet<_>>()
+                        .into_iter()
                         .map(CompletionCandidate::new)
+                        .collect::<Vec<_>>()
+                }))
+            } else if parent == "happy" || (name == "happy" && arg.get_id() == "agent") {
+                let typed = typed.clone();
+                arg.add(ArgValueCompleter::new(move |current: &OsStr| {
+                    let search_path = std::env::var_os("PATH").unwrap_or_default();
+                    BuiltinAgent::ALL
+                        .iter()
+                        .filter(|agent| {
+                            agent
+                                .as_str()
+                                .starts_with(current.to_string_lossy().as_ref())
+                        })
+                        .filter(|agent| {
+                            agents::installed(
+                                &Agent::Happy(**agent),
+                                typed.commands(),
+                                &search_path,
+                            )
+                        })
+                        .map(|agent| CompletionCandidate::new(agent.as_str()))
                         .collect::<Vec<_>>()
                 }))
             } else if parent == "skill" && name == "install" && arg.get_id() == "agent" {
@@ -185,18 +241,23 @@ fn decorate(command: Command, parent: &str, typed: Arc<Typed>) -> Command {
 
 impl Typed {
     fn command_names(&self) -> Vec<String> {
-        self.command_names
-            .get_or_init(|| self.load_command_names())
-            .clone()
+        let mut names: BTreeSet<String> = self.commands().keys().cloned().collect();
+        names.extend(self.custom.clone());
+        names.into_iter().collect()
     }
 
-    fn load_command_names(&self) -> Vec<String> {
+    /// The effective configured commands, from cwd when no workspace resolves.
+    fn commands(&self) -> &Commands {
+        self.commands.get_or_init(|| self.load_commands())
+    }
+
+    fn load_commands(&self) -> Commands {
         let state = self
             .state
             .clone()
             .or_else(|| std::env::var_os(env::STATE_DIR).map(PathBuf::from));
         let Ok(paths) = Paths::new(state) else {
-            return vec![];
+            return named_commands::defaults();
         };
         let global = Config::load(&paths).unwrap_or_default();
         let mut layers = ConfigLayers::default();
@@ -233,12 +294,11 @@ impl Typed {
                 layers = *found;
             }
         }
-        let mut names: BTreeSet<String> = Stack::new(&global, &layers)
+        Stack::new(&global, &layers)
             .named(|config| &config.commands)
-            .into_keys()
-            .collect();
-        names.extend(self.custom.clone());
-        names.into_iter().collect()
+            .into_iter()
+            .map(|(name, (argv, _))| (name, argv))
+            .collect()
     }
 
     fn complete(&self, target: Target, current: &OsStr) -> Vec<CompletionCandidate> {

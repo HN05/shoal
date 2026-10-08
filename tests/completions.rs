@@ -1,6 +1,42 @@
 mod support;
 
-use std::{fs, path::Path};
+use std::{fs, os::unix::fs::PermissionsExt, path::Path, process::Command};
+
+/// Agents complete only when their executables are installed.
+fn install_programs(home: &Path, programs: &[&str]) {
+    let bin = home.join("bin");
+    fs::create_dir_all(&bin).unwrap();
+    for program in programs {
+        let path = bin.join(program);
+        fs::write(&path, "#!/bin/sh\n").unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+}
+
+fn completion(home: &Path, shell: &str, words: &[&str]) -> Command {
+    let mut command = support::cli(home);
+    command
+        .arg("--")
+        .args(words)
+        .env("SHOAL_COMPLETE", shell)
+        .env("_CLAP_COMPLETE_INDEX", (words.len() - 1).to_string());
+    command
+}
+
+/// Candidate values, without the descriptions zsh appends after a colon.
+fn candidates(mut command: Command) -> Vec<String> {
+    let output = command.output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8(output.stdout)
+        .unwrap()
+        .lines()
+        .map(|line| line.split(':').next().unwrap().to_owned())
+        .collect()
+}
 
 fn generate(home: &Path, args: &[&str]) -> Vec<u8> {
     let output = support::cli(home).args(args).output().unwrap();
@@ -15,6 +51,7 @@ fn generate(home: &Path, args: &[&str]) -> Vec<u8> {
 #[test]
 fn bash_completes_commands_and_flags_without_a_daemon() {
     let home = tempfile::tempdir().unwrap();
+    install_programs(home.path(), &["codex"]);
     let script = home.path().join("completions.bash");
     fs::write(&script, generate(home.path(), &["completions", "bash"])).unwrap();
     let output = support::isolated(home.path(), "bash").args(["--noprofile", "--norc", "-c", r#"
@@ -87,6 +124,7 @@ fn dynamic_completion_covers_nested_commands_flags_and_paths_without_daemon() {
         "[commands]\nreview = ['tuicr']\n[ai.pi]\nskill_dir = '~/pi-skills'\n",
     )
     .unwrap();
+    install_programs(home.path(), &["claude", "codex", "happy", "tuicr"]);
     for (words, expected) in [
         (vec!["shoal", "repo", "r"], "rm"),
         (vec!["shoal", "rev"], "review"),
@@ -125,27 +163,61 @@ fn dynamic_completion_covers_nested_commands_flags_and_paths_without_daemon() {
         (vec!["shoal", "skill", "install", "pi"], "pi"),
     ] {
         for shell in ["bash", "zsh"] {
-            let output = support::cli(home.path())
-                .arg("--")
-                .args(&words)
-                .env("SHOAL_COMPLETE", shell)
-                .env("_CLAP_COMPLETE_INDEX", (words.len() - 1).to_string())
-                .output()
-                .unwrap();
+            let values = candidates(completion(home.path(), shell, &words));
             assert!(
-                output.status.success(),
-                "{}",
-                String::from_utf8_lossy(&output.stderr)
-            );
-            let text = String::from_utf8(output.stdout).unwrap();
-            assert!(
-                text.lines()
-                    .any(|line| line.split(':').next() == Some(expected)),
-                "{shell} {words:?}: {text}"
+                values.iter().any(|value| value == expected),
+                "{shell} {words:?}: {values:?}"
             );
         }
     }
     assert!(!home.path().join("state").exists());
+}
+
+#[test]
+fn agents_without_installed_executables_are_not_completed() {
+    let home = tempfile::tempdir().unwrap();
+    install_programs(home.path(), &["claude"]);
+    // Only the fixture's bin, so agents installed on this machine stay out.
+    let path = format!("{}:/usr/bin:/bin", home.path().join("bin").display());
+    for (words, expected, missing) in [
+        (
+            vec!["shoal", "c"],
+            &["claude", "completions"][..],
+            &["codex"][..],
+        ),
+        (vec!["shoal", "cod"], &[], &["codex"]),
+        (vec!["shoal", "ha"], &[], &["happy"]),
+        (vec!["shoal", "t"], &[], &["t3"]),
+        (vec!["shoal", "codex", "--a"], &[], &["--app"]),
+        (
+            vec!["shoal", "add", "--agent", "c"],
+            &["claude"],
+            &["codex"],
+        ),
+        (
+            vec!["shoal", "add", "--agent", "happy-"],
+            &[],
+            &["happy-claude"],
+        ),
+    ] {
+        for shell in ["bash", "zsh"] {
+            let mut command = completion(home.path(), shell, &words);
+            command.env("PATH", &path);
+            let values = candidates(command);
+            for value in expected {
+                assert!(
+                    values.contains(&value.to_string()),
+                    "{shell} {words:?}: {values:?}"
+                );
+            }
+            for value in missing {
+                assert!(
+                    !values.contains(&value.to_string()),
+                    "{shell} {words:?}: {values:?}"
+                );
+            }
+        }
+    }
 }
 
 #[test]
