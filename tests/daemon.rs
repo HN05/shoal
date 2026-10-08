@@ -888,6 +888,7 @@ fn cli_typed_response_errors_preserve_output_and_exit_contracts() {
                     Err(error) => panic!("{error}"),
                 }
             };
+            stream.set_nonblocking(false).unwrap();
             stream
                 .set_read_timeout(Some(Duration::from_secs(3)))
                 .unwrap();
