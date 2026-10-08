@@ -118,6 +118,9 @@ fn discard_saved(saved: &Saved, active: impl Fn(&str) -> bool) -> Result<Vec<Str
         );
         claims.push(claim(path)?);
     }
+    for command in &saved.commands {
+        claims.push(claim(&command.path)?);
+    }
     for (_, path) in &saved.agents {
         std::fs::remove_file(path)?;
     }
@@ -305,5 +308,26 @@ mod tests {
         std::fs::remove_file(&record).unwrap();
         drop(first);
         assert!(claim(&record).is_err());
+    }
+
+    #[test]
+    fn discard_leaves_command_records_another_resume_is_reporting() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("execution.command.json");
+        std::fs::write(&path, r#"{"argv":["true"]}"#).unwrap();
+        let saved = Saved {
+            agents: vec![],
+            commands: vec![SavedCommand {
+                id: "execution".into(),
+                path: path.clone(),
+                argv: vec!["true".into()],
+            }],
+        };
+        let reporting = claim(&path).unwrap();
+        assert!(discard_saved(&saved, |_| false).is_err());
+        assert!(path.exists());
+        drop(reporting);
+        assert_eq!(discard_saved(&saved, |_| false).unwrap(), ["execution"]);
+        assert!(!path.exists());
     }
 }
