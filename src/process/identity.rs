@@ -136,7 +136,14 @@ fn visibility(identity: &Identity, deadline: std::time::Instant) -> Result<Visib
             Ok(environment) if !environment.is_empty() => {
                 return Ok(Visibility::Environment(environment));
             }
-            Err(_) => return Ok(Visibility::Unreadable),
+            // Without CAP_SYS_PTRACE, Linux refuses an exiting process's
+            // environment. A refusal also hides env_end, so never wait on it.
+            Err(_) => {
+                return Ok(match image(identity.pid)? {
+                    Image::Ended => Visibility::Gone,
+                    _ => Visibility::Unreadable,
+                });
+            }
             Ok(_) => {}
         }
         match image(identity.pid)? {
