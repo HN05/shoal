@@ -143,6 +143,16 @@ pub enum Command {
         #[arg(long, default_value_t = 3600)]
         timeout: u64,
     },
+    /// Mark linked items, or the workspace when none are linked, ready for review at HEAD.
+    Ready {
+        #[command(flatten)]
+        items: ItemArgs,
+    },
+    /// Withdraw ready-for-review marks from all items, one kind, or a selected issue or PR.
+    Unready {
+        #[command(flatten)]
+        items: ItemArgs,
+    },
     /// Bring an existing worktree under Shoal management, including cleanup.
     Adopt {
         /// Registered repository that owns the linked worktree.

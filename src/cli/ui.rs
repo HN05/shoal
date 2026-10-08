@@ -428,6 +428,24 @@ fn pick_workspace(ctx: &Context, workspaces: Vec<Workspace>) -> Result<String> {
 /// columns that tell rows apart. Repositories (`(id, name)` pairs) appear when
 /// the rows span several, a branch where it differs from the name, and the
 /// state unless the workspace is ready.
+/// Non-ready states, or a ready workspace's ready-for-review marks.
+fn state_cell(workspace: &Workspace) -> (String, Option<Style>) {
+    if workspace.state != WorkspaceState::Ready {
+        return (
+            workspace.state.to_string(),
+            Some(workspace_state_style(workspace.state)),
+        );
+    }
+    if workspace.review.is_empty() {
+        return (String::new(), None);
+    }
+    if workspace.review.iter().any(|mark| mark.stale == Some(true)) {
+        ("ready for review (outdated)".into(), Some(Style::Warning))
+    } else {
+        ("ready for review".into(), Some(Style::Success))
+    }
+}
+
 pub fn workspace_rows(
     workspaces: &[Workspace],
     repositories: &[(String, String)],
@@ -454,10 +472,7 @@ pub fn workspace_rows(
                 (w.name.clone(), Some(Style::Heading)),
                 (shown(several_repositories, repository(w).to_owned()), None),
                 (shown(w.branch != w.name, w.branch.clone()), None),
-                (
-                    shown(w.state != WorkspaceState::Ready, w.state.to_string()),
-                    Some(workspace_state_style(w.state)),
-                ),
+                state_cell(w),
                 (
                     shown(path, w.path.display().to_string()),
                     Some(Style::Muted),

@@ -12724,6 +12724,77 @@ fn agents_notify_the_user_about_their_own_workspace_without_completing_it() {
     assert!(fixture.ok(&["inspect", "sender"])["completion"].is_null());
 }
 
+#[test]
+fn agents_mark_their_workspace_ready_for_review_until_new_commits() {
+    let fixture = Fixture::new();
+    let added = fixture.add("reviewed");
+    fixture.add("other");
+    let path = Path::new(added["path"].as_str().unwrap());
+    let output = scoped_command(&fixture, "reviewed", &["ready"]);
+    assert!(output.status.success(), "{output:?}");
+    let marks: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(marks[0]["url"].is_null() && marks[0]["stale"] == false);
+    for args in [
+        &["ready", "--workspace", "other"][..],
+        &["ready", "pr"],
+        &["unready", "pr", "12"],
+    ] {
+        let output = scoped_command(&fixture, "reviewed", args);
+        assert!(
+            !output.status.success(),
+            "scoped {args:?} unexpectedly succeeded"
+        );
+    }
+    let row = |fixture: &Fixture| {
+        let output = fixture.run(&["ls"]);
+        String::from_utf8(output.stdout)
+            .unwrap()
+            .lines()
+            .find(|line| line.contains("reviewed"))
+            .unwrap()
+            .to_owned()
+    };
+    assert!(row(&fixture).contains("ready for review"));
+    assert!(!row(&fixture).contains("outdated"));
+
+    fs::write(path.join("later"), "later\n").unwrap();
+    git(path, &["add", "later"]);
+    git(
+        path,
+        &[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "-m",
+            "later",
+        ],
+    );
+    assert!(row(&fixture).contains("ready for review (outdated)"));
+    assert_eq!(
+        fixture.ok(&["status", "reviewed"])["workspace"]["review"][0]["stale"],
+        true
+    );
+
+    let output = scoped_command(&fixture, "reviewed", &["unready"]);
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(
+        serde_json::from_slice::<Value>(&output.stdout)
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    assert!(!row(&fixture).contains("ready for review"));
+    assert!(
+        fixture.ok(&["inspect", "reviewed"])["workspace"]
+            .get("review")
+            .is_none()
+    );
+}
+
 fn scoped_command(fixture: &Fixture, workspace: &str, args: &[&str]) -> Output {
     fixture
         .command()

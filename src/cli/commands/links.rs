@@ -12,6 +12,7 @@ use crate::{
         link::{ItemKind, Link, LinkTarget, Selection},
     },
     git,
+    model::ReviewMark,
     protocol::Method,
 };
 
@@ -80,6 +81,67 @@ pub(super) async fn watch(ctx: &Context, items: ItemArgs, timeout: u64) -> Resul
     let workspace =
         ui::select_workspace(ctx, items.workspace, ui::Fallback::CurrentDirectory).await?;
     workspaces::watch_items(ctx, workspace, selected, timeout).await
+}
+
+pub(super) async fn ready(ctx: &Context, items: ItemArgs) -> Result<i32> {
+    let selection = Selection::parse(items.kind_or_url, items.item)?;
+    let workspace =
+        ui::select_workspace(ctx, items.workspace, ui::Fallback::CurrentDirectory).await?;
+    let marks: Vec<ReviewMark> = client::request(
+        &ctx.paths,
+        Method::MarkReady {
+            workspace,
+            selection,
+        },
+    )
+    .await?;
+    ctx.emit(
+        &format!("Ready for review:\n{}", review_lines(&marks)),
+        &marks,
+    )?;
+    Ok(0)
+}
+
+pub(super) async fn unready(ctx: &Context, items: ItemArgs) -> Result<i32> {
+    let selection = Selection::parse(items.kind_or_url, items.item)?;
+    let workspace =
+        ui::select_workspace(ctx, items.workspace, ui::Fallback::CurrentDirectory).await?;
+    let marks: Vec<ReviewMark> = client::request(
+        &ctx.paths,
+        Method::ClearReady {
+            workspace,
+            selection,
+        },
+    )
+    .await?;
+    let message = if marks.is_empty() {
+        "No ready-for-review marks".to_owned()
+    } else {
+        format!("Ready-for-review marks cleared:\n{}", review_lines(&marks))
+    };
+    ctx.emit(&message, &marks)?;
+    Ok(0)
+}
+
+/// One indented line per mark: its item, or the workspace, and whether new
+/// commits arrived since.
+pub(super) fn review_lines(marks: &[ReviewMark]) -> String {
+    marks
+        .iter()
+        .map(|mark| {
+            let item = match (mark.kind, &mark.url) {
+                (Some(kind), Some(url)) => format!("{kind} {url}"),
+                _ => "workspace".to_owned(),
+            };
+            let outdated = if mark.stale == Some(true) {
+                " (outdated)"
+            } else {
+                ""
+            };
+            format!("  {item}{outdated}")
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 pub(super) struct AddInput {

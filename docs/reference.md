@@ -750,6 +750,7 @@ setup_cmd = "scripts/setup.sh"        # Prepares the worktree; must exit 0
 post_setup_cmd = "scripts/attach.sh"  # After the workspace is ready, e.g. open tmux
 post_agent_exit_cmd = "scripts/exited.sh" # When a tracked agent exits
 post_done_cmd = "scripts/done.sh"     # After assignment completion, before cleanup
+post_ready_cmd = "scripts/ready.sh"   # After work is marked ready for review
 pre_remove_cmd = "scripts/detach.sh"  # Before the worktree is removed, e.g. close it
 post_remove_cmd = "scripts/removed.sh" # After removal, from the repository checkout
 ```
@@ -941,6 +942,32 @@ cleanup. `[pr_cleanup] enabled = false` pauses PR completion independently of id
 cleanup, globally on reload or per repository immediately; unlinking remains
 available. Previous PR registration and wait command spellings remain accepted.
 
+### Ready for review
+
+```sh
+shoal ready              # Mark every linked item, or the workspace when none are linked
+shoal ready pr 12        # Mark one linked PR; `ready issue` marks the linked issue
+shoal unready            # Withdraw all marks; select a kind or item like unlink
+```
+
+A mark says the agent considers the work for a linked issue or PR, or for the
+workspace itself when nothing is linked, ready for review at the current HEAD.
+Items are selected like `link`, and a selected item must be linked; a kind with
+no linked items is an error. Marking again moves the mark to the current HEAD.
+Marks never notify, record completion, or affect cleanup; use `shoal notify` to
+ask for attention. New commits make a mark outdated: `ls` shows
+`ready for review (outdated)`, and `status`, `inspect` and `ls --json` list
+`review` marks with `kind`, `url`, `head`, `created_at` and `stale`. Unlinking an
+item withdraws its mark, and removal deletes all marks. Each mark and withdrawal
+is a [workspace event](#workspace-events). Scoped callers mark only their own
+workspace; `--workspace` selects another one for unscoped callers.
+
+`post_ready_cmd` runs in the daemon after marks are recorded, under the same
+rules, precedence and limits as `post_done_cmd`, with `SHOAL_REVIEW_MARKS` holding
+the JSON array of marks just recorded. Failure records `hook_failed` and keeps
+the marks; every `shoal ready` runs it again. Forge actions belong in this hook or
+an event consumer: Shoal itself does not change the issue or PR.
+
 ### Automatic cleanup
 
 Idle, clean, fully pushed worktrees are removed after 10 minutes by default.
@@ -976,7 +1003,9 @@ Scoped callers cannot read events.
 Each JSON line has `type: "event"`, an increasing `id`, Unix-seconds `created_at`,
 workspace and repository UUIDs (`workspace_id`, `repository_id`), `name`, `path`,
 `branch`, `kind`, `cause`, and `error`. Kinds are `created`, `ready`, `setup_failed`,
-`completed`, `continued`, `removed`, `retained`, and `branch_changed`. Causes are
+`completed`, `continued`, `removed`, `retained`, `branch_changed`, `review_ready`
+and `review_cleared`. Review events add a `review` object with the mark's `kind`,
+`url` (both null for a workspace mark) and `head`. Causes are
 `manual`, `idle`, `issue`, `pr`, `completion`, or `missing_directory`, and null
 when inapplicable; `error` describes setup or cleanup failures. Branch changes
 are observed during daemon sweeps; detached HEAD has a null branch, and the
@@ -1153,7 +1182,8 @@ yourself that such processes stopped, use `--repair --acknowledge-stopped`; visi
 
 ### Scoped workspace commands
 
-PR watches, merge acknowledgements and `notify` are own-workspace scope exceptions.
+PR watches, merge acknowledgements, `notify`, `ready` and `unready` are
+own-workspace scope exceptions.
 Processes carrying a Shoal scope token are confined to their own worktree:
 `status`, inspect, execute, `merge`, `diff`, `setup`, and resources. They may read
 effective configuration for their own workspace, but cannot change configuration.

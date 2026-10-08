@@ -994,6 +994,12 @@ fn render_status(status: &WorkspaceStatus, json: bool) {
         }
         None => println!("PR watch:      none"),
     }
+    if workspace.review.is_empty() {
+        println!("Review:        none");
+    } else {
+        println!("Review:        ready for review");
+        println!("{}", super::links::review_lines(&workspace.review));
+    }
     println!("Notifications: {} unread", status.unread_notifications);
 }
 

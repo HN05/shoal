@@ -127,6 +127,7 @@ shoal rm fix-login            # Remove the workspace
 shoal link pr 42              # Link a PR (or paste its URL)
 shoal link pr 43              # Link another; all must merge before cleanup after done
 shoal watch                   # Wake on all linked item comments, checks, or closure
+shoal ready                   # Mark linked items ready for review at HEAD
 shoal unlink pr 43            # Cancel one linked PR
 shoal unlink pr               # Cancel linked PRs
 ```
