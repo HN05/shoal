@@ -1209,7 +1209,7 @@ pub(super) async fn pr(ctx: &Context, workspace: Option<String>, action: Action)
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let (message, value) = match &action {
         Action::Watch { .. } => (
-            "PR watch registered; once all merge, automatic done may stop commands and remove the workspace according to its cleanup policy.",
+            "PR watch registered; run shoal pr wait for updates and shoal done once the assignment is finished.",
             json!({"registered": true}),
         ),
         Action::Clear => ("All PR watches cancelled", json!({"registered": false})),

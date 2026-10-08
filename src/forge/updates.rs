@@ -75,7 +75,10 @@ impl Snapshot {
         if next.state != self.state {
             match next.state.as_str() {
                 "closed" => emit(UpdateKind::Closed, "PR closed without merging".into()),
-                "merged" => emit(UpdateKind::Merged, "PR merged".into()),
+                "merged" => emit(
+                    UpdateKind::Merged,
+                    "PR merged; run `shoal done` once the assignment is finished".into(),
+                ),
                 _ => {}
             }
         }
