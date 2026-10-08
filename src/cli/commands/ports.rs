@@ -59,7 +59,7 @@ pub(super) async fn run(
 
 /// Acquire a port, offering the daemon's suggestion when the preferred port
 /// is taken. Exit 2 means nothing was reserved.
-async fn acquire(
+pub(super) async fn acquire(
     ctx: &Context,
     workspace: String,
     name: String,

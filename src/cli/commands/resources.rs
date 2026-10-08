@@ -45,27 +45,7 @@ pub(super) async fn run(
                 name,
                 reason,
             };
-            let outcome = retry(wait, async || {
-                let method = Method::ResourceAcquire {
-                    workspace: workspace.clone(),
-                    request: request.clone(),
-                };
-                client::request::<Acquisition<ResourceLease>>(&ctx.paths, method).await
-            })
-            .await?;
-            outcome.finish(
-                ctx,
-                |lease| ctx.emit(&describe(&lease, Palette::stdout(ctx.json)), &lease),
-                |message| {
-                    json!({
-                        "acquired": false,
-                        "code": "resource_busy",
-                        "pool": request.pool,
-                        "resource": request.resource,
-                        "message": message,
-                    })
-                },
-            )
+            acquire(ctx, workspace, request, wait).await
         }
         Some(ResourceCommand::Release {
             pool,
@@ -90,6 +70,36 @@ pub(super) async fn run(
         Some(ResourceCommand::List { scope }) => overview(ctx, scope).await,
         None => overview(ctx, scope).await,
     }
+}
+
+/// Exit 2 means no compatible capacity or a pending or denied approval.
+pub(super) async fn acquire(
+    ctx: &Context,
+    workspace: String,
+    request: ResourceRequest,
+    wait: u64,
+) -> Result<i32> {
+    let outcome = retry(wait, async || {
+        let method = Method::ResourceAcquire {
+            workspace: workspace.clone(),
+            request: request.clone(),
+        };
+        client::request::<Acquisition<ResourceLease>>(&ctx.paths, method).await
+    })
+    .await?;
+    outcome.finish(
+        ctx,
+        |lease| ctx.emit(&describe(&lease, Palette::stdout(ctx.json)), &lease),
+        |message| {
+            json!({
+                "acquired": false,
+                "code": "resource_busy",
+                "pool": request.pool,
+                "resource": request.resource,
+                "message": message,
+            })
+        },
+    )
 }
 
 fn describe(lease: &ResourceLease, palette: Palette) -> String {

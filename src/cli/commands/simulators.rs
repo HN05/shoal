@@ -53,19 +53,7 @@ pub(super) async fn run(
                 runtime,
                 reason,
             };
-            let outcome = retry(wait, async || {
-                let method = Method::SimAcquire {
-                    workspace: workspace.clone(),
-                    request: request.clone(),
-                };
-                client::request::<Acquisition<Simulator>>(&ctx.paths, method).await
-            })
-            .await?;
-            outcome.finish(
-                ctx,
-                |sim| ctx.emit_styled(Style::Success, &describe(&sim), &sim),
-                |message| json!({"acquired": false, "code": "simulator_busy", "message": message}),
-            )
+            acquire(ctx, workspace, request, wait).await
         }
         Some(SimCommand::History {
             scope,
@@ -105,6 +93,28 @@ pub(super) async fn run(
         }
         None => overview(ctx, scope).await,
     }
+}
+
+/// Exit 2 means the simulator is busy or awaiting approval.
+pub(super) async fn acquire(
+    ctx: &Context,
+    workspace: String,
+    request: SimRequest,
+    wait: u64,
+) -> Result<i32> {
+    let outcome = retry(wait, async || {
+        let method = Method::SimAcquire {
+            workspace: workspace.clone(),
+            request: request.clone(),
+        };
+        client::request::<Acquisition<Simulator>>(&ctx.paths, method).await
+    })
+    .await?;
+    outcome.finish(
+        ctx,
+        |sim| ctx.emit_styled(Style::Success, &describe(&sim), &sim),
+        |message| json!({"acquired": false, "code": "simulator_busy", "message": message}),
+    )
 }
 
 async fn overview(ctx: &Context, scope: WorkspaceScope) -> Result<i32> {
