@@ -119,6 +119,7 @@ fn selection_preserves_relative_load_name_ties_and_shared_readers() -> Result<()
     ];
     let mut request = ResourceRequest {
         mode: Some(LockMode::Permit),
+        kind: None,
         pool: "pool".into(),
         name: "next".into(),
         resource: None,
@@ -149,5 +150,13 @@ fn selection_preserves_relative_load_name_ties_and_shared_readers() -> Result<()
     assert!(status.resources[2].read_available);
     assert!(!status.resources[2].write_available);
     assert_eq!(status.resources[2].readers, 2);
+    request.mode = None;
+    request.kind = Some(ResourceKind::Semaphore);
+    assert_eq!(
+        select_member(&definition, &request, &usage, 1)?.unwrap().0,
+        "alpha"
+    );
+    request.kind = Some(ResourceKind::Repo);
+    assert!(select_member(&definition, &request, &usage, 1).is_err());
     Ok(())
 }

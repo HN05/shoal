@@ -259,6 +259,7 @@ mod tests {
                     &workspace.id,
                     ResourceRequest {
                         mode: None,
+                        kind: None,
                         pool: "lock".into(),
                         name: "lock".into(),
                         resource: None,
@@ -428,6 +429,7 @@ mod tests {
         let lease =
             |pool: &str, mode: Option<crate::daemon::resources::LockMode>| ResourceRequest {
                 mode,
+                kind: None,
                 pool: pool.into(),
                 name: "default".into(),
                 resource: None,

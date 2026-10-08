@@ -194,10 +194,24 @@ pub struct ResourceLease {
     pub created_at: i64,
 }
 
+impl ResourceLease {
+    /// Leases record the member's kind through their mode and repository binding.
+    fn kind(&self) -> ResourceKind {
+        match (&self.repository, self.mode) {
+            (Some(_), _) => ResourceKind::Repo,
+            (None, LockMode::Permit) => ResourceKind::Semaphore,
+            (None, LockMode::Read | LockMode::Write) => ResourceKind::Rwlock,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ResourceRequest {
     #[serde(default)]
     pub mode: Option<LockMode>,
+    /// Restrict selection to members of this kind.
+    #[serde(default)]
+    pub kind: Option<ResourceKind>,
     pub pool: String,
     pub name: String,
     pub resource: Option<String>,
@@ -500,11 +514,12 @@ fn select_member<'a>(
     let eligible: Vec<_> = definition
         .resources
         .iter()
-        .filter(|(name, _)| {
+        .filter(|(name, settings)| {
             request
                 .resource
                 .as_ref()
                 .is_none_or(|wanted| wanted == *name)
+                && request.kind.is_none_or(|kind| kind == settings.kind)
         })
         .filter_map(|(name, settings)| {
             let mode = settings.mode(request.mode)?;
@@ -513,7 +528,7 @@ fn select_member<'a>(
         .collect();
     ensure!(
         !eligible.is_empty(),
-        "requested mode is incompatible with the selected resource(s); read/write require kind = rwlock, repo grants read only, permit requires semaphore"
+        "requested kind or mode is incompatible with the selected resource(s); read/write require kind = rwlock, repo grants read only, permit requires semaphore"
     );
     let load = |slots: u32, capacity: u32| u64::from(slots) * u64::from(capacity);
     Ok(eligible
@@ -872,7 +887,8 @@ fn renew_lease(
             && request
                 .resource
                 .as_ref()
-                .is_none_or(|r| r == &existing.resource),
+                .is_none_or(|r| r == &existing.resource)
+            && request.kind.is_none_or(|kind| kind == existing.kind()),
         "lease name already acquired with different settings; release it first"
     );
     let mut lease = existing.clone();
@@ -1066,6 +1082,7 @@ mod tests {
             assert!(named_lease(&db, "a", "other", "three")?.is_none());
             let request = ResourceRequest {
                 mode: None,
+                kind: None,
                 pool: "target".into(),
                 name: "three".into(),
                 resource: None,

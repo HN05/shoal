@@ -39,6 +39,7 @@ pub(super) async fn run(
                 ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
             let request = ResourceRequest {
                 mode,
+                kind: None,
                 pool,
                 resource,
                 name,
