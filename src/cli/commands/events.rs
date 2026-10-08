@@ -72,9 +72,6 @@ mod tests {
                     follow: true
                 }
             ));
-            protocol::write(&mut stream, &Response::new(request.id, Body::Ok))
-                .await
-                .unwrap();
             protocol::write(
                 &mut stream,
                 &Response::new(
