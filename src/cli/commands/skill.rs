@@ -9,7 +9,10 @@ use std::{
 use anyhow::{Context, Result, ensure};
 use serde_json::json;
 
-use crate::cli::{SkillCommand, SkillName};
+use crate::{
+    cli::{SkillCommand, SkillName},
+    paths::Paths,
+};
 
 /// Bundled skills by name; a packaged directory holds `<name>/SKILL.md` for each.
 const SKILLS: [(&str, &str); 2] = [
@@ -29,6 +32,7 @@ pub(super) fn run(
     name: SkillName,
     command: Option<&SkillCommand>,
     json_output: bool,
+    state_dir: Option<PathBuf>,
 ) -> Result<i32> {
     let Some(SkillCommand::Install { agent }) = command else {
         let (name, contents) = match name {
@@ -43,7 +47,7 @@ pub(super) fn run(
         return Ok(0);
     };
     ensure!(
-        !crate::env::is_scoped(),
+        !crate::env::inherits_scope(&Paths::state_dir(state_dir)?),
         "workspace processes cannot install user-level skills; run shoal skill install outside the scoped execution"
     );
     let home = crate::fsutil::home_dir()?;

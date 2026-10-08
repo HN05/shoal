@@ -31,13 +31,7 @@ impl Paths {
 
     pub fn new(state: Option<PathBuf>) -> Result<Self> {
         let home = crate::fsutil::home_dir()?;
-        ensure!(home.is_absolute(), "HOME must be an absolute path");
-        let state = state.unwrap_or_else(|| home.join(DEFAULT_STATE));
-        let state = if state.is_absolute() {
-            state
-        } else {
-            std::env::current_dir()?.join(state)
-        };
+        let state = Self::state_dir(state)?;
         let socket = state.join("daemon.sock");
         ensure!(
             socket.as_os_str().len() < MAX_SOCKET_PATH_LEN,
@@ -48,6 +42,18 @@ impl Paths {
             home,
             state,
             socket,
+        })
+    }
+
+    /// The state directory `new` selects, without requiring a usable socket path.
+    pub fn state_dir(state: Option<PathBuf>) -> Result<PathBuf> {
+        let home = crate::fsutil::home_dir()?;
+        ensure!(home.is_absolute(), "HOME must be an absolute path");
+        let state = state.unwrap_or_else(|| home.join(DEFAULT_STATE));
+        Ok(if state.is_absolute() {
+            state
+        } else {
+            std::env::current_dir()?.join(state)
         })
     }
 

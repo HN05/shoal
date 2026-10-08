@@ -13,7 +13,7 @@ pub(super) async fn run(ctx: &Context, command: Option<AccessCommand>) -> Result
     match command {
         Some(command @ (AccessCommand::Approve { .. } | AccessCommand::Deny { .. })) => {
             ensure!(
-                !crate::env::inherits_scope(&ctx.paths),
+                !crate::env::inherits_scope(&ctx.paths.state),
                 "workspace processes cannot decide access requests; ask the user to run this command"
             );
             let approve = matches!(command, AccessCommand::Approve { .. });

@@ -170,7 +170,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
     }
     // Skill delivery is independent of daemon state and socket-path limits.
     if let Some(Command::Skill { name, command }) = &cli.command {
-        return skill::run(*name, command.as_ref(), cli.json);
+        return skill::run(*name, command.as_ref(), cli.json, cli.state_dir.clone());
     }
     if let Some(path) = menu_path(cli.command.as_ref())
         && !Context::is_interactive(cli.json)
@@ -185,7 +185,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         None => menu::choose(&ctx).await?,
     };
     ensure!(
-        !(command.is_administrative() && env::inherits_scope(&ctx.paths)),
+        !(command.is_administrative() && env::inherits_scope(&ctx.paths.state)),
         "workspace processes cannot administer Shoal; ask the user to run this command"
     );
     match command {
@@ -201,7 +201,12 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             None => crate::config::named_commands::list(&ctx).await,
         },
         Command::Custom(args) => crate::config::named_commands::invoke(&ctx, args).await,
-        Command::Skill { name, command } => skill::run(name, command.as_ref(), ctx.json),
+        Command::Skill { name, command } => skill::run(
+            name,
+            command.as_ref(),
+            ctx.json,
+            Some(ctx.paths.state.clone()),
+        ),
         Command::Completions { shell } => {
             let script = shell::completions(shell)?;
             ctx.emit(&script, json!({"script": script}))?;

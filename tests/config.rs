@@ -78,33 +78,40 @@ fn clearing_scope_in_a_child_keeps_the_ancestor_scope_for_its_state() {
     let home = tempfile::tempdir().unwrap();
     // This test binary is the scoped parent: macOS hides the environment of
     // platform binaries such as /bin/sh, as it would an agent's shell.
-    let run = |state: Option<&Path>| {
+    let run = |args: &str, state: Option<&Path>| {
         let mut parent = support::isolated(home.path(), std::env::current_exe().unwrap());
         parent
             .args(["--exact", "unscoped_child", "--ignored", "--nocapture"])
             .env("XDG_CONFIG_HOME", home.path().join("xdg"))
-            .env("SHOAL_SCOPE_TOKEN", "test-scope");
+            .env("SHOAL_SCOPE_TOKEN", "test-scope")
+            .env("CHILD_ARGS", args);
         if let Some(state) = state {
             parent.env("CHILD_STATE_DIR", state);
         }
         parent.output().unwrap()
     };
-    let output = run(None);
-    assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("cannot administer"));
+    let config = "config set default_agent codex";
+    for (args, refusal) in [
+        (config, "cannot administer"),
+        ("skill install", "cannot install user-level skills"),
+    ] {
+        let output = run(args, None);
+        assert!(!output.status.success());
+        assert!(String::from_utf8_lossy(&output.stderr).contains(refusal));
+    }
     assert!(!home.path().join("xdg").exists());
-    let output = run(Some(&home.path().join("other-state")));
+    let output = run(config, Some(&home.path().join("other-state")));
     assert!(output.status.success(), "{output:?}");
 }
 
-/// Runs an administrative command with the scope token cleared, as an agent's
-/// child could, and exits with its status.
+/// Runs `CHILD_ARGS` with the scope token cleared, as an agent's child could,
+/// and exits with its status.
 #[test]
 #[ignore = "helper launched by clearing_scope_in_a_child_keeps_the_ancestor_scope_for_its_state"]
 fn unscoped_child() {
     let mut command = Command::new(env!("CARGO_BIN_EXE_shoal"));
     command
-        .args(["config", "set", "default_agent", "codex"])
+        .args(std::env::var("CHILD_ARGS").unwrap().split_whitespace())
         .env_remove("SHOAL_SCOPE_TOKEN");
     if let Some(state) = std::env::var_os("CHILD_STATE_DIR") {
         command.env("SHOAL_STATE_DIR", state);

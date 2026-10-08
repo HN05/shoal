@@ -169,13 +169,14 @@ pub fn is_scoped() -> bool {
     std::env::var_os(SCOPE_TOKEN).is_some()
 }
 
-/// True when this process or an ancestor carries scope for `paths`' state, so
-/// clearing Shoal variables in a child does not lift its execution's limits.
-pub fn inherits_scope(paths: &Paths) -> bool {
+/// True when this process or an ancestor carries scope for the `state`
+/// directory, so clearing Shoal variables in a child does not lift its
+/// execution's limits.
+pub fn inherits_scope(state: &std::path::Path) -> bool {
     is_scoped()
         || crate::process::identity::scoped_ancestor_state_dirs()
             .iter()
-            .any(|dir| same_directory(dir, &paths.state))
+            .any(|dir| same_directory(dir, state))
 }
 
 fn same_directory(a: &std::path::Path, b: &std::path::Path) -> bool {
