@@ -507,10 +507,14 @@ Grant reuse validates all records for the workspace and target, including releas
 grants, before matching typed settings. Malformed history outside those selections
 does not block access; listings validate every selected record.
 
-Port, simulator, and generic resource commands share the same shape: the bare
-noun (or `list`) combines relevant configuration or capacity with leases;
-`acquire` and `release` change ownership. Simulator machine inventory remains
-under `sim catalog`. All-workspace overviews that need independent per-workspace
+Leases use top-level verbs that take the kind first: `acquire <kind>`,
+`release [kind [item]]` and `leases [kind]`, with `--workspace` instead of a
+positional workspace. Like `unlink`, omitting the item or kind widens release
+to every lease of that kind or in the workspace; listings combine configuration
+or capacity with leases. Holds stay separate because they keep a workspace
+rather than share capacity. The per-noun `port`, `sim` and `resource`
+subcommands remain accepted but hidden; simulator machine inventory and audit
+history remain under `sim`. All-workspace overviews that need independent per-workspace
 reads use bounded concurrency, retain workspace order and report every failure.
 
 ## Removal and recovery

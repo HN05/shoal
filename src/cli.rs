@@ -300,8 +300,9 @@ pub enum Command {
         #[arg(long, conflicts_with = "workspace")]
         all: bool,
     },
-    /// Reserve and release workspace TCP ports.
+    /// Reserve and release workspace TCP ports; superseded by acquire, release, and leases.
     #[command(
+        hide = true,
         args_conflicts_with_subcommands = true,
         mut_arg("workspace", |arg| arg.help("Show the effective configuration and reservations for this workspace")),
         mut_arg("all", |arg| arg.help("Show every managed workspace"))
@@ -317,8 +318,9 @@ pub enum Command {
         #[command(subcommand)]
         command: Option<AccessCommand>,
     },
-    /// Acquire and release shared resource permits.
+    /// Acquire and release shared resource permits; superseded by acquire, release, and leases.
     #[command(
+        hide = true,
         args_conflicts_with_subcommands = true,
         mut_arg("workspace", |arg| arg.help("Show effective capacity and leases for this workspace")),
         mut_arg("all", |arg| arg.help("Show every managed workspace"))
@@ -329,7 +331,7 @@ pub enum Command {
         #[command(flatten)]
         scope: WorkspaceScope,
     },
-    /// Acquire and release Xcode simulators.
+    /// Show the simulator catalog and clean-device history.
     #[command(
         args_conflicts_with_subcommands = true,
         mut_arg("workspace", |arg| arg.help("Show configured profiles, capacity, and devices for this workspace")),
@@ -783,11 +785,13 @@ pub enum SimCommand {
     /// Show available device types, installed runtimes, and machine profiles.
     Catalog,
     /// Show configured profiles, capacity, and managed instances.
+    #[command(hide = true)]
     List {
         #[command(flatten)]
         scope: WorkspaceScope,
     },
     /// Acquire exclusive use; reuse the same named lease on repeated requests.
+    #[command(hide = true)]
     Acquire {
         workspace: Option<String>,
         #[arg(long, default_value = "default")]
@@ -819,6 +823,7 @@ pub enum SimCommand {
         before: Option<i64>,
     },
     /// End exclusive use; the idle policy controls shutdown and deletion.
+    #[command(hide = true)]
     Release {
         #[arg(default_value = "default")]
         name: String,
