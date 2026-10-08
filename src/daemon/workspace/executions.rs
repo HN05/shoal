@@ -359,7 +359,7 @@ impl Manager {
         exit_code: Option<i32>,
     ) -> Result<bool> {
         let scan = match exit_code {
-            Some(_) => process::scan(HashSet::from([id.clone()])).await.ok(),
+            Some(_) => Some(process::scan(HashSet::from([id.clone()])).await),
             None => None,
         };
         self.finish_execution_after_scan(id, kind, exit_code, scan)
@@ -371,23 +371,10 @@ impl Manager {
         id: String,
         kind: ExecutionKind,
         exit_code: Option<i32>,
-        scan: Option<process::Scan>,
+        scan: Option<Result<process::Scan>>,
     ) -> Result<bool> {
-        let complete = if let Some(scan) = scan {
-            let query_id = id.clone();
-            match self
-                .store
-                .run(move |db| store::find_execution(db, &query_id))
-                .await?
-            {
-                Some(execution) => Processes::inspect(&execution, &scan)
-                    .await
-                    .is_ok_and(|processes| processes.command_stopped()),
-                None => false,
-            }
-        } else {
-            false
-        };
+        let issue = self.execution_completion_issue(&id, scan).await?;
+        let complete = issue.is_none();
         let mut connections = self.connections.lock().await;
         let record_id = id.clone();
         self.store
@@ -396,9 +383,12 @@ impl Manager {
                 if kind == ExecutionKind::Setup {
                     let code = exit_code.unwrap_or(1);
                     let error = (!(complete && code == 0)).then(|| {
-                        format!(
-                            "setup failed (exit {code}, processes stopped: {complete}); retry with shoal setup"
-                        )
+                        let reason = issue.as_ref().map_or(String::new(), |issue| format!("; {issue}"));
+                        if code == 0 {
+                            format!("setup command exited successfully (exit 0), but process verification is incomplete{reason}; inspect with shoal doctor")
+                        } else {
+                            format!("setup failed (exit {code}, processes stopped: {complete}){reason}; retry with shoal setup")
+                        }
                     });
                     let state = if error.is_none() {
                         WorkspaceState::Ready
@@ -435,6 +425,34 @@ impl Manager {
             .await
             .retain(|_, caller| caller.execution_id() != Some(id.as_str()));
         Ok(complete)
+    }
+
+    async fn execution_completion_issue(
+        &self,
+        id: &str,
+        scan: Option<Result<process::Scan>>,
+    ) -> Result<Option<String>> {
+        let scan = match scan {
+            Some(Ok(scan)) => scan,
+            Some(Err(error)) => return Ok(Some(format!("process inventory failed: {error:#}"))),
+            None => {
+                return Ok(Some(
+                    "wrapper disconnected without reporting its exit".into(),
+                ));
+            }
+        };
+        let query_id = id.to_owned();
+        let execution = self
+            .store
+            .run(move |db| store::find_execution(db, &query_id))
+            .await?;
+        let Some(execution) = execution else {
+            return Ok(Some("execution record is missing".into()));
+        };
+        Ok(match Processes::inspect(&execution, &scan).await {
+            Ok(processes) => processes.completion_issue(),
+            Err(error) => Some(format!("process inspection failed: {error:#}")),
+        })
     }
 
     pub async fn stop_workspace(&self, selector: &str) -> Result<()> {

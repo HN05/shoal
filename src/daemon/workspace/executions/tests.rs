@@ -163,7 +163,7 @@ async fn registration_publishes_atomically_and_preserves_stop_during_pre_setup()
             started.plan.id,
             ExecutionKind::Setup,
             Some(1),
-            Some(process::Scan::default()),
+            Some(Ok(process::Scan::default())),
         )
         .await
         .unwrap();
@@ -244,7 +244,12 @@ async fn unreadable_process_keeps_finished_execution_unknown() {
         };
         assert!(
             !manager
-                .finish_execution_after_scan(started.plan.id.clone(), kind, Some(0), Some(scan()))
+                .finish_execution_after_scan(
+                    started.plan.id.clone(),
+                    kind,
+                    Some(0),
+                    Some(Ok(scan()))
+                )
                 .await
                 .unwrap()
         );
@@ -282,7 +287,12 @@ async fn unreadable_process_keeps_finished_execution_unknown() {
         child.wait().await.unwrap();
         assert!(
             manager
-                .finish_execution_after_scan(started.plan.id.clone(), kind, Some(0), Some(scan()))
+                .finish_execution_after_scan(
+                    started.plan.id.clone(),
+                    kind,
+                    Some(0),
+                    Some(Ok(scan()))
+                )
                 .await
                 .unwrap()
         );
@@ -336,7 +346,7 @@ async fn recorded_child_and_unverified_group_block_completion_without_markers() 
                     started.plan.id.clone(),
                     ExecutionKind::Setup,
                     Some(0),
-                    Some(process::Scan::default())
+                    Some(Ok(process::Scan::default()))
                 )
                 .await
                 .unwrap()
@@ -346,6 +356,19 @@ async fn recorded_child_and_unverified_group_block_completion_without_markers() 
             WorkspaceState::Failed
         );
         assert!(!setup_finished(&manager, &workspace).await);
+        let error = manager
+            .workspace(&workspace.id)
+            .await
+            .unwrap()
+            .error
+            .unwrap();
+        assert!(error.contains("setup command exited successfully (exit 0)"));
+        assert!(error.contains(&format!("PID {}", identity.pid)), "{error}");
+        assert!(error.contains(if recorded_child {
+            "owned processes still running"
+        } else {
+            "unverified process-group survivors"
+        }));
         child.kill().await.unwrap();
         child.wait().await.unwrap();
         // The reporting wrapper is still alive but its command/group is gone.
@@ -355,10 +378,38 @@ async fn recorded_child_and_unverified_group_block_completion_without_markers() 
                     started.plan.id,
                     ExecutionKind::Setup,
                     Some(0),
-                    Some(process::Scan::default())
+                    Some(Ok(process::Scan::default()))
                 )
                 .await
                 .unwrap()
         );
     }
+}
+
+#[tokio::test]
+async fn setup_preserves_inventory_failure_in_its_retained_diagnostic() {
+    let (_root, manager, workspace) = fixture("exit 0").await;
+    let started = manager
+        .begin_execution(&workspace.id, None, ExecutionKind::Setup, None)
+        .await
+        .unwrap();
+    assert!(
+        !manager
+            .finish_execution_after_scan(
+                started.plan.id,
+                ExecutionKind::Setup,
+                Some(0),
+                Some(Err(anyhow::anyhow!("inventory fixture refused"))),
+            )
+            .await
+            .unwrap()
+    );
+    let workspace = manager.workspace(&workspace.id).await.unwrap();
+    assert_eq!(workspace.state, WorkspaceState::Failed);
+    assert!(
+        workspace
+            .error
+            .unwrap()
+            .contains("process inventory failed: inventory fixture refused")
+    );
 }

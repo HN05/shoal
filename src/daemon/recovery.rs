@@ -39,6 +39,8 @@ pub struct ExecutionReport {
     pub wrapper_alive: bool,
     pub processes: Vec<process::Identity>,
     pub unverified_processes: Vec<process::Identity>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unreadable_processes: Vec<process::Identity>,
     pub cleared: bool,
     pub notes: Vec<String>,
 }
@@ -326,10 +328,10 @@ impl Manager {
         if !processes.launch_recorded {
             notes.push("Execution has incomplete launch identity; explicit --acknowledge-stopped is required after checking its processes".into());
         }
-        if processes.unreadable > 0 {
+        if !processes.unreadable.is_empty() {
             notes.push(format!(
                 "{} same-user process environments could not be inspected",
-                processes.unreadable
+                processes.unreadable.len()
             ));
         }
         if !unverified.is_empty() {
@@ -377,6 +379,7 @@ impl Manager {
             wrapper_alive: processes.wrapper.is_some(),
             processes: processes.owned,
             unverified_processes: unverified,
+            unreadable_processes: processes.unreadable,
             cleared,
             notes,
         })
