@@ -3,6 +3,7 @@ use anyhow::{Result, ensure};
 
 pub const MAX_NAME_LEN: usize = 64;
 pub const MAX_REASON_LEN: usize = 256;
+pub const MAX_MESSAGE_LEN: usize = 512;
 
 /// Portable identifier: ASCII letters, digits, `-` or `_`, starting with a
 /// letter or digit. Used for workspaces, repositories, and simulator profiles.
@@ -41,6 +42,18 @@ pub fn reason(kind: &str, value: Option<&str>) -> Result<()> {
             && text.len() <= MAX_REASON_LEN
             && !text.contains(['\n', '\r'])),
         "{kind} reason must be a nonempty single line (max {MAX_REASON_LEN} bytes)"
+    );
+    Ok(())
+}
+
+/// Single-line text an agent sends the user; control characters would corrupt
+/// terminal output and its notification escape sequences.
+pub fn message(value: &str) -> Result<()> {
+    ensure!(
+        !value.trim().is_empty()
+            && value.len() <= MAX_MESSAGE_LEN
+            && !value.chars().any(char::is_control),
+        "messages must be a nonempty single line without control characters (max {MAX_MESSAGE_LEN} bytes)"
     );
     Ok(())
 }

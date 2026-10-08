@@ -61,13 +61,15 @@ instructions instead of the PR delivery guidance below.
   environments carry a scope token and get own-worktree access
   only; workspace allocation/removal/recovery and shared repository/service
   administration stay denied, while own-workspace setup, rename, PR registration,
-  merge acknowledgements, assignment continuation/completion, own-repository sync and
+  merge acknowledgements, messages to the user, assignment continuation/completion,
+  own-repository sync and
   effective-configuration reads are allowed;
   only unscoped callers export or revoke environment tokens. Export requires a
   ready, verified worktree; tokens persist across restart until revocation or
   workspace removal, without execution tracking or cleanup protection.
   Notifications are read by the unscoped user only and never fail the
-  operation they record. Workspace events are an unscoped, durable lifecycle
+  operation they record; an agent message is the operation, so its failure is
+  returned, and it never records completion. Workspace events are an unscoped, durable lifecycle
   stream with replay gaps, independent of notification read state. Only explicit
   done completes an assignment unless `[done] automatic` is enabled. PR cleanup
   defaults on and removes a completed workspace only after every watched PR merges

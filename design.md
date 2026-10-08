@@ -397,11 +397,13 @@ changing recorded ownership.
 
 Notifications stay in the terminal: the daemon records what a user would
 otherwise miss (busy resources and who holds them, port conflicts, exits of
-shortcut-launched agents, workspaces it removed or retained on its own) and the
+shortcut-launched agents, workspaces it removed or retained on its own, messages
+a workspace's agent sends to ask for attention) and the
 CLI shows them once, on request or as a followed stream that also raises the
 terminal's own notifications (OSC 9); `ls`, workspace `status`, and `daemon status` only count them. Recording never fails the operation it describes,
-repeated polled conflicts collapse until read, and scoped processes cannot read
-them. `post_agent_exit_cmd` exposes tracked-agent exit notifications to user
+repeated polled conflicts and identical messages collapse until read, and scoped
+processes cannot read them. Agent messages are separate from completion: telling
+the user a PR is ready neither ends the assignment nor affects cleanup. `post_agent_exit_cmd` exposes tracked-agent exit notifications to user
 integrations while the workspace is ready, using normal configuration precedence
 and daemon hook rules with the agent name, reported code, and process-completion
 status. Failure notifies without changing the exit result or marking completion;

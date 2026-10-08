@@ -30,11 +30,14 @@ states!(NotificationKind {
     CleanupFailed => "cleanup_failed",
     /// A best-effort event hook failed.
     HookFailed => "hook_failed",
+    /// A workspace process asked for the user's attention.
+    AgentMessage => "agent_message",
 });
 
 impl NotificationKind {
-    /// Polled operations repeat identical events every retry or sweep; those
-    /// collapse into one unread notification; completed events remain distinct.
+    /// Polled operations repeat identical events every retry or sweep, and
+    /// agents may repeat a message; those collapse into one unread
+    /// notification; completed events remain distinct.
     fn collapses(self) -> bool {
         !matches!(
             self,
@@ -81,6 +84,30 @@ impl Manager {
         kind: NotificationKind,
         message: impl Into<String>,
     ) {
+        if let Err(error) = self.record_notification(workspace, kind, message).await {
+            eprintln!("notification not recorded: {error:#}");
+        }
+    }
+
+    /// Record a message a workspace process sends the user. Unlike daemon
+    /// events, the message is the whole operation, so failures are returned.
+    pub async fn send_message(&self, selector: &str, message: String) -> Result<()> {
+        crate::validate::message(&message)?;
+        let workspace = self.workspace(selector).await?;
+        self.record_notification(
+            Some(&workspace.name),
+            NotificationKind::AgentMessage,
+            message,
+        )
+        .await
+    }
+
+    async fn record_notification(
+        &self,
+        workspace: Option<&str>,
+        kind: NotificationKind,
+        message: impl Into<String>,
+    ) -> Result<()> {
         let message = message.into();
         let workspace = workspace.map(str::to_owned);
         let recorded = self
@@ -116,14 +143,11 @@ impl Manager {
                 tx.commit()?;
                 Ok(Some(id))
             })
-            .await;
-        match recorded {
-            Ok(Some(id)) => {
-                self.notifications_changed.send_replace(id);
-            }
-            Ok(None) => {}
-            Err(error) => eprintln!("notification not recorded: {error:#}"),
+            .await?;
+        if let Some(id) = recorded {
+            self.notifications_changed.send_replace(id);
         }
+        Ok(())
     }
 
     /// Oldest first. `unread_only` gives the oldest unread notifications, so a
@@ -270,6 +294,79 @@ mod tests {
         let after = manager.notifications_after(last, 50).await.unwrap();
         assert_eq!(after.len(), 1);
         assert!(after[0].id > last && !after[0].read);
+    }
+
+    #[tokio::test]
+    async fn agent_messages_are_validated_collapsed_and_confined_to_their_workspace() {
+        use crate::{
+            daemon::scope::{self, Caller},
+            protocol::Method,
+            test_support::repository,
+        };
+        let (temp, manager) = manager().await;
+        let checkout = repository(temp.path(), "repo");
+        let repo = manager
+            .register_repository(checkout.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        let workspace = manager
+            .create_workspace(&repo.id, "sender".into(), None, None, None)
+            .await
+            .unwrap();
+        let other = manager
+            .create_workspace(&repo.id, "other".into(), None, None, None)
+            .await
+            .unwrap();
+        for invalid in ["", "  ", "two\nlines", "bell\x07", &"x".repeat(513)] {
+            assert!(
+                manager
+                    .send_message(&workspace.id, invalid.into())
+                    .await
+                    .is_err(),
+                "{invalid:?}"
+            );
+        }
+        for _ in 0..2 {
+            manager
+                .send_message(&workspace.id, "PR #12 is ready to merge".into())
+                .await
+                .unwrap();
+        }
+        let unread = manager.notifications(true, 50).await.unwrap();
+        assert_eq!(unread.len(), 1);
+        assert_eq!(unread[0].workspace.as_deref(), Some("sender"));
+        assert_eq!(unread[0].kind, NotificationKind::AgentMessage);
+        assert_eq!(unread[0].message, "PR #12 is ready to merge");
+        manager
+            .issue_scope(
+                "scope".into(),
+                Caller {
+                    workspace_id: workspace.id.clone(),
+                    execution: None,
+                },
+            )
+            .await;
+        for (target, allowed) in [(&workspace.name, true), (&other.name, false)] {
+            let mut method = Method::SendMessage {
+                workspace: target.clone(),
+                message: "hello".into(),
+            };
+            assert_eq!(
+                scope::authorize(&manager, Some("scope"), &mut method)
+                    .await
+                    .is_ok(),
+                allowed
+            );
+        }
+        let mut method = Method::ListNotifications {
+            unread_only: true,
+            limit: 50,
+        };
+        assert!(
+            scope::authorize(&manager, Some("scope"), &mut method)
+                .await
+                .is_err()
+        );
     }
 
     #[tokio::test]

@@ -36,13 +36,15 @@ when behavior changes, distinguishing decisions from proposals.
   explicit conflicts.
 - Workspace commands inherit a scope token. Enforce own-worktree resource access
   in the daemon and deny workspace allocation/removal/recovery and shared
-  repository/service administration; own-workspace setup, rename, issue/PR links and watches, and merge
-  acknowledgements, assignment continuation/completion and own-repository sync are allowed.
+  repository/service administration; own-workspace setup, rename, issue/PR links and watches, merge
+  acknowledgements, messages to the user, assignment continuation/completion and own-repository
+  sync are allowed.
   Scope is cooperative, not a boundary against hostile same-user processes.
 - Notifications are daemon records the CLI shows: record them where the daemon
   decides (busy resources, port conflicts, agent-shortcut exits, its own
   removals), never fail the operation for one, collapse repeated polled events
-  until read, and deny them to scoped callers.
+  until read, and deny reading them to scoped callers. A scoped caller may send
+  the user a message for its own workspace, separate from completion.
 - `shoal sync` fetches the default branch's remote and fast-forwards the local
   default branch under the creation refresh rules. It never pushes or moves
   workspace branches; agents update their branch from it with plain Git.

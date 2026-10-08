@@ -523,6 +523,10 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::ListNotifications { unread_only, limit } => {
             Body::Notifications(manager.notifications(unread_only, limit).await?)
         }
+        Method::SendMessage { workspace, message } => {
+            manager.send_message(&workspace, message).await?;
+            Body::Ok
+        }
         Method::MarkNotificationsRead { ids } => {
             manager.mark_notifications_read(ids).await?;
             Body::Ok
