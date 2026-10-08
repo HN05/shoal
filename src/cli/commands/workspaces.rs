@@ -1170,32 +1170,6 @@ pub(super) async fn inspect(ctx: &Context, workspace: Option<String>) -> Result<
     Ok(0)
 }
 
-pub(super) async fn pause(
-    ctx: &Context,
-    workspace: Option<String>,
-    execution: Option<String>,
-) -> Result<i32> {
-    ensure!(
-        !crate::env::is_scoped(),
-        "pause agents outside scoped executions"
-    );
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    request::<()>(
-        &ctx.paths,
-        Method::WorkspacePause {
-            workspace,
-            execution,
-        },
-    )
-    .await?;
-    ctx.emit_styled(
-        Style::Success,
-        "Agents paused; restore with shoal resume",
-        json!({"paused": true}),
-    )?;
-    Ok(0)
-}
-
 pub(super) async fn stop(ctx: &Context, workspace: Option<String>) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     request::<()>(&ctx.paths, Method::StopWorkspace { workspace }).await?;
@@ -1348,7 +1322,7 @@ pub(super) async fn exec(
     command: Vec<OsString>,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    execution::run(&ctx.paths, workspace, command, None).await
+    execution::run_command(&ctx.paths, workspace, command).await
 }
 
 pub(super) async fn continue_work(ctx: &Context, workspace: Option<String>) -> Result<i32> {

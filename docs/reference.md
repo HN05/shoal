@@ -151,12 +151,12 @@ readings, manual stop/removal, lost connections, uncertain surviving processes, 
 changed workspace ownership prevent recovery. Reloading with recovery disabled
 finishes waiting agents at once, keeping their records for `shoal resume`.
 
-`shoal pause [workspace]` stops connected tracked agents through
-their wrappers and saves recovery records, retaining work and resource leases.
-Use `--execution <id>` to pause one agent. Ordinary commands keep running;
-disconnected executions require `shoal doctor`. Pause cancels a waiting automatic
+`shoal stop [workspace]` stops tracked agents and commands through their wrappers,
+retaining work and resource leases. Agents save recovery records; commands started
+with `exec` or `run` save their arguments without being rerun. Setup, landing and other internal commands save nothing.
+Disconnected executions require `shoal doctor`. Stopping cancels a waiting automatic
 restore and requires explicit resume even with `[agent_resume]` configured.
-Run pause and resume outside scoped executions.
+Run stop and resume outside scoped executions.
 
 `shoal resume [workspace]` restores a saved agent recovery record after its
 wrapper exits; use `--execution <id>` when several agents stopped in one workspace.
@@ -169,7 +169,7 @@ the latest session in the workspace. Other agents require a configured restore
 command. Resume shows the saved pressure reason. Records
 survive daemon restart and suppress idle cleanup until the replacement process
 is registered or the workspace is removed. A failed launch retains its record;
-a later pause or overload creates a record for the replacement execution. The original
+a later stop or overload creates a record for the replacement execution. The original
 task prompt is never replayed.
 
 ## Workspaces
@@ -235,7 +235,7 @@ shoal status fix-login                   # Activity, changes, held resources, an
 shoal status pr 12                       # Workspaces that link PR 12
 shoal status resource devices            # Workspaces that hold a devices lease
 shoal inspect fix-login
-shoal stop fix-login                     # Stop commands; keep the worktree
+shoal stop fix-login                     # Stop agents and commands for shoal resume
 shoal rm fix-login                       # Remove; choose what to keep if work differs
 ```
 

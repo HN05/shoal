@@ -84,7 +84,7 @@ async fn adjacent_controls_child() {
                 "-c".into(),
                 "while :; do sleep 1; done".into(),
             ],
-            &Mode::Command,
+            &Mode::Command { record: false },
             None,
             None,
         )
@@ -100,7 +100,7 @@ async fn adjacent_controls_child() {
         ));
         assert!(recovery::wait(&mut stream).await.unwrap().is_none());
         assert!(
-            report_completion(&mut stream, 143, &Mode::Command)
+            report_completion(&mut stream, 143, &Mode::Command { record: false })
                 .await
                 .unwrap()
         );

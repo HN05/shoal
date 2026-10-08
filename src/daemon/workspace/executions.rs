@@ -55,6 +55,14 @@ pub(super) enum StopPolicy {
     ForRemoval,
 }
 
+/// Whether a workspace stop saves agent sessions and interrupted commands for
+/// `shoal resume`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StopRecords {
+    Save,
+    Skip,
+}
+
 /// The connection must retain the Git guard through execution completion.
 #[derive(Debug)]
 pub(crate) struct StartedExecution {
@@ -420,6 +428,7 @@ impl Manager {
             .await?;
         connections.remove(&id);
         self.agents.lock().await.remove(&id);
+        self.resumable_stops.lock().await.remove(&id);
         self.scopes
             .lock()
             .await
@@ -455,13 +464,18 @@ impl Manager {
         })
     }
 
-    pub async fn stop_workspace(&self, selector: &str) -> Result<()> {
+    pub async fn stop_workspace(&self, selector: &str, records: StopRecords) -> Result<()> {
         let workspace = self.workspace(selector).await?;
         self.reserve_lifecycle(&workspace.id, WorkspaceState::Stopping)
             .await?;
-        let result = self
-            .stop_executions(&workspace.id, StopPolicy::RequireCompleteProof)
-            .await;
+        let result = async {
+            if records == StopRecords::Save {
+                self.save_records_on_stop(&workspace.id).await?;
+            }
+            self.stop_executions(&workspace.id, StopPolicy::RequireCompleteProof)
+                .await
+        }
+        .await;
         self.set_state(
             &workspace.id,
             workspace.state,
@@ -473,6 +487,20 @@ impl Manager {
         )
         .await?;
         result
+    }
+
+    /// Wrappers decide what to save; setup and landing save nothing.
+    async fn save_records_on_stop(&self, workspace_id: &str) -> Result<()> {
+        let executions = self.inspect_workspace(workspace_id).await?.executions;
+        self.resumable_stops
+            .lock()
+            .await
+            .extend(executions.into_iter().map(|execution| execution.id));
+        Ok(())
+    }
+
+    pub(crate) async fn stop_saves_records(&self, id: &str) -> bool {
+        self.resumable_stops.lock().await.contains(id)
     }
 
     async fn stop_disconnected(&self, execution: &Execution, policy: StopPolicy) -> Result<()> {

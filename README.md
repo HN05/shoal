@@ -120,8 +120,7 @@ shoal inspect fix-login       # Detailed workspace and execution records
 shoal notifications           # Conflicts, finished agents, and removals you missed
 shoal notify "PR #12 is ready to merge"  # Notify the user from a workspace
 shoal events --follow --json  # Stream workspace lifecycle events
-shoal stop fix-login          # Stop managed commands; keep the workspace
-shoal pause fix-login         # Stop agents; save sessions for shoal resume
+shoal stop fix-login          # Stop agents and commands; save them for shoal resume
 shoal done fix-login          # Mark finished and request safe cleanup
 shoal done --keep fix-login   # Mark finished; keep for review
 shoal done --cleanup fix-login # Override a configured keep default
@@ -178,7 +177,7 @@ for wrapper setup.
 Memory overload protection stops tracked agents by default while retaining their
 workspaces and leases. To opt out, run `shoal config set overload.memory.enabled
 false`. See [overload protection](docs/reference.md#overload-protection)
-for thresholds and timing. Pause agents manually with `shoal pause`, then restore
+for thresholds and timing. Stop agents manually with `shoal stop`, then restore
 a stopped session with `shoal resume`. Codex and Claude automatically continue
 the workspace session after load recovers; `[agent_resume]` overrides their restore
 command or enables recovery for other agents.

@@ -68,9 +68,10 @@ never replay the original task prompt. Keep waiting wrappers tracked, serialize
 restores, and preserve manual recovery across restarts. Saved recovery represents
 unfinished work until restored or explicitly discarded.
 Agent metadata is transient, so restart cannot select disconnected survivors.
-Manual pause stops connected tracked agents through their wrappers and saves
-session recovery for explicit resume, preserving work and leases. It may select
-one execution; ordinary commands continue and scoped callers cannot pause agents.
+Manual stop ends connected tracked executions through their wrappers, preserving
+work and leases. Agents save session recovery for explicit resume; user commands
+save their arguments to be reported on resume, never rerun, because replaying an
+arbitrary command is not known to be safe. Scoped callers cannot stop executions.
 
 Use short transactions for atomic claims. Closed Shoal enums with matching display and
 wire names use one macro to share explicit spellings across conversions and reject

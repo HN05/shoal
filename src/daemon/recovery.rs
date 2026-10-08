@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, path::PathBuf};
 
 use crate::{
-    daemon::workspace::Manager,
+    daemon::workspace::{Manager, StopRecords},
     model::Workspace,
     process::{execution::Processes, identity as process},
     state::{ExecutionState, WorkspaceState, states},
@@ -148,7 +148,7 @@ impl Manager {
             );
             if running
                 && quiescent
-                && let Err(error) = self.stop_workspace(&workspace.id).await
+                && let Err(error) = self.stop_workspace(&workspace.id, StopRecords::Skip).await
             {
                 report.issues.push(format!("connected stop: {error:#}"));
             }

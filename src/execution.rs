@@ -72,8 +72,11 @@ pub fn exit_code(status: ExitStatus) -> i32 {
 
 #[derive(Clone)]
 enum Mode {
-    /// An arbitrary command chosen by the caller.
-    Command,
+    /// An arbitrary command chosen by the caller; `record` keeps it for
+    /// `shoal resume` to report when `shoal stop` interrupts it.
+    Command {
+        record: bool,
+    },
     Recovery {
         record: PathBuf,
     },
@@ -94,7 +97,9 @@ enum Mode {
 impl Mode {
     fn kind(&self) -> ExecutionKind {
         match self {
-            Self::Command | Self::Recovery { .. } | Self::Detached { .. } => ExecutionKind::Command,
+            Self::Command { .. } | Self::Recovery { .. } | Self::Detached { .. } => {
+                ExecutionKind::Command
+            }
             Self::Land { .. } => ExecutionKind::Land,
             Self::Setup { .. } => ExecutionKind::Setup,
         }
@@ -113,7 +118,27 @@ pub async fn run(
     agent: Option<String>,
 ) -> Result<i32> {
     ensure!(!command.is_empty(), "a command is required after --");
-    run_tracked(paths, workspace, command, Mode::Command, agent).await
+    run_tracked(
+        paths,
+        workspace,
+        command,
+        Mode::Command { record: false },
+        agent,
+    )
+    .await
+}
+
+/// A command the user chose, recorded when `shoal stop` interrupts it.
+pub async fn run_command(paths: &Paths, workspace: String, command: Vec<OsString>) -> Result<i32> {
+    ensure!(!command.is_empty(), "a command is required after --");
+    run_tracked(
+        paths,
+        workspace,
+        command,
+        Mode::Command { record: true },
+        None,
+    )
+    .await
 }
 
 /// Consume the selected recovery record only after the replacement process is
@@ -356,6 +381,17 @@ async fn run_tracked(
                             next_command = recovery.command.clone();
                             eprintln!("shoal: restoring agent session");
                             continue;
+                        }
+                    }
+                } else if matches!(mode, Mode::Command { record: true }) {
+                    match recovery::save_command(paths, &plan.workspace.id, &plan.id, &next_command)
+                    {
+                        Ok(_) => eprintln!(
+                            "shoal: command stopped; shoal resume {} lists it",
+                            plan.workspace.name
+                        ),
+                        Err(error) => {
+                            eprintln!("warning: cannot record stopped command: {error:#}")
                         }
                     }
                 }

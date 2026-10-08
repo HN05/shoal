@@ -171,14 +171,7 @@ pub enum Command {
         /// New literal Git branch name.
         branch: String,
     },
-    /// Stop tracked agents and save their sessions for manual resume.
-    Pause {
-        workspace: Option<String>,
-        /// Pause only this tracked execution; defaults to all connected agents.
-        #[arg(long)]
-        execution: Option<String>,
-    },
-    /// Restore a paused agent or one stopped by overload protection.
+    /// Restore stopped agent sessions and list interrupted commands.
     Resume {
         workspace: Option<String>,
         /// Select a stopped execution when the workspace has several records.
@@ -403,7 +396,7 @@ pub enum Command {
         #[arg(long, requires = "repair")]
         reclaim: bool,
     },
-    /// Stop managed commands and keep the workspace.
+    /// Stop tracked agents and commands, saving them for `shoal resume`; keep the workspace.
     Stop { workspace: Option<String> },
     /// Remove a workspace and release its resources.
     ///

@@ -197,7 +197,7 @@ pub async fn run(
         args,
     )
     .await?;
-    execution::run(&ctx.paths, workspace, command, None).await
+    execution::run_command(&ctx.paths, workspace, command).await
 }
 
 pub async fn expand(

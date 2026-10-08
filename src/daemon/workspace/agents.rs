@@ -6,12 +6,6 @@ use tokio::sync::watch;
 use super::{GuardMode, Manager};
 use crate::{daemon::notifications::NotificationKind, protocol::timing, state::WorkspaceState};
 
-#[derive(Clone, PartialEq, Eq)]
-enum StopReason {
-    Overload(String),
-    Pause,
-}
-
 pub(super) struct Agent {
     name: String,
     workspace: String,
@@ -19,12 +13,13 @@ pub(super) struct Agent {
     started: Instant,
     recover: bool,
     stop: watch::Sender<bool>,
-    stop_reason: Option<StopReason>,
+    /// The pressure reason while an overload stop awaits automatic recovery.
+    overload: Option<String>,
 }
 
 impl Agent {
     pub(super) fn cancel_recovery(&mut self) {
-        self.stop_reason = None;
+        self.overload = None;
     }
 }
 
@@ -174,7 +169,7 @@ impl Manager {
                     started: Instant::now(),
                     recover,
                     stop: stop.clone(),
-                    stop_reason: None,
+                    overload: None,
                 },
             );
         }
@@ -230,11 +225,11 @@ impl Manager {
         let agent = agents
             .get_mut(id)
             .ok_or_else(|| anyhow::anyhow!("agent no longer exists"))?;
-        if !matches!(agent.stop_reason, Some(StopReason::Overload(_))) {
+        if agent.overload.is_none() {
             return Ok(false);
         }
         stop.send(false)?;
-        agent.stop_reason = None;
+        agent.overload = None;
         agent.started = Instant::now();
         let (name, workspace) = (agent.name.clone(), agent.workspace.clone());
         drop(agents);
@@ -253,113 +248,11 @@ impl Manager {
             .lock()
             .await
             .get(id)
-            .and_then(|agent| match &agent.stop_reason {
-                Some(StopReason::Overload(reason)) => Some(reason.clone()),
-                _ => None,
-            })
+            .and_then(|agent| agent.overload.clone())
     }
 
     pub(crate) async fn agent_was_overloaded(&self, id: &str) -> bool {
         self.agent_overload_reason(id).await.is_some()
-    }
-
-    pub(crate) async fn agent_was_paused(&self, id: &str) -> bool {
-        self.agents
-            .lock()
-            .await
-            .get(id)
-            .is_some_and(|agent| agent.stop_reason == Some(StopReason::Pause))
-    }
-
-    pub(crate) async fn pause_workspace_agents(
-        &self,
-        selector: &str,
-        execution: Option<&str>,
-    ) -> anyhow::Result<()> {
-        let workspace = self.workspace(selector).await?;
-        self.reserve_lifecycle(&workspace.id, WorkspaceState::Stopping)
-            .await?;
-        let result = async {
-            self.verify_worktree(&workspace).await?;
-            let selected = self.request_agent_pauses(&workspace.id, execution).await?;
-            self.await_agent_pauses(&workspace.id, &selected).await
-        }
-        .await;
-        self.set_state(
-            &workspace.id,
-            workspace.state,
-            result
-                .as_ref()
-                .err()
-                .map(|error| format!("{error:#}"))
-                .or(workspace.error),
-        )
-        .await?;
-        result
-    }
-
-    async fn request_agent_pauses(
-        &self,
-        workspace_id: &str,
-        requested: Option<&str>,
-    ) -> anyhow::Result<Vec<String>> {
-        let executions = self.inspect_workspace(workspace_id).await?.executions;
-        let selected = {
-            let mut agents = self.agents.lock().await;
-            let mut selected = Vec::new();
-            for execution in executions {
-                if requested.is_some_and(|id| id != execution.id) {
-                    continue;
-                }
-                if let Some(agent) = agents.get_mut(&execution.id)
-                    && !agent.stop.is_closed()
-                    && (!*agent.stop.borrow() || agent.stop_reason.is_some())
-                {
-                    agent.stop_reason = Some(StopReason::Pause);
-                    agent.stop.send(true)?;
-                    selected.push((execution.id, agent.name.clone(), agent.workspace.clone()));
-                }
-            }
-            selected
-        };
-        anyhow::ensure!(
-            !selected.is_empty(),
-            "no connected tracked agent matches; inspect the workspace or run shoal doctor"
-        );
-        for (_, name, workspace) in &selected {
-            self.notify(
-                Some(workspace),
-                NotificationKind::AgentStopped,
-                format!("Pausing {name}; restore with shoal resume; workspace and resource leases retained"),
-            )
-            .await;
-        }
-        Ok(selected.into_iter().map(|(id, _, _)| id).collect())
-    }
-
-    async fn await_agent_pauses(&self, workspace_id: &str, ids: &[String]) -> anyhow::Result<()> {
-        let deadline = tokio::time::Instant::now() + timing::WORKSPACE_STOP_TIMEOUT;
-        loop {
-            let executions = self.inspect_workspace(workspace_id).await?.executions;
-            if !executions
-                .iter()
-                .any(|execution| ids.contains(&execution.id))
-            {
-                for id in ids {
-                    anyhow::ensure!(
-                        crate::execution::recovery::record_path(&self.paths, workspace_id, id)
-                            .is_file(),
-                        "agent {id} exited without a saved recovery record"
-                    );
-                }
-                return Ok(());
-            }
-            anyhow::ensure!(
-                tokio::time::Instant::now() < deadline,
-                "timed out waiting for agents to pause; inspect with shoal doctor"
-            );
-            tokio::time::sleep(timing::WORKSPACE_STOP_POLL_INTERVAL).await;
-        }
     }
 
     pub(crate) fn reset_overload_recovery(&self) {
@@ -419,7 +312,7 @@ impl Manager {
                 if let Err(error) = &handoff {
                     eprintln!("overload recovery handoff not saved: {error:#}");
                 }
-                agent.stop_reason = Some(StopReason::Overload(reason.into()));
+                agent.overload = Some(reason.into());
                 agent.stop.send(true).ok()?;
                 Some((
                     id.clone(),

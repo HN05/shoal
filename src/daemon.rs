@@ -38,7 +38,7 @@ use tokio::{
 
 use ports::Acquisition;
 use scope::Caller;
-use workspace::{ExecutionKind, Manager, StartedExecution};
+use workspace::{ExecutionKind, Manager, StartedExecution, StopRecords};
 
 use crate::{
     paths::Paths,
@@ -490,15 +490,8 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             Body::Ok
         }
         Method::StopWorkspace { workspace } => {
-            manager.stop_workspace(&workspace).await?;
-            Body::Ok
-        }
-        Method::WorkspacePause {
-            workspace,
-            execution,
-        } => {
             manager
-                .pause_workspace_agents(&workspace, execution.as_deref())
+                .stop_workspace(&workspace, StopRecords::Save)
                 .await?;
             Body::Ok
         }
@@ -855,7 +848,7 @@ async fn execute(
                                     // Read the policy now, so a reload applies to running agents.
                                     recovering = recover && manager.config().overload.recovery.enabled;
                                     Control::OverloadStop { recover: recovering, reason }
-                                } else if manager.agent_was_paused(&execution_id).await {
+                                } else if kind == ExecutionKind::Command && manager.stop_saves_records(&execution_id).await {
                                     Control::Pause
                                 } else { Control::Stop };
                                 protocol::write(&mut writer, &control).await?;

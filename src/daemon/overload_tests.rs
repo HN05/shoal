@@ -175,10 +175,19 @@ fn launch(
     manager: &Manager,
     workspace: &crate::model::Workspace,
 ) -> tokio::task::JoinHandle<Result<i32>> {
-    let mut command = crate::test_support::isolated_test(
-        &manager.paths.home,
+    launch_child(
+        manager,
+        workspace,
         "daemon::overload_tests::tracked_agent_child",
-    );
+    )
+}
+
+fn launch_child(
+    manager: &Manager,
+    workspace: &crate::model::Workspace,
+    test: &str,
+) -> tokio::task::JoinHandle<Result<i32>> {
+    let mut command = crate::test_support::isolated_test(&manager.paths.home, test);
     command.env("SHOAL_TEST_WORKSPACE", &workspace.id);
     tokio::spawn(async move {
         let status = command.status().await?;
@@ -211,7 +220,30 @@ async fn tracked_agent_child() {
 }
 
 #[tokio::test]
-async fn manual_pause_preserves_work_and_leases_and_requires_manual_resume() {
+#[ignore = "isolated tracked command launched by the stop test"]
+async fn tracked_command_child() {
+    if std::env::var_os("SHOAL_TEST_HELPER").is_none() {
+        return;
+    }
+    let root = std::env::current_dir().unwrap();
+    let paths = crate::paths::Paths::for_test(root);
+    let id = std::env::var("SHOAL_TEST_WORKSPACE").unwrap();
+    let code = crate::execution::run_command(
+        &paths,
+        id,
+        vec![
+            "sh".into(),
+            "-c".into(),
+            "trap 'exit 0' TERM; touch command-started; while :; do sleep 1; done".into(),
+        ],
+    )
+    .await
+    .unwrap();
+    std::process::exit(code);
+}
+
+#[tokio::test]
+async fn stop_saves_agents_and_commands_preserving_work_and_leases() {
     let (_root, manager, workspace, serving) = fixture().await;
     manager
         .acquire_port(
@@ -223,34 +255,49 @@ async fn manual_pause_preserves_work_and_leases_and_requires_manual_resume() {
         .await
         .unwrap();
     fs::write(workspace.path.join("unfinished"), "work in progress").unwrap();
-    let unrelated = manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
-        .await
-        .unwrap();
     fs::remove_file(workspace.path.join(".shoal.toml")).unwrap();
-    let launched = launch(&manager, &workspace);
+    let agent = launch(&manager, &workspace);
+    let command = launch_child(
+        &manager,
+        &workspace,
+        "daemon::overload_tests::tracked_command_child",
+    );
     wait_started(&workspace).await;
+    bounded(async {
+        while !workspace.path.join("command-started").is_file() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await;
     let ctx = crate::cli::context::Context::new(manager.paths.clone(), true);
     crate::cli::client::request::<()>(
         &manager.paths,
-        Method::WorkspacePause {
+        Method::StopWorkspace {
             workspace: workspace.id.clone(),
-            execution: None,
         },
     )
     .await
     .unwrap();
-    bounded(launched).await.unwrap().unwrap();
+    bounded(agent).await.unwrap().unwrap();
+    bounded(command).await.unwrap().unwrap();
     let retained = manager.inspect_workspace(&workspace.id).await.unwrap();
     assert_eq!(retained.workspace.state, workspace.state);
     assert_eq!(retained.ports.len(), 1);
-    assert_eq!(retained.executions.len(), 1);
-    assert!(!*unrelated.stop.borrow());
+    assert!(retained.executions.is_empty());
     assert_eq!(
         fs::read_to_string(workspace.path.join("unfinished")).unwrap(),
         "work in progress"
     );
+    let commands = fs::read_dir(manager.paths.workspace_state(&workspace.id))
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| path.to_string_lossy().ends_with(".command.json"))
+        .map(|path| serde_json::from_slice(&fs::read(path).unwrap()).unwrap())
+        .collect::<Vec<serde_json::Value>>();
+    assert_eq!(commands.len(), 1);
+    assert_eq!(commands[0]["argv"][0], "sh");
     assert!(crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
+    // A manual stop never restores automatically.
     manager.recovery_ready.send_replace(Some(0));
     assert!(!workspace.path.join("restored").exists());
     fs::write(
@@ -270,91 +317,6 @@ async fn manual_pause_preserves_work_and_leases_and_requires_manual_resume() {
         0
     );
     assert!(workspace.path.join("restored").exists());
-    manager
-        .finish_execution(unrelated.plan.id, ExecutionKind::Command, Some(0))
-        .await
-        .unwrap();
-    serving.abort();
-}
-
-#[tokio::test]
-async fn manual_pause_selects_only_the_requested_connected_agent() {
-    let (_root, manager, workspace, serving) = fixture().await;
-    let launched = launch(&manager, &workspace);
-    wait_started(&workspace).await;
-    let id = manager
-        .inspect_workspace(&workspace.id)
-        .await
-        .unwrap()
-        .executions[0]
-        .id
-        .clone();
-    let unrelated = manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
-        .await
-        .unwrap();
-    manager
-        .track_agent(
-            &unrelated.plan.id,
-            "other",
-            &workspace.id,
-            &workspace.name,
-            false,
-        )
-        .await;
-    assert!(
-        manager
-            .pause_workspace_agents(&workspace.id, Some("missing"))
-            .await
-            .is_err()
-    );
-    assert!(!*unrelated.stop.borrow());
-    let token = unrelated.plan.scope_token.clone();
-    let mut method = Method::WorkspacePause {
-        workspace: workspace.id.clone(),
-        execution: Some(id.clone()),
-    };
-    assert!(
-        scope::authorize(&manager, Some(&token), &mut method)
-            .await
-            .is_err()
-    );
-    bounded(manager.pause_workspace_agents(&workspace.id, Some(&id)))
-        .await
-        .unwrap();
-    bounded(launched).await.unwrap().unwrap();
-    assert!(crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
-    assert!(!workspace.path.join("restored").exists());
-    assert!(!*unrelated.stop.borrow());
-    assert!(
-        manager
-            .inspect_workspace(&workspace.id)
-            .await
-            .unwrap()
-            .executions
-            .iter()
-            .any(|execution| execution.id == unrelated.plan.id)
-    );
-    manager
-        .finish_execution(unrelated.plan.id, ExecutionKind::Command, Some(0))
-        .await
-        .unwrap();
-    serving.abort();
-}
-
-#[tokio::test]
-async fn manual_pause_cancels_automatic_restore_of_an_overloaded_agent() {
-    let (_root, manager, workspace, serving) = fixture().await;
-    let launched = launch(&manager, &workspace);
-    wait_started(&workspace).await;
-    assert!(manager.stop_agent_for_overload("test pressure").await);
-    wait_paused(&manager, &workspace).await;
-    bounded(manager.pause_workspace_agents(&workspace.id, None))
-        .await
-        .unwrap();
-    bounded(launched).await.unwrap().unwrap();
-    assert!(crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
-    assert!(!workspace.path.join("restored").exists());
     serving.abort();
 }
 
@@ -416,7 +378,7 @@ async fn manual_stop_cancels_waiting_recovery_and_leaves_a_restore_record() {
             .await
     );
     wait_paused(&manager, &workspace).await;
-    bounded(manager.stop_workspace(&workspace.id))
+    bounded(manager.stop_workspace(&workspace.id, StopRecords::Save))
         .await
         .unwrap();
     bounded(launched).await.unwrap().unwrap();
@@ -505,7 +467,7 @@ async fn discard_clears_pending_recovery_without_launching_an_agent() {
         .await
         .is_err()
     );
-    bounded(manager.stop_workspace(&workspace.id))
+    bounded(manager.stop_workspace(&workspace.id, StopRecords::Save))
         .await
         .unwrap();
     bounded(launched).await.unwrap().unwrap();
@@ -680,7 +642,7 @@ async fn manual_resume_consumes_the_record_on_start_even_if_other_commands_run_o
             .await
     );
     wait_paused(&manager, &workspace).await;
-    bounded(manager.stop_workspace(&workspace.id))
+    bounded(manager.stop_workspace(&workspace.id, StopRecords::Save))
         .await
         .unwrap();
     bounded(launched).await.unwrap().unwrap();

@@ -212,9 +212,9 @@ configured command for another agent, plus proven child
   without disabling protection. Persist manual recovery without replaying the original prompt; consume the
   selected record only after its replacement process is registered. Unrelated
   executions do not block manual recovery.
-  Manual pause targets connected tracked agents, saves recovery for explicit
-  resume, preserves work and leases, and leaves ordinary commands running.
-  Scoped callers cannot pause agents.
+  Manual stop saves agent recovery and user command arguments for explicit
+  resume, preserves work and leases, and never reruns a recorded command.
+  Scoped callers cannot stop executions.
 - Agent forge wrappers are opt-in, resolve per tool through configuration layers,
   and change only the tracked agent's PATH, inherited by descendants. Wrappers
   own authentication; Shoal must not read tokens or switch the user's login.

@@ -17,8 +17,8 @@ mod repo_removal;
 pub(crate) mod review;
 mod status;
 
-pub use executions::ExecutionKind;
 pub(crate) use executions::StartedExecution;
+pub use executions::{ExecutionKind, StopRecords};
 
 use crate::{
     config::Config,
@@ -83,6 +83,8 @@ pub struct Manager {
     /// Connected executions and the channel that asks their wrapper to stop.
     connections: Mutex<HashMap<String, watch::Sender<bool>>>,
     agents: Mutex<HashMap<String, agents::Agent>>,
+    /// Connected executions whose pending stop saves what `shoal resume` needs.
+    resumable_stops: Mutex<std::collections::HashSet<String>>,
     pub(super) recovery_ready: watch::Sender<Option<u64>>,
     pub(super) recovery_epoch: std::sync::atomic::AtomicU64,
     pub(super) recovery_gate: Mutex<()>,
@@ -112,6 +114,7 @@ impl Manager {
             scopes: Mutex::new(HashMap::new()),
             connections: Mutex::new(HashMap::new()),
             agents: Mutex::new(HashMap::new()),
+            resumable_stops: Mutex::new(std::collections::HashSet::new()),
             recovery_ready: watch::channel(None).0,
             recovery_epoch: std::sync::atomic::AtomicU64::new(0),
             recovery_gate: Mutex::new(()),

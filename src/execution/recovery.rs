@@ -127,7 +127,43 @@ pub(crate) fn save_record(
 pub(crate) fn record_path(paths: &Paths, workspace_id: &str, id: &str) -> PathBuf {
     paths
         .workspace_state(workspace_id)
-        .join(format!("{id}.recovery.json"))
+        .join(format!("{id}{AGENT_SUFFIX}"))
+}
+
+const AGENT_SUFFIX: &str = ".recovery.json";
+const COMMAND_SUFFIX: &str = ".command.json";
+
+/// A command `shoal stop` interrupted, reported by `shoal resume` instead of
+/// being rerun: replaying an arbitrary command is not known to be safe.
+#[derive(Debug, Serialize, Deserialize)]
+pub(crate) struct CommandRecord {
+    pub argv: Vec<String>,
+}
+
+pub(super) fn save_command(
+    paths: &Paths,
+    workspace_id: &str,
+    id: &str,
+    argv: &[OsString],
+) -> Result<PathBuf> {
+    let directory = paths.workspace_state(workspace_id);
+    std::fs::create_dir_all(&directory)?;
+    let path = directory.join(format!("{id}{COMMAND_SUFFIX}"));
+    let record = CommandRecord {
+        argv: argv
+            .iter()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect(),
+    };
+    crate::fsutil::replace_atomically(
+        &path,
+        &serde_json::to_vec(&record)?,
+        ReplaceOptions {
+            permissions: Permissions::Temporary,
+            sync: true,
+        },
+    )?;
+    Ok(path)
 }
 
 pub(super) async fn wait(
@@ -159,11 +195,9 @@ pub fn pending(paths: &Paths, workspace_id: &str) -> Result<bool> {
     };
     for entry in entries {
         let entry = entry?;
-        if entry
-            .file_name()
-            .to_string_lossy()
-            .ends_with(".recovery.json")
-        {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if name.ends_with(AGENT_SUFFIX) || name.ends_with(COMMAND_SUFFIX) {
             return Ok(true);
         }
     }
