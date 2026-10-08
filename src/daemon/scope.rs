@@ -53,6 +53,8 @@ pub async fn authorize(
         | Method::WorkspaceContinue { workspace }
         | Method::WorkspaceDone { workspace, .. }
         | Method::SetPr { workspace, .. }
+        | Method::SetIssue { workspace, .. }
+        | Method::ClearIssue { workspace, .. }
         | Method::PrWait { workspace, .. }
         | Method::AcknowledgePrUpdates { workspace, .. }
         | Method::ResourceAcquire { workspace, .. }

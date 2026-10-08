@@ -6,13 +6,74 @@ use anyhow::{Context as _, Result, ensure};
 use super::workspaces::{self, AgentLaunch, Creation};
 use crate::{
     agent::Agent,
-    cli::{client, context::Context, ui},
+    cli::{ItemArgs, client, context::Context, ui},
     forge::{
         ForgeRepo, IssueInput,
-        link::{Link, LinkTarget},
+        link::{ItemKind, Link, LinkTarget, Selection},
     },
     git,
+    protocol::Method,
 };
+
+pub(super) async fn link(ctx: &Context, items: ItemArgs) -> Result<i32> {
+    let selected = Selection::parse(items.kind_or_url, items.item)?;
+    let input = selected
+        .input
+        .context("link needs an issue or PR URL, or pr/issue and a number")?;
+    let workspace =
+        ui::select_workspace(ctx, items.workspace, ui::Fallback::CurrentDirectory).await?;
+    match selected.kind.unwrap() {
+        ItemKind::Pr => {
+            workspaces::pr(
+                ctx,
+                Some(workspace),
+                crate::forge::pr::Action::Watch { url: input },
+            )
+            .await
+        }
+        ItemKind::Issue => {
+            client::request::<()>(
+                &ctx.paths,
+                Method::SetIssue {
+                    workspace,
+                    url: input,
+                },
+            )
+            .await?;
+            ctx.emit(
+                "Issue linked; closure can complete the assignment.",
+                serde_json::json!({"registered": true}),
+            )?;
+            Ok(0)
+        }
+    }
+}
+
+pub(super) async fn unlink(ctx: &Context, items: ItemArgs) -> Result<i32> {
+    let selected = Selection::parse(items.kind_or_url, items.item)?;
+    let workspace =
+        ui::select_workspace(ctx, items.workspace, ui::Fallback::CurrentDirectory).await?;
+    if selected.kind != Some(ItemKind::Pr) {
+        client::request::<()>(
+            &ctx.paths,
+            Method::ClearIssue {
+                workspace: workspace.clone(),
+                url: selected.input.clone(),
+            },
+        )
+        .await?;
+    }
+    if selected.kind != Some(ItemKind::Issue) {
+        let action = selected
+            .input
+            .map_or(crate::forge::pr::Action::Clear, |url| {
+                crate::forge::pr::Action::Unwatch { url }
+            });
+        client::request::<()>(&ctx.paths, Method::SetPr { workspace, action }).await?;
+    }
+    ctx.emit("Items unlinked", serde_json::json!({"registered": false}))?;
+    Ok(0)
+}
 
 pub(super) struct AddInput {
     pub positional: Option<String>,

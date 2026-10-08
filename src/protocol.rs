@@ -182,6 +182,10 @@ pub enum Method {
         workspace: String,
         url: String,
     },
+    ClearIssue {
+        workspace: String,
+        url: Option<String>,
+    },
     SetPr {
         workspace: String,
         #[serde(flatten)]

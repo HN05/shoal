@@ -69,11 +69,11 @@ shoal add my-project --existing origin/feature/api --agent codex
 shoal add my-project quick-fix --path ../quick-fix
 shoal adopt my-project ../existing-worktree  # Take ownership, including automatic cleanup
 shoal rename fix-login fix/login             # Rename its branch and workspace together
-shoal add https://github.com/owner/repo/issues/68 # Create from an issue
-shoal continue                          # Defer automatic completion until shoal done
+shoal add https://github.com/owner/repo/issues/68 # Create from an issue; completes when it closes
+shoal continue                          # Keep working until an explicit shoal done
 shoal add https://github.com/owner/repo/issues/34  # Add an issue, PR, or branch link
-shoal add https://github.com/owner/repo/pull/505    # Open a PR head branch
-shoal add https://github.com/owner/repo/tree/feature/api # Open a branch
+shoal link https://github.com/owner/repo/issues/34  # Link an issue to the current workspace
+shoal unlink issue                         # Remove the linked issue
 ```
 
 Inside Herdr, `add` opens a new tab after your choices; use `--here`
@@ -121,11 +121,11 @@ shoal done fix-login          # Mark finished and request safe cleanup
 shoal done --keep fix-login   # Mark finished; keep for review
 shoal done --cleanup fix-login # Override a configured keep default
 shoal rm fix-login            # Remove the workspace
-shoal pr watch 42             # Watch a PR (also accepts a URL)
-shoal pr watch 43             # Add another; all must merge before cleanup after done
-shoal pr wait                 # Wake on PR comments, individual CI results, or conflicts
-shoal pr unwatch --pr 43      # Cancel one watch
-shoal pr unwatch              # Cancel all watches
+shoal link pr 42              # Link a PR (or paste its URL)
+shoal link pr 43              # Link another; all must merge before automatic done
+shoal pr wait                # Wake on linked PR activity
+shoal unlink pr 43            # Cancel one linked PR
+shoal unlink pr               # Cancel linked PRs
 ```
 
 For workspace actions, omit the name to use your scoped or current workspace;

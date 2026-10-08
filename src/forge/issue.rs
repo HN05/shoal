@@ -80,6 +80,47 @@ impl Manager {
             .await
     }
 
+    pub async fn clear_issue(&self, selector: &str, input: Option<&str>) -> Result<()> {
+        let _guard = self.pr_gate.lock().await;
+        let workspace = self.workspace(selector).await?;
+        let selected = match input {
+            Some(input) => Some(self.issue_forge(&workspace, input).await?.2),
+            None => None,
+        };
+        self.store
+            .run(move |db| {
+                let tx = db.transaction()?;
+                let existing: Option<String> = tx
+                    .query_row(
+                        "SELECT url FROM workspace_issue WHERE workspace_id=?1",
+                        [&workspace.id],
+                        |row| row.get(0),
+                    )
+                    .optional()?;
+                if let Some(url) = selected {
+                    ensure!(
+                        existing.as_ref() == Some(&url),
+                        "issue is not linked: {url}"
+                    );
+                }
+                if let Some(url) = existing {
+                    tx.execute(
+                        "DELETE FROM pr_activity WHERE workspace_id=?1 AND url=?2",
+                        rusqlite::params![workspace.id, url],
+                    )?;
+                }
+                tx.execute(
+                    "DELETE FROM workspace_issue WHERE workspace_id=?1",
+                    [&workspace.id],
+                )?;
+                tx.commit()?;
+                Ok(())
+            })
+            .await?;
+        self.cleanup_notify.notify_one();
+        Ok(())
+    }
+
     /// Completion is a one-shot signal: never overwrite a prior keep choice or
     /// bind an old closure to later work, including after daemon restart.
     pub async fn sweep_issues(&self) -> Result<()> {
@@ -274,6 +315,40 @@ mod tests {
                 .unwrap()
                 .url,
             url
+        );
+        assert!(
+            reopened
+                .clear_issue(&workspace.id, Some("317"))
+                .await
+                .is_err()
+        );
+        assert!(
+            reopened
+                .issue_registration(&workspace.id)
+                .await
+                .unwrap()
+                .is_some()
+        );
+        reopened
+            .clear_issue(&workspace.id, Some("316"))
+            .await
+            .unwrap();
+        assert!(
+            reopened
+                .issue_registration(&workspace.id)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        reopened.set_issue(&workspace.id, "317").await.unwrap();
+        assert!(
+            reopened
+                .issue_registration(&workspace.id)
+                .await
+                .unwrap()
+                .unwrap()
+                .url
+                .ends_with("/317")
         );
         reopened.store.shutdown().await;
     }

@@ -116,6 +116,16 @@ pub enum Command {
         #[arg(last = true)]
         args: Vec<OsString>,
     },
+    /// Link an issue or PR; URLs identify the kind, numbers need pr/issue.
+    Link {
+        #[command(flatten)]
+        items: ItemArgs,
+    },
+    /// Unlink all items, one kind, or a selected issue or PR.
+    Unlink {
+        #[command(flatten)]
+        items: ItemArgs,
+    },
     /// Bring an existing worktree under Shoal management, including cleanup.
     Adopt {
         /// Registered repository that owns the linked worktree.
@@ -246,7 +256,7 @@ pub enum Command {
         #[arg(long)]
         local: bool,
     },
-    /// Watch PRs, wait for their updates, cancel watches, or review a PR.
+    /// Open a pull request for review.
     Pr {
         #[command(subcommand)]
         command: PrCommand,
@@ -428,6 +438,18 @@ pub enum Command {
     },
 }
 
+#[derive(Debug, Args)]
+pub struct ItemArgs {
+    /// pr/issue to select a kind, or an issue/PR URL.
+    pub kind_or_url: Option<String>,
+    /// Number or URL when a kind is supplied.
+    #[arg(requires = "kind_or_url")]
+    pub item: Option<String>,
+    /// Workspace to use; defaults to the current workspace or picker.
+    #[arg(long)]
+    pub workspace: Option<String>,
+}
+
 #[derive(Debug, Subcommand)]
 pub enum HoldCommand {
     /// Keep a workspace while an external session is open.
@@ -453,7 +475,8 @@ pub enum HoldCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum PrCommand {
-    /// Watch a PR; cleanup after done waits until every watched PR merges.
+    /// Watch a PR; when all merge, mark done (may stop commands and remove the workspace).
+    #[command(hide = true)]
     Watch {
         /// GitHub or Forgejo PR number or URL; repeated watches accumulate.
         #[arg(value_name = "NUMBER_OR_URL")]
@@ -461,9 +484,10 @@ pub enum PrCommand {
         workspace: Option<String>,
     },
     /// Cancel all PR watches, or only the selected PR with --pr.
+    #[command(hide = true)]
     Unwatch {
         workspace: Option<String>,
-        /// Cancel only this PR; the remaining watches stay active.
+        /// Cancel only this PR; the remaining watches can still trigger completion.
         #[arg(long = "pr", value_name = "NUMBER_OR_URL")]
         url: Option<String>,
     },

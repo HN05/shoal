@@ -185,6 +185,18 @@ impl Manager {
         if !matches!(action, Action::Clear | Action::Unwatch { .. }) {
             self.verify_worktree(&workspace).await?;
         }
+        let previous = match self.pr_registration(&workspace.id).await {
+            Ok(previous) => previous,
+            Err(_) if matches!(action, Action::Clear) => None,
+            Err(error) => return Err(error),
+        };
+        let previously_watched = match previous {
+            Some(Registration {
+                kind: RegistrationKind::Watch { urls, .. },
+                ..
+            }) => urls,
+            _ => Vec::new(),
+        };
         let kind = match action {
             Action::Clear => None,
             Action::Unwatch { url } => self.without_pr_watch(&workspace, &url).await?,
@@ -220,11 +232,15 @@ impl Manager {
             }) => urls.clone(),
             _ => Vec::new(),
         };
+        let removed = previously_watched
+            .into_iter()
+            .filter(|url| !watched.contains(url))
+            .collect::<Vec<_>>();
         let id = workspace.id;
         self.store.run(move |db| {
             let tx = db.transaction()?;
             store::require_ready(&tx, &id)?;
-            tx.execute("DELETE FROM pr_activity WHERE workspace_id=?1 AND url NOT IN (SELECT value FROM json_each(?2))", rusqlite::params![id, serde_json::to_string(&watched)?])?;
+            tx.execute("DELETE FROM pr_activity WHERE workspace_id=?1 AND url IN (SELECT value FROM json_each(?2))", rusqlite::params![id, serde_json::to_string(&removed)?])?;
             if let Some(registration) = registration {
                 tx.execute("INSERT INTO pr_cleanup(workspace_id,record) VALUES (?1,?2) ON CONFLICT(workspace_id) DO UPDATE SET record=excluded.record", rusqlite::params![id, serde_json::to_string(&registration)?])?;
             } else { tx.execute("DELETE FROM pr_cleanup WHERE workspace_id=?1", [&id])?; }

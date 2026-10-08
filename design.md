@@ -201,11 +201,9 @@ Hooks that run with a worktree resolve paths against it and use it as their
 working directory. Setup runs through
 the tracked wrapper with workspace scope; the daemon owns readiness and execution
 records, and `add` keeps the workspace preparing until setup exits cleanly with no
-survivors. Failures preserve files, branches, and leases; process-verification
-failures retain the workspace and report the command's exit status and the
-blocking evidence. Other failures let interactive callers choose delete, ignore
-(which repairs verified state first), or keep. JSON callers get a nonzero exit.
-`setup` reruns setup explicitly; nothing retries automatically.
+survivors. Failures preserve files, branches, and leases; interactive callers choose
+delete, ignore (which repairs verified state first), or keep, while JSON callers get
+a nonzero exit. `setup` reruns setup explicitly; nothing retries automatically.
 
 Hooks are deliberately untracked user processes with the workspace identity
 but no scope token, because their purpose is to start or stop things that
@@ -280,10 +278,9 @@ By default, workspace shells receive focus and agent launches stay in the
 background; an explicit focus setting overrides this choice.
 The worker drops the plan before starting children; a retained tab's shell keeps
 it, inert, while a non-default state directory is passed only to the worker.
-Herdr tabs remain open after tracked agent exits. Completion closes them only
-after tracked executions have resolved; removal closes them immediately.
-Preparation failures and shell or untracked desktop handoffs retain them until
-that lifecycle change.
+Herdr tabs remain open after tracked agent exits and close when their workspace
+is completed or removed; preparation failures and shell or untracked desktop
+handoffs retain them until that lifecycle change.
 
 Single-workspace actions select an explicit target, otherwise the caller's scoped
 workspace or the workspace containing the current directory, then an interactive
@@ -443,9 +440,7 @@ issue template is configured. Empty repository values suppress only the addition
 Repository-root Markdown files and global files beside `config.toml` sit below
 inline TOML values at each level; provenance names the highest configured layer
 and reports the combined text.
-`install` adds missing templates from the bundled repository-root defaults and
-updates a regular file that still matches an earlier bundled default, since agent
-guidance must reach existing installs; edited or linked files stay untouched;
+`install` adds missing templates from the bundled repository-root defaults;
 rendering substitutes known fields once without evaluating their contents.
 Before a workspace exists, the registered checkout's file stands in for the
 worktree's. Repository config is read per request, so changes need no restart
@@ -506,18 +501,14 @@ reads use bounded concurrency, retain workspace order and report every failure.
 
 External sessions acquire caller-named workspace holds independently of assignment
 completion. Holds are idempotent by name and persist across restarts. They block
-automatic removal while the worktree exists, allowing automatic completion to
+automatic removal while the worktree exists, allowing issue and PR completion to
 record done; releasing the last hold restores normal cleanup eligibility. Explicit
 removal lists holders and releases holds with the workspace record; deleted-worktree
 cleanup still forgets missing worktrees. Release remains available through failed or
 active lifecycle operations and hooks. Scoped callers manage only their own workspace.
 
 Workspace completion uses `[done] cleanup` (default true), resolved through the
-normal configuration layers with explicit keep and cleanup overrides. Only an
-explicit done signal completes an assignment unless `[done] automatic` (default
-false) lets issue closure and merged PR watches record it, so a merge or closure
-never removes a workspace whose agent is still working; agent instructions make
-`done` the last step of every assignment. Completion
+normal configuration layers with explicit keep and cleanup overrides. Completion
 is persisted separately from lifecycle readiness, binds to HEAD, and notifies the
 user; it does not assert that work was merged. Own-workspace continuation cancels
 pending completion and defers issue, PR and idle cleanup until explicit completion,
@@ -540,9 +531,11 @@ HEAD, including after hooks. Tracked agent exits wake the cleanup sweep after
 their exit hook, without waiting for the polling interval. Changed HEAD retains
 the workspace until a new completion signal; failed cleanup retains ownership
 and reports why.
-Issue associations suppress idle cleanup. With automatic completion, the daemon
-polls their repository-bound URLs using its existing forge login and records
-completion once closure is confirmed, honoring the done default without replacing an existing completion.
+Issue linking and unlinking are own-workspace operations; associations are idempotent
+and replacing one requires unlinking it first. Unlinking preserves recorded completion.
+Issue associations suppress idle cleanup. The daemon polls their repository-bound
+URLs using its existing forge login and records completion once closure is
+confirmed, honoring the done default without replacing an existing completion.
 Lookup failures retain the workspace; reopening the issue does not undo completion.
 
 Manual and automatic cleanup share one path: establish ownership, stop owned
@@ -559,13 +552,12 @@ worktrees and dangerous paths, persists progress, and blocks new workspaces unti
 an interrupted removal is retried.
 PR cleanup is separately enabled by default: persisted watches use the
 user's gh/fj login, resolve numbers against the workspace's origin into stored
-URLs bound to that repository. Watch registration and cancellation are explicit
-actions; cancellation can select one PR or the entire set. Watches accumulate
+URLs bound to that repository. Top-level `link` and `unlink` manage associations;
+unlinking can select one item, one kind or the entire set. PR links accumulate
 without duplicates and require
 every watched PR to merge, with HEAD present in at least one; the existing branch
-checks apply to each PR. Once confirmed, an explicit completion proceeds to cleanup;
-automatic completion records it through `done`, honoring its configured default or
-a prior explicit choice. The confirmed
+checks apply to each PR. Once confirmed, the daemon records completion through
+`done`, honoring its configured default or a prior explicit choice. The confirmed
 HEAD persists so restart cannot complete the same watch set again. Persisted manual
 acknowledgement binds to exactly the recorded HEAD. Registrations distinguish watches from
 acknowledgements; legacy single-watch records retain their stored and JSON shape.
@@ -606,9 +598,8 @@ identity that has exited or is exiting no longer blocks the ownership proof, and
 one whose exec has not yet published its environment is read again within a
 bounded settle wait before it counts as unreadable. A reported command
 exit clears its execution and permits setup readiness only when marker, child and
-group evidence has no survivors and environment visibility is complete; a settled
-empty environment is readable evidence. The reporting wrapper may remain alive
-awaiting acknowledgement. Recovery polls
+group evidence has no survivors and environment visibility is complete; the
+reporting wrapper may remain alive awaiting acknowledgement. Recovery polls
 incomplete proof within the workspace stop budget and still refuses live or
 unverifiable survivors. Moved
 worktrees stay unresolved until restored. Any other ownership failure is

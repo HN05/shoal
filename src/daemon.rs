@@ -379,6 +379,10 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             manager.set_issue(&workspace, &url).await?;
             Body::Ok
         }
+        Method::ClearIssue { workspace, url } => {
+            manager.clear_issue(&workspace, url.as_deref()).await?;
+            Body::Ok
+        }
         Method::SetPr { workspace, action } => {
             manager.set_pr(&workspace, action).await?;
             Body::Ok

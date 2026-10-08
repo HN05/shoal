@@ -246,6 +246,8 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             )
             .await
         }
+        Command::Link { items } => links::link(&ctx, items).await,
+        Command::Unlink { items } => links::unlink(&ctx, items).await,
         Command::Adopt { repository, path } => workspaces::adopt(&ctx, repository, path).await,
         Command::Rename { workspace, branch } => workspaces::rename(&ctx, workspace, branch).await,
         Command::Issue {

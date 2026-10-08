@@ -1,7 +1,73 @@
 //! Classify pasted forge links without making network requests.
 use anyhow::{Context, Result, ensure};
+use serde::{Deserialize, Serialize};
 
 use super::{ForgeRepo, IssueInput};
+
+crate::state::states!(ItemKind {
+    Issue => "issue",
+    Pr => "pr",
+});
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct Selection {
+    pub kind: Option<ItemKind>,
+    pub input: Option<String>,
+}
+
+impl Selection {
+    pub fn parse(first: Option<String>, second: Option<String>) -> Result<Self> {
+        let selection = match first.as_deref() {
+            Some("pr") => Self {
+                kind: Some(ItemKind::Pr),
+                input: second,
+            },
+            Some("issue") => Self {
+                kind: Some(ItemKind::Issue),
+                input: second,
+            },
+            Some(_) => {
+                ensure!(
+                    second.is_none(),
+                    "use a URL, or pr/issue followed by a number or URL"
+                );
+                let link = Link::parse(first.as_deref().unwrap())?;
+                let kind = match link.target {
+                    LinkTarget::Issue => ItemKind::Issue,
+                    LinkTarget::Pr => ItemKind::Pr,
+                    LinkTarget::Branch(_) => anyhow::bail!("expected an issue or PR link"),
+                };
+                Self {
+                    kind: Some(kind),
+                    input: first,
+                }
+            }
+            None => {
+                ensure!(second.is_none(), "an item needs a kind or URL");
+                Self::default()
+            }
+        };
+        if let Some(input) = &selection.input {
+            if IssueInput::parse(input) == IssueInput::Url {
+                let link = Link::parse(input)?;
+                ensure!(
+                    matches!(
+                        (&link.target, selection.kind),
+                        (LinkTarget::Issue, Some(ItemKind::Issue))
+                            | (LinkTarget::Pr, Some(ItemKind::Pr))
+                    ),
+                    "link does not match the selected item kind"
+                );
+            } else {
+                ensure!(
+                    input.parse::<u64>().is_ok_and(|number| number > 0),
+                    "item number must be positive"
+                );
+            }
+        }
+        Ok(selection)
+    }
+}
 
 pub(crate) struct Link {
     pub repository: ForgeRepo,
@@ -112,5 +178,26 @@ mod tests {
         ] {
             assert!(Link::parse(url).is_err(), "{url}");
         }
+    }
+
+    #[test]
+    fn selections_require_kinds_for_numbers_and_match_urls() {
+        assert!(Selection::parse(Some("505".into()), None).is_err());
+        let selection = Selection::parse(Some("pr".into()), Some("505".into())).unwrap();
+        assert_eq!(selection.kind, Some(ItemKind::Pr));
+        assert_eq!(selection.input.as_deref(), Some("505"));
+        assert!(
+            Selection::parse(
+                Some("pr".into()),
+                Some("https://github.com/team/repo/issues/1".into())
+            )
+            .is_err()
+        );
+        assert!(
+            Selection::parse(Some("issue".into()), None)
+                .unwrap()
+                .input
+                .is_none()
+        );
     }
 }
