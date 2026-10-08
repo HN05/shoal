@@ -4,6 +4,7 @@ and deliver a prompt, plus a test hook that marks a session alive the way a
 connected happy-cli heartbeat would. Prints its port on the first stdout line
 and mirrors every request into the JSON file named by argv[1]."""
 import json
+import os
 import sys
 import threading
 import uuid
@@ -15,8 +16,10 @@ RECORD = sys.argv[1]
 
 
 def persist():
-    with open(RECORD, "w") as handle:
+    # Replace the record whole: the test reads it while requests arrive.
+    with open(RECORD + ".tmp", "w") as handle:
         json.dump(STATE, handle)
+    os.replace(RECORD + ".tmp", RECORD)
 
 
 class Handler(BaseHTTPRequestHandler):
