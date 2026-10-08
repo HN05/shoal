@@ -60,7 +60,7 @@ CPU is opt-in and requires sustained aggregate busy time. Stop connected tracked
 agents through their execution wrappers, preserving work and leases. Stop and exit
 notifications carry the pressure reason and recovery path, distinguishing automatic
 restore from manual recovery and missing recovery records. Persist a minimal
-agent recovery record before delivering the stop, so a lost wrapper does not lose
+agent recovery record with the stop reason before delivering the stop, so a lost wrapper does not lose
 the handoff; failure to save warns without disabling overload protection. Agent
 session recovery is automatic when explicitly configured and load has recovered;
 never replay the original task prompt. Keep waiting wrappers tracked, serialize

@@ -312,9 +312,13 @@ async fn run_tracked(
         };
         match outcome {
             Ok(Outcome::Exited(code)) => break Ok(code),
-            Ok(Outcome::Paused { code, recover }) => {
+            Ok(Outcome::Paused {
+                code,
+                recover,
+                reason,
+            }) => {
                 if let Some(recovery) = &recovery {
-                    match recovery.save(paths, &plan.workspace.id, &plan.id) {
+                    match recovery.save(paths, &plan.workspace.id, &plan.id, reason.as_deref()) {
                         Ok(path) => {
                             recovery_record = Some(path);
                             if !recover || !recovery.automatic {
@@ -362,7 +366,11 @@ async fn run_tracked(
 
 enum Outcome {
     Exited(i32),
-    Paused { code: i32, recover: bool },
+    Paused {
+        code: i32,
+        recover: bool,
+        reason: Option<String>,
+    },
 }
 
 /// Launch the command, register its process group, and wait for it to exit or
@@ -426,14 +434,16 @@ async fn supervise(
     let status = tokio::select! {
         status = child.wait() => status?,
         result = &mut control => {
+            if let Ok(Control::OverloadStop { reason, .. }) = &result {
+                eprintln!("shoal: stopping agent: {reason}; workspace and resource leases retained");
+            }
             let status = stop(&mut child, &group, libc::SIGTERM).await?;
             let control = result.context("daemon disconnected; command stopped, execution requires reconciliation")?;
             match control {
                 Control::OverloadStop { recover, reason } => {
-                    eprintln!("shoal: stopping agent: {reason}; workspace and resource leases retained");
-                    recovery = Some(recover);
+                    recovery = Some((recover, Some(reason)));
                 }
-                Control::Pause => recovery = Some(false),
+                Control::Pause => recovery = Some((false, None)),
                 Control::Stop => {},
                 _ => bail!("unexpected execution control"),
             }
@@ -446,9 +456,10 @@ async fn supervise(
     // A command owns its process group; descendants do not outlive its lease.
     drop(group);
     Ok(match recovery {
-        Some(recover) => Outcome::Paused {
+        Some((recover, reason)) => Outcome::Paused {
             code: exit_code(status),
             recover,
+            reason,
         },
         None => Outcome::Exited(exit_code(status)),
     })

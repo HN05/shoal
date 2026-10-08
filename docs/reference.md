@@ -134,7 +134,7 @@ agent name. They use the same workspace substitutions and repository layering as
 No resume command is configured by default; a failed command lookup warns and
 disables automatic recovery for that launch. Overload notifications include the
 pressure reason, execution ID, and automatic or manual recovery path. Shoal saves
-the minimal recovery handoff before signaling the wrapper, so a wrapper killed
+the agent identity and pressure reason before signaling the wrapper, so a wrapper killed
 under pressure can still be resumed after reconciliation. With one configured, the wrapper
 stays connected while the agent is stopped and automatically runs that command
 after healthy readings persist for the recovery interval. Recovery requires
@@ -159,7 +159,8 @@ launching it, allowing normal idle cleanup again.
 The selected execution must stop or be reconciled first; unrelated executions may
 keep running. The command uses
 the current resume configuration; without one, built-in terminal agents open
-their session picker. Other agents require a configured restore command. Records
+their session picker. Other agents require a configured restore command. Resume
+shows the saved pressure reason. Records
 survive daemon restart and suppress idle cleanup until the replacement process
 is registered or the workspace is removed. A failed launch retains its record;
 a later pause or overload creates a record for the replacement execution. The original

@@ -188,7 +188,7 @@ instructions instead of the PR delivery guidance below.
   Automatic recovery requires a configured session restore command, proven child
   termination, verified ready workspace ownership and sustained healthy headroom.
   Keep waiting wrappers tracked, serialize restores and honor manual stop/removal.
-  Persist overload recovery before delivering the stop, reporting save failures
+  Persist overload recovery and its reason before delivering the stop, reporting save failures
   without disabling protection. Persist manual recovery without replaying the original prompt; consume the
   selected record only after its replacement process is registered. Unrelated
   executions do not block manual recovery.

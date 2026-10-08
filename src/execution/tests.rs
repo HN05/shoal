@@ -94,8 +94,9 @@ async fn adjacent_controls_child() {
             outcome,
             Outcome::Paused {
                 code: 143,
-                recover: true
-            }
+                recover: true,
+                reason: Some(reason),
+            } if reason == "critical memory pressure"
         ));
         assert!(recovery::wait(&mut stream).await.unwrap().is_none());
         assert!(

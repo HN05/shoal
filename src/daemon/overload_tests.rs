@@ -368,7 +368,10 @@ async fn manual_stop_cancels_waiting_recovery_and_leaves_a_restore_record() {
     assert_eq!(records.len(), 1);
     let text = fs::read_to_string(&records[0]).unwrap();
     let record: serde_json::Value = serde_json::from_str(&text).unwrap();
-    assert_eq!(record, serde_json::json!({"agent": "fixture"}));
+    assert_eq!(
+        record,
+        serde_json::json!({"agent": "fixture", "stop_reason": "test memory pressure"})
+    );
     assert!(
         manager
             .cleanup_snapshot(&workspace.id)

@@ -58,6 +58,9 @@ pub async fn run(
     }
     let recorded: Record =
         serde_json::from_slice(&std::fs::read(&selected)?).context("read recovery record")?;
+    if let Some(reason) = &recorded.stop_reason {
+        eprintln!("shoal: restoring {} stopped after {reason}", recorded.agent);
+    }
     let recovery = Recovery::resolve(&ctx.paths, &inspection.workspace, &recorded.agent).await?;
     ensure!(
         !recovery.command.is_empty(),
