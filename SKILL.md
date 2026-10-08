@@ -55,7 +55,7 @@ Shoal marks the assignment done automatically unless waiting for explicit `done`
 `shoal unlink pr <number-or-url>` unlinks one PR; omit its number or URL to unlink
 all PRs. Closed, unmerged PRs keep waiting.
 
-While linked PRs are open, run `shoal --json pr wait` from the workspace. Handle
+While linked PRs are open, run `shoal --json watch pr` from the workspace. Handle
 the returned `updates` by inspecting their PR URLs, then wait again. Comments
 and reviews wake the wait, as does each completed CI check or a merge conflict;
 respond to available review findings while other checks run. The first wait

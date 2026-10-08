@@ -1255,10 +1255,29 @@ pub(super) async fn pr(ctx: &Context, workspace: Option<String>, action: Action)
 
 pub(super) async fn pr_wait(ctx: &Context, workspace: Option<String>, timeout: u64) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    watch_items(
+        ctx,
+        workspace,
+        crate::forge::link::Selection {
+            kind: Some(crate::forge::link::ItemKind::Pr),
+            input: None,
+        },
+        timeout,
+    )
+    .await
+}
+
+pub(super) async fn watch_items(
+    ctx: &Context,
+    workspace: String,
+    selection: crate::forge::link::Selection,
+    timeout: u64,
+) -> Result<i32> {
     let (_stream, body) = client::open(
         &ctx.paths,
-        Method::PrWait {
+        Method::WatchItems {
             workspace: workspace.clone(),
+            selection,
             timeout_secs: timeout,
         },
     )
@@ -1269,7 +1288,7 @@ pub(super) async fn pr_wait(ctx: &Context, workspace: Option<String>, timeout: u
             println!("{} [{}]: {}", update.url, update.kind, update.message);
         }
         if updates.timed_out {
-            println!("No PR updates before timeout.");
+            println!("No item updates before timeout.");
         }
     })?;
     std::io::Write::flush(&mut std::io::stdout())?;

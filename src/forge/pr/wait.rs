@@ -1,14 +1,20 @@
 //! Workspace-owned activity cursors; waiting does not change completion policy.
 use std::time::Duration;
 
-use anyhow::{Result, ensure};
+use anyhow::{Context, Result, ensure};
 use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 
 use super::{RegistrationKind, current_head};
 use crate::{
     daemon::{store, workspace::Manager},
-    forge::updates::{Snapshot, Update},
+    forge::{
+        ForgeRepo,
+        link::{ItemKind, Selection},
+        repository,
+        updates::{Snapshot, Update},
+    },
+    model::Workspace,
 };
 
 const POLL_INTERVAL: Duration = Duration::from_secs(30);
@@ -28,64 +34,144 @@ struct ActivityRecord {
 }
 
 impl Manager {
+    #[cfg(test)]
     pub async fn wait_prs(&self, selector: &str, seconds: u64) -> Result<Updates> {
-        ensure!(
-            (1..=3600).contains(&seconds),
-            "PR wait timeout must be between 1 and 3600 seconds"
-        );
-        let workspace = self.workspace(selector).await?;
-        wait_for_updates(seconds, || self.poll_pr_activity(&workspace.id)).await
+        self.wait_items(
+            selector,
+            &Selection {
+                kind: Some(ItemKind::Pr),
+                input: None,
+            },
+            seconds,
+        )
+        .await
     }
 
-    async fn poll_pr_activity(&self, id: &str) -> Result<Vec<Update>> {
+    pub async fn wait_items(
+        &self,
+        selector: &str,
+        selection: &Selection,
+        seconds: u64,
+    ) -> Result<Updates> {
+        ensure!(
+            (1..=3600).contains(&seconds),
+            "watch timeout must be between 1 and 3600 seconds"
+        );
+        ensure!(
+            selection.input.is_none() || selection.kind.is_some(),
+            "explicit items need a kind"
+        );
+        let workspace = self.workspace(selector).await?;
+        wait_for_updates(seconds, || {
+            self.poll_item_activity(&workspace.id, selection)
+        })
+        .await
+    }
+
+    async fn poll_item_activity(&self, id: &str, selection: &Selection) -> Result<Vec<Update>> {
         let guard = self.pr_gate.lock().await;
         let workspace = self.workspace(id).await?;
         self.verify_worktree(&workspace).await?;
         current_head(&workspace).await?;
-        let Some(registration) = self.pr_registration(id).await? else {
-            anyhow::bail!("no watched PRs; register one with shoal pr watch");
-        };
-        let RegistrationKind::Watch { urls, .. } = registration.kind else {
-            anyhow::bail!("no watched PRs; register one with shoal pr watch");
-        };
-        let pending = self.pending_pr_activity(id).await?;
+        let items = self.selected_items(&workspace, selection).await?;
+        let urls = items.iter().map(|(url, _)| url.clone()).collect::<Vec<_>>();
+        let pending = self.pending_activity(id, &urls).await?;
         if !pending.is_empty() {
             return Ok(pending);
         }
         drop(guard);
+        let remote = repository::remote_url_from_path(&workspace.path)
+            .await?
+            .context("watch needs an origin remote")?;
+        let forge = ForgeRepo::parse(&remote)?;
         let mut observations = Vec::new();
-        for url in urls {
-            let (forge, number, _) = self.pr_forge(&workspace, &url).await?;
-            observations.push((
-                url,
-                forge
-                    .activity(&workspace.path, number, &workspace.branch)
-                    .await?,
-            ));
+        for (url, kind) in items {
+            let snapshot = match kind {
+                ItemKind::Issue => {
+                    let (number, _) = forge.issue(&url)?;
+                    forge.issue_activity(&workspace.path, number).await?
+                }
+                ItemKind::Pr => {
+                    let (number, _) = forge.pull(&url)?;
+                    let branch = if selection.input.is_some() {
+                        forge.pull_request(&workspace.path, &url).await?.head
+                    } else {
+                        workspace.branch.clone()
+                    };
+                    forge.activity(&workspace.path, number, &branch).await?
+                }
+            };
+            observations.push((url, snapshot));
         }
-        self.record_pr_activity(id, observations).await
+        self.record_activity(id, observations, selection).await
     }
 
+    async fn selected_items(
+        &self,
+        workspace: &Workspace,
+        selection: &Selection,
+    ) -> Result<Vec<(String, ItemKind)>> {
+        if let Some(input) = &selection.input {
+            let remote = repository::remote_url_from_path(&workspace.path)
+                .await?
+                .context("watch needs an origin remote")?;
+            let forge = ForgeRepo::parse(&remote)?;
+            let kind = selection.kind.context("explicit items need a kind")?;
+            let (_, url) = match kind {
+                ItemKind::Pr => forge.pull(input)?,
+                ItemKind::Issue => forge.issue(input)?,
+            };
+            return Ok(vec![(url, kind)]);
+        }
+        let id = workspace.id.clone();
+        let kind = selection.kind;
+        let items = self
+            .store
+            .run(move |db| linked_items(db, &id, kind))
+            .await?;
+        ensure!(
+            !items.is_empty(),
+            "no linked items of the selected kind; register one with shoal link"
+        );
+        Ok(items)
+    }
+
+    #[cfg(test)]
     async fn record_pr_activity(
         &self,
         id: &str,
         observations: Vec<(String, Snapshot)>,
     ) -> Result<Vec<Update>> {
+        self.record_activity(
+            id,
+            observations,
+            &Selection {
+                kind: Some(ItemKind::Pr),
+                input: None,
+            },
+        )
+        .await
+    }
+
+    async fn record_activity(
+        &self,
+        id: &str,
+        observations: Vec<(String, Snapshot)>,
+        selection: &Selection,
+    ) -> Result<Vec<Update>> {
+        let selection = selection.clone();
         let _guard = self.pr_gate.lock().await;
         let id = id.to_owned();
         self.store.run(move |db| {
             let tx = db.transaction()?;
             store::require_ready(&tx, &id)?;
-            let registration: Option<String> = tx.query_row(
-                "SELECT record FROM pr_cleanup WHERE workspace_id=?1", [&id], |row| row.get(0)
-            ).optional()?;
-            let registration: Option<super::Registration> = registration.map(|text| serde_json::from_str(&text)).transpose()?;
-            let Some(super::Registration { kind: RegistrationKind::Watch { urls, .. }, .. }) = registration else {
-                anyhow::bail!("no watched PRs; register one with shoal pr watch");
-            };
+            let items = linked_items(&tx, &id, selection.kind)?;
+            if selection.input.is_none() {
+                ensure!(!items.is_empty(), "no linked items of the selected kind; register one with shoal link");
+            }
             let mut updates = Vec::new();
             for (url, mut snapshot) in observations {
-                if !urls.contains(&url) {
+                if selection.input.is_none() && !items.iter().any(|(linked, _)| linked == &url) {
                     continue;
                 }
                 let previous: Option<String> = tx.query_row(
@@ -108,22 +194,44 @@ impl Manager {
                 tx.execute("INSERT INTO pr_activity(workspace_id,url,record) VALUES (?1,?2,?3) ON CONFLICT(workspace_id,url) DO UPDATE SET record=excluded.record", params![id, url, serde_json::to_string(&record)?])?;
             }
             ensure!(serde_json::to_vec(&updates)?.len() < crate::protocol::MAX_FRAME - 256,
-                "too many PR updates for one response; cancel unused watches");
+                "too many updates for one response; select fewer items");
             tx.commit()?;
             Ok(updates)
         }).await
     }
 
+    #[cfg(test)]
     async fn pending_pr_activity(&self, id: &str) -> Result<Vec<Update>> {
+        let id_owned = id.to_owned();
+        let urls = self
+            .store
+            .run(move |db| {
+                Ok(linked_items(db, &id_owned, Some(ItemKind::Pr))?
+                    .into_iter()
+                    .map(|(url, _)| url)
+                    .collect::<Vec<_>>())
+            })
+            .await?;
+        self.pending_activity(id, &urls).await
+    }
+
+    async fn pending_activity(&self, id: &str, urls: &[String]) -> Result<Vec<Update>> {
+        let urls = urls.to_vec();
         let id = id.to_owned();
         self.store
             .run(move |db| {
                 let mut statement =
-                    db.prepare("SELECT record FROM pr_activity WHERE workspace_id=?1")?;
-                let records = statement.query_map([id], |row| row.get::<_, String>(0))?;
+                    db.prepare("SELECT url,record FROM pr_activity WHERE workspace_id=?1")?;
+                let records = statement.query_map([id], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                })?;
                 let mut updates = Vec::new();
                 for record in records {
-                    let record: ActivityRecord = serde_json::from_str(&record?)?;
+                    let (url, record) = record?;
+                    if !urls.contains(&url) {
+                        continue;
+                    }
+                    let record: ActivityRecord = serde_json::from_str(&record)?;
                     updates.extend(record.pending);
                 }
                 Ok(updates)
@@ -170,6 +278,43 @@ impl Manager {
             })
             .await
     }
+}
+
+fn linked_items(
+    db: &rusqlite::Connection,
+    id: &str,
+    kind: Option<ItemKind>,
+) -> Result<Vec<(String, ItemKind)>> {
+    let mut items = Vec::new();
+    if kind != Some(ItemKind::Issue) {
+        let registration: Option<String> = db
+            .query_row(
+                "SELECT record FROM pr_cleanup WHERE workspace_id=?1",
+                [id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if let Some(super::Registration {
+            kind: RegistrationKind::Watch { urls, .. },
+            ..
+        }) = registration
+            .map(|text| serde_json::from_str(&text))
+            .transpose()?
+        {
+            items.extend(urls.into_iter().map(|url| (url, ItemKind::Pr)));
+        }
+    }
+    if kind != Some(ItemKind::Pr) {
+        let url: Option<String> = db
+            .query_row(
+                "SELECT url FROM workspace_issue WHERE workspace_id=?1",
+                [id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        items.extend(url.into_iter().map(|url| (url, ItemKind::Issue)));
+    }
+    Ok(items)
 }
 
 async fn wait_for_updates<F: std::future::Future<Output = Result<Vec<Update>>>>(
@@ -277,6 +422,122 @@ mod tests {
             })
             .await
             .unwrap();
+    }
+
+    #[tokio::test]
+    async fn linked_filters_preserve_other_cursors_and_unlink_drops_inflight_activity() {
+        let (root, manager) = manager().await;
+        let repo_path = repository(root.path(), "repo");
+        let repo = manager
+            .register_repository(repo_path.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        let workspace = manager
+            .create_workspace(&repo.id, "items".into(), None, None, None)
+            .await
+            .unwrap();
+        let id = workspace.id.clone();
+        manager
+            .store
+            .run(move |db| {
+                db.execute(
+                    "INSERT INTO workspace_issue(workspace_id,url) VALUES (?1,'issue')",
+                    [id],
+                )?;
+                Ok(())
+            })
+            .await
+            .unwrap();
+        register_watch(&manager, &workspace.id, "pr").await;
+        let updates = manager
+            .record_activity(
+                &workspace.id,
+                vec![
+                    ("pr".into(), snapshot("review")),
+                    ("issue".into(), snapshot("comment")),
+                ],
+                &Selection::default(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(updates.len(), 2);
+        let pending = manager
+            .pending_activity(&workspace.id, &["pr".into()])
+            .await
+            .unwrap();
+        assert_eq!(pending.len(), 1);
+        manager
+            .acknowledge_pr_updates(&workspace.id, vec![pending[0].delivery.clone()])
+            .await
+            .unwrap();
+        manager
+            .set_pr(&workspace.id, super::super::Action::Clear)
+            .await
+            .unwrap();
+        assert_eq!(
+            manager
+                .pending_activity(&workspace.id, &["issue".into()])
+                .await
+                .unwrap()
+                .len(),
+            1
+        );
+        assert!(
+            manager
+                .record_activity(
+                    &workspace.id,
+                    vec![("pr".into(), snapshot("later"))],
+                    &Selection::default()
+                )
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        manager.clear_issue(&workspace.id, None).await.unwrap();
+        assert!(
+            manager
+                .pending_activity(&workspace.id, &["issue".into()])
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            manager
+                .record_activity(
+                    &workspace.id,
+                    vec![("issue".into(), snapshot("later"))],
+                    &Selection::default()
+                )
+                .await
+                .is_err()
+        );
+        let explicit = Selection {
+            kind: Some(ItemKind::Issue),
+            input: Some("2".into()),
+        };
+        let updates = manager
+            .record_activity(
+                &workspace.id,
+                vec![("explicit".into(), snapshot("new"))],
+                &explicit,
+            )
+            .await
+            .unwrap();
+        assert_eq!(updates.len(), 1);
+        assert!(
+            manager
+                .issue_registration(&workspace.id)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            manager
+                .pr_registration(&workspace.id)
+                .await
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[tokio::test(start_paused = true)]
@@ -429,7 +690,7 @@ mod tests {
                 .await
                 .unwrap_err()
                 .to_string()
-                .contains("no watched PRs")
+                .contains("no linked items")
         );
         assert!(restarted.completion(&workspace.id).await.unwrap().is_none());
     }

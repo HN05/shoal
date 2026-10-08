@@ -237,6 +237,14 @@ pub(super) fn require_open(kind: ForgeKind, output: &str, number: u64) -> Result
     Ok(())
 }
 
+pub(super) fn state(kind: ForgeKind, output: &str, number: u64) -> Result<String> {
+    Ok(match parse_state(kind, output, number)? {
+        IssueState::Open => "open",
+        IssueState::Closed => "closed",
+    }
+    .into())
+}
+
 fn parse_state(kind: ForgeKind, output: &str, number: u64) -> Result<IssueState> {
     match kind {
         ForgeKind::GitHub => {

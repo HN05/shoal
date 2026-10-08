@@ -4,6 +4,59 @@ use anyhow::{Context, Result, ensure};
 use std::path::Path;
 
 impl ForgeRepo {
+    pub(crate) async fn issue_activity(&self, path: &Path, number: u64) -> Result<Snapshot> {
+        let id = number.to_string();
+        let repository = format!("{}/{}", self.host, self.path);
+        let mut snapshot = Snapshot::default();
+        match self.kind {
+            ForgeKind::GitHub => {
+                let args = [
+                    "issue",
+                    "view",
+                    &id,
+                    "--repo",
+                    &repository,
+                    "--json",
+                    "number,state,comments",
+                ];
+                let output = self.kind.query(path, &args, Query::Issue).await?;
+                let issue: serde_json::Value = serde_json::from_str(&output)?;
+                ensure!(issue["number"] == number, "gh returned a different issue");
+                snapshot.state = issue["state"]
+                    .as_str()
+                    .context("issue has no state")?
+                    .to_ascii_lowercase();
+                ensure!(
+                    matches!(snapshot.state.as_str(), "open" | "closed"),
+                    "unknown issue state"
+                );
+                for comment in issue["comments"]
+                    .as_array()
+                    .context("missing issue comments")?
+                {
+                    let id = comment.get("id").context("issue comment has no ID")?;
+                    snapshot
+                        .comments
+                        .insert(id.to_string(), comment_fingerprint(comment));
+                }
+            }
+            ForgeKind::Forgejo => {
+                let args = [
+                    "--style", "minimal", "issue", "view", &id, "--host", &self.host, "--remote",
+                    "origin",
+                ];
+                let output = self.kind.query(path, &args, Query::Issue).await?;
+                snapshot.state = super::super::issue::state(self.kind, &output, number)?;
+                let args = [&args[..], &["comments"]].concat();
+                snapshot.record_comments(
+                    "discussion",
+                    self.kind.query(path, &args, Query::Issue).await,
+                );
+            }
+        }
+        Ok(snapshot)
+    }
+
     pub(crate) async fn activity(
         &self,
         path: &Path,

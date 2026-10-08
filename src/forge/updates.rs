@@ -14,6 +14,7 @@ crate::state::states!(UpdateKind {
     MergeConflict => "merge_conflict",
     Closed => "closed",
     Merged => "merged",
+    Reopened => "reopened",
     LookupFailed => "lookup_failed",
 });
 
@@ -59,7 +60,7 @@ impl Snapshot {
             .iter()
             .any(|(id, comment)| !comment.is_empty() && self.comments.get(id) != Some(comment))
         {
-            emit(UpdateKind::Comment, "PR comments or review changed".into());
+            emit(UpdateKind::Comment, "Comments or reviews changed".into());
         }
         for (id, check) in &next.checks {
             if check.complete && self.checks.get(id) != Some(check) {
@@ -74,11 +75,19 @@ impl Snapshot {
         }
         if next.state != self.state {
             match next.state.as_str() {
-                "closed" => emit(UpdateKind::Closed, "PR closed without merging".into()),
-                "merged" => emit(
-                    UpdateKind::Merged,
-                    "PR merged; run `shoal done` once the assignment is finished".into(),
+                "closed" => emit(
+                    UpdateKind::Closed,
+                    if url.contains("/issues/") {
+                        "Issue closed"
+                    } else {
+                        "PR closed without merging"
+                    }
+                    .into(),
                 ),
+                "open" if self.state == "closed" => {
+                    emit(UpdateKind::Reopened, "Item reopened".into())
+                }
+                "merged" => emit(UpdateKind::Merged, "PR merged".into()),
                 _ => {}
             }
         }
@@ -171,5 +180,35 @@ mod tests {
         let mut closed = reviewed.clone();
         closed.state = "closed".into();
         assert_eq!(reviewed.changes(&closed, "pr")[0].kind, UpdateKind::Closed);
+    }
+    #[test]
+    fn issue_closure_and_reopening_have_item_messages() {
+        let mut opened = Snapshot {
+            state: "open".into(),
+            ..Default::default()
+        };
+        let closed = Snapshot {
+            state: "closed".into(),
+            ..Default::default()
+        };
+        let updates = opened.changes(&closed, "https://forge.example/team/repo/issues/1");
+        assert_eq!(updates[0].kind, UpdateKind::Closed);
+        assert_eq!(updates[0].message, "Issue closed");
+        assert_eq!(
+            closed.changes(&opened, "issue")[0].kind,
+            UpdateKind::Reopened
+        );
+        opened.state.clear();
+        assert!(
+            opened
+                .changes(
+                    &Snapshot {
+                        state: "open".into(),
+                        ..Default::default()
+                    },
+                    "issue"
+                )
+                .is_empty()
+        );
     }
 }

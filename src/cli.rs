@@ -126,6 +126,14 @@ pub enum Command {
         #[command(flatten)]
         items: ItemArgs,
     },
+    /// Wait for activity on linked items, one kind, or an explicit item.
+    Watch {
+        #[command(flatten)]
+        items: ItemArgs,
+        /// Return no updates when the wait expires (1–3600 seconds).
+        #[arg(long, default_value_t = 3600)]
+        timeout: u64,
+    },
     /// Bring an existing worktree under Shoal management, including cleanup.
     Adopt {
         /// Registered repository that owns the linked worktree.
@@ -492,6 +500,7 @@ pub enum PrCommand {
         url: Option<String>,
     },
     /// Wait for the next comment, completed CI check, or merge conflict update.
+    #[command(hide = true)]
     Wait {
         workspace: Option<String>,
         /// Stop waiting after this many seconds and return no updates.

@@ -19,7 +19,9 @@ const GROUPS: &[(&str, &[&str])] = &[
     ),
     (
         "Changes and review",
-        &["diff", "review", "merge", "land", "pr", "link", "unlink"],
+        &[
+            "diff", "review", "merge", "land", "pr", "link", "unlink", "watch",
+        ],
     ),
     ("Shared resources", &["port", "sim", "resource", "access"]),
     (

@@ -195,6 +195,11 @@ pub enum Method {
         workspace: String,
         timeout_secs: u64,
     },
+    WatchItems {
+        workspace: String,
+        selection: crate::forge::link::Selection,
+        timeout_secs: u64,
+    },
     AcknowledgePrUpdates {
         workspace: String,
         deliveries: Vec<String>,

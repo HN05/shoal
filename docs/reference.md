@@ -894,21 +894,20 @@ association is idempotent and must be unlinked before linking a different issue.
 PR links accumulate without duplicates and must name the recorded workspace
 branch. Linked items suppress idle cleanup.
 
-`shoal pr wait [workspace]` polls watched PR activity every ~30 seconds and returns
-on comments or reviews, each completed CI check, a new merge conflict, closure,
-or merging. Each result includes its PR URL, kind and message; `--json` returns
-an `updates` array. The first wait reports existing activity; subsequent waits
-share a cursor per workspace that survives restarts, including changes made
-between waits. Updates remain replayable until the CLI acknowledges successful
-output; an interrupted wait may report them again. Cancelling a watch discards
-its cursor. `--timeout <seconds>`
-bounds the wait (1–3600, default 3600); expiration returns an empty array and
-`timed_out: true`. Scoped agents can wait only in their own workspace. Waiting
-continues when automatic completion is deferred or PR cleanup is disabled.
-Activity lookup failures report an error or a `lookup_failed` update; unavailable
-sources must recover before their changes can be reported. Forgejo discussion
-and review changes are grouped, and CI results follow the contexts exposed by
-`fj pr status`.
+`shoal watch` polls all linked items every ~30 seconds; `watch pr` or `watch issue`
+filters by kind. `watch <url>`, `watch pr <number-or-url>` and
+`watch issue <number-or-url>` select an explicit item in the workspace's repository
+without linking it or changing completion policy. Watches return on comments,
+reviews, completed CI checks, new merge conflicts, closure, reopening or merging.
+Each update includes its item URL, kind and message; `--json` returns an `updates`
+array. The first watch reports existing activity; subsequent watches share a
+cursor per workspace and item across restarts. Pending updates replay until the
+CLI acknowledges successful output. Unlinking discards that item's cursor.
+`--timeout <seconds>` bounds the wait (1–3600, default 3600); expiration returns
+an empty array and `timed_out: true`. Scoped callers can watch only in their own
+workspace. Activity polling continues when completion is deferred or PR cleanup
+is disabled. Lookup failures report errors or `lookup_failed` updates. Forgejo
+comment and review changes are grouped; CI results follow `fj pr status` contexts.
 
 Unless waiting for explicit `done`, once every linked PR has merged and at least
 one contains current HEAD, Shoal records completion using `[done] cleanup` or an

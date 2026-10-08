@@ -226,6 +226,21 @@ async fn serve(mut stream: UnixStream, server: Server) -> Result<()> {
             return wait_pr_updates(stream, request.id, server.manager, workspace, timeout_secs)
                 .await;
         }
+        Method::WatchItems {
+            workspace,
+            selection,
+            timeout_secs,
+        } => {
+            return watch_item_updates(
+                stream,
+                request.id,
+                server.manager,
+                workspace,
+                selection,
+                timeout_secs,
+            )
+            .await;
+        }
         Method::Status => Body::Status(DaemonStatus {
             pid: std::process::id(),
             version: env!("CARGO_PKG_VERSION").into(),
@@ -258,7 +273,8 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         | Method::Execute { .. }
         | Method::WatchNotifications
         | Method::WatchWorkspaceEvents { .. }
-        | Method::PrWait { .. } => {
+        | Method::PrWait { .. }
+        | Method::WatchItems { .. } => {
             anyhow::bail!("unsupported operation")
         }
         Method::ReloadConfig => {
@@ -614,15 +630,37 @@ async fn watch_workspace_events(
 }
 
 async fn wait_pr_updates(
-    mut stream: UnixStream,
+    stream: UnixStream,
     request_id: u64,
     manager: Arc<Manager>,
     workspace: String,
     timeout_secs: u64,
 ) -> Result<()> {
+    watch_item_updates(
+        stream,
+        request_id,
+        manager,
+        workspace,
+        crate::forge::link::Selection {
+            kind: Some(crate::forge::link::ItemKind::Pr),
+            input: None,
+        },
+        timeout_secs,
+    )
+    .await
+}
+
+async fn watch_item_updates(
+    mut stream: UnixStream,
+    request_id: u64,
+    manager: Arc<Manager>,
+    workspace: String,
+    selection: crate::forge::link::Selection,
+    timeout_secs: u64,
+) -> Result<()> {
     let mut closed = [0u8; 1];
     let result = tokio::select! {
-        result = manager.wait_prs(&workspace, timeout_secs) => result,
+        result = manager.wait_items(&workspace, &selection, timeout_secs) => result,
         _ = tokio::io::AsyncReadExt::read(&mut stream, &mut closed) => return Ok(()),
     };
     let body = match result {

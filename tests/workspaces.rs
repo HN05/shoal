@@ -10143,7 +10143,186 @@ fn pr_wait_wakes_for_individual_ci_reviews_and_conflicts_with_own_scope() {
     fixture.ok(&["pr", "unwatch", "watch"]);
     let missing = fixture.run(&["pr", "wait", "watch"]);
     assert!(!missing.status.success());
-    assert!(String::from_utf8_lossy(&missing.stderr).contains("no watched PRs"));
+    assert!(String::from_utf8_lossy(&missing.stderr).contains("no linked items"));
+}
+
+#[test]
+fn unified_items_link_filter_and_watch_explicit_targets_without_completion() {
+    let mut fixture = Fixture::with_config(Some("[auto_cleanup]\nenabled=false\n"));
+    fixture.add("items");
+    fixture.add("other");
+    fixture.add_github_origin();
+    let bin = fixture.root.path().join("bin");
+    fs::create_dir(&bin).unwrap();
+    fs::write(
+        bin.join("gh"),
+        r#"#!/bin/sh
+case "$1" in
+ api) printf '[]';;
+ issue) cat "$HOME/issue.json";;
+ *) cat "$HOME/pr.json";;
+esac
+"#,
+    )
+    .unwrap();
+    fs::set_permissions(bin.join("gh"), fs::Permissions::from_mode(0o755)).unwrap();
+    let issue_file = fixture.root.path().join("issue.json");
+    let write_issue = |number, body: &str| {
+        fs::write(
+            &issue_file,
+            serde_json::json!({"number":number,"state":"OPEN","comments":[{"id":1,"body":body}]})
+                .to_string(),
+        )
+        .unwrap()
+    };
+    fs::write(fixture.root.path().join("pr.json"), serde_json::json!({"number":7,"state":"OPEN","headRefName":"items","headRefOid":"head","title":"PR","baseRefName":"main","isCrossRepository":false,
+        "commits":[],"comments":[{"id":2,"body":"PR comment"}],"reviews":[],"statusCheckRollup":[],"mergeable":"MERGEABLE"}).to_string()).unwrap();
+    write_issue(1, "first");
+    fixture.ok(&["link", "pr", "7", "--workspace", "items"]);
+    fixture.ok(&[
+        "link",
+        "https://github.com/team/project/issues/1",
+        "--workspace",
+        "items",
+    ]);
+    fixture.ok(&["continue", "items"]);
+    let binary = env!("CARGO_BIN_EXE_shoal");
+    let filtered = fixture.ok(&["exec", "items", "--", binary, "--json", "watch", "pr"]);
+    assert_eq!(filtered["updates"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        filtered["updates"][0]["url"],
+        "https://github.com/team/project/pull/7"
+    );
+    let issue = fixture.ok(&["watch", "issue", "--workspace", "items"]);
+    assert_eq!(
+        issue["updates"][0]["url"],
+        "https://github.com/team/project/issues/1"
+    );
+    write_issue(1, "changed");
+    let all = fixture.ok(&["watch", "--workspace", "items"]);
+    assert_eq!(all["updates"].as_array().unwrap().len(), 1);
+    fixture.restart();
+    write_issue(1, "changed after restart");
+    let direct = fixture.ok(&[
+        "watch",
+        "https://github.com/team/project/issues/1",
+        "--workspace",
+        "items",
+    ]);
+    assert_eq!(direct["updates"].as_array().unwrap().len(), 1);
+    assert!(
+        !fixture
+            .run(&["unlink", "issue", "2", "--workspace", "items"])
+            .status
+            .success()
+    );
+    assert!(
+        !fixture
+            .run(&[
+                "exec",
+                "items",
+                "--",
+                binary,
+                "watch",
+                "--workspace",
+                "other"
+            ])
+            .status
+            .success()
+    );
+    fixture.ok(&[
+        "exec", "items", "--", binary, "--json", "unlink", "issue", "1",
+    ]);
+    let inspection = fixture.ok(&["inspect", "items"]);
+    assert!(inspection["issue"].is_null());
+    assert_eq!(
+        inspection["pr_cleanup"]["url"],
+        "https://github.com/team/project/pull/7"
+    );
+    write_issue(2, "unlinked issue");
+    let explicit = fixture.ok(&["watch", "issue", "2", "--workspace", "items"]);
+    assert_eq!(
+        explicit["updates"][0]["url"],
+        "https://github.com/team/project/issues/2"
+    );
+    let inspection = fixture.ok(&["inspect", "items"]);
+    assert!(inspection["issue"].is_null() && inspection["completion"].is_null());
+    write_issue(1, "relink");
+    fixture.ok(&["link", "issue", "1", "--workspace", "items"]);
+    fixture.ok(&["unlink", "--workspace", "items"]);
+    assert!(fixture.ok(&["inspect", "items"])["issue"].is_null());
+    assert!(fixture.ok(&["inspect", "items"])["pr_cleanup"].is_null());
+    assert!(
+        !fixture
+            .run(&["watch", "--workspace", "items"])
+            .status
+            .success()
+    );
+    let explicit = fixture.ok(&["watch", "pr", "7", "--workspace", "items"]);
+    assert_eq!(explicit["updates"].as_array().unwrap().len(), 1);
+    assert!(fixture.ok(&["inspect", "items"])["pr_cleanup"].is_null());
+    assert!(
+        !fixture
+            .run(&[
+                "watch",
+                "https://github.com/other/project/issues/2",
+                "--workspace",
+                "items"
+            ])
+            .status
+            .success()
+    );
+}
+
+#[test]
+fn watch_forgejo_issue_reports_comments_closure_and_reopening() {
+    let fixture = Fixture::with_config(Some("[auto_cleanup]\nenabled=false\n"));
+    fixture.add("issue-watch");
+    git(
+        &fixture.repo,
+        &[
+            "remote",
+            "add",
+            "origin",
+            "https://forge.example/team/repo.git",
+        ],
+    );
+    fixture.ok(&["continue", "issue-watch"]);
+    let bin = fixture.root.path().join("bin");
+    fs::create_dir(&bin).unwrap();
+    fs::write(
+        bin.join("fj"),
+        r#"#!/bin/sh
+for arg; do last=$arg; done
+if [ "$last" = comments ]; then cat "$HOME/comments"; else cat "$HOME/issue"; fi
+"#,
+    )
+    .unwrap();
+    fs::set_permissions(bin.join("fj"), fs::Permissions::from_mode(0o755)).unwrap();
+    let state = |state| {
+        fs::write(
+            fixture.root.path().join("issue"),
+            format!("Issue #8\nBy user — {state}\n"),
+        )
+        .unwrap()
+    };
+    state("Open");
+    fs::write(
+        fixture.root.path().join("comments"),
+        "User said:\n> first comment\n",
+    )
+    .unwrap();
+    fixture.ok(&["link", "issue", "8", "--workspace", "issue-watch"]);
+    let first = fixture.ok(&["watch", "issue", "--workspace", "issue-watch"]);
+    assert_eq!(first["updates"][0]["kind"], "comment");
+    state("Closed");
+    let closed = fixture.ok(&["watch", "--workspace", "issue-watch"]);
+    assert_eq!(closed["updates"].as_array().unwrap().len(), 1);
+    assert_eq!(closed["updates"][0]["kind"], "closed");
+    state("Open");
+    let reopened = fixture.ok(&["watch", "issue", "8", "--workspace", "issue-watch"]);
+    assert_eq!(reopened["updates"][0]["kind"], "reopened");
+    assert!(fixture.ok(&["inspect", "issue-watch"])["completion"].is_null());
 }
 
 #[test]

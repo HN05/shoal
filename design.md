@@ -561,10 +561,11 @@ checks apply to each PR. Once confirmed, the daemon records completion through
 HEAD persists so restart cannot complete the same watch set again. Persisted manual
 acknowledgement binds to exactly the recorded HEAD. Registrations distinguish watches from
 acknowledgements; legacy single-watch records retain their stored and JSON shape.
-Ambiguous records and conflicting actions are rejected. Own-workspace `pr wait`
-polls activity independently of cleanup, reporting comments or reviews, each
-completed CI check, new merge conflicts and PR closure or merging. It shares a
-persistent cursor per workspace and PR, reporting existing activity on the first
+Ambiguous records and conflicting actions are rejected. Own-workspace `watch`
+polls linked issue and PR activity independently of cleanup, with kind filters
+or an explicit item that does not change associations. It reports comments or
+reviews, completed CI checks, new merge conflicts, closure, reopening or merging. It shares a
+persistent cursor per workspace and item, reporting existing activity on the first
 wait and changes between waits thereafter; cancelling the watch discards that cursor.
 Activity lookups run outside completion serialization; persisting results
 rechecks the watch set so cancelled watches cannot recreate their cursors.

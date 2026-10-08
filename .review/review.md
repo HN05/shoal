@@ -124,8 +124,11 @@ instructions instead of the PR delivery guidance below.
   their remote head remains the original branch. Reserve intent before changing Git;
   no execution other than the scoped caller may be recorded.
   explicit repair reconciles interrupted intent without replaying the mutation.
-- Pasted links select repositories by origin identity. `add` opens issue, PR or
-  branch links; `link`/`unlink` manage workspace-owned completion associations.
+- Pasted links select repositories by origin identity: `add` opens issue, PR or
+  branch links; `link`/`unlink` manage issue and PR completion associations. `watch`
+  defaults to linked items, supports kind filters and explicit items without
+  changing completion. Cursors are workspace/item-owned, recheck associations
+  before recording linked activity, and unlinking clears only that item's cursor.
 - Existing branches, including an issue's derived local branch, use unsuffixed
   worktrees; reopen verified owned workspaces, require explicit adoption for other
   linked checkouts, never adopt the main checkout,

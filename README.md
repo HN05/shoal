@@ -74,6 +74,7 @@ shoal continue                          # Keep working until an explicit shoal d
 shoal add https://github.com/owner/repo/issues/34  # Add an issue, PR, or branch link
 shoal link https://github.com/owner/repo/issues/34  # Link an issue to the current workspace
 shoal unlink issue                         # Remove the linked issue
+shoal watch pr 505                         # Watch an explicit PR
 ```
 
 Inside Herdr, `add` opens a new tab after your choices; use `--here`
@@ -123,7 +124,7 @@ shoal done --cleanup fix-login # Override a configured keep default
 shoal rm fix-login            # Remove the workspace
 shoal link pr 42              # Link a PR (or paste its URL)
 shoal link pr 43              # Link another; all must merge before automatic done
-shoal pr wait                # Wake on linked PR activity
+shoal watch                   # Wake on all linked item comments, checks, or closure
 shoal unlink pr 43            # Cancel one linked PR
 shoal unlink pr               # Cancel linked PRs
 ```
