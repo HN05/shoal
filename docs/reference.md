@@ -156,7 +156,7 @@ finishes waiting agents at once, keeping their records for `shoal resume`.
 `shoal stop [workspace]` stops tracked agents and commands through their wrappers,
 retaining work and resource leases. Agents save recovery records; commands started
 with `exec` or `run` save their arguments, which `shoal resume` reports and never
-reruns. Setup, landing and other internal commands save nothing.
+reruns; arguments that are not UTF-8 are not saved. Setup, landing and other internal commands save nothing.
 `--all` stops every ready or failed workspace with a running execution in parallel,
 reporting each failure without keeping the others running.
 Disconnected executions require `shoal doctor`. Stopping cancels a waiting automatic

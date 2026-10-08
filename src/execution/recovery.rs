@@ -160,15 +160,17 @@ pub(super) fn save_command(
     id: &str,
     argv: &[OsString],
 ) -> Result<PathBuf> {
-    let directory = paths.workspace_state(workspace_id);
-    std::fs::create_dir_all(&directory)?;
-    let path = directory.join(format!("{id}{COMMAND_SUFFIX}"));
+    // A lossy record would report a different command than the one stopped.
     let record = CommandRecord {
         argv: argv
             .iter()
-            .map(|arg| arg.to_string_lossy().into_owned())
-            .collect(),
+            .map(|arg| arg.to_str().map(str::to_owned))
+            .collect::<Option<_>>()
+            .ok_or_else(|| anyhow::anyhow!("an argument is not valid UTF-8"))?,
     };
+    let directory = paths.workspace_state(workspace_id);
+    std::fs::create_dir_all(&directory)?;
+    let path = directory.join(format!("{id}{COMMAND_SUFFIX}"));
     crate::fsutil::replace_atomically(
         &path,
         &serde_json::to_vec(&record)?,
@@ -333,5 +335,15 @@ mod tests {
             Some("critical memory pressure")
         );
         assert!(pending(&paths, "workspace").unwrap());
+    }
+
+    #[test]
+    fn commands_with_arguments_that_are_not_utf8_are_not_recorded() {
+        use std::os::unix::ffi::OsStringExt;
+        let root = tempfile::tempdir().unwrap();
+        let paths = Paths::for_test(root.path());
+        let argv = [OsString::from("cat"), OsString::from_vec(vec![0xff])];
+        assert!(save_command(&paths, "workspace", "execution", &argv).is_err());
+        assert!(!pending(&paths, "workspace").unwrap());
     }
 }
