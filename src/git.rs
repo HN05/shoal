@@ -217,6 +217,16 @@ impl Worktree {
     }
 }
 
+/// The canonical Git directory shared by every worktree of the checkout at `path`.
+pub async fn common_dir(path: &Path) -> Result<PathBuf> {
+    let dir = run(
+        path,
+        &["rev-parse", "--path-format=absolute", "--git-common-dir"],
+    )
+    .await?;
+    Ok(std::fs::canonicalize(dir.trim())?)
+}
+
 pub async fn worktrees(
     repo: &Path,
     run: impl AsyncFn(&Path, &[&str]) -> Result<String>,

@@ -294,13 +294,8 @@ async fn check_checkout(repo: &Repository, workspaces: &[Workspace]) -> Result<(
         real_directory_identity(&git_dir)?.is_some(),
         "repository Git directory is missing"
     );
-    let common = git::run(
-        &repo.path,
-        &["rev-parse", "--path-format=absolute", "--git-common-dir"],
-    )
-    .await?;
     ensure!(
-        fs::canonicalize(common.trim())? == git_dir,
+        git::common_dir(&repo.path).await? == git_dir,
         "repository uses external Git metadata; refusing deletion"
     );
     for tree in git::worktrees(&repo.path, git::run).await? {

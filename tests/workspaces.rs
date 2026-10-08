@@ -12053,12 +12053,7 @@ fn adopt_cli_preserves_work_and_uses_normal_lifecycle() {
     let output = fixture
         .command()
         .current_dir(fixture.root.path())
-        .args([
-            "--json",
-            "adopt",
-            fixture.repo.to_str().unwrap(),
-            "existing worktree",
-        ])
+        .args(["--json", "adopt", "existing worktree"])
         .output()
         .unwrap();
     assert!(
@@ -12072,8 +12067,9 @@ fn adopt_cli_preserves_work_and_uses_normal_lifecycle() {
     fixture.restart();
     let again = fixture.ok(&[
         "adopt",
-        fixture.repo.to_str().unwrap(),
         "~/existing worktree",
+        "--repo",
+        fixture.repo.to_str().unwrap(),
     ]);
     assert_eq!(again["id"], w["id"]);
     let output = fixture.run(&["exec", "adopt-topic", "--", "cat", "tracked"]);
@@ -12089,6 +12085,75 @@ fn adopt_cli_preserves_work_and_uses_normal_lifecycle() {
     fixture.ok(&["port", "acquire", "test", "adopt-topic"]);
     fixture.ok(&["repo", "rm", fixture.repo.to_str().unwrap(), "--yes"]);
     assert!(!path.exists());
+    assert!(fixture.ok(&["ls"]).as_array().unwrap().is_empty());
+}
+
+#[test]
+fn adopt_infers_a_checkout_with_a_separate_git_directory() {
+    let fixture = Fixture::new();
+    let root = fixture.root.path();
+    let checkout = root.join("separate");
+    fs::create_dir(&checkout).unwrap();
+    let checkout = fs::canonicalize(checkout).unwrap();
+    let git_dir = root.join("separate.git");
+    git(
+        &checkout,
+        &[
+            "init",
+            "-b",
+            "main",
+            "--separate-git-dir",
+            git_dir.to_str().unwrap(),
+        ],
+    );
+    git(
+        &checkout,
+        &[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.test",
+            "commit",
+            "--allow-empty",
+            "-m",
+            "initial",
+        ],
+    );
+    fixture.ok(&["repo", "add", checkout.to_str().unwrap()]);
+    let path = root.join("separate-worktree");
+    git(
+        &checkout,
+        &["worktree", "add", "-b", "topic", path.to_str().unwrap()],
+    );
+    let adopted = fixture.ok(&["adopt", path.to_str().unwrap()]);
+    assert_eq!(adopted["name"], "topic");
+}
+
+#[test]
+fn adopt_infers_the_repository_from_the_worktree_remote() {
+    let fixture = Fixture::new();
+    fixture.add_github_origin();
+    let adopt = |name: &str, remote: &str| {
+        let clone = init_repo(fixture.root.path(), name, &[("tracked", "clone\n")]);
+        git(&clone, &["remote", "add", "origin", remote]);
+        let path = fixture.root.path().join(format!("{name}-worktree"));
+        git(
+            &clone,
+            &["worktree", "add", "-b", "topic", path.to_str().unwrap()],
+        );
+        let output = fixture.run(&["adopt", path.to_str().unwrap()]);
+        assert!(!output.status.success());
+        String::from_utf8_lossy(&output.stderr).into_owned()
+    };
+    // The shared remote selects the registration, whose checkout then refuses
+    // a worktree of another clone.
+    let error = adopt("clone", "git@github.com:team/project.git");
+    assert!(
+        error.contains("linked worktree of this repository"),
+        "{error}"
+    );
+    let error = adopt("other", "git@github.com:team/other.git");
+    assert!(error.contains("pass --repo <repository>"), "{error}");
     assert!(fixture.ok(&["ls"]).as_array().unwrap().is_empty());
 }
 
@@ -12120,7 +12185,7 @@ fn explicit_locations_do_not_require_unrelated_checkouts_to_be_readable() {
             adopted.to_str().unwrap(),
         ],
     );
-    fixture.ok(&["adopt", repo, adopted.to_str().unwrap()]);
+    fixture.ok(&["adopt", adopted.to_str().unwrap(), "--repo", repo]);
     for protected in [
         offline.join("nested"),
         Path::new(registration["workspaces_dir"].as_str().unwrap()).join("nested"),

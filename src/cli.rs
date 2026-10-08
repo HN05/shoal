@@ -155,10 +155,11 @@ pub enum Command {
     },
     /// Bring an existing worktree under Shoal management, including cleanup.
     Adopt {
-        /// Registered repository that owns the linked worktree.
-        repository: String,
         /// Existing worktree root; files and Git settings are preserved, setup is skipped.
         path: PathBuf,
+        /// Registered repository; defaults to the one whose checkout or origin remote the worktree shares.
+        #[arg(long = "repo")]
+        repository: Option<String>,
     },
     /// Rename a workspace's Git branch and derived workspace name.
     #[command(allow_missing_positional = true)]

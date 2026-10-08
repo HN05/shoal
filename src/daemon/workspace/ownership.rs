@@ -88,8 +88,8 @@ impl Manager {
             fs::canonicalize(root.trim())? == fs::canonicalize(&workspace.path)?,
             "workspace path no longer points to its worktree root"
         );
-        let expected = git_common_dir(&repo.path).await?;
-        let actual = git_common_dir(&workspace.path).await?;
+        let expected = git::common_dir(&repo.path).await?;
+        let actual = git::common_dir(&workspace.path).await?;
         ensure!(
             expected == actual,
             "workspace now belongs to a different repository"
@@ -170,15 +170,6 @@ impl Manager {
         }
         Ok(Some(path.to_owned()))
     }
-}
-
-async fn git_common_dir(path: &Path) -> Result<PathBuf> {
-    let dir = git::run(
-        path,
-        &["rev-parse", "--path-format=absolute", "--git-common-dir"],
-    )
-    .await?;
-    Ok(fs::canonicalize(dir.trim())?)
 }
 
 pub(super) async fn git_dir(path: &Path) -> Result<PathBuf> {

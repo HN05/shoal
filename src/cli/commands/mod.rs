@@ -257,7 +257,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         Command::Watch { items, timeout } => links::watch(&ctx, items, timeout).await,
         Command::Ready { items } => links::ready(&ctx, items).await,
         Command::Unready { items } => links::unready(&ctx, items).await,
-        Command::Adopt { repository, path } => workspaces::adopt(&ctx, repository, path).await,
+        Command::Adopt { path, repository } => workspaces::adopt(&ctx, path, repository).await,
         Command::Rename { workspace, branch } => workspaces::rename(&ctx, workspace, branch).await,
         Command::Issue {
             here,

@@ -1,6 +1,9 @@
 //! CLI workspace workflows; all state mutations go through the daemon.
 use crate::tools::Tool;
-use std::{ffi::OsString, path::PathBuf};
+use std::{
+    ffi::OsString,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{Context as _, Result, ensure};
 use serde_json::json;
@@ -19,6 +22,7 @@ use crate::{
     forge::{
         IssueInput,
         pr::{Action, RegistrationKind},
+        repository,
     },
     git::{
         self,
@@ -668,9 +672,12 @@ impl ResolvedAddAgent {
     }
 }
 
-pub(super) async fn adopt(ctx: &Context, repository: String, path: PathBuf) -> Result<i32> {
-    let repository = ui::repository_selector(repository)?;
+pub(super) async fn adopt(ctx: &Context, path: PathBuf, repository: Option<String>) -> Result<i32> {
     let path = super::repositories::absolute(ctx, path)?;
+    let repository = match repository {
+        Some(repository) => ui::repository_selector(repository)?,
+        None => worktree_repository(ctx, &path).await?.into(),
+    };
     let workspace =
         request::<Workspace>(&ctx.paths, Method::AdoptWorkspace { repository, path }).await?;
     ctx.emit(
@@ -684,6 +691,51 @@ pub(super) async fn adopt(ctx: &Context, repository: String, path: PathBuf) -> R
     )?;
     shell::navigate(&workspace.path, ctx.json)?;
     Ok(0)
+}
+
+/// The registered repository whose checkout owns the worktree at `path`,
+/// otherwise the only one sharing its origin remote, otherwise one chosen
+/// interactively.
+async fn worktree_repository(ctx: &Context, path: &Path) -> Result<String> {
+    let mut repos = client::repositories(&ctx.paths).await?;
+    let common = git::common_dir(path)
+        .await
+        .with_context(|| format!("{} is not a Git worktree", path.display()))?;
+    for repo in &repos {
+        // Checkouts may keep their Git directory elsewhere; an unreadable one owns nothing.
+        if git::common_dir(&repo.path)
+            .await
+            .is_ok_and(|dir| dir == common)
+        {
+            return Ok(repo.id.clone());
+        }
+    }
+    if let Some(remote) = repository::identity(&path.to_string_lossy()).await? {
+        let mut matches = Vec::new();
+        for repo in &repos {
+            // An unreadable registration cannot share the remote.
+            if repository::identity(&repo.source)
+                .await
+                .ok()
+                .flatten()
+                .as_ref()
+                == Some(&remote)
+            {
+                matches.push(repo.clone());
+            }
+        }
+        match matches.as_slice() {
+            [repo] => return Ok(repo.id.clone()),
+            [] => {}
+            _ => repos = matches,
+        }
+    }
+    ensure!(
+        ctx.interactive(),
+        "cannot infer the repository of {}; pass --repo <repository>",
+        path.display()
+    );
+    ui::pick(ctx, "Repository> ", ui::repository_choices(repos).await?)
 }
 
 pub(super) async fn setup(ctx: &Context, workspace: Option<String>) -> Result<i32> {
