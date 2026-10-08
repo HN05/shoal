@@ -10,9 +10,7 @@ assignment with these steps:
 1. After opening a PR, run `shoal link pr <number-or-url>`.
 2. While watched PRs are open, run `shoal watch pr`. Handle the reported
    comments, reviews, CI results and merge conflicts, then wait again; a timeout
-   means no update. When a PR is ready to merge, run `shoal ready`, and again
-   after later fixes. Run `shoal notify "<message>"` when you need the user.
-   Merge only when authorized.
+   means no update. Merge only when authorized.
 3. When the assignment is finished (every watched PR merged, or no PR needed),
    run `shoal done` as your last command. It may stop this session and removes
    the workspace once its work is merged or pushed. Run `shoal done --keep`
