@@ -129,10 +129,12 @@ their idle delay, until enough space is available. A repository with idle
 cleanup disabled keeps its workspaces. Removals record `workspace_removed`
 notifications and the `disk_space` event cause; a pass that cannot free enough
 space repeats at most every 30 seconds. While space stays below
-`disk.stop_free_gib` after cleanup, the daemon stops every tracked execution as
-`shoal stop` does, including ones started later, and records an `agent_stopped`
-notification per workspace, or `stop_failed` when stopping fails. Free disk
-space, then restore them with `shoal resume`. A failed reading removes and stops nothing.
+`disk.stop_free_gib` after cleanup, the daemon stops every running agent as
+memory protection does, then every other tracked execution as `shoal stop` does,
+including ones started later, recording `agent_stopped` notifications, or
+`stop_failed` when stopping fails. Agents restore under the recovery rules below
+once `disk.cleanup_free_gib` is available; otherwise free disk space, then run
+`shoal resume`. A failed reading removes and stops nothing.
 
 Configure machine-wide settings in global TOML and reload the daemon:
 

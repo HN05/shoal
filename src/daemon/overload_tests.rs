@@ -826,32 +826,76 @@ async fn manual_resume_consumes_the_record_on_start_even_if_other_commands_run_o
 }
 
 #[tokio::test]
-async fn critical_disk_space_stops_executions_cleanup_cannot_remove() {
+async fn critical_disk_space_stops_commands_and_restores_agents_once_space_recovers() {
     let (_root, manager, workspace, serving) = fixture().await;
     let agent = launch(&manager, &workspace);
-    wait_started(&manager, &workspace).await;
-    bounded(super::disk::Monitor::default().check(
+    let command = launch_child(
         &manager,
-        tokio::time::Instant::now(),
-        |_: &std::path::Path| Ok(0),
-    ))
-    .await
-    .unwrap();
-    bounded(agent).await.unwrap().unwrap();
-    let retained = manager.inspect_workspace(&workspace.id).await.unwrap();
-    assert!(retained.executions.is_empty());
-    assert!(crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
-    let stopped = manager
+        &workspace,
+        "daemon::overload_tests::tracked_command_child",
+    );
+    wait_started(&manager, &workspace).await;
+    wait_launched(&manager, &workspace, "command-started", 2).await;
+    let mut monitor = super::disk::Monitor::default();
+    let now = tokio::time::Instant::now();
+    let empty = |_: &std::path::Path| Ok(0);
+    bounded(monitor.check(&manager, now, empty)).await.unwrap();
+    bounded(command).await.unwrap().unwrap();
+    wait_paused(&manager, &workspace).await;
+    let records = fs::read_dir(manager.paths.workspace_state(&workspace.id))
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| path.to_string_lossy().ends_with(".recovery.json"))
+        .collect::<Vec<_>>();
+    assert_eq!(records.len(), 1);
+    let record: serde_json::Value =
+        serde_json::from_slice(&fs::read(&records[0]).unwrap()).unwrap();
+    let reason = record["stop_reason"].as_str().unwrap();
+    assert!(
+        reason.starts_with("free disk space is below 2 GiB at ")
+            && reason.ends_with("(0.0 GiB free); all running agents stopped"),
+        "{reason}"
+    );
+    let messages = manager
         .notifications(false, 10)
         .await
         .unwrap()
         .into_iter()
-        .find(|event| event.kind == NotificationKind::AgentStopped)
+        .filter(|event| event.kind == NotificationKind::AgentStopped)
+        .map(|event| event.message)
+        .collect::<Vec<_>>();
+    assert_eq!(messages.len(), 2, "{messages:?}");
+    assert!(
+        messages.iter().any(|message| message
+            .contains("automatic session restore waits until free disk space reaches 5 GiB")),
+        "{messages:?}"
+    );
+    assert!(
+        messages
+            .iter()
+            .any(|message| message.contains("then shoal resume load lists them")),
+        "{messages:?}"
+    );
+    // Later critical readings leave the waiting agent's restore in place.
+    bounded(monitor.check(&manager, now, empty)).await.unwrap();
+    assert!(
+        !manager
+            .disk_space_recovered
+            .load(std::sync::atomic::Ordering::Relaxed)
+    );
+    bounded(monitor.check(&manager, now, |_: &std::path::Path| Ok(u64::MAX)))
+        .await
         .unwrap();
     assert!(
-        stopped.message.contains("shoal resume load"),
-        "{}",
-        stopped.message
+        manager
+            .disk_space_recovered
+            .load(std::sync::atomic::Ordering::Relaxed)
+    );
+    publish_recovery(&manager);
+    assert_eq!(bounded(agent).await.unwrap().unwrap(), 0);
+    assert_eq!(
+        fs::read_to_string(workspace.path.join("restored")).unwrap(),
+        "restored"
     );
     serving.abort();
 }

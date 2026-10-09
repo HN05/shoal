@@ -88,9 +88,10 @@ Agent metadata is transient, so restart cannot select disconnected survivors.
 Disk protection reads available space on filesystems holding workspaces or
 daemon state. Below its cleanup threshold it removes idle cleanup candidates there
 without their idle delay, through the same removal path and repository settings.
-When that cannot keep space above its stop threshold, it stops every tracked
-execution as manual stop does, since any of them may be writing; restoring them
-stays explicit. A failed reading authorizes nothing.
+When that cannot keep space above its stop threshold, it stops every agent as
+overload protection does and every other tracked execution as manual stop does,
+since any of them may be writing. Agents restore once space reaches the cleanup
+threshold, so restores cannot refill the disk at once; commands stay explicit. A failed reading authorizes nothing.
 Manual stop ends connected tracked executions through their wrappers, preserving
 work and leases. Agents save session recovery for explicit resume; user commands
 save their arguments, which resume reports once, as the restored agent's first

@@ -14,7 +14,7 @@ use tokio::time::Instant;
 use super::{
     events::EventCause,
     notifications::NotificationKind,
-    workspace::{Manager, StopRecords},
+    workspace::{Manager, Protection},
 };
 use crate::daemon::log;
 use crate::{config::overload::Disk, model::Workspace};
@@ -100,7 +100,7 @@ impl Monitor {
             .iter()
             .find(|filesystem| filesystem.free < settings.stop_free_bytes())
         {
-            stop_executions(manager, critical).await?;
+            stop_executions(manager, settings, critical).await?;
         }
         Ok(())
     }
@@ -188,29 +188,57 @@ async fn free_space(
     Ok(())
 }
 
-/// Stop every workspace's tracked executions as `shoal stop` does, saving
+/// Stop every running agent through protection, so it restores once free
+/// space recovers, then the remaining executions as `shoal stop` does, saving
 /// what `shoal resume` restores. Executions started while space stays this
 /// low stop on the next check.
-async fn stop_executions(manager: &Manager, filesystem: &Filesystem) -> Result<()> {
-    let workspaces: Vec<String> = manager
+async fn stop_executions(
+    manager: &Manager,
+    settings: &Disk,
+    filesystem: &Filesystem,
+) -> Result<()> {
+    let low = format!(
+        "free disk space is below {} GiB at {} ({:.1} GiB free)",
+        settings.stop_free_gib,
+        filesystem.path.display(),
+        filesystem.free as f64 / f64::from(1 << 30)
+    );
+    let protection = Protection {
+        reason: format!("{low}; all running agents stopped"),
+        resumes_when: format!("free disk space reaches {} GiB", settings.cleanup_free_gib),
+    };
+    for agent in manager.stop_agents_for_disk_space(&protection).await {
+        log!(
+            "disk space protection stopped {} in {}: {low}",
+            agent.name,
+            agent.workspace
+        );
+    }
+    let executions: Vec<(String, String)> = manager
         .store
         .run(|db| {
             Ok(db
-                .prepare("SELECT DISTINCT workspace_id FROM executions")?
-                .query_map([], |row| row.get(0))?
+                .prepare("SELECT id, workspace_id FROM executions")?
+                .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
                 .collect::<rusqlite::Result<_>>()?)
         })
         .await?;
+    let mut workspaces = Vec::new();
+    for (execution, workspace) in executions {
+        if !manager.agent_was_overloaded(&execution).await && !workspaces.contains(&workspace) {
+            workspaces.push(workspace);
+        }
+    }
+    let (low, reason) = (&low, &protection.reason);
     let stops = workspaces.into_iter().map(|id| async move {
         let workspace = manager.workspace(&id).await?;
-        let (kind, message) = match manager.stop_workspace(&id, StopRecords::manual()).await {
+        let (kind, message) = match manager.stop_unprotected(&id, reason.clone()).await {
             Ok(()) => {
-                log!("disk space protection stopped {}", workspace.name);
+                log!("disk space protection stopped commands in {}: {low}", workspace.name);
                 (
                     NotificationKind::AgentStopped,
                     format!(
-                        "Stopped tracked executions: {}; free disk space, then restore with shoal resume {}",
-                        filesystem.describe(),
+                        "Stopped tracked commands: {low}; free disk space, then shoal resume {} lists them",
                         workspace.name
                     ),
                 )

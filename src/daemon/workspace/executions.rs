@@ -73,6 +73,14 @@ impl StopRecords {
     }
 }
 
+/// Whether a workspace stop ends agents that protection already stopped,
+/// cancelling their automatic restore.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Protected {
+    Stop,
+    Keep,
+}
+
 /// A restored connection for a wrapper whose command kept running.
 #[derive(Debug)]
 pub(crate) struct ReattachedExecution {
@@ -605,15 +613,34 @@ impl Manager {
         })
     }
 
+    /// Stop every execution, cancelling agents' waiting automatic restores.
     pub async fn stop_workspace(&self, selector: &str, records: StopRecords) -> Result<()> {
+        self.stop_workspace_executions(selector, records, Protected::Stop)
+            .await
+    }
+
+    /// Stop executions other than agents that protection already stopped,
+    /// saving records as `shoal stop` does.
+    pub async fn stop_unprotected(&self, selector: &str, reason: String) -> Result<()> {
+        self.stop_workspace_executions(selector, StopRecords::Save { reason }, Protected::Keep)
+            .await
+    }
+
+    async fn stop_workspace_executions(
+        &self,
+        selector: &str,
+        records: StopRecords,
+        protected: Protected,
+    ) -> Result<()> {
         let workspace = self.workspace(selector).await?;
         self.reserve_lifecycle(&workspace.id, WorkspaceState::Stopping)
             .await?;
         let result = async {
             if let StopRecords::Save { reason } = records {
-                self.save_records_on_stop(&workspace.id, reason).await?;
+                self.save_records_on_stop(&workspace.id, reason, protected)
+                    .await?;
             }
-            self.stop_executions(&workspace.id, StopPolicy::RequireCompleteProof)
+            self.stop_executions_keeping(&workspace.id, StopPolicy::RequireCompleteProof, protected)
                 .await
         }
         .await;
@@ -631,13 +658,26 @@ impl Manager {
     }
 
     /// Wrappers decide what to save; setup and landing save nothing.
-    async fn save_records_on_stop(&self, workspace_id: &str, reason: String) -> Result<()> {
+    async fn save_records_on_stop(
+        &self,
+        workspace_id: &str,
+        reason: String,
+        protected: Protected,
+    ) -> Result<()> {
         let executions = self.inspect_workspace(workspace_id).await?.executions;
-        self.resumable_stops.lock().await.extend(
-            executions
-                .into_iter()
-                .map(|execution| (execution.id, reason.clone())),
-        );
+        let agents = self.agents.lock().await;
+        let stopping = executions.into_iter().filter(|execution| {
+            protected == Protected::Stop
+                || !agents
+                    .get(&execution.id)
+                    .is_some_and(|agent| agent.protected())
+        });
+        let stopping: Vec<_> = stopping.map(|execution| execution.id).collect();
+        drop(agents);
+        self.resumable_stops
+            .lock()
+            .await
+            .extend(stopping.into_iter().map(|id| (id, reason.clone())));
         Ok(())
     }
 
@@ -712,6 +752,16 @@ impl Manager {
 
     /// Ask connected wrappers to stop and signal disconnected survivors.
     pub(super) async fn stop_executions(&self, id: &str, policy: StopPolicy) -> Result<()> {
+        self.stop_executions_keeping(id, policy, Protected::Stop)
+            .await
+    }
+
+    async fn stop_executions_keeping(
+        &self,
+        id: &str,
+        policy: StopPolicy,
+        protected: Protected,
+    ) -> Result<()> {
         let id = id.to_owned();
         let deadline = Instant::now() + timing::WORKSPACE_STOP_TIMEOUT;
         loop {
@@ -733,6 +783,9 @@ impl Manager {
                 {
                     Some(sender) => {
                         if let Some(agent) = self.agents.lock().await.get_mut(&execution.id) {
+                            if protected == Protected::Keep && agent.protected() {
+                                continue;
+                            }
                             agent.cancel_recovery();
                         }
                         sender

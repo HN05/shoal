@@ -40,6 +40,11 @@ impl Agent {
     pub(super) fn cancel_recovery(&mut self) {
         self.overload = None;
     }
+
+    /// Whether protection stopped the agent and it awaits automatic recovery.
+    pub(super) fn protected(&self) -> bool {
+        self.overload.is_some()
+    }
 }
 
 impl Manager {
@@ -261,7 +266,7 @@ impl Manager {
         self.notify(
             Some(&workspace),
             NotificationKind::AgentResumed,
-            format!("Restoring {name} after sustained healthy system load"),
+            format!("Restoring {name} after sustained healthy readings"),
         )
         .await;
         Ok(true)
@@ -319,40 +324,84 @@ impl Manager {
     }
 
     pub(crate) async fn stop_agent_for_overload(&self, reason: &str) -> bool {
-        let protection = Protection::load(reason);
-        let stopped = {
+        !self
+            .stop_agents(&Protection::load(reason), Select::Newest)
+            .await
+            .is_empty()
+    }
+
+    /// Stop every running agent, since any of them may be writing.
+    pub(crate) async fn stop_agents_for_disk_space(
+        &self,
+        protection: &Protection,
+    ) -> Vec<StoppedAgent> {
+        self.stop_agents(protection, Select::All).await
+    }
+
+    async fn stop_agents(&self, protection: &Protection, select: Select) -> Vec<StoppedAgent> {
+        let stopped: Vec<_> = {
             let mut agents = self.agents.lock().await;
-            let selected = agents
+            let running = agents
                 .iter_mut()
-                .filter(|(_, agent)| !agent.stop.is_closed() && !*agent.stop.borrow())
-                .max_by_key(|(_, agent)| agent.started);
-            selected.and_then(|(id, agent)| {
-                let handoff = crate::execution::recovery::save_record(
-                    &self.paths,
-                    &agent.workspace_id,
-                    id,
-                    &agent.name,
-                    Some(reason),
-                );
-                if let Err(error) = &handoff {
-                    log!("overload recovery handoff not saved: {error:#}");
-                }
-                agent.overload = Some(protection.clone());
-                agent.stop.send(true).ok()?;
-                Some((
-                    id.clone(),
-                    agent.name.clone(),
-                    agent.workspace.clone(),
-                    agent.recover,
-                    handoff.is_ok(),
-                ))
-            })
+                .filter(|(_, agent)| !agent.stop.is_closed() && !*agent.stop.borrow());
+            let selected: Vec<_> = match select {
+                Select::Newest => running
+                    .max_by_key(|(_, agent)| agent.started)
+                    .into_iter()
+                    .collect(),
+                Select::All => running.collect(),
+            };
+            selected
+                .into_iter()
+                .filter_map(|(id, agent)| self.protect(id, agent, protection))
+                .collect()
         };
-        let Some((id, name, workspace, recover, handoff_saved)) = stopped else {
-            return false;
-        };
-        self.reset_overload_recovery();
-        let recovery = if !recover {
+        if !stopped.is_empty() {
+            self.reset_overload_recovery();
+        }
+        for agent in &stopped {
+            self.notify_protection_stop(agent, protection).await;
+        }
+        stopped
+    }
+
+    /// Save the recovery handoff before delivering the stop, so a wrapper
+    /// terminated under pressure can still be resumed.
+    fn protect(
+        &self,
+        id: &str,
+        agent: &mut Agent,
+        protection: &Protection,
+    ) -> Option<StoppedAgent> {
+        let handoff = crate::execution::recovery::save_record(
+            &self.paths,
+            &agent.workspace_id,
+            id,
+            &agent.name,
+            Some(&protection.reason),
+        );
+        if let Err(error) = &handoff {
+            log!("overload recovery handoff not saved: {error:#}");
+        }
+        agent.overload = Some(protection.clone());
+        agent.stop.send(true).ok()?;
+        Some(StoppedAgent {
+            id: id.into(),
+            name: agent.name.clone(),
+            workspace: agent.workspace.clone(),
+            recover: agent.recover,
+            handoff_saved: handoff.is_ok(),
+        })
+    }
+
+    async fn notify_protection_stop(&self, agent: &StoppedAgent, protection: &Protection) {
+        let StoppedAgent {
+            id,
+            name,
+            workspace,
+            ..
+        } = agent;
+        let recovery = if !agent.recover {
             "automatic recovery unavailable: configure [agent_resume] with a session restore command"
         } else if !self.config().overload.recovery.enabled {
             "automatic recovery disabled by overload.recovery.enabled"
@@ -363,13 +412,26 @@ impl Manager {
             )
         };
         self.notify(
-            Some(&workspace),
+            Some(workspace),
             NotificationKind::AgentStopped,
-            format!("Stopping {name}: {reason}; {recovery}; after the wrapper exits, restore with shoal resume {workspace} --execution {id}{}; workspace and resource leases retained", if handoff_saved { "" } else { "; recovery handoff could not be saved; run shoal doctor if the wrapper exits" }),
+            format!("Stopping {name}: {}; {recovery}; after the wrapper exits, restore with shoal resume {workspace} --execution {id}{}; workspace and resource leases retained", protection.reason, if agent.handoff_saved { "" } else { "; recovery handoff could not be saved; run shoal doctor if the wrapper exits" }),
         )
         .await;
-        true
     }
+}
+
+enum Select {
+    Newest,
+    All,
+}
+
+/// An agent asked to stop for protection.
+pub(crate) struct StoppedAgent {
+    id: String,
+    pub name: String,
+    pub workspace: String,
+    recover: bool,
+    handoff_saved: bool,
 }
 
 async fn await_process_proof<F>(mut probe: impl FnMut() -> F) -> anyhow::Result<()>

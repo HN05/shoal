@@ -18,6 +18,7 @@ pub(crate) mod review;
 mod stack;
 mod status;
 
+pub(crate) use agents::Protection;
 pub use executions::{ExecutionKind, StopRecords};
 pub(crate) use executions::{ReattachedExecution, StartedExecution};
 pub(crate) use stack::record_base_changed;
