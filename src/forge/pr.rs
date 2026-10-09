@@ -333,13 +333,7 @@ impl Manager {
                 }
             };
             // A base stays until its stacked workspaces moved; a failure retries next sweep.
-            if let Err(error) = self.advance_stack(&workspace, &registration.kind).await {
-                eprintln!(
-                    "stacked workspaces of {} not updated: {error:#}",
-                    workspace.name
-                );
-                continue;
-            }
+            let restacked = self.advance_stack(&workspace, &registration.kind).await;
             // A repository that disabled PR cleanup keeps its watches waiting;
             // unreadable config is recorded like a failed lookup.
             let settings = self.workspace_settings(&workspace).await;
@@ -351,6 +345,7 @@ impl Manager {
             }
             // `Ok(true)` once the workspace is removed; `Ok(false)` while the PR is open.
             let result: Result<bool> = async {
+                restacked.context("could not move the workspaces stacked on it")?;
                 let automatic = settings?.done.automatic;
                 self.verify_worktree(&workspace).await?;
                 let head = current_head(&workspace).await?;
