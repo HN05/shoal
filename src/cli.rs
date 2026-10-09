@@ -653,7 +653,8 @@ pub enum SkillCommand {
 pub enum RepoCommand {
     /// Show or replace repository configuration stored locally by Shoal.
     Config {
-        repository: String,
+        /// Registered repository; omit to choose one.
+        repository: Option<String>,
         /// Import TOML as the complete config for all this repository's workspaces.
         #[arg(long, conflicts_with = "clear", value_hint = clap::ValueHint::FilePath)]
         file: Option<PathBuf>,
@@ -671,15 +672,18 @@ pub enum RepoCommand {
         path: Option<PathBuf>,
     },
     Rename {
-        repository: String,
-        name: String,
+        /// Registered repository; omit to choose one.
+        repository: Option<String>,
+        /// New name; omit to enter one.
+        name: Option<String>,
     },
     /// Delete a repository checkout and all its Shoal workspaces and resources.
     ///
     /// Uncommitted and unpushed work is permanently lost.
     #[command(alias = "remove")]
     Rm {
-        repository: String,
+        /// Registered repository; omit to choose one.
+        repository: Option<String>,
         #[command(flatten)]
         confirmation: ConfirmationArgs,
     },

@@ -52,16 +52,16 @@ pub(super) async fn choose(ctx: &Context) -> Result<Command> {
             args: vec![],
         },
         RepoMenuAction::Rename => repo(RepoCommand::Rename {
-            repository: picked.id,
-            name: ui::input(ctx, "New name")?,
+            repository: Some(picked.id),
+            name: Some(ui::input(ctx, "New name")?),
         }),
         RepoMenuAction::Config => repo(RepoCommand::Config {
-            repository: picked.id,
+            repository: Some(picked.id),
             file: None,
             clear: false,
         }),
         RepoMenuAction::Delete => repo(RepoCommand::Rm {
-            repository: picked.id,
+            repository: Some(picked.id),
             confirmation: ConfirmationArgs::default(),
         }),
     })

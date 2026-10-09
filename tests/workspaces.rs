@@ -207,6 +207,26 @@ impl Fixture {
         )
     }
 
+    /// Run `args` on a terminal with a picker that records its rows and selects
+    /// the row whose ID is `choice`, then type `answer` into later prompts.
+    fn pick(&self, args: &[&str], choice: &str, answer: &str) -> (Output, String) {
+        let bin = self.root.path().join("bin");
+        fs::create_dir_all(&bin).unwrap();
+        let fzf = bin.join("fzf");
+        fs::write(&fzf, "#!/bin/sh\ncat > \"$SHOAL_TEST_PICK_INPUT\"\nawk -F '\\t' -v id=\"$SHOAL_TEST_PICK_ID\" '$1 == id { print }' \"$SHOAL_TEST_PICK_INPUT\"\n").unwrap();
+        fs::set_permissions(&fzf, fs::Permissions::from_mode(0o755)).unwrap();
+        let rows = self.root.path().join("picker-rows");
+        let _ = fs::remove_file(&rows);
+        let (output, _) = self.interactive_command(
+            self.command()
+                .env("SHOAL_TEST_PICK_INPUT", &rows)
+                .env("SHOAL_TEST_PICK_ID", choice)
+                .args(args),
+            answer,
+        );
+        (output, fs::read_to_string(&rows).unwrap_or_default())
+    }
+
     /// Interactive commands open pickers for whatever agents and fzf they find,
     /// so they see only the fixture's `bin`, the runner's Git and Worktrunk, and
     /// system directories.
@@ -6799,6 +6819,28 @@ head -n 1 "$HOME/picker-input"
             }
         }
     }
+}
+
+#[test]
+fn repository_commands_pick_an_omitted_repository() {
+    let fixture = Fixture::new();
+    let id = fixture.ok(&["repo", "list"])[0]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let missing = fixture.run(&["repo", "rm", "--yes"]);
+    assert!(!missing.status.success());
+    assert!(String::from_utf8_lossy(&missing.stderr).contains("missing argument"));
+
+    let (output, rows) = fixture.pick(&["repo", "config"], &id, "");
+    assert!(output.status.success(), "{output:?}");
+    assert!(rows.starts_with(&format!("{id}\t")), "{rows:?}");
+    let (output, _) = fixture.pick(&["repo", "rename"], &id, "renamed\n");
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(fixture.ok(&["repo", "list"])[0]["name"], "renamed");
+    let (output, _) = fixture.pick(&["repo", "rm", "--yes"], &id, "");
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(fixture.ok(&["repo", "list"]), serde_json::json!([]));
 }
 
 #[test]

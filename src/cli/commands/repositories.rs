@@ -24,7 +24,7 @@ pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
             file,
             clear,
         } => {
-            let repository = ui::repository_selector(repository)?;
+            let repository = chosen(ctx, repository).await?;
             let updating = file.is_some() || clear;
             let method = if updating {
                 let toml = file
@@ -82,7 +82,11 @@ pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
             })?;
         }
         RepoCommand::Rename { repository, name } => {
-            let repository = ui::repository_selector(repository)?;
+            let repository = chosen(ctx, repository).await?;
+            let name = match name {
+                Some(name) => name,
+                None => ui::input(ctx, "New name")?,
+            };
             let repo =
                 request::<Repository>(&ctx.paths, Method::RenameRepository { repository, name })
                     .await?;
@@ -98,7 +102,7 @@ pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
             repository,
             confirmation,
         } => {
-            let mut repository = ui::repository_selector(repository)?;
+            let mut repository = chosen(ctx, repository).await?;
             if !confirmation.yes {
                 let repositories = client::repositories(&ctx.paths).await?;
                 let repo = repository::select(&repositories, &repository).await?;
@@ -138,6 +142,17 @@ pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
         }
     }
     Ok(0)
+}
+
+/// The named repository, else one chosen from the registered repositories.
+async fn chosen(ctx: &Context, repository: Option<String>) -> Result<repository::Selector> {
+    match repository {
+        Some(repository) => ui::repository_selector(repository),
+        None => {
+            let repos = client::repositories(&ctx.paths).await?;
+            Ok(ui::pick(ctx, "Repository> ", ui::repository_choices(repos).await?)?.into())
+        }
+    }
 }
 
 pub(super) async fn sync(ctx: &Context, repository: Option<String>) -> Result<i32> {

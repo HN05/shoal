@@ -282,13 +282,16 @@ Ctrl-O inspects, Ctrl-S stops, Ctrl-F shows the diff. Each action returns to you
 shell. Bare `shoal repo` opens the same kind of list over registered repositories
 (without a terminal it prints `repo` help): Enter adds a workspace, Ctrl-A
 registers a path or URL, Ctrl-R renames, Ctrl-O shows saved config, Ctrl-D deletes.
+`repo rename` asks for an omitted name.
 
 Commands acting on one workspace use an explicit target, otherwise the caller's
 scoped workspace or the workspace containing the current directory, then an
 interactive fzf picker; a deleted current directory provides no workspace context.
 Invalid explicit targets fail without fallback; without a
 current workspace, noninteractive and JSON calls require a target. Scoped callers
-remain confined to their own workspace. Bare `shoal cd` always opens a picker;
+remain confined to their own workspace. Another omitted required argument that
+names an existing record opens a picker of those records, under the same
+noninteractive rule. Bare `shoal cd` always opens a picker;
 all-workspace listings and `--all` retain their scope. `config show` uses its
 checkout-aware, non-picker selection described below.
 `shoal add` offers repositories in most-recently-used order, then
