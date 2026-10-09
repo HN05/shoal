@@ -60,6 +60,7 @@ pub async fn authorize(
         Method::HoldAcquire { workspace, .. }
         | Method::HoldRelease { workspace, .. }
         | Method::HoldList { workspace }
+        | Method::SetBaseWorkspace { workspace, .. }
         | Method::RenameWorkspace { workspace, .. }
         | Method::WorkspaceUndone { workspace }
         | Method::WorkspaceDone { workspace, .. }

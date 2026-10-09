@@ -1,13 +1,89 @@
 //! Base workspaces: the workspace whose branch a stacked workspace builds on.
 use std::path::Path;
 
-use anyhow::Result;
-use rusqlite::{Connection, OptionalExtension};
+use anyhow::{Context, Result, ensure};
+use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 
+use super::Manager;
 use crate::{
+    daemon::{
+        events::{EventCause, EventKind},
+        store,
+    },
     git,
     model::{Workspace, WorkspaceRef},
 };
+
+impl Manager {
+    /// Record or clear the workspace whose branch this one builds on.
+    pub async fn set_base_workspace(
+        &self,
+        selector: &str,
+        base: Option<String>,
+    ) -> Result<Workspace> {
+        let workspace = self.workspace(selector).await?;
+        let (id, repository_id) = (workspace.id.clone(), workspace.repository_id);
+        self.store
+            .run(move |db| {
+                let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
+                let base = match &base {
+                    Some(base) => Some(base_workspace(&tx, &repository_id, base)?),
+                    None => None,
+                };
+                if let Some(base) = &base {
+                    ensure!(
+                        !store::exists(
+                            &tx,
+                            "WITH RECURSIVE chain(id) AS (
+                                SELECT ?1 UNION SELECT base_workspace_id FROM workspaces
+                                JOIN chain USING(id) WHERE base_workspace_id IS NOT NULL
+                            ) SELECT 1 FROM chain WHERE id=?2",
+                            [base, &id],
+                        )?,
+                        "a workspace cannot build on itself or a workspace stacked on it"
+                    );
+                }
+                let changed = tx.execute(
+                    "UPDATE workspaces SET base_workspace_id=?2 WHERE id=?1 AND base_workspace_id IS NOT ?2",
+                    params![id, base],
+                )?;
+                if changed > 0 {
+                    tx.execute(
+                        "INSERT INTO workspace_events(record) SELECT json_object(
+                            'kind',?2,'workspace_id',id,'repository_id',repository_id,
+                            'name',name,'path',path,'branch',branch,'cause',?3,'error',NULL,
+                            'base_workspace',json((SELECT json_object('id',id,'name',name,'branch',branch)
+                                FROM workspaces WHERE id=?4))
+                        ) FROM workspaces WHERE id=?1",
+                        params![id, EventKind::BaseChanged, EventCause::Manual, base],
+                    )?;
+                }
+                tx.commit()?;
+                Ok(())
+            })
+            .await?;
+        self.workspace(&workspace.id).await
+    }
+}
+
+/// A workspace of the repository named by ID, name or branch.
+fn base_workspace(db: &Connection, repository_id: &str, selector: &str) -> Result<String> {
+    let named = db
+        .query_row(
+            "SELECT id,repository_id FROM workspaces WHERE id=?1 OR name=?1",
+            [selector],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+        )
+        .optional()?;
+    if let Some((id, repository)) = named {
+        ensure!(
+            repository == repository_id,
+            "base workspace {selector} belongs to another repository"
+        );
+        return Ok(id);
+    }
+    owner(db, repository_id, selector)?.with_context(|| format!("unknown workspace: {selector}"))
+}
 
 /// Fill in the workspace's base and the workspaces stacked on it.
 pub(super) fn load(db: &Connection, workspace: &mut Workspace) -> Result<()> {

@@ -439,6 +439,9 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             Body::Ok
         }
         Method::HoldList { workspace } => Body::Holds(manager.workspace(&workspace).await?.holds),
+        Method::SetBaseWorkspace { workspace, base } => {
+            Body::Workspace(manager.set_base_workspace(&workspace, base).await?)
+        }
         Method::InspectWorkspace { workspace } => {
             Body::Inspection(manager.inspect_workspace(&workspace).await?)
         }

@@ -189,6 +189,11 @@ pub enum Method {
     HoldList {
         workspace: String,
     },
+    /// Record or clear the workspace whose branch this one builds on.
+    SetBaseWorkspace {
+        workspace: String,
+        base: Option<String>,
+    },
     WorkspaceUndone {
         workspace: String,
     },
