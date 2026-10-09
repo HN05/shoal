@@ -324,8 +324,8 @@ check = ["cargo", "test"]
 
 Run `shoal run check [workspace] -- <extra arguments>`; the shorter `shoal check`
 form is equivalent when the name does not collide with a built-in command. Omit
-the workspace to use the current one, or the picker for a globally configured
-command. Repository-only commands need a current or explicit workspace. Unknown
+the workspace to use the current one, otherwise the picker, which offers only the
+workspaces that define a repository-only command. Unknown
 names are rejected with suggestions for similar built-ins. Put
 Shoal's global flags before `run` or the shorthand command name. Bare `shoal run`
 lists each effective command's argument array, source layer, and whether its bare

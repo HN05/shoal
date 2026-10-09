@@ -164,17 +164,18 @@ pub async fn run(
     } else {
         Fallback::CurrentDirectoryOnly
     };
-    let workspace = ui::select_workspace(ctx, workspace, fallback)
-        .await
-        .map_err(|error| {
-            if error.is::<ui::NoCurrentWorkspace>() {
-                error
+    let workspace = match ui::select_workspace(ctx, workspace, fallback).await {
+        Err(error) if error.is::<ui::NoCurrentWorkspace>() => {
+            let defining = defining_workspaces(ctx, name).await?;
+            if defining.is_empty() {
+                return Err(error
                     .context("repository-only commands require a current or explicit workspace")
-                    .context(unknown_command(name))
-            } else {
-                error
+                    .context(unknown_command(name)));
             }
-        })?;
+            ui::pick_workspace(ctx, defining)?
+        }
+        workspace => workspace?,
+    };
     let settings = client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.clone())).await?;
     let inspection = client::inspect(&ctx.paths, workspace.clone()).await?;
     let command = expand(
@@ -186,6 +187,26 @@ pub async fn run(
     )
     .await?;
     execution::run_command(&ctx.paths, workspace, command).await
+}
+
+/// Workspaces whose repository configuration defines `name`; none for
+/// noninteractive callers, who must name the workspace.
+async fn defining_workspaces(ctx: &Context, name: &str) -> Result<Vec<Workspace>> {
+    let mut defining = Vec::new();
+    if !ctx.interactive() {
+        return Ok(defining);
+    }
+    for workspace in client::workspaces(&ctx.paths).await? {
+        let target = ConfigTarget::Workspace(workspace.id.clone());
+        // A workspace whose configuration cannot load does not define it.
+        if client::settings(&ctx.paths, target)
+            .await
+            .is_ok_and(|settings| settings.commands.contains_key(name))
+        {
+            defining.push(workspace);
+        }
+    }
+    Ok(defining)
 }
 
 pub async fn expand(

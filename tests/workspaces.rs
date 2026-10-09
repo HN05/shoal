@@ -12574,6 +12574,28 @@ fn cli_agent_command_defaults_can_be_replaced_at_launch() {
 }
 
 #[test]
+fn repository_commands_pick_a_workspace_that_defines_them() {
+    let fixture = Fixture::new();
+    let defining = fixture.add("defining");
+    fixture.add("other");
+    let path = Path::new(defining["path"].as_str().unwrap());
+    fs::write(
+        path.join(".shoal.toml"),
+        "[commands]\nlocal-check = ['printf', '%s', 'repository command']\n",
+    )
+    .unwrap();
+    let id = defining["id"].as_str().unwrap();
+    let (output, rows) = fixture.pick(&["local-check"], id, "");
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(output.stdout, b"repository command");
+    assert!(rows.starts_with(&format!("{id}\t")), "{rows:?}");
+    assert_eq!(rows.lines().count(), 1, "{rows:?}");
+    let (output, rows) = fixture.pick(&["lsit"], id, "");
+    assert!(!output.status.success());
+    assert!(rows.is_empty(), "{rows:?}");
+}
+
+#[test]
 fn unknown_commands_never_open_the_workspace_picker() {
     let fixture = Fixture::new();
     let workspace = fixture.add("command-target");
