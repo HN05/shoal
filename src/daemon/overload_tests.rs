@@ -3,11 +3,16 @@ use super::*;
 use crate::test_support::{manager, repository};
 use std::{future::Future, os::unix::fs::PermissionsExt};
 
-async fn bounded<T>(future: impl Future<Output = T>) -> T {
-    // A hang guard, not a deadline for process scans on a shared CI host.
-    timeout(Duration::from_secs(60), future)
-        .await
-        .expect("overload exchange timed out")
+/// A hang guard, not a deadline for process scans on a shared CI host. Its
+/// panic names the caller, so a hang shows which exchange never finished.
+#[track_caller]
+fn bounded<T>(future: impl Future<Output = T>) -> impl Future<Output = T> {
+    let caller = std::panic::Location::caller();
+    async move {
+        timeout(Duration::from_secs(60), future)
+            .await
+            .unwrap_or_else(|_| panic!("overload exchange at {caller} timed out"))
+    }
 }
 
 // Native ownership scans cover the whole process table. Another fixture's
