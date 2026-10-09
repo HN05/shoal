@@ -8,11 +8,11 @@ use crate::{
     agent::Agent,
     cli::{ItemArgs, client, context::Context, ui},
     forge::{
-        ForgeRepo, IssueInput,
+        ForgeRepo, IssueInput, PullRequest,
         link::{ItemKind, Link, LinkTarget, Selection},
     },
     git,
-    model::ReviewMark,
+    model::{Repository, ReviewMark},
     protocol::Method,
 };
 
@@ -264,22 +264,7 @@ pub(super) async fn add(
     match target.unwrap() {
         LinkTarget::Pr => {
             let pull = forge.pull_request(&repo.path, positional).await?;
-            let owned = client::workspaces(&ctx.paths)
-                .await?
-                .iter()
-                .any(|workspace| {
-                    workspace.repository_id == repo.id && workspace.branch == pull.head
-                });
-            if owned {
-                creation.existing = Some(pull.head);
-            } else {
-                if creation.base.is_none() {
-                    creation.base = Some(
-                        super::review::fetch_pull_branch(&repo.path, "base", &pull.base).await?,
-                    );
-                }
-                creation.existing = Some(git::remote_ref("origin", &pull.head));
-            }
+            pull_creation(ctx, repo, pull, &mut creation).await?;
         }
         LinkTarget::Branch(branch) => {
             git::check_branch_name(None, branch).await?;
@@ -297,4 +282,28 @@ pub(super) async fn add(
         here,
     )
     .await
+}
+
+/// Reopen the workspace that owns the PR's head branch, or open the pushed
+/// branch compared against the PR's base.
+pub(super) async fn pull_creation(
+    ctx: &Context,
+    repo: &Repository,
+    pull: PullRequest,
+    creation: &mut Creation,
+) -> Result<()> {
+    let owned = client::workspaces(&ctx.paths)
+        .await?
+        .iter()
+        .any(|workspace| workspace.repository_id == repo.id && workspace.branch == pull.head);
+    if owned {
+        creation.existing = Some(pull.head);
+    } else {
+        if creation.base.is_none() {
+            creation.base =
+                Some(super::review::fetch_pull_branch(&repo.path, "base", &pull.base).await?);
+        }
+        creation.existing = Some(git::remote_ref("origin", &pull.head));
+    }
+    Ok(())
 }
