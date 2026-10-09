@@ -244,7 +244,12 @@ fn bsd_info(pid: u32) -> Result<Option<libc::proc_bsdinfo>> {
         }
         return Err(error).context("inspect process identity");
     }
-    ensure!(result as usize == size, "incomplete process identity");
+    // A process can exit between the inventory and this identity lookup. A
+    // short proc_pidinfo result is the macOS equivalent of a vanished /proc
+    // entry; it cannot prove ownership and must not abort the whole scan.
+    if result as usize != size {
+        return Ok(None);
+    }
     Ok(Some(unsafe { info.assume_init() }))
 }
 

@@ -228,8 +228,11 @@ fn waiting_process() -> tokio::process::Child {
 async fn unreadable_process_keeps_finished_execution_unknown() {
     for kind in [ExecutionKind::Command, ExecutionKind::Setup] {
         let (_root, manager, workspace) = fixture("exit 0").await;
+        let wrapper = crate::process::identity::capture(std::process::id())
+            .unwrap()
+            .unwrap();
         let started = manager
-            .begin_execution(&workspace.id, None, kind, None)
+            .begin_execution(&workspace.id, Some(wrapper), kind, None)
             .await
             .unwrap();
         fs::remove_file(workspace.path.join(".shoal.toml")).unwrap();

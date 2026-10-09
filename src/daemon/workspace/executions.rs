@@ -383,7 +383,32 @@ impl Manager {
         exit_code: Option<i32>,
     ) -> Result<bool> {
         let scan = match exit_code {
-            Some(_) => Some(process::scan(HashSet::from([id.clone()])).await),
+            Some(_) => {
+                // Daemon-side reservations can be registered without a
+                // wrapper while a command is prepared. There is no process
+                // ownership to reconcile in that state, and a whole-process
+                // scan on macOS can observe an unrelated process whose
+                // environment is disappearing. Skip that inventory until a
+                // wrapper, child, or process group has been recorded.
+                let query_id = id.clone();
+                let needs_scan = self
+                    .store
+                    .run(move |db| {
+                        Ok(
+                            store::find_execution(db, &query_id)?.is_none_or(|execution| {
+                                execution.wrapper.is_some()
+                                    || execution.child.is_some()
+                                    || execution.group_id.is_some()
+                            }),
+                        )
+                    })
+                    .await?;
+                Some(if needs_scan {
+                    process::scan(HashSet::from([id.clone()])).await
+                } else {
+                    Ok(process::Scan::default())
+                })
+            }
             None => None,
         };
         self.finish_execution_after_scan(id, kind, exit_code, scan)
