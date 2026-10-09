@@ -31,8 +31,10 @@ class Shoal < Formula
 
   def caveats
     <<~EOS
-      Install the agent skills once (they follow future Homebrew upgrades):
+      Install the agent skills once (they follow future Homebrew upgrades).
+      This fills existing skill directories; name a tool to create its directory:
         #{opt_bin}/shoal skill install
+        #{opt_bin}/shoal skill install claude
 
       Register the per-user daemon:
         shoal install

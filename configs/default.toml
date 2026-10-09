@@ -56,10 +56,11 @@ codex = ["codex", "{args}", "--sandbox", "danger-full-access", "--ask-for-approv
 # fj = "~/bin/fj-agent"
 # gh = "~/bin/gh-agent"
 
-# User-level skill locations for additional AI tools: shoal skill install pi.
-# Shoal adds <skill>/SKILL.md beneath skill_dir. Launchers belong in [commands].
-# [ai.pi]
-# skill_dir = "~/.pi/agent/skills"
+# Additional AI tools: command runs one as `shoal droid`, and
+# shoal skill install adds <skill>/SKILL.md beneath skill_dir.
+# [ai.droid]
+# command = ["droid", "{args}"]
+# skill_dir = "~/.factory/skills"
 
 [herdr]
 # Run issue/add in a new tab inside Herdr, after interactive choices.

@@ -73,6 +73,7 @@ merges a finished branch into the default branch.
 
 ## Install skills
 
-`shoal skill install` installs this skill and `shoal-worker` for all configured
-tools; an optional tool name selects one. Homebrew links follow upgrades; Cargo
+`shoal skill install` installs this skill and `shoal-worker` into every AI
+tool's existing skill directory; a tool name selects one and creates its
+directory. Homebrew links follow upgrades; Cargo
 installs need refreshing. Run it outside a scoped execution.

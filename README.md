@@ -20,8 +20,9 @@ menus. For a downloaded binary, install
 the [runtime dependencies](#runtime-dependencies) before running `shoal install`.
 `shoal install` starts the per-user
 daemon and writes missing config and prompt template defaults in `~/.config/shoal/`;
-`shoal skill install` installs the worker and orchestrator skills for Codex,
-Claude Code, and [configured AI tools](docs/reference.md#agent-skills-outside-project-repositories).
+`shoal skill install` installs the worker and orchestrator skills into each
+[AI tool's existing skill directory](docs/reference.md#agent-skill-outside-project-repositories);
+`shoal skill install <tool>` creates one.
 
 For directory navigation and tab completion, add this to your `.zshrc` or
 `.bashrc`, then run it in your current shell:

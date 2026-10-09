@@ -1477,31 +1477,25 @@ separate read/write availability.
 
 ```sh
 shoal skill install          # Every tool whose skill directory exists
-shoal skill install pi       # One tool configured below
+shoal skill install grok     # One tool, creating its skill directory
 ```
 
-opencode and pi read Codex's `~/.agents/skills`; Grok uses `~/.grok/skills`.
-Define additional tools' user-level skill directories in global Shoal config
-(an AI tool without one is skipped by `all`):
+Installs the bundled skills at user scope with no daemon, as `<skill>/SKILL.md`
+in each tool's skill directory: `~/.claude/skills` for Claude (honoring an
+absolute `CLAUDE_CONFIG_DIR`), `~/.grok/skills` for Grok, and `~/.agents/skills`
+for Codex, opencode and pi, which share one copy. Without a tool name, Shoal
+installs only into skill directories that already exist and skips a configured
+tool without `skill_dir`; create a directory, or name the tool, to install for
+it. Set or override a tool's directory in global Shoal config:
 
 ```toml
-[ai.pi]
-skill_dir = "~/.pi/agent/skills"
-
-[ai.opencode]
-skill_dir = "~/.config/opencode/skills"
+[ai.droid]
+skill_dir = "~/.factory/skills"
 ```
 
 Names are portable identifiers; `all` is reserved. `skill_dir` must be absolute
-or start with `~/`; Shoal appends `shoal/SKILL.md`. These machine settings cannot
-be set per repository; `command` makes a tool an [agent](#agents).
-
-Installs the bundled `SKILL.md` at user scope with no daemon: Codex at
-`~/.agents/skills/shoal/SKILL.md`, Claude at `~/.claude/skills/shoal/SKILL.md`
-(honoring an absolute `CLAUDE_CONFIG_DIR`); `[ai.codex]` and `[ai.claude]` can
-override those directories. Without a tool name, Shoal installs only into skill
-directories that already exist, once per directory; naming a tool creates its
-directory. Homebrew installs symlink to the
+or start with `~/`. These machine settings cannot be set per repository;
+`command` makes a tool an [agent](#agents). Homebrew installs symlink to the
 packaged skill so upgrades apply automatically; Cargo installs copy it, so
 rerun after upgrading. Other files in the skill directory are preserved. Run it
 outside scoped executions. `shoal skill` prints the instructions (`--json`
