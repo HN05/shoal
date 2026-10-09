@@ -104,7 +104,8 @@ checked out, where `git fetch origin main:main` is refused. It never pushes or c
 with plain Git afterwards; other pushed branches are current as
 `origin/<branch>`. `shoal conflicts` checks committed HEAD against your base
 workspace's branch, otherwise the local default branch, or a branch you name,
-without touching the worktree. After rebasing a pushed branch, push it with
+without touching the worktree. Without a watched PR, `shoal --json watch`
+returns a `merge_conflict` update when that check newly fails. After rebasing a pushed branch, push it with
 `git push --force-with-lease`.
 
 Branches of other workspaces are shared refs, so `git merge feature/api`

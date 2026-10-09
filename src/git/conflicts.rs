@@ -48,7 +48,7 @@ impl Manager {
             return Ok(base.branch.clone());
         }
         let repo = self.repository(workspace.repository_id.as_str()).await?;
-        git::default_branch::resolve(&repo.path, DefaultBranchLookup::Cached).await
+        git::default_branch::resolve(&repo.path, DefaultBranchLookup::Discover).await
     }
 }
 

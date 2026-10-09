@@ -159,12 +159,31 @@ impl Manager {
         self.verify_worktree(&workspace).await?;
         current_head(&workspace).await?;
         let items = self.selected_items(&workspace, selection).await?;
-        let urls = items.iter().map(|(url, _)| url.clone()).collect::<Vec<_>>();
-        let pending = self.pending_activity(id, &urls).await?;
+        let branch = watches_branch(selection, &items).then(|| workspace.branch.clone());
+        let mut keys = items.iter().map(|(url, _)| url.clone()).collect::<Vec<_>>();
+        keys.extend(branch.clone());
+        let pending = self.pending_activity(id, &keys).await?;
         if !pending.is_empty() {
             return Ok(pending);
         }
         drop(guard);
+        let mut observations = self.item_activity(&workspace, items, selection).await?;
+        if let Some(branch) = branch {
+            let check = self.check_conflicts(id, None).await;
+            observations.push((branch, Snapshot::branch_conflicts(check)));
+        }
+        self.record_activity(id, observations, selection).await
+    }
+
+    async fn item_activity(
+        &self,
+        workspace: &Workspace,
+        items: Vec<(String, ItemKind)>,
+        selection: &Selection,
+    ) -> Result<Vec<(String, Snapshot)>> {
+        if items.is_empty() {
+            return Ok(Vec::new());
+        }
         let remote = repository::remote_url_from_path(&workspace.path)
             .await?
             .context("watch needs an origin remote")?;
@@ -187,7 +206,7 @@ impl Manager {
             };
             observations.push((url, snapshot));
         }
-        self.record_activity(id, observations, selection).await
+        Ok(observations)
     }
 
     /// The canonical URL of an explicitly selected item, linked or not.
@@ -226,7 +245,7 @@ impl Manager {
             .run(move |db| linked_items(db, &id, kind))
             .await?;
         ensure!(
-            !items.is_empty(),
+            !items.is_empty() || kind.is_none(),
             "no linked items of the selected kind; register one with shoal link"
         );
         Ok(items)
@@ -263,11 +282,17 @@ impl Manager {
             store::require_ready(&tx, &id)?;
             let items = linked_items(&tx, &id, selection.kind)?;
             if selection.input.is_none() {
-                ensure!(!items.is_empty(), "no linked items of the selected kind; register one with shoal link");
+                ensure!(!items.is_empty() || selection.kind.is_none(), "no linked items of the selected kind; register one with shoal link");
             }
+            // A PR linked since the poll takes over conflict reports from the branch.
+            let branch = if watches_branch(&selection, &items) {
+                Some(tx.query_row("SELECT branch FROM workspaces WHERE id=?1", [&id], |row| row.get::<_, String>(0))?)
+            } else {
+                None
+            };
             let mut updates = Vec::new();
             for (url, mut snapshot) in observations {
-                if selection.input.is_none() && !items.iter().any(|(linked, _)| linked == &url) {
+                if selection.input.is_none() && !items.iter().any(|(linked, _)| linked == &url) && branch.as_ref() != Some(&url) {
                     continue;
                 }
                 let previous: Option<String> = tx.query_row(
@@ -452,6 +477,15 @@ impl Updates {
             superseded: true,
         }
     }
+}
+
+/// Whether a wait also reports the workspace branch's local conflicts with
+/// its base: only an unfiltered wait without a linked PR, whose forge would
+/// report them otherwise.
+fn watches_branch(selection: &Selection, items: &[(String, ItemKind)]) -> bool {
+    selection.input.is_none()
+        && selection.kind.is_none()
+        && !items.iter().any(|(_, kind)| *kind == ItemKind::Pr)
 }
 
 async fn wait_for_updates<F: std::future::Future<Output = Result<Vec<Update>>>>(
@@ -664,7 +698,8 @@ mod tests {
                     &Selection::default()
                 )
                 .await
-                .is_err()
+                .unwrap()
+                .is_empty()
         );
         let explicit = Selection {
             kind: Some(ItemKind::Issue),
@@ -897,5 +932,69 @@ mod tests {
                 .contains("no linked items")
         );
         assert!(restarted.completion(&workspace.id).await.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn unfiltered_waits_without_a_pr_report_new_branch_conflicts() {
+        let (root, manager) = manager().await;
+        let repo_path = repository(root.path(), "repo");
+        let repo = manager
+            .register_repository(repo_path.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        let workspace = manager
+            .create_workspace(&repo.id, "branch".into(), None, None, None)
+            .await
+            .unwrap();
+        let all = Selection::default();
+
+        // A linked PR's forge reports conflicts instead.
+        register_watch(&manager, &workspace.id, "pr").await;
+        let conflicting = Snapshot::branch_conflicts(Ok(crate::model::ConflictCheck {
+            workspace_id: workspace.id.clone(),
+            target: "main".into(),
+            target_commit: String::new(),
+            head: String::new(),
+            conflicts: true,
+            files: vec!["tracked".into()],
+        }));
+        let observation = vec![(workspace.branch.clone(), conflicting)];
+        let recorded = manager.record_activity(&workspace.id, observation, &all);
+        assert!(recorded.await.unwrap().is_empty());
+        manager
+            .set_pr(&workspace.id, super::super::Action::Clear)
+            .await
+            .unwrap();
+
+        let poll = || manager.poll_item_activity(&workspace.id, &all);
+        assert!(poll().await.unwrap().is_empty());
+        for (repo, content) in [(&workspace.path, "workspace\n"), (&repo_path, "main\n")] {
+            std::fs::write(repo.join("tracked"), content).unwrap();
+            crate::test_support::commit(repo, "tracked");
+        }
+        let updates = poll().await.unwrap();
+        assert_eq!(updates.len(), 1);
+        assert_eq!(updates[0].url, workspace.branch);
+        assert_eq!(updates[0].kind, UpdateKind::MergeConflict);
+        assert_eq!(updates[0].message, "Conflicts with main: tracked");
+        assert_eq!(
+            poll().await.unwrap(),
+            updates,
+            "unacknowledged updates replay"
+        );
+        manager
+            .acknowledge_pr_updates(&workspace.id, vec![updates[0].delivery.clone()])
+            .await
+            .unwrap();
+        assert!(
+            poll().await.unwrap().is_empty(),
+            "a persisting conflict is not new"
+        );
+        let issues = Selection {
+            kind: Some(ItemKind::Issue),
+            input: None,
+        };
+        let error = manager.poll_item_activity(&workspace.id, &issues).await;
+        assert!(error.unwrap_err().to_string().contains("no linked items"));
     }
 }

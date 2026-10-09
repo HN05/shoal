@@ -5,12 +5,16 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 use super::strip_bidi_isolates;
+use crate::model::ConflictCheck;
 
 mod queries;
 
 /// How long a lookup may keep failing with the same error before it is
 /// reported again, so a failing source cannot silence a wait indefinitely.
 const FAILURE_REPORT_INTERVAL: u64 = 600;
+
+/// Conflicted paths named in a branch conflict message; `shoal conflicts` lists all.
+const MAX_LISTED_FILES: usize = 10;
 
 crate::state::states!(UpdateKind {
     Comment => "comment",
@@ -38,6 +42,9 @@ pub(crate) struct Snapshot {
     comments: BTreeMap<String, String>,
     checks: BTreeMap<String, Check>,
     conflict: Option<bool>,
+    /// Replaces the PR conflict message for a local branch check.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    conflict_message: Option<String>,
     state: String,
     errors: BTreeMap<String, String>,
     /// Unix seconds when each failing source was last reported.
@@ -54,6 +61,33 @@ struct Check {
 }
 
 impl Snapshot {
+    /// A workspace branch's local merge check, observed like PR mergeability.
+    pub(crate) fn branch_conflicts(check: Result<ConflictCheck>) -> Self {
+        let mut snapshot = Self::default();
+        match check {
+            Ok(check) => {
+                snapshot.conflict = Some(check.conflicts);
+                snapshot.conflict_message = check.conflicts.then(|| {
+                    let mut files =
+                        check.files[..check.files.len().min(MAX_LISTED_FILES)].join(", ");
+                    if check.files.len() > MAX_LISTED_FILES {
+                        files.push_str(&format!(
+                            " and {} more",
+                            check.files.len() - MAX_LISTED_FILES
+                        ));
+                    }
+                    format!("Conflicts with {}: {files}", check.target)
+                });
+            }
+            Err(error) => {
+                snapshot
+                    .errors
+                    .insert("merge conflicts".into(), format!("{error:#}"));
+            }
+        }
+        snapshot
+    }
+
     pub(super) fn changes(&self, next: &Self, url: &str) -> Vec<Update> {
         let mut updates = Vec::new();
         let mut emit = |kind, message| {
@@ -83,7 +117,11 @@ impl Snapshot {
             }
         }
         if next.conflict == Some(true) && self.conflict != Some(true) {
-            emit(UpdateKind::MergeConflict, "PR has merge conflicts".into());
+            let message = next.conflict_message.as_deref();
+            emit(
+                UpdateKind::MergeConflict,
+                message.unwrap_or("PR has merge conflicts").into(),
+            );
         }
         if next.state != self.state {
             match next.state.as_str() {

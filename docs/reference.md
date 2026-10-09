@@ -1109,6 +1109,9 @@ without linking it or changing completion policy; explicit PR watches also accep
 PRs whose head branch is in a fork. Watches return on comments,
 reviews, completed CI checks, new merge conflicts, closure, reopening, merging,
 or a merged base workspace.
+An unfiltered `shoal watch` without a linked PR also returns when the workspace
+branch newly conflicts with the default target of `shoal conflicts`, naming the
+branch and the conflicted paths; with nothing linked, it waits for that alone.
 Each update includes its item URL, kind and message; `--json` returns an `updates`
 array. The first watch reports existing activity; subsequent watches share a
 cursor per workspace and item across restarts. Pending updates replay until the

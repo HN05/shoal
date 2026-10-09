@@ -10973,12 +10973,10 @@ esac
     fixture.ok(&["unlink", "--workspace", "items"]);
     assert!(fixture.ok(&["inspect", "items"])["issue"].is_null());
     assert!(fixture.ok(&["inspect", "items"])["pr_cleanup"].is_null());
-    assert!(
-        !fixture
-            .run(&["watch", "--workspace", "items"])
-            .status
-            .success()
-    );
+    // With nothing linked, a watch waits for branch conflicts alone.
+    let branch = fixture.ok(&["watch", "--workspace", "items", "--timeout", "1"]);
+    assert_eq!(branch["timed_out"], true);
+    assert!(branch["updates"].as_array().unwrap().is_empty());
     let pr_file = fixture.root.path().join("pr.json");
     let mut fork: Value = serde_json::from_str(&fs::read_to_string(&pr_file).unwrap()).unwrap();
     fork["isCrossRepository"] = serde_json::json!(true);
@@ -11055,6 +11053,15 @@ fn watch_forgejo_issue_reports_comments_closure_and_reopening() {
             "add",
             "origin",
             "https://forge.example/team/repo.git",
+        ],
+    );
+    // The unfiltered watch checks branch conflicts against the default branch.
+    git(
+        &fixture.repo,
+        &[
+            "symbolic-ref",
+            "refs/remotes/origin/HEAD",
+            "refs/remotes/origin/main",
         ],
     );
     let bin = fixture.root.path().join("bin");
