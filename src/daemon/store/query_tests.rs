@@ -215,10 +215,11 @@ fn ownership_snapshot(db: &mut Connection) -> Result<Vec<Vec<Vec<rusqlite::types
     ]
     .into_iter()
     .map(|table| {
-        let columns = if table == "workspaces" {
-            WORKSPACE_COLUMNS
-        } else {
-            "*"
+        // Columns added after version 17 are absent before the upgrade.
+        let columns = match table {
+            "workspaces" => WORKSPACE_COLUMNS,
+            "executions" => EXECUTION_COLUMNS,
+            _ => "*",
         };
         let mut statement = db.prepare(&format!("SELECT {columns} FROM {table} ORDER BY rowid"))?;
         let columns = statement.column_count();

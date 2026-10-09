@@ -25,7 +25,7 @@ use crate::{
     sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
 };
 
-pub const VERSION: u32 = 69;
+pub const VERSION: u32 = 70;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -278,7 +278,13 @@ pub enum Method {
         agent: Option<String>,
         #[serde(default)]
         recover: bool,
+        /// The wrapper keeps its command running when the daemon goes away
+        /// and returns with [`Method::Reattach`].
+        #[serde(default)]
+        reattach: bool,
     },
+    /// Long-lived: an execution connection resumed after a daemon restart.
+    Reattach(Reattach),
     // Notifications.
     ListNotifications {
         unread_only: bool,
@@ -578,6 +584,25 @@ pub struct DaemonStatus {
     pub unread_notifications: u64,
 }
 
+/// A wrapper's request to restore its execution connection after the daemon
+/// went away. It is permanent: daemons accept it at every protocol version, so
+/// wrappers from older releases can reattach after an upgrade. Add fields only
+/// with defaults, and keep the execution events and controls such a wrapper
+/// understands.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Reattach {
+    pub execution: String,
+    pub wrapper: Identity,
+    pub child: Option<Identity>,
+    pub group_id: u32,
+    pub scope_token: String,
+    /// Transient agent metadata the daemon lost with its memory.
+    #[serde(default)]
+    pub agent: Option<String>,
+    #[serde(default)]
+    pub recover: bool,
+}
+
 /// Wrapper → daemon messages after an [`Method::Execute`] response.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -610,6 +635,8 @@ pub enum Control {
     Finished {
         complete: bool,
     },
+    /// The daemon is shutting down; keep the command running and reattach.
+    Detach,
 }
 
 fn default_overload_reason() -> String {
@@ -784,6 +811,22 @@ mod tests {
     }
 
     #[test]
+    fn reattachment_keeps_its_wire_spelling() {
+        let wire = json!({"reattach": {
+            "execution": "execution", "wrapper": {"pid": 2, "birth": "wrapper"},
+            "child": null, "group_id": 2, "scope_token": "token"
+        }});
+        let Method::Reattach(request) = serde_json::from_value(wire).unwrap() else {
+            panic!("reattachment must keep its method name");
+        };
+        assert!(request.agent.is_none() && !request.recover);
+        assert_eq!(
+            serde_json::to_value(Control::Detach).unwrap(),
+            json!({"type": "detach"})
+        );
+    }
+
+    #[test]
     fn older_overload_controls_use_a_generic_reason() {
         let control: Control =
             serde_json::from_value(json!({"type": "overload_stop", "recover": false})).unwrap();
@@ -808,6 +851,7 @@ mod tests {
                 kind,
                 agent: Some("test-agent".into()),
                 recover: false,
+                reattach: true,
             };
             let encoded = serde_json::to_value(method).unwrap();
             assert_eq!(encoded["execute"]["kind"], spelling);

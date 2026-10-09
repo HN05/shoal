@@ -217,6 +217,11 @@ async fn serve(
                 return protocol::write(&mut stream, &response).await;
             }
         };
+    // Wrappers from any release reattach, and their launch scope does not
+    // survive the restart; the record and token they present prove ownership.
+    if let Method::Reattach(reattach) = request.method {
+        return execution_connection::reattach(stream, request.id, server.manager, reattach).await;
+    }
     if request.protocol != protocol::VERSION {
         let body = Body::error(
             ErrorCode::ProtocolMismatch,
@@ -244,6 +249,7 @@ async fn serve(
             kind,
             agent,
             recover,
+            reattach,
         } => {
             return execution_connection::execute(
                 stream,
@@ -255,6 +261,7 @@ async fn serve(
                     kind,
                     agent,
                     recover,
+                    reattach,
                     parent_execution: caller
                         .and_then(|caller| caller.execution_id().map(str::to_owned)),
                 },
@@ -327,6 +334,7 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::Status
         | Method::Shutdown
         | Method::Execute { .. }
+        | Method::Reattach(_)
         | Method::WatchNotifications
         | Method::WatchWorkspaceEvents { .. }
         | Method::PrWait { .. }
@@ -782,5 +790,54 @@ mod tests {
         for caller_pid in [1, 123, u32::MAX] {
             assert_eq!(removal_inspection(caller_pid), InspectionPolicy::GitOnly);
         }
+    }
+
+    #[tokio::test]
+    async fn reattachment_is_served_at_every_protocol_version_without_scope() {
+        use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+        let (_root, manager) = crate::test_support::manager().await;
+        let wrapper = crate::process::identity::capture(std::process::id())
+            .unwrap()
+            .unwrap();
+        // The spelling an older wrapper sends, with its own protocol version
+        // and a scope token the restarted daemon has never issued.
+        let request = serde_json::json!({
+            "protocol": 1, "id": 3, "scope": "unknown",
+            "method": {"reattach": {
+                "execution": "missing", "wrapper": wrapper, "child": null,
+                "group_id": wrapper.pid, "scope_token": "token"
+            }}
+        });
+        let (client, stream) = UnixStream::pair().unwrap();
+        let operation = manager.background_operations.clone().read_owned().await;
+        let server = Server {
+            manager,
+            started: Instant::now(),
+            managed: false,
+            shutdown: watch::channel(false).0,
+        };
+        let served = tokio::spawn(serve(stream, server, operation));
+        let mut client = BufReader::new(client);
+        client
+            .get_mut()
+            .write_all(format!("{request}\n").as_bytes())
+            .await
+            .unwrap();
+        let mut response = String::new();
+        timeout(Duration::from_secs(60), client.read_line(&mut response))
+            .await
+            .unwrap()
+            .unwrap();
+        let response: serde_json::Value = serde_json::from_str(&response).unwrap();
+        assert_eq!(response["id"], 3);
+        assert_eq!(response["data"]["code"], "execution_failed", "{response}");
+        assert!(
+            response["data"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("execution record is missing"),
+            "{response}"
+        );
+        served.await.unwrap().unwrap();
     }
 }

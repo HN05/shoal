@@ -316,6 +316,7 @@ async fn run_tracked(
         kind,
         agent,
         recover: recovery.as_ref().is_some_and(|recovery| recovery.automatic),
+        reattach: false,
     };
     let (mut link, body) = timeout(kind.start_timeout(), Link::open(paths, method))
         .await

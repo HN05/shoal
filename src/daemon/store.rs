@@ -12,7 +12,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 31;
+const SCHEMA_VERSION: i64 = 32;
 
 #[cfg(test)]
 mod benchmark;
@@ -325,6 +325,11 @@ const MIGRATIONS: &[(i64, &str, Option<Precondition>)] = &[
     ),
     (30, include_str!("store/workspace_review.sql"), None),
     (31, include_str!("store/workspace_undone.sql"), None),
+    (
+        32,
+        "ALTER TABLE executions ADD COLUMN scope_token TEXT;",
+        None,
+    ),
 ];
 
 fn migrate(db: &mut Connection) -> Result<()> {
@@ -647,6 +652,9 @@ mod tests {
         }
         if version >= 31 {
             db.execute_batch(include_str!("store/workspace_undone.sql"))?;
+        }
+        if version >= 32 {
+            db.execute_batch("ALTER TABLE executions ADD COLUMN scope_token TEXT;")?;
         }
         db.pragma_update(None, "user_version", version)?;
         db.execute_batch(

@@ -115,7 +115,9 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
         db.execute_batch(&format!("DROP TRIGGER {trigger};"))?;
     }
     db.execute_batch("DROP TABLE workspace_events; ALTER TABLE workspaces DROP COLUMN observed_branch; ALTER TABLE workspace_completion DROP COLUMN cause;")?;
-    // Migration 31 adds this column again when the emulated database upgrades.
+    // Migrations 31 and 32 add these columns again when the emulated database
+    // upgrades.
     db.execute_batch("ALTER TABLE workspace_holds DROP COLUMN from_continuation;")?;
+    db.execute_batch("ALTER TABLE executions DROP COLUMN scope_token;")?;
     Ok(())
 }

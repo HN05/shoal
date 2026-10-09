@@ -439,3 +439,127 @@ async fn shutdown_stops_connected_executions_and_refuses_new_ones() {
         .unwrap();
     bounded(shutdown).await.unwrap();
 }
+
+#[tokio::test]
+async fn reattachment_requires_the_recorded_identities_and_scope_token() {
+    let (_root, manager, workspace) = fixture("true").await;
+    let wrapper = process::capture(std::process::id()).unwrap().unwrap();
+    let started = manager
+        .begin_execution(
+            &workspace.id,
+            Some(wrapper.clone()),
+            ExecutionKind::Command,
+            None,
+        )
+        .await
+        .unwrap();
+    let id = started.plan.id.clone();
+    let token = started.plan.scope_token.clone();
+    manager
+        .record_execution_child(id.clone(), Some(wrapper.clone()), wrapper.pid)
+        .await
+        .unwrap();
+    drop(started);
+    // A restart forgets connections and scopes and marks the record unknown.
+    manager.detach_execution(&id).await;
+    manager
+        .store
+        .quarantine_interrupted_operations()
+        .await
+        .unwrap();
+    assert!(manager.caller(&token).await.unwrap().is_none());
+    let request = Reattach {
+        execution: id.clone(),
+        wrapper: wrapper.clone(),
+        child: Some(wrapper.clone()),
+        group_id: wrapper.pid,
+        scope_token: token.clone(),
+        agent: Some("codex".into()),
+        recover: true,
+    };
+    let stranger = Identity {
+        pid: wrapper.pid,
+        birth: "another process".into(),
+    };
+    for (request, refusal) in [
+        (
+            Reattach {
+                execution: Uuid::new_v4().to_string(),
+                ..request.clone()
+            },
+            "execution record is missing",
+        ),
+        (
+            Reattach {
+                scope_token: Uuid::new_v4().to_string(),
+                ..request.clone()
+            },
+            "scope token does not match",
+        ),
+        (
+            Reattach {
+                child: None,
+                ..request.clone()
+            },
+            "process identity does not match",
+        ),
+        (
+            Reattach {
+                group_id: wrapper.pid + 1,
+                ..request.clone()
+            },
+            "process identity does not match",
+        ),
+        (
+            Reattach {
+                wrapper: stranger,
+                ..request.clone()
+            },
+            "wrapper is no longer alive",
+        ),
+    ] {
+        let error = manager.reattach_execution(&request).await.unwrap_err();
+        assert!(format!("{error:#}").contains(refusal), "{error:#}");
+    }
+    assert!(!manager.execution_connected(&id).await);
+    let reattached = manager.reattach_execution(&request).await.unwrap();
+    assert_eq!(reattached.workspace.id, workspace.id);
+    assert!(manager.execution_connected(&id).await);
+    let caller = manager.caller(&token).await.unwrap().unwrap();
+    assert_eq!(caller.execution_id(), Some(id.as_str()));
+    assert_eq!(caller.kind(), Some(ExecutionKind::Command));
+    assert!(manager.agents.lock().await.contains_key(&id));
+    let inspection = manager.inspect_workspace(&workspace.id).await.unwrap();
+    assert_eq!(inspection.executions[0].state, ExecutionState::Running);
+    let error = manager.reattach_execution(&request).await.unwrap_err();
+    assert!(error.to_string().contains("already connected"), "{error:#}");
+}
+
+#[tokio::test]
+async fn setup_executions_cannot_reattach() {
+    let (_root, manager, workspace) = fixture("exit 0").await;
+    let wrapper = process::capture(std::process::id()).unwrap().unwrap();
+    let started = manager
+        .begin_execution(
+            &workspace.id,
+            Some(wrapper.clone()),
+            ExecutionKind::Setup,
+            None,
+        )
+        .await
+        .unwrap();
+    manager.detach_execution(&started.plan.id).await;
+    let error = manager
+        .reattach_execution(&Reattach {
+            execution: started.plan.id.clone(),
+            wrapper: wrapper.clone(),
+            child: None,
+            group_id: wrapper.pid,
+            scope_token: started.plan.scope_token.clone(),
+            agent: None,
+            recover: false,
+        })
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("scope token"), "{error:#}");
+}

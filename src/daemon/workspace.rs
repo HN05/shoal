@@ -17,8 +17,8 @@ mod repo_removal;
 pub(crate) mod review;
 mod status;
 
-pub(crate) use executions::StartedExecution;
 pub use executions::{ExecutionKind, StopRecords};
+pub(crate) use executions::{ReattachedExecution, StartedExecution};
 
 use crate::{
     config::Config,

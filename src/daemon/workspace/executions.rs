@@ -12,7 +12,7 @@ use crate::{
         execution::Processes,
         identity::{self as process, Identity},
     },
-    protocol::timing,
+    protocol::{Reattach, timing},
     state::{ExecutionState, WorkspaceState, states},
 };
 use anyhow::{Context, Result, bail, ensure};
@@ -62,6 +62,13 @@ pub(super) enum StopPolicy {
 pub enum StopRecords {
     Save,
     Skip,
+}
+
+/// A restored connection for a wrapper whose command kept running.
+#[derive(Debug)]
+pub(crate) struct ReattachedExecution {
+    pub workspace: Workspace,
+    pub stop: watch::Receiver<bool>,
 }
 
 /// The connection must retain the Git guard through execution completion.
@@ -197,6 +204,10 @@ impl Manager {
         self.verify_worktree(&workspace).await?;
         self.touch(&workspace.id).await;
         let id = Uuid::new_v4().to_string();
+        let scope_token = Uuid::new_v4().to_string();
+        // Only commands may reattach: setup and landing hold daemon gates
+        // that a restart releases.
+        let reattach_token = (kind == ExecutionKind::Command).then(|| scope_token.clone());
         let (execution_id, workspace_id) = (id.clone(), workspace.id.clone());
         let ports = self
             .store
@@ -204,12 +215,13 @@ impl Manager {
                 let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
                 kind.reserve(&tx, &workspace_id, parent_execution.as_deref())?;
                 tx.execute(
-                    "INSERT INTO executions(id,workspace_id,state,wrapper) VALUES (?1,?2,?3,?4)",
+                    "INSERT INTO executions(id,workspace_id,state,wrapper,scope_token) VALUES (?1,?2,?3,?4,?5)",
                     params![
                         execution_id,
                         workspace_id,
                         ExecutionState::Running,
-                        store::json_text(wrapper.as_ref())?
+                        store::json_text(wrapper.as_ref())?,
+                        reattach_token
                     ],
                 )?;
                 let ports = store::ports(&tx, Some(&workspace_id))?;
@@ -219,7 +231,6 @@ impl Manager {
             .await?;
         let (sender, receiver) = watch::channel(false);
         connections.insert(id.clone(), sender);
-        let scope_token = Uuid::new_v4().to_string();
         self.issue_scope(
             scope_token.clone(),
             Caller {
@@ -432,13 +443,103 @@ impl Manager {
             })
             .await?;
         connections.remove(&id);
-        self.agents.lock().await.remove(&id);
-        self.resumable_stops.lock().await.remove(&id);
+        drop(connections);
+        self.forget_connection(&id).await;
+        Ok(complete)
+    }
+
+    /// Restore the connection of a wrapper that kept its command running while
+    /// the daemon was away. The record, the scope token issued at launch and
+    /// the wrapper and child identities must all match.
+    pub(crate) async fn reattach_execution(
+        &self,
+        request: &Reattach,
+    ) -> Result<ReattachedExecution> {
+        ensure!(
+            process::alive(&request.wrapper)?,
+            "execution wrapper is no longer alive"
+        );
+        let mut connections = self.connections.lock().await;
+        ensure!(
+            !connections
+                .get(&request.execution)
+                .is_some_and(|sender| !sender.is_closed()),
+            "execution is already connected"
+        );
+        let verified = request.clone();
+        let workspace_id = self
+            .store
+            .run(move |db| {
+                let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
+                let execution = store::find_execution(&tx, &verified.execution)?
+                    .context("execution record is missing")?;
+                let token: Option<String> = tx.query_row(
+                    "SELECT scope_token FROM executions WHERE id=?1",
+                    [&verified.execution],
+                    |row| row.get(0),
+                )?;
+                ensure!(
+                    token.as_deref() == Some(verified.scope_token.as_str()),
+                    "execution scope token does not match"
+                );
+                ensure!(
+                    execution.wrapper.as_ref() == Some(&verified.wrapper)
+                        && execution.child == verified.child
+                        && execution.group_id == Some(verified.group_id),
+                    "execution process identity does not match its record"
+                );
+                tx.execute(
+                    "UPDATE executions SET state=?2 WHERE id=?1",
+                    params![verified.execution, ExecutionState::Running],
+                )?;
+                tx.commit()?;
+                Ok(execution.workspace_id)
+            })
+            .await?;
+        let workspace = self.workspace(&workspace_id).await?;
+        let (sender, stop) = watch::channel(false);
+        connections.insert(request.execution.clone(), sender);
+        self.issue_scope(
+            request.scope_token.clone(),
+            Caller {
+                execution: Some(ScopedExecution {
+                    id: request.execution.clone(),
+                    kind: ExecutionKind::Command,
+                }),
+                workspace_id: workspace.id.clone(),
+            },
+        )
+        .await;
+        drop(connections);
+        if let Some(agent) = &request.agent {
+            self.track_agent(
+                &request.execution,
+                agent,
+                &workspace.id,
+                &workspace.name,
+                request.recover,
+            )
+            .await;
+        }
+        self.touch(&workspace.id).await;
+        Ok(ReattachedExecution { workspace, stop })
+    }
+
+    /// Drop a wrapper's connection without recording completion, so its
+    /// execution awaits reattachment.
+    pub(crate) async fn detach_execution(&self, id: &str) {
+        self.connections.lock().await.remove(id);
+        self.forget_connection(id).await;
+    }
+
+    /// Drop what the daemon kept in memory for a removed connection.
+    async fn forget_connection(&self, id: &str) {
+        self.agents.lock().await.remove(id);
+        self.resumable_stops.lock().await.remove(id);
         self.scopes
             .lock()
             .await
-            .retain(|_, caller| caller.execution_id() != Some(id.as_str()));
-        Ok(complete)
+            .retain(|_, caller| caller.execution_id() != Some(id));
     }
 
     async fn execution_completion_issue(
@@ -504,10 +605,12 @@ impl Manager {
         Ok(())
     }
 
-    /// Before the daemon exits, stop every connected execution as `shoal stop`
-    /// does, so a restart leaves resumable records instead of disconnected
-    /// executions. Requests already accepted cannot register afterwards, and
-    /// wrappers that miss the bound are left for the startup audit.
+    /// Before the daemon exits, ask every connected execution to stop. Wrappers
+    /// that can reattach detach instead and keep their commands running; the
+    /// rest stop as `shoal stop` does, so a restart leaves resumable records
+    /// instead of disconnected executions. Requests already accepted cannot
+    /// register afterwards, and wrappers that miss the bound are left for the
+    /// startup audit.
     pub async fn stop_for_shutdown(&self) {
         let deadline = Instant::now() + timing::WORKSPACE_STOP_TIMEOUT;
         {
@@ -526,6 +629,11 @@ impl Manager {
         while Instant::now() < deadline && !self.connections.lock().await.is_empty() {
             sleep(timing::WORKSPACE_STOP_POLL_INTERVAL).await;
         }
+    }
+
+    /// Set once shutdown starts asking executions to stop.
+    pub(crate) fn shutting_down(&self) -> bool {
+        self.shutting_down.load(Ordering::Relaxed)
     }
 
     pub(crate) async fn stop_saves_records(&self, id: &str) -> bool {
