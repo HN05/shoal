@@ -173,7 +173,7 @@ async fn run_in_pane(created: &CreatedResult, argv: &[OsString]) -> Result<()> {
 
 // The tab inherits HOME, so only a non-default state directory needs naming.
 fn shoal_argv(paths: &Paths) -> Result<Vec<OsString>> {
-    let mut argv = vec![std::env::current_exe()?.into_os_string()];
+    let mut argv = vec![crate::fsutil::invoked_executable()?.into_os_string()];
     if !paths.is_default_state() {
         argv.extend(["--state-dir".into(), paths.state.clone().into_os_string()]);
     }
@@ -339,7 +339,7 @@ type FileIdentity = (u64, u64, i64, i64);
 
 impl Executable {
     fn current() -> Option<Self> {
-        Some(Self::at(std::env::current_exe().ok()?))
+        Some(Self::at(crate::fsutil::invoked_executable().ok()?))
     }
 
     fn at(path: std::path::PathBuf) -> Self {

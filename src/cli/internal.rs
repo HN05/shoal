@@ -33,7 +33,7 @@ pub fn internal_command(
     command: InternalCommand<'_>,
 ) -> Result<Vec<OsString>> {
     let mut args = vec![
-        std::env::current_exe()?.into_os_string(),
+        crate::fsutil::invoked_executable()?.into_os_string(),
         "--state-dir".into(),
         paths.state.as_os_str().to_owned(),
     ];

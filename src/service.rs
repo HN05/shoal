@@ -56,22 +56,7 @@ pub fn file(paths: &Paths, platform: Platform) -> PathBuf {
 pub fn executable(explicit: Option<PathBuf>) -> Result<PathBuf> {
     let path = match explicit {
         Some(path) => path,
-        None => {
-            let arg = PathBuf::from(
-                std::env::args_os()
-                    .next()
-                    .context("missing executable path")?,
-            );
-            if arg.components().count() > 1 {
-                arg
-            } else {
-                crate::fsutil::find_executable(
-                    arg.as_os_str(),
-                    &std::env::var_os("PATH").unwrap_or_default(),
-                )
-                .unwrap_or(std::env::current_exe()?)
-            }
-        }
+        None => fsutil::invoked_executable()?,
     };
     let path = if path.is_absolute() {
         path

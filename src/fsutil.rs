@@ -95,6 +95,47 @@ pub fn find_executable(program: &OsStr, search_path: &OsStr) -> Option<PathBuf> 
         .find(|path| is_executable(path).unwrap_or(false))
 }
 
+/// The absolute path this process was started through. Unlike `current_exe`
+/// on Linux, it keeps an installation symlink instead of resolving into a
+/// versioned directory, so a later run of it reaches an upgraded binary.
+pub fn invoked_executable() -> io::Result<PathBuf> {
+    let current = std::env::current_exe()?;
+    Ok(invoked_path(
+        std::env::args_os().next(),
+        &std::env::var_os("PATH").unwrap_or_default(),
+        &std::env::current_dir()?,
+        current,
+    ))
+}
+
+// Trust argv[0] only while it names the running binary.
+fn invoked_path(
+    arg: Option<std::ffi::OsString>,
+    search_path: &OsStr,
+    cwd: &Path,
+    current: PathBuf,
+) -> PathBuf {
+    let invoked = arg.map(PathBuf::from).and_then(|arg| {
+        if arg.components().count() > 1 {
+            Some(cwd.join(arg))
+        } else {
+            find_executable(arg.as_os_str(), search_path)
+        }
+    });
+    match invoked {
+        Some(path) if same_file(&path, &current) => path,
+        _ => current,
+    }
+}
+
+fn same_file(left: &Path, right: &Path) -> bool {
+    use std::os::unix::fs::MetadataExt as _;
+    match (fs::metadata(left), fs::metadata(right)) {
+        (Ok(left), Ok(right)) => (left.dev(), left.ino()) == (right.dev(), right.ino()),
+        _ => false,
+    }
+}
+
 /// Read UTF-8 text; only a missing file is treated as absent.
 pub fn read_optional(path: &Path) -> io::Result<Option<String>> {
     match fs::read_to_string(path) {
@@ -172,6 +213,44 @@ pub fn replace_atomically(path: &Path, contents: &[u8], options: ReplaceOptions)
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn invoked_path_keeps_an_installation_symlink_to_the_running_binary() {
+        let root = tempfile::tempdir().unwrap();
+        let keg = root.path().join("keg");
+        let bin = root.path().join("bin");
+        fs::create_dir_all(&keg).unwrap();
+        fs::create_dir_all(&bin).unwrap();
+        let binary = keg.join("shoal");
+        let other = keg.join("other");
+        for file in [&binary, &other] {
+            fs::write(file, "").unwrap();
+            fs::set_permissions(file, fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let link = bin.join("shoal");
+        std::os::unix::fs::symlink(&binary, &link).unwrap();
+        let resolve = |arg: &str| {
+            invoked_path(
+                Some(arg.into()),
+                bin.as_os_str(),
+                root.path(),
+                binary.clone(),
+            )
+        };
+        assert_eq!(resolve(link.to_str().unwrap()), link);
+        assert_eq!(resolve("shoal"), link, "found on PATH");
+        assert_eq!(
+            resolve("bin/shoal"),
+            link,
+            "relative to the start directory"
+        );
+        assert_eq!(resolve(other.to_str().unwrap()), binary);
+        assert_eq!(resolve("missing"), binary);
+        assert_eq!(
+            invoked_path(None, bin.as_os_str(), root.path(), binary.clone()),
+            binary
+        );
+    }
 
     #[test]
     fn available_bytes_reads_the_filesystem_or_fails() {

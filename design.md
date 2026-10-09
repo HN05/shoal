@@ -334,8 +334,9 @@ after tracked executions have resolved or Herdr reports the agent's turn finishe
 closes them immediately.
 Preparation failures and shell or untracked desktop handoffs retain them until
 that lifecycle change. A tab watcher refused for a protocol mismatch restarts
-from its executable path once another binary is installed there, so tabs opened
-before an upgrade still close.
+from the installation path Shoal was started through, never a resolved versioned
+binary, once another binary is installed there, so tabs opened before an upgrade
+still close.
 
 Single-workspace actions select an explicit target, otherwise the caller's scoped
 workspace or the workspace containing the current directory, then an interactive
