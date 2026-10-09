@@ -1123,8 +1123,8 @@ workspace and repository UUIDs (`workspace_id`, `repository_id`), `name`, `path`
 `url` (both null for a workspace mark) and `head`. Link events add a `link`
 object with the linked issue or PR's `kind` and canonical `url`. `created` and `base_changed`
 events add `base_workspace` with the base's `id`, `name` and `branch`, or null.
-Causes are `manual`, `idle`, `issue`, `pr`, `completion`, `missing_directory`, or
-`pr` when a base workspace's PRs merged, `removed` for a base workspace's removal, and null
+Causes are `manual`, `idle`, `issue`, `pr` (including a base workspace's merged
+PRs), `completion`, `missing_directory`, or `removed` for a base workspace's removal, and null
 when inapplicable; `error` describes setup or cleanup failures. Branch changes
 are observed during daemon sweeps; detached HEAD has a null branch, and the
 recorded workspace branch remains unchanged.
