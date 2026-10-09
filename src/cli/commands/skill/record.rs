@@ -68,10 +68,15 @@ impl Record {
         fsutil::read_optional(&path)
             .with_context(|| format!("read {}", path.display()))?
             .map(|text| {
-                serde_json::from_str(&text)
-                    .with_context(|| format!("parse {}; remove it to reinstall", path.display()))
+                let record: Self = serde_json::from_str(&text)?;
+                // Names become paths that refresh may remove.
+                for name in record.skills.keys() {
+                    crate::validate::name("skill", name)?;
+                }
+                anyhow::Ok(record)
             })
             .transpose()
+            .with_context(|| format!("parse {}; remove it to reinstall", path.display()))
     }
 
     pub(super) fn save(&self, directory: &Path) -> Result<()> {
@@ -138,7 +143,13 @@ mod tests {
         };
         record.save(root.path()).unwrap();
         assert_eq!(Record::load(root.path()).unwrap(), Some(record));
-        fs::write(root.path().join(FILE), r#"{"skills":{"x":"other"}}"#).unwrap();
-        assert!(Record::load(root.path()).is_err());
+        for invalid in [
+            r#"{"skills":{"x":"other"}}"#,
+            r#"{"skills":{"../outside":"kept"}}"#,
+            r#"{"skills":{"nested/skill":"kept"}}"#,
+        ] {
+            fs::write(root.path().join(FILE), invalid).unwrap();
+            assert!(Record::load(root.path()).is_err(), "{invalid}");
+        }
     }
 }
