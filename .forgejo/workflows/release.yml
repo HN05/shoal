@@ -100,6 +100,7 @@ jobs:
         run: |
           set -eu
           curl -fsS "${FORGEJO_SERVER%/}/$REPOSITORY/raw/commit/$WORKFLOW_SHA/.forgejo/scripts/checkout-release.sh" -o checkout-release.sh
+          curl -fsS "${FORGEJO_SERVER%/}/$REPOSITORY/raw/commit/$WORKFLOW_SHA/scripts/release_metadata.py" -o release_metadata.py
           sh checkout-release.sh
       - name: Update shared tap
         env:
@@ -169,6 +170,7 @@ jobs:
         run: |
           set -eu
           curl -fsS "${FORGEJO_SERVER%/}/$REPOSITORY/raw/commit/$WORKFLOW_SHA/.forgejo/scripts/checkout-release.sh" -o checkout-release.sh
+          curl -fsS "${FORGEJO_SERVER%/}/$REPOSITORY/raw/commit/$WORKFLOW_SHA/scripts/release_metadata.py" -o release_metadata.py
           sh checkout-release.sh
           # Build helpers follow the workflow commit when resuming an older tag.
           for helper in cross-build.sh zig-wrapper.py; do
@@ -226,6 +228,7 @@ jobs:
         run: |
           set -eu
           curl -fsS "${FORGEJO_SERVER%/}/$REPOSITORY/raw/commit/$WORKFLOW_SHA/.forgejo/scripts/checkout-release.sh" -o checkout-release.sh
+          curl -fsS "${FORGEJO_SERVER%/}/$REPOSITORY/raw/commit/$WORKFLOW_SHA/scripts/release_metadata.py" -o release_metadata.py
           sh checkout-release.sh
       - name: Download the attached binaries
         env:

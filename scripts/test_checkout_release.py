@@ -1,11 +1,13 @@
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 import unittest
 
 
 SCRIPT = Path(__file__).resolve().parents[1] / ".forgejo/scripts/checkout-release.sh"
+METADATA = Path(__file__).resolve().parents[1] / "scripts/release_metadata.py"
 
 
 class CheckoutReleaseTests(unittest.TestCase):
@@ -35,6 +37,7 @@ class CheckoutReleaseTests(unittest.TestCase):
 
     def checkout(self, tag, directory):
         directory.mkdir()
+        shutil.copyfile(METADATA, directory / "release_metadata.py")
         return subprocess.run(
             ["sh", str(SCRIPT)], cwd=directory, capture_output=True, text=True,
             env={**os.environ, "RELEASE_TAG": tag, "FORGEJO_SERVER": self.root.as_uri() + "/",
@@ -62,7 +65,7 @@ class CheckoutReleaseTests(unittest.TestCase):
                 job = self.root / f"invalid-{index}"
                 result = self.checkout(tag, job)
                 self.assertNotEqual(result.returncode, 0)
-                self.assertIn("expected stable vX.Y.Z tag", result.stderr)
+                self.assertIn("expected a stable vMAJOR.MINOR.PATCH tag", result.stderr)
                 self.assertFalse((job / "source").exists())
 
     def test_missing_tag_fails_without_checking_out_main(self):

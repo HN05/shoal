@@ -4,10 +4,15 @@ set -eu
 
 python3 - <<'PY'
 import os
-import re
+import sys
 
-if not re.fullmatch(r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", os.environ["RELEASE_TAG"]):
-    raise SystemExit("expected stable vX.Y.Z tag")
+sys.path.insert(0, os.getcwd())
+import release_metadata
+
+try:
+    release_metadata.tag_version(os.environ["RELEASE_TAG"])
+except ValueError as error:
+    raise SystemExit(str(error))
 PY
 
 git init source
