@@ -17,8 +17,9 @@ use crate::{
     },
     hooks::HookKind,
     model::{
-        DiffBase, ExecutionPlan, Inspection, PortOverview, PortReservation, PortSuggestion,
-        Repository, RepositoryRemoval, SyncedRepository, Workspace, WorkspaceStatus,
+        ConflictCheck, DiffBase, ExecutionPlan, Inspection, PortOverview, PortReservation,
+        PortSuggestion, Repository, RepositoryRemoval, SyncedRepository, Workspace,
+        WorkspaceStatus,
     },
     process::identity::Identity,
     removal::{BranchChoice, RemovalCheck, RemovalResult},
@@ -288,6 +289,10 @@ pub enum Method {
     DiffBase {
         workspace: String,
     },
+    Conflicts {
+        workspace: String,
+        target: Option<String>,
+    },
     /// One effective hook, resolved against the directory where it runs.
     WorkspaceHook {
         workspace: String,
@@ -533,6 +538,7 @@ response_bodies! {
     RemovalCheck(RemovalCheck),
     RemovalResult(RemovalResult),
     DiffBase(DiffBase),
+    Conflicts(ConflictCheck),
     Hook(Option<std::path::PathBuf>),
     LayeredConfig(Box<ConfigLayers>),
     SyncedRepository(SyncedRepository),

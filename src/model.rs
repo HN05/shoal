@@ -271,6 +271,18 @@ pub struct DiffBase {
     pub commit: String,
 }
 
+/// Whether a workspace's committed HEAD merges cleanly into a target.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ConflictCheck {
+    pub workspace_id: String,
+    pub target: String,
+    pub target_commit: String,
+    pub head: String,
+    pub conflicts: bool,
+    /// Conflicted paths, empty when the merge is clean.
+    pub files: Vec<String>,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PulledBranch {
     pub branch: String,

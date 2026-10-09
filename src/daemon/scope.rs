@@ -82,6 +82,7 @@ pub async fn authorize(
         | Method::WorkspaceStatus { workspace }
         | Method::SelectItems { workspace, .. }
         | Method::DiffBase { workspace }
+        | Method::Conflicts { workspace, .. }
         | Method::Execute {
             workspace,
             kind: ExecutionKind::Command,

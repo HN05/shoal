@@ -30,7 +30,10 @@ use crate::{
         existing_branch::{Branch, OpenedWorkspace},
     },
     hooks::{self, Hook, HookKind},
-    model::{Completion, DiffBase, Repository, Workspace, WorkspaceStatus, WorkspaceTarget},
+    model::{
+        Completion, ConflictCheck, DiffBase, Repository, Workspace, WorkspaceStatus,
+        WorkspaceTarget,
+    },
     protocol::{ConfigTarget, Method},
     removal::{BranchChoice, RemovalCheck, RemovalResult},
     shell,
@@ -148,6 +151,27 @@ pub(super) async fn diff(ctx: &Context, workspace: Option<String>) -> Result<i32
         None,
     )
     .await
+}
+
+pub(super) async fn conflicts(
+    ctx: &Context,
+    workspace: Option<String>,
+    target: Option<String>,
+) -> Result<i32> {
+    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    let check =
+        request::<ConflictCheck>(&ctx.paths, Method::Conflicts { workspace, target }).await?;
+    ctx.show(&check, |check| {
+        if check.conflicts {
+            println!("Conflicts with {}:", check.target);
+            for file in &check.files {
+                println!("  {file}");
+            }
+        } else {
+            println!("No conflicts with {}", check.target);
+        }
+    })?;
+    Ok(i32::from(check.conflicts))
 }
 
 pub(super) async fn cd(ctx: &Context, workspace: Option<String>) -> Result<i32> {

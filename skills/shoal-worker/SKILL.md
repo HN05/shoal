@@ -35,7 +35,8 @@ supersedes a running one, which returns `superseded: true` without updates.
 `--timeout <seconds>` bounds the wait (default 3600, maximum 3600); `timed_out`
 with empty `updates` means no update. A `lookup_failed` entry names a failed
 activity lookup and repeats every 10 minutes while it persists; until that source
-recovers, check what it covers yourself, such as merge conflicts. Waiting also
+recovers, check what it covers yourself, such as merge conflicts with
+`shoal conflicts`. Waiting also
 reports PR closure or merging and grants no permission to merge. A
 `base_merged` update means your base workspace landed. It says whether Shoal
 retargeted your PR; run the rebase command it gives and push with
@@ -93,6 +94,7 @@ report the error with `shoal notify` and wait instead of working around it.
 
 ```sh
 shoal --json sync
+shoal --json conflicts     # exit 1 lists the paths that conflict with main
 git rebase main            # or git merge main; use your repo's branch name
 ```
 
@@ -100,7 +102,9 @@ git rebase main            # or git merge main; use your repo's branch name
 default branch, advancing the registered checkout when it has that branch
 checked out, where `git fetch origin main:main` is refused. It never pushes or changes your branch. Rebase or merge
 with plain Git afterwards; other pushed branches are current as
-`origin/<branch>`. After rebasing a pushed branch, push it with
+`origin/<branch>`. `shoal conflicts` checks committed HEAD against your base
+workspace's branch, otherwise the local default branch, or a branch you name,
+without touching the worktree. After rebasing a pushed branch, push it with
 `git push --force-with-lease`.
 
 Branches of other workspaces are shared refs, so `git merge feature/api`

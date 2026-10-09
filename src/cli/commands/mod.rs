@@ -306,6 +306,9 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         Command::Status { workspace, item } => workspaces::status(&ctx, workspace, item).await,
         Command::Cd { workspace } => workspaces::cd(&ctx, workspace).await,
         Command::Diff { workspace } => workspaces::diff(&ctx, workspace).await,
+        Command::Conflicts { target, workspace } => {
+            workspaces::conflicts(&ctx, workspace, target).await
+        }
         Command::Review {
             workspace,
             pr,

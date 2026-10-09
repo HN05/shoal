@@ -251,6 +251,17 @@ pub enum Command {
     Cd { workspace: Option<String> },
     /// Show changes since the branch's fork point.
     Diff { workspace: Option<String> },
+    /// Check whether the branch merges cleanly into another branch.
+    ///
+    /// Compares committed HEAD with the target: by default the base workspace's
+    /// branch, otherwise the default branch. Exits 1 on conflicts.
+    Conflicts {
+        /// Branch or commit to merge into.
+        target: Option<String>,
+        /// Workspace to check; defaults to the current workspace or picker.
+        #[arg(long)]
+        workspace: Option<String>,
+    },
     /// Review workspace or PR changes, or refine an issue, with a review tool or agent.
     Review {
         /// Workspace to review, or a PR or issue URL.

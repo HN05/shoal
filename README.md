@@ -121,6 +121,7 @@ shoal claude fix-login         # Run Claude Code
 shoal codex fix-login --app    # Open in the Codex desktop app
 shoal happy claude fix-login   # Detached Happy session, visible in the Happy app
 shoal diff fix-login           # Changes since the branch's fork point
+shoal conflicts --workspace fix-login  # Whether the branch merges cleanly into main
 shoal inspect fix-login       # Detailed workspace and execution records
 shoal notifications           # Conflicts, finished agents, and removals you missed
 shoal notify "PR #12 is ready to merge"  # Notify the user from a workspace

@@ -1,4 +1,5 @@
 //! Git invocations shared by workspace creation, removal, branch refreshes, and landing.
+mod conflicts;
 pub mod default_branch;
 mod diff;
 pub mod existing_branch;

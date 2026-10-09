@@ -584,6 +584,9 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             Body::Ok
         }
         Method::DiffBase { workspace } => Body::DiffBase(manager.diff_base(&workspace).await?),
+        Method::Conflicts { workspace, target } => {
+            Body::Conflicts(manager.check_conflicts(&workspace, target).await?)
+        }
         Method::WorkspaceHook { workspace, kind } => {
             let workspace = manager.workspace(&workspace).await?;
             Body::Hook(manager.workspace_hook(&workspace, kind).await?)

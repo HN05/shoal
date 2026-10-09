@@ -281,7 +281,9 @@ and skips hooks; post-remove events are not durably queued or replayed.
 
 `diff` compares against the recorded base's fork point (merge-base fallback, fixed
 commits stay fixed) with native Git settings, so advancing the base is never shown
-as work. `sync` fetches the default branch's remote and fast-forwards the local default
+as work. `conflicts` asks `git merge-tree` whether committed HEAD merges cleanly
+into a target, by default the base workspace's branch, otherwise the local default
+branch, which `sync` keeps current; it writes only objects. `sync` fetches the default branch's remote and fast-forwards the local default
 branch under the creation refresh rules, advancing a clean registered checkout where
 `git fetch` into the checked-out branch is refused; it never pushes or moves workspace branches, so updating
 a workspace from it stays plain Git. Shoal has no merge or rebase command: Git

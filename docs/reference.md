@@ -901,6 +901,20 @@ Fixed-commit bases use that commit; older workspaces without base metadata use
 `main`. Committed, staged, and unstaged tracked changes appear; untracked files
 follow Git. A missing or unrelated base is an error.
 
+### Conflicts
+
+```sh
+shoal conflicts            # Against the base workspace's branch, otherwise the default branch
+shoal conflicts release    # Against another branch or commit
+```
+
+Reports the paths a merge of the workspace's committed HEAD into the target would
+leave conflicted, without touching the worktree, index or refs; uncommitted
+changes are not checked. The default target is the local branch, so run
+`shoal sync` first to compare with the remote's latest default branch. Exits 1 on
+conflicts; `--json` returns `target`, `target_commit`, `head`, `conflicts` and
+`files`. Requires Git 2.38 or newer.
+
 ### Workspace setup and hooks
 
 Repository config (`.shoal.toml`, `.shoal/config.toml`, or the imported local
