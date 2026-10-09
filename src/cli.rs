@@ -220,7 +220,11 @@ pub enum Command {
         workspace: Option<String>,
     },
     /// List workspaces.
-    Ls,
+    Ls {
+        /// List ready-for-review PRs, issues and workspaces instead.
+        #[arg(long)]
+        ready: bool,
+    },
     /// Show workspace activity, changes, resources, and PR state.
     ///
     /// Name a workspace, or find the workspaces that link an issue or PR or

@@ -105,6 +105,7 @@ After [adding an AI tool](docs/reference.md#agents), run
 shoal                         # Interactive workspace menu
 shoal repo                    # Interactive repository menu
 shoal ls                      # List workspaces
+shoal ls --ready              # PRs, issues and workspaces marked ready for review
 shoal status fix-login        # Workspace activity, changes, resources, and PR state
 shoal status pr 12            # Workspaces that link PR 12; also issue or resource
 shoal config show fix-login   # Effective settings and the source of each value

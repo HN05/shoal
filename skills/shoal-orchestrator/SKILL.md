@@ -42,6 +42,7 @@ is in `prompt_file` and the user must send it from the app.
 
 ```sh
 shoal --json ls
+shoal ls --ready        # PRs, issues and workspaces agents marked ready for review
 shoal --json status fix-login
 shoal --json notifications
 shoal --json events --follow --since <id>

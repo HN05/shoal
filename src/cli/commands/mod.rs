@@ -297,7 +297,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             super::herdr::watch(&ctx, workspace, tab).await
         }
         Command::Setup { workspace } => workspaces::setup(&ctx, workspace).await,
-        Command::Ls => workspaces::list(&ctx).await,
+        Command::Ls { ready } => workspaces::list(&ctx, ready).await,
         Command::Hold { command, scope } => holds::run(&ctx, command, scope).await,
         Command::Base { command, workspace } => base::run(&ctx, command, workspace).await,
         Command::Status { workspace, item } => workspaces::status(&ctx, workspace, item).await,

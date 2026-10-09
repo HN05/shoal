@@ -978,11 +978,23 @@ async fn ignore_setup_failure(ctx: &Context, workspace: &Workspace) -> Result<()
     Ok(())
 }
 
-pub(super) async fn list(ctx: &Context) -> Result<i32> {
-    let workspaces = client::workspaces(&ctx.paths).await?;
-    let stopped = ui::stopped_workspaces(&ctx.paths, &workspaces);
-    ctx.show(&workspaces, |workspaces| {
-        for row in ui::workspace_rows(workspaces, &[], &stopped, true, Palette::stdout(ctx.json)) {
+pub(super) async fn list(ctx: &Context, ready: bool) -> Result<i32> {
+    let mut workspaces = client::workspaces(&ctx.paths).await?;
+    let rows = if ready {
+        workspaces.retain(|workspace| !workspace.review.is_empty());
+        // Only text rows name repositories, which reads each checkout's remote.
+        let repositories = if ctx.json {
+            Vec::new()
+        } else {
+            ui::repository_choices(client::repositories(&ctx.paths).await?).await?
+        };
+        ui::review_rows(&workspaces, &repositories, Palette::stdout(ctx.json))
+    } else {
+        let stopped = ui::stopped_workspaces(&ctx.paths, &workspaces);
+        ui::workspace_rows(&workspaces, &[], &stopped, true, Palette::stdout(ctx.json))
+    };
+    ctx.show(&workspaces, |_| {
+        for row in rows {
             println!("{row}");
         }
     })?;

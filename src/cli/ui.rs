@@ -18,7 +18,8 @@ use crate::{
         output::{Palette, Style, workspace_state_style},
         workspace_context::{ScopeOrder, WorkspaceContext},
     },
-    model::{Repository, Workspace},
+    forge::link::{self, ItemKind},
+    model::{Repository, ReviewMark, Workspace},
     paths::Paths,
     removal::{BranchChoice, RemovalCheck},
     state::WorkspaceState,
@@ -489,25 +490,14 @@ pub fn workspace_rows(
     path: bool,
     palette: Palette,
 ) -> Vec<String> {
-    let repository = |workspace: &Workspace| {
-        repositories
-            .iter()
-            .find(|(id, _)| id == &workspace.repository_id)
-            .map_or("unknown repository", |(_, name)| name.as_str())
-    };
-    let several_repositories = workspaces
-        .iter()
-        .map(repository)
-        .collect::<HashSet<_>>()
-        .len()
-        > 1;
     let shown = |show: bool, text: String| if show { text } else { String::new() };
     let cells: Vec<[Cell; 5]> = workspaces
         .iter()
-        .map(|w| {
+        .zip(repository_column(workspaces, repositories))
+        .map(|(w, repository)| {
             [
                 (w.name.clone(), Some(Style::Heading)),
-                (shown(several_repositories, repository(w).to_owned()), None),
+                (repository, None),
                 (shown(w.branch != w.name, w.branch.clone()), None),
                 state_cell(w, stopped.contains(&w.id)),
                 (
@@ -521,6 +511,71 @@ pub fn workspace_rows(
         .iter()
         .zip(aligned(cells, palette))
         .map(|(workspace, row)| format!("{} {row}", palette.workspace_marker(workspace.state)))
+        .collect()
+}
+
+/// One aligned row per ready-for-review mark: the workspace, its repository
+/// when the rows span several, the marked PR or issue (or the workspace
+/// itself), its URL, and whether new commits made the mark outdated.
+pub fn review_rows(
+    workspaces: &[Workspace],
+    repositories: &[(String, String)],
+    palette: Palette,
+) -> Vec<String> {
+    let cells: Vec<[Cell; 5]> = workspaces
+        .iter()
+        .zip(repository_column(workspaces, repositories))
+        .flat_map(|(w, repository)| {
+            w.review.iter().map(move |mark| {
+                [
+                    (w.name.clone(), Some(Style::Heading)),
+                    (repository.clone(), None),
+                    (mark_label(mark), None),
+                    (mark.url.clone().unwrap_or_default(), None),
+                    if mark.stale == Some(true) {
+                        ("outdated".into(), Some(Style::Warning))
+                    } else {
+                        (String::new(), None)
+                    },
+                ]
+            })
+        })
+        .collect();
+    aligned(cells, palette)
+}
+
+/// `PR #12` or `issue #3` for a linked item, `workspace` for a mark made
+/// while nothing was linked.
+fn mark_label(mark: &ReviewMark) -> String {
+    let (Some(kind), Some(url)) = (mark.kind, &mark.url) else {
+        return "workspace".into();
+    };
+    let name = match kind {
+        ItemKind::Pr => "PR",
+        ItemKind::Issue => "issue",
+    };
+    match link::item(kind, url) {
+        Ok((_, number)) => format!("{name} #{number}"),
+        Err(_) => name.into(),
+    }
+}
+
+/// Each workspace's repository name, or empty cells when all share one.
+/// Repositories are `(id, name)` pairs.
+fn repository_column(workspaces: &[Workspace], repositories: &[(String, String)]) -> Vec<String> {
+    let names: Vec<&str> = workspaces
+        .iter()
+        .map(|workspace| {
+            repositories
+                .iter()
+                .find(|(id, _)| id == &workspace.repository_id)
+                .map_or("unknown repository", |(_, name)| name.as_str())
+        })
+        .collect();
+    let several = names.iter().collect::<HashSet<_>>().len() > 1;
+    names
+        .into_iter()
+        .map(|name| if several { name.into() } else { String::new() })
         .collect()
 }
 
@@ -637,6 +692,42 @@ mod tests {
             branch.into(),
             state,
         )
+    }
+
+    #[test]
+    fn review_rows_list_each_mark_with_its_item_and_staleness() {
+        let plain = Palette::stdout(true);
+        let mark = |kind, url: Option<&str>, stale| ReviewMark {
+            kind,
+            url: url.map(Into::into),
+            head: "abc".into(),
+            created_at: 0,
+            stale,
+        };
+        let mut linked = workspace("a", "fix-login", "fix-login", WorkspaceState::Ready);
+        linked.review = vec![
+            mark(
+                Some(ItemKind::Pr),
+                Some("https://example.com/o/r/pulls/12"),
+                Some(true),
+            ),
+            mark(
+                Some(ItemKind::Issue),
+                Some("https://example.com/o/r/issues/3"),
+                Some(false),
+            ),
+        ];
+        let mut unlinked = workspace("b", "docs", "docs", WorkspaceState::Ready);
+        unlinked.review = vec![mark(None, None, None)];
+        let repositories = [("a".into(), "shoal".into()), ("b".into(), "app".into())];
+        assert_eq!(
+            review_rows(&[linked, unlinked], &repositories, plain),
+            [
+                "fix-login  shoal  PR #12     https://example.com/o/r/pulls/12  outdated",
+                "fix-login  shoal  issue #3   https://example.com/o/r/issues/3",
+                "docs       app    workspace",
+            ]
+        );
     }
 
     #[test]

@@ -1117,7 +1117,10 @@ marking linked items replaces a mark made while nothing was linked.
 Marks never notify, record completion, or affect cleanup; use `shoal notify` to
 ask for attention. New commits make a mark outdated: `ls` shows
 `ready for review (outdated)`, and `status`, `inspect` and `ls --json` list
-`review` marks with `kind`, `url`, `head`, `created_at` and `stale`. Unlinking an
+`review` marks with `kind`, `url`, `head`, `created_at` and `stale`.
+`shoal ls --ready` lists every mark across repositories, one row per marked
+item with its URL and `outdated` when HEAD has moved; with `--json` it lists the
+workspaces that have marks. Unlinking an
 item withdraws its mark, and removal deletes all marks. Each mark and withdrawal
 is a [workspace event](#workspace-events). Scoped callers mark only their own
 workspace; `--workspace` selects another one for unscoped callers.

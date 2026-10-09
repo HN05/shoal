@@ -13878,8 +13878,14 @@ fn agents_mark_their_workspace_ready_for_review_until_new_commits() {
             .unwrap()
             .to_owned()
     };
+    let ready =
+        |fixture: &Fixture| String::from_utf8(fixture.run(&["ls", "--ready"]).stdout).unwrap();
     assert!(row(&fixture).contains("ready for review"));
     assert!(!row(&fixture).contains("outdated"));
+    assert_eq!(ready(&fixture), "reviewed  workspace\n");
+    let listed = fixture.ok(&["ls", "--ready"]);
+    assert_eq!(listed.as_array().unwrap().len(), 1);
+    assert_eq!(listed[0]["name"], "reviewed");
 
     fs::write(path.join("later"), "later\n").unwrap();
     git(path, &["add", "later"]);
@@ -13896,6 +13902,7 @@ fn agents_mark_their_workspace_ready_for_review_until_new_commits() {
         ],
     );
     assert!(row(&fixture).contains("ready for review (outdated)"));
+    assert_eq!(ready(&fixture), "reviewed  workspace  outdated\n");
     assert_eq!(
         fixture.ok(&["status", "reviewed"])["workspace"]["review"][0]["stale"],
         true
@@ -13912,6 +13919,7 @@ fn agents_mark_their_workspace_ready_for_review_until_new_commits() {
         1
     );
     assert!(!row(&fixture).contains("ready for review"));
+    assert_eq!(fixture.ok(&["ls", "--ready"]), serde_json::json!([]));
     assert!(
         fixture.ok(&["inspect", "reviewed"])["workspace"]
             .get("review")
