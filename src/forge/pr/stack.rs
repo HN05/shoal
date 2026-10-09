@@ -29,10 +29,11 @@ impl Manager {
         if base.stacked_workspaces.is_empty() {
             return Ok(None);
         }
+        let mut merged = Vec::new();
         for url in urls {
-            match self.base_pr_merged(base, url).await {
-                Ok(true) => {}
-                Ok(false) => return Ok(None),
+            match self.base_pr_commits(base, url).await {
+                Ok(Some(commits)) => merged.extend(commits),
+                Ok(None) => return Ok(None),
                 Err(error) => {
                     return Ok(Some(
                         error.context(format!("could not check whether {url} merged")),
@@ -43,21 +44,26 @@ impl Manager {
         let Some(url) = urls.last() else {
             return Ok(None);
         };
+        // The rebase cutoff is HEAD, so commits the merge left out would be
+        // dropped from every stacked branch.
+        let head = current_head(base).await?;
+        if !merged.contains(&head) {
+            return Ok(Some(anyhow::anyhow!(
+                "the merged PRs do not contain the base workspace's HEAD"
+            )));
+        }
         let (forge, _, _) = self.pr_forge(base, url).await?;
         let target = forge.pull_request(&base.path, url).await?.base;
-        let head = current_head(base).await?;
-        for stacked in &base.stacked_workspaces {
-            self.restack(stacked, base, &target, &head).await?;
+        // Reload: this sweep may already have removed or moved some of them.
+        for stacked in self.workspace(&base.id).await?.stacked_workspaces {
+            self.restack(&stacked, base, &target, &head).await?;
         }
         Ok(None)
     }
 
-    async fn base_pr_merged(&self, base: &Workspace, url: &str) -> Result<bool> {
+    async fn base_pr_commits(&self, base: &Workspace, url: &str) -> Result<Option<Vec<String>>> {
         let (forge, number, _) = self.pr_forge(base, url).await?;
-        Ok(forge
-            .merged_commits(&base.path, number, &base.branch)
-            .await?
-            .is_some())
+        forge.merged_commits(&base.path, number, &base.branch).await
     }
 
     async fn restack(

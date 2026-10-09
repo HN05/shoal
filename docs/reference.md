@@ -671,7 +671,8 @@ workspace moves the workspaces stacked on it to its own base workspace, or to
 none. `status` shows both directions; `ls --json` and `inspect` give
 `base_workspace` (`id`, `name`, `branch`, or null) and `stacked_workspaces`.
 
-Once every watched PR of a base workspace has merged, the daemon moves the
+Once every watched PR of a base workspace has merged, with its HEAD among the
+merged commits, the daemon moves the
 workspaces stacked on it to its own base workspace and retargets their linked
 PRs that still target its branch to the branch it merged into. Their next
 `watch` returns a `base_merged` update with the rebase command; the agent

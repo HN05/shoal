@@ -199,7 +199,7 @@ A stacked workspace records the workspace whose branch it builds on, inferred wh
 the creation base names another workspace's branch locally or on a remote, so
 stacks span workspaces on any forge. The base is local metadata, not a link:
 removing it moves its stacked workspaces down to its own base and journals the
-change. When every watched PR of the base merges, the PR sweep does the same
+change. When every watched PR of the base merges and covers its HEAD, the PR sweep does the same
 before cleanup can remove it, retargets stacked PRs still targeting its branch,
 and queues a watch update; agents rebase their own branches, since Shoal never
 moves workspace branches. Retargeting is Shoal's only forge write: `gh pr edit`,

@@ -119,7 +119,7 @@ instead of the PR delivery guidance below.
   fetched first. A base naming another workspace's branch records that workspace
   as the base workspace; base changes stay in the same repository without cycles,
   and removal moves stacked workspaces down to the removed workspace's base.
-- Once every watched PR of a base merges, the PR sweep restacks its stacked
+- Once every watched PR of a base merges and covers its HEAD, the PR sweep restacks its stacked
   workspaces before cleanup can remove it, retargets only their PRs still
   targeting its branch, and queues a watch update; it never rebases or pushes.
   Retargeting is the only forge write. Forgejo uses fj's saved token for the PR's

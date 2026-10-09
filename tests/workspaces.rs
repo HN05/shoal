@@ -15247,6 +15247,22 @@ fn failed_restacks_are_reported_even_when_pr_cleanup_is_disabled() {
             .unwrap()
             .is_empty()
     );
+    // A merge that left out the base's HEAD keeps the stack, since rebasing
+    // onto it would drop the missing commits.
+    fs::remove_file(root.join("fail")).unwrap();
+    let pr = serde_json::json!({"number": 1, "state": "MERGED", "headRefName": "lower",
+        "commits": [{"oid": "0".repeat(40)}]});
+    fs::write(root.join("pr-1"), pr.to_string()).unwrap();
+    fixture.restart();
+    wait_until("recorded unmerged base HEAD", || {
+        fixture.ok(&["inspect", "lower"])["pr_cleanup"]["error"]
+            .as_str()
+            .is_some_and(|error| error.contains("do not contain the base workspace's HEAD"))
+    });
+    assert_eq!(
+        fixture.ok(&["inspect", "upper"])["workspace"]["base_workspace"]["name"],
+        "lower"
+    );
     // A failure after the merge is confirmed is reported.
     write_pr(1, "MERGED", "lower", "main");
     fs::write(root.join("fail"), "baseRefName").unwrap();
