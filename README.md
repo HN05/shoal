@@ -81,7 +81,8 @@ shoal watch pr 505                         # Watch an explicit PR
 Inside Herdr, `add` opens a new tab after your choices; use `--here`
 to run in the current pane. See [Herdr settings](docs/reference.md#agents).
 
-Use `--agent claude` for Claude Code, or `--agent happy-claude`/`happy-codex` for
+Use `--agent claude` for Claude Code, `opencode`, `pi` or `grok` for those
+tools, or `--agent happy-claude`/`happy-codex` for
 a detached [Happy](https://github.com/slopus/happy) session that appears in the
 Happy app. Interactive `shoal add` uses `--agent` or picks an installed agent.
 Issue additions also use `default_agent = "codex"` from the repository or global

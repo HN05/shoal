@@ -444,7 +444,11 @@ and workspace removal closes it immediately. `add`
 without an agent (or choosing “No agent”) opens an interactive shell in the ready
 workspace and leaves the tab open until that workspace is completed or removed.
 
-Add an AI tool in global config to run it as an agent:
+Besides Claude and Codex, Shoal includes [opencode](https://opencode.ai)
+(`opencode --prompt {prompt} {args}`), [pi](https://github.com/badlogic/pi-mono)
+(`pi`) and [Grok Build](https://docs.x.ai/build/overview) (`grok`); pi and Grok
+take the prompt as their first argument. Each runs as `shoal <name>` once its
+executable is on PATH. Add another AI tool in global config to run it as an agent:
 
 ```toml
 default_agent = "droid"
@@ -1476,6 +1480,7 @@ shoal skill install          # Every tool whose skill directory exists
 shoal skill install pi       # One tool configured below
 ```
 
+opencode and pi read Codex's `~/.agents/skills`; Grok uses `~/.grok/skills`.
 Define additional tools' user-level skill directories in global Shoal config
 (an AI tool without one is skipped by `all`):
 

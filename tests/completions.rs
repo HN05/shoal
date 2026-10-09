@@ -125,7 +125,12 @@ fn dynamic_completion_covers_nested_commands_flags_and_paths_without_daemon() {
          [ai.droid]\ncommand = ['droid']\n",
     )
     .unwrap();
-    install_programs(home.path(), &["claude", "codex", "happy", "tuicr", "droid"]);
+    install_programs(
+        home.path(),
+        &[
+            "claude", "codex", "happy", "tuicr", "droid", "opencode", "grok",
+        ],
+    );
     for (words, expected) in [
         (vec!["shoal", "repo", "r"], "rm"),
         (vec!["shoal", "rev"], "review"),
@@ -156,6 +161,8 @@ fn dynamic_completion_covers_nested_commands_flags_and_paths_without_daemon() {
         (vec!["shoal", "codex", "--a"], "--app"),
         (vec!["shoal", "add", "--agent", "co"], "codex"),
         (vec!["shoal", "dro"], "droid"),
+        (vec!["shoal", "open"], "opencode"),
+        (vec!["shoal", "add", "--agent", "gr"], "grok"),
         (vec!["shoal", "add", "--agent", "dro"], "droid"),
         (vec!["shoal", "review", "--agent", "cl"], "claude"),
         (vec!["shoal", "add", "--agent", "cl"], "claude"),
@@ -197,6 +204,9 @@ fn agents_without_installed_executables_are_not_completed() {
         (vec!["shoal", "ha"], &[], &["happy"]),
         (vec!["shoal", "t"], &[], &["t3"]),
         (vec!["shoal", "dr"], &[], &["droid"]),
+        (vec!["shoal", "o"], &[], &["opencode"]),
+        (vec!["shoal", "p"], &[], &["pi"]),
+        (vec!["shoal", "add", "--agent", "g"], &[], &["grok"]),
         // Plain configured commands are not agents.
         (vec!["shoal", "add", "--agent", "r"], &[], &["review"]),
         (vec!["shoal", "add", "--agent", "d"], &[], &["droid"]),

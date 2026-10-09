@@ -51,6 +51,22 @@ pub const PROVIDERS: &[Provider] = &[
         command: &["claude"],
         skill_dir: SkillDir::Claude,
     },
+    // opencode and pi also read `~/.agents/skills`, so they share Codex's copy.
+    Provider {
+        name: "opencode",
+        command: &["opencode", "--prompt", "{prompt}", "{args}"],
+        skill_dir: SkillDir::Home(".agents/skills"),
+    },
+    Provider {
+        name: "pi",
+        command: &["pi"],
+        skill_dir: SkillDir::Home(".agents/skills"),
+    },
+    Provider {
+        name: "grok",
+        command: &["grok"],
+        skill_dir: SkillDir::Home(".grok/skills"),
+    },
 ];
 
 /// Built-in launchers, the lowest layer of `[commands]`.
@@ -201,6 +217,8 @@ mod tests {
         let directories = skill_dirs(&agents, Path::new("/home")).unwrap();
         assert_eq!(directories["claude"], Some("/home/claude-skills".into()));
         assert_eq!(directories["codex"], Some("/home/.agents/skills".into()));
+        assert_eq!(directories["opencode"], directories["codex"]);
+        assert_eq!(directories["grok"], Some("/home/.grok/skills".into()));
         assert_eq!(directories["notes"], Some("/skills".into()));
         assert_eq!(directories["droid"], None);
     }

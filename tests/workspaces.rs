@@ -12958,6 +12958,19 @@ fn configured_ai_tools_run_as_agents_from_their_own_command() {
     assert_eq!(output.status.code(), Some(7), "{output:?}");
     assert!(args().starts_with("repo-droid\0Follow "), "{}", args());
 
+    // Built-in providers without specialized launchers place the prompt the
+    // same way.
+    fs::copy(bin.join("fake-droid"), bin.join("opencode")).unwrap();
+    let output = fixture.run(&["opencode", "provider", "--", "user message"]);
+    assert_eq!(output.status.code(), Some(7), "{output:?}");
+    assert_eq!(
+        args(),
+        format!(
+            "fake-droid\0--prompt\0Follow {}\0user message\0",
+            workspace["branch"].as_str().unwrap()
+        )
+    );
+
     // A provider whose launcher is missing never starts.
     fs::remove_file(bin.join("repo-droid")).unwrap();
     let output = fixture.run(&["droid", "provider"]);

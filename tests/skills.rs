@@ -220,8 +220,14 @@ fn skill_export_and_default_install_work_without_daemon_or_repository() {
     ))
     .unwrap();
     let entries = installed["installed"].as_array().unwrap();
-    assert_eq!(entries.len(), 4);
-    for (agent, relative) in [("codex", ".agents/skills"), ("claude", ".claude/skills")] {
+    // opencode and pi share Codex's directory; Grok's does not exist.
+    assert_eq!(entries.len(), 8);
+    for (agent, relative) in [
+        ("codex", ".agents/skills"),
+        ("opencode", ".agents/skills"),
+        ("pi", ".agents/skills"),
+        ("claude", ".claude/skills"),
+    ] {
         let directory = home.path().join(relative);
         assert_installed(&directory);
         for (name, _) in SKILLS {

@@ -1052,7 +1052,8 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
         for (name, (value, layer)) in &commands {
             assert_eq!((json(value), *layer), command(name), "{name}");
         }
-        assert_eq!(commands.len(), 5);
+        // Three configured names plus every built-in provider's launcher.
+        assert_eq!(commands.len(), 3 + crate::ai::PROVIDERS.len());
         let effective = stack.resolve().unwrap();
         assert_eq!(effective.commands["review"], ["saved", "two words"]);
         assert_eq!(effective.commands["check"], ["check"]);
