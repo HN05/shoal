@@ -187,7 +187,9 @@ struct Outcome {
 
 /// Install the bundled skills in `directory` and remove retired ones Shoal
 /// still owns. A recorded skill whose file differs from what Shoal wrote
-/// belongs to the user; files from before the record existed are Shoal's.
+/// belongs to the user, as does every skill whose directory is not a real
+/// directory, such as a link into the user's dotfiles; files from before the
+/// record existed are Shoal's.
 fn refresh(directory: &Path, source: Option<&Path>, mode: Mode) -> Result<Outcome> {
     let loaded = Record::load(directory)?;
     let mut record = loaded.clone().unwrap_or_default();
@@ -203,6 +205,7 @@ fn refresh(directory: &Path, source: Option<&Path>, mode: Mode) -> Result<Outcom
             None => Entry::copy(contents.as_bytes()),
         };
         let present = exists(&path)?;
+        let linked = !real_directory(&directory.join(name))?;
         // A concurrent refresh may already have written this version.
         let current = expected.matches(&path)?;
         let owned = match record.skills.get(name) {
@@ -211,7 +214,7 @@ fn refresh(directory: &Path, source: Option<&Path>, mode: Mode) -> Result<Outcom
             Some(previous) if present => current || previous.matches(&path)?,
             Some(_) => mode != Mode::Refresh,
         };
-        if owned || force {
+        if (owned || force) && !linked {
             if !current {
                 install(
                     &path,
@@ -242,14 +245,17 @@ fn refresh(directory: &Path, source: Option<&Path>, mode: Mode) -> Result<Outcom
             .remove(&name)
             .expect("retired names are recorded");
         let path = skill_file(directory, &name);
-        if entry.matches(&path)? {
+        if real_directory(&directory.join(&name))? && entry.matches(&path)? {
             remove_skill(&directory.join(&name))?;
             outcome.changed = true;
         } else if entry != Entry::Kept && exists(&path)? {
             outcome.kept.push(name);
         }
     }
-    if loaded.is_none() && remove_skill(&directory.join(RETIRED))? {
+    if loaded.is_none()
+        && real_directory(&directory.join(RETIRED))?
+        && remove_skill(&directory.join(RETIRED))?
+    {
         outcome.changed = true;
     }
     if loaded.as_ref() != Some(&record) {
@@ -274,6 +280,15 @@ fn holds_shoal_skills(directory: &Path, record: &Record) -> Result<bool> {
         }
     }
     Ok(false)
+}
+
+/// Whether `path` is a directory itself, not a link to one, or is absent.
+fn real_directory(path: &Path) -> Result<bool> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) => Ok(metadata.is_dir()),
+        Err(error) if record::is_absent(&error) => Ok(true),
+        Err(error) => Err(error).with_context(|| format!("inspect {}", path.display())),
+    }
 }
 
 fn exists(path: &Path) -> Result<bool> {
@@ -536,6 +551,15 @@ mod tests {
         fs::remove_file(skill_file(directory, worker)).unwrap();
         refresh(directory, None, Mode::Install { force: false }).unwrap();
         assert_eq!(read(worker), SKILLS[0].1);
+        // A linked skill directory is the user's, even when forced.
+        let elsewhere = tempfile::tempdir().unwrap();
+        fs::write(elsewhere.path().join("SKILL.md"), "old").unwrap();
+        fs::remove_dir_all(directory.join(worker)).unwrap();
+        symlink(elsewhere.path(), directory.join(worker)).unwrap();
+        record(directory, &[(worker, Entry::copy(b"old"))]);
+        let outcome = refresh(directory, None, Mode::Install { force: true }).unwrap();
+        assert_eq!(outcome.kept, [worker]);
+        assert_eq!(read(worker), "old");
     }
 
     #[test]
@@ -561,9 +585,15 @@ mod tests {
         fs::write(directory.join("copied/notes.md"), "keep").unwrap();
         fs::write(skill_file(&directory, "edited"), "edited").unwrap();
         fs::write(skill_file(&directory, "kept"), "kept").unwrap();
+        // A retired skill reached through a linked directory stays.
+        let elsewhere = root.path().join("elsewhere");
+        fs::create_dir(&elsewhere).unwrap();
+        fs::write(elsewhere.join("SKILL.md"), "retired").unwrap();
+        symlink(&elsewhere, directory.join("redirected")).unwrap();
         record(
             &directory,
             &[
+                ("redirected", Entry::copy(b"retired")),
                 ("linked", Entry::Link(skill_file(&source, "linked"))),
                 ("copied", Entry::copy(b"retired")),
                 ("edited", Entry::copy(b"retired")),
@@ -571,7 +601,8 @@ mod tests {
             ],
         );
         let outcome = refresh(&directory, Some(&source), Mode::Install { force: false }).unwrap();
-        assert_eq!(outcome.kept, ["edited"]);
+        assert_eq!(outcome.kept, ["edited", "redirected"]);
+        assert!(elsewhere.join("SKILL.md").exists());
         assert!(!directory.join("linked").exists());
         assert_eq!(fs::read_dir(directory.join("copied")).unwrap().count(), 1);
         for name in ["edited", "kept"] {
