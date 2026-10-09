@@ -812,7 +812,7 @@ async fn manual_resume_consumes_the_record_on_start_even_if_other_commands_run_o
 async fn critical_disk_space_stops_executions_cleanup_cannot_remove() {
     let (_root, manager, workspace, serving) = fixture().await;
     let agent = launch(&manager, &workspace);
-    wait_started(&workspace).await;
+    wait_started(&manager, &workspace).await;
     bounded(super::disk::Monitor::default().check(
         &manager,
         tokio::time::Instant::now(),
