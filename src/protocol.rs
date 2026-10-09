@@ -660,6 +660,9 @@ pub enum Control {
         recover: bool,
         #[serde(default = "default_overload_reason")]
         reason: String,
+        /// The condition automatic recovery waits for, completing "once …".
+        #[serde(default = "default_resumes_when")]
+        resumes_when: String,
     },
     Resume {
         ports: Vec<crate::model::PortReservation>,
@@ -673,6 +676,11 @@ pub enum Control {
 
 fn default_overload_reason() -> String {
     "system overload".into()
+}
+
+/// What memory and CPU protection wait for, and what older daemons meant.
+pub fn default_resumes_when() -> String {
+    "system load is healthy".into()
 }
 
 pub async fn read<T: DeserializeOwned>(stream: &mut (impl AsyncRead + Unpin)) -> Result<T> {
@@ -883,9 +891,11 @@ mod tests {
     fn older_overload_controls_use_a_generic_reason() {
         let control: Control =
             serde_json::from_value(json!({"type": "overload_stop", "recover": false})).unwrap();
-        assert!(
-            matches!(control, Control::OverloadStop { recover: false, reason } if reason == "system overload")
-        );
+        assert!(matches!(
+            control,
+            Control::OverloadStop { recover: false, reason, resumes_when }
+                if reason == "system overload" && resumes_when == "system load is healthy"
+        ));
     }
 
     #[test]

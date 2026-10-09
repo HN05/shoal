@@ -14,8 +14,26 @@ pub(super) struct Agent {
     started: Instant,
     recover: bool,
     stop: watch::Sender<bool>,
-    /// The pressure reason while an overload stop awaits automatic recovery.
-    overload: Option<String>,
+    /// Set while an overload stop awaits automatic recovery.
+    overload: Option<Protection>,
+}
+
+/// Why protection stopped an agent, and what its automatic restore waits for.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Protection {
+    pub reason: String,
+    /// Completes "once …"; recovery also waits for every other signal.
+    pub resumes_when: String,
+}
+
+impl Protection {
+    /// Memory or CPU pressure.
+    pub(crate) fn load(reason: &str) -> Self {
+        Self {
+            reason: reason.into(),
+            resumes_when: crate::protocol::default_resumes_when(),
+        }
+    }
 }
 
 impl Agent {
@@ -249,7 +267,7 @@ impl Manager {
         Ok(true)
     }
 
-    pub(crate) async fn agent_overload_reason(&self, id: &str) -> Option<String> {
+    pub(crate) async fn agent_overload(&self, id: &str) -> Option<Protection> {
         self.agents
             .lock()
             .await
@@ -258,7 +276,7 @@ impl Manager {
     }
 
     pub(crate) async fn agent_was_overloaded(&self, id: &str) -> bool {
-        self.agent_overload_reason(id).await.is_some()
+        self.agent_overload(id).await.is_some()
     }
 
     pub(crate) fn reset_overload_recovery(&self) {
@@ -301,6 +319,7 @@ impl Manager {
     }
 
     pub(crate) async fn stop_agent_for_overload(&self, reason: &str) -> bool {
+        let protection = Protection::load(reason);
         let stopped = {
             let mut agents = self.agents.lock().await;
             let selected = agents
@@ -318,7 +337,7 @@ impl Manager {
                 if let Err(error) = &handoff {
                     log!("overload recovery handoff not saved: {error:#}");
                 }
-                agent.overload = Some(reason.into());
+                agent.overload = Some(protection.clone());
                 agent.stop.send(true).ok()?;
                 Some((
                     id.clone(),
@@ -338,7 +357,10 @@ impl Manager {
         } else if !self.config().overload.recovery.enabled {
             "automatic recovery disabled by overload.recovery.enabled"
         } else {
-            "automatic session restore waits for healthy load"
+            &format!(
+                "automatic session restore waits until {}",
+                protection.resumes_when
+            )
         };
         self.notify(
             Some(&workspace),
@@ -517,7 +539,7 @@ mod tests {
             (
                 true,
                 true,
-                "automatic session restore waits for healthy load",
+                "automatic session restore waits until system load is healthy",
             ),
         ] {
             let mut config = crate::config::Config::default();
@@ -563,8 +585,8 @@ mod tests {
                     .contains(&format!("shoal resume {} --execution {id}", workspace.name))
             );
             assert_eq!(
-                manager.agent_overload_reason(id).await.as_deref(),
-                Some("critical memory pressure")
+                manager.agent_overload(id).await,
+                Some(Protection::load("critical memory pressure"))
             );
             manager
                 .notify_agent_exit(

@@ -48,6 +48,7 @@ async fn adjacent_controls_child() {
         Control::OverloadStop {
             recover: true,
             reason: "critical memory pressure".into(),
+            resumes_when: "system load is healthy".into(),
         },
         Control::Stop,
     ] {
@@ -95,7 +96,7 @@ async fn adjacent_controls_child() {
             outcome,
             Outcome::Paused {
                 code: 143,
-                stop: Halt::Protection { recover: true, reason },
+                stop: Halt::Protection { recover: true, reason, .. },
             } if reason == "critical memory pressure"
         ));
         assert!(recovery::wait(&mut link).await.unwrap().is_none());
@@ -342,16 +343,28 @@ async fn reattachment_child() {
 
 #[test]
 fn only_protection_reasons_are_saved_and_pauses_state_theirs() {
+    let restore = "restore with shoal resume worker --execution id";
     let protection = Halt::Protection {
         recover: false,
-        reason: "critical memory pressure".into(),
+        reason: "free disk space is below 2 GiB".into(),
+        resumes_when: "free disk space reaches 5 GiB".into(),
     };
-    assert_eq!(protection.saved_reason(), Some("critical memory pressure"));
-    assert_eq!(protection.stated_reason(), "");
+    assert_eq!(
+        protection.saved_reason(),
+        Some("free disk space is below 2 GiB")
+    );
+    assert_eq!(
+        protection.manual_restore(restore),
+        "shoal: agent stopped; once free disk space reaches 5 GiB, restore with shoal resume worker --execution id"
+    );
     let stop = Halt::Pause {
         reason: Some("stopped by shoal stop".into()),
     };
     assert_eq!(stop.saved_reason(), None);
     assert_eq!(stop.stated_reason(), ": stopped by shoal stop");
+    assert_eq!(
+        stop.manual_restore(restore),
+        "shoal: agent stopped: stopped by shoal stop; restore with shoal resume worker --execution id"
+    );
     assert_eq!(Halt::Pause { reason: None }.stated_reason(), "");
 }

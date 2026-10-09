@@ -226,10 +226,14 @@ async fn relay(
                     changed = stop.changed(), if !sent_stop => {
                         changed?;
                         if *stop.borrow_and_update() {
-                            let control = if let Some(reason) = manager.agent_overload_reason(execution_id).await {
+                            let control = if let Some(protection) = manager.agent_overload(execution_id).await {
                                 // Read the policy now, so a reload applies to running agents.
                                 recovering = recover && manager.config().overload.recovery.enabled;
-                                Control::OverloadStop { recover: recovering, reason }
+                                Control::OverloadStop {
+                                    recover: recovering,
+                                    reason: protection.reason,
+                                    resumes_when: protection.resumes_when,
+                                }
                             } else if reattach && manager.shutting_down() {
                                 Control::Detach
                             } else if kind == ExecutionKind::Command && let Some(reason) = manager.resumable_stop_reason(execution_id).await {
@@ -301,7 +305,10 @@ async fn finish(
         ..
     } = execution;
     let mut overload_reason = if agent.is_some() {
-        manager.agent_overload_reason(&execution_id).await
+        manager
+            .agent_overload(&execution_id)
+            .await
+            .map(|protection| protection.reason)
     } else {
         None
     };

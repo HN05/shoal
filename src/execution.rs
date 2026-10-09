@@ -382,18 +382,19 @@ async fn run_tracked(
         match outcome {
             Ok(Outcome::Exited(code)) => break Ok(code),
             Ok(Outcome::Paused { code, stop }) => {
-                let recover = matches!(stop, Halt::Protection { recover: true, .. });
                 if let Some(recovery) = &recovery {
-                    match recovery.save(paths, &plan.workspace.id, &plan.id, stop.saved_reason()) {
+                    let automatic = recovery.automatic && stop.recovers();
+                    let restore = format!(
+                        "restore with shoal resume {} --execution {}",
+                        plan.workspace.name, plan.id
+                    );
+                    let saved =
+                        recovery.save(paths, &plan.workspace.id, &plan.id, stop.saved_reason());
+                    match &saved {
                         Ok(path) => {
-                            recovery_record = Some(path);
-                            if !recover || !recovery.automatic {
-                                eprintln!(
-                                    "shoal: agent stopped{}; restore with shoal resume {} --execution {}",
-                                    stop.stated_reason(),
-                                    plan.workspace.name,
-                                    plan.id
-                                );
+                            recovery_record = Some(path.clone());
+                            if !automatic {
+                                eprintln!("{}", stop.manual_restore(&restore));
                             }
                         }
                         Err(error) => eprintln!("warning: cannot save recovery command: {error:#}"),
@@ -402,15 +403,20 @@ async fn run_tracked(
                         // Once paused, the daemon may forget the stopped child.
                         link.disarm();
                         link.send(&ExecutionEvent::Paused).await?;
-                        if recover && recovery.automatic {
+                        if let Halt::Protection { resumes_when, .. } = &stop
+                            && automatic
+                        {
                             eprintln!(
-                                "shoal: waiting for healthy load before restoring agent session"
+                                "shoal: waiting until {resumes_when}; the agent resumes automatically"
                             );
                             if let Some(ports) = recovery::wait(&mut link).await? {
                                 plan.ports = ports;
                                 next_command = recovery.command.clone();
                                 eprintln!("shoal: restoring agent session");
                                 continue;
+                            }
+                            if saved.is_ok() {
+                                eprintln!("shoal: automatic restore cancelled; {restore}");
                             }
                         }
                     }
@@ -462,12 +468,20 @@ enum Outcome {
 #[derive(Debug)]
 enum Halt {
     /// Overload or disk space protection; the reason is saved for `shoal resume`.
-    Protection { recover: bool, reason: String },
+    Protection {
+        recover: bool,
+        reason: String,
+        resumes_when: String,
+    },
     /// `shoal stop`, a daemon shutdown or a refused reattachment.
     Pause { reason: Option<String> },
 }
 
 impl Halt {
+    fn recovers(&self) -> bool {
+        matches!(self, Self::Protection { recover: true, .. })
+    }
+
     fn saved_reason(&self) -> Option<&str> {
         match self {
             Self::Protection { reason, .. } => Some(reason),
@@ -483,6 +497,18 @@ impl Halt {
                 reason: Some(reason),
             } => format!(": {reason}"),
             _ => String::new(),
+        }
+    }
+
+    /// The line for an agent that does not restore itself.
+    fn manual_restore(&self, restore: &str) -> String {
+        match self {
+            Self::Protection { resumes_when, .. } => {
+                format!("shoal: agent stopped; once {resumes_when}, {restore}")
+            }
+            Self::Pause { .. } => {
+                format!("shoal: agent stopped{}; {restore}", self.stated_reason())
+            }
         }
     }
 }
@@ -556,8 +582,16 @@ async fn supervise(
                 }
                 let status = stop(&mut child, &group, libc::SIGTERM).await?;
                 match control {
-                    Ok(Control::OverloadStop { recover, reason }) => {
-                        recovery = Some(Halt::Protection { recover, reason });
+                    Ok(Control::OverloadStop {
+                        recover,
+                        reason,
+                        resumes_when,
+                    }) => {
+                        recovery = Some(Halt::Protection {
+                            recover,
+                            reason,
+                            resumes_when,
+                        });
                     }
                     Ok(Control::Pause { reason }) => recovery = Some(Halt::Pause { reason }),
                     // A refused reattachment saves the session as a stop does.
