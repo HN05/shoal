@@ -1472,7 +1472,7 @@ separate read/write availability.
 ## Agent skill outside project repositories
 
 ```sh
-shoal skill install          # All configured tools, including built-in defaults
+shoal skill install          # Every tool whose skill directory exists
 shoal skill install pi       # One tool configured below
 ```
 
@@ -1494,7 +1494,9 @@ be set per repository; `command` makes a tool an [agent](#agents).
 Installs the bundled `SKILL.md` at user scope with no daemon: Codex at
 `~/.agents/skills/shoal/SKILL.md`, Claude at `~/.claude/skills/shoal/SKILL.md`
 (honoring an absolute `CLAUDE_CONFIG_DIR`); `[ai.codex]` and `[ai.claude]` can
-override those directories. Homebrew installs symlink to the
+override those directories. Without a tool name, Shoal installs only into skill
+directories that already exist, once per directory; naming a tool creates its
+directory. Homebrew installs symlink to the
 packaged skill so upgrades apply automatically; Cargo installs copy it, so
 rerun after upgrading. Other files in the skill directory are preserved. Run it
 outside scoped executions. `shoal skill` prints the instructions (`--json`

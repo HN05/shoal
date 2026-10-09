@@ -198,10 +198,20 @@ fn skill_export_and_default_install_work_without_daemon_or_repository() {
         assert_eq!(exported["skill"].as_str().unwrap().as_bytes(), contents);
     }
     assert_eq!(fs::read_dir(home.path()).unwrap().count(), 0);
+    // Installing for every tool writes nothing until a skill directory exists.
+    let output = success(
+        cli(home.path())
+            .args(["skill", "install"])
+            .output()
+            .unwrap(),
+    );
+    assert!(String::from_utf8_lossy(&output).contains("No skill directories found"));
+    assert_eq!(fs::read_dir(home.path()).unwrap().count(), 0);
     // The single skill earlier versions installed is replaced.
     let retired = home.path().join(".agents/skills/shoal");
     fs::create_dir_all(&retired).unwrap();
     fs::write(retired.join("SKILL.md"), "retired").unwrap();
+    fs::create_dir_all(home.path().join(".claude/skills")).unwrap();
     let installed: serde_json::Value = serde_json::from_slice(&success(
         cli(home.path())
             .args(["--json", "skill", "install"])
@@ -339,12 +349,14 @@ fn configured_ai_tools_install_selected_or_all_skills_and_override_defaults() {
     assert_eq!(installed["installed"].as_array().unwrap().len(), 2);
     assert_eq!(installed["installed"][0]["agent"], "pi");
     assert!(!home.path().join("custom codex").exists());
+    fs::create_dir(home.path().join("custom codex")).unwrap();
     let installed: serde_json::Value = serde_json::from_slice(&success(run("all"))).unwrap();
-    assert_eq!(installed["installed"].as_array().unwrap().len(), 6);
-    for directory in ["pi skills", "custom codex", ".claude/skills"] {
+    assert_eq!(installed["installed"].as_array().unwrap().len(), 4);
+    for directory in ["pi skills", "custom codex"] {
         assert_installed(&home.path().join(directory));
     }
     assert!(!home.path().join(".agents").exists());
+    assert!(!home.path().join(".claude").exists());
     let unknown = run("unknown");
     assert!(!unknown.status.success());
     assert!(String::from_utf8_lossy(&unknown.stderr).contains("unknown AI tool"));

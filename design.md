@@ -454,6 +454,7 @@ on the forge for a mark. Proposal: an opt-in that undrafts a linked PR (#454).
 Skills are split by role: `shoal-worker` covers an agent's own workspace and
 `shoal-orchestrator` covers unscoped coordination from a console, so neither
 role loads the other's commands. Both are installed together at user scope,
+for every tool whose skill directory already exists unless a tool is named,
 independent of the daemon and never from a scoped execution; their availability
 registers nothing. Installation removes the retired `shoal/SKILL.md`, which
 Shoal owned, and no other file. Global `[ai.<name>]` settings name skill

@@ -54,10 +54,11 @@ pub(super) fn run(
     ensure!(home.is_absolute(), "HOME must be an absolute path");
     let directories = crate::ai::skill_dirs(&crate::ai::load(&home)?, &home)?;
     let destinations: Vec<_> = if agent == "all" {
-        // A provider without a skill directory takes no part in installing all.
+        // Only tools in use: a missing directory means the tool has no skills here.
         directories
             .into_iter()
             .filter_map(|(name, directory)| Some((name, directory?)))
+            .filter(|(_, directory)| directory.is_dir())
             .collect()
     } else {
         let directory = directories.get(agent.as_str()).with_context(|| {
@@ -73,20 +74,29 @@ pub(super) fn run(
         .map(PathBuf::from)
         .or_else(|| crate::env::COMPILED_SKILLS_DIR.map(PathBuf::from));
     let source = packaged_source(configured_source, &std::env::current_exe()?)?;
+    let mut written = std::collections::BTreeSet::new();
     for (agent, directory) in destinations {
+        // Tools that share a directory share one installation.
+        let shared = !written.insert(directory.clone());
         for (name, contents) in SKILLS {
             let path = skill_file(&directory, name);
             let packaged = source.as_ref().map(|source| skill_file(source, name));
-            install(&path, packaged.as_deref(), contents)?;
+            if !shared {
+                install(&path, packaged.as_deref(), contents)?;
+            }
             if !json_output {
                 println!("Installed {agent} skill {name} at {}", path.display());
             }
             installed.push(json!({"agent": agent, "skill": name, "path": path}));
         }
-        remove_retired(&directory.join(RETIRED))?;
+        if !shared {
+            remove_retired(&directory.join(RETIRED))?;
+        }
     }
     if json_output {
         println!("{}", json!({"installed": installed}));
+    } else if installed.is_empty() {
+        println!("No skill directories found; run `shoal skill install <tool>` to create one");
     }
     Ok(0)
 }
