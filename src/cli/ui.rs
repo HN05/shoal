@@ -458,7 +458,7 @@ pub fn stopped_workspaces(paths: &Paths, workspaces: &[Workspace]) -> HashSet<St
 }
 
 /// Non-ready states, then a ready workspace's stopped work or ready-for-review marks.
-fn state_cell(workspace: &Workspace, stopped: bool) -> (String, Option<Style>) {
+fn state_cell(workspace: &Workspace, stopped: bool) -> Cell {
     if workspace.state != WorkspaceState::Ready {
         return (
             workspace.state.to_string(),
@@ -502,7 +502,7 @@ pub fn workspace_rows(
         .len()
         > 1;
     let shown = |show: bool, text: String| if show { text } else { String::new() };
-    let cells: Vec<[(String, Option<Style>); 5]> = workspaces
+    let cells: Vec<[Cell; 5]> = workspaces
         .iter()
         .map(|w| {
             [
@@ -517,31 +517,44 @@ pub fn workspace_rows(
             ]
         })
         .collect();
-    let widths: Vec<usize> = (0..5)
+    workspaces
+        .iter()
+        .zip(aligned(cells, palette))
+        .map(|(workspace, row)| format!("{} {row}", palette.workspace_marker(workspace.state)))
+        .collect()
+}
+
+/// A table cell's text and its style.
+pub type Cell = (String, Option<Style>);
+
+/// Rows padded into columns two spaces apart. Columns empty in every row are
+/// dropped, and each row ends at its last non-empty cell.
+pub fn aligned<const N: usize>(rows: Vec<[Cell; N]>, palette: Palette) -> Vec<String> {
+    let widths: Vec<usize> = (0..N)
         .map(|column| {
-            cells
-                .iter()
+            rows.iter()
                 .map(|row| row[column].0.chars().count())
                 .max()
                 .unwrap_or(0)
         })
         .collect();
-    workspaces
-        .iter()
-        .zip(cells)
-        .map(|(workspace, row)| {
+    rows.into_iter()
+        .map(|row| {
             let last = row.iter().rposition(|(text, _)| !text.is_empty());
-            let mut line = palette.workspace_marker(workspace.state);
+            let mut line = String::new();
+            let mut first = true;
             for (column, (text, style)) in row.into_iter().enumerate() {
                 if widths[column] == 0 || Some(column) > last {
                     continue;
+                }
+                if !std::mem::take(&mut first) {
+                    line.push_str("  ");
                 }
                 let padding = if Some(column) == last {
                     0
                 } else {
                     widths[column] - text.chars().count()
                 };
-                line.push_str(if column == 0 { " " } else { "  " });
                 line.push_str(&match style {
                     Some(style) if !text.is_empty() => palette.paint(style, text),
                     _ => text,
