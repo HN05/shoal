@@ -53,6 +53,7 @@ pub(super) async fn link(ctx: &Context, items: ItemArgs) -> Result<i32> {
                 Method::SetIssue {
                     workspace,
                     url: input,
+                    title: None,
                 },
             )
             .await?;

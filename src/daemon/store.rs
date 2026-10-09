@@ -12,7 +12,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 34;
+const SCHEMA_VERSION: i64 = 35;
 
 #[cfg(test)]
 mod benchmark;
@@ -338,6 +338,7 @@ const MIGRATIONS: &[(i64, &str, Option<Precondition>)] = &[
             WHERE from_continuation AND reason='Kept by shoal continue';",
         None,
     ),
+    (35, "ALTER TABLE workspace_issue ADD COLUMN title TEXT;", None),
 ];
 
 fn migrate(db: &mut Connection) -> Result<()> {
@@ -457,13 +458,14 @@ pub fn workspace(row: &Row<'_>) -> rusqlite::Result<Workspace> {
 
 /// Read canonical links while keeping malformed legacy PR records out of list output.
 pub fn workspace_links(db: &Connection, workspace_id: &str) -> rusqlite::Result<WorkspaceLinks> {
-    let issue = db
+    let (issue, issue_title) = db
         .query_row(
-            "SELECT url FROM workspace_issue WHERE workspace_id=?1",
+            "SELECT url,title FROM workspace_issue WHERE workspace_id=?1",
             [workspace_id],
-            |row| row.get::<_, String>(0),
+            |row| Ok((Some(row.get(0)?), row.get(1)?)),
         )
-        .optional()?;
+        .optional()?
+        .unwrap_or_default();
     let prs = db
         .query_row(
             "SELECT record FROM pr_cleanup WHERE workspace_id=?1",
@@ -480,7 +482,11 @@ pub fn workspace_links(db: &Connection, workspace_id: &str) -> rusqlite::Result<
                 })
         })
         .unwrap_or_default();
-    Ok(WorkspaceLinks { issue, prs })
+    Ok(WorkspaceLinks {
+        issue,
+        issue_title,
+        prs,
+    })
 }
 
 const PORT_COLUMNS: &str = "workspace_id,name,port,env_var,reason";
@@ -697,6 +703,9 @@ mod tests {
         }
         if version >= 33 {
             db.execute_batch(include_str!("store/workspace_base.sql"))?;
+        }
+        if version >= 35 {
+            db.execute_batch("ALTER TABLE workspace_issue ADD COLUMN title TEXT;")?;
         }
         db.pragma_update(None, "user_version", version)?;
         db.execute_batch(

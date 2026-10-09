@@ -42,7 +42,13 @@ impl Manager {
     }
 
     /// Association is part of opening a workspace, before tracked setup starts.
-    pub async fn set_issue(&self, selector: &str, input: &str) -> Result<()> {
+    /// Linking the same issue again records a newly known title.
+    pub async fn set_issue(
+        &self,
+        selector: &str,
+        input: &str,
+        title: Option<String>,
+    ) -> Result<()> {
         let _guard = self.pr_gate.lock().await;
         let workspace = self.workspace(selector).await?;
         self.verify_worktree(&workspace).await?;
@@ -73,11 +79,12 @@ impl Manager {
                     existing.as_ref().is_none_or(|existing| existing == &url),
                     "workspace is already associated with a different issue"
                 );
-                let inserted = tx.execute(
-                    "INSERT INTO workspace_issue(workspace_id,url) VALUES (?1,?2)
-                 ON CONFLICT(workspace_id) DO NOTHING",
-                    rusqlite::params![workspace.id, url],
-                )? == 1;
+                let inserted = existing.is_none();
+                tx.execute(
+                    "INSERT INTO workspace_issue(workspace_id,url,title) VALUES (?1,?2,?3)
+                 ON CONFLICT(workspace_id) DO UPDATE SET title=COALESCE(excluded.title,title)",
+                    rusqlite::params![workspace.id, url, title],
+                )?;
                 if inserted {
                     events::record_link(
                         &tx,
@@ -324,8 +331,15 @@ mod tests {
             &["remote", "add", "origin", "https://github.com/team/repo"],
         );
         let url = "https://github.com/team/repo/issues/316";
-        manager.set_issue(&workspace.id, url).await.unwrap();
-        manager.set_issue(&workspace.id, "316").await.unwrap();
+        manager.set_issue(&workspace.id, url, None).await.unwrap();
+        manager
+            .set_issue(&workspace.id, "316", Some("Show titles".into()))
+            .await
+            .unwrap();
+        manager.set_issue(&workspace.id, "316", None).await.unwrap();
+        let links = manager.workspace(&workspace.id).await.unwrap().links;
+        assert_eq!(links.issue.as_deref(), Some(url));
+        assert_eq!(links.issue_title.as_deref(), Some("Show titles"));
         let linked: Vec<_> = manager
             .workspace_events(None, 100)
             .await
@@ -341,10 +355,14 @@ mod tests {
         assert_eq!(linked.len(), 1);
         assert_eq!(linked[0].kind, crate::forge::link::ItemKind::Issue);
         assert_eq!(linked[0].url, url);
-        assert!(manager.set_issue(&workspace.id, "317").await.is_err());
+        assert!(manager.set_issue(&workspace.id, "317", None).await.is_err());
         assert!(
             manager
-                .set_issue(&workspace.id, "https://github.com/other/repo/issues/316")
+                .set_issue(
+                    &workspace.id,
+                    "https://github.com/other/repo/issues/316",
+                    None
+                )
                 .await
                 .is_err()
         );
@@ -394,7 +412,19 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
-        reopened.set_issue(&workspace.id, "317").await.unwrap();
+        reopened
+            .set_issue(&workspace.id, "317", None)
+            .await
+            .unwrap();
+        assert!(
+            reopened
+                .workspace(&workspace.id)
+                .await
+                .unwrap()
+                .links
+                .issue_title
+                .is_none()
+        );
         assert!(
             reopened
                 .issue_registration(&workspace.id)

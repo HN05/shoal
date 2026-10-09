@@ -72,6 +72,9 @@ pub struct WorkspaceRef {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct WorkspaceLinks {
     pub issue: Option<String>,
+    /// The linked issue's title when the linking caller knew it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub issue_title: Option<String>,
     pub prs: Vec<String>,
 }
 

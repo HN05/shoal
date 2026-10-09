@@ -340,6 +340,7 @@ async fn execute_add_with_target(
             Method::SetIssue {
                 workspace: opened.workspace.id.clone(),
                 url: issue.url.clone(),
+                title: Some(issue.title.clone()),
             },
         )
         .await?;

@@ -88,6 +88,7 @@ async fn marks_bind_to_head_follow_links_and_record_events() {
         listed[0].links,
         crate::model::WorkspaceLinks {
             issue: Some(issue.clone()),
+            issue_title: None,
             prs: vec![pr.clone()],
         }
     );
