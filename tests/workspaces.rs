@@ -15206,10 +15206,10 @@ fn failed_restacks_are_reported_even_when_pr_cleanup_is_disabled() {
     fixture.add_github_origin();
     let root = fixture.root.path().to_owned();
     fs::create_dir_all(root.join("bin")).unwrap();
-    // The merge check succeeds; the target lookup after it fails.
+    // Fail the lookups whose arguments contain the pattern in ~/fail.
     fs::write(
         root.join("bin/gh"),
-        "#!/bin/sh\ncase \"$*\" in *baseRefName*) [ -e \"$HOME/fail\" ] && exit 1;; esac\ncat \"$HOME/pr-$3\"\n",
+        "#!/bin/sh\n[ -e \"$HOME/fail\" ] && case \"$*\" in *\"$(cat \"$HOME/fail\")\"*) exit 1;; esac\ncat \"$HOME/pr-$3\"\n",
     )
     .unwrap();
     fs::set_permissions(root.join("bin/gh"), fs::Permissions::from_mode(0o755)).unwrap();
@@ -15232,8 +15232,24 @@ fn failed_restacks_are_reported_even_when_pr_cleanup_is_disabled() {
         "[auto_cleanup]\nenabled=false\n[pr_cleanup]\nenabled=false\n",
     )
     .unwrap();
+    // An unknown merge holds the base back and records why, without alerts.
+    fs::write(root.join("fail"), "commits").unwrap();
+    fixture.restart();
+    wait_until("recorded merge lookup failure", || {
+        fixture.ok(&["inspect", "lower"])["pr_cleanup"]["error"]
+            .as_str()
+            .is_some_and(|error| error.contains("could not check whether"))
+    });
+    assert!(
+        fixture
+            .ok(&["notifications"])
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    // A failure after the merge is confirmed is reported.
     write_pr(1, "MERGED", "lower", "main");
-    fs::write(root.join("fail"), "").unwrap();
+    fs::write(root.join("fail"), "baseRefName").unwrap();
     fixture.restart();
     wait_until("reported restack failure", || {
         fixture.ok(&["inspect", "lower"])["pr_cleanup"]["error"]

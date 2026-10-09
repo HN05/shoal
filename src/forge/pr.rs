@@ -334,7 +334,9 @@ impl Manager {
             };
             // A base stays until its stacked workspaces moved; a failure retries next sweep.
             let restacked = self.advance_stack(&workspace, &registration.kind).await;
-            if matches!(restacked, Ok(false)) {
+            if let Ok(Some(error)) = &restacked {
+                registration.error = Some(format!("{error:#}"));
+                self.save_registration(&workspace.id, &registration).await?;
                 continue;
             }
             // A repository that disabled PR cleanup keeps its watches waiting;
@@ -403,18 +405,22 @@ impl Manager {
                 }
             }
             registration.error = result.err().map(|error| format!("{error:#}"));
-            let id = workspace.id;
-            self.store
-                .run(move |db| {
-                    db.execute(
-                        "UPDATE pr_cleanup SET record=?2 WHERE workspace_id=?1",
-                        rusqlite::params![id, serde_json::to_string(&registration)?],
-                    )?;
-                    Ok(())
-                })
-                .await?;
+            self.save_registration(&workspace.id, &registration).await?;
         }
         Ok(())
+    }
+
+    async fn save_registration(&self, id: &str, registration: &Registration) -> Result<()> {
+        let (id, record) = (id.to_owned(), serde_json::to_string(registration)?);
+        self.store
+            .run(move |db| {
+                db.execute(
+                    "UPDATE pr_cleanup SET record=?2 WHERE workspace_id=?1",
+                    rusqlite::params![id, record],
+                )?;
+                Ok(())
+            })
+            .await
     }
 
     async fn confirm_pr_completion(

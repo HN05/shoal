@@ -16,31 +16,32 @@ impl Manager {
     /// Once every watched PR of `base` has merged, retarget the PRs of the
     /// workspaces stacked on it to the branch it merged into, stack them on
     /// its own base, and queue a `base_merged` update for their next watch.
-    /// `Ok(false)` while a failed lookup leaves the merge unknown: the base's
+    /// A failed merge lookup returns its error as `Ok(Some(_))`: the base's
     /// cleanup waits for the next sweep without reporting a failure.
     pub(super) async fn advance_stack(
         &self,
         base: &Workspace,
         registration: &RegistrationKind,
-    ) -> Result<bool> {
+    ) -> Result<Option<anyhow::Error>> {
         let RegistrationKind::Watch { urls, .. } = registration else {
-            return Ok(true);
+            return Ok(None);
         };
         if base.stacked_workspaces.is_empty() {
-            return Ok(true);
+            return Ok(None);
         }
         for url in urls {
             match self.base_pr_merged(base, url).await {
                 Ok(true) => {}
-                Ok(false) => return Ok(true),
+                Ok(false) => return Ok(None),
                 Err(error) => {
-                    eprintln!("could not check whether {url} merged: {error:#}");
-                    return Ok(false);
+                    return Ok(Some(
+                        error.context(format!("could not check whether {url} merged")),
+                    ));
                 }
             }
         }
         let Some(url) = urls.last() else {
-            return Ok(true);
+            return Ok(None);
         };
         let (forge, _, _) = self.pr_forge(base, url).await?;
         let target = forge.pull_request(&base.path, url).await?.base;
@@ -48,7 +49,7 @@ impl Manager {
         for stacked in &base.stacked_workspaces {
             self.restack(stacked, base, &target, &head).await?;
         }
-        Ok(true)
+        Ok(None)
     }
 
     async fn base_pr_merged(&self, base: &Workspace, url: &str) -> Result<bool> {
