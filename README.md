@@ -282,8 +282,9 @@ brew upgrade hn05/tap/shoal
 
 Managed daemons apply the upgrade once their clients and operations are idle. For
 a main-channel install, use `brew upgrade --fetch-HEAD hn05/tap/shoal`; run
-`shoal daemon restart` to apply an upgrade immediately, then `shoal resume --all`
-to restore the agents and commands it stopped. Skill links update
+`shoal daemon restart` to apply an upgrade immediately; running agents and
+commands reattach to the new daemon. Wrappers from releases before reattachment
+are stopped instead; restore them with `shoal resume --all`. Skill links update
 automatically; reload `source <(shoal shell init)` in open terminals.
 
 ## Development

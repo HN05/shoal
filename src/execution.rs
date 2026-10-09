@@ -33,9 +33,9 @@ use crate::{
     model::{ExecutionPlan, Workspace},
     paths::Paths,
     process,
-    protocol::{Control, ExecutionEvent, Method, timing},
+    protocol::{Control, ExecutionEvent, Method, Reattach, timing},
 };
-use link::Link;
+use link::{Link, Received, Refused};
 
 /// What a detached wrapper reports on stdout once the daemon has recorded the
 /// command's process group; the CLI that spawned it returns after reading it.
@@ -109,6 +109,12 @@ impl Mode {
 
     fn is_setup(&self) -> bool {
         matches!(self, Mode::Setup { .. })
+    }
+
+    /// Commands keep running across a daemon restart; setup and landing
+    /// depend on gates the daemon holds.
+    fn reattaches(&self) -> bool {
+        self.kind() == ExecutionKind::Command
     }
 }
 
@@ -310,18 +316,33 @@ async fn run_tracked(
     } else {
         None
     };
+    let recover = recovery.as_ref().is_some_and(|recovery| recovery.automatic);
     let method = Method::Execute {
         workspace,
-        wrapper,
+        wrapper: wrapper.clone(),
         kind,
-        agent,
-        recover: recovery.as_ref().is_some_and(|recovery| recovery.automatic),
-        reattach: false,
+        agent: agent.clone(),
+        recover,
+        reattach: mode.reattaches(),
     };
     let (mut link, body) = timeout(kind.start_timeout(), Link::open(paths, method))
         .await
         .context("daemon did not start the execution in time")??;
     let mut plan = ExecutionPlan::try_from(body)?;
+    if mode.reattaches() {
+        link.allow_reattach(
+            paths,
+            Reattach {
+                execution: plan.id.clone(),
+                wrapper,
+                child: None,
+                group_id: 0,
+                scope_token: plan.scope_token.clone(),
+                agent,
+                recover,
+            },
+        );
+    }
     let command = if let Some(land) = &plan.land {
         internal_command(
             paths,
@@ -353,6 +374,9 @@ async fn run_tracked(
             )
             .await
         };
+        if let Some(refusal) = link.refusal() {
+            eprintln!("shoal: {refusal}; command stopped");
+        }
         match outcome {
             Ok(Outcome::Exited(code)) => break Ok(code),
             Ok(Outcome::Paused {
@@ -373,14 +397,20 @@ async fn run_tracked(
                         }
                         Err(error) => eprintln!("warning: cannot save recovery command: {error:#}"),
                     }
-                    link.send(&ExecutionEvent::Paused).await?;
-                    if recover && recovery.automatic {
-                        eprintln!("shoal: waiting for healthy load before restoring agent session");
-                        if let Some(ports) = recovery::wait(&mut link).await? {
-                            plan.ports = ports;
-                            next_command = recovery.command.clone();
-                            eprintln!("shoal: restoring agent session");
-                            continue;
+                    if link.refusal().is_none() {
+                        // Once paused, the daemon may forget the stopped child.
+                        link.disarm();
+                        link.send(&ExecutionEvent::Paused).await?;
+                        if recover && recovery.automatic {
+                            eprintln!(
+                                "shoal: waiting for healthy load before restoring agent session"
+                            );
+                            if let Some(ports) = recovery::wait(&mut link).await? {
+                                plan.ports = ports;
+                                next_command = recovery.command.clone();
+                                eprintln!("shoal: restoring agent session");
+                                continue;
+                            }
                         }
                     }
                 } else if matches!(mode, Mode::Command { record: true }) {
@@ -407,6 +437,9 @@ async fn run_tracked(
         result = Err(error);
     }
     let code = result.as_ref().copied().unwrap_or(1);
+    if link.refusal().is_some() {
+        return result;
+    }
     // Report only after child/process-group cleanup. A lost connection never
     // grants the daemon permission to assume processes stopped.
     let report = report_completion(&mut link, code, &mode).await;
@@ -446,16 +479,18 @@ async fn supervise(
     let mut terminal = Terminal::capture(true)?;
     let mut child = spawn(paths, plan, command, mode, auth)?;
     let group = ProcessGroup(child.id().context("child PID unavailable")? as i32);
+    let identity = process::identity::capture(group.pid())?;
     link.send(&ExecutionEvent::Started {
-        child: process::identity::capture(group.pid())?,
+        child: identity.clone(),
         group_id: group.pid(),
     })
     .await?;
-    let acknowledged = timeout(timing::START_ACK_TIMEOUT, link.recv()).await??;
+    let acknowledged = timeout(timing::START_ACK_TIMEOUT, link.control()).await??;
     ensure!(
         matches!(acknowledged, Control::Started),
         "daemon did not acknowledge process registration"
     );
+    link.arm(identity, group.pid());
     if let Mode::Recovery { records } = mode {
         for record in records {
             recovery::consume(record)?;
@@ -477,30 +512,41 @@ async fn supervise(
     // The child may have been stopped by SIGTTIN/SIGTTOU before it became the
     // foreground group.
     group.send(libc::SIGCONT);
-    let control = link.recv();
-    tokio::pin!(control);
     let mut recovery = None;
-    let status = tokio::select! {
-        status = child.wait() => status?,
-        result = &mut control => {
-            if let Ok(Control::OverloadStop { reason, .. }) = &result {
-                eprintln!("shoal: stopping agent: {reason}; workspace and resource leases retained");
-            }
-            let status = stop(&mut child, &group, libc::SIGTERM).await?;
-            let control = result.context("daemon disconnected; command stopped, execution requires reconciliation")?;
-            match control {
-                Control::OverloadStop { recover, reason } => {
-                    recovery = Some((recover, Some(reason)));
+    // While the daemon is away the link reattaches in the background and the
+    // command keeps the terminal; nothing is written to it.
+    let status = loop {
+        tokio::select! {
+            status = child.wait() => break status?,
+            received = link.recv() => {
+                let control = match received {
+                    Ok(Received::Detached | Received::Reattached) => continue,
+                    Ok(Received::Control(control)) => Ok(control),
+                    Err(error) => Err(error),
+                };
+                if let Ok(Control::OverloadStop { reason, .. }) = &control {
+                    eprintln!("shoal: stopping agent: {reason}; workspace and resource leases retained");
                 }
-                Control::Pause => recovery = Some((false, None)),
-                Control::Stop => {},
-                _ => bail!("unexpected execution control"),
+                let status = stop(&mut child, &group, libc::SIGTERM).await?;
+                match control {
+                    Ok(Control::OverloadStop { recover, reason }) => {
+                        recovery = Some((recover, Some(reason)));
+                    }
+                    // A refused reattachment saves the session as a stop does.
+                    Ok(Control::Pause) => recovery = Some((false, None)),
+                    Err(error) if error.is::<Refused>() => recovery = Some((false, None)),
+                    Ok(Control::Stop) => {},
+                    Ok(_) => bail!("unexpected execution control"),
+                    Err(error) => return Err(error.context(
+                        "daemon disconnected; command stopped, execution requires reconciliation",
+                    )),
+                }
+                break status;
             }
-            status
+            _ = terminate.recv() => break stop(&mut child, &group, libc::SIGTERM).await?,
+            _ = interrupt.recv() => break stop(&mut child, &group, libc::SIGINT).await?,
+            _ = quit.recv() => break stop(&mut child, &group, libc::SIGQUIT).await?,
         }
-        _ = terminate.recv() => stop(&mut child, &group, libc::SIGTERM).await?,
-        _ = interrupt.recv() => stop(&mut child, &group, libc::SIGINT).await?,
-        _ = quit.recv() => stop(&mut child, &group, libc::SIGQUIT).await?,
     };
     // A command owns its process group; descendants do not outlive its lease.
     drop(group);
@@ -586,27 +632,63 @@ fn configure_environment(process: &mut Command, paths: &Paths, plan: &ExecutionP
         .env(env::EXECUTION_ID, &plan.id);
 }
 
+/// Report the exit code, resending it to a reattached daemon when the
+/// previous one went away before acknowledging it.
 async fn report_completion(link: &mut Link, code: i32, mode: &Mode) -> Result<bool> {
-    let exchange = async {
+    loop {
+        if !link.is_attached() {
+            await_reattachment(link).await?;
+        }
         link.send(&ExecutionEvent::Finished { exit_code: code })
             .await?;
-        loop {
-            if let Control::Finished { complete } = link.recv().await? {
-                if !complete {
-                    if mode.is_setup() {
-                        return Err(SetupVerificationFailure { exit_code: code }.into());
+        let exchange = async {
+            loop {
+                match link.recv().await? {
+                    Received::Control(Control::Finished { complete }) => {
+                        return Ok::<_, anyhow::Error>(Some(complete));
                     }
-                    eprintln!(
-                        "warning: execution has surviving or unverified processes; run shoal doctor to inspect it"
-                    );
+                    Received::Control(_) => {}
+                    Received::Detached | Received::Reattached => return Ok(None),
                 }
-                return Ok(complete);
             }
+        };
+        let acknowledged = timeout(timing::COMPLETION_ACK_TIMEOUT, exchange)
+            .await
+            .context("execution completion acknowledgement timed out")??;
+        let Some(complete) = acknowledged else {
+            continue;
+        };
+        if !complete {
+            if mode.is_setup() {
+                return Err(SetupVerificationFailure { exit_code: code }.into());
+            }
+            eprintln!(
+                "warning: execution has surviving or unverified processes; run shoal doctor to inspect it"
+            );
         }
+        return Ok(complete);
+    }
+}
+
+/// Wait for a restarting daemon to take the execution back after its
+/// command exited. The terminal is the caller's again, so a signal ends it.
+async fn await_reattachment(link: &mut Link) -> Result<()> {
+    eprintln!("shoal: waiting for the daemon to restart to report the command's exit");
+    let mut terminate = signal(SignalKind::terminate())?;
+    let mut interrupt = signal(SignalKind::interrupt())?;
+    let mut quit = signal(SignalKind::quit())?;
+    let reattached = async {
+        while !matches!(link.recv().await?, Received::Reattached) {}
+        Ok::<_, anyhow::Error>(())
     };
-    timeout(timing::COMPLETION_ACK_TIMEOUT, exchange)
-        .await
-        .context("execution completion acknowledgement timed out")?
+    tokio::select! {
+        reattached = timeout(timing::REATTACH_EXIT_TIMEOUT, reattached) => {
+            reattached.context("the daemon did not restart")?
+        }
+        _ = terminate.recv() => bail!("interrupted while waiting for the daemon"),
+        _ = interrupt.recv() => bail!("interrupted while waiting for the daemon"),
+        _ = quit.recv() => bail!("interrupted while waiting for the daemon"),
+    }
 }
 
 /// The command's process group; killed when dropped.

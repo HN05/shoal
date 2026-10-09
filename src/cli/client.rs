@@ -144,7 +144,7 @@ pub async fn reload_config(paths: &Paths) -> Result<bool> {
     }
 }
 
-fn is_unreachable(error: &anyhow::Error) -> bool {
+pub(crate) fn is_unreachable(error: &anyhow::Error) -> bool {
     error
         .chain()
         .filter_map(|e| e.downcast_ref::<io::Error>())

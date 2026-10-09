@@ -1,5 +1,5 @@
 use super::*;
-use crate::protocol;
+use crate::{process::identity::Identity, protocol};
 use tokio::{io::AsyncWriteExt, net::UnixStream};
 
 #[tokio::test]
@@ -111,4 +111,232 @@ async fn adjacent_controls_child() {
     })
     .await
     .expect("execution control exchange stalled");
+}
+
+#[tokio::test]
+async fn wrappers_reattach_report_late_exits_and_stop_when_refused() {
+    let root = tempfile::tempdir_in("/tmp").unwrap();
+    let output = timeout(
+        Duration::from_secs(120),
+        crate::test_support::isolated_test(root.path(), "execution::tests::reattachment_child")
+            .output(),
+    )
+    .await
+    .expect("isolated reattachment test stalled")
+    .unwrap();
+    assert!(output.status.success(), "{output:?}");
+}
+
+/// The daemon end of a wrapper's first connection, and the wrapper's link.
+fn connected(paths: &Paths, plan: &ExecutionPlan) -> (Link, BufReader<UnixStream>) {
+    let (client, server) = UnixStream::pair().unwrap();
+    let (reader, writer) = client.into_split();
+    let mut link = Link::new(BufReader::new(reader), writer);
+    link.allow_reattach(
+        paths,
+        Reattach {
+            execution: plan.id.clone(),
+            wrapper: process::identity::capture(std::process::id())
+                .unwrap()
+                .unwrap(),
+            child: None,
+            group_id: 0,
+            scope_token: plan.scope_token.clone(),
+            agent: Some("codex".into()),
+            recover: false,
+        },
+    );
+    (link, BufReader::new(server))
+}
+
+/// Acknowledge the wrapper's child, returning its identity and group.
+async fn acknowledge_start(daemon: &mut BufReader<UnixStream>) -> (Option<Identity>, u32) {
+    let ExecutionEvent::Started { child, group_id } =
+        protocol::read_buffered(daemon).await.unwrap()
+    else {
+        panic!("wrapper did not register its child");
+    };
+    protocol::write(daemon.get_mut(), &Control::Started)
+        .await
+        .unwrap();
+    (child, group_id)
+}
+
+async fn accept_reattach(listener: &tokio::net::UnixListener) -> (Reattach, BufReader<UnixStream>) {
+    let (stream, _) = listener.accept().await.unwrap();
+    let mut stream = BufReader::new(stream);
+    let request: protocol::Request = protocol::read_buffered(&mut stream).await.unwrap();
+    let protocol::Method::Reattach(reattach) = request.method else {
+        panic!("wrapper did not reattach");
+    };
+    assert!(request.scope.is_none());
+    (reattach, stream)
+}
+
+async fn acknowledge_finish(daemon: &mut BufReader<UnixStream>, expected: i32) {
+    let event = protocol::read_buffered::<ExecutionEvent>(daemon)
+        .await
+        .unwrap();
+    assert!(
+        matches!(event, ExecutionEvent::Finished { exit_code } if exit_code == expected),
+        "{event:?}"
+    );
+    protocol::write(daemon.get_mut(), &Control::Finished { complete: true })
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+#[ignore = "isolated wrapper launched by reattachment regression"]
+async fn reattachment_child() {
+    if std::env::var_os("SHOAL_TEST_HELPER").is_none() {
+        return;
+    }
+    let root = std::env::current_dir().unwrap();
+    let paths = Paths::for_test(&root);
+    std::fs::create_dir_all(&paths.state).unwrap();
+    let listener = tokio::net::UnixListener::bind(&paths.socket).unwrap();
+    let plan = ExecutionPlan {
+        id: uuid::Uuid::new_v4().to_string(),
+        workspace: Workspace::new_record(
+            "repo".into(),
+            "worker".into(),
+            root.clone(),
+            "worker".into(),
+            crate::state::WorkspaceState::Ready,
+        ),
+        scope_token: "test-scope".into(),
+        setup_cmd: None,
+        ports: vec![],
+        land: None,
+    };
+    let mode = Mode::Command { record: false };
+    let waiting = |marker: &str| -> Vec<OsString> {
+        vec![
+            "/bin/sh".into(),
+            "-c".into(),
+            format!("while [ ! -f {marker} ]; do sleep 0.05; done; touch {marker}-exited; exit 7")
+                .into(),
+        ]
+    };
+
+    // A planned restart: detach, reattach with the recorded identities, and
+    // obey the new daemon's stop.
+    let (mut link, mut daemon) = connected(&paths, &plan);
+    let restarted = async {
+        let (child, group_id) = acknowledge_start(&mut daemon).await;
+        protocol::write(daemon.get_mut(), &Control::Detach)
+            .await
+            .unwrap();
+        drop(daemon);
+        let (reattach, mut daemon) = accept_reattach(&listener).await;
+        assert_eq!(
+            (reattach.execution, reattach.child),
+            (plan.id.clone(), child)
+        );
+        assert_eq!(reattach.group_id, group_id);
+        assert_eq!(reattach.scope_token, plan.scope_token);
+        assert_eq!(reattach.agent.as_deref(), Some("codex"));
+        protocol::write(
+            daemon.get_mut(),
+            &protocol::Response::new(1, protocol::Body::Ok),
+        )
+        .await
+        .unwrap();
+        protocol::write(daemon.get_mut(), &Control::Stop)
+            .await
+            .unwrap();
+        acknowledge_finish(&mut daemon, 143).await;
+    };
+    let wrapper = async {
+        let outcome = supervise(
+            &mut link,
+            &paths,
+            &plan,
+            &waiting("never"),
+            &mode,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+        assert!(matches!(outcome, Outcome::Exited(143)));
+        assert!(report_completion(&mut link, 143, &mode).await.unwrap());
+    };
+    tokio::join!(restarted, wrapper);
+
+    // A crash during which the command exits: its status waits for the next daemon.
+    let (mut link, mut daemon) = connected(&paths, &plan);
+    let crashed = async {
+        acknowledge_start(&mut daemon).await;
+        drop(daemon);
+        std::fs::write(root.join("release"), "").unwrap();
+        while !root.join("release-exited").exists() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        let (_, mut daemon) = accept_reattach(&listener).await;
+        protocol::write(
+            daemon.get_mut(),
+            &protocol::Response::new(1, protocol::Body::Ok),
+        )
+        .await
+        .unwrap();
+        acknowledge_finish(&mut daemon, 7).await;
+    };
+    let wrapper = async {
+        let outcome = supervise(
+            &mut link,
+            &paths,
+            &plan,
+            &waiting("release"),
+            &mode,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+        assert!(matches!(outcome, Outcome::Exited(7)));
+        assert!(report_completion(&mut link, 7, &mode).await.unwrap());
+    };
+    tokio::join!(crashed, wrapper);
+
+    // A daemon that no longer knows the execution stops the command, which
+    // then saves its session as a stop does.
+    let (mut link, mut daemon) = connected(&paths, &plan);
+    let refused = async {
+        acknowledge_start(&mut daemon).await;
+        drop(daemon);
+        let (_, mut daemon) = accept_reattach(&listener).await;
+        let body = protocol::Body::error(
+            protocol::ErrorCode::ExecutionFailed,
+            "execution record is missing",
+        );
+        protocol::write(daemon.get_mut(), &protocol::Response::new(1, body))
+            .await
+            .unwrap();
+    };
+    let wrapper = async {
+        let outcome = supervise(
+            &mut link,
+            &paths,
+            &plan,
+            &waiting("never"),
+            &mode,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+        assert!(matches!(
+            outcome,
+            Outcome::Paused {
+                code: 143,
+                recover: false,
+                reason: None
+            }
+        ));
+        let refusal = link.refusal().unwrap().to_string();
+        assert!(refusal.contains("execution record is missing"), "{refusal}");
+    };
+    tokio::join!(refused, wrapper);
 }

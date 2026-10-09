@@ -199,7 +199,7 @@ pub(super) async fn wait(
     let mut terminate = signal(SignalKind::terminate())?;
     let mut quit = signal(SignalKind::quit())?;
     tokio::select! {
-        control = link.recv() => match control? {
+        control = link.control() => match control? {
             Control::Resume { ports } => Ok(Some(ports)),
             Control::Stop => Ok(None),
             _ => anyhow::bail!("unexpected recovery control"),

@@ -53,9 +53,17 @@ to the terminal even when output is redirected. It registers through one request
 and gives the entire command process group a shared grace period on stop requests,
 even after its leader exits. The daemon prepares each kind before shared registration.
 The daemon never proxies terminals, and a lost connection is not proof that an
-execution stopped or that its resources are free. Graceful shutdown therefore first
-stops connected executions as manual stop does, within the workspace stop timeout,
-so a restart leaves resumable records instead of disconnected executions.
+execution stopped or that its resources are free. Command wrappers outlive the
+daemon instead: on a lost connection or a shutdown's detach control they keep the
+command and terminal, retry the socket with capped backoff, and reattach with the
+execution ID, wrapper and child identities, process group and the execution's
+scope token. The daemon verifies these against the record, restores scope and
+agent metadata, and serves the connection as before; a command that exits
+meanwhile reports once reattached. A refusal stops the command as manual stop
+does. Reattachment is a permanent protocol method accepted at every version, and
+wrappers advertise it when they register: graceful shutdown detaches those and
+stops the rest as manual stop does, within the workspace stop timeout. Setup and
+landing hold daemon gates, so they never reattach.
 
 Overload protection is configured machine-wide: memory is enabled by default,
 CPU is opt-in and requires sustained aggregate busy time. Stop connected tracked
@@ -679,8 +687,6 @@ polish, then filesystem restrictions. Open items:
   worktree, caches, logs, and audit history.
 - **Distribution:** stable service identity across
   upgrades; native Linux service and recovery validation.
-- **Execution reattachment (proposal, #448):** wrappers keep running across a daemon
-  restart and reattach after identity verification, so upgrades interrupt nothing.
 - **Execution environments:** host/guest and cross-user coordination;
   independent state directories currently have independent capacity.
 

@@ -212,9 +212,13 @@ configured command for another agent, plus proven child
   without disabling protection. Persist manual recovery without replaying the original prompt; consume the
   selected record only after its replacement process is registered. Unrelated
   executions do not block manual recovery.
-  Manual stop and graceful daemon shutdown save agent recovery and user command
-  arguments for explicit resume, preserve work and leases, and never rerun a
-  recorded command.
+  Manual stop, refused reattachment and graceful shutdown of wrappers that cannot
+  reattach save agent recovery and user command arguments for explicit resume,
+  preserve work and leases, and never rerun a recorded command.
+- Command wrappers keep running when the daemon goes away and reattach only after
+  the daemon verifies the record, scope token, wrapper and child identities and
+  process group; the reattach request stays accepted at every protocol version.
+  Detached wrappers never write to the terminal while their command runs.
   Scoped callers cannot stop executions.
 - Agent forge wrappers are opt-in, resolve per tool through configuration layers,
   and change only the tracked agent's PATH, inherited by descendants. Wrappers

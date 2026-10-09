@@ -3727,10 +3727,10 @@ fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
 }
 
 #[test]
-fn daemon_shutdown_saves_running_agents_and_commands_for_resume() {
+fn daemon_restarts_keep_tracked_agents_and_commands_running() {
     let mut fixture = Fixture::with_config(Some("[commands]\nclaude = ['sh', './agent.sh']\n"));
     let workspace = fixture.add("restarted");
-    let path = Path::new(workspace["path"].as_str().unwrap());
+    let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
     fs::write(
         path.join("agent.sh"),
         "touch agent-started\ntrap 'exit 0' TERM\nwhile :; do sleep 1; done\n",
@@ -3746,50 +3746,83 @@ fn daemon_shutdown_saves_running_agents_and_commands_for_resume() {
             .spawn()
             .unwrap()
     };
-    let children = [
-        spawn(&["claude", "restarted"]),
-        spawn(&[
-            "exec",
-            "restarted",
-            "--",
-            "sh",
-            "-c",
-            "touch command-started; while :; do sleep 1; done",
-        ]),
-    ];
-    let deadline = Instant::now() + Duration::from_secs(10);
-    while !(path.join("agent-started").exists() && path.join("command-started").exists()) {
-        assert!(Instant::now() < deadline, "executions did not start");
-        thread::sleep(Duration::from_millis(10));
-    }
-    let output = fixture.run(&["daemon", "stop"]);
-    assert!(output.status.success(), "{output:?}");
-    assert!(String::from_utf8_lossy(&output.stdout).contains("shoal resume --all"));
-    fixture.daemon.child.wait().unwrap();
-    for mut child in children {
-        child.wait().unwrap();
-    }
+    let mut agent = spawn(&["claude", "restarted"]);
+    let mut command = spawn(&[
+        "exec",
+        "restarted",
+        "--",
+        "sh",
+        "-c",
+        "touch command-started; while [ ! -f release ]; do sleep 0.1; done; touch command-exited; exit 3",
+    ]);
+    wait_until("executions to start", || {
+        path.join("agent-started").exists() && path.join("command-started").exists()
+    });
     let state = fixture
         .root
         .path()
         .join("state/workspaces")
         .join(workspace["id"].as_str().unwrap());
-    let mut saved = fs::read_dir(&state)
-        .unwrap()
-        .map(|entry| {
-            let name = entry.unwrap().file_name().to_string_lossy().into_owned();
-            name[name.find('.').unwrap()..].to_owned()
-        })
-        .collect::<Vec<_>>();
-    saved.sort();
-    assert_eq!(saved, [".command.json", ".recovery.json"]);
+    let saved = || {
+        let mut saved = fs::read_dir(&state)
+            .map(|entries| {
+                entries
+                    .map(|entry| {
+                        let name = entry.unwrap().file_name().to_string_lossy().into_owned();
+                        name[name.find('.').unwrap()..].to_owned()
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        saved.sort();
+        saved
+    };
+    let running = |fixture: &Fixture| {
+        fixture.ok(&["inspect", "restarted"])["executions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|execution| execution["state"] == "running")
+            .count()
+    };
+    // A planned stop detaches the wrappers, which keep their commands running.
+    let output = fixture.run(&["daemon", "stop"]);
+    assert!(output.status.success(), "{output:?}");
+    assert!(!String::from_utf8_lossy(&output.stdout).contains("shoal resume"));
+    fixture.daemon.child.wait().unwrap();
+    assert!(agent.try_wait().unwrap().is_none());
+    assert!(command.try_wait().unwrap().is_none());
+    assert!(saved().is_empty(), "{:?}", saved());
+    // A command that exits while the daemon is away reports to the next one.
+    fs::write(path.join("release"), "").unwrap();
+    wait_until("command to exit", || path.join("command-exited").exists());
     fixture.restart();
-    // Nothing is left for shoal doctor to reconcile.
+    assert_eq!(command.wait().unwrap().code(), Some(3));
+    wait_until("agent to reattach", || running(&fixture) == 1);
+    // A crash leaves the agent running too.
+    fixture.restart();
+    assert!(agent.try_wait().unwrap().is_none());
+    wait_until("agent to reattach after a crash", || running(&fixture) == 1);
+    // Stopping works again and the daemon still knows the agent.
+    fixture.ok(&["stop", "restarted"]);
+    assert!(agent.wait().unwrap().success());
+    assert_eq!(saved(), [".recovery.json"]);
     assert!(
         fixture.ok(&["inspect", "restarted"])["executions"]
             .as_array()
             .unwrap()
             .is_empty()
+    );
+    let notifications = fixture.ok(&["notifications"]);
+    let messages = notifications
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|event| event["message"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert!(
+        messages.contains(&"claude exited with code 0"),
+        "{messages:?}"
     );
 }
 
@@ -7618,9 +7651,16 @@ fn doctor_recovers_daemon_crash_and_requires_acknowledgement_for_legacy_records(
         .stderr(Stdio::null())
         .spawn()
         .unwrap();
-    wait_registered_execution(&fixture, "crash");
-    fixture.restart();
+    let execution = wait_registered_execution(&fixture, "crash");
+    // A crash that takes the wrapper and its command along leaves nothing to
+    // reattach, only the record.
+    fixture.daemon.child.kill().unwrap();
+    fixture.daemon.child.wait().unwrap();
+    wrapper.kill().unwrap();
     wrapper.wait().unwrap();
+    let group = execution["child"]["pid"].as_i64().unwrap() as i32;
+    unsafe { libc::kill(-group, libc::SIGKILL) };
+    fixture.restart();
     let report = recovery_report(&fixture, &["doctor", "crash"]);
     assert_eq!(report[0]["executions"][0]["state"], "unknown");
     repaired_workspaces(

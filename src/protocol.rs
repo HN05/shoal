@@ -65,6 +65,15 @@ pub mod timing {
     pub const WORKSPACE_STOP_TIMEOUT: Duration = Duration::from_secs(10);
     /// Notice completed execution records promptly while workspace stopping waits.
     pub const WORKSPACE_STOP_POLL_INTERVAL: Duration = Duration::from_millis(50);
+    /// First retry of a detached wrapper; the delay doubles up to the cap.
+    pub const REATTACH_RETRY_INITIAL: Duration = Duration::from_millis(100);
+    /// Keep a detached wrapper's scope gap short once the daemon returns.
+    pub const REATTACH_RETRY_MAX: Duration = Duration::from_secs(1);
+    /// Give up on an unresponsive daemon's reattach reply and retry.
+    pub const REATTACH_RESPONSE_TIMEOUT: Duration = Duration::from_secs(30);
+    /// After its command exits, wait this long for a restarting daemon to take
+    /// the exit report; cover a stop with its workspace drain plus a start.
+    pub const REATTACH_EXIT_TIMEOUT: Duration = Duration::from_secs(60);
 
     const _: () = {
         assert!(
@@ -76,6 +85,10 @@ pub mod timing {
                 > EXECUTION_START_TIMEOUT.as_millis() + START_ACK_TIMEOUT.as_millis()
         );
         assert!(WORKSPACE_STOP_TIMEOUT.as_millis() > EXECUTION_STOP_GRACE.as_millis());
+        assert!(
+            REATTACH_EXIT_TIMEOUT.as_millis()
+                > WORKSPACE_STOP_TIMEOUT.as_millis() + 2 * DAEMON_WAIT_TIMEOUT.as_millis()
+        );
     };
 }
 

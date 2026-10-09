@@ -39,9 +39,8 @@ Upgrade with `brew update && brew upgrade hn05/tap/shoal` (`--fetch-HEAD` for
 `main`). Managed daemons notice the replacement and restart once tracked executions
 have finished and daemon operations are idle. Followed event and notification
 streams reconnect across the handoff; use `shoal daemon restart` to apply an
-upgrade immediately, then `shoal resume --all`: stopping the daemon first stops
-its connected agents and commands as `shoal stop` does, within the workspace stop
-timeout. The channels share one installation,
+upgrade immediately. Tracked agents and commands keep running while the daemon
+is away and reattach to the next one; see [Daemon restarts](#daemon-restarts). The channels share one installation,
 daemon, and skill path; to switch, run `shoal daemon stop`, uninstall, install
 the other channel, and `shoal daemon start`. State and skill links live outside
 the package and survive. Skill links follow Homebrew's stable `opt` path; a
@@ -93,6 +92,23 @@ settings on each command. Setup preserves compatible
 daemons and commands until restart; incompatible daemons restart automatically.
 Stop foreground daemons manually. macOS diagnostics go to `daemon.log` in the
 state directory; Linux uses `journalctl --user -u shoal.service`. Native Linux service integration remains untested.
+
+### Daemon restarts
+
+Stopping, restarting or losing the daemon does not interrupt tracked agents and
+commands. Their wrappers keep the command and terminal, write nothing while it
+runs, and reconnect once a daemon listens again; until then the command's own
+`shoal` calls fail. The new daemon checks the execution record, scope token and
+process identities, then restores the agent's name and automatic recovery
+setting, so stop, overload protection, exit notifications and
+`post_agent_exit_cmd` work as before. A command that exits while the daemon is
+away reports its exit code once reattached; after it exits the wrapper prints
+that it is waiting and gives up after a minute or on Ctrl-C, leaving the
+execution for `shoal doctor`. When the daemon refuses an execution, the wrapper
+stops the command and saves what `shoal stop` saves. Waiting executions stay
+active for cleanup and removal. Setup, landing and wrappers from releases before
+reattachment stop on shutdown as `shoal stop` does, and `shoal daemon restart`
+then suggests `shoal resume --all`.
 
 ### Overload protection
 
@@ -1201,7 +1217,7 @@ When current checks find no issues, reports show the recorded failure and repair
 `doctor` is unavailable inside scoped executions. Before accepting requests or
 running cleanup, daemon startup atomically marks unfinished simulator cleans
 interrupted, transient lifecycle operations failed, and disconnected executions
-unknown, then audits worktrees without deleting files or releasing leases. Repair restores verified
+unknown until their wrappers reattach, then audits worktrees without deleting files or releasing leases. Repair restores verified
 worktrees to ready and clears executions proven stopped; connected commands keep
 running unless `--stop`. Moved worktrees must return to their recorded path,
 and a deleted directory is forgotten by the next
