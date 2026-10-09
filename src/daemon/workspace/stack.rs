@@ -21,6 +21,9 @@ impl Manager {
         selector: &str,
         base: Option<String>,
     ) -> Result<Workspace> {
+        // The PR sweep restacks under this gate, so a change cannot land
+        // between its retarget and its recorded move.
+        let _gate = self.pr_gate.lock().await;
         let workspace = self.workspace(selector).await?;
         let (id, repository_id) = (workspace.id.clone(), workspace.repository_id);
         self.store
