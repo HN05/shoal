@@ -129,18 +129,23 @@ def prepare(requested, dry_run, automated=False):
             "--head", branch, "--body-file", body.name)
 
 
+def verify_release_commit(sha, version):
+    """Verify that *sha* is the versioned commit that will be published."""
+    git("merge-base", "--is-ancestor", sha, "origin/main")
+    if git("rev-parse", "HEAD") != sha:
+        raise ValueError("check out the release commit before publishing")
+    if versions(git("show", f"{sha}:Cargo.toml"), git("show", f"{sha}:Cargo.lock")) != version:
+        raise ValueError("requested version is not merged into main")
+
+
 def publish(version, dry_run, merged_commit=None):
     parts(version)
     if git("status", "--porcelain"):
         raise ValueError("commit or stash changes before publishing a release")
     run("git", "fetch", "origin", "+refs/heads/main:refs/remotes/origin/main", "--tags")
     sha = merged_commit or git("rev-parse", "origin/main")
-    git("merge-base", "--is-ancestor", sha, "origin/main")
     # Validate what will actually be tagged, not the caller's old checkout.
-    if git("rev-parse", "HEAD") != sha:
-        raise ValueError("check out the release commit before publishing")
-    if versions(git("show", f"{sha}:Cargo.toml"), git("show", f"{sha}:Cargo.lock")) != version:
-        raise ValueError("requested version is not merged into main")
+    verify_release_commit(sha, version)
     tag = version_tag(version)
     existing = git("tag", "--list", tag)
     if existing and git("rev-parse", f"refs/tags/{tag}^{{commit}}") != sha:
@@ -202,12 +207,6 @@ def merged_release(pr, repository, number):
 
 def publish_merged(pr, repository, number):
     version, sha = merged_release(pr, repository, number)
-    if git("status", "--porcelain"):
-        raise ValueError("publish-pr requires a clean checkout")
-    run("git", "fetch", "origin", "+refs/heads/main:refs/remotes/origin/main", "--tags")
-    git("merge-base", "--is-ancestor", sha, "origin/main")
-    if versions(git("show", f"{sha}:Cargo.toml"), git("show", f"{sha}:Cargo.lock")) != version:
-        raise ValueError("merged PR version does not match its release branch")
     run("git", "checkout", "--detach", sha)
     publish(version, False, merged_commit=sha)
 
@@ -220,9 +219,6 @@ def resume(version):
     if not git("tag", "--list", tag):
         raise ValueError("the current version can only resume from its existing release tag")
     sha = git("rev-parse", f"refs/tags/{tag}^{{commit}}")
-    git("merge-base", "--is-ancestor", sha, "origin/main")
-    if versions(git("show", f"{sha}:Cargo.toml"), git("show", f"{sha}:Cargo.lock")) != version:
-        raise ValueError("release tag does not contain the requested version")
     run("git", "checkout", "--detach", sha)
     publish(version, False, merged_commit=sha)
 
