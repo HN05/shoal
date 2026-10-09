@@ -18,6 +18,9 @@ use crate::{
     model::Workspace,
 };
 
+/// Prefixes errors from moving stacked workspaces, which a later sweep clears.
+const STACK_ERROR: &str = "could not move the workspaces stacked on it";
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "RegistrationRecord", into = "RegistrationRecord")]
 pub struct Registration {
@@ -335,7 +338,7 @@ impl Manager {
             // A base stays until its stacked workspaces moved; a failure retries next sweep.
             let restacked = self.advance_stack(&workspace, &registration.kind).await;
             if let Ok(Some(error)) = &restacked {
-                registration.error = Some(format!("{error:#}"));
+                registration.error = Some(format!("{STACK_ERROR}: {error:#}"));
                 self.save_registration(&workspace.id, &registration).await?;
                 continue;
             }
@@ -347,16 +350,20 @@ impl Manager {
                     .as_ref()
                     .is_ok_and(|settings| !settings.pr_cleanup.enabled)
             {
-                // Without cleanup attempts, a base's stored error can only be a
-                // stack error, which this sweep has resolved.
-                if !workspace.stacked_workspaces.is_empty() && registration.error.take().is_some() {
+                // This sweep resolved any stored stack error; others stay.
+                if registration
+                    .error
+                    .as_deref()
+                    .is_some_and(|error| error.starts_with(STACK_ERROR))
+                {
+                    registration.error = None;
                     self.save_registration(&workspace.id, &registration).await?;
                 }
                 continue;
             }
             // `Ok(true)` once the workspace is removed; `Ok(false)` while the PR is open.
             let result: Result<bool> = async {
-                restacked.context("could not move the workspaces stacked on it")?;
+                restacked.context(STACK_ERROR)?;
                 let automatic = settings?.done.automatic;
                 self.verify_worktree(&workspace).await?;
                 let head = current_head(&workspace).await?;
