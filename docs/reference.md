@@ -1095,7 +1095,7 @@ workspace. Activity polling continues when PR cleanup is disabled. Lookup failur
 that keeps failing with the same error is reported again every 10 minutes. Forgejo
 comment and review changes are grouped; CI results follow `fj pr status` contexts.
 When `fj pr status` fails, CI results and merge conflicts come from Forgejo's
-anonymous API for the PR's head commit, which reaches only public repositories.
+API for the PR's head commit, using fj's login for the host when it has one.
 
 Once every linked PR has merged and at least one contains current HEAD, a
 workspace marked `done` is cleaned up. With automatic completion, Shoal records

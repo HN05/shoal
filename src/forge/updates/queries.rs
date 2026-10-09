@@ -4,9 +4,8 @@ use crate::forge::{
     pr::state::{CheckResult, PrState, PrStatus, Verdict, fj_reviews, github_reviews, summarize},
     strip_bidi_isolates,
 };
-use crate::tools::Tool;
 use anyhow::{Context, Result, anyhow, ensure};
-use std::{path::Path, time::Duration};
+use std::path::Path;
 
 impl ForgeRepo {
     pub(crate) async fn issue_activity(&self, path: &Path, number: u64) -> Result<Snapshot> {
@@ -189,8 +188,7 @@ impl ForgeRepo {
 
     /// `fj pr status` 0.6 reads CI from the PR commit with the newest timestamp. When a
     /// rebase gives every commit the same timestamp it picks the oldest, and fails when
-    /// that commit has no CI. Forgejo's API reads the head commit, but without a login
-    /// reaches only public repositories, so it is the fallback.
+    /// that commit has no CI. Forgejo's API reads the head commit, so it is the fallback.
     async fn forgejo_checks(&self, path: &Path, id: &str) -> Result<ForgejoChecks> {
         let args = [
             "--style", "minimal", "pr", "status", id, "--host", &self.host,
@@ -202,9 +200,9 @@ impl ForgeRepo {
             },
             Err(error) => error,
         };
-        self.forgejo_api_checks(id).await.map_err(|fallback| {
-            anyhow!("{error:#}; the anonymous Forgejo API also failed: {fallback:#}")
-        })
+        self.forgejo_api_checks(id)
+            .await
+            .map_err(|fallback| anyhow!("{error:#}; the Forgejo API also failed: {fallback:#}"))
     }
 
     async fn forgejo_api_checks(&self, id: &str) -> Result<ForgejoChecks> {
@@ -216,20 +214,6 @@ impl ForgeRepo {
             .forgejo_api(&format!("commits/{head}/status?limit=50"))
             .await?;
         api_checks(&pull, &combined)
-    }
-
-    async fn forgejo_api(&self, endpoint: &str) -> Result<serde_json::Value> {
-        let url = format!(
-            "{}://{}/api/v1/repos/{}/{endpoint}",
-            self.web_scheme, self.host, self.path
-        );
-        let mut curl = tokio::process::Command::new(Tool::Curl.program());
-        curl.args(["-q", "-sS", "-f", "-H", "Accept: application/json", &url]);
-        let output = crate::subprocess::Run::new(curl)
-            .timeout(Duration::from_secs(20))
-            .output()
-            .await?;
-        serde_json::from_str(&output).with_context(|| format!("invalid response from {url}"))
     }
 }
 

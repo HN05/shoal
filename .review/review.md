@@ -123,8 +123,9 @@ instead of the PR delivery guidance below.
 - Once every watched PR of a base merges and covers its HEAD, the PR sweep restacks its stacked
   workspaces before cleanup can remove it, retargets only their PRs still
   targeting its branch, and queues a watch update; it never rebases or pushes.
-  Retargeting is the only forge write. Forgejo uses fj's saved token for the PR's
-  own host, validated, passed to curl on stdin, never logged, stored or sent elsewhere.
+  Retargeting is the only forge write. Forgejo API requests use fj's saved token
+  for the repository's own host, validated, passed to curl on stdin, never logged,
+  stored or sent elsewhere.
 - Daemon ref updates disable Git credential and SSH askpass prompts without
   overriding the user's SSH transport; interactive Git retains normal prompting.
   Ancestry and exact-ref failures stop branch selection, refresh, and removal;
