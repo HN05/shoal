@@ -434,8 +434,9 @@ be replaced. Status and inspection expose them.
 repository by origin identity, offering interactive registration when missing.
 Issue links and numbers invoke issue opening with `default_agent` standing in
 for `--agent`; numbers use `--repo`, the current checkout/workspace, then a picker.
-PR links open their head against the refreshed remote base and branch links open
-an origin branch, using existing-branch ownership checks and retaining an owned
+PR links open their head against the refreshed remote base and link the PR once
+the workspace is ready, as issue links associate their issue; branch links open
+an origin branch. Both use existing-branch ownership checks and retain an owned
 workspace's diff base. Opening fork PR branches is refused. Interactive `add`
 without a branch, base or issue also offers the repository's open issues and PRs,
 which open as their links do.

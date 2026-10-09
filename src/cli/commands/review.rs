@@ -211,6 +211,7 @@ async fn pull_request(
                 existing: Some(git::remote_ref("origin", &pull.head)),
                 base: Some(tracking),
                 git_profile: None,
+                pr: Some(pull.url.clone()),
             };
             let code = super::workspaces::add(
                 ctx,
@@ -263,6 +264,7 @@ async fn issue(
                 existing: None,
                 base: None,
                 git_profile: None,
+                pr: None,
             };
             let code = super::workspaces::add(
                 ctx,

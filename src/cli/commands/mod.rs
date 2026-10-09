@@ -271,6 +271,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
                     existing,
                     base,
                     git_profile,
+                    pr: None,
                 },
                 agent,
                 args,

@@ -330,7 +330,7 @@ pub(super) async fn add(
 }
 
 /// Reopen the workspace that owns the PR's head branch, or open the pushed
-/// branch compared against the PR's base.
+/// branch compared against the PR's base; either way the PR is linked.
 pub(super) async fn pull_creation(
     ctx: &Context,
     repo: &Repository,
@@ -350,5 +350,6 @@ pub(super) async fn pull_creation(
         }
         creation.existing = Some(git::remote_ref("origin", &pull.head));
     }
+    creation.pr = Some(pull.url);
     Ok(())
 }

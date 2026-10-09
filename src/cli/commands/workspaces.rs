@@ -189,6 +189,9 @@ pub(in crate::cli) struct Creation {
     pub existing: Option<String>,
     pub base: Option<String>,
     pub git_profile: Option<String>,
+    /// The PR whose head branch is opened; it is linked once the workspace is ready.
+    #[serde(default)]
+    pub pr: Option<String>,
 }
 
 pub(super) enum AgentLaunch {
@@ -318,6 +321,7 @@ async fn execute_add_with_target(
         agent,
         args,
     } = plan;
+    let pr = creation.pr.clone();
     let opened = open_add_workspace(ctx, &target, creation).await?;
     if let Some(tab) = &ctx.herdr_tab {
         tab.watch_workspace(ctx, &opened.workspace.id)?;
@@ -343,7 +347,32 @@ async fn execute_add_with_target(
     let Some(workspace) = finish_add_workspace(ctx, opened).await? else {
         return Ok(1);
     };
+    if let Some(url) = pr {
+        link_pull(ctx, &workspace, url).await?;
+    }
     agent.launch(ctx, workspace, issue, args).await
+}
+
+/// Link the PR a workspace was opened on, unless PR cleanup is disabled. The
+/// workspace already exists, so a refused link only warns.
+async fn link_pull(ctx: &Context, workspace: &Workspace, url: String) -> Result<()> {
+    let settings =
+        client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
+    if !settings.pr_cleanup.enabled {
+        return Ok(());
+    }
+    let linked = request::<()>(
+        &ctx.paths,
+        Method::SetPr {
+            workspace: workspace.id.clone(),
+            action: crate::forge::pr::Action::Watch { url: url.clone() },
+        },
+    )
+    .await;
+    if let Err(error) = linked {
+        eprintln!("warning: cannot link PR {url}: {error:#}");
+    }
+    Ok(())
 }
 
 struct AddTarget {
@@ -629,6 +658,7 @@ async fn open_add_workspace(
         existing,
         base,
         git_profile,
+        pr: _,
     } = creation;
     let repository = target.selector.clone();
     if let Some(branch) = existing {

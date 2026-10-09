@@ -2454,8 +2454,9 @@ fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
     commit("top");
     git(&author, &["push", "origin", "stack/base", "stack/top"]);
 
-    let bin = fixture.root.path().join("pr-bin");
-    fs::create_dir(&bin).unwrap();
+    // The daemon also queries the PR when linking it, through the fixture's bin.
+    let bin = fixture.root.path().join("bin");
+    fs::create_dir_all(&bin).unwrap();
     let fj_args = fixture.root.path().join("fj-args");
     fs::write(
         bin.join("fj"),
@@ -2497,6 +2498,12 @@ fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
             .unwrap()
             .contains("pr\0view\x007\0--host\0forge.example\0")
     );
+    let url = "https://forge.example/team/project/pulls/7";
+    let linked_prs = || fixture.ok(&["inspect", "stack-top"])["workspace"]["links"]["prs"].clone();
+    assert_eq!(linked_prs(), serde_json::json!([url]));
+    // Opening the PR again relinks it to its owner.
+    fixture.ok(&["unlink", "pr", url, "--workspace", "stack-top"]);
+    assert_eq!(linked_prs(), serde_json::json!([]));
     let added = fixture
         .command()
         .args([
@@ -2508,6 +2515,7 @@ fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
         .output()
         .unwrap();
     assert!(added.status.success(), "{added:?}");
+    assert_eq!(linked_prs(), serde_json::json!([url]));
     let added: Value = serde_json::from_slice(&added.stdout).unwrap();
     assert_eq!(added["branch"], "stack/top");
     let branch = fixture.ok(&[
