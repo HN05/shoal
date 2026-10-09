@@ -253,10 +253,7 @@ pub(super) async fn add(
         )
         .await;
     }
-    let remote = crate::forge::repository::remote_url_from_path(&repo.path)
-        .await?
-        .context("link needs an origin remote")?;
-    let forge = ForgeRepo::parse(&remote)?;
+    let forge = super::issues::origin_forge(repo).await?;
     ensure!(
         link.as_ref().is_some_and(|link| link.repository == forge),
         "link belongs to a different repository"

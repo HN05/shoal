@@ -172,7 +172,7 @@ impl Issue {
 pub(super) async fn origin_forge(repo: &Repository) -> Result<ForgeRepo> {
     let remote = repository::remote_url_from_path(&repo.path)
         .await?
-        .context("issue lookup needs an origin remote")?;
+        .context("forge lookup needs an origin remote")?;
     ForgeRepo::parse(&remote)
 }
 
