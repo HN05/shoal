@@ -69,7 +69,10 @@ impl Snapshot {
             .iter()
             .any(|(id, comment)| !comment.is_empty() && self.comments.get(id) != Some(comment))
         {
-            emit(UpdateKind::Comment, "Comments or reviews changed".into());
+            emit(
+                UpdateKind::Comment,
+                format!("Comments or reviews changed; read them with shoal view {url}"),
+            );
         }
         for (id, check) in &next.checks {
             if check.complete && self.checks.get(id) != Some(check) {

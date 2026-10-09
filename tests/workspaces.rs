@@ -10749,6 +10749,10 @@ fn pr_wait_wakes_for_individual_ci_reviews_and_conflicts_with_own_scope() {
         .map(|update| update["kind"].as_str().unwrap())
         .collect();
     assert_eq!(kinds, ["comment", "ci_completed"]);
+    assert_eq!(
+        first["updates"][0]["message"],
+        "Comments or reviews changed; read them with shoal view https://github.com/team/project/pull/7"
+    );
     assert_eq!(first["updates"][1]["message"], "review: SUCCESS");
     assert_eq!(
         first["updates"][0]["url"],
