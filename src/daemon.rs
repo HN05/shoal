@@ -6,6 +6,7 @@ mod auto_update;
 mod cleanup;
 pub mod doctor;
 pub mod events;
+mod execution_connection;
 mod execution_recovery;
 pub(crate) mod handoff;
 pub mod notifications;
@@ -38,15 +39,11 @@ use tokio::{
 
 use ports::Acquisition;
 use scope::Caller;
-use workspace::{ExecutionKind, Manager, StartedExecution, StopRecords};
+use workspace::{ExecutionKind, Manager, StopRecords};
 
 use crate::{
     paths::Paths,
-    process::identity::Identity,
-    protocol::{
-        self, Body, Control, DaemonStatus, ErrorCode, ExecutionEvent, Method, Request, Response,
-        timing,
-    },
+    protocol::{self, Body, DaemonStatus, ErrorCode, Method, Request, Response, timing},
     removal::InspectionPolicy,
 };
 
@@ -248,11 +245,11 @@ async fn serve(
             agent,
             recover,
         } => {
-            return execute(
+            return execution_connection::execute(
                 stream,
                 request.id,
                 server.manager,
-                ExecutionContext {
+                execution_connection::ExecutionContext {
                     workspace,
                     wrapper,
                     kind,
@@ -761,208 +758,6 @@ async fn watch_item_updates(
         Err(error) => Body::error(ErrorCode::OperationFailed, format!("{error:#}")),
     };
     protocol::write(&mut stream, &Response::new(request_id, body)).await
-}
-
-struct ExecutionContext {
-    workspace: String,
-    wrapper: Identity,
-    kind: ExecutionKind,
-    agent: Option<String>,
-    recover: bool,
-    parent_execution: Option<String>,
-}
-
-/// Long-lived execution connection: register the wrapper's child, relay stop
-/// requests, and record completion when the wrapper reports it.
-async fn execute(
-    mut stream: UnixStream,
-    request_id: u64,
-    manager: Arc<Manager>,
-    context: ExecutionContext,
-) -> Result<()> {
-    let ExecutionContext {
-        workspace,
-        wrapper,
-        kind,
-        agent,
-        recover,
-        parent_execution,
-    } = context;
-    let StartedExecution {
-        plan,
-        mut stop,
-        _git_guard,
-    } = match manager
-        .begin_execution(&workspace, Some(wrapper), kind, parent_execution.as_deref())
-        .await
-    {
-        Ok(begun) => begun,
-        Err(error) => {
-            let body = Body::error(ErrorCode::ExecutionFailed, format!("{error:#}"));
-            return protocol::write(&mut stream, &Response::new(request_id, body)).await;
-        }
-    };
-    let execution_id = plan.id.clone();
-    let agent_workspace = plan.workspace.clone();
-    let workspace_id = plan.workspace.id.clone();
-    if kind == ExecutionKind::Command
-        && let Some(agent) = &agent
-    {
-        manager
-            .track_agent(
-                &execution_id,
-                agent,
-                &agent_workspace.id,
-                &agent_workspace.name,
-                recover,
-            )
-            .await;
-    }
-    let (reader, mut writer) = stream.into_split();
-    let (events, mut incoming) = tokio::sync::mpsc::channel(4);
-    let mut readers = JoinSet::new();
-    readers.spawn(read_execution_events(reader, events));
-    let mut handoff_claimed = false;
-    let result = async {
-        protocol::write(
-            &mut writer,
-            &Response::new(request_id, Body::Execution(plan)),
-        )
-        .await?;
-        let mut awaiting_started = true;
-        let mut sent_stop = false;
-        let mut recovering = false;
-        loop {
-            let event = if awaiting_started {
-                incoming.recv().await.context("execution disconnected")??
-            } else {
-                let event = incoming.recv();
-                tokio::pin!(event);
-                loop {
-                    tokio::select! {
-                        event = &mut event => break event.context("execution disconnected")??,
-                        changed = stop.changed(), if !sent_stop => {
-                            changed?;
-                            if *stop.borrow_and_update() {
-                                let control = if let Some(reason) = manager.agent_overload_reason(&execution_id).await {
-                                    // Read the policy now, so a reload applies to running agents.
-                                    recovering = recover && manager.config().overload.recovery.enabled;
-                                    Control::OverloadStop { recover: recovering, reason }
-                                } else if kind == ExecutionKind::Command && manager.stop_saves_records(&execution_id).await {
-                                    Control::Pause
-                                } else { Control::Stop };
-                                protocol::write(&mut writer, &control).await?;
-                                sent_stop = true;
-                            }
-                        }
-                    }
-                }
-            };
-            match event {
-                ExecutionEvent::Started { child, group_id } => {
-                    awaiting_started = false;
-                    manager
-                        .record_execution_child(execution_id.clone(), child, group_id)
-                        .await?;
-                    protocol::write(&mut writer, &Control::Started).await?;
-                }
-                ExecutionEvent::Finished { exit_code } => break Ok(exit_code),
-                ExecutionEvent::Paused => {
-                    handoff_claimed = true;
-                    if !recovering {
-                        continue;
-                    }
-                    use execution_recovery::Action;
-                    match execution_recovery::pause(
-                        &manager,
-                        &execution_id,
-                        &workspace_id,
-                        &mut incoming,
-                        &mut stop,
-                        recovering,
-                    )
-                    .await?
-                    {
-                        Action::Resume(ports) => {
-                            handoff_claimed = false;
-                            awaiting_started = true;
-                            sent_stop = false;
-                            protocol::write(&mut writer, &Control::Resume { ports }).await?;
-                        }
-                        Action::Stop => protocol::write(&mut writer, &Control::Stop).await?,
-                        Action::Finished(exit_code) => break Ok(exit_code),
-                    }
-                }
-            }
-        }
-    }
-    .await;
-    readers.abort_all();
-    let mut overload_reason = if agent.is_some() {
-        manager.agent_overload_reason(&execution_id).await
-    } else {
-        None
-    };
-    let complete = manager
-        .finish_execution(execution_id.clone(), kind, result.as_ref().ok().copied())
-        .await?;
-    if overload_reason.is_some() && !handoff_claimed && complete {
-        let record =
-            crate::execution::recovery::record_path(&manager.paths, &workspace_id, &execution_id);
-        if let Err(error) = std::fs::remove_file(&record)
-            && error.kind() != std::io::ErrorKind::NotFound
-        {
-            eprintln!("unused overload recovery handoff not removed: {error:#}");
-        }
-        overload_reason = None;
-    }
-    if let Some(agent) = &agent {
-        manager
-            .notify_agent_exit(
-                &agent_workspace,
-                agent,
-                result.as_ref().ok().copied(),
-                complete,
-                overload_reason
-                    .as_deref()
-                    .map(|reason| (execution_id.as_str(), reason)),
-            )
-            .await;
-    }
-    let acknowledged = if result.is_ok() {
-        protocol::write(&mut writer, &Control::Finished { complete }).await
-    } else {
-        Ok(())
-    };
-    // A bounded hook can outlast the wrapper's acknowledgement deadline.
-    if let Some(agent) = agent {
-        manager
-            .post_agent_exit(
-                &agent_workspace,
-                &agent,
-                result.as_ref().ok().copied(),
-                complete,
-            )
-            .await;
-    }
-    acknowledged?;
-    result.map(|_| ())
-}
-
-/// Keep frame reads alive across control changes so stop/recovery cannot discard
-/// a partially received execution event.
-async fn read_execution_events(
-    reader: tokio::net::unix::OwnedReadHalf,
-    events: tokio::sync::mpsc::Sender<Result<ExecutionEvent>>,
-) {
-    let mut reader = tokio::io::BufReader::new(reader);
-    loop {
-        let event = protocol::read_buffered::<ExecutionEvent>(&mut reader).await;
-        let failed = event.is_err();
-        if events.send(event).await.is_err() || failed {
-            break;
-        }
-    }
 }
 
 /// Preserve the legacy request field at the protocol boundary. Its numeric
