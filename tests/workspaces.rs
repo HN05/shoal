@@ -14315,7 +14315,10 @@ fn install_failing_git(fixture: &Fixture) {
         .unwrap()
         .canonicalize()
         .unwrap();
-    std::os::unix::fs::symlink(real_git, bin.join("real-git")).unwrap();
+    // The macOS developer-tool shim resolves the tool by its invoked basename.
+    let real_bin = bin.join("real");
+    fs::create_dir(&real_bin).unwrap();
+    std::os::unix::fs::symlink(real_git, real_bin.join("git")).unwrap();
     fs::write(
         bin.join("git"),
         r#"#!/bin/sh
@@ -14328,7 +14331,7 @@ if [ -f "$HOME/git-failure" ]; then
         fi
     done
 fi
-exec "$HOME/bin/real-git" "$@"
+exec "$HOME/bin/real/git" "$@"
 "#,
     )
     .unwrap();
