@@ -645,7 +645,11 @@ upstream, failed fetch, divergence, or a dirty or managed default-branch
 checkout stops creation; an already-ahead branch is preserved. `--base REF`
 starts from any locally resolvable commit without refreshing,
 unless it names the local default branch; the resolved base is recorded for
-`shoal diff`.
+`shoal diff`. A `--base` naming another workspace's branch, locally or on a
+remote, also records that workspace as the base workspace of a stacked change.
+Removing a base workspace moves the workspaces stacked on it to its own base
+workspace, or to none. `ls --json` and `inspect` give `base_workspace` (`id`,
+`name`, `branch`, or null) and `stacked_workspaces`.
 Existing-branch workspaces diff against the local default, or their opening
 commit if on it or unavailable.
 
@@ -1086,10 +1090,12 @@ Scoped callers cannot read events.
 Each JSON line has `type: "event"`, an increasing `id`, Unix-seconds `created_at`,
 workspace and repository UUIDs (`workspace_id`, `repository_id`), `name`, `path`,
 `branch`, `kind`, `cause`, and `error`. Kinds are `created`, `ready`, `setup_failed`,
-`completed`, `undone`, `removed`, `retained`, `branch_changed`, `review_ready`
-and `review_cleared`; history from earlier versions may also contain `continued`. Review events add a `review` object with the mark's `kind`,
-`url` (both null for a workspace mark) and `head`. Causes are
-`manual`, `idle`, `issue`, `pr`, `completion`, or `missing_directory`, and null
+`completed`, `undone`, `removed`, `retained`, `branch_changed`, `review_ready`,
+`review_cleared` and `base_changed`; history from earlier versions may also contain `continued`. Review events add a `review` object with the mark's `kind`,
+`url` (both null for a workspace mark) and `head`. `created` and `base_changed`
+events add `base_workspace` with the base's `id`, `name` and `branch`, or null.
+Causes are `manual`, `idle`, `issue`, `pr`, `completion`, `missing_directory`, or
+`removed` for a base workspace's removal, and null
 when inapplicable; `error` describes setup or cleanup failures. Branch changes
 are observed during daemon sweeps; detached HEAD has a null branch, and the
 recorded workspace branch remains unchanged.

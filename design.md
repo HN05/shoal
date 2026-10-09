@@ -192,7 +192,13 @@ discovered live and become local tracking branches. Local selection preserves
 commits; remote selection fast-forwards matching tracking branches. Ready owned
 workspaces reopen without setup, hooks, or refresh; other checkouts block creation.
 Existing worktrees use an explicit base ref, otherwise the local default, as their
-diff base, or the opening commit if unavailable or on that same branch. Adoption
+diff base, or the opening commit if unavailable or on that same branch.
+A stacked workspace records the workspace whose branch it builds on, inferred when
+the creation base names another workspace's branch locally or on a remote, so
+stacks span workspaces on any forge. The base is local metadata, not a link:
+removing it moves its stacked workspaces down to its own base and journals the
+change. Proposal: when the base's watched PR merges, retarget the stacked
+workspace's PRs and tell its agent to rebase (#488). Adoption
 takes a path; the CLI infers its repository from the owning checkout, then a unique
 `origin` remote match, then a picker, with `--repo` as the override. Explicit
 adoption accepts an unlocked linked worktree root on a local branch of the registered repository with no ownership

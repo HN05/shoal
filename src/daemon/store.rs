@@ -12,7 +12,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 32;
+const SCHEMA_VERSION: i64 = 33;
 
 #[cfg(test)]
 mod benchmark;
@@ -330,6 +330,7 @@ const MIGRATIONS: &[(i64, &str, Option<Precondition>)] = &[
         "ALTER TABLE executions ADD COLUMN scope_token TEXT;",
         None,
     ),
+    (33, include_str!("store/workspace_base.sql"), None),
 ];
 
 fn migrate(db: &mut Connection) -> Result<()> {
@@ -430,6 +431,8 @@ pub fn workspace(row: &Row<'_>) -> rusqlite::Result<Workspace> {
     Ok(Workspace {
         holds: Vec::new(),
         review: Vec::new(),
+        base_workspace: None,
+        stacked_workspaces: Vec::new(),
         id: row.get("id")?,
         repository_id: row.get("repository_id")?,
         name: row.get("name")?,
@@ -656,6 +659,9 @@ mod tests {
         if version >= 32 {
             db.execute_batch("ALTER TABLE executions ADD COLUMN scope_token TEXT;")?;
         }
+        if version >= 33 {
+            db.execute_batch(include_str!("store/workspace_base.sql"))?;
+        }
         db.pragma_update(None, "user_version", version)?;
         db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
@@ -813,7 +819,8 @@ mod tests {
                 "id": "workspace", "repository_id": "repo", "name": "worker", "path": "/work",
                 "branch": "feature", "state": "failed", "error": "setup error",
                 "base_commit": "abc", "base_ref": "refs/heads/main",
-                "git_dir": "/git/worktrees/worker", "git_dir_id": "1:2"
+                "git_dir": "/git/worktrees/worker", "git_dir_id": "1:2",
+                "base_workspace": null
             }),
         )?;
         check_columns(

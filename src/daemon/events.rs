@@ -24,6 +24,8 @@ states!(EventKind {
     ReviewReady => "review_ready",
     /// A ready mark was withdrawn or its item unlinked.
     ReviewCleared => "review_cleared",
+    /// The workspace's base workspace was set, cleared, or removed.
+    BaseChanged => "base_changed",
 });
 
 states!(EventCause {
@@ -33,6 +35,8 @@ states!(EventCause {
     Pr => "pr",
     Completion => "completion",
     MissingDirectory => "missing_directory",
+    /// The base workspace was removed and its own base took its place.
+    Removed => "removed",
 });
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -49,6 +53,34 @@ pub struct EventDetails {
     /// The mark a review event describes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub review: Option<ReviewEvent>,
+    /// Present on creation and base changes; null when there is no base.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "present_or_null"
+    )]
+    pub base_workspace: Option<Option<crate::model::WorkspaceRef>>,
+}
+
+/// Distinguish an absent field from an explicit null.
+mod present_or_null {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    pub fn serialize<T: Serialize, S: Serializer>(
+        value: &Option<Option<T>>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        value
+            .as_ref()
+            .and_then(Option::as_ref)
+            .serialize(serializer)
+    }
+
+    pub fn deserialize<'de, T: Deserialize<'de>, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<Option<Option<T>>, D::Error> {
+        Option::deserialize(deserializer).map(Some)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -70,7 +102,7 @@ pub struct WorkspaceEvent {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum EventItem {
-    Event(WorkspaceEvent),
+    Event(Box<WorkspaceEvent>),
     Gap {
         since: i64,
         oldest_id: i64,
@@ -155,7 +187,7 @@ impl Manager {
             let mut stmt = db.prepare("SELECT id,created_at,record FROM workspace_events WHERE id>?1 ORDER BY id LIMIT ?2")?;
             for row in stmt.query_map(params![cursor,limit], |r| Ok((r.get::<_,i64>(0)?,r.get::<_,i64>(1)?,r.get::<_,String>(2)?)))? {
                 let (id,created_at,record) = row?;
-                items.push(EventItem::Event(WorkspaceEvent { id,created_at,details:serde_json::from_str(&record)? }));
+                items.push(EventItem::Event(Box::new(WorkspaceEvent { id,created_at,details:serde_json::from_str(&record)? })));
             }
             Ok(items)
         }).await

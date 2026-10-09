@@ -50,6 +50,20 @@ pub struct Workspace {
     pub holds: Vec<WorkspaceHold>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub review: Vec<ReviewMark>,
+    /// The workspace whose branch this one's branch builds on.
+    #[serde(default)]
+    pub base_workspace: Option<WorkspaceRef>,
+    /// Workspaces that record this one as their base.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub stacked_workspaces: Vec<WorkspaceRef>,
+}
+
+/// Another workspace a record refers to, with its current name and branch.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkspaceRef {
+    pub id: String,
+    pub name: String,
+    pub branch: String,
 }
 
 /// An agent's statement that linked work is ready for review at a commit.
@@ -97,6 +111,8 @@ impl Workspace {
             git_dir_id: None,
             holds: Vec::new(),
             review: Vec::new(),
+            base_workspace: None,
+            stacked_workspaces: Vec::new(),
         }
     }
 

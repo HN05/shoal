@@ -58,6 +58,8 @@ mod tests {
         Workspace {
             holds: Vec::new(),
             review: Vec::new(),
+            base_workspace: None,
+            stacked_workspaces: Vec::new(),
             id: format!("id-{name}"),
             repository_id: "repo".into(),
             name: name.into(),

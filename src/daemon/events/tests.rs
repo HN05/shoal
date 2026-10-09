@@ -283,7 +283,7 @@ async fn boundary_future_and_empty_cursors_have_explicit_gap_semantics() {
     seed(&manager, 1).await;
     assert!(matches!(
         receive(&mut stream).await,
-        Body::EventItem(EventItem::Event(WorkspaceEvent { id: 1, .. }))
+        Body::EventItem(EventItem::Event(event)) if event.id == 1
     ));
     drop(stream);
     task.await.unwrap().unwrap();
@@ -291,8 +291,8 @@ async fn boundary_future_and_empty_cursors_have_explicit_gap_semantics() {
     let boundary = manager.workspace_events(Some(5), 1000).await.unwrap();
     assert_eq!(boundary.len(), 1000);
     assert!(matches!(
-        boundary[0],
-        EventItem::Event(WorkspaceEvent { id: 6, .. })
+        &boundary[0],
+        EventItem::Event(event) if event.id == 6
     ));
     let future = manager.workspace_events(Some(1006), 1000).await.unwrap();
     assert!(matches!(

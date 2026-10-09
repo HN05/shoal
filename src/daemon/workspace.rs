@@ -15,6 +15,7 @@ mod rename;
 mod repo_configuration;
 mod repo_removal;
 pub(crate) mod review;
+mod stack;
 mod status;
 
 pub use executions::{ExecutionKind, StopRecords};
@@ -219,6 +220,7 @@ impl Manager {
                 for workspace in &mut workspaces {
                     workspace.holds = holds::list(db, &workspace.id)?;
                     workspace.review = review::list(db, &workspace.id)?;
+                    stack::load(db, workspace)?;
                 }
                 Ok(workspaces)
             })
@@ -250,6 +252,7 @@ impl Manager {
                     .with_context(|| format!("unknown workspace: {selector}"))?;
                 workspace.holds = holds::list(db, &workspace.id)?;
                 workspace.review = review::list(db, &workspace.id)?;
+                stack::load(db, &mut workspace)?;
                 Ok(workspace)
             })
             .await
@@ -325,6 +328,10 @@ impl Manager {
             WorkspaceSource::New(base) => (base, None),
             WorkspaceSource::Existing(branch, base) => (base, Some(branch)),
         };
+        let base_branch = match &base {
+            Some(base) => stack::base_branch(&repo.path, base).await?,
+            None => None,
+        };
         let name = derive_workspace_name(&name);
         let path = match path {
             Some(path) => self.workspace_location(repo, &path).await?,
@@ -345,7 +352,8 @@ impl Manager {
             "workspace path already exists: {}",
             workspace.path.display()
         );
-        self.insert_workspace(workspace.clone()).await?;
+        self.insert_workspace(workspace.clone(), base_branch)
+            .await?;
         let result = self
             .materialize_worktree(repo, &workspace, base, existing, git_profile)
             .await;
@@ -370,7 +378,8 @@ impl Manager {
         self.workspace(&workspace.id).await
     }
 
-    async fn insert_workspace(&self, record: Workspace) -> Result<()> {
+    /// Record a new workspace, stacked on the workspace that owns `base_branch`.
+    async fn insert_workspace(&self, record: Workspace, base_branch: Option<String>) -> Result<()> {
         self.store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
@@ -397,8 +406,12 @@ impl Manager {
                     ensure!(record.repository_id != workspace.repository_id || record.branch != workspace.branch,
                         "branch is already owned by workspace {}", workspace.name);
                 }
+                let base_workspace = match &base_branch {
+                    Some(branch) => stack::owner(&tx, &record.repository_id, branch)?,
+                    None => None,
+                };
                 tx.execute(
-                    "INSERT INTO workspaces (id,repository_id,name,path,branch,state,git_dir,git_dir_id,base_commit,base_ref,setup_finished,observed_branch) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?5)",
+                    "INSERT INTO workspaces (id,repository_id,name,path,branch,state,git_dir,git_dir_id,base_commit,base_ref,setup_finished,observed_branch,base_workspace_id) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?5,?12)",
                     params![
                         record.id,
                         record.repository_id,
@@ -411,6 +424,7 @@ impl Manager {
                         record.base_commit,
                         record.base_ref,
                         record.state == WorkspaceState::Ready,
+                        base_workspace,
                     ],
                 )?;
                 tx.execute(
