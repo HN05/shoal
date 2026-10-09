@@ -83,6 +83,16 @@ async fn marks_bind_to_head_follow_links_and_record_events() {
         })
         .await
         .unwrap();
+    let listed = manager.list_workspaces().await.unwrap();
+    assert_eq!(
+        listed[0].links,
+        crate::model::WorkspaceLinks {
+            issue: Some(issue.clone()),
+            prs: vec![pr.clone()],
+        }
+    );
+    let inspection = manager.inspect_workspace(&workspace.id).await.unwrap();
+    assert_eq!(inspection.workspace.links, listed[0].links);
     let marks = manager
         .mark_ready(&workspace.id, Selection::default())
         .await

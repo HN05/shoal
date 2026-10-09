@@ -302,7 +302,9 @@ now: open, merged or closed, merge conflicts, each CI check's result, and a
 review state from each reviewer's latest approval or change request. A failed
 PR lookup reports its error on that PR without failing the command. `--json`
 returns the same data, with PRs in `prs`; `inspect` keeps the raw workspace and
-execution records. An issue or PR URL, `pr` or `issue` with a number or URL, or
+execution records. Workspace records from `ls --json` and `inspect --json` include
+`links.issue` and linked PR URLs in `links.prs`; an acknowledgement without a PR
+URL leaves `links.prs` empty. An issue or PR URL, `pr` or `issue` with a number or URL, or
 `resource` with a pool or member name shows every workspace that links or holds
 it instead, as a JSON array; a number must be linked in only one repository.
 Scoped callers find only their own workspace.

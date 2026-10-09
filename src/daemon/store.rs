@@ -6,7 +6,7 @@ use serde::{Serialize, de::DeserializeOwned};
 use std::{path::PathBuf, time::Duration};
 
 use crate::{
-    model::{Execution, PortReservation, Repository, Workspace},
+    model::{Execution, PortReservation, Repository, Workspace, WorkspaceLinks},
     sim::audit::CleanRequestStatus,
     state::{ExecutionState, WorkspaceState},
 };
@@ -433,6 +433,7 @@ pub fn workspace(row: &Row<'_>) -> rusqlite::Result<Workspace> {
         review: Vec::new(),
         base_workspace: None,
         stacked_workspaces: Vec::new(),
+        links: WorkspaceLinks::default(),
         id: row.get("id")?,
         repository_id: row.get("repository_id")?,
         name: row.get("name")?,
@@ -445,6 +446,34 @@ pub fn workspace(row: &Row<'_>) -> rusqlite::Result<Workspace> {
         git_dir: row.get::<_, Option<String>>("git_dir")?.map(PathBuf::from),
         git_dir_id: row.get("git_dir_id")?,
     })
+}
+
+/// Read canonical links while keeping malformed legacy PR records out of list output.
+pub fn workspace_links(db: &Connection, workspace_id: &str) -> rusqlite::Result<WorkspaceLinks> {
+    let issue = db
+        .query_row(
+            "SELECT url FROM workspace_issue WHERE workspace_id=?1",
+            [workspace_id],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()?;
+    let prs = db
+        .query_row(
+            "SELECT record FROM pr_cleanup WHERE workspace_id=?1",
+            [workspace_id],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()?
+        .and_then(|record| {
+            serde_json::from_str::<crate::forge::pr::Registration>(&record)
+                .ok()
+                .and_then(|registration| match registration.kind {
+                    crate::forge::pr::RegistrationKind::Watch { urls, .. } => Some(urls),
+                    crate::forge::pr::RegistrationKind::Acknowledgement { .. } => None,
+                })
+        })
+        .unwrap_or_default();
+    Ok(WorkspaceLinks { issue, prs })
 }
 
 const PORT_COLUMNS: &str = "workspace_id,name,port,env_var,reason";
@@ -820,7 +849,7 @@ mod tests {
                 "branch": "feature", "state": "failed", "error": "setup error",
                 "base_commit": "abc", "base_ref": "refs/heads/main",
                 "git_dir": "/git/worktrees/worker", "git_dir_id": "1:2",
-                "base_workspace": null
+                "base_workspace": null, "links": {"issue": null, "prs": []}
             }),
         )?;
         check_columns(

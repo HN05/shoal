@@ -50,6 +50,8 @@ pub struct Workspace {
     pub holds: Vec<WorkspaceHold>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub review: Vec<ReviewMark>,
+    #[serde(default)]
+    pub links: WorkspaceLinks,
     /// The workspace whose branch this one's branch builds on.
     #[serde(default)]
     pub base_workspace: Option<WorkspaceRef>,
@@ -64,6 +66,13 @@ pub struct WorkspaceRef {
     pub id: String,
     pub name: String,
     pub branch: String,
+}
+
+/// Canonical issue and pull-request links associated with a workspace.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct WorkspaceLinks {
+    pub issue: Option<String>,
+    pub prs: Vec<String>,
 }
 
 /// An agent's statement that linked work is ready for review at a commit.
@@ -113,6 +122,7 @@ impl Workspace {
             review: Vec::new(),
             base_workspace: None,
             stacked_workspaces: Vec::new(),
+            links: WorkspaceLinks::default(),
         }
     }
 

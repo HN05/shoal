@@ -221,6 +221,7 @@ impl Manager {
                     workspace.holds = holds::list(db, &workspace.id)?;
                     workspace.review = review::list(db, &workspace.id)?;
                     stack::load(db, workspace)?;
+                    workspace.links = store::workspace_links(db, &workspace.id)?;
                 }
                 Ok(workspaces)
             })
@@ -253,6 +254,7 @@ impl Manager {
                 workspace.holds = holds::list(db, &workspace.id)?;
                 workspace.review = review::list(db, &workspace.id)?;
                 stack::load(db, &mut workspace)?;
+                workspace.links = store::workspace_links(db, &workspace.id)?;
                 Ok(workspace)
             })
             .await

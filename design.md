@@ -44,6 +44,9 @@ wire format; unfamiliar codes are preserved verbatim for version compatibility.
 
 Internal CLI workers are built through one typed argument builder that explicitly
 passes the resolved state directory and output mode.
+Workspace JSON records expose canonical linked-item URLs under `links`, with one
+optional issue URL and a list of watched PR URLs; acknowledgement-only PR cleanup
+records have no URL to expose.
 The execution wrapper owns terminal I/O, environment delivery, exit codes, and
 command process groups. It retains buffered daemon controls across start, stop,
 and recovery transitions so adjacent frames cannot be lost. After commands and
