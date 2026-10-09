@@ -223,9 +223,13 @@ configured command for another agent, plus proven child
   without disabling protection. Persist manual recovery without replaying the original prompt; consume the
   selected record only after its replacement process is registered. Unrelated
   executions do not block manual recovery.
+  Critical disk space stops every agent the same way, restoring once the cleanup
+  threshold is free, and other executions as manual stop does; recovery requires
+  that free space too.
   Manual stop, refused reattachment and graceful shutdown of wrappers that cannot
   reattach save agent recovery and user command arguments for explicit resume,
-  preserve work and leases, and never rerun a recorded command.
+  preserve work and leases, and never rerun a recorded command. Every daemon stop
+  carries its cause, which the wrapper prints after the agent stops.
   Scoped callers cannot stop executions.
 - Command wrappers keep running when the daemon goes away and reattach only after
   the daemon verifies the record, scope token, wrapper and child identities and
