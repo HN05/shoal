@@ -254,8 +254,10 @@ pub(in crate::cli) struct AddPlan {
 }
 
 impl AddPlan {
-    pub fn launches_agent(&self) -> bool {
-        self.agent.agent.is_some()
+    /// Whether the agent starts with input: an issue prompt or forwarded arguments.
+    /// A workspace shell or an agent without input waits for the user.
+    pub fn runs_unattended(&self) -> bool {
+        self.agent.agent.is_some() && (self.issue.is_some() || !self.args.is_empty())
     }
 
     pub fn label(&self) -> String {

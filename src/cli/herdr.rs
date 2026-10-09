@@ -70,7 +70,7 @@ pub(super) async fn handoff(
         !env::inherits_scope(&ctx.paths.state),
         "workspace processes cannot allocate workspaces"
     );
-    let focus = settings.herdr.focus.unwrap_or(!plan.launches_agent());
+    let focus = settings.herdr.focus.unwrap_or(!plan.runs_unattended());
     if let Some(template) = settings.herdr.tab_name {
         let repos = client::repositories(&ctx.paths).await?;
         let repo = crate::forge::repository::select(&repos, &plan.repository).await?;

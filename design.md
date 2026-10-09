@@ -321,8 +321,9 @@ with the launch plan so the worker preserves the caller's naming choice.
 The plan travels in the tab's environment, naming a found issue by URL rather
 than carrying its unbounded body, and preserving
 state/config selection and literal arguments without hook scripts or state files.
-By default, workspace shells receive focus and agent launches stay in the
-background; an explicit focus setting overrides this choice.
+By default, agents that start with an issue prompt or forwarded arguments stay in
+the background, and tabs that wait for the user's input receive focus; an
+explicit focus setting overrides this choice.
 The worker drops the plan before starting children; a retained tab's shell keeps
 it, inert, while a non-default state directory is passed only to the worker.
 Herdr tabs remain open after tracked agent exits. Completion closes them only

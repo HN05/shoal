@@ -16223,13 +16223,16 @@ fn herdr_plans_carry_issue_urls_instead_of_bodies() {
         .unwrap();
     let plan: Value = serde_json::from_str(plan).unwrap();
     assert_eq!(plan["issue"], "https://github.com/team/project/issues/34");
+    // The issue prompt lets the agent start without the user.
+    assert!(calls[0].iter().any(|arg| arg == "--no-focus"));
 }
 
 #[test]
-fn herdr_focus_defaults_follow_the_resolved_agent_and_allow_overrides() {
+fn herdr_focus_defaults_follow_the_agent_input_and_allow_overrides() {
     for (focus, agent, expected) in [
         (None, None, "--focus"),
         (Some(false), None, "--no-focus"),
+        (None, Some("pi"), "--focus"),
         (Some(true), Some("pi"), "--focus"),
         (Some(false), Some("pi"), "--no-focus"),
     ] {

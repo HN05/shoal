@@ -447,8 +447,10 @@ allocated workspace branch otherwise, unless `tab_name` supplies a template.
 calls run in place.
 
 The `[herdr]` table in global or repository config uses normal per-option
-precedence. New tabs focus by default when opening a workspace shell and stay
-in the background when launching an agent; an explicit `focus` overrides this.
+precedence. New tabs stay in the background by default when launching an agent
+with an issue prompt or forwarded arguments, and focus otherwise, so a workspace
+shell or an agent waiting for its first prompt is ready to type into; an explicit
+`focus` overrides this.
 `new_tab` and `close_when_done` default to true:
 
 ```toml
