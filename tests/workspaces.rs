@@ -11417,6 +11417,9 @@ fn view_shows_linked_items_with_status_and_discussion() {
     assert_eq!(pr["reviews"][0]["comments"][0]["path"], "src/a.rs");
     assert!(pr.get("errors").is_none(), "{pr}");
 
+    let status = fixture.ok(&["status", "view"]);
+    assert_eq!(status["issue_status"]["state"], "open");
+
     let brief = fixture.ok(&["view", "pr", "--no-comments", "--workspace", "view"]);
     assert_eq!(brief.as_array().unwrap().len(), 1);
     assert!(brief[0].get("reviews").is_none());

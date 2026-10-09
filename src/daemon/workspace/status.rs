@@ -11,7 +11,7 @@ use crate::{
         view::ItemView,
     },
     git,
-    model::{DiffSummary, Workspace, WorkspaceStatus, WorkspaceTarget},
+    model::{DiffSummary, Inspection, IssueStatus, Workspace, WorkspaceStatus, WorkspaceTarget},
 };
 
 impl Manager {
@@ -32,7 +32,10 @@ impl Manager {
             Ok(diff) => (Some(diff), None),
             Err(error) => (None, Some(format!("{error:#}"))),
         };
-        let prs = pr::state::watched(&inspection.workspace, inspection.pr_cleanup.as_ref()).await;
+        let (prs, issue_status) = tokio::join!(
+            pr::state::watched(&inspection.workspace, inspection.pr_cleanup.as_ref()),
+            issue_status(&inspection)
+        );
         let unread_notifications = self.unread_notifications().await?;
         let workspace_id = inspection.workspace.id.clone();
         let setup_finished = self
@@ -50,8 +53,33 @@ impl Manager {
             unread_notifications,
             cleanup_error: self.cleanup_problem(),
             prs,
+            issue_status,
         })
     }
+}
+
+async fn issue_status(inspection: &Inspection) -> Option<IssueStatus> {
+    let url = &inspection.issue.as_ref()?.url;
+    let path = &inspection.workspace.path;
+    let closed = async {
+        let remote = repository::remote_url_from_path(path)
+            .await?
+            .context("issue lookup needs an origin remote")?;
+        let forge = ForgeRepo::parse(&remote)?;
+        let (number, _) = forge.issue(url)?;
+        forge.issue_closed(path, number).await
+    }
+    .await;
+    Some(match closed {
+        Ok(closed) => IssueStatus {
+            state: Some(if closed { "closed" } else { "open" }.into()),
+            error: None,
+        },
+        Err(error) => IssueStatus {
+            state: None,
+            error: Some(format!("{error:#}")),
+        },
+    })
 }
 
 impl Manager {

@@ -1209,7 +1209,11 @@ fn render_status(status: &WorkspaceStatus, json: bool) {
 
     if let Some(issue) = &inspection.issue {
         println!("Issue:         {}", issue.url);
-        if let Some(error) = &issue.error {
+        if let Some(state) = status.issue_status.as_ref().and_then(|s| s.state.as_ref()) {
+            println!("  State:       {state}");
+        }
+        let lookup = status.issue_status.as_ref().and_then(|s| s.error.as_ref());
+        for error in issue.error.iter().chain(lookup) {
             println!("  {}", palette.paint(Style::Warning, error));
         }
     }

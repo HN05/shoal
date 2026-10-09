@@ -192,6 +192,18 @@ pub struct WorkspaceStatus {
     /// The current state of each watched PR.
     #[serde(default)]
     pub prs: Vec<crate::forge::pr::state::PrStatus>,
+    /// The linked issue's current state.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub issue_status: Option<IssueStatus>,
+}
+
+/// A failed lookup leaves `state` empty and records its error.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IssueStatus {
+    /// `open` or `closed`.
+    pub state: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
 }
 
 /// Something a workspace links or holds, for finding that workspace.
