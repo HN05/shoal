@@ -513,8 +513,8 @@ pub struct ItemArgs {
 pub enum BaseCommand {
     /// Record the workspace whose branch this workspace builds on.
     Set {
-        /// Workspace name or branch in the same repository.
-        base: String,
+        /// Workspace name or branch in the same repository; omit to choose one.
+        base: Option<String>,
         #[arg(long)]
         workspace: Option<String>,
     },

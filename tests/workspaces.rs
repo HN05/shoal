@@ -6844,6 +6844,26 @@ fn repository_commands_pick_an_omitted_repository() {
 }
 
 #[test]
+fn base_set_picks_a_workspace_of_the_same_repository() {
+    let fixture = Fixture::new();
+    let lower = fixture.add("lower");
+    fixture.add("upper");
+    let other = init_repo(fixture.root.path(), "other", &[("tracked", "other\n")]);
+    fixture.ok(&["repo", "add", other.to_str().unwrap()]);
+    let foreign = fixture.ok(&["add", other.to_str().unwrap(), "foreign"]);
+    let lower = lower["id"].as_str().unwrap();
+    let (output, rows) = fixture.pick(&["base", "set", "--workspace", "upper"], lower, "");
+    assert!(output.status.success(), "{output:?}");
+    assert!(rows.contains(&format!("{lower}\t")), "{rows:?}");
+    assert_eq!(rows.lines().count(), 1, "{rows:?}");
+    assert!(!rows.contains(foreign["id"].as_str().unwrap()));
+    assert_eq!(
+        fixture.ok(&["inspect", "upper"])["workspace"]["base_workspace"]["name"],
+        "lower"
+    );
+}
+
+#[test]
 fn cd_always_picks_even_inside_a_workspace_and_cancel_does_not_navigate() {
     let fixture = Fixture::new();
     let first = fixture.add("first");

@@ -438,7 +438,7 @@ pub async fn workspace_picker(ctx: &Context) -> Result<String> {
     pick_workspace(ctx, workspaces)
 }
 
-fn pick_workspace(ctx: &Context, workspaces: Vec<Workspace>) -> Result<String> {
+pub fn pick_workspace(ctx: &Context, workspaces: Vec<Workspace>) -> Result<String> {
     let stopped = stopped_workspaces(&ctx.paths, &workspaces);
     let rows = workspace_rows(&workspaces, &[], &stopped, true, Palette::stderr(ctx.json));
     pick(
