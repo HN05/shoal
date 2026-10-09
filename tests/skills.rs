@@ -286,26 +286,27 @@ fn unscoped_commands_update_installed_skills_after_upgrade() {
     // An earlier version copied one skill before Shoal recorded installations.
     fs::create_dir_all(installed.join("shoal-worker")).unwrap();
     fs::write(installed.join("shoal-worker/SKILL.md"), "version one").unwrap();
-    let completions = |scope: Option<&str>| {
+    let run = |scope: Option<&str>, args: &[&str]| {
         let mut command = cli(home.path());
         command.env("SHOAL_STATE_DIR", home.path().join("state"));
         if let Some(token) = scope {
             command.env("SHOAL_SCOPE_TOKEN", token);
         }
-        command.args(["completions", "bash"]).output().unwrap()
+        command.args(args).output().unwrap()
     };
-    let output = completions(Some("scoped"));
+    let output = run(Some("scoped"), &["completions", "bash"]);
     success(output);
     assert_eq!(
         fs::read_to_string(installed.join("shoal-worker/SKILL.md")).unwrap(),
         "version one"
     );
-    let output = completions(None);
+    // Printing a skill also updates the installed ones.
+    let output = run(None, &["skill"]);
     assert!(String::from_utf8_lossy(&output.stderr).contains("Updated Shoal skills"));
     success(output);
     assert_installed(&installed);
     // Up to date skills and other tools' directories are left alone.
-    let output = completions(None);
+    let output = run(None, &["completions", "bash"]);
     assert!(output.stderr.is_empty(), "{output:?}");
     assert!(!home.path().join(".claude").exists());
 }

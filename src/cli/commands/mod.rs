@@ -156,6 +156,26 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         println!("{}", json!({"protocol": crate::protocol::VERSION}));
         return Ok(0);
     }
+    // The service runs without the user's tool configuration environment, and
+    // skill installation does this work itself.
+    if !matches!(
+        cli.command,
+        Some(
+            Command::Daemon {
+                command: crate::cli::DaemonCommand::Run { .. }
+            } | Command::Skill {
+                command: Some(_),
+                ..
+            }
+        )
+    ) && let Ok(state) = Paths::state_dir(cli.state_dir.clone())
+    {
+        skill::refresh_installed(&state, cli.json);
+    }
+    // Skill delivery is independent of daemon state and socket-path limits.
+    if let Some(Command::Skill { name, command }) = &cli.command {
+        return skill::run(*name, command.as_ref(), cli.json, cli.state_dir.clone());
+    }
     // Shell recovery must also work after cleanup, without daemon configuration.
     if let Some(Command::Shell {
         command: ShellCommand::Recover { path },
@@ -169,20 +189,6 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             println!("{}", destination.display());
         }
         return Ok(0);
-    }
-    // Skill delivery is independent of daemon state and socket-path limits.
-    if let Some(Command::Skill { name, command }) = &cli.command {
-        return skill::run(*name, command.as_ref(), cli.json, cli.state_dir.clone());
-    }
-    // The service runs without the user's tool configuration environment.
-    if !matches!(
-        cli.command,
-        Some(Command::Daemon {
-            command: crate::cli::DaemonCommand::Run { .. }
-        })
-    ) && let Ok(state) = Paths::state_dir(cli.state_dir.clone())
-    {
-        skill::refresh_installed(&state, cli.json);
     }
     if let Some(path) = menu_path(cli.command.as_ref())
         && !Context::is_interactive(cli.json)
