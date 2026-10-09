@@ -515,8 +515,12 @@ impl Drop for FakeServiceManager {
 #[test]
 fn daemon_start_offers_to_install_a_missing_service() {
     let manager = FakeServiceManager::new();
-    let (status, transcript) = prompt::answer(manager.command().args(["daemon", "start"]), "n\n");
-    assert!(!status.success(), "{transcript}");
+    let (output, transcript) = prompt::answer(
+        manager.command().args(["daemon", "start"]),
+        "n\n",
+        prompt::AnswerOptions::default(),
+    );
+    assert!(!output.status.success(), "{transcript}");
     assert!(
         transcript.contains("Install it with `shoal install`? [y/N]"),
         "{transcript}"
@@ -526,8 +530,12 @@ fn daemon_start_offers_to_install_a_missing_service() {
         "{transcript}"
     );
     assert!(!manager.pid.exists());
-    let (status, transcript) = prompt::answer(manager.command().args(["daemon", "start"]), "y\n");
-    assert!(status.success(), "{transcript}");
+    let (output, transcript) = prompt::answer(
+        manager.command().args(["daemon", "start"]),
+        "y\n",
+        prompt::AnswerOptions::default(),
+    );
+    assert!(output.status.success(), "{transcript}");
     assert!(manager.pid.exists());
     let status = manager
         .command()

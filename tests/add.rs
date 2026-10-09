@@ -122,12 +122,13 @@ fn unregistered_repositories_are_registered_on_confirmation() {
         ),
     ] {
         let daemon = FakeDaemon::start();
-        let (status, transcript) = prompt::answer(
+        let (output, transcript) = prompt::answer(
             daemon.command().args(args).args(["--agent", "missing"]),
             answer,
+            prompt::AnswerOptions::default(),
         );
         assert_eq!(daemon.methods(), expected, "{args:?}: {transcript}");
-        assert!(!status.success(), "{args:?}: {transcript}");
+        assert!(!output.status.success(), "{args:?}: {transcript}");
         assert!(
             transcript.contains("Register https://other.example/team/repo with Shoal? [y/N]"),
             "{transcript}"

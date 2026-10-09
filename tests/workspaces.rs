@@ -1,3 +1,5 @@
+#[path = "support/prompt.rs"]
+mod prompt;
 #[path = "support/pty.rs"]
 mod pty;
 
@@ -161,49 +163,14 @@ impl Fixture {
     }
 
     fn interactive_command(&self, command: &mut Command, answer: &str) -> (Output, String) {
-        use std::{io::Read, os::unix::process::CommandExt};
         command.env("PATH", self.interactive_path());
-        let (mut master, slave) = pty::open();
-        // A tracked command needs a controlling terminal to transfer foreground
-        // ownership to its child, not just file descriptors that pass isatty.
-        unsafe {
-            command.pre_exec(|| {
-                if libc::setsid() < 0
-                    || libc::ioctl(libc::STDIN_FILENO, libc::TIOCSCTTY as _, 0) < 0
-                {
-                    return Err(std::io::Error::last_os_error());
-                }
-                Ok(())
-            });
-        }
-        let mut child = command
-            .stdin(slave.try_clone().unwrap())
-            .stderr(slave.try_clone().unwrap())
-            .stdout(Stdio::piped())
-            .spawn()
-            .unwrap();
-        master.write_all(answer.as_bytes()).unwrap();
-        let deadline = Instant::now() + Duration::from_secs(60);
-        let mut transcript = Vec::new();
-        loop {
-            let _ = master.read_to_end(&mut transcript);
-            if child.try_wait().unwrap().is_some() {
-                break;
-            }
-            if Instant::now() >= deadline {
-                let _ = child.kill();
-                let _ = child.wait();
-                panic!(
-                    "interactive command timed out: {}",
-                    String::from_utf8_lossy(&transcript)
-                );
-            }
-            thread::sleep(Duration::from_millis(10));
-        }
-        let _ = master.read_to_end(&mut transcript);
-        (
-            child.wait_with_output().unwrap(),
-            String::from_utf8(transcript).unwrap(),
+        prompt::answer(
+            command,
+            answer,
+            prompt::AnswerOptions {
+                controlling_terminal: true,
+                kill_on_timeout: true,
+            },
         )
     }
 
