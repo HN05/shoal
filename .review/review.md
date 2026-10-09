@@ -194,7 +194,9 @@ instructions instead of the PR delivery guidance below.
   JSON, help, noninteractive and `--here` calls run in place. Shell and untracked
   desktop handoffs retain the tab.
 - Agent pickers offer “No agent”: issue creation continues without a launch,
-  and review returns without starting a reviewer.
+  and review returns without starting a reviewer. An agent whose executables are
+  not on PATH is refused before any work and left out of pickers, the workspace
+  menu and completion.
 - Claude and Codex launches (including Happy and Codex app handoffs) persist
   trust for the workspace, its repository's Shoal directory, and the registered
   checkout even when the user config is absent, preserving other settings.
@@ -233,12 +235,16 @@ configured command for another agent, plus proven child
   Repository-only commands require a current or explicit workspace; unknown names
   report command errors with built-in suggestions without opening a picker.
   `{diff_base}` resolves lazily through the shared daemon diff-base lookup.
-  Custom agent names select named commands and run as tracked agents. Their
+  AI tools (built-in providers and global `[ai.<name>]` entries) are agents:
+  an `[ai]` `command` joins the global command layer, and `shoal <name>` and
+  `run` launch it as `shoal claude` does; pickers and completion offer AI tools
+  only. Custom agent names select named commands and run as tracked agents. Their
   `{prompt}` combines general instructions and issue context, prepended to
   forwarded arguments when no prompt placeholder is configured.
   Plain command invocations expand `{prompt}` to an empty string.
 - AI skill directories are machine-only configuration. Skill installation accepts
   configured tool names, needs no daemon, and remains denied to scoped processes.
+  Installing for every tool writes only into skill directories that exist.
 - External tools are invoked with argument arrays, never shell strings. Captured
   subprocesses share optional deadlines and bounded diagnostics, terminate on
   cancellation, and drain output while sending input. Internal CLI workers use
