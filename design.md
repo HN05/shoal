@@ -332,10 +332,10 @@ without a current workspace require a target. Scope remains daemon-enforced.
 Bare `cd` always picks; all-workspace operations retain their scope.
 An omitted required argument that names an existing record opens a picker on a
 terminal; noninteractive and JSON calls require it.
-`config show` never opens a picker. An agent whose executables are not on PATH
+An agent whose executables are not on PATH
 is refused before any work starts and left out of pickers, the workspace menu
 and completion; pickers offer “No agent” to continue without launching one. `config show` reports effective repository values with their winning layers and uses a registered checkout
-before a workspace exists. `status` combines lifecycle, fork-point changes, active work,
+before a workspace exists, then the picker. `status` combines lifecycle, fork-point changes, active work,
 leases and watched PR state in one workspace view; the daemon looks PRs up on each request
 and keeps a failed lookup on its PR. Human output uses `Display` for enum values and a shared
 semantic palette at the CLI presentation layer; machine output and stored values

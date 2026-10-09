@@ -5,6 +5,7 @@ use crate::{
         client,
         context::Context,
         output::{Palette, Style},
+        ui,
         workspace_context::{ScopeOrder, WorkspaceContext},
     },
     config::{self, edit::Change, repo::LocalConfig},
@@ -124,11 +125,8 @@ async fn target(ctx: &Context, explicit: Option<String>) -> Result<ConfigTarget>
             std::fs::canonicalize(&repository.path).is_ok_and(|path| cwd.starts_with(path))
         })
         .max_by_key(|repository| repository.path.components().count());
-    ensure!(
-        repository.is_some(),
-        "no current workspace or registered checkout; pass an explicit workspace"
-    );
-    Ok(ConfigTarget::Repository(
-        repository.expect("checked above").id.clone().into(),
-    ))
+    Ok(match repository {
+        Some(repository) => ConfigTarget::Repository(repository.id.clone().into()),
+        None => ConfigTarget::Workspace(ui::pick_workspace(ctx, workspaces)?),
+    })
 }

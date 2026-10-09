@@ -292,8 +292,8 @@ current workspace, noninteractive and JSON calls require a target. Scoped caller
 remain confined to their own workspace. Another omitted required argument that
 names an existing record opens a picker of those records, under the same
 noninteractive rule. Bare `shoal cd` always opens a picker;
-all-workspace listings and `--all` retain their scope. `config show` uses its
-checkout-aware, non-picker selection described below.
+all-workspace listings and `--all` retain their scope. `config show` checks the
+registered checkout before the picker, as described below.
 `shoal add` offers repositories in most-recently-used order, then
 a new-branch prompt or a picker of existing branches, open issues or open PRs; a
 chosen issue or PR opens as its link would. Noninteractive and JSON calls never prompt;
@@ -749,7 +749,8 @@ or extensions. Other worktrees retain their settings.
 
 Run `shoal config show [workspace]` to print every effective repository setting
 and the layer that supplied it. With no workspace, Shoal uses the current
-workspace, or the registered checkout when no workspace exists yet. Named tables
+workspace, the registered checkout when no workspace exists yet, then the
+workspace picker. Named tables
 such as commands and ports show one entry per name. `--json` returns `key`, `value`,
 and `layer` for each entry.
 

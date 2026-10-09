@@ -1161,10 +1161,7 @@ fn workspace_context_adapters_preserve_directory_scope_and_picker_policy() {
         .output()
         .unwrap();
     assert!(!output.status.success());
-    assert!(
-        String::from_utf8_lossy(&output.stderr)
-            .contains("no current workspace or registered checkout")
-    );
+    assert!(String::from_utf8_lossy(&output.stderr).contains("missing argument"));
 }
 
 #[test]
@@ -6879,6 +6876,17 @@ fn hold_release_picks_an_omitted_hold() {
     let holds = fixture.ok(&["hold", "list", "upper"]);
     assert_eq!(holds.as_array().unwrap().len(), 1);
     assert_eq!(holds[0]["name"], "review");
+}
+
+#[test]
+fn config_show_picks_a_workspace_outside_any_checkout() {
+    let fixture = Fixture::new();
+    let workspace = fixture.add("configured");
+    let id = workspace["id"].as_str().unwrap();
+    let (output, rows) = fixture.pick(&["config", "show"], id, "");
+    assert!(output.status.success(), "{output:?}");
+    assert!(rows.starts_with(&format!("{id}\t")), "{rows:?}");
+    assert!(String::from_utf8_lossy(&output.stdout).contains("default_agent"));
 }
 
 #[test]
