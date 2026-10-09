@@ -29,6 +29,7 @@ fn acquire(kind: &str, wait: &str, json: bool, replies: Vec<Value>) -> (Output, 
                     Err(error) => panic!("accept: {error}"),
                 }
             };
+            stream.set_nonblocking(false).unwrap();
             stream
                 .set_read_timeout(Some(Duration::from_secs(60)))
                 .unwrap();
