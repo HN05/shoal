@@ -363,7 +363,41 @@ async fn clean_branch(path: &Path, branch: &str) -> Result<()> {
 }
 
 /// Executed only by the landing worker, inside the tracked process group.
-pub async fn finish_land(plan: LandPlan) -> Result<LandedBranch> {
+/// With `push`, the default branch then goes to its upstream; a missing
+/// upstream is refused before anything merges.
+pub async fn finish_land(plan: LandPlan, push: bool) -> Result<LandedBranch> {
+    let default = plan.default_refresh.branch.clone();
+    let target = if push {
+        let target = upstream(&plan.repo, &git::local_ref(&default)).await?;
+        Some(target.with_context(|| format!("{default} has no upstream to push to"))?)
+    } else {
+        None
+    };
+    let repo = plan.repo.path.clone();
+    let mut landed = merge_land(plan).await?;
+    if let Some((remote, reference)) = target {
+        git_run(
+            &repo,
+            &[
+                "push",
+                "--",
+                &remote,
+                &format!("{}:{reference}", landed.commit),
+            ],
+        )
+        .await
+        .with_context(|| {
+            format!(
+                "{} landed in {default} ({}), but pushing {default} to {remote} failed",
+                landed.branch, landed.commit
+            )
+        })?;
+        landed.pushed_to = Some(remote);
+    }
+    Ok(landed)
+}
+
+async fn merge_land(plan: LandPlan) -> Result<LandedBranch> {
     let LandPlan {
         workspace,
         repo,
@@ -401,6 +435,7 @@ pub async fn finish_land(plan: LandPlan) -> Result<LandedBranch> {
         updated,
         fast_forward,
         default_refresh,
+        pushed_to: None,
     };
     if git::is_ancestor(&repo.path, &source, &previous, git::isolated_command).await? {
         return Ok(landed(previous.clone(), false, true));

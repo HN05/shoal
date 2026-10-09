@@ -16,6 +16,7 @@ pub enum InternalCommand<'a> {
     },
     Land {
         plan: &'a str,
+        push: bool,
     },
     Detached {
         workspace: &'a str,
@@ -43,7 +44,13 @@ pub fn internal_command(
         InternalCommand::HerdrWatch { workspace, tab } => {
             args.extend([HERDR_WATCH.into(), workspace.into(), tab.into()]);
         }
-        InternalCommand::Land { plan } => args.extend([LAND.into(), plan.into()]),
+        InternalCommand::Land { plan, push } => {
+            args.push(LAND.into());
+            if push {
+                args.push("--push".into());
+            }
+            args.push(plan.into());
+        }
         InternalCommand::Detached {
             workspace,
             log,
@@ -106,13 +113,16 @@ mod tests {
     #[test]
     fn land_round_trips_serialized_plan_and_globals() {
         let plan = r#"{"path":"/a path/with \"quotes\""}"#;
-        for json in [false, true] {
-            let Command::LandInternal { plan: parsed_plan } =
-                parse(InternalCommand::Land { plan }, json)
+        for (json, push) in [(false, false), (true, true)] {
+            let Command::LandInternal {
+                plan: parsed_plan,
+                push: parsed_push,
+            } = parse(InternalCommand::Land { plan, push }, json)
             else {
                 panic!("expected land worker");
             };
             assert_eq!(parsed_plan, plan);
+            assert_eq!(parsed_push, push);
         }
     }
 

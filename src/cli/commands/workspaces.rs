@@ -65,9 +65,9 @@ pub(super) async fn environment(
     Ok(0)
 }
 
-pub(super) async fn land(ctx: &Context, workspace: Option<String>) -> Result<i32> {
+pub(super) async fn land(ctx: &Context, workspace: Option<String>, push: bool) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    execution::land(&ctx.paths, workspace, ctx.json).await
+    execution::land(&ctx.paths, workspace, ctx.json, push).await
 }
 
 pub(super) async fn rename(
@@ -87,7 +87,7 @@ pub(super) async fn rename(
     Ok(0)
 }
 
-pub(super) async fn land_worker(ctx: &Context, plan: String) -> Result<i32> {
+pub(super) async fn land_worker(ctx: &Context, plan: String, push: bool) -> Result<i32> {
     anyhow::ensure!(env::is_scoped(), "land worker requires a tracked execution");
     request::<()>(&ctx.paths, Method::CheckLanding).await?;
     let plan: crate::model::LandPlan = serde_json::from_str(&plan)?;
@@ -95,7 +95,7 @@ pub(super) async fn land_worker(ctx: &Context, plan: String) -> Result<i32> {
         std::env::var(env::WORKSPACE_ID)? == plan.workspace.id,
         "land worker requires its authorized workspace"
     );
-    let result = crate::git::repo::finish_land(plan).await?;
+    let result = crate::git::repo::finish_land(plan, push).await?;
     ctx.show(&result, |result| {
         let refresh = &result.default_refresh;
         if refresh.updated {
@@ -111,6 +111,9 @@ pub(super) async fn land_worker(ctx: &Context, plan: String) -> Result<i32> {
             println!("Fast-forwarded {default} to {branch} ({commit})");
         } else {
             println!("Merged {branch} into {default} ({commit})");
+        }
+        if let Some(remote) = &result.pushed_to {
+            println!("Pushed {default} to {remote}");
         }
     })?;
     Ok(0)

@@ -276,10 +276,19 @@ pub enum Command {
         /// Registered repository; defaults to the current checkout or workspace.
         repository: Option<String>,
     },
-    /// Merge this workspace into the default branch locally, without pushing.
-    Land { workspace: Option<String> },
+    /// Merge this workspace into the default branch, then optionally push it.
+    Land {
+        workspace: Option<String>,
+        /// Push the default branch to its upstream after landing.
+        #[arg(long)]
+        push: bool,
+    },
     #[command(name = internal::LAND, hide = true)]
-    LandInternal { plan: String },
+    LandInternal {
+        #[arg(long)]
+        push: bool,
+        plan: String,
+    },
     #[command(name = internal::HERDR, hide = true)]
     HerdrInternal {
         #[arg(long)]

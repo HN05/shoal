@@ -89,6 +89,7 @@ enum Mode {
     },
     Land {
         json: bool,
+        push: bool,
     },
     /// The repository's configured setup command; `json` keeps stdout clean.
     Setup {
@@ -282,8 +283,8 @@ fn log_tail(log: &Path) -> String {
     lines.into_iter().rev().collect::<Vec<_>>().join("\n")
 }
 
-pub async fn land(paths: &Paths, workspace: String, json: bool) -> Result<i32> {
-    run_tracked(paths, workspace, vec![], Mode::Land { json }, None).await
+pub async fn land(paths: &Paths, workspace: String, json: bool, push: bool) -> Result<i32> {
+    run_tracked(paths, workspace, vec![], Mode::Land { json, push }, None).await
 }
 
 pub async fn setup(paths: &Paths, workspace: String, json: bool) -> Result<i32> {
@@ -346,9 +347,10 @@ async fn run_tracked(
     let command = if let Some(land) = &plan.land {
         internal_command(
             paths,
-            matches!(mode, Mode::Land { json: true }),
+            matches!(mode, Mode::Land { json: true, .. }),
             InternalCommand::Land {
                 plan: &serde_json::to_string(land)?,
+                push: matches!(mode, Mode::Land { push: true, .. }),
             },
         )?
     } else {

@@ -301,6 +301,9 @@ pub struct LandedBranch {
     pub fast_forward: bool,
     /// How the default branch was refreshed from its upstream first.
     pub default_refresh: PulledBranch,
+    /// The remote the default branch was pushed to after landing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pushed_to: Option<String>,
 }
 
 /// A daemon-authorized landing, held under the repository Git gate.

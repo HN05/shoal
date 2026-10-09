@@ -1,4 +1,4 @@
-use std::{fs, path::PathBuf, sync::Arc};
+use std::{fs, os::unix::fs::PermissionsExt, path::PathBuf, sync::Arc};
 
 use crate::{
     daemon::{
@@ -1238,11 +1238,56 @@ async fn land_refreshes_the_default_branch_and_needs_it_outside_workspaces() {
     assert_eq!(git(&f.repo, &["rev-parse", "main"]), expected);
 }
 
+#[tokio::test]
+async fn land_pushes_the_default_branch_to_its_upstream() {
+    let f = Fixture::new().await;
+    let workspace = f.add("worker").await;
+    fs::write(workspace.path.join("feature"), "work\n").unwrap();
+    commit(&workspace.path, "feature");
+    let main = git(&f.repo, &["rev-parse", "main"]);
+    let error = f.manager.land_and_push("worker", true).await.unwrap_err();
+    assert!(error.to_string().contains("no upstream"), "{error:#}");
+    assert_eq!(git(&f.repo, &["rev-parse", "main"]), main);
+    f.remote();
+    let origin = f.root.path().join("origin.git");
+    let landed = f.manager.land_and_push("worker", true).await.unwrap();
+    assert_eq!(landed.pushed_to.as_deref(), Some("origin"));
+    assert_eq!(git(&origin, &["rev-parse", "main"]).trim(), landed.commit);
+    assert_eq!(
+        git(&f.repo, &["rev-parse", "origin/main"]).trim(),
+        landed.commit
+    );
+    // A rejected push keeps the landing and says so.
+    let hook = origin.join("hooks/pre-receive");
+    fs::write(&hook, "#!/bin/sh\nexit 1\n").unwrap();
+    fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).unwrap();
+    fs::write(workspace.path.join("feature"), "more\n").unwrap();
+    commit(&workspace.path, "feature");
+    let expected = git(&workspace.path, &["rev-parse", "HEAD"]);
+    let error = f.manager.land_and_push("worker", true).await.unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("but pushing main to origin failed"),
+        "{error:#}"
+    );
+    assert_eq!(git(&f.repo, &["rev-parse", "main^2"]), expected);
+    assert_eq!(git(&origin, &["rev-parse", "main"]).trim(), landed.commit);
+}
+
 impl Manager {
     async fn land_workspace(&self, selector: &str) -> anyhow::Result<crate::model::LandedBranch> {
+        self.land_and_push(selector, false).await
+    }
+
+    async fn land_and_push(
+        &self,
+        selector: &str,
+        push: bool,
+    ) -> anyhow::Result<crate::model::LandedBranch> {
         let workspace = self.workspace(selector).await?;
         let _guard = self.lock_repository_git(&workspace.repository_id).await;
-        super::finish_land(self.prepare_land(selector).await?).await
+        super::finish_land(self.prepare_land(selector).await?, push).await
     }
 }
 

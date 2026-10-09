@@ -860,7 +860,9 @@ output. Nothing is stashed, reset, or pushed.
 
 `shoal land [workspace]` merges the workspace's recorded branch into the
 repository default branch for repositories without a remote or pull-request
-flow; nothing is pushed. When the default branch has an upstream, Shoal fetches
+flow. `--push` then pushes the default branch to its upstream, an alternative to
+a pull request; it refuses a default branch without one before merging, and a
+failed push keeps the landed merge. When the default branch has an upstream, Shoal fetches
 and fast-forwards it first, preserving an ahead branch and refusing divergence or
 a failed fetch. The default branch cannot be held by a managed workspace, and any
 other checkout of it must be clean. The workspace must be clean and on its recorded

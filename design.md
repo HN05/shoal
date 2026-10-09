@@ -282,7 +282,9 @@ a workspace from it stays plain Git. Shoal has no merge or rebase command: Git
 already does both in a workspace. `land`,
 the local substitute for a pull request, merges the workspace branch into the default
 branch, first refreshing a configured upstream while preserving an ahead branch and
-refusing divergence or fetch failure, without pushing. The default branch cannot be
+refusing divergence or fetch failure. It pushes the default branch to that upstream
+only on request, checking the upstream before merging and keeping the merge when the
+push fails. The default branch cannot be
 held by a managed workspace, and any checkout of it must be clean. Land aborts a merge
 that does not apply cleanly, leaving conflicts to a Git merge of the default branch into
 the workspace. Landing holds the repository Git gate for the tracked execution; the

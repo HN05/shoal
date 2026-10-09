@@ -151,6 +151,7 @@ To move changes between your workspace and the default branch:
 shoal sync                    # Fetch and fast-forward the default branch
 git rebase main               # Or git merge; use your repo's branch name
 shoal land                    # Merge your branch into the default branch; no remote needed
+shoal land --push             # Then push the default branch instead of opening a PR
 ```
 
 For local code review, configure `[commands] review = ["tuicr", "-r",

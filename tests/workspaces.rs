@@ -11276,6 +11276,11 @@ fn land_merges_into_main_without_a_remote_and_is_denied_to_scoped_processes() {
     let denied = fixture.run(&["exec", "worker", "--", binary, "land-internal", "{}"]);
     assert!(!denied.status.success());
     assert!(String::from_utf8_lossy(&denied.stderr).contains("only an authorized landing"));
+    let unpushable = fixture.run(&["land", "--push", "worker"]);
+    assert!(!unpushable.status.success());
+    assert!(
+        String::from_utf8_lossy(&unpushable.stderr).contains("main has no upstream to push to")
+    );
     assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), before);
     let result = fixture.ok(&["land", "worker"]);
     assert_eq!(result["updated"], true);
