@@ -1,6 +1,6 @@
 //! Automatic removal of idle, clean, fully pushed worktrees, and of workspaces
 //! whose directory was deleted outside Shoal.
-use anyhow::Result;
+use anyhow::{Result, ensure};
 use std::{
     collections::{HashMap, hash_map::DefaultHasher},
     fs,
@@ -78,9 +78,25 @@ pub fn fingerprint(root: &Path, head: &str, activity: u64) -> Result<u64> {
     Ok(hash.finish())
 }
 
-/// Each workspace's idle delay comes from its own layered config; a disabled
-/// one gets only deleted-directory cleanup.
+/// One pass of every automatic cleanup. A failed step does not skip the
+/// steps after it; the error names each step that failed.
 pub async fn sweep(manager: &Manager, timers: &mut Timers) -> Result<()> {
+    let mut failed = Vec::new();
+    let mut step = |name: &str, result: Result<()>| {
+        if let Err(error) = result {
+            failed.push(format!("{name}: {error:#}"));
+        }
+    };
+    step("branch observation", observe_branches(manager).await);
+    step("issue cleanup", manager.sweep_issues().await);
+    step("completion cleanup", manager.sweep_completed().await);
+    step("PR cleanup", manager.sweep_prs().await);
+    step("idle cleanup", sweep_idle(manager, timers).await);
+    ensure!(failed.is_empty(), "{}", failed.join("; "));
+    Ok(())
+}
+
+async fn observe_branches(manager: &Manager) -> Result<()> {
     for workspace in manager.list_workspaces().await? {
         if workspace.state == WorkspaceState::Ready
             && workspace.path.is_dir()
@@ -89,55 +105,75 @@ pub async fn sweep(manager: &Manager, timers: &mut Timers) -> Result<()> {
             log!("branch observation skipped {}: {error:#}", workspace.name);
         }
     }
-    manager.sweep_issues().await?;
-    manager.sweep_completed().await?;
-    manager.sweep_prs().await?;
+    Ok(())
+}
+
+/// Each workspace's idle delay comes from its own layered config; a disabled
+/// one gets only deleted-directory cleanup. A failure in one workspace does
+/// not skip the others.
+async fn sweep_idle(manager: &Manager, timers: &mut Timers) -> Result<()> {
     let workspaces = manager.list_workspaces().await?;
     timers
         .idle
         .retain(|id, _| workspaces.iter().any(|workspace| &workspace.id == id));
+    let mut failed = Vec::new();
     for workspace in workspaces {
-        // Only a worktree that existed (identity recorded) can have been deleted;
-        // a failed creation keeps its error until removed explicitly.
-        if matches!(
-            workspace.state,
-            WorkspaceState::Ready | WorkspaceState::Failed
-        ) && workspace.git_dir.is_some()
-            && !workspace.path.try_exists()?
-        {
-            timers.idle.remove(&workspace.id);
-            remove_deleted(manager, &workspace).await;
-            continue;
-        }
-        let Some((delay, snapshot)) = observe(manager, &workspace).await else {
-            timers.idle.remove(&workspace.id);
-            continue;
-        };
-        if timers.observe(&workspace.id, snapshot, Instant::now(), delay) {
-            let (kind, message) = match manager.remove_idle(&workspace.id, snapshot).await {
-                Ok(()) => {
-                    log!("auto cleanup removed {}", workspace.name);
-                    (
-                        NotificationKind::WorkspaceRemoved,
-                        "removed by idle cleanup".to_owned(),
-                    )
-                }
-                Err(error) => {
-                    manager
-                        .record_retained(&workspace.id, EventCause::Idle, &error)
-                        .await?;
-                    log!("auto cleanup retained {}: {error:#}", workspace.name);
-                    (
-                        NotificationKind::CleanupFailed,
-                        format!("idle cleanup retained the workspace: {error:#}"),
-                    )
-                }
-            };
-            manager.notify(Some(&workspace.name), kind, message).await;
-            timers.idle.remove(&workspace.id);
+        if let Err(error) = sweep_workspace(manager, timers, &workspace).await {
+            failed.push(format!("{}: {error:#}", workspace.name));
         }
     }
+    ensure!(failed.is_empty(), "{}", failed.join("; "));
     Ok(())
+}
+
+async fn sweep_workspace(
+    manager: &Manager,
+    timers: &mut Timers,
+    workspace: &Workspace,
+) -> Result<()> {
+    // Only a worktree that existed (identity recorded) can have been deleted;
+    // a failed creation keeps its error until removed explicitly.
+    if matches!(
+        workspace.state,
+        WorkspaceState::Ready | WorkspaceState::Failed
+    ) && workspace.git_dir.is_some()
+        && !workspace.path.try_exists()?
+    {
+        timers.idle.remove(&workspace.id);
+        remove_deleted(manager, workspace).await;
+        return Ok(());
+    }
+    let Some((delay, snapshot)) = observe(manager, workspace).await else {
+        timers.idle.remove(&workspace.id);
+        return Ok(());
+    };
+    if !timers.observe(&workspace.id, snapshot, Instant::now(), delay) {
+        return Ok(());
+    }
+    timers.idle.remove(&workspace.id);
+    let (kind, message, recorded) = match manager.remove_idle(&workspace.id, snapshot).await {
+        Ok(()) => {
+            log!("auto cleanup removed {}", workspace.name);
+            (
+                NotificationKind::WorkspaceRemoved,
+                "removed by idle cleanup".to_owned(),
+                Ok(()),
+            )
+        }
+        Err(error) => {
+            log!("auto cleanup retained {}: {error:#}", workspace.name);
+            let recorded = manager
+                .record_retained(&workspace.id, EventCause::Idle, &error)
+                .await;
+            (
+                NotificationKind::CleanupFailed,
+                format!("idle cleanup retained the workspace: {error:#}"),
+                recorded,
+            )
+        }
+    };
+    manager.notify(Some(&workspace.name), kind, message).await;
+    recorded
 }
 
 /// The idle delay and snapshot of a ready, removable workspace; `None` when
@@ -309,6 +345,56 @@ mod tests {
                     .contains(workspace.path.to_str().unwrap())
             );
         }
+    }
+
+    #[tokio::test]
+    async fn failed_step_does_not_skip_later_steps_and_is_named() {
+        use crate::test_support::{manager, repository};
+        let (temp, manager) = manager().await;
+        let checkout = repository(temp.path(), "repo");
+        let repo = manager
+            .register_repository(checkout.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        let linked = manager
+            .create_workspace(&repo.id, "linked".into(), None, None, None)
+            .await
+            .unwrap();
+        let idle = manager
+            .create_workspace(&repo.id, "idle".into(), None, None, None)
+            .await
+            .unwrap();
+        let id = linked.id.clone();
+        manager
+            .store
+            .run(move |db| {
+                db.execute(
+                    "INSERT INTO workspace_issue(workspace_id,url) VALUES (?1,'issue')",
+                    [id],
+                )?;
+                db.execute_batch(
+                    "CREATE TEMP TRIGGER full_disk BEFORE UPDATE ON workspace_issue
+                     BEGIN SELECT RAISE(ABORT, 'database or disk is full'); END;",
+                )?;
+                Ok(())
+            })
+            .await
+            .unwrap();
+        let mut timers = Timers::default();
+        timers.idle.insert(
+            idle.id.clone(),
+            Idle {
+                snapshot: manager.cleanup_snapshot(&idle.id).await.unwrap().unwrap(),
+                since: Instant::now() - Duration::from_secs(3600),
+            },
+        );
+        let error = sweep(&manager, &mut timers).await.unwrap_err().to_string();
+        assert!(
+            error.starts_with("issue cleanup: ") && error.contains("disk is full"),
+            "{error}"
+        );
+        assert!(!idle.path.exists());
+        assert!(linked.path.exists());
     }
 
     #[tokio::test]

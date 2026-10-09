@@ -1125,7 +1125,8 @@ File changes (including ignored files), HEAD and commands reset the timer.
 Running/unknown commands, directory users (including shells), dirty/unpushed work,
 simulator leases, permits, holds and failed checks block cleanup. Pushed means reachable
 from locally known remote branches or the local default branch; no fetch.
-Sweeps run about every 30 seconds; timers reset on restart. The daemon needs `lsof` on PATH.
+Sweeps run about every 30 seconds; a failed step does not skip the others, and
+timers reset on restart. The daemon needs `lsof` on PATH.
 
 ```toml
 [auto_cleanup]
