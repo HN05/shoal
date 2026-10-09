@@ -94,8 +94,8 @@ workspace.
 
 ## Everyday commands
 
-After [configuring a custom agent](docs/reference.md#agents), run
-`shoal add my-project fix-api --agent pi` or `shoal add <issue-url>`.
+After [adding an AI tool](docs/reference.md#agents), run
+`shoal add my-project fix-api --agent droid` or `shoal add <issue-url>`.
 
 ```sh
 shoal                         # Interactive workspace menu

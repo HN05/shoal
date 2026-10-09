@@ -9648,7 +9648,7 @@ fn add_item_finds_the_repository_and_starts_the_default_agent() {
 
 #[test]
 fn agent_picker_can_skip_launch_select_agents_or_cancel() {
-    let fixture = Fixture::with_config(Some("[commands]\nnone = ['agent-probe']\n"));
+    let fixture = Fixture::with_config(Some("[ai.none]\ncommand = ['agent-probe']\n"));
     fixture.add_github_origin();
     let bin = fixture.root.path().join("bin");
     fs::create_dir(&bin).unwrap();
@@ -12786,7 +12786,7 @@ fn explicit_locations_do_not_require_unrelated_checkouts_to_be_readable() {
 #[test]
 fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
     let fixture = Fixture::with_config(Some(
-        "default_agent = 'pi'\nagent_template = 'Follow {branch}'\nissue_template = '{title}: {body}'\n[commands]\npi = ['missing-global-launcher']\n",
+        "default_agent = 'helper'\nagent_template = 'Follow {branch}'\nissue_template = '{title}: {body}'\n[commands]\nhelper = ['missing-global-launcher']\n",
     ));
     let bin = fixture.root.path().join("bin");
     fs::create_dir_all(&bin).unwrap();
@@ -12808,7 +12808,7 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
     let saved = fixture.root.path().join("saved.toml");
     fs::write(
         &saved,
-        "[commands]\npi = ['fake-agent', '--prompt={prompt}', '{args}', '{branch}']\n",
+        "[commands]\nhelper = ['fake-agent', '--prompt={prompt}', '{args}', '{branch}']\n",
     )
     .unwrap();
     fixture.ok(&[
@@ -12844,13 +12844,17 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
         serde_json::json!([])
     );
     let notifications = fixture.ok(&["notifications"]);
-    assert!(notifications.to_string().contains("pi exited with code 7"));
+    assert!(
+        notifications
+            .to_string()
+            .contains("helper exited with code 7")
+    );
     assert!(!fixture.root.path().join(".claude.json").exists());
     assert!(!fixture.root.path().join(".codex/config.toml").exists());
 
     let output = fixture.run(&[
         "run",
-        "pi",
+        "helper",
         workspace["id"].as_str().unwrap(),
         "--",
         "literal {prompt}",
@@ -12862,7 +12866,7 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
     );
 
     // Without an explicit prompt slot, context precedes literal forwarded arguments.
-    fs::write(&saved, "[commands]\npi = ['fake-agent', '{args}']\n").unwrap();
+    fs::write(&saved, "[commands]\nhelper = ['fake-agent', '{args}']\n").unwrap();
     fixture.ok(&[
         "repo",
         "config",
@@ -12877,7 +12881,7 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
         "--base",
         "HEAD",
         "--agent",
-        "pi",
+        "helper",
         "--",
         "user message",
     ]);
@@ -12897,6 +12901,71 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
     assert!(!unknown.status.success());
     assert!(String::from_utf8_lossy(&unknown.stderr).contains("unknown agent"));
     assert_eq!(fixture.ok(&["ls"]), before);
+}
+
+#[test]
+fn configured_ai_tools_run_as_agents_from_their_own_command() {
+    let fixture = Fixture::with_config(Some(
+        "agent_template = 'Follow {branch}'\n[ai.droid]\ncommand = ['fake-droid', '{args}']\n",
+    ));
+    let bin = fixture.root.path().join("bin");
+    fs::create_dir_all(&bin).unwrap();
+    for name in ["fake-droid", "repo-droid"] {
+        let path = bin.join(name);
+        fs::write(
+            &path,
+            format!(
+                "#!/bin/sh\ntest -n \"$SHOAL_SCOPE_TOKEN\" || exit 99\nprintf '{name}\\0' > \"$HOME/agent-args\"\nprintf '%s\\0' \"$@\" >> \"$HOME/agent-args\"\nexit 7\n"
+            ),
+        )
+        .unwrap();
+        fs::set_permissions(path, fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    let workspace = fixture.add("provider");
+    let args = || fs::read_to_string(fixture.root.path().join("agent-args")).unwrap();
+    for words in [
+        vec!["droid", "provider", "--", "user message"],
+        vec!["run", "droid", "provider", "--", "user message"],
+    ] {
+        let output = fixture.run(&words);
+        assert_eq!(output.status.code(), Some(7), "{words:?}: {output:?}");
+        assert_eq!(
+            args(),
+            format!(
+                "fake-droid\0Follow {}\0user message\0",
+                workspace["branch"].as_str().unwrap()
+            )
+        );
+    }
+    assert!(
+        fixture
+            .ok(&["notifications"])
+            .to_string()
+            .contains("droid exited with code 7")
+    );
+
+    // A repository launcher replaces the one [ai] supplies.
+    let saved = fixture.root.path().join("saved.toml");
+    fs::write(&saved, "[commands]\ndroid = ['repo-droid']\n").unwrap();
+    fixture.ok(&[
+        "repo",
+        "config",
+        fixture.repo.to_str().unwrap(),
+        "--file",
+        saved.to_str().unwrap(),
+    ]);
+    let output = fixture.run(&["droid", "provider"]);
+    assert_eq!(output.status.code(), Some(7), "{output:?}");
+    assert!(args().starts_with("repo-droid\0Follow "), "{}", args());
+
+    // A provider whose launcher is missing never starts.
+    fs::remove_file(bin.join("repo-droid")).unwrap();
+    let output = fixture.run(&["droid", "provider"]);
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("cannot start droid: repo-droid is not installed"),
+        "{output:?}"
+    );
 }
 
 #[test]

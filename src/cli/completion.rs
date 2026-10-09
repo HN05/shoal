@@ -38,7 +38,13 @@ struct Typed {
     workspace: Option<String>,
     pool: Option<String>,
     custom: Option<String>,
-    commands: OnceLock<Commands>,
+    settings: OnceLock<Settings>,
+}
+
+/// The configuration completion reads, from cwd when no workspace resolves.
+struct Settings {
+    commands: Commands,
+    providers: BTreeSet<String>,
 }
 
 /// Live values an argument can be completed with.
@@ -96,6 +102,8 @@ pub fn command() -> Command {
         });
         typed.pool = value(leaf, "pool");
     }
+    let search_path = std::env::var_os("PATH").unwrap_or_default();
+    let commands = typed.commands();
     for name in typed.command_names() {
         if command
             .get_subcommands()
@@ -103,15 +111,20 @@ pub fn command() -> Command {
         {
             continue;
         }
+        let about = if !typed.settings().providers.contains(&name) {
+            "Configured workspace command".to_owned()
+        } else if typed.launchable(&name, &search_path) {
+            format!("Run {name} in a workspace")
+        } else {
+            continue;
+        };
         command = command.subcommand(
             Command::new(name)
-                .about("Configured workspace command")
+                .about(about)
                 .arg(clap::Arg::new("workspace"))
                 .arg(clap::Arg::new("args").last(true).num_args(0..)),
         );
     }
-    let search_path = std::env::var_os("PATH").unwrap_or_default();
-    let commands = typed.commands();
     let launchable = |agent: Agent| agents::installed(&agent, commands, &search_path);
     for (name, available) in [
         ("claude", launchable(Agent::Claude)),
@@ -176,22 +189,17 @@ fn decorate(command: Command, parent: &str, typed: Arc<Typed>) -> Command {
                 let typed = typed.clone();
                 arg.add(ArgValueCompleter::new(move |current: &OsStr| {
                     let search_path = std::env::var_os("PATH").unwrap_or_default();
-                    let commands = typed.commands();
                     Agent::possible_values()
                         .into_iter()
-                        .chain(commands.keys().cloned())
+                        .chain(typed.settings().providers.iter().cloned())
                         .filter(|name| name.starts_with(current.to_string_lossy().as_ref()))
-                        .filter(|name| {
-                            name.parse::<Agent>().is_ok_and(|agent| {
-                                agents::installed(&agent, commands, &search_path)
-                            })
-                        })
+                        .filter(|name| typed.launchable(name, &search_path))
                         .collect::<BTreeSet<_>>()
                         .into_iter()
                         .map(CompletionCandidate::new)
                         .collect::<Vec<_>>()
                 }))
-            } else if parent == "happy" || (name == "happy" && arg.get_id() == "agent") {
+            } else if name == "happy" && arg.get_id() == "agent" {
                 let typed = typed.clone();
                 arg.add(ArgValueCompleter::new(move |current: &OsStr| {
                     let search_path = std::env::var_os("PATH").unwrap_or_default();
@@ -247,18 +255,30 @@ impl Typed {
         names.into_iter().collect()
     }
 
-    /// The effective configured commands, from cwd when no workspace resolves.
     fn commands(&self) -> &Commands {
-        self.commands.get_or_init(|| self.load_commands())
+        &self.settings().commands
     }
 
-    fn load_commands(&self) -> Commands {
+    /// Whether `name` is an agent whose programs are on `search_path`.
+    fn launchable(&self, name: &str, search_path: &OsStr) -> bool {
+        name.parse::<Agent>()
+            .is_ok_and(|agent| agents::installed(&agent, self.commands(), search_path))
+    }
+
+    fn settings(&self) -> &Settings {
+        self.settings.get_or_init(|| self.load_settings())
+    }
+
+    fn load_settings(&self) -> Settings {
         let state = self
             .state
             .clone()
             .or_else(|| std::env::var_os(env::STATE_DIR).map(PathBuf::from));
         let Ok(paths) = Paths::new(state) else {
-            return named_commands::defaults();
+            return Settings {
+                commands: named_commands::defaults(),
+                providers: crate::ai::providers(&Default::default()),
+            };
         };
         let global = Config::load(&paths).unwrap_or_default();
         let mut layers = ConfigLayers::default();
@@ -295,11 +315,15 @@ impl Typed {
                 layers = *found;
             }
         }
-        Stack::new(&global, &layers)
+        let commands = Stack::new(&global, &layers)
             .named(|config| &config.commands)
             .into_iter()
             .map(|(name, (argv, _))| (name, argv))
-            .collect()
+            .collect();
+        Settings {
+            commands,
+            providers: crate::ai::providers(&global.ai),
+        }
     }
 
     fn complete(&self, target: Target, current: &OsStr) -> Vec<CompletionCandidate> {

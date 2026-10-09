@@ -62,7 +62,7 @@ pub enum Command {
         #[arg(last = true, requires = "name")]
         args: Vec<OsString>,
     },
-    /// Run a command defined in [commands].
+    /// Run a configured command or AI tool.
     #[command(external_subcommand)]
     Custom(Vec<OsString>),
     /// Show or install Shoal instructions for agents.

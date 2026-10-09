@@ -130,20 +130,23 @@ struct Invocation {
     args: Vec<OsString>,
 }
 
-pub async fn invoke(ctx: &Context, words: Vec<OsString>) -> Result<i32> {
+/// The name, workspace and arguments of `shoal <name>`; `None` once help
+/// has been printed.
+pub type Invoked = (String, Option<String>, Vec<OsString>);
+
+pub fn invocation(words: Vec<OsString>) -> Result<Option<Invoked>> {
     let name = words[0]
         .to_str()
         .context("command name must be UTF-8")?
         .to_owned();
-    let invocation = match Invocation::try_parse_from(words) {
-        Ok(invocation) => invocation,
+    match Invocation::try_parse_from(words) {
+        Ok(invocation) => Ok(Some((name, invocation.workspace, invocation.args))),
         Err(error) if error.kind() == clap::error::ErrorKind::DisplayHelp => {
             error.print()?;
-            return Ok(0);
+            Ok(None)
         }
-        Err(error) => return Err(error.into()),
-    };
-    run(ctx, &name, invocation.workspace, invocation.args).await
+        Err(error) => Err(error.into()),
+    }
 }
 
 pub async fn run(

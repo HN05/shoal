@@ -196,12 +196,13 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             workspace,
             args,
         } => match name {
-            Some(name) if name == "claude" => agents::claude(&ctx, workspace, args).await,
-            Some(name) if name == "codex" => agents::codex(&ctx, None, workspace, args).await,
-            Some(name) => crate::config::named_commands::run(&ctx, &name, workspace, args).await,
+            Some(name) => agents::run_named(&ctx, &name, workspace, args).await,
             None => crate::config::named_commands::list(&ctx).await,
         },
-        Command::Custom(args) => crate::config::named_commands::invoke(&ctx, args).await,
+        Command::Custom(words) => match crate::config::named_commands::invocation(words)? {
+            Some((name, workspace, args)) => agents::run_named(&ctx, &name, workspace, args).await,
+            None => Ok(0),
+        },
         Command::Skill { name, command } => skill::run(
             name,
             command.as_ref(),

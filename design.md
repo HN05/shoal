@@ -366,13 +366,17 @@ An issue target asks an agent to refine the issue before implementation, in the
 workspace `add --issue` would continue, opening it when missing. Review tools own review storage, exports, and forge authentication, with
 explicit feedback handoff to agents.
 
-Custom `--agent` and `default_agent` names select named commands through the
-same configuration layers. They run as tracked agents with scope, forge wrappers,
-and exit notifications. Their `{prompt}` argument combines general instructions
+AI tools are providers: built-in ones plus global `[ai.<name>]` entries. A
+`command` there is the tool's launcher at the global `[commands]` layer, so
+repositories can still replace it, and gives it a `shoal <name>` agent shortcut
+that `run` shares; names that built-in commands shadow are rejected. Pickers
+and completion offer providers only, while custom `--agent` and `default_agent`
+names select any named command through the same configuration layers. Agents run
+as tracked agents with scope, forge wrappers, and exit notifications. Their `{prompt}` argument combines general instructions
 and issue context; without it, nonempty context precedes forwarded arguments.
 Plain command invocations expand `{prompt}` to an empty string. User arguments
-and inserted prompt text remain literal. Built-in names retain
-their specialized launchers; custom names add no tool-specific flags or trust setup.
+and inserted prompt text remain literal. Claude and Codex retain
+their specialized launchers; other names add no tool-specific flags or trust setup.
 
 Agent shortcuts use the execution wrapper: by default Codex CLI gets full access without
 approvals and Claude runs with its own settings. Both trust the
@@ -453,8 +457,8 @@ role loads the other's commands. Both are installed together at user scope,
 independent of the daemon and never from a scoped execution; their availability
 registers nothing. Installation removes the retired `shoal/SKILL.md`, which
 Shoal owned, and no other file. Global `[ai.<name>]` settings name skill
-directories for user-configured tools, with Codex and Claude defaults. Skill directories describe
-the machine and cannot be set per repository; custom launchers use named
+directories, with defaults for built-in providers. Skill directories describe
+the machine and cannot be set per repository; provider launchers join named
 commands without tool-specific integrations. Packaged skills resolve the runtime
 `SHOAL_SKILLS_DIR`, build-time directory, then an adjacent `shoal-skills` symlink
 to a directory holding every bundled skill. Explicit paths must be absolute;

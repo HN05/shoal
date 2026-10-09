@@ -444,23 +444,31 @@ and workspace removal closes it immediately. `add`
 without an agent (or choosing “No agent”) opens an interactive shell in the ready
 workspace and leaves the tab open until that workspace is completed or removed.
 
-Custom agents use `[commands]` with normal repository/global precedence:
+Add an AI tool in global config to run it as an agent:
 
 ```toml
-default_agent = "pi"
+default_agent = "droid"
 
-[commands]
-pi = ["pi", "{args}"]
-opencode = ["opencode", "--prompt", "{prompt}", "{args}"]
+[ai.droid]
+command = ["droid", "{args}"]
+skill_dir = "~/.factory/skills" # Optional; see agent skills below
 ```
 
-For custom agent launches, `{prompt}` combines the rendered `agent_template` and
+`shoal droid [workspace] -- <args>` (or `shoal run droid`) then starts it in a
+workspace the way `shoal claude` does, and `--agent droid` selects it. `command`
+is its launcher at the global layer, so a repository `[commands]` entry with the
+same name replaces it; defining both in the global file is an error. Names that
+collide with built-in commands are rejected. The picker and completion offer AI
+tools only.
+
+For AI tool launches, `{prompt}` combines the rendered `agent_template` and
 issue prompt, separated by a blank line. Without that placeholder, nonempty context
 becomes the first forwarded argument. Substitutions happen once; user arguments
-remain literal. Built-in agent names keep their specialized launchers; custom
-agents receive no tool-specific flags or trust setup. `shoal run <name>` remains
-a plain command invocation without agent prompts or exit notifications, expanding
-`{prompt}` to an empty string.
+remain literal. Claude and Codex keep their specialized launchers; other tools
+receive no tool-specific flags or trust setup. `--agent` and `default_agent` also
+accept any `[commands]` name; `shoal run <name>` for a name that is not an AI tool
+remains a plain command invocation without agent prompts or exit notifications,
+expanding `{prompt}` to an empty string.
 
 `shoal codex` without `--cli`/`--app` uses `codex.default_mode` from the workspace's
 repository config or `~/.config/shoal/config.toml` (or
@@ -1468,7 +1476,8 @@ shoal skill install          # All configured tools, including built-in defaults
 shoal skill install pi       # One tool configured below
 ```
 
-Define additional tools' user-level skill directories in global Shoal config:
+Define additional tools' user-level skill directories in global Shoal config
+(an AI tool without one is skipped by `all`):
 
 ```toml
 [ai.pi]
@@ -1480,7 +1489,7 @@ skill_dir = "~/.config/opencode/skills"
 
 Names are portable identifiers; `all` is reserved. `skill_dir` must be absolute
 or start with `~/`; Shoal appends `shoal/SKILL.md`. These machine settings cannot
-be set per repository. Use `[commands]` for custom launchers.
+be set per repository; `command` makes a tool an [agent](#agents).
 
 Installs the bundled `SKILL.md` at user scope with no daemon: Codex at
 `~/.agents/skills/shoal/SKILL.md`, Claude at `~/.claude/skills/shoal/SKILL.md`

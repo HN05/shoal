@@ -13,8 +13,15 @@ use anyhow::{Context as _, Result, ensure};
 
 use crate::{
     agent::{Agent, CodexMode},
-    cli::{client, context::Context, ui},
-    config::{Effective, named_commands::Commands},
+    cli::{
+        client,
+        context::Context,
+        ui::{self, Fallback},
+    },
+    config::{
+        Config, Effective,
+        named_commands::{self, Commands},
+    },
     fsutil,
     model::Workspace,
     protocol::ConfigTarget,
@@ -55,8 +62,8 @@ fn pick_agent(ctx: &Context, settings: &Effective) -> Result<Option<Agent>> {
     let mut choices = Vec::new();
     for label in Agent::possible_values().into_iter().chain(
         settings
-            .commands
-            .keys()
+            .providers
+            .iter()
             .filter(|name| matches!(name.parse(), Ok(Agent::Custom(_))))
             .cloned(),
     ) {
@@ -95,8 +102,9 @@ pub(in crate::cli) fn installed(agent: &Agent, commands: &Commands, search_path:
 /// Refuse an agent whose executables are missing before anything starts.
 pub(in crate::cli) fn ensure_installed(agent: &Agent, commands: &Commands) -> Result<()> {
     let name = String::from(agent.clone());
-    let programs = programs(agent, commands)
-        .with_context(|| format!("unknown agent {name:?}; define it in [commands]"))?;
+    let programs = programs(agent, commands).with_context(|| {
+        format!("unknown agent {name:?}; set [ai.{name}] command in Shoal config")
+    })?;
     for program in programs {
         ensure_program(&name, program)?;
     }
@@ -134,6 +142,27 @@ pub(in crate::cli) fn program_available(program: &str, search_path: &OsStr) -> b
         true
     } else {
         fsutil::find_executable(OsStr::new(program), search_path).is_some()
+    }
+}
+
+/// `shoal <name>` and `shoal run <name>`: providers launch as agents with
+/// their prompts, other names as plain configured commands.
+pub(super) async fn run_named(
+    ctx: &Context,
+    name: &str,
+    workspace: Option<String>,
+    args: Vec<OsString>,
+) -> Result<i32> {
+    match name {
+        "claude" => claude(ctx, workspace, args).await,
+        "codex" => codex(ctx, None, workspace, args).await,
+        _ if crate::ai::providers(&Config::load(&ctx.paths)?.ai).contains(name) => {
+            let workspace =
+                ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+            let workspace = client::inspect(&ctx.paths, workspace).await?.workspace;
+            native::custom_agent(ctx, name, workspace, None, args).await
+        }
+        _ => named_commands::run(ctx, name, workspace, args).await,
     }
 }
 

@@ -121,10 +121,11 @@ fn dynamic_completion_covers_nested_commands_flags_and_paths_without_daemon() {
     fs::create_dir_all(home.path().join(".config/shoal")).unwrap();
     fs::write(
         home.path().join(".config/shoal/config.toml"),
-        "[commands]\nreview = ['tuicr']\n[ai.pi]\nskill_dir = '~/pi-skills'\n",
+        "[commands]\nreview = ['tuicr']\n[ai.pi]\nskill_dir = '~/pi-skills'\n\
+         [ai.droid]\ncommand = ['droid']\n",
     )
     .unwrap();
-    install_programs(home.path(), &["claude", "codex", "happy", "tuicr"]);
+    install_programs(home.path(), &["claude", "codex", "happy", "tuicr", "droid"]);
     for (words, expected) in [
         (vec!["shoal", "repo", "r"], "rm"),
         (vec!["shoal", "rev"], "review"),
@@ -154,7 +155,8 @@ fn dynamic_completion_covers_nested_commands_flags_and_paths_without_daemon() {
         (vec!["shoal", "daemon", "re"], "restart"),
         (vec!["shoal", "codex", "--a"], "--app"),
         (vec!["shoal", "add", "--agent", "co"], "codex"),
-        (vec!["shoal", "add", "--agent", "rev"], "review"),
+        (vec!["shoal", "dro"], "droid"),
+        (vec!["shoal", "add", "--agent", "dro"], "droid"),
         (vec!["shoal", "review", "--agent", "cl"], "claude"),
         (vec!["shoal", "add", "--agent", "cl"], "claude"),
         (vec!["shoal", "add", "--agent", "happy-cl"], "happy-claude"),
@@ -176,7 +178,13 @@ fn dynamic_completion_covers_nested_commands_flags_and_paths_without_daemon() {
 #[test]
 fn agents_without_installed_executables_are_not_completed() {
     let home = tempfile::tempdir().unwrap();
-    install_programs(home.path(), &["claude"]);
+    install_programs(home.path(), &["claude", "tuicr"]);
+    fs::create_dir_all(home.path().join(".config/shoal")).unwrap();
+    fs::write(
+        home.path().join(".config/shoal/config.toml"),
+        "[commands]\nreview = ['tuicr']\n[ai.droid]\ncommand = ['droid']\n",
+    )
+    .unwrap();
     // Only the fixture's bin, so agents installed on this machine stay out.
     let path = format!("{}:/usr/bin:/bin", home.path().join("bin").display());
     for (words, expected, missing) in [
@@ -188,6 +196,10 @@ fn agents_without_installed_executables_are_not_completed() {
         (vec!["shoal", "cod"], &[], &["codex"]),
         (vec!["shoal", "ha"], &[], &["happy"]),
         (vec!["shoal", "t"], &[], &["t3"]),
+        (vec!["shoal", "dr"], &[], &["droid"]),
+        // Plain configured commands are not agents.
+        (vec!["shoal", "add", "--agent", "r"], &[], &["review"]),
+        (vec!["shoal", "add", "--agent", "d"], &[], &["droid"]),
         (vec!["shoal", "codex", "--a"], &[], &["--app"]),
         (
             vec!["shoal", "add", "--agent", "c"],

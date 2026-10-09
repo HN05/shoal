@@ -109,12 +109,14 @@ pub(super) async fn choose(ctx: &Context) -> Result<Command> {
     })
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 enum ExecuteChoice {
     Claude,
     Codex(CodexMode),
     Happy(BuiltinAgent),
     T3,
+    /// A configured AI tool without a dedicated command.
+    Provider(String),
     Shell,
 }
 
@@ -136,20 +138,41 @@ async fn execute_command(ctx: &Context, workspace: Option<String>) -> Result<Com
             agents::installed(&Agent::Happy(*agent), &settings.commands, &search_path)
         }
         ExecuteChoice::T3 => agents::program_available("t3", &search_path),
+        ExecuteChoice::Provider(name) => agents::installed(
+            &Agent::Custom(name.clone()),
+            &settings.commands,
+            &search_path,
+        ),
         ExecuteChoice::Shell => true,
     };
+    let providers = settings
+        .providers
+        .iter()
+        .filter(|name| matches!(name.parse(), Ok(Agent::Custom(_))))
+        .map(|name| (ExecuteChoice::Provider(name.clone()), name.clone()));
     let choices: Vec<_> = [
-        (ExecuteChoice::Claude, "claude"),
-        (ExecuteChoice::Codex(CodexMode::Cli), "codex cli"),
-        (ExecuteChoice::Codex(CodexMode::App), "codex app"),
-        (ExecuteChoice::Happy(BuiltinAgent::Claude), "happy claude"),
-        (ExecuteChoice::Happy(BuiltinAgent::Codex), "happy codex"),
-        (ExecuteChoice::T3, "t3"),
-        (ExecuteChoice::Shell, "custom shell command"),
+        (ExecuteChoice::Claude, "claude".to_owned()),
+        (ExecuteChoice::Codex(CodexMode::Cli), "codex cli".into()),
+        (ExecuteChoice::Codex(CodexMode::App), "codex app".into()),
+        (
+            ExecuteChoice::Happy(BuiltinAgent::Claude),
+            "happy claude".into(),
+        ),
+        (
+            ExecuteChoice::Happy(BuiltinAgent::Codex),
+            "happy codex".into(),
+        ),
+        (ExecuteChoice::T3, "t3".into()),
     ]
     .into_iter()
+    .chain(providers)
+    .chain([(ExecuteChoice::Shell, "custom shell command".into())])
     .filter(|(choice, _)| installed(choice))
     .collect();
+    let choices: Vec<_> = choices
+        .iter()
+        .map(|(choice, label)| (choice.clone(), label.as_str()))
+        .collect();
     let choice = ui::pick_choice(ctx, "Execute> ", &choices)?;
     Ok(match choice {
         ExecuteChoice::Claude => Command::Claude {
@@ -169,6 +192,11 @@ async fn execute_command(ctx: &Context, workspace: Option<String>) -> Result<Com
             args: vec![],
         },
         ExecuteChoice::T3 => Command::T3 {
+            workspace,
+            args: vec![],
+        },
+        ExecuteChoice::Provider(name) => Command::Run {
+            name: Some(name),
             workspace,
             args: vec![],
         },
