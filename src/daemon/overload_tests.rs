@@ -170,17 +170,54 @@ async fn built_in_restore_child() {
     serving.abort();
 }
 
-async fn wait_started(workspace: &crate::model::Workspace) {
-    bounded(async {
-        while !workspace.path.join("started").is_file() {
+#[track_caller]
+fn wait_started<'a>(
+    manager: &'a Manager,
+    workspace: &'a crate::model::Workspace,
+) -> impl Future<Output = ()> + 'a {
+    wait_launched(manager, workspace, "started", 1)
+}
+
+/// Waits until the child has written `marker`, so its TERM trap is set, and
+/// the daemon has recorded the process groups of `executions` executions. The
+/// marker alone can appear before the wrapper's start report is recorded, and
+/// a stop sent then reaches an execution that never paused and whose launch
+/// is unproven.
+#[track_caller]
+fn wait_launched<'a>(
+    manager: &'a Manager,
+    workspace: &'a crate::model::Workspace,
+    marker: &'a str,
+    executions: usize,
+) -> impl Future<Output = ()> + 'a {
+    bounded(async move {
+        loop {
+            let id = workspace.id.clone();
+            let recorded = manager
+                .store
+                .run(move |db| {
+                    Ok(store::executions(db, &id)?
+                        .iter()
+                        .filter(|record| record.group_id.is_some())
+                        .count())
+                })
+                .await
+                .unwrap();
+            if workspace.path.join(marker).is_file() && recorded >= executions {
+                break;
+            }
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
     })
-    .await;
 }
 
-async fn wait_paused(manager: &Manager, workspace: &crate::model::Workspace) {
-    bounded(async {
+/// A pause clears the process group that `wait_started` saw recorded.
+#[track_caller]
+fn wait_paused<'a>(
+    manager: &'a Manager,
+    workspace: &'a crate::model::Workspace,
+) -> impl Future<Output = ()> + 'a {
+    bounded(async move {
         loop {
             let id = workspace.id.clone();
             let paused = manager
@@ -198,7 +235,6 @@ async fn wait_paused(manager: &Manager, workspace: &crate::model::Workspace) {
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
     })
-    .await;
 }
 
 fn launch(
@@ -292,13 +328,8 @@ async fn stop_saves_agents_and_commands_preserving_work_and_leases() {
         &workspace,
         "daemon::overload_tests::tracked_command_child",
     );
-    wait_started(&workspace).await;
-    bounded(async {
-        while !workspace.path.join("command-started").is_file() {
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-    })
-    .await;
+    wait_started(&manager, &workspace).await;
+    wait_launched(&manager, &workspace, "command-started", 2).await;
     let ctx = crate::cli::context::Context::new(manager.paths.clone(), true);
     crate::cli::client::request::<()>(
         &manager.paths,
@@ -365,12 +396,7 @@ async fn resume_without_an_agent_reports_stopped_commands_once() {
         &workspace,
         "daemon::overload_tests::tracked_command_child",
     );
-    bounded(async {
-        while !workspace.path.join("command-started").is_file() {
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-    })
-    .await;
+    wait_launched(&manager, &workspace, "command-started", 1).await;
     bounded(manager.stop_workspace(&workspace.id, StopRecords::Save))
         .await
         .unwrap();
@@ -394,7 +420,7 @@ async fn overload_restores_the_configured_session_and_keeps_waiting_execution_ow
     )
     .unwrap();
     let launched = launch(&manager, &workspace);
-    wait_started(&workspace).await;
+    wait_started(&manager, &workspace).await;
     assert!(
         manager
             .stop_agent_for_overload("test memory pressure")
@@ -436,7 +462,7 @@ async fn overload_restores_the_configured_session_and_keeps_waiting_execution_ow
 async fn manual_stop_cancels_waiting_recovery_and_leaves_a_restore_record() {
     let (_root, manager, workspace, serving) = fixture().await;
     let launched = launch(&manager, &workspace);
-    wait_started(&workspace).await;
+    wait_started(&manager, &workspace).await;
     assert!(
         manager
             .stop_agent_for_overload("test memory pressure")
@@ -474,7 +500,7 @@ async fn manual_stop_cancels_waiting_recovery_and_leaves_a_restore_record() {
 async fn shutdown_finishes_an_agent_waiting_for_overload_recovery() {
     let (_root, manager, workspace, serving) = fixture().await;
     let launched = launch(&manager, &workspace);
-    wait_started(&workspace).await;
+    wait_started(&manager, &workspace).await;
     assert!(
         manager
             .stop_agent_for_overload("test memory pressure")
@@ -519,7 +545,7 @@ async fn failed_restore_expansion_does_not_block_launch_or_manual_recovery_recor
     )
     .unwrap();
     let launched = launch(&manager, &workspace);
-    wait_started(&workspace).await;
+    wait_started(&manager, &workspace).await;
     assert!(
         manager
             .stop_agent_for_overload("test memory pressure")
@@ -543,7 +569,7 @@ async fn failed_restore_expansion_does_not_block_launch_or_manual_recovery_recor
 async fn discard_clears_pending_recovery_without_launching_an_agent() {
     let (_root, manager, workspace, serving) = fixture().await;
     let launched = launch(&manager, &workspace);
-    wait_started(&workspace).await;
+    wait_started(&manager, &workspace).await;
     assert!(
         manager
             .stop_agent_for_overload("test memory pressure")
@@ -591,7 +617,7 @@ async fn discard_clears_pending_recovery_without_launching_an_agent() {
 async fn refused_recovery_finishes_the_stopped_execution_and_retains_manual_recovery() {
     let (_root, manager, workspace, serving) = fixture().await;
     let launched = launch(&manager, &workspace);
-    wait_started(&workspace).await;
+    wait_started(&manager, &workspace).await;
     assert!(
         manager
             .stop_agent_for_overload("test memory pressure")
@@ -650,7 +676,7 @@ fn publish_recovery(manager: &Manager) {
 async fn disabling_recovery_while_an_agent_waits_finishes_it_with_a_restore_record() {
     let (_root, manager, workspace, serving) = fixture().await;
     let launched = launch(&manager, &workspace);
-    wait_started(&workspace).await;
+    wait_started(&manager, &workspace).await;
     assert!(manager.stop_agent_for_overload("test pressure").await);
     wait_paused(&manager, &workspace).await;
     // Load never recovers here: disabling alone must end the wait.
@@ -666,7 +692,7 @@ async fn enabling_recovery_applies_to_an_agent_started_without_it() {
     let (_root, manager, workspace, serving) = fixture().await;
     set_recovery(&manager, false).await;
     let launched = launch(&manager, &workspace);
-    wait_started(&workspace).await;
+    wait_started(&manager, &workspace).await;
     set_recovery(&manager, true).await;
     assert!(manager.stop_agent_for_overload("test pressure").await);
     wait_paused(&manager, &workspace).await;
@@ -683,7 +709,7 @@ async fn enabling_recovery_applies_to_an_agent_started_without_it() {
 async fn recovery_disconnect_closes_the_connection_without_forgetting_ownership() {
     let (_root, manager, workspace, serving) = fixture().await;
     let launched = launch(&manager, &workspace);
-    wait_started(&workspace).await;
+    wait_started(&manager, &workspace).await;
     assert!(
         manager
             .stop_agent_for_overload("test memory pressure")
@@ -728,7 +754,7 @@ async fn recovery_disconnect_closes_the_connection_without_forgetting_ownership(
 async fn manual_resume_consumes_the_record_on_start_even_if_other_commands_run_or_restore_fails() {
     let (_root, manager, workspace, serving) = fixture().await;
     let launched = launch(&manager, &workspace);
-    wait_started(&workspace).await;
+    wait_started(&manager, &workspace).await;
     assert!(
         manager
             .stop_agent_for_overload("test memory pressure")
