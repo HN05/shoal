@@ -87,12 +87,13 @@ pub fn commands(agents: &Agents) -> impl Iterator<Item = (String, Vec<String>)> 
         .filter_map(|(name, agent)| Some((name.clone(), agent.command.clone()?)))
 }
 
-/// Every provider name: built-in and configured.
+/// Every AI tool that runs as an agent: built-in, or configured with a
+/// launcher. A tool with only a skill directory is not one.
 pub fn providers(agents: &Agents) -> BTreeSet<String> {
     PROVIDERS
         .iter()
         .map(|provider| provider.name.to_owned())
-        .chain(agents.keys().cloned())
+        .chain(commands(agents).map(|(name, _)| name))
         .collect()
 }
 
@@ -214,6 +215,8 @@ mod tests {
             )]
         );
         assert!(providers(&agents).contains("droid"));
+        // Skill-only tools are not agents, so `shoal notes` stays a command error.
+        assert!(!providers(&agents).contains("notes"));
         let directories = skill_dirs(&agents, Path::new("/home")).unwrap();
         assert_eq!(directories["claude"], Some("/home/claude-skills".into()));
         assert_eq!(directories["codex"], Some("/home/.agents/skills".into()));

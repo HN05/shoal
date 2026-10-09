@@ -12906,7 +12906,8 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
 #[test]
 fn configured_ai_tools_run_as_agents_from_their_own_command() {
     let fixture = Fixture::with_config(Some(
-        "agent_template = 'Follow {branch}'\n[ai.droid]\ncommand = ['fake-droid', '{args}']\n",
+        "agent_template = 'Follow {branch}'\n[ai.droid]\ncommand = ['fake-droid', '{args}']\n\
+         [ai.notes]\nskill_dir = '~/notes'\n",
     ));
     let bin = fixture.root.path().join("bin");
     fs::create_dir_all(&bin).unwrap();
@@ -12969,6 +12970,13 @@ fn configured_ai_tools_run_as_agents_from_their_own_command() {
             "fake-droid\0--prompt\0Follow {}\0user message\0",
             workspace["branch"].as_str().unwrap()
         )
+    );
+
+    // A tool with only a skill directory is not an agent.
+    let output = fixture.run(&["notes", "provider"]);
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("unknown command \"notes\""),
+        "{output:?}"
     );
 
     // A provider whose launcher is missing never starts.
