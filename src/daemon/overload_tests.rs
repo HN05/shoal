@@ -109,12 +109,29 @@ async fn built_in_restore_child() {
     )
     .unwrap();
     for (agent, handoff, expected) in [
-        ("codex", None, vec!["codex-fixture", "resume", "--last"]),
+        (
+            "codex",
+            None,
+            vec![
+                "codex-fixture",
+                "resume",
+                "--last",
+                "-c",
+                "features.worktrees=false",
+            ],
+        ),
         ("claude", None, vec!["claude-fixture", "--continue"]),
         (
             "codex",
             Some("handoff"),
-            vec!["codex-fixture", "resume", "--last", "handoff"],
+            vec![
+                "codex-fixture",
+                "resume",
+                "--last",
+                "-c",
+                "features.worktrees=false",
+                "handoff",
+            ],
         ),
         (
             "claude",

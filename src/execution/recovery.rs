@@ -77,7 +77,11 @@ impl Recovery {
             (command, argv.iter().any(|arg| arg.contains("{prompt}")))
         } else {
             let mut args: Vec<OsString> = match name.as_str() {
-                "codex" => vec!["resume".into(), "--last".into()],
+                // Codex's worktrees feature widens `--last` to every linked
+                // worktree of the repository; restore this workspace's session.
+                "codex" => ["resume", "--last", "-c", "features.worktrees=false"]
+                    .map(OsString::from)
+                    .into(),
                 "claude" => vec!["--continue".into()],
                 _ => vec![],
             };
