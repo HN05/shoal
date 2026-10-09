@@ -145,7 +145,10 @@ a wall-clock duration or race it against a short real timeout. Assert the outcom
 and the applied limit, drive time with a paused Tokio clock, or wait on an explicit
 signal. Give limits that should not trigger generous values; test limits that
 should trigger with work that cannot finish. Real timeouts are generous hang
-guards only, never the behavior being asserted.
+guards only, never the behavior being asserted. A wait observes the state the
+next step depends on, where that step reads it, and only a condition that
+cannot hold before the awaited event: a file a child writes does not prove the
+daemon recorded its start.
 
 ## CI
 

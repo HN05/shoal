@@ -317,7 +317,8 @@ configured command for another agent, plus proven child
   environment's Shoal variables or configuration locations, use the isolated
   xcrun fixture, and never install services or touch personal simulators.
   Check timing against AGENTS.md's validation rule: tests must not depend on
-  runner speed.
+  runner speed, and a wait must observe the awaited event itself, not a proxy
+  that can hold first.
 - Documentation: usage lives in README.md, behavior in docs/reference.md,
   decisions in design.md, contributor rules in AGENTS.md. Flag behavior
   changes without the matching sentence edit, text that restates code or
