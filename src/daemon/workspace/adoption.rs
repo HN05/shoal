@@ -2,6 +2,7 @@
 use super::{
     Manager, derive_workspace_name, existing_base, identity::directory_identity, ownership,
 };
+use crate::daemon::log;
 use crate::{
     git::{self, worktrunk},
     model::Workspace,
@@ -111,7 +112,7 @@ impl Manager {
         // Mark only once the record exists, so a refused insertion leaves the
         // metadata untouched; the committed identity protects it if marking fails.
         if let Err(error) = self.record_worktree_identity(&workspace).await {
-            eprintln!(
+            log!(
                 "worktree identity not recorded for {}: {error:#}",
                 workspace.name
             );

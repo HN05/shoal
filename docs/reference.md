@@ -90,7 +90,8 @@ hand, run `shoal daemon reload`. Reloading keeps running agents and leases, and 
 invalid file leaves the daemon's previous settings in place. The CLI reads agent
 settings on each command. Setup preserves compatible
 daemons and commands until restart; incompatible daemons restart automatically.
-Stop foreground daemons manually. macOS diagnostics go to `daemon.log` in the
+Stop foreground daemons manually. The daemon starts each diagnostic line with its
+local time and drops lines it cannot write. macOS diagnostics go to `daemon.log` in the
 state directory; Linux uses `journalctl --user -u shoal.service`. Native Linux service integration remains untested.
 
 ### Daemon restarts

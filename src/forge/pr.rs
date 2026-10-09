@@ -6,6 +6,7 @@ use anyhow::{Context, Result, ensure};
 use rusqlite::OptionalExtension;
 use serde::{Deserialize, Serialize};
 
+use crate::daemon::log;
 use crate::{
     daemon::{
         events::{self, EventKind},
@@ -379,7 +380,7 @@ impl Manager {
                     return Ok(false);
                 }
                 self.remove_merged(&workspace.id, &head).await?;
-                eprintln!("PR cleanup removed {}", workspace.name);
+                log!("PR cleanup removed {}", workspace.name);
                 Ok(true)
             }
             .await;

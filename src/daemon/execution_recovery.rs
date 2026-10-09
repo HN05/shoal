@@ -4,6 +4,7 @@ use anyhow::{Context, Result, ensure};
 use tokio::sync::{mpsc, watch};
 
 use super::workspace::Manager;
+use crate::daemon::log;
 use crate::{model::PortReservation, protocol::ExecutionEvent};
 
 pub(super) enum Action {
@@ -51,7 +52,7 @@ pub(super) async fn pause(
     match resume {
         Ok(action) => Ok(action),
         Err(error) => {
-            eprintln!("agent recovery cancelled: {error:#}");
+            log!("agent recovery cancelled: {error:#}");
             Ok(Action::Stop)
         }
     }

@@ -1,5 +1,6 @@
 //! Restart a managed daemon after its installed executable is replaced.
 use super::workspace::Manager;
+use crate::daemon::log;
 use anyhow::{Result, ensure};
 use std::{
     fs,
@@ -74,7 +75,7 @@ impl Update {
             let protocol = match installed_protocol(&self.path).await {
                 Ok(protocol) => Some(protocol),
                 Err(error) => {
-                    eprintln!("daemon update waits for clients: {error:#}");
+                    log!("daemon update waits for clients: {error:#}");
                     None
                 }
             };

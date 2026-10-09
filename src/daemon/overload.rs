@@ -4,6 +4,7 @@ use std::{sync::Arc, time::Duration};
 use tokio::time::Instant;
 
 use super::workspace::Manager;
+use crate::daemon::log;
 
 #[derive(Default)]
 struct Sustained {
@@ -48,7 +49,7 @@ impl Monitor {
             self.previous_cpu = None;
         }
         let memory = memory.unwrap_or_else(|error| {
-            eprintln!("memory overload monitor: {error:#}");
+            log!("memory overload monitor: {error:#}");
             false
         });
         let used = match cpu {
@@ -57,7 +58,7 @@ impl Monitor {
                 .replace(ticks)
                 .and_then(|previous| ticks.used_percent_since(previous)),
             Err(error) => {
-                eprintln!("CPU overload monitor: {error:#}");
+                log!("CPU overload monitor: {error:#}");
                 self.previous_cpu = None;
                 None
             }

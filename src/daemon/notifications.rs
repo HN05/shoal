@@ -5,6 +5,7 @@ use anyhow::Result;
 use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 
+use crate::daemon::log;
 use crate::{daemon::workspace::Manager, state::states};
 
 /// Rows kept before older read notifications are pruned; unread ones stay.
@@ -87,7 +88,7 @@ impl Manager {
         message: impl Into<String>,
     ) {
         if let Err(error) = self.record_notification(workspace, kind, message).await {
-            eprintln!("notification not recorded: {error:#}");
+            log!("notification not recorded: {error:#}");
         }
     }
 

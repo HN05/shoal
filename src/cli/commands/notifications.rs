@@ -113,34 +113,15 @@ fn terminal_notification(notification: &Notification) -> String {
 fn render(notification: &Notification, palette: Palette) -> String {
     format!(
         "{}  {}  {}",
-        palette.paint(Style::Muted, local_time(notification.created_at)),
+        palette.paint(
+            Style::Muted,
+            crate::time::local_minutes(notification.created_at)
+        ),
         palette.paint(
             Style::Heading,
             notification.workspace.as_deref().unwrap_or("-")
         ),
         notification.message
-    )
-}
-
-/// `YYYY-MM-DD HH:MM` in the local time zone.
-fn local_time(unix_seconds: i64) -> String {
-    // Infer the ABI type from localtime_r; libc deprecates its musl time_t alias.
-    let time = unix_seconds as _;
-    // SAFETY: localtime_r writes only into the zeroed `tm` passed to it.
-    let tm = unsafe {
-        let mut tm: libc::tm = std::mem::zeroed();
-        if libc::localtime_r(&time, &mut tm).is_null() {
-            return unix_seconds.to_string();
-        }
-        tm
-    };
-    format!(
-        "{:04}-{:02}-{:02} {:02}:{:02}",
-        tm.tm_year + 1900,
-        tm.tm_mon + 1,
-        tm.tm_mday,
-        tm.tm_hour,
-        tm.tm_min
     )
 }
 
@@ -160,14 +141,5 @@ mod tests {
             super::terminal_notification(&notification),
             "\x1b]9;Shoal fix-login: claude exited with code 0\x07"
         );
-    }
-
-    #[test]
-    fn local_time_uses_a_fixed_width_date_and_time() {
-        // Check the shape without assuming the process time zone.
-        let text = super::local_time(1_700_000_000);
-        assert_eq!(text.len(), 16, "{text}");
-        assert_eq!(&text[4..5], "-");
-        assert_eq!(&text[10..11], " ");
     }
 }

@@ -10,6 +10,7 @@ pub mod events;
 mod execution_connection;
 mod execution_recovery;
 pub(crate) mod handoff;
+pub(crate) mod log;
 pub mod notifications;
 mod overload;
 #[cfg(test)]
@@ -38,6 +39,7 @@ use tokio::{
     time::timeout,
 };
 
+pub(crate) use log::log;
 use ports::Acquisition;
 use scope::Caller;
 use workspace::{ExecutionKind, Manager, StopRecords};
@@ -120,7 +122,7 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
         managed,
         shutdown,
     };
-    eprintln!("shoal daemon listening on {}", paths.socket.display());
+    log!("shoal daemon listening on {}", paths.socket.display());
     let mut background = JoinSet::new();
     background.spawn(cleanup::run(manager.clone()));
     background.spawn(overload::run(manager.clone()));
@@ -140,11 +142,11 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
                             match update.as_mut().expect("update monitor enabled").supports_followers(clients.len()).await {
                                 Ok(true) => { quiescence = Some(guard); break Ok(()); }
                                 Ok(false) => {},
-                                Err(error) => eprintln!("daemon update check: {error:#}"),
+                                Err(error) => log!("daemon update check: {error:#}"),
                             }
                         }
                         Ok(None) => {},
-                        Err(error) => eprintln!("daemon update check: {error:#}"),
+                        Err(error) => log!("daemon update check: {error:#}"),
                     }
                 }
             },
@@ -158,7 +160,7 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
                 let operation = server.manager.background_operations.clone().read_owned().await;
                 clients.spawn(async move {
                     if let Err(error) = serve(stream, server, operation).await {
-                        eprintln!("client connection: {error:#}");
+                        log!("client connection: {error:#}");
                     }
                 });
             }
@@ -169,7 +171,7 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
     clients.shutdown().await;
     manager.store.shutdown().await;
     if quiescence.is_some() {
-        eprintln!("daemon executable was updated; restarting");
+        log!("daemon executable was updated; restarting");
         return handoff::exec(
             &update.expect("update monitor enabled").path,
             &paths,
@@ -201,7 +203,7 @@ async fn expire_simulators(manager: Arc<Manager>) {
         tokio::time::sleep(SIMULATOR_SWEEP_INTERVAL).await;
         let _operation = manager.background_operations.read().await;
         if let Err(error) = manager.expire_simulators().await {
-            eprintln!("simulator cleanup: {error:#}");
+            log!("simulator cleanup: {error:#}");
         }
     }
 }

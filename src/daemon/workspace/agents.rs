@@ -4,6 +4,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::watch;
 
 use super::{GuardMode, Manager};
+use crate::daemon::log;
 use crate::{daemon::notifications::NotificationKind, protocol::timing, state::WorkspaceState};
 
 pub(super) struct Agent {
@@ -315,7 +316,7 @@ impl Manager {
                     Some(reason),
                 );
                 if let Err(error) = &handoff {
-                    eprintln!("overload recovery handoff not saved: {error:#}");
+                    log!("overload recovery handoff not saved: {error:#}");
                 }
                 agent.overload = Some(reason.into());
                 agent.stop.send(true).ok()?;

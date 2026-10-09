@@ -3,6 +3,7 @@ use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, path::PathBuf};
 
+use crate::daemon::log;
 use crate::{
     daemon::workspace::{Manager, StopRecords},
     model::Workspace,
@@ -94,7 +95,7 @@ impl Manager {
                 .await?;
             } else if let Err(error) = self.record_worktree_identity(&workspace).await {
                 // Verification passed, so the existing record still protects it.
-                eprintln!(
+                log!(
                     "worktree identity not recorded for {}: {error:#}",
                     workspace.name
                 );

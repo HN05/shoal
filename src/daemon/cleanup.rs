@@ -11,6 +11,7 @@ use std::{
 };
 use tokio::time::{Instant, sleep};
 
+use crate::daemon::log;
 use crate::{
     daemon::{events::EventCause, notifications::NotificationKind, workspace::Manager},
     model::Workspace,
@@ -85,7 +86,7 @@ pub async fn sweep(manager: &Manager, timers: &mut Timers) -> Result<()> {
             && workspace.path.is_dir()
             && let Err(error) = manager.observe_workspace_branch(&workspace).await
         {
-            eprintln!("branch observation skipped {}: {error:#}", workspace.name);
+            log!("branch observation skipped {}: {error:#}", workspace.name);
         }
     }
     manager.sweep_issues().await?;
@@ -115,7 +116,7 @@ pub async fn sweep(manager: &Manager, timers: &mut Timers) -> Result<()> {
         if timers.observe(&workspace.id, snapshot, Instant::now(), delay) {
             let (kind, message) = match manager.remove_idle(&workspace.id, snapshot).await {
                 Ok(()) => {
-                    eprintln!("auto cleanup removed {}", workspace.name);
+                    log!("auto cleanup removed {}", workspace.name);
                     (
                         NotificationKind::WorkspaceRemoved,
                         "removed by idle cleanup".to_owned(),
@@ -125,7 +126,7 @@ pub async fn sweep(manager: &Manager, timers: &mut Timers) -> Result<()> {
                     manager
                         .record_retained(&workspace.id, EventCause::Idle, &error)
                         .await?;
-                    eprintln!("auto cleanup retained {}: {error:#}", workspace.name);
+                    log!("auto cleanup retained {}: {error:#}", workspace.name);
                     (
                         NotificationKind::CleanupFailed,
                         format!("idle cleanup retained the workspace: {error:#}"),
@@ -155,7 +156,7 @@ pub(super) async fn observe(manager: &Manager, workspace: &Workspace) -> Option<
     }
     .await;
     observed.unwrap_or_else(|error: anyhow::Error| {
-        eprintln!("auto cleanup skipped {}: {error:#}", workspace.name);
+        log!("auto cleanup skipped {}: {error:#}", workspace.name);
         None
     })
 }
@@ -167,13 +168,13 @@ async fn remove_deleted(manager: &Manager, workspace: &Workspace) {
         Ok(Some(_)) => return,
         Ok(None) => {}
         Err(error) => {
-            eprintln!("deleted worktree {} retained: {error:#}", workspace.name);
+            log!("deleted worktree {} retained: {error:#}", workspace.name);
             return;
         }
     }
     let (kind, message) = match manager.remove_deleted(&workspace.id).await {
         Ok(_) => {
-            eprintln!("forgot deleted worktree {}", workspace.name);
+            log!("forgot deleted worktree {}", workspace.name);
             (
                 NotificationKind::WorkspaceRemoved,
                 "forgotten after its directory was deleted; branch retained".to_owned(),
@@ -184,12 +185,12 @@ async fn remove_deleted(manager: &Manager, workspace: &Workspace) {
                 .record_retained(&workspace.id, EventCause::MissingDirectory, &error)
                 .await
             {
-                eprintln!(
+                log!(
                     "record retained workspace {}: {record_error:#}",
                     workspace.name
                 );
             }
-            eprintln!("deleted worktree {} retained: {error:#}", workspace.name);
+            log!("deleted worktree {} retained: {error:#}", workspace.name);
             (
                 NotificationKind::CleanupFailed,
                 format!("deleted worktree retained: {error:#}"),
@@ -205,7 +206,7 @@ pub async fn run(manager: Arc<Manager>) {
         {
             let _operation = manager.background_operations.read().await;
             if let Err(error) = sweep(&manager, &mut timers).await {
-                eprintln!("auto cleanup: {error:#}");
+                log!("auto cleanup: {error:#}");
             }
         }
         tokio::select! {

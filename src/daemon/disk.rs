@@ -16,6 +16,7 @@ use super::{
     notifications::NotificationKind,
     workspace::{Manager, StopRecords},
 };
+use crate::daemon::log;
 use crate::{config::overload::Disk, model::Workspace};
 
 /// Each pass inspects every workspace, so a pass that could not free enough
@@ -54,7 +55,7 @@ pub(super) async fn run(manager: Arc<Manager>) {
             .check(&manager, Instant::now(), crate::fsutil::available_bytes)
             .await
         {
-            eprintln!("disk space monitor: {error:#}");
+            log!("disk space monitor: {error:#}");
         }
     }
 }
@@ -118,7 +119,7 @@ fn sample(
                 path: path.to_owned(),
                 free,
             }),
-            Err(error) => eprintln!("disk space reading {}: {error}", path.display()),
+            Err(error) => log!("disk space reading {}: {error}", path.display()),
         }
     }
     filesystems
@@ -150,7 +151,7 @@ async fn free_space(
         };
         let (kind, message) = match manager.remove_for_disk_space(&workspace.id, snapshot).await {
             Ok(()) => {
-                eprintln!("disk space cleanup removed {}", workspace.name);
+                log!("disk space cleanup removed {}", workspace.name);
                 (
                     NotificationKind::WorkspaceRemoved,
                     format!("removed by disk space cleanup; {}", filesystem.describe()),
@@ -160,7 +161,7 @@ async fn free_space(
                 manager
                     .record_retained(&workspace.id, EventCause::DiskSpace, &error)
                     .await?;
-                eprintln!("disk space cleanup retained {}: {error:#}", workspace.name);
+                log!("disk space cleanup retained {}: {error:#}", workspace.name);
                 (
                     NotificationKind::CleanupFailed,
                     format!("disk space cleanup retained the workspace: {error:#}"),
@@ -190,7 +191,7 @@ async fn stop_executions(manager: &Manager, filesystem: &Filesystem) -> Result<(
         let workspace = manager.workspace(&id).await?;
         let (kind, message) = match manager.stop_workspace(&id, StopRecords::Save).await {
             Ok(()) => {
-                eprintln!("disk space protection stopped {}", workspace.name);
+                log!("disk space protection stopped {}", workspace.name);
                 (
                     NotificationKind::AgentStopped,
                     format!(
@@ -201,7 +202,7 @@ async fn stop_executions(manager: &Manager, filesystem: &Filesystem) -> Result<(
                 )
             }
             Err(error) => {
-                eprintln!("disk space protection could not stop {}: {error:#}", workspace.name);
+                log!("disk space protection could not stop {}: {error:#}", workspace.name);
                 (
                     NotificationKind::StopFailed,
                     // Repeated failures collapse, so the message omits free space.
@@ -217,7 +218,7 @@ async fn stop_executions(manager: &Manager, filesystem: &Filesystem) -> Result<(
     });
     for result in futures_util::future::join_all(stops).await {
         if let Err(error) = result {
-            eprintln!("disk space protection: {error:#}");
+            log!("disk space protection: {error:#}");
         }
     }
     Ok(())
