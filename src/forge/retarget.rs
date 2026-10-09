@@ -51,7 +51,9 @@ impl ForgeRepo {
         );
         let body = serde_json::json!({ "base": base }).to_string();
         let mut curl = Command::new(Tool::Curl.program());
+        // -q first: a user .curlrc must not trace the token header.
         curl.args([
+            "-q",
             "-sS",
             "-f",
             "-o",
