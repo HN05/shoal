@@ -538,8 +538,9 @@ pub enum HoldCommand {
     /// Release one named hold.
     Release {
         workspace: Option<String>,
+        /// Hold to release; omit to choose one.
         #[arg(long)]
-        name: String,
+        name: Option<String>,
     },
     /// List holds on a workspace, or every workspace with --all.
     List {

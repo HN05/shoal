@@ -1,5 +1,5 @@
 //! CLI access to workspace holds.
-use anyhow::Result;
+use anyhow::{Result, ensure};
 use serde_json::json;
 
 use crate::{
@@ -48,6 +48,10 @@ pub(super) async fn run(
         Some(HoldCommand::Release { workspace, name }) => {
             let workspace =
                 ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+            let name = match name {
+                Some(name) => name,
+                None => pick(ctx, &workspace).await?,
+            };
             client::request::<()>(&ctx.paths, Method::HoldRelease { workspace, name }).await?;
             ctx.emit_styled(Style::Success, "Hold released", json!({"released": true}))?;
             Ok(0)
@@ -78,6 +82,29 @@ async fn list(ctx: &Context, scope: WorkspaceScope) -> Result<i32> {
         ctx.show(&holds, |holds| render(holds))?;
     }
     Ok(0)
+}
+
+async fn pick(ctx: &Context, workspace: &str) -> Result<String> {
+    let holds = client::request::<Vec<WorkspaceHold>>(
+        &ctx.paths,
+        Method::HoldList {
+            workspace: workspace.to_owned(),
+        },
+    )
+    .await?;
+    ensure!(!holds.is_empty(), "no holds on this workspace");
+    let entries = holds
+        .into_iter()
+        .map(|hold| {
+            let label = format!(
+                "{}{}",
+                hold.name,
+                optional(hold.reason.as_deref(), |r| format!(" ({r})"))
+            );
+            (hold.name, label)
+        })
+        .collect();
+    ui::pick(ctx, "Hold> ", entries)
 }
 
 fn render(holds: &[WorkspaceHold]) {

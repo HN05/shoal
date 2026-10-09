@@ -6864,6 +6864,24 @@ fn base_set_picks_a_workspace_of_the_same_repository() {
 }
 
 #[test]
+fn hold_release_picks_an_omitted_hold() {
+    let fixture = Fixture::new();
+    fixture.add("upper");
+    let none = fixture.run(&["hold", "release", "upper"]);
+    assert!(String::from_utf8_lossy(&none.stderr).contains("no holds on this workspace"));
+    fixture.ok(&["hold", "acquire", "upper", "--name", "review"]);
+    fixture.ok(&[
+        "hold", "acquire", "upper", "--name", "demo", "--reason", "show",
+    ]);
+    let (output, rows) = fixture.pick(&["hold", "release", "upper"], "demo", "");
+    assert!(output.status.success(), "{output:?}");
+    assert!(rows.contains("demo\tdemo (show)") && rows.contains("review\t"));
+    let holds = fixture.ok(&["hold", "list", "upper"]);
+    assert_eq!(holds.as_array().unwrap().len(), 1);
+    assert_eq!(holds[0]["name"], "review");
+}
+
+#[test]
 fn cd_always_picks_even_inside_a_workspace_and_cancel_does_not_navigate() {
     let fixture = Fixture::new();
     let first = fixture.add("first");
