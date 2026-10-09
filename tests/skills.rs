@@ -280,6 +280,37 @@ fn skill_install_refreshes_only_selected_tool_and_preserves_siblings() {
 }
 
 #[test]
+fn unscoped_commands_update_installed_skills_after_upgrade() {
+    let home = tempfile::tempdir().unwrap();
+    let installed = home.path().join(".agents/skills");
+    // An earlier version copied one skill before Shoal recorded installations.
+    fs::create_dir_all(installed.join("shoal-worker")).unwrap();
+    fs::write(installed.join("shoal-worker/SKILL.md"), "version one").unwrap();
+    let completions = |scope: Option<&str>| {
+        let mut command = cli(home.path());
+        command.env("SHOAL_STATE_DIR", home.path().join("state"));
+        if let Some(token) = scope {
+            command.env("SHOAL_SCOPE_TOKEN", token);
+        }
+        command.args(["completions", "bash"]).output().unwrap()
+    };
+    let output = completions(Some("scoped"));
+    success(output);
+    assert_eq!(
+        fs::read_to_string(installed.join("shoal-worker/SKILL.md")).unwrap(),
+        "version one"
+    );
+    let output = completions(None);
+    assert!(String::from_utf8_lossy(&output.stderr).contains("Updated Shoal skills"));
+    success(output);
+    assert_installed(&installed);
+    // Up to date skills and other tools' directories are left alone.
+    let output = completions(None);
+    assert!(output.stderr.is_empty(), "{output:?}");
+    assert!(!home.path().join(".claude").exists());
+}
+
+#[test]
 fn skill_install_honors_claude_override_and_rejects_invalid_paths_before_writes() {
     let home = tempfile::tempdir().unwrap();
     let config = home.path().join("custom Claude config");

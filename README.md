@@ -22,7 +22,8 @@ the [runtime dependencies](#runtime-dependencies) before running `shoal install`
 daemon and writes missing config and prompt template defaults in `~/.config/shoal/`;
 `shoal skill install` installs the worker and orchestrator skills into each
 [AI tool's existing skill directory](docs/reference.md#agent-skill-outside-project-repositories);
-`shoal skill install <tool>` creates one.
+`shoal skill install <tool>` creates one. Later `shoal` commands keep installed
+skills current after upgrades.
 
 For directory navigation and tab completion, add this to your `.zshrc` or
 `.bashrc`, then run it in your current shell:
@@ -289,8 +290,9 @@ Managed daemons apply the upgrade once their clients and operations are idle. Fo
 a main-channel install, use `brew upgrade --fetch-HEAD hn05/tap/shoal`; run
 `shoal daemon restart` to apply an upgrade immediately; running agents and
 commands reattach to the new daemon. Wrappers from releases before reattachment
-are stopped instead; restore them with `shoal resume --all`. Skill links update
-automatically; reload `source <(shoal shell init)` in open terminals.
+are stopped instead; restore them with `shoal resume --all`. The next `shoal`
+command updates installed skills; reload `source <(shoal shell init)` in open
+terminals.
 
 ## Development
 

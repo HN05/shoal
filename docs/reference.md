@@ -43,8 +43,8 @@ upgrade immediately. Tracked agents and commands keep running while the daemon
 is away and reattach to the next one; see [Daemon restarts](#daemon-restarts). The channels share one installation,
 daemon, and skill path; to switch, run `shoal daemon stop`, uninstall, install
 the other channel, and `shoal daemon start`. State and skill links live outside
-the package and survive. Skill links follow Homebrew's stable `opt` path; a
-skill copied by an older install needs one `shoal skill install` to migrate.
+the package and survive. Skill links follow Homebrew's stable `opt` path, and
+the next `shoal` command [updates installed skills](#agent-skill-outside-project-repositories).
 Packagers can set `SHOAL_SKILL_PATH` to an absolute skill file at runtime,
 overriding the path given in `SHOAL_BUILD_SKILL_PATH` at build time. Without either,
 an adjacent `shoal-skill` symlink can point through a stable installation prefix;
@@ -1543,12 +1543,14 @@ skill_dir = "~/.factory/skills"
 Names are portable identifiers; `all` is reserved. `skill_dir` must be absolute
 or start with `~/`. These machine settings cannot be set per repository;
 `command` makes a tool an [agent](#agents). Homebrew installs symlink to the
-packaged skill so upgrades apply automatically; Cargo installs copy it, so
-rerun after upgrading. Other files in the skill directory are preserved. Run it
-outside scoped executions. `shoal skill` prints the instructions (`--json`
+packaged skill; Cargo installs copy it. Other files in the skill directory are
+preserved. Run it outside scoped executions. `shoal skill` prints the instructions (`--json`
 returns a `skill` field).
 
 Shoal records what it installed in `.shoal-skills.json` in each skill directory.
-Installation removes skills a later version retired. A skill changed since
-Shoal installed it is kept and reported; `--force` replaces it. Skills installed
-before the record existed are treated as unchanged.
+After an upgrade, the next unscoped command updates each directory that still
+holds a Shoal skill: it adds new skills, replaces outdated copies and removes
+retired skills. A skill changed or removed since Shoal installed it is kept and
+reported once; `shoal skill install` restores a removed skill, and `--force`
+also replaces a changed one. Skills installed before the record existed are
+treated as unchanged.

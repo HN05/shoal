@@ -478,9 +478,12 @@ for every tool whose skill directory already exists unless a tool is named,
 independent of the daemon and never from a scoped execution; their availability
 registers nothing. Each skill directory records what Shoal installed there;
 Shoal owns a skill only while it matches that record, so it updates or removes
-only those, and treats files from before the record as its own. A changed skill
-stays as the user left it unless installation is forced. Global `[ai.<name>]`
-settings name skill directories, with defaults for built-in providers. Skill directories describe
+only those, and treats files from before the record as its own. Unscoped
+commands other than the daemon refresh directories that still hold a Shoal
+skill, so upgrades need no reinstall; the daemon may not share the user's tool
+environment. A changed or removed skill stays as the user left it until an
+explicit install, which restores removed skills and with `--force` replaces
+changed ones. Global `[ai.<name>]` settings name skill directories, with defaults for built-in providers. Skill directories describe
 the machine and cannot be set per repository; provider launchers join named
 commands without tool-specific integrations. Packaged skills resolve the runtime
 `SHOAL_SKILLS_DIR`, build-time directory, then an adjacent `shoal-skills` symlink

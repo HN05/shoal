@@ -3,7 +3,7 @@ mod record;
 
 use crate::fsutil::{self, Permissions, ReplaceOptions};
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fs, io,
     os::unix::fs::symlink,
     path::{Path, PathBuf},
@@ -80,7 +80,11 @@ pub(super) fn run(
     let mut outcomes = BTreeMap::new();
     for (agent, directory) in destinations {
         if !outcomes.contains_key(&directory) {
-            let outcome = refresh(&directory, source.as_deref(), *force)?;
+            let outcome = refresh(
+                &directory,
+                source.as_deref(),
+                Mode::Install { force: *force },
+            )?;
             outcomes.insert(directory.clone(), outcome);
         }
         let outcome = &outcomes[&directory];
@@ -110,6 +114,49 @@ pub(super) fn run(
     Ok(0)
 }
 
+/// Bring skills Shoal installed earlier up to date with this version, so an
+/// upgrade needs no `shoal skill install`. Never fails the calling command.
+pub(super) fn refresh_installed(state: &Path, json_output: bool) {
+    if crate::env::inherits_scope(state) {
+        return;
+    }
+    let warn = |error: anyhow::Error| {
+        if !json_output {
+            eprintln!("warning: cannot update Shoal skills: {error:#}");
+        }
+    };
+    let found = installed_directories().and_then(|directories| Ok((directories, packaged()?)));
+    let (directories, source) = match found {
+        Ok(found) => found,
+        Err(error) => return warn(error),
+    };
+    for directory in directories {
+        match refresh(&directory, source.as_deref(), Mode::Refresh) {
+            Ok(outcome) if !json_output => {
+                if outcome.changed {
+                    eprintln!("Updated Shoal skills in {}", directory.display());
+                }
+                for name in outcome.kept {
+                    eprintln!(
+                        "Kept modified skill {name} at {}; run `shoal skill install --force` to replace it",
+                        skill_file(&directory, &name).display()
+                    );
+                }
+            }
+            Ok(_) => {}
+            Err(error) => warn(error),
+        }
+    }
+}
+
+/// Every configured skill directory, once; `refresh` skips those without Shoal skills.
+fn installed_directories() -> Result<BTreeSet<PathBuf>> {
+    let home = crate::fsutil::home_dir()?;
+    ensure!(home.is_absolute(), "HOME must be an absolute path");
+    let directories = crate::ai::skill_dirs(&crate::ai::load(&home)?, &home)?;
+    Ok(directories.into_values().flatten().collect())
+}
+
 fn packaged() -> Result<Option<PathBuf>> {
     let configured = std::env::var_os(crate::env::SKILLS_DIR)
         .map(PathBuf::from)
@@ -117,21 +164,38 @@ fn packaged() -> Result<Option<PathBuf>> {
     packaged_source(configured, &std::env::current_exe()?)
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Mode {
+    /// `shoal skill install`: install every bundled skill the user has not
+    /// changed, or every one with `force`.
+    Install { force: bool },
+    /// After an upgrade: update only directories that hold Shoal skills, and
+    /// leave skills the user removed or changed.
+    Refresh,
+}
+
 #[derive(Debug, Default)]
 struct Outcome {
     /// Bundled skills installed as this version provides them.
     installed: Vec<&'static str>,
-    /// Skills left as the user changed them.
+    /// Skills left as the user changed them: on install every one, on refresh
+    /// those found changed by this call.
     kept: Vec<String>,
+    /// Whether this call changed a skill.
+    changed: bool,
 }
 
 /// Install the bundled skills in `directory` and remove retired ones Shoal
 /// still owns. A recorded skill whose file differs from what Shoal wrote
 /// belongs to the user; files from before the record existed are Shoal's.
-fn refresh(directory: &Path, source: Option<&Path>, force: bool) -> Result<Outcome> {
+fn refresh(directory: &Path, source: Option<&Path>, mode: Mode) -> Result<Outcome> {
     let loaded = Record::load(directory)?;
     let mut record = loaded.clone().unwrap_or_default();
     let mut outcome = Outcome::default();
+    if mode == Mode::Refresh && !holds_shoal_skills(directory, &record)? {
+        return Ok(outcome);
+    }
+    let force = mode == (Mode::Install { force: true });
     for (name, contents) in SKILLS {
         let path = skill_file(directory, name);
         let expected = match source {
@@ -139,12 +203,13 @@ fn refresh(directory: &Path, source: Option<&Path>, force: bool) -> Result<Outco
             None => Entry::copy(contents.as_bytes()),
         };
         let present = exists(&path)?;
-        // A concurrent install may already have written this version.
+        // A concurrent refresh may already have written this version.
         let current = expected.matches(&path)?;
         let owned = match record.skills.get(name) {
             None => true,
-            Some(Entry::Kept) => !present,
-            Some(previous) => !present || current || previous.matches(&path)?,
+            Some(Entry::Kept) => !present && mode != Mode::Refresh,
+            Some(previous) if present => current || previous.matches(&path)?,
+            Some(_) => mode != Mode::Refresh,
         };
         if owned || force {
             if !current {
@@ -153,11 +218,15 @@ fn refresh(directory: &Path, source: Option<&Path>, force: bool) -> Result<Outco
                     source.map(|source| skill_file(source, name)).as_deref(),
                     contents,
                 )?;
+                outcome.changed = true;
             }
             record.skills.insert(name.to_owned(), expected);
             outcome.installed.push(name);
-        } else {
-            record.skills.insert(name.to_owned(), Entry::Kept);
+        } else if record.skills.insert(name.to_owned(), Entry::Kept) != Some(Entry::Kept) {
+            if present {
+                outcome.kept.push(name.to_owned());
+            }
+        } else if present && mode != Mode::Refresh {
             outcome.kept.push(name.to_owned());
         }
     }
@@ -175,12 +244,13 @@ fn refresh(directory: &Path, source: Option<&Path>, force: bool) -> Result<Outco
         let path = skill_file(directory, &name);
         if entry.matches(&path)? {
             remove_skill(&directory.join(&name))?;
+            outcome.changed = true;
         } else if entry != Entry::Kept && exists(&path)? {
             outcome.kept.push(name);
         }
     }
-    if loaded.is_none() {
-        remove_skill(&directory.join(RETIRED))?;
+    if loaded.is_none() && remove_skill(&directory.join(RETIRED))? {
+        outcome.changed = true;
     }
     if loaded.as_ref() != Some(&record) {
         fs::create_dir_all(directory)
@@ -188,6 +258,22 @@ fn refresh(directory: &Path, source: Option<&Path>, force: bool) -> Result<Outco
         record.save(directory)?;
     }
     Ok(outcome)
+}
+
+/// Whether `directory` still holds a skill Shoal installed, now or earlier;
+/// removing every one stops automatic updates there.
+fn holds_shoal_skills(directory: &Path, record: &Record) -> Result<bool> {
+    let names = SKILLS
+        .iter()
+        .map(|(name, _)| *name)
+        .chain(record.skills.keys().map(String::as_str))
+        .chain([RETIRED]);
+    for name in names {
+        if exists(&skill_file(directory, name))? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 fn exists(path: &Path) -> Result<bool> {
@@ -424,7 +510,7 @@ mod tests {
             fs::create_dir_all(directory.join(name)).unwrap();
             fs::write(skill_file(directory, name), "old").unwrap();
         }
-        refresh(directory, None, false).unwrap();
+        refresh(directory, None, Mode::Install { force: false }).unwrap();
         assert_eq!(read(worker), SKILLS[0].1);
         // A recorded copy from an earlier version is replaced; an edited one is kept.
         fs::write(skill_file(directory, worker), "old").unwrap();
@@ -437,18 +523,18 @@ mod tests {
             ],
         );
         for _ in 0..2 {
-            let outcome = refresh(directory, None, false).unwrap();
+            let outcome = refresh(directory, None, Mode::Install { force: false }).unwrap();
             assert_eq!(outcome.installed, [worker]);
             assert_eq!(outcome.kept, [orchestrator]);
             assert_eq!(read(worker), SKILLS[0].1);
             assert_eq!(read(orchestrator), "edited");
         }
-        let outcome = refresh(directory, None, true).unwrap();
+        let outcome = refresh(directory, None, Mode::Install { force: true }).unwrap();
         assert!(outcome.kept.is_empty());
         assert_eq!(read(orchestrator), SKILLS[1].1);
         // A removed skill is restored.
         fs::remove_file(skill_file(directory, worker)).unwrap();
-        refresh(directory, None, false).unwrap();
+        refresh(directory, None, Mode::Install { force: false }).unwrap();
         assert_eq!(read(worker), SKILLS[0].1);
     }
 
@@ -461,7 +547,7 @@ mod tests {
             fs::create_dir_all(source.join(name)).unwrap();
             fs::write(skill_file(&source, name), "packaged").unwrap();
         }
-        refresh(&directory, Some(&source), false).unwrap();
+        refresh(&directory, Some(&source), Mode::Install { force: false }).unwrap();
         for name in ["linked", "copied", "edited", "kept"] {
             fs::create_dir_all(directory.join(name)).unwrap();
         }
@@ -484,7 +570,7 @@ mod tests {
                 ("kept", Entry::Kept),
             ],
         );
-        let outcome = refresh(&directory, Some(&source), false).unwrap();
+        let outcome = refresh(&directory, Some(&source), Mode::Install { force: false }).unwrap();
         assert_eq!(outcome.kept, ["edited"]);
         assert!(!directory.join("linked").exists());
         assert_eq!(fs::read_dir(directory.join("copied")).unwrap().count(), 1);
@@ -499,8 +585,61 @@ mod tests {
             .collect();
         assert_eq!(names, [SKILLS[1].0, SKILLS[0].0]);
         // A retired skill is reported once, then belongs to the user.
-        let outcome = refresh(&directory, Some(&source), false).unwrap();
+        let outcome = refresh(&directory, Some(&source), Mode::Install { force: false }).unwrap();
         assert!(outcome.kept.is_empty());
+    }
+
+    #[test]
+    fn refresh_updates_installed_skills_and_reports_user_changes_once() {
+        let root = tempfile::tempdir().unwrap();
+        let directory = root.path();
+        let (worker, orchestrator) = (SKILLS[0].0, SKILLS[1].0);
+        let read = |name| fs::read_to_string(skill_file(directory, name)).unwrap();
+        // Refreshing never starts an installation.
+        let outcome = refresh(directory, None, Mode::Refresh).unwrap();
+        assert!(!outcome.changed && outcome.installed.is_empty());
+        assert_eq!(fs::read_dir(directory).unwrap().count(), 0);
+
+        // An upgrade replaces what an earlier version wrote.
+        for (name, _) in SKILLS {
+            fs::create_dir_all(directory.join(name)).unwrap();
+            fs::write(skill_file(directory, name), "old").unwrap();
+        }
+        record(directory, &[(worker, Entry::copy(b"old"))]);
+        fs::write(skill_file(directory, orchestrator), "edited").unwrap();
+        record(directory, &[(orchestrator, Entry::copy(b"old"))]);
+        let outcome = refresh(directory, None, Mode::Refresh).unwrap();
+        assert!(outcome.changed);
+        assert_eq!(outcome.installed, [worker]);
+        assert_eq!(outcome.kept, [orchestrator]);
+        assert_eq!(read(worker), SKILLS[0].1);
+        assert_eq!(read(orchestrator), "edited");
+        // A kept skill is reported once by refresh and on every install.
+        let outcome = refresh(directory, None, Mode::Refresh).unwrap();
+        assert!(!outcome.changed && outcome.kept.is_empty());
+        let outcome = refresh(directory, None, Mode::Install { force: false }).unwrap();
+        assert_eq!(outcome.kept, [orchestrator]);
+        assert_eq!(read(orchestrator), "edited");
+        refresh(directory, None, Mode::Install { force: true }).unwrap();
+        assert_eq!(read(orchestrator), SKILLS[1].1);
+
+        // A skill the user removed returns only on install.
+        fs::remove_file(skill_file(directory, worker)).unwrap();
+        record(directory, &[(worker, Entry::copy(b"old"))]);
+        let outcome = refresh(directory, None, Mode::Refresh).unwrap();
+        assert!(outcome.kept.is_empty() && !skill_file(directory, worker).exists());
+        refresh(directory, None, Mode::Refresh).unwrap();
+        assert!(!skill_file(directory, worker).exists());
+        refresh(directory, None, Mode::Install { force: false }).unwrap();
+        assert_eq!(read(worker), SKILLS[0].1);
+
+        // Removing every Shoal skill stops refreshes there.
+        for (name, _) in SKILLS {
+            fs::remove_dir_all(directory.join(name)).unwrap();
+        }
+        record(directory, &[("shoal-new", Entry::Kept)]);
+        refresh(directory, None, Mode::Refresh).unwrap();
+        assert!(!directory.join(worker).exists());
     }
 
     #[test]

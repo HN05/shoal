@@ -174,6 +174,16 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
     if let Some(Command::Skill { name, command }) = &cli.command {
         return skill::run(*name, command.as_ref(), cli.json, cli.state_dir.clone());
     }
+    // The service runs without the user's tool configuration environment.
+    if !matches!(
+        cli.command,
+        Some(Command::Daemon {
+            command: crate::cli::DaemonCommand::Run { .. }
+        })
+    ) && let Ok(state) = Paths::state_dir(cli.state_dir.clone())
+    {
+        skill::refresh_installed(&state, cli.json);
+    }
     if let Some(path) = menu_path(cli.command.as_ref())
         && !Context::is_interactive(cli.json)
     {
