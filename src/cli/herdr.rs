@@ -86,6 +86,16 @@ pub(super) async fn handoff(
     Ok(true)
 }
 
+/// The Herdr pane this process runs in.
+pub(crate) fn current_pane() -> Option<String> {
+    if std::env::var("HERDR_ENV").as_deref() != Ok("1") {
+        return None;
+    }
+    std::env::var("HERDR_PANE_ID")
+        .ok()
+        .filter(|pane| !pane.is_empty())
+}
+
 /// Whether this terminal can hand Shoal work to new Herdr tabs.
 pub(in crate::cli) fn available(ctx: &Context) -> bool {
     ctx.herdr_tab.is_none() && ctx.interactive() && std::env::var("HERDR_ENV").as_deref() == Ok("1")

@@ -27,6 +27,9 @@ pub(crate) struct Record {
     pub agent: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stop_reason: Option<String>,
+    /// The Herdr pane the agent ran in, where `shoal resume --all` restores it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub herdr_pane: Option<String>,
 }
 
 impl Recovery {
@@ -111,8 +114,20 @@ impl Recovery {
         workspace_id: &str,
         id: &str,
         reason: Option<&str>,
+        herdr_pane: Option<String>,
     ) -> Result<PathBuf> {
-        save_record(paths, workspace_id, id, &self.agent, reason)
+        let record = Record::new(&self.agent, reason, herdr_pane);
+        write_record(paths, workspace_id, id, record)
+    }
+}
+
+impl Record {
+    fn new(agent: &str, reason: Option<&str>, herdr_pane: Option<String>) -> Self {
+        Self {
+            agent: agent.replace(' ', "-"),
+            stop_reason: reason.map(str::to_owned),
+            herdr_pane,
+        }
     }
 }
 
@@ -125,23 +140,30 @@ pub(crate) fn save_record(
     agent: &str,
     reason: Option<&str>,
 ) -> Result<PathBuf> {
+    write_record(paths, workspace_id, id, Record::new(agent, reason, None))
+}
+
+fn write_record(
+    paths: &Paths,
+    workspace_id: &str,
+    id: &str,
+    mut record: Record,
+) -> Result<PathBuf> {
     let directory = paths.workspace_state(workspace_id);
     std::fs::create_dir_all(&directory)?;
     let path = record_path(paths, workspace_id, id);
-    // A later stop without a reason, such as shutdown racing an overload
-    // stop, keeps the pressure reason the daemon saved first.
-    let stop_reason = reason.map(str::to_owned).or_else(|| {
-        std::fs::read(&path)
-            .ok()
-            .and_then(|saved| serde_json::from_slice::<Record>(&saved).ok())
-            .and_then(|saved| saved.stop_reason)
-    });
+    // A later save without a field, such as shutdown racing an overload stop
+    // or the daemon's handoff after the wrapper's, keeps the value saved first.
+    if let Some(saved) = std::fs::read(&path)
+        .ok()
+        .and_then(|saved| serde_json::from_slice::<Record>(&saved).ok())
+    {
+        record.stop_reason = record.stop_reason.or(saved.stop_reason);
+        record.herdr_pane = record.herdr_pane.or(saved.herdr_pane);
+    }
     crate::fsutil::replace_atomically(
         &path,
-        &serde_json::to_vec(&Record {
-            agent: agent.replace(' ', "-"),
-            stop_reason,
-        })?,
+        &serde_json::to_vec(&record)?,
         ReplaceOptions {
             permissions: Permissions::Temporary,
             sync: true,
@@ -354,12 +376,22 @@ mod tests {
             Some("critical memory pressure")
         );
         assert!(pending(&paths, "workspace").unwrap());
+        let recovery = Recovery {
+            agent: "codex".into(),
+            command: vec![],
+            automatic: false,
+            handoff_delivered: false,
+        };
+        recovery
+            .save(&paths, "workspace", "execution", None, Some("w1:p2".into()))
+            .unwrap();
         save_record(&paths, "workspace", "execution", "codex", None).unwrap();
         let record: Record = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
         assert_eq!(
             record.stop_reason.as_deref(),
             Some("critical memory pressure")
         );
+        assert_eq!(record.herdr_pane.as_deref(), Some("w1:p2"));
     }
 
     #[test]
