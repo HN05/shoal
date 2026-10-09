@@ -332,8 +332,10 @@ The worker drops the plan before starting children; a retained tab's shell keeps
 it, inert, while a non-default state directory is passed only to the worker.
 Herdr tabs remain open after tracked agent exits. Completion closes them only
 after tracked executions have resolved or Herdr reports the agent's turn finished
-(`idle` or `done`), since interactive agents stay running at their prompt; removal
-closes them immediately.
+(`idle` or `done`), since interactive agents stay running at their prompt, and
+never while stopped work waits for resume, so the tab keeps the stop's cause and
+`shoal resume --all` can restore the agent in its pane; removal closes them
+immediately.
 Preparation failures and shell or untracked desktop handoffs retain them until
 that lifecycle change. A tab watcher refused for a protocol mismatch restarts
 from the installation path Shoal was started through, never a resolved versioned

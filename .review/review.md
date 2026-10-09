@@ -21,7 +21,8 @@ instead of the PR delivery guidance below.
   work and leases on failure, never adopts moved or replaced worktrees, and
   never signals a process whose recorded identity was not verified. Herdr
   completion waits for tracked executions to resolve or for Herdr to report the
-  agent's turn finished before closing the tab; removal closes it immediately. Unreadable
+  agent's turn finished, and for stopped work to be resumed, before closing the
+  tab; removal closes it immediately. Unreadable
   inventory entries block ownership proof only while their recorded identity is live;
   recovery polls incomplete proof within the stop budget without weakening it.
   Worktree ownership is proven by the owner marker in the Git admin directory; the recorded

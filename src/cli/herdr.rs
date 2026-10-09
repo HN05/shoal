@@ -454,17 +454,22 @@ fn file_identity(path: &Path) -> Option<FileIdentity> {
 #[derive(Debug, PartialEq)]
 enum Lifecycle {
     Active,
-    Completed { running: bool },
+    /// `stopped` while an agent or command waits for `shoal resume`.
+    Completed {
+        running: bool,
+        stopped: bool,
+    },
     Removed,
 }
 
 impl Lifecycle {
     /// Completion waits for the agent's final response: its tracked execution
-    /// resolves, or Herdr reports that the agent finished its turn.
+    /// resolves, or Herdr reports that the agent finished its turn. A stopped
+    /// agent keeps the tab, which shows why it stopped and where it resumes.
     fn closes_tab(&self, agent: AgentStatus) -> bool {
         match self {
-            Self::Active => false,
-            Self::Completed { running } => {
+            Self::Active | Self::Completed { stopped: true, .. } => false,
+            Self::Completed { running, .. } => {
                 !running || matches!(agent, AgentStatus::Idle | AgentStatus::Done)
             }
             Self::Removed => true,
@@ -476,6 +481,7 @@ async fn workspace_lifecycle(ctx: &Context, workspace: &str) -> Result<Lifecycle
     match client::inspect(&ctx.paths, workspace.into()).await {
         Ok(inspection) if inspection.completion.is_some() => Ok(Lifecycle::Completed {
             running: !inspection.executions.is_empty(),
+            stopped: crate::execution::recovery::pending(&ctx.paths, workspace)?,
         }),
         Ok(_) => Ok(Lifecycle::Active),
         Err(error) => {
@@ -541,20 +547,34 @@ mod tests {
             };
             assert_eq!(
                 inspect_lifecycle(true, vec![execution]).await,
-                Lifecycle::Completed { running: true }
+                Lifecycle::Completed {
+                    running: true,
+                    stopped: false
+                }
             );
         }
         assert_eq!(
             inspect_lifecycle(true, vec![]).await,
-            Lifecycle::Completed { running: false }
+            Lifecycle::Completed {
+                running: false,
+                stopped: false
+            }
         );
         assert_eq!(inspect_lifecycle(false, vec![]).await, Lifecycle::Active);
+        assert_eq!(
+            inspect_with_records(true, vec![], true).await,
+            Lifecycle::Completed {
+                running: false,
+                stopped: true
+            }
+        );
     }
 
     #[test]
     fn completion_closes_the_tab_once_the_agent_finishes_its_turn() {
         use AgentStatus::*;
-        let running = Lifecycle::Completed { running: true };
+        let completed = |running, stopped| Lifecycle::Completed { running, stopped };
+        let running = completed(true, false);
         for status in [Idle, Done] {
             assert!(running.closes_tab(status));
         }
@@ -562,7 +582,9 @@ mod tests {
             assert!(!running.closes_tab(status));
         }
         for status in [Idle, Working, Blocked, Done, Unknown] {
-            assert!(Lifecycle::Completed { running: false }.closes_tab(status));
+            assert!(completed(false, false).closes_tab(status));
+            assert!(!completed(false, true).closes_tab(status));
+            assert!(!completed(true, true).closes_tab(status));
             assert!(Lifecycle::Removed.closes_tab(status));
             assert!(!Lifecycle::Active.closes_tab(status));
         }
@@ -625,9 +647,21 @@ mod tests {
     }
 
     async fn inspect_lifecycle(completed: bool, executions: Vec<Execution>) -> Lifecycle {
+        inspect_with_records(completed, executions, false).await
+    }
+
+    async fn inspect_with_records(
+        completed: bool,
+        executions: Vec<Execution>,
+        stopped: bool,
+    ) -> Lifecycle {
         let temp = tempfile::tempdir().unwrap();
         let paths = Paths::for_test(temp.path());
         paths.prepare().unwrap();
+        if stopped {
+            crate::execution::recovery::save_record(&paths, "workspace", "agent", "codex", None)
+                .unwrap();
+        }
         let listener = UnixListener::bind(&paths.socket).unwrap();
         let server = tokio::spawn(async move {
             let (stream, _) = listener.accept().await.unwrap();
