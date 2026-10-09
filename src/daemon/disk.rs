@@ -203,9 +203,10 @@ async fn stop_executions(manager: &Manager, filesystem: &Filesystem) -> Result<(
                 eprintln!("disk space protection could not stop {}: {error:#}", workspace.name);
                 (
                     NotificationKind::StopFailed,
+                    // Repeated failures collapse, so the message omits free space.
                     format!(
-                        "Could not stop tracked executions: {}: {error:#}",
-                        filesystem.describe()
+                        "Could not stop tracked executions while disk space is critical at {}: {error:#}",
+                        filesystem.path.display()
                     ),
                 )
             }
