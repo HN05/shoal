@@ -57,11 +57,20 @@ pub(super) enum StopPolicy {
 }
 
 /// Whether a workspace stop saves agent sessions and interrupted commands for
-/// `shoal resume`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// `shoal resume`, and why their wrappers stopped them.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StopRecords {
-    Save,
+    Save { reason: String },
     Skip,
+}
+
+impl StopRecords {
+    /// The stop `shoal stop` requests.
+    pub fn manual() -> Self {
+        Self::Save {
+            reason: "stopped by shoal stop".into(),
+        }
+    }
 }
 
 /// A restored connection for a wrapper whose command kept running.
@@ -601,8 +610,8 @@ impl Manager {
         self.reserve_lifecycle(&workspace.id, WorkspaceState::Stopping)
             .await?;
         let result = async {
-            if records == StopRecords::Save {
-                self.save_records_on_stop(&workspace.id).await?;
+            if let StopRecords::Save { reason } = records {
+                self.save_records_on_stop(&workspace.id, reason).await?;
             }
             self.stop_executions(&workspace.id, StopPolicy::RequireCompleteProof)
                 .await
@@ -622,12 +631,13 @@ impl Manager {
     }
 
     /// Wrappers decide what to save; setup and landing save nothing.
-    async fn save_records_on_stop(&self, workspace_id: &str) -> Result<()> {
+    async fn save_records_on_stop(&self, workspace_id: &str, reason: String) -> Result<()> {
         let executions = self.inspect_workspace(workspace_id).await?.executions;
-        self.resumable_stops
-            .lock()
-            .await
-            .extend(executions.into_iter().map(|execution| execution.id));
+        self.resumable_stops.lock().await.extend(
+            executions
+                .into_iter()
+                .map(|execution| (execution.id, reason.clone())),
+        );
         Ok(())
     }
 
@@ -648,7 +658,7 @@ impl Manager {
                 if let Some(agent) = agents.get_mut(id) {
                     agent.cancel_recovery();
                 }
-                saving.insert(id.clone());
+                saving.insert(id.clone(), "the Shoal daemon shut down".into());
                 let _ = sender.send(true);
             }
         }
@@ -662,8 +672,9 @@ impl Manager {
         self.shutting_down.load(Ordering::Relaxed)
     }
 
-    pub(crate) async fn stop_saves_records(&self, id: &str) -> bool {
-        self.resumable_stops.lock().await.contains(id)
+    /// The reason a pending stop saves records for `shoal resume`, if it does.
+    pub(crate) async fn resumable_stop_reason(&self, id: &str) -> Option<String> {
+        self.resumable_stops.lock().await.get(id).cloned()
     }
 
     async fn stop_disconnected(&self, execution: &Execution, policy: StopPolicy) -> Result<()> {

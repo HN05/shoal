@@ -189,7 +189,7 @@ async fn stop_executions(manager: &Manager, filesystem: &Filesystem) -> Result<(
         .await?;
     let stops = workspaces.into_iter().map(|id| async move {
         let workspace = manager.workspace(&id).await?;
-        let (kind, message) = match manager.stop_workspace(&id, StopRecords::Save).await {
+        let (kind, message) = match manager.stop_workspace(&id, StopRecords::manual()).await {
             Ok(()) => {
                 log!("disk space protection stopped {}", workspace.name);
                 (

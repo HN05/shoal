@@ -237,7 +237,10 @@ async fn unknown_execution_blocks_stop_and_unattended_removal_even_when_missing(
                 fs::remove_dir_all(&workspace.path).unwrap();
             }
             let error = manager
-                .stop_workspace(&workspace.id, crate::daemon::workspace::StopRecords::Save)
+                .stop_workspace(
+                    &workspace.id,
+                    crate::daemon::workspace::StopRecords::manual(),
+                )
                 .await
                 .unwrap_err();
             assert!(
@@ -309,7 +312,10 @@ async fn stale_birth_identity_never_authorizes_signaling_a_live_group() {
             Ok(())
         }).await.unwrap();
         let error = manager
-            .stop_workspace(&workspace.id, crate::daemon::workspace::StopRecords::Save)
+            .stop_workspace(
+                &workspace.id,
+                crate::daemon::workspace::StopRecords::manual(),
+            )
             .await
             .unwrap_err();
         assert!(

@@ -430,7 +430,7 @@ async fn shutdown_stops_connected_executions_and_refuses_new_ones() {
         async move { manager.stop_for_shutdown().await }
     });
     bounded(running.stop.wait_for(|stop| *stop)).await.unwrap();
-    assert!(manager.stop_saves_records(&id).await);
+    assert!(manager.resumable_stop_reason(&id).await.is_some());
     let error = manager
         .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
         .await

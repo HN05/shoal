@@ -188,7 +188,7 @@ changed workspace ownership prevent recovery. Reloading with recovery disabled
 finishes waiting agents at once, keeping their records for `shoal resume`.
 
 `shoal stop [workspace]` stops tracked agents and commands through their wrappers,
-retaining work and resource leases. Agents save recovery records; commands started
+which print what stopped them and how to restore them, retaining work and resource leases. Agents save recovery records; commands started
 with `exec` or `run` save their arguments, which `shoal resume` reports and never
 reruns; arguments that are not UTF-8 are not saved. Setup, landing and other internal commands save nothing.
 `--all` stops every ready or failed workspace with a running execution in parallel,

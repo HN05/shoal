@@ -650,7 +650,12 @@ pub enum ExecutionEvent {
 pub enum Control {
     Started,
     Stop,
-    Pause,
+    /// Stop and save what `shoal resume` restores. Older wrappers ignore the
+    /// reason.
+    Pause {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reason: Option<String>,
+    },
     OverloadStop {
         recover: bool,
         #[serde(default = "default_overload_reason")]
@@ -851,6 +856,27 @@ mod tests {
             serde_json::to_value(Control::Detach).unwrap(),
             json!({"type": "detach"})
         );
+    }
+
+    #[test]
+    fn pause_reasons_are_optional_on_the_wire() {
+        let control: Control = serde_json::from_value(json!({"type": "pause"})).unwrap();
+        assert!(matches!(control, Control::Pause { reason: None }));
+        let wire = serde_json::to_value(Control::Pause {
+            reason: Some("shoal stop".into()),
+        })
+        .unwrap();
+        assert_eq!(wire, json!({"type": "pause", "reason": "shoal stop"}));
+        // Wrappers from before the reason read it as their unit variant.
+        #[derive(Deserialize)]
+        #[serde(tag = "type", rename_all = "snake_case")]
+        enum Legacy {
+            Pause,
+        }
+        assert!(matches!(
+            serde_json::from_value::<Legacy>(wire).unwrap(),
+            Legacy::Pause
+        ));
     }
 
     #[test]

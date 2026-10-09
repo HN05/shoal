@@ -381,19 +381,18 @@ async fn run_tracked(
         }
         match outcome {
             Ok(Outcome::Exited(code)) => break Ok(code),
-            Ok(Outcome::Paused {
-                code,
-                recover,
-                reason,
-            }) => {
+            Ok(Outcome::Paused { code, stop }) => {
+                let recover = matches!(stop, Halt::Protection { recover: true, .. });
                 if let Some(recovery) = &recovery {
-                    match recovery.save(paths, &plan.workspace.id, &plan.id, reason.as_deref()) {
+                    match recovery.save(paths, &plan.workspace.id, &plan.id, stop.saved_reason()) {
                         Ok(path) => {
                             recovery_record = Some(path);
                             if !recover || !recovery.automatic {
                                 eprintln!(
-                                    "shoal: agent stopped; restore with shoal resume {} --execution {}",
-                                    plan.workspace.name, plan.id
+                                    "shoal: agent stopped{}; restore with shoal resume {} --execution {}",
+                                    stop.stated_reason(),
+                                    plan.workspace.name,
+                                    plan.id
                                 );
                             }
                         }
@@ -419,7 +418,8 @@ async fn run_tracked(
                     match recovery::save_command(paths, &plan.workspace.id, &plan.id, &next_command)
                     {
                         Ok(_) => eprintln!(
-                            "shoal: command stopped; shoal resume {} lists it",
+                            "shoal: command stopped{}; shoal resume {} lists it",
+                            stop.stated_reason(),
                             plan.workspace.name
                         ),
                         Err(error) => {
@@ -455,11 +455,36 @@ async fn run_tracked(
 
 enum Outcome {
     Exited(i32),
-    Paused {
-        code: i32,
-        recover: bool,
-        reason: Option<String>,
-    },
+    Paused { code: i32, stop: Halt },
+}
+
+/// Why the daemon stopped a command it expects to be restored.
+#[derive(Debug)]
+enum Halt {
+    /// Overload or disk space protection; the reason is saved for `shoal resume`.
+    Protection { recover: bool, reason: String },
+    /// `shoal stop`, a daemon shutdown or a refused reattachment.
+    Pause { reason: Option<String> },
+}
+
+impl Halt {
+    fn saved_reason(&self) -> Option<&str> {
+        match self {
+            Self::Protection { reason, .. } => Some(reason),
+            Self::Pause { .. } => None,
+        }
+    }
+
+    /// A pause reason for the stopped line; protection already named its
+    /// reason when the stop arrived.
+    fn stated_reason(&self) -> String {
+        match self {
+            Self::Pause {
+                reason: Some(reason),
+            } => format!(": {reason}"),
+            _ => String::new(),
+        }
+    }
 }
 
 /// Launch the command, register its process group, and wait for it to exit or
@@ -532,11 +557,13 @@ async fn supervise(
                 let status = stop(&mut child, &group, libc::SIGTERM).await?;
                 match control {
                     Ok(Control::OverloadStop { recover, reason }) => {
-                        recovery = Some((recover, Some(reason)));
+                        recovery = Some(Halt::Protection { recover, reason });
                     }
+                    Ok(Control::Pause { reason }) => recovery = Some(Halt::Pause { reason }),
                     // A refused reattachment saves the session as a stop does.
-                    Ok(Control::Pause) => recovery = Some((false, None)),
-                    Err(error) if error.is::<Refused>() => recovery = Some((false, None)),
+                    Err(error) if error.is::<Refused>() => {
+                        recovery = Some(Halt::Pause { reason: None });
+                    }
                     Ok(Control::Stop) => {},
                     Ok(_) => bail!("unexpected execution control"),
                     Err(error) => return Err(error.context(
@@ -553,10 +580,9 @@ async fn supervise(
     // A command owns its process group; descendants do not outlive its lease.
     drop(group);
     Ok(match recovery {
-        Some((recover, reason)) => Outcome::Paused {
+        Some(stop) => Outcome::Paused {
             code: exit_code(status),
-            recover,
-            reason,
+            stop,
         },
         None => Outcome::Exited(exit_code(status)),
     })

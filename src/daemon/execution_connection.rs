@@ -232,8 +232,8 @@ async fn relay(
                                 Control::OverloadStop { recover: recovering, reason }
                             } else if reattach && manager.shutting_down() {
                                 Control::Detach
-                            } else if kind == ExecutionKind::Command && manager.stop_saves_records(execution_id).await {
-                                Control::Pause
+                            } else if kind == ExecutionKind::Command && let Some(reason) = manager.resumable_stop_reason(execution_id).await {
+                                Control::Pause { reason: Some(reason) }
                             } else { Control::Stop };
                             protocol::write(writer, &control).await?;
                             if matches!(control, Control::Detach) {
@@ -466,7 +466,10 @@ mod tests {
         assert!(matches!(read(&mut capable).await, Control::Detach));
         bounded(reattached).await.unwrap().unwrap();
         assert!(!manager.execution_connected(&detaching).await);
-        assert!(matches!(read(&mut legacy).await, Control::Pause));
+        assert!(matches!(
+            read(&mut legacy).await,
+            Control::Pause { reason: Some(reason) } if reason == "the Shoal daemon shut down"
+        ));
         protocol::write(legacy.get_mut(), &ExecutionEvent::Finished { exit_code: 0 })
             .await
             .unwrap();

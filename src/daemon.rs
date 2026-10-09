@@ -535,7 +535,7 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         }
         Method::StopWorkspace { workspace } => {
             manager
-                .stop_workspace(&workspace, StopRecords::Save)
+                .stop_workspace(&workspace, StopRecords::manual())
                 .await?;
             Body::Ok
         }

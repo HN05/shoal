@@ -86,8 +86,9 @@ pub struct Manager {
     /// Connected executions and the channel that asks their wrapper to stop.
     connections: Mutex<HashMap<String, watch::Sender<bool>>>,
     agents: Mutex<HashMap<String, agents::Agent>>,
-    /// Connected executions whose pending stop saves what `shoal resume` needs.
-    resumable_stops: Mutex<std::collections::HashSet<String>>,
+    /// Connected executions whose pending stop saves what `shoal resume`
+    /// needs, with the reason their wrappers show.
+    resumable_stops: Mutex<HashMap<String, String>>,
     /// Set under the connections lock once shutdown stops executions.
     shutting_down: std::sync::atomic::AtomicBool,
     pub(super) recovery_ready: watch::Sender<Option<u64>>,
@@ -120,7 +121,7 @@ impl Manager {
             scopes: Mutex::new(HashMap::new()),
             connections: Mutex::new(HashMap::new()),
             agents: Mutex::new(HashMap::new()),
-            resumable_stops: Mutex::new(std::collections::HashSet::new()),
+            resumable_stops: Mutex::new(HashMap::new()),
             shutting_down: std::sync::atomic::AtomicBool::new(false),
             recovery_ready: watch::channel(None).0,
             recovery_epoch: std::sync::atomic::AtomicU64::new(0),
