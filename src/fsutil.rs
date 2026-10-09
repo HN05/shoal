@@ -115,11 +115,14 @@ fn invoked_path(
     cwd: &Path,
     current: PathBuf,
 ) -> PathBuf {
+    // A relative argv[0] or PATH entry names a file in the current directory.
     let invoked = arg.map(PathBuf::from).and_then(|arg| {
         if arg.components().count() > 1 {
             Some(cwd.join(arg))
         } else {
-            find_executable(arg.as_os_str(), search_path)
+            std::env::split_paths(search_path)
+                .map(|directory| cwd.join(directory).join(&arg))
+                .find(|path| is_executable(path).unwrap_or(false))
         }
     });
     match invoked {
@@ -242,7 +245,17 @@ mod tests {
         assert_eq!(
             resolve("bin/shoal"),
             link,
-            "relative to the start directory"
+            "relative to the current directory"
+        );
+        assert_eq!(
+            invoked_path(
+                Some("shoal".into()),
+                "bin".as_ref(),
+                root.path(),
+                binary.clone()
+            ),
+            link,
+            "found through a relative PATH entry"
         );
         assert_eq!(resolve(other.to_str().unwrap()), binary);
         assert_eq!(resolve("missing"), binary);
