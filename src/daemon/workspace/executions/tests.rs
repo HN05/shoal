@@ -476,6 +476,7 @@ async fn reattachment_requires_the_recorded_identities_and_scope_token() {
         scope_token: token.clone(),
         agent: Some("codex".into()),
         recover: true,
+        running_ms: 0,
     };
     let stranger = Identity {
         pid: wrapper.pid,
@@ -558,6 +559,7 @@ async fn setup_executions_cannot_reattach() {
             scope_token: started.plan.scope_token.clone(),
             agent: None,
             recover: false,
+            running_ms: 0,
         })
         .await
         .unwrap_err();

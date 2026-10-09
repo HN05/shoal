@@ -340,6 +340,7 @@ async fn run_tracked(
                 scope_token: plan.scope_token.clone(),
                 agent,
                 recover,
+                running_ms: 0,
             },
         );
     }

@@ -91,6 +91,7 @@ pub(super) async fn execute(
                 &plan.workspace.id,
                 &plan.workspace.name,
                 recover,
+                std::time::Duration::ZERO,
             )
             .await;
     }
@@ -420,6 +421,7 @@ mod tests {
                 scope_token: started.plan.scope_token.clone(),
                 agent: None,
                 recover: false,
+                running_ms: 0,
             },
         ));
         let mut capable = BufReader::new(client);

@@ -614,6 +614,9 @@ pub struct Reattach {
     pub agent: Option<String>,
     #[serde(default)]
     pub recover: bool,
+    /// How long the command has run, keeping the overload stop order.
+    #[serde(default)]
+    pub running_ms: u64,
 }
 
 /// Wrapper → daemon messages after an [`Method::Execute`] response.

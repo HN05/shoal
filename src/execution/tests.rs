@@ -144,6 +144,7 @@ fn connected(paths: &Paths, plan: &ExecutionPlan) -> (Link, BufReader<UnixStream
             scope_token: plan.scope_token.clone(),
             agent: Some("codex".into()),
             recover: false,
+            running_ms: 0,
         },
     );
     (link, BufReader::new(server))

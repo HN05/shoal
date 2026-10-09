@@ -1,6 +1,6 @@
 //! Connected agent metadata is deliberately transient: a daemon restart must
 //! not turn an unknown execution into an automatic signal target.
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tokio::sync::watch;
 
 use super::{GuardMode, Manager};
@@ -150,6 +150,8 @@ impl Manager {
             .await
     }
 
+    /// `running` is how long the agent has already run, so a reattached
+    /// agent keeps its place in the newest-first overload order.
     pub(crate) async fn track_agent(
         &self,
         id: &str,
@@ -157,6 +159,7 @@ impl Manager {
         workspace_id: &str,
         workspace: &str,
         recover: bool,
+        running: Duration,
     ) {
         let connections = self.connections.lock().await;
         if let Some(stop) = connections.get(id) {
@@ -166,7 +169,9 @@ impl Manager {
                     name: name.into(),
                     workspace: workspace.into(),
                     workspace_id: workspace_id.into(),
-                    started: Instant::now(),
+                    started: Instant::now()
+                        .checked_sub(running)
+                        .unwrap_or_else(Instant::now),
                     recover,
                     stop: stop.clone(),
                     overload: None,
@@ -523,7 +528,14 @@ mod tests {
                 .unwrap();
             let id = &execution.plan.id;
             manager
-                .track_agent(id, "codex", &workspace.id, &workspace.name, recover)
+                .track_agent(
+                    id,
+                    "codex",
+                    &workspace.id,
+                    &workspace.name,
+                    recover,
+                    Duration::ZERO,
+                )
                 .await;
             assert!(
                 manager
@@ -598,15 +610,6 @@ mod tests {
             .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
             .await
             .unwrap();
-        manager
-            .track_agent(
-                &first.plan.id,
-                "first",
-                &workspace.id,
-                &workspace.name,
-                false,
-            )
-            .await;
         let second = manager
             .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
             .await
@@ -618,6 +621,18 @@ mod tests {
                 &workspace.id,
                 &workspace.name,
                 false,
+                Duration::ZERO,
+            )
+            .await;
+        // Reattached after a restart, the first agent keeps its earlier launch.
+        manager
+            .track_agent(
+                &first.plan.id,
+                "first",
+                &workspace.id,
+                &workspace.name,
+                false,
+                Duration::from_secs(3600),
             )
             .await;
         assert!(

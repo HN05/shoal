@@ -518,6 +518,7 @@ impl Manager {
                 &workspace.id,
                 &workspace.name,
                 request.recover,
+                Duration::from_millis(request.running_ms),
             )
             .await;
         }

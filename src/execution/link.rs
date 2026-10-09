@@ -12,7 +12,7 @@ use tokio::{
     },
     sync::mpsc,
     task::JoinHandle,
-    time::{sleep, timeout},
+    time::{Instant, sleep, timeout},
 };
 
 use crate::{
@@ -59,8 +59,9 @@ enum Connection {
 struct Reattachment {
     paths: Paths,
     request: Reattach,
-    /// Set while the command runs and the daemon's record still names it.
-    armed: bool,
+    /// When the command started, while it runs and the daemon's record
+    /// still names it.
+    armed: Option<Instant>,
 }
 
 struct Attached {
@@ -90,7 +91,7 @@ impl Link {
         self.reattach = Some(Reattachment {
             paths: paths.clone(),
             request,
-            armed: false,
+            armed: None,
         });
     }
 
@@ -99,14 +100,14 @@ impl Link {
         if let Some(reattach) = &mut self.reattach {
             reattach.request.child = child;
             reattach.request.group_id = group_id;
-            reattach.armed = true;
+            reattach.armed = Some(Instant::now());
         }
     }
 
     /// Stop reattaching: the daemon's record no longer names a running child.
     pub(super) fn disarm(&mut self) {
         if let Some(reattach) = &mut self.reattach {
-            reattach.armed = false;
+            reattach.armed = None;
         }
     }
 
@@ -186,7 +187,7 @@ impl Link {
     fn armed(&self) -> bool {
         self.reattach
             .as_ref()
-            .is_some_and(|reattach| reattach.armed)
+            .is_some_and(|reattach| reattach.armed.is_some())
     }
 
     fn detach(&mut self) {
@@ -194,6 +195,9 @@ impl Link {
         let task = tokio::spawn(reattach_with_backoff(
             reattach.paths.clone(),
             reattach.request.clone(),
+            reattach
+                .armed
+                .expect("an armed link has started its command"),
         ));
         self.connection = Connection::Reattaching(task);
     }
@@ -238,9 +242,14 @@ async fn read_controls(
 }
 
 /// Retry until a daemon answers; only its answer can refuse the execution.
-async fn reattach_with_backoff(paths: Paths, request: Reattach) -> Result<Attached, Refused> {
+async fn reattach_with_backoff(
+    paths: Paths,
+    mut request: Reattach,
+    started: Instant,
+) -> Result<Attached, Refused> {
     let mut delay = timing::REATTACH_RETRY_INITIAL;
     loop {
+        request.running_ms = started.elapsed().as_millis().try_into().unwrap_or(u64::MAX);
         if let Some(attached) = attempt(&paths, &request).await? {
             return Ok(attached);
         }
