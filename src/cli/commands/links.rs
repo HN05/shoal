@@ -18,12 +18,20 @@ use crate::{
 
 pub(super) async fn link(ctx: &Context, items: ItemArgs) -> Result<i32> {
     let selected = Selection::parse(items.kind_or_url, items.item)?;
-    let input = selected
-        .input
-        .context("link needs an issue or PR URL, or pr/issue and a number")?;
+    ensure!(
+        selected.input.is_some() || ctx.interactive(),
+        "link needs an issue or PR URL, or pr/issue and a number"
+    );
     let workspace =
         ui::select_workspace(ctx, items.workspace, ui::Fallback::CurrentDirectory).await?;
-    match selected.kind.unwrap() {
+    let (kind, input) = match selected {
+        Selection {
+            kind: Some(kind),
+            input: Some(input),
+        } => (kind, input),
+        Selection { kind, .. } => pick_open_item(ctx, &workspace, kind).await?,
+    };
+    match kind {
         ItemKind::Pr => {
             client::request::<()>(
                 &ctx.paths,
@@ -55,6 +63,46 @@ pub(super) async fn link(ctx: &Context, items: ItemArgs) -> Result<i32> {
             Ok(0)
         }
     }
+}
+
+/// Choose an open issue or PR of the workspace's repository, asking for the
+/// kind when it is not given.
+async fn pick_open_item(
+    ctx: &Context,
+    workspace: &str,
+    kind: Option<ItemKind>,
+) -> Result<(ItemKind, String)> {
+    let kind = match kind {
+        Some(kind) => kind,
+        None => ui::pick_choice(
+            ctx,
+            "Link> ",
+            &[(ItemKind::Issue, "Issue"), (ItemKind::Pr, "Pull request")],
+        )?,
+    };
+    let repository = client::workspaces(&ctx.paths)
+        .await?
+        .into_iter()
+        .find(|w| w.id == workspace || w.name == workspace)
+        .with_context(|| format!("unknown workspace: {workspace}"))?
+        .repository_id;
+    let repos = client::repositories(&ctx.paths).await?;
+    let repo = repos
+        .iter()
+        .find(|repo| repo.id == repository)
+        .context("workspace repository is missing")?;
+    let forge = super::issues::origin_forge(repo).await?;
+    let number = match kind {
+        ItemKind::Issue => {
+            let issues = forge.open_issues(&repo.path).await?;
+            ui::pick_item(ctx, "Issue> ", "issues", issues)?
+        }
+        ItemKind::Pr => {
+            let pulls = forge.open_pulls(&repo.path).await?;
+            ui::pick_item(ctx, "Pull request> ", "pull requests", pulls)?
+        }
+    };
+    Ok((kind, number))
 }
 
 pub(super) async fn unlink(ctx: &Context, items: ItemArgs) -> Result<i32> {

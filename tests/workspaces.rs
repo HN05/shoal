@@ -10252,6 +10252,50 @@ esac
     assert!(transcript.contains("no open pull requests"), "{transcript}");
 }
 
+#[test]
+fn link_picks_an_omitted_open_issue_or_pull_request() {
+    let fixture = Fixture::new();
+    fixture.add("topic");
+    fixture.add_github_origin();
+    install_test_script(
+        &fixture.root.path().join("bin/gh"),
+        r#"#!/bin/sh
+case "$1 $2" in
+ 'issue list') echo '[{"number":34,"title":"Fix API timeout"}]';;
+ 'pr list') echo '[{"number":7,"title":"Topic"}]';;
+ 'issue view') echo '{"number":34,"state":"OPEN","title":"Fix API timeout","body":"","comments":[]}';;
+ 'pr view') echo '{"number":7,"state":"OPEN","headRefName":"topic","headRefOid":"head","title":"Topic","baseRefName":"main","isCrossRepository":false,"commits":[],"comments":[],"reviews":[],"statusCheckRollup":[],"mergeable":"MERGEABLE"}';;
+ *) printf '[]';;
+esac
+"#,
+    );
+    let missing = fixture.run(&["link", "--workspace", "topic"]);
+    assert!(String::from_utf8_lossy(&missing.stderr).contains("link needs an issue or PR"));
+    let picker = fixture.root.path().join("bin/fzf");
+    for (args, kind, number) in [
+        (vec!["link", "--workspace", "topic"], "Pull request", "7"),
+        (vec!["link", "issue", "--workspace", "topic"], "", "34"),
+    ] {
+        install_test_script(
+            &picker,
+            &format!(
+                "#!/bin/sh\nawk -F '\\t' '$2 == \"{kind}\" || $1 == \"{number}\" {{print}}'\n"
+            ),
+        );
+        let (output, transcript) = fixture.interactive_command(fixture.command().args(&args), "");
+        assert!(output.status.success(), "{output:?} {transcript}");
+    }
+    let workspace = fixture.ok(&["inspect", "topic"]);
+    assert_eq!(
+        workspace["workspace"]["links"]["prs"],
+        serde_json::json!(["https://github.com/team/project/pull/7"])
+    );
+    assert_eq!(
+        workspace["workspace"]["links"]["issue"],
+        "https://github.com/team/project/issues/34"
+    );
+}
+
 fn wait_removed(fixture: &Fixture, name: &str) {
     let deadline = Instant::now() + Duration::from_secs(60);
     while fixture
