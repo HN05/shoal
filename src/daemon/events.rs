@@ -26,6 +26,10 @@ states!(EventKind {
     ReviewCleared => "review_cleared",
     /// The workspace's base workspace was set, cleared, or removed.
     BaseChanged => "base_changed",
+    /// A workspace link was added.
+    Linked => "linked",
+    /// A workspace link was removed.
+    Unlinked => "unlinked",
 });
 
 states!(EventCause {
@@ -60,6 +64,9 @@ pub struct EventDetails {
         with = "present_or_null"
     )]
     pub base_workspace: Option<Option<crate::model::WorkspaceRef>>,
+    /// The issue or PR link changed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub link: Option<Box<LinkEvent>>,
 }
 
 /// Distinguish an absent field from an explicit null.
@@ -89,6 +96,12 @@ pub struct ReviewEvent {
     pub kind: Option<crate::forge::link::ItemKind>,
     pub url: Option<String>,
     pub head: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LinkEvent {
+    pub kind: crate::forge::link::ItemKind,
+    pub url: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -130,6 +143,29 @@ pub(crate) fn record(
                  AND json_extract(record,'$.error') IS ?4
          )",
         params![id, kind, cause, error],
+    )?;
+    Ok(())
+}
+
+/// Record a link mutation in the transaction that changes its association.
+pub(crate) fn record_link(
+    db: &Connection,
+    id: &str,
+    event_kind: EventKind,
+    kind: crate::forge::link::ItemKind,
+    url: &str,
+) -> Result<()> {
+    ensure!(matches!(
+        event_kind,
+        EventKind::Linked | EventKind::Unlinked
+    ));
+    db.execute(
+        "INSERT INTO workspace_events(record)
+         SELECT json_object('kind',?2,'workspace_id',id,'repository_id',repository_id,
+             'name',name,'path',path,'branch',branch,'cause',NULL,'error',NULL,
+             'link',json_object('kind',?3,'url',?4))
+         FROM workspaces WHERE id=?1",
+        params![id, event_kind, kind, url],
     )?;
     Ok(())
 }

@@ -74,6 +74,40 @@ fn lifecycle_events_commit_and_roll_back_with_state() -> Result<()> {
 }
 
 #[test]
+fn link_events_include_item_kind_and_url() -> Result<()> {
+    let mut db = Connection::open_in_memory()?;
+    migrate(&mut db)?;
+    db.execute(
+        "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1)",
+        [],
+    )?;
+    db.execute(
+        "INSERT INTO workspaces(id,repository_id,name,path,branch,state,observed_branch)
+         VALUES ('w','repo','worker','/work','worker','ready','worker')",
+        [],
+    )?;
+    crate::daemon::events::record_link(
+        &db,
+        "w",
+        crate::daemon::events::EventKind::Linked,
+        crate::forge::link::ItemKind::Pr,
+        "https://forge.example/team/repo/pulls/7",
+    )?;
+    let record: String = db.query_row(
+        "SELECT record FROM workspace_events WHERE json_extract(record,'$.kind')='linked'",
+        [],
+        |row| row.get(0),
+    )?;
+    let record: serde_json::Value = serde_json::from_str(&record)?;
+    assert_eq!(record["link"]["kind"], "pr");
+    assert_eq!(
+        record["link"]["url"],
+        "https://forge.example/team/repo/pulls/7"
+    );
+    Ok(())
+}
+
+#[test]
 fn retention_is_bounded_and_ids_are_never_reused() -> Result<()> {
     let mut db = Connection::open_in_memory()?;
     migrate(&mut db)?;

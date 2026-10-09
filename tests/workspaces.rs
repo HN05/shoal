@@ -10465,6 +10465,26 @@ fn pr_watch_checks_github_state_and_commit_and_survives_restart() {
         "watch",
     ]);
     fixture.ok(&["unlink", "pr", "--workspace", "watch"]);
+    let events = fixture
+        .command()
+        .args(["--json", "events"])
+        .output()
+        .unwrap();
+    assert!(events.status.success());
+    let events: Vec<Value> = String::from_utf8(events.stdout)
+        .unwrap()
+        .lines()
+        .map(serde_json::from_str)
+        .collect::<Result<_, _>>()
+        .unwrap();
+    for kind in ["linked", "unlinked"] {
+        let event = events
+            .iter()
+            .find(|event| event["kind"] == kind)
+            .unwrap_or_else(|| panic!("missing {kind} event"));
+        assert_eq!(event["link"]["kind"], "pr");
+        assert_eq!(event["link"]["url"], "https://github.com/team/repo/pull/56");
+    }
     fixture.ok(&["link", "pr", "56", "--workspace", "watch"]);
     fixture.ok(&["unlink", "pr", "--workspace", "watch"]);
     // Scoped callers can omit the workspace and register by number too.

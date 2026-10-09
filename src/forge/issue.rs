@@ -5,7 +5,11 @@ use serde::{Deserialize, Serialize};
 
 use super::{ForgeKind, ForgeRepo, Query, forgejo_details, repository};
 use crate::{
-    daemon::{notifications::NotificationKind, workspace::Manager},
+    daemon::{
+        events::{self, EventKind},
+        notifications::NotificationKind,
+        workspace::Manager,
+    },
     model::Workspace,
     state::WorkspaceState,
 };
@@ -69,11 +73,20 @@ impl Manager {
                     existing.as_ref().is_none_or(|existing| existing == &url),
                     "workspace is already associated with a different issue"
                 );
-                tx.execute(
+                let inserted = tx.execute(
                     "INSERT INTO workspace_issue(workspace_id,url) VALUES (?1,?2)
                  ON CONFLICT(workspace_id) DO NOTHING",
                     rusqlite::params![workspace.id, url],
-                )?;
+                )? == 1;
+                if inserted {
+                    events::record_link(
+                        &tx,
+                        &workspace.id,
+                        EventKind::Linked,
+                        crate::forge::link::ItemKind::Issue,
+                        &url,
+                    )?;
+                }
                 tx.commit()?;
                 Ok(())
             })
@@ -106,9 +119,20 @@ impl Manager {
                 if let Some(url) = existing {
                     tx.execute(
                         "DELETE FROM pr_activity WHERE workspace_id=?1 AND url=?2",
-                        rusqlite::params![workspace.id, url],
+                        rusqlite::params![workspace.id, &url],
                     )?;
-                    crate::daemon::workspace::review::forget(&tx, &workspace.id, &[url])?;
+                    crate::daemon::workspace::review::forget(
+                        &tx,
+                        &workspace.id,
+                        std::slice::from_ref(&url),
+                    )?;
+                    events::record_link(
+                        &tx,
+                        &workspace.id,
+                        EventKind::Unlinked,
+                        crate::forge::link::ItemKind::Issue,
+                        &url,
+                    )?;
                 }
                 tx.execute(
                     "DELETE FROM workspace_issue WHERE workspace_id=?1",
@@ -277,7 +301,10 @@ fn parse_state(kind: ForgeKind, output: &str, number: u64) -> Result<IssueState>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::{git, manager, repository};
+    use crate::{
+        daemon::events::{EventItem, EventKind},
+        test_support::{git, manager, repository},
+    };
 
     #[tokio::test]
     async fn association_is_persistent_idempotent_and_bound_to_the_origin() {
@@ -299,6 +326,21 @@ mod tests {
         let url = "https://github.com/team/repo/issues/316";
         manager.set_issue(&workspace.id, url).await.unwrap();
         manager.set_issue(&workspace.id, "316").await.unwrap();
+        let linked: Vec<_> = manager
+            .workspace_events(None, 100)
+            .await
+            .unwrap()
+            .into_iter()
+            .filter_map(|item| match item {
+                EventItem::Event(event) if event.details.kind == EventKind::Linked => {
+                    event.details.link
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(linked.len(), 1);
+        assert_eq!(linked[0].kind, crate::forge::link::ItemKind::Issue);
+        assert_eq!(linked[0].url, url);
         assert!(manager.set_issue(&workspace.id, "317").await.is_err());
         assert!(
             manager
@@ -341,6 +383,10 @@ mod tests {
             .clear_issue(&workspace.id, Some("316"))
             .await
             .unwrap();
+        assert!(reopened.workspace_events(None, 100).await.unwrap().iter().any(
+            |item| matches!(item, EventItem::Event(event) if event.details.kind == EventKind::Unlinked
+                && event.details.link.as_ref().is_some_and(|link| link.url == url))
+        ));
         assert!(
             reopened
                 .issue_registration(&workspace.id)

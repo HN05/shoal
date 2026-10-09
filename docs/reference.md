@@ -1109,8 +1109,9 @@ Each JSON line has `type: "event"`, an increasing `id`, Unix-seconds `created_at
 workspace and repository UUIDs (`workspace_id`, `repository_id`), `name`, `path`,
 `branch`, `kind`, `cause`, and `error`. Kinds are `created`, `ready`, `setup_failed`,
 `completed`, `undone`, `removed`, `retained`, `branch_changed`, `review_ready`,
-`review_cleared` and `base_changed`; history from earlier versions may also contain `continued`. Review events add a `review` object with the mark's `kind`,
-`url` (both null for a workspace mark) and `head`. `created` and `base_changed`
+`review_cleared`, `linked`, `unlinked` and `base_changed`; history from earlier versions may also contain `continued`. Review events add a `review` object with the mark's `kind`,
+`url` (both null for a workspace mark) and `head`. Link events add a `link`
+object with the linked issue or PR's `kind` and canonical `url`. `created` and `base_changed`
 events add `base_workspace` with the base's `id`, `name` and `branch`, or null.
 Causes are `manual`, `idle`, `issue`, `pr`, `completion`, `missing_directory`, or
 `removed` for a base workspace's removal, and null

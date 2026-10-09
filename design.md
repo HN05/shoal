@@ -434,7 +434,10 @@ lifecycle transitions and cleanup outcomes, survive ownership removal, and retai
 the newest 1,000 records with increasing IDs. Unscoped integrations replay or
 follow them without consuming notifications; expired cursors report a gap for
 resync. External branch changes are observed during daemon sweeps without
-changing recorded ownership.
+changing recorded ownership. Issue and PR association changes append `linked` or
+`unlinked` events in the same transaction as the association mutation, carrying
+the item's kind and canonical URL so integrations can follow links without
+polling workspace inspection.
 
 Notifications stay in the terminal: the daemon records what a user would
 otherwise miss (busy resources and who holds them, port conflicts, exits of
