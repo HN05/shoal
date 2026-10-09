@@ -80,6 +80,7 @@ pub async fn authorize(
         | Method::SimRelease { workspace, .. }
         | Method::InspectWorkspace { workspace }
         | Method::WorkspaceStatus { workspace }
+        | Method::ViewItems { workspace, .. }
         | Method::DiffBase { workspace }
         | Method::Execute {
             workspace,

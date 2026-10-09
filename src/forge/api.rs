@@ -12,6 +12,8 @@ use super::ForgeRepo;
 use crate::tools::Tool;
 
 const TIMEOUT: Duration = Duration::from_secs(20);
+/// Forgejo's default maximum page size.
+const PAGE_SIZE: usize = 50;
 
 impl ForgeRepo {
     /// GET a repository endpoint, authenticated when fj has a login for the
@@ -47,6 +49,27 @@ impl ForgeRepo {
                 )
             })?;
         serde_json::from_str(&output).with_context(|| format!("invalid response from {url}"))
+    }
+
+    /// Every item of a paginated list endpoint.
+    pub(super) async fn forgejo_api_pages(&self, endpoint: &str) -> Result<Vec<serde_json::Value>> {
+        let separator = if endpoint.contains('?') { '&' } else { '?' };
+        let mut items = Vec::new();
+        for page in 1.. {
+            let response = self
+                .forgejo_api(&format!(
+                    "{endpoint}{separator}limit={PAGE_SIZE}&page={page}"
+                ))
+                .await?;
+            let batch = response
+                .as_array()
+                .with_context(|| format!("Forgejo {endpoint} is not a list"))?;
+            items.extend(batch.iter().cloned());
+            if batch.len() < PAGE_SIZE {
+                break;
+            }
+        }
+        Ok(items)
     }
 }
 

@@ -10,6 +10,7 @@ mod remote_url;
 pub mod repository;
 mod retarget;
 pub mod updates;
+pub mod view;
 
 use crate::tools::Tool;
 use anyhow::{Context, Result, ensure};
@@ -444,6 +445,8 @@ enum Query {
     Issue,
     Pull(&'static str),
     List,
+    /// Reading an issue or PR for `shoal view`.
+    View,
 }
 
 impl ForgeKind {
@@ -452,7 +455,7 @@ impl ForgeKind {
         let mut command = tokio::process::Command::new(tool);
         command.current_dir(path).args(args).env("NO_COLOR", "1");
         let seconds = match query {
-            Query::Issue | Query::List => 30,
+            Query::Issue | Query::List | Query::View => 30,
             Query::Pull(_) => 20,
         };
         let output = crate::subprocess::Run::new(command)
@@ -475,6 +478,9 @@ impl Query {
                 .with_context(|| format!("PR lookup requires {tool} and its existing login{hint}")),
             Self::List => crate::subprocess::checked_output(tool, output).with_context(|| {
                 format!("{tool} search failed; install it and check `{tool} auth login` and repository access")
+            }),
+            Self::View => crate::subprocess::checked_output(tool, output).with_context(|| {
+                format!("{tool} lookup failed; install it and check `{tool} auth login` and repository access")
             }),
         }
     }

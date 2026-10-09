@@ -7,6 +7,8 @@ use crate::{
         ForgeRepo, IssueInput,
         link::{self, ItemKind},
         pr::{self, wait::linked_items},
+        repository,
+        view::ItemView,
     },
     git,
     model::{DiffSummary, Workspace, WorkspaceStatus, WorkspaceTarget},
@@ -53,6 +55,27 @@ impl Manager {
 }
 
 impl Manager {
+    /// Each selected item as the forge reports it now, in link order.
+    pub async fn view_items(
+        &self,
+        selector: &str,
+        selection: &link::Selection,
+        comments: bool,
+    ) -> Result<Vec<ItemView>> {
+        let workspace = self.workspace(selector).await?;
+        let items = self.selected_items(&workspace, selection).await?;
+        let remote = repository::remote_url_from_path(&workspace.path)
+            .await?
+            .context("item lookup needs an origin remote")?;
+        let forge = ForgeRepo::parse(&remote)?;
+        Ok(futures_util::future::join_all(
+            items
+                .iter()
+                .map(|(url, kind)| forge.view(&workspace.path, *kind, url, comments)),
+        )
+        .await)
+    }
+
     /// Workspaces that link an issue or PR, or hold a lease on a resource,
     /// optionally only among the one a scoped caller owns.
     pub async fn find_workspaces(

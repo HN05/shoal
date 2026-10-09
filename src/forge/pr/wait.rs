@@ -211,7 +211,7 @@ impl Manager {
         Ok(Some((url, kind)))
     }
 
-    async fn selected_items(
+    pub(crate) async fn selected_items(
         &self,
         workspace: &Workspace,
         selection: &Selection,

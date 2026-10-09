@@ -249,6 +249,12 @@ pub enum Method {
     WorkspaceStatus {
         workspace: String,
     },
+    /// Linked items, or an explicit one, with their content and status.
+    ViewItems {
+        workspace: String,
+        selection: crate::forge::link::Selection,
+        comments: bool,
+    },
     /// Workspaces that link an item or hold a resource.
     FindWorkspaces {
         target: crate::model::WorkspaceTarget,
@@ -517,6 +523,7 @@ response_bodies! {
     WithdrawnCompletion(Option<crate::model::Completion>),
     ReviewMarks(Vec<crate::model::ReviewMark>),
     WorkspaceStatus(WorkspaceStatus),
+    ItemViews(Vec<crate::forge::view::ItemView>),
     WorkspaceEnv(std::collections::BTreeMap<String, String>),
     Cleanup(crate::daemon::cleanup::ManualCleanup),
     Diagnostics(Vec<crate::daemon::doctor::Check>),
