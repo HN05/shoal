@@ -202,8 +202,19 @@ pub(super) async fn add(
         effective: tokio::sync::OnceCell::new(),
     };
     let agent = choose_add_agent(&settings, agent).await?;
-    // Look the issue up before any picker or handoff, so its failures end here.
-    let issue = match issue {
+    let picked = match issue {
+        Some(_) => None,
+        None => pick_add_source(ctx, &target, &mut creation).await?,
+    };
+    // A picked issue defaults its agent as --issue does.
+    let agent = match (agent, &picked) {
+        (AgentChoice::PickerIfInteractive, Some(_)) => {
+            choose_add_agent(&settings, AgentLaunch::IssueDefault(None)).await?
+        }
+        (agent, _) => agent,
+    };
+    // Look the issue up before any other picker or handoff, so its failures end here.
+    let issue = match issue.or(picked) {
         Some(input) => Some(super::issues::load(target.repository(ctx).await?, &input).await?),
         None => None,
     };
@@ -456,6 +467,60 @@ async fn resolve_add_agent(
     Ok(ResolvedAddAgent { agent, codex_mode })
 }
 
+/// Ask what an interactive addition starts from when no option says. Branch
+/// choices fill `creation`; a chosen issue's number is returned.
+async fn pick_add_source(
+    ctx: &Context,
+    target: &AddTarget,
+    creation: &mut Creation,
+) -> Result<Option<String>> {
+    if creation.branch.is_some()
+        || creation.existing.is_some()
+        || creation.base.is_some()
+        || !ctx.interactive()
+    {
+        return Ok(None);
+    }
+    #[derive(Clone, Copy)]
+    enum Source {
+        New,
+        Existing,
+        Issue,
+        Pull,
+    }
+    let source = ui::pick_choice(
+        ctx,
+        "Workspace> ",
+        &[
+            (Source::New, "Create a new branch"),
+            (Source::Existing, "Use an existing branch"),
+            (Source::Issue, "Use an issue"),
+            (Source::Pull, "Use a pull request"),
+        ],
+    )?;
+    match source {
+        Source::New => {}
+        Source::Existing => creation.existing = Some(pick_add_branch(ctx, target).await?),
+        Source::Issue => {
+            let repo = target.repository(ctx).await?;
+            let issues = super::issues::origin_forge(repo)
+                .await?
+                .open_issues(&repo.path)
+                .await?;
+            return ui::pick_item(ctx, "Issue> ", "issues", issues).map(Some);
+        }
+        Source::Pull => {
+            let repo = target.repository(ctx).await?;
+            let forge = super::issues::origin_forge(repo).await?;
+            let pulls = forge.open_pulls(&repo.path).await?;
+            let number = ui::pick_item(ctx, "Pull request> ", "pull requests", pulls)?;
+            let pull = forge.pull_request(&repo.path, &number).await?;
+            super::links::pull_creation(ctx, repo, pull, creation).await?;
+        }
+    }
+    Ok(None)
+}
+
 async fn select_add_creation(
     ctx: &Context,
     target: &AddTarget,
@@ -467,25 +532,6 @@ async fn select_add_creation(
     }
     if let Some(issue) = issue {
         return issue_creation(ctx, target, creation, issue.branch_name(), &issue.url).await;
-    }
-    if creation.base.is_none() && ctx.interactive() {
-        #[derive(Clone, Copy)]
-        enum BranchMode {
-            New,
-            Existing,
-        }
-        let mode = ui::pick_choice(
-            ctx,
-            "Workspace> ",
-            &[
-                (BranchMode::New, "Create a new branch"),
-                (BranchMode::Existing, "Use an existing branch"),
-            ],
-        )?;
-        if let BranchMode::Existing = mode {
-            creation.existing = Some(pick_add_branch(ctx, target).await?);
-            return Ok(creation);
-        }
     }
     // Check here so a typo can be corrected before creating work.
     creation.branch = Some(loop {

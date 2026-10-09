@@ -10094,6 +10094,76 @@ fn interactive_add_picks_existing_branch_and_reopens_workspace() {
     assert_eq!(fixture.ok(&["ls"]).as_array().unwrap().len(), 1);
 }
 
+#[test]
+fn interactive_add_picks_an_open_issue_or_pull_request() {
+    let fixture = Fixture::new();
+    fixture.add("topic");
+    fixture.add_github_origin();
+    // An existing branch avoids refreshing the default branch from GitHub.
+    git(&fixture.repo, &["branch", "issue-34-fix-api-timeout"]);
+    install_test_script(
+        &fixture.root.path().join("bin/gh"),
+        r#"#!/bin/sh
+case "$1 $2" in
+ 'issue list') echo '[{"number":34,"title":"Fix API timeout"},{"number":35,"title":"Other"}]';;
+ 'issue view') echo '{"state":"OPEN","number":34,"title":"Fix API timeout","body":""}';;
+ 'pr list') echo '[{"number":7,"title":"Topic"}]';;
+ 'pr view') echo '{"number":7,"title":"Topic","headRefName":"topic","baseRefName":"main","isCrossRepository":false}';;
+ *) exit 1;;
+esac
+"#,
+    );
+    let picker = fixture.root.path().join("bin/fzf");
+    let directive = fixture.root.path().join("destination");
+    let add = |choice: &str, item: &str| {
+        install_test_script(
+            &picker,
+            &format!(
+                "#!/bin/sh\nawk -F '\\t' '$2 == \"{choice}\" || $2 ~ /^#{item} / {{print}}'\n"
+            ),
+        );
+        let (mut master, slave) = pty::open();
+        let _drain = slave.try_clone().unwrap();
+        let output = fixture
+            .command()
+            .env("SHOAL_SHELL_DIRECTIVE", &directive)
+            .env("PATH", fixture.interactive_path())
+            .args(["add", fixture.repo.to_str().unwrap()])
+            .stdin(slave.try_clone().unwrap())
+            .stderr(slave)
+            .output()
+            .unwrap();
+        let mut transcript = Vec::new();
+        let _ = std::io::Read::read_to_end(&mut master, &mut transcript);
+        (output, String::from_utf8_lossy(&transcript).into_owned())
+    };
+    let (output, transcript) = add("Use an issue", "34");
+    assert!(output.status.success(), "{output:?} {transcript}");
+    let issue = fixture.ok(&["inspect", "issue-34-fix-api-timeout"]);
+    assert_eq!(
+        issue["issue"]["url"],
+        "https://github.com/team/project/issues/34"
+    );
+    // The PR's head branch belongs to a workspace, which reopens.
+    let (output, transcript) = add("Use a pull request", "7");
+    assert!(output.status.success(), "{output:?} {transcript}");
+    assert_eq!(
+        fs::read_to_string(&directive).unwrap().trim(),
+        fixture.ok(&["inspect", "topic"])["workspace"]["path"]
+            .as_str()
+            .unwrap()
+    );
+    assert_eq!(fixture.ok(&["ls"]).as_array().unwrap().len(), 2);
+
+    install_test_script(
+        &fixture.root.path().join("bin/gh"),
+        "#!/bin/sh\necho '[]'\n",
+    );
+    let (output, transcript) = add("Use a pull request", "7");
+    assert!(!output.status.success());
+    assert!(transcript.contains("no open pull requests"), "{transcript}");
+}
+
 fn wait_removed(fixture: &Fixture, name: &str) {
     let deadline = Instant::now() + Duration::from_secs(15);
     while fixture

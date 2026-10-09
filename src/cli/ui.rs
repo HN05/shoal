@@ -259,6 +259,27 @@ pub fn pick_with_keys<T: Clone>(
     })
 }
 
+/// Choose an open issue or PR, returning its number; `kind` names them when
+/// there are none.
+pub fn pick_item(
+    ctx: &Context,
+    prompt: &str,
+    kind: &str,
+    items: Vec<crate::forge::list::Item>,
+) -> Result<String> {
+    ensure!(!items.is_empty(), "no open {kind}");
+    let entries = items
+        .into_iter()
+        .map(|item| {
+            (
+                item.number.to_string(),
+                format!("#{}  {}", item.number, item.title),
+            )
+        })
+        .collect();
+    pick(ctx, prompt, entries)
+}
+
 /// Choose a typed value; labels are display-only, even when they repeat.
 pub fn pick_choice<T: Clone>(ctx: &Context, prompt: &str, choices: &[(T, &str)]) -> Result<T> {
     let entries = choices

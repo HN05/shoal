@@ -168,11 +168,16 @@ impl Issue {
     }
 }
 
-pub(super) async fn load(repo: &Repository, input: &str) -> Result<Issue> {
+/// The forge that hosts the repository's origin remote.
+pub(super) async fn origin_forge(repo: &Repository) -> Result<ForgeRepo> {
     let remote = repository::remote_url_from_path(&repo.path)
         .await?
         .context("issue lookup needs an origin remote")?;
-    let forge = ForgeRepo::parse(&remote)?;
+    ForgeRepo::parse(&remote)
+}
+
+pub(super) async fn load(repo: &Repository, input: &str) -> Result<Issue> {
+    let forge = origin_forge(repo).await?;
     let (number, url) = forge.issue(input)?;
     let (title, details) = forge.issue_details(&repo.path, number).await?;
     Ok(Issue {

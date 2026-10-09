@@ -408,7 +408,9 @@ Issue links and numbers invoke issue opening with `default_agent` standing in
 for `--agent`; numbers use `--repo`, the current checkout/workspace, then a picker.
 PR links open their head against the refreshed remote base and branch links open
 an origin branch, using existing-branch ownership checks and retaining an owned
-workspace's diff base. Opening fork PR branches is refused.
+workspace's diff base. Opening fork PR branches is refused. Interactive `add`
+without a branch, base or issue also offers the repository's open issues and PRs,
+which open as their links do.
 Interactive `add` uses an agent picker when no agent is named; non-interactive
 additions launch only when an agent is named. `add --agent` launches only after
 creation, setup, and the post-setup hook

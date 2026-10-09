@@ -292,7 +292,8 @@ remain confined to their own workspace. Bare `shoal cd` always opens a picker;
 all-workspace listings and `--all` retain their scope. `config show` uses its
 checkout-aware, non-picker selection described below.
 `shoal add` offers repositories in most-recently-used order, then
-a new-branch prompt or existing-branch picker. Noninteractive and JSON calls never prompt;
+a new-branch prompt or a picker of existing branches, open issues or open PRs; a
+chosen issue or PR opens as its link would. Noninteractive and JSON calls never prompt;
 management commands support JSON output, while executed commands keep their
 own stdin, stdout, stderr, and exit code.
 

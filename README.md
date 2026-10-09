@@ -62,7 +62,7 @@ shoal add my-project fix-login
 shoal codex fix-login --cli
 ```
 
-Use `shoal add my-project` to pick a new or existing branch, or pass it explicitly:
+Use `shoal add my-project` to pick a new or existing branch, an open issue or an open PR, or pass it explicitly:
 
 ```sh
 shoal add my-project fix-api --base feature/api  # Branch from feature/api

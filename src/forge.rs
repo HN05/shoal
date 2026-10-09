@@ -1,6 +1,7 @@
 //! Forge identity and read-only issue/PR queries using the user's gh/fj login.
 pub mod issue;
 pub mod link;
+pub mod list;
 mod locator;
 pub mod pr;
 mod remote_url;
@@ -439,6 +440,7 @@ const MERGED_HINT: &str = "; use `shoal done` to finish without a PR watch";
 enum Query {
     Issue,
     Pull(&'static str),
+    List,
 }
 
 impl ForgeKind {
@@ -447,7 +449,7 @@ impl ForgeKind {
         let mut command = tokio::process::Command::new(tool);
         command.current_dir(path).args(args).env("NO_COLOR", "1");
         let seconds = match query {
-            Query::Issue => 30,
+            Query::Issue | Query::List => 30,
             Query::Pull(_) => 20,
         };
         let output = crate::subprocess::Run::new(command)
@@ -468,6 +470,9 @@ impl Query {
             }
             Self::Pull(hint) => crate::subprocess::checked_output(tool, output)
                 .with_context(|| format!("PR lookup requires {tool} and its existing login{hint}")),
+            Self::List => crate::subprocess::checked_output(tool, output).with_context(|| {
+                format!("{tool} search failed; install it and check `{tool} auth login` and repository access")
+            }),
         }
     }
 }
