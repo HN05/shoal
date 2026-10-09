@@ -212,6 +212,13 @@ pub enum Command {
         #[command(flatten)]
         scope: WorkspaceScope,
     },
+    /// Show, set or clear the workspace a stacked workspace builds on.
+    #[command(args_conflicts_with_subcommands = true)]
+    Base {
+        #[command(subcommand)]
+        command: Option<BaseCommand>,
+        workspace: Option<String>,
+    },
     /// List workspaces.
     Ls,
     /// Show workspace activity, changes, resources, and PR state.
@@ -500,6 +507,22 @@ pub struct ItemArgs {
     /// Workspace to use; defaults to the current workspace or picker.
     #[arg(long)]
     pub workspace: Option<String>,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum BaseCommand {
+    /// Record the workspace whose branch this workspace builds on.
+    Set {
+        /// Workspace name or branch in the same repository.
+        base: String,
+        #[arg(long)]
+        workspace: Option<String>,
+    },
+    /// Remove the recorded base workspace.
+    Clear {
+        #[arg(long)]
+        workspace: Option<String>,
+    },
 }
 
 #[derive(Debug, Subcommand)]

@@ -2,6 +2,7 @@
 //! daemon modules own lifecycle and allocation policy.
 mod access;
 mod acquisition;
+mod base;
 mod configuration;
 mod events;
 mod holds;
@@ -281,6 +282,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         Command::Setup { workspace } => workspaces::setup(&ctx, workspace).await,
         Command::Ls => workspaces::list(&ctx).await,
         Command::Hold { command, scope } => holds::run(&ctx, command, scope).await,
+        Command::Base { command, workspace } => base::run(&ctx, command, workspace).await,
         Command::Status { workspace, item } => workspaces::status(&ctx, workspace, item).await,
         Command::Cd { workspace } => workspaces::cd(&ctx, workspace).await,
         Command::Diff { workspace } => workspaces::diff(&ctx, workspace).await,

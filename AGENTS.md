@@ -39,7 +39,7 @@ when behavior changes, distinguishing decisions from proposals.
 - Workspace commands inherit a scope token; CLI refusals also follow process
   ancestry for the same state directory, so a cleared token does not unscope. Enforce own-worktree resource access
   in the daemon and deny workspace allocation/removal/recovery and shared
-  repository/service administration; own-workspace setup, rename, issue/PR links and watches, merge
+  repository/service administration; own-workspace setup, rename, base workspace, issue/PR links and watches, merge
   acknowledgements, messages to the user, ready-for-review marks, assignment completion and withdrawal, and own-repository
   sync are allowed.
   Scope is cooperative, not a boundary against hostile same-user processes.

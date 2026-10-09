@@ -96,7 +96,9 @@ with plain Git afterwards; other pushed branches are current as
 
 Branches of other workspaces are shared refs, so `git merge feature/api`
 brings in their latest commits; use `origin/feature/api` for pushed work after
-`shoal sync`. Stay on your workspace's recorded branch.
+`shoal sync`. Stay on your workspace's recorded branch. When it builds on
+another workspace's branch, record that with `shoal base set <workspace>`;
+`shoal base` shows it.
 Agents cannot land: when the repository has no remote, the human runs
 `shoal land` to merge your branch into the default branch.
 

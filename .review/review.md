@@ -60,7 +60,7 @@ instructions instead of the PR delivery guidance below.
 - Scope: tracked executions and externally launched processes with exported
   environments carry a scope token and get own-worktree access
   only (CLI refusals also follow ancestry for the same state directory); workspace allocation/removal/recovery and shared repository/service
-  administration stay denied, while own-workspace setup, rename, PR registration,
+  administration stay denied, while own-workspace setup, rename, base workspace, PR registration,
   merge acknowledgements, messages to the user, ready-for-review marks,
   assignment completion and its withdrawal,
   own-repository sync and
@@ -116,7 +116,9 @@ instructions instead of the PR delivery guidance below.
   reject invalid selected records; malformed history outside a query does not block it.
 - Explicit creation bases resolve locally and are recorded for diff; only a base
   naming the local default branch is refreshed, and one naming a remote branch is
-  fetched first.
+  fetched first. A base naming another workspace's branch records that workspace
+  as the base workspace; base changes stay in the same repository without cycles,
+  and removal moves stacked workspaces down to the removed workspace's base.
 - Daemon ref updates disable Git credential and SSH askpass prompts without
   overriding the user's SSH transport; interactive Git retains normal prompting.
   Ancestry and exact-ref failures stop branch selection, refresh, and removal;

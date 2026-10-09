@@ -1011,6 +1011,7 @@ fn render_status(status: &WorkspaceStatus, json: bool) {
     );
     println!("Path:          {}", workspace.path.display());
     println!("Branch:        {}", workspace.branch);
+    super::base::render(workspace);
     println!(
         "Setup:         {}",
         if status.setup_finished {

@@ -21,13 +21,16 @@ commands also approve access requests, so act on those only as the user directs.
 shoal --json repo list
 shoal --json add https://github.com/owner/repo/issues/34 --agent happy-codex
 shoal --json add my-project fix-login --agent happy-claude
+shoal --json add my-project fix-ui --base fix-login --agent happy-claude
 shoal --json happy codex fix-login --prompt "Fix the login bug" -- --yolo
 ```
 
 `add` accepts a registered repository and branch, or an issue, PR or branch URL;
 an issue becomes the agent's prompt. Happy agents (`happy-codex`, `happy-claude`)
 run detached and appear in the Happy app. CLI agents (`codex`, `claude`) run in
-the current terminal until they exit, so use them only when the user asks.
+the current terminal until they exit, so use them only when the user asks. A
+`--base` naming another workspace's branch stacks the new workspace on it; `ls`
+and `status` show the base workspace.
 
 Shoal returns once the launch is recorded (`execution_id`, `pid`, `log`); the
 session runs detached and `shoal stop` or `shoal rm` ends it. Issue and `--prompt`

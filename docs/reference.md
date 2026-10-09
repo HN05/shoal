@@ -645,13 +645,28 @@ upstream, failed fetch, divergence, or a dirty or managed default-branch
 checkout stops creation; an already-ahead branch is preserved. `--base REF`
 starts from any locally resolvable commit without refreshing,
 unless it names the local default branch; the resolved base is recorded for
-`shoal diff`. A `--base` naming another workspace's branch, locally or on a
-remote, also records that workspace as the base workspace of a stacked change.
-Removing a base workspace moves the workspaces stacked on it to its own base
-workspace, or to none. `ls --json` and `inspect` give `base_workspace` (`id`,
-`name`, `branch`, or null) and `stacked_workspaces`.
+`shoal diff`.
 Existing-branch workspaces diff against the local default, or their opening
 commit if on it or unavailable.
+
+### Stacked workspaces
+
+A stacked change is a chain of workspaces, each on a branch built on the one
+below. A `--base` naming another workspace's branch, locally or on a remote,
+records that workspace as the new workspace's base workspace.
+
+```sh
+shoal base                          # Show the current workspace's base workspace
+shoal base set feature-a            # Record it by workspace name or branch
+shoal base clear                    # Remove it
+shoal base set feature-a --workspace feature-b
+```
+
+The base must be another workspace of the same repository and must not create
+a cycle. Scoped callers may set their own workspace's base. Removing a base
+workspace moves the workspaces stacked on it to its own base workspace, or to
+none. `status` shows both directions; `ls --json` and `inspect` give
+`base_workspace` (`id`, `name`, `branch`, or null) and `stacked_workspaces`.
 
 ### Repositories
 
