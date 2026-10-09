@@ -297,18 +297,74 @@ pub async fn watch(ctx: &Context, workspace: String, tab: String) -> Result<i32>
         id: tab,
         close_when_done: true,
     };
+    let executable = Executable::current();
     // A missing daemon or a failed query does not prove completion or removal.
     // Retain the observer across daemon restarts, but not deletion of its state.
     while ctx.paths.state.exists() {
-        if workspace_finished(ctx, &workspace).await.unwrap_or(false) {
-            if tab.exists().await {
-                tab.close().await;
+        match workspace_finished(ctx, &workspace).await {
+            Ok(true) => {
+                if tab.exists().await {
+                    tab.close().await;
+                }
+                break;
             }
-            break;
+            Ok(false) => {}
+            Err(error) if error.is::<client::ProtocolMismatch>() => {
+                if let Some(installed) = executable.as_ref().filter(|exe| exe.replaced()) {
+                    return Err(installed.exec());
+                }
+            }
+            Err(_) => {}
         }
         tokio::time::sleep(Duration::from_millis(500)).await;
     }
     Ok(0)
+}
+
+/// The binary this watcher runs, so an upgrade that changes the daemon
+/// protocol can hand the watch to the installed release.
+struct Executable {
+    path: std::path::PathBuf,
+    identity: Option<FileIdentity>,
+}
+
+type FileIdentity = (u64, u64, i64, i64);
+
+impl Executable {
+    fn current() -> Option<Self> {
+        Some(Self::at(std::env::current_exe().ok()?))
+    }
+
+    fn at(path: std::path::PathBuf) -> Self {
+        let identity = file_identity(&path);
+        Self { path, identity }
+    }
+
+    /// Whether another binary now sits at this path, as after an upgrade.
+    fn replaced(&self) -> bool {
+        file_identity(&self.path).is_some_and(|now| self.identity != Some(now))
+    }
+
+    /// Restart this command from the installed binary; returns only on failure.
+    fn exec(&self) -> anyhow::Error {
+        use std::os::unix::process::CommandExt as _;
+        let error = std::process::Command::new(&self.path)
+            .args(std::env::args_os().skip(1))
+            .exec();
+        anyhow::Error::new(error).context("restart the Herdr tab watcher from the installed shoal")
+    }
+}
+
+// Follows symlinks, so retargeting a versioned install link counts as a change.
+fn file_identity(path: &Path) -> Option<FileIdentity> {
+    use std::os::unix::fs::MetadataExt as _;
+    let metadata = std::fs::metadata(path).ok()?;
+    Some((
+        metadata.dev(),
+        metadata.ino(),
+        metadata.mtime(),
+        metadata.mtime_nsec(),
+    ))
 }
 
 async fn workspace_finished(ctx: &Context, workspace: &str) -> Result<bool> {
@@ -398,6 +454,29 @@ mod tests {
             .unwrap();
         server.await.unwrap();
         finished
+    }
+
+    #[test]
+    fn executable_is_replaced_by_a_new_file_or_link_target() {
+        let temp = tempfile::tempdir().unwrap();
+        let first = temp.path().join("first");
+        let second = temp.path().join("second");
+        let link = temp.path().join("shoal");
+        std::fs::write(&first, "old").unwrap();
+        std::fs::write(&second, "new").unwrap();
+        std::os::unix::fs::symlink(&first, &link).unwrap();
+        let executable = Executable::at(link.clone());
+        assert!(!executable.replaced());
+
+        std::fs::remove_file(&link).unwrap();
+        std::os::unix::fs::symlink(&second, &link).unwrap();
+        assert!(executable.replaced());
+
+        let executable = Executable::at(first.clone());
+        std::fs::rename(&second, &first).unwrap();
+        assert!(executable.replaced());
+        std::fs::remove_file(&first).unwrap();
+        assert!(!executable.replaced(), "a missing binary cannot take over");
     }
 
     #[test]
