@@ -29,6 +29,8 @@ impl Manager {
         if base.stacked_workspaces.is_empty() {
             return Ok(None);
         }
+        // Its HEAD and remote authorize forge writes for other workspaces.
+        self.verify_worktree(base).await?;
         let mut merged = Vec::new();
         for url in urls {
             match self.base_pr_commits(base, url).await {
@@ -74,6 +76,7 @@ impl Manager {
         head: &str,
     ) -> Result<()> {
         let workspace = self.workspace(&stacked.id).await?;
+        self.verify_worktree(&workspace).await?;
         let id = workspace.id.clone();
         let items = self
             .store
