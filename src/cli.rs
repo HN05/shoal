@@ -143,6 +143,14 @@ pub enum Command {
         #[arg(long, default_value_t = 3600)]
         timeout: u64,
     },
+    /// Show linked items, one kind, or a selected issue or PR with status and discussion.
+    View {
+        #[command(flatten)]
+        items: ItemArgs,
+        /// Leave out comments and reviews.
+        #[arg(long)]
+        no_comments: bool,
+    },
     /// Mark linked items, or the workspace when none are linked, ready for review at HEAD.
     Ready {
         #[command(flatten)]

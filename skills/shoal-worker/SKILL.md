@@ -25,7 +25,8 @@ omit its number or URL to unlink all PRs. Closed, unmerged PRs keep waiting, so 
 watches before finishing without a merge.
 
 While watched PRs are open, run `shoal --json watch pr` from the workspace. Handle
-the returned `updates` by inspecting their PR URLs, then wait again. Comments
+the returned `updates` by reading their items with `shoal view <url>`, then wait
+again. Comments
 and reviews wake the wait, as does each completed CI check or a merge conflict;
 respond to available review findings while other checks run. The first wait
 includes existing activity; later waits share a persistent cursor per workspace.
@@ -41,6 +42,9 @@ retargeted your PR; run the rebase command it gives and push with
 `git push --force-with-lease`. For the current
 state instead of changes, `shoal --json status` lists each watched PR in `prs`
 with its state, merge conflicts, CI check results, review state and lookup errors.
+`shoal view` adds the linked issue and each item's description, comments and
+reviews with inline comments; use it instead of `gh` or `fj` to read them, with
+`view pr <number>` or a URL for an unlinked item and `--no-comments` for state only.
 
 `shoal done` defaults to cleanup, which may stop your execution. Use
 `shoal done --keep` when the user wants to review in this workspace; `--cleanup`

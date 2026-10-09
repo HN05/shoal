@@ -23,6 +23,7 @@ mod service;
 mod simulators;
 mod skill;
 mod stop;
+mod view;
 pub(in crate::cli) mod workspaces;
 
 #[cfg(test)]
@@ -281,6 +282,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         }
         Command::Link { items } => links::link(&ctx, items).await,
         Command::Unlink { items } => links::unlink(&ctx, items).await,
+        Command::View { items, no_comments } => view::view(&ctx, items, no_comments).await,
         Command::Watch { items, timeout } => links::watch(&ctx, items, timeout).await,
         Command::Ready { items } => links::ready(&ctx, items).await,
         Command::Unready { items } => links::unready(&ctx, items).await,

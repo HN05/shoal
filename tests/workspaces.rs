@@ -11354,6 +11354,89 @@ fn land_merges_into_main_without_a_remote_and_is_denied_to_scoped_processes() {
 }
 
 #[test]
+fn view_shows_linked_items_with_status_and_discussion() {
+    let fixture = Fixture::with_config(Some("[auto_cleanup]\nenabled=false\n"));
+    fixture.add("view");
+    fixture.add_github_origin();
+    let bin = fixture.root.path().join("bin");
+    fs::create_dir(&bin).unwrap();
+    fs::write(
+        bin.join("gh"),
+        "#!/bin/sh\ncase \"$1 $2\" in\n'issue view') [ \"$3\" = 3 ] && cat \"$HOME/issue.json\" || echo '{\"number\":3}';;\n'pr view') cat \"$HOME/pr.json\";;\n*) case \"$4\" in */reviews) cat \"$HOME/reviews.json\";; *) cat \"$HOME/inline.json\";; esac;;\nesac\n",
+    )
+    .unwrap();
+    fs::set_permissions(bin.join("gh"), fs::Permissions::from_mode(0o755)).unwrap();
+    let root = fixture.root.path();
+    fs::write(
+        root.join("issue.json"),
+        serde_json::json!({"number":3,"title":"Crash","body":"Steps","state":"OPEN",
+            "author":{"login":"ann"},"labels":[{"name":"bug"}],"createdAt":"t0",
+            "comments":[{"author":{"login":"bob"},"createdAt":"t1","body":"Same here"}]})
+        .to_string(),
+    )
+    .unwrap();
+    fs::write(
+        root.join("pr.json"),
+        serde_json::json!({"number":7,"title":"Fix crash","body":"Closes #3","state":"OPEN",
+            "author":{"login":"agent"},"labels":[],"createdAt":"t2","headRefName":"view",
+            "baseRefName":"main","isDraft":false,"headRefOid":"head","commits":[],
+            "comments":[],"reviews":[{"id":"r1","author":{"login":"bot"},"state":"CHANGES_REQUESTED"}],
+            "mergeable":"CONFLICTING","statusCheckRollup":[{"__typename":"CheckRun","name":"rust",
+            "status":"COMPLETED","conclusion":"FAILURE","detailsUrl":"rust/1"}]})
+        .to_string(),
+    )
+    .unwrap();
+    fs::write(
+        root.join("reviews.json"),
+        r#"[[{"id":11,"user":{"login":"bot"},"state":"CHANGES_REQUESTED","body":"One blocker","submitted_at":"t3"}]]"#,
+    )
+    .unwrap();
+    fs::write(
+        root.join("inline.json"),
+        r#"[[{"pull_request_review_id":11,"user":{"login":"bot"},"path":"src/a.rs","line":3,"body":"Handle None","created_at":"t3"}]]"#,
+    )
+    .unwrap();
+    fixture.ok(&["link", "issue", "3", "--workspace", "view"]);
+    fixture.ok(&["link", "pr", "7", "--workspace", "view"]);
+
+    let views = fixture.ok(&["view", "--workspace", "view"]);
+    let views = views.as_array().unwrap();
+    assert_eq!(views.len(), 2);
+    let issue = views.iter().find(|view| view["kind"] == "issue").unwrap();
+    assert_eq!(issue["url"], "https://github.com/team/project/issues/3");
+    assert_eq!(issue["state"], "open");
+    assert_eq!(issue["comments"][0]["body"], "Same here");
+    let pr = views.iter().find(|view| view["kind"] == "pr").unwrap();
+    assert_eq!(pr["pr"]["merge_conflicts"], true);
+    assert_eq!(pr["pr"]["checks"][0]["result"], "failure");
+    assert_eq!(pr["pr"]["review"], "changes_requested");
+    assert_eq!(pr["reviews"][0]["comments"][0]["path"], "src/a.rs");
+    assert!(pr.get("errors").is_none(), "{pr}");
+
+    let brief = fixture.ok(&["view", "pr", "--no-comments", "--workspace", "view"]);
+    assert_eq!(brief.as_array().unwrap().len(), 1);
+    assert!(brief[0].get("reviews").is_none());
+
+    let text = fixture.run(&["view", "pr", "7", "--workspace", "view"]);
+    assert!(text.status.success());
+    let text = String::from_utf8_lossy(&text.stdout);
+    assert!(text.contains("PR #7: Fix crash"), "{text}");
+    assert!(text.contains("Branch:   view → main"), "{text}");
+    assert!(text.contains("src/a.rs:3 · bot · t3"), "{text}");
+
+    // An unreadable item reports its error and fails the command.
+    let missing = fixture.run(&["--json", "view", "issue", "9", "--workspace", "view"]);
+    assert_eq!(missing.status.code(), Some(1));
+    let missing: Value = serde_json::from_slice(&missing.stdout).unwrap();
+    assert!(
+        missing[0]["errors"][0]
+            .as_str()
+            .unwrap()
+            .contains("different item")
+    );
+}
+
+#[test]
 fn stop_preserves_the_child_exit_status_when_group_inventory_fails() {
     let fixture = Fixture::new();
     fixture.add("worker");

@@ -1075,6 +1075,15 @@ association is idempotent and must be unlinked before linking a different issue.
 PR links accumulate without duplicates and must name the recorded workspace
 branch. Linked items suppress idle cleanup.
 
+`shoal view` shows linked items as the forge reports them now: title, state,
+author, labels, description, comments, and reviews with their inline comments; a
+PR adds its branches and the merge conflicts, CI checks and review state `status`
+reports. Kinds and explicit items select as they do for `watch`, and
+`--no-comments` leaves out comments and reviews. Forgejo items also report whether
+each inline thread is resolved. A failed lookup reports its error on that item,
+and the command exits 1 when an item could not be read. `--json` returns an array
+of items.
+
 `shoal watch` polls all linked items every ~30 seconds; `watch pr` or `watch issue`
 filters by kind. `watch <url>`, `watch pr <number-or-url>` and
 `watch issue <number-or-url>` select an explicit item in the workspace's repository
