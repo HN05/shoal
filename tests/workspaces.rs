@@ -15260,6 +15260,14 @@ fn failed_restacks_are_reported_even_when_pr_cleanup_is_disabled() {
         fixture.ok(&["inspect", "upper"])["workspace"]["base_workspace"]["name"],
         "lower"
     );
+    // Recovery restacks and clears the recorded error.
+    fs::remove_file(root.join("fail")).unwrap();
+    fixture.restart();
+    wait_until("restack after recovery", || {
+        let lower = fixture.ok(&["inspect", "lower"]);
+        lower["pr_cleanup"]["error"].is_null()
+            && fixture.ok(&["inspect", "upper"])["workspace"]["base_workspace"].is_null()
+    });
 }
 
 fn issue_completion_fixture(tool: &str, cleanup: bool) -> Fixture {

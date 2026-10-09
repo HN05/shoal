@@ -347,6 +347,11 @@ impl Manager {
                     .as_ref()
                     .is_ok_and(|settings| !settings.pr_cleanup.enabled)
             {
+                // Without cleanup attempts, a base's stored error can only be a
+                // stack error, which this sweep has resolved.
+                if !workspace.stacked_workspaces.is_empty() && registration.error.take().is_some() {
+                    self.save_registration(&workspace.id, &registration).await?;
+                }
                 continue;
             }
             // `Ok(true)` once the workspace is removed; `Ok(false)` while the PR is open.
