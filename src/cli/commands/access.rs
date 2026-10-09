@@ -4,7 +4,7 @@ use serde_json::json;
 
 use super::EXIT_BUSY;
 use crate::{
-    cli::{AccessCommand, client::request, context::Context, output::Style},
+    cli::{AccessCommand, client::request, context::Context, output::Style, ui},
     daemon::access::{AccessRequest, DecisionStatus},
     protocol::Method,
 };
@@ -19,6 +19,10 @@ pub(super) async fn run(ctx: &Context, command: Option<AccessCommand>) -> Result
             let approve = matches!(command, AccessCommand::Approve { .. });
             let (AccessCommand::Approve { id } | AccessCommand::Deny { id }) = command else {
                 unreachable!()
+            };
+            let id = match id {
+                Some(id) => id,
+                None => pick_pending(ctx).await?,
             };
             let request =
                 request::<Box<AccessRequest>>(&ctx.paths, Method::DecideAccess { id, approve })
@@ -44,6 +48,18 @@ async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32> {
         }
     })?;
     Ok(0)
+}
+
+async fn pick_pending(ctx: &Context) -> Result<String> {
+    let requests =
+        request::<Vec<AccessRequest>>(&ctx.paths, Method::ListAccess { workspace: None }).await?;
+    let pending: Vec<_> = requests
+        .iter()
+        .filter(|request| request.status == DecisionStatus::Pending)
+        .map(|request| (request.id.clone(), describe(request)))
+        .collect();
+    ensure!(!pending.is_empty(), "no pending access requests");
+    ui::pick(ctx, "Access request> ", pending)
 }
 
 fn describe(request: &AccessRequest) -> String {

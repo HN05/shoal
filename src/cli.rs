@@ -941,9 +941,15 @@ pub enum AccessCommand {
     /// List requests and retained grants (scoped callers see their own workspace).
     List { workspace: Option<String> },
     /// Approve the exact settings recorded in a request; does not allocate capacity.
-    Approve { id: String },
+    Approve {
+        /// Request ID; omit to choose a pending request.
+        id: Option<String>,
+    },
     /// Deny a pending request.
-    Deny { id: String },
+    Deny {
+        /// Request ID; omit to choose a pending request.
+        id: Option<String>,
+    },
 }
 
 #[derive(Debug, Subcommand)]

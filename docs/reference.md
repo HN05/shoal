@@ -1501,8 +1501,8 @@ still need a reason and the usual audit before mutations.
 Agents use the normal acquire command with `--reason`. `shoal access` lists
 requests and retained workspace grants; `shoal access list <workspace>` filters
 by workspace. Scoped callers can see only their own requests. An unscoped user
-reviews the recorded settings and uses `shoal access approve <id>` or
-`shoal access deny <id>`. Approval reserves no capacity: retry acquisition after
+reviews the recorded settings and uses `shoal access approve [id]` or
+`shoal access deny [id]`. Approval reserves no capacity: retry acquisition after
 the decision. Pending requests produce a daemon notification, collapsed until read.
 
 An acquisition waiting for a decision returns exit 2 and JSON

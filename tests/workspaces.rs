@@ -14020,6 +14020,41 @@ fn repository_resources_validate_targets_before_claiming_and_bind_approvals() {
     assert_eq!(lease["repository"]["path"], replacement.to_str().unwrap());
 }
 
+#[test]
+fn access_decisions_pick_an_omitted_pending_request() {
+    let fixture = Fixture::with_config(Some("[resources.signing]\nrequires_approval=true\n"));
+    set_repository_toml(&fixture, "[ports.web]\nrequires_approval=true\n");
+    fixture.add("agent");
+    let none = fixture.run(&["access", "approve"]);
+    assert!(String::from_utf8_lossy(&none.stderr).contains("no pending access requests"));
+    let signing = pending_access(scoped_command(
+        &fixture,
+        "agent",
+        &["acquire", "resource", "signing", "--reason", "sign build"],
+    ));
+    let web = pending_access(scoped_command(
+        &fixture,
+        "agent",
+        &["acquire", "port", "web", "--reason", "serve preview"],
+    ));
+    let (signing, web) = (signing["id"].as_str().unwrap(), web["id"].as_str().unwrap());
+    let (output, rows) = fixture.pick(&["access", "approve"], web, "");
+    assert!(output.status.success(), "{output:?}");
+    assert!(rows.contains(&format!("{signing}\t")) && rows.contains(&format!("{web}\t")));
+    let (output, rows) = fixture.pick(&["access", "deny"], signing, "");
+    assert!(output.status.success(), "{output:?}");
+    assert!(!rows.contains(&format!("{web}\t")), "{rows:?}");
+    let statuses: Vec<_> = fixture
+        .ok(&["access"])
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|request| (request["id"].clone(), request["status"].clone()))
+        .collect();
+    assert!(statuses.contains(&(web.into(), "approved".into())));
+    assert!(statuses.contains(&(signing.into(), "denied".into())));
+}
+
 fn pending_access(output: Output) -> Value {
     assert_eq!(
         output.status.code(),
