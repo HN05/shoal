@@ -25,12 +25,14 @@ pub mod workspace;
 use std::{
     fs::{self, File, OpenOptions},
     os::unix::fs::{FileTypeExt, OpenOptionsExt, PermissionsExt},
+    panic::AssertUnwindSafe,
     sync::Arc,
     time::{Duration, Instant},
 };
 
 use anyhow::{Context, Result, ensure};
 use fs2::FileExt;
+use futures_util::FutureExt;
 use tokio::{
     net::{UnixListener, UnixStream},
     signal::unix::{SignalKind, signal},
@@ -52,6 +54,8 @@ use crate::{
 
 const MAX_CLIENTS: usize = 128;
 const SIMULATOR_SWEEP_INTERVAL: Duration = Duration::from_secs(15);
+/// Keeps a background loop that panics at once from spinning.
+const RESTART_DELAY: Duration = Duration::from_secs(10);
 
 /// Never unlink the lock file: waiters must all lock the same inode.
 struct Ownership {
@@ -124,10 +128,22 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
     };
     log!("shoal daemon listening on {}", paths.socket.display());
     let mut background = JoinSet::new();
-    background.spawn(cleanup::run(manager.clone()));
-    background.spawn(overload::run(manager.clone()));
-    background.spawn(disk::run(manager.clone()));
-    background.spawn(expire_simulators(manager.clone()));
+    background.spawn(supervise("auto cleanup", {
+        let manager = manager.clone();
+        move || cleanup::run(manager.clone())
+    }));
+    background.spawn(supervise("overload monitor", {
+        let manager = manager.clone();
+        move || overload::run(manager.clone())
+    }));
+    background.spawn(supervise("disk monitor", {
+        let manager = manager.clone();
+        move || disk::run(manager.clone())
+    }));
+    background.spawn(supervise("simulator cleanup", {
+        let manager = manager.clone();
+        move || expire_simulators(manager.clone())
+    }));
     let mut clients = JoinSet::new();
     let mut quiescence = None;
     let result = loop {
@@ -196,6 +212,22 @@ fn remove_stale_socket(paths: &Paths) -> Result<()> {
         Err(e) => return Err(e.into()),
     }
     Ok(())
+}
+
+/// Run a background loop again after it panics, so one failure cannot stop it
+/// for the rest of the daemon's life.
+async fn supervise<F, Fut>(name: &'static str, mut task: F)
+where
+    F: FnMut() -> Fut,
+    Fut: Future<Output = ()>,
+{
+    while AssertUnwindSafe(task()).catch_unwind().await.is_err() {
+        log!(
+            "{name} panicked; restarting in {}s",
+            RESTART_DELAY.as_secs()
+        );
+        tokio::time::sleep(RESTART_DELAY).await;
+    }
 }
 
 async fn expire_simulators(manager: Arc<Manager>) {
@@ -787,6 +819,18 @@ fn removal_inspection(caller_pid: u32) -> InspectionPolicy {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test(start_paused = true)]
+    async fn background_loops_restart_after_a_panic() {
+        let runs = std::sync::atomic::AtomicUsize::new(0);
+        supervise("test loop", || async {
+            if runs.fetch_add(1, std::sync::atomic::Ordering::SeqCst) < 2 {
+                panic!("failed printing to stderr");
+            }
+        })
+        .await;
+        assert_eq!(runs.into_inner(), 3);
+    }
 
     #[test]
     fn legacy_removal_request_selects_inspection_without_using_a_pid() {

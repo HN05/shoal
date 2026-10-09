@@ -684,6 +684,7 @@ When completion requests cleanup, confirmed merges stop tracked agents through s
 rechecking clean files and HEAD after stopping. Failures retain work and leases;
 registered workspaces are excluded from idle cleanup until cleared or removed.
 An invalid record retains its workspace without blocking cleanup of others.
+Background loops restart after a panic, and a failed daemon log write never stops them.
 
 `doctor` reports current issues by default, falling back to the recorded
 failure and repair guidance; repair restores verified worktrees and clears
