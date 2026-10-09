@@ -7,12 +7,18 @@ on:
     inputs:
       focus:
         description: Audit focus (bugs, maintainability, testing, performance or docs)
+        type: string
+        required: false
         default: bugs
       ref:
         description: Branch, tag or commit (empty uses the default branch)
+        type: string
+        required: false
         default: ''
       scope:
         description: Paths or area (empty uses this week's area)
+        type: string
+        required: false
         default: ''
 
 concurrency:
