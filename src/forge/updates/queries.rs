@@ -174,25 +174,24 @@ impl ForgeRepo {
             self.kind.query(path, &args, Query::Pull("")).await,
         );
         if snapshot.state == "open" {
-            let args = [
-                "--style", "minimal", "pr", "status", &id, "--host", &self.host,
-            ];
-            let result = async {
-                let output = self.kind.query(path, &args, Query::Pull("")).await?;
-                forgejo_status(
-                    &output,
-                    &mut snapshot,
-                    revision.as_deref().unwrap_or_default(),
-                )
-            }
-            .await;
-            if let Err(error) = result {
-                snapshot
-                    .errors
-                    .insert("CI and merge conflicts".into(), format!("{error:#}"));
+            match self.forgejo_checks(path, &id).await {
+                Ok(checks) => checks.record(&mut snapshot, revision.as_deref().unwrap_or_default()),
+                Err(error) => {
+                    snapshot
+                        .errors
+                        .insert("CI and merge conflicts".into(), format!("{error:#}"));
+                }
             }
         }
         Ok(snapshot)
+    }
+
+    async fn forgejo_checks(&self, path: &Path, id: &str) -> Result<ForgejoChecks> {
+        let args = [
+            "--style", "minimal", "pr", "status", id, "--host", &self.host,
+        ];
+        let output = self.kind.query(path, &args, Query::Pull("")).await?;
+        fj_checks(&output)
     }
 }
 
@@ -234,17 +233,10 @@ impl ForgeRepo {
         let output = self.kind.query(path, &view, Query::Pull("")).await?;
         let mut status = PrStatus::new(url.into(), Some(forgejo_state(&output, &id, None)?));
         if status.state == Some(PrState::Open) {
-            let args = [
-                "--style", "minimal", "pr", "status", &id, "--host", &self.host,
-            ];
-            let mut snapshot = Snapshot::default();
-            let result = async {
-                let output = self.kind.query(path, &args, Query::Pull("")).await?;
-                forgejo_status(&output, &mut snapshot, "")
-            }
-            .await;
-            match result {
-                Ok(()) => {
+            match self.forgejo_checks(path, &id).await {
+                Ok(checks) => {
+                    let mut snapshot = Snapshot::default();
+                    checks.record(&mut snapshot, "");
                     status.merge_conflicts = snapshot.conflict;
                     status.checks = check_results(snapshot);
                 }
@@ -418,7 +410,31 @@ fn forgejo_revision(text: &str) -> Result<String> {
         .context("Forgejo PR commits did not include a revision")
 }
 
-fn forgejo_status(text: &str, snapshot: &mut Snapshot, revision: &str) -> Result<()> {
+/// Mergeability and CI contexts of an open PR, in `fj pr status` terms.
+struct ForgejoChecks {
+    conflict: bool,
+    /// Each context with its capitalized state.
+    checks: Vec<(String, String)>,
+}
+
+impl ForgejoChecks {
+    fn record(self, snapshot: &mut Snapshot, revision: &str) {
+        snapshot.conflict = Some(self.conflict);
+        for (name, state) in self.checks {
+            snapshot.checks.insert(
+                name.clone(),
+                Check {
+                    name,
+                    complete: state != "Pending",
+                    state,
+                    revision: revision.into(),
+                },
+            );
+        }
+    }
+}
+
+fn fj_checks(text: &str) -> Result<ForgejoChecks> {
     let text = strip_bidi_isolates(text).replace("STYLE()", "");
     let mut lines = text.lines();
     let header = lines.next().context("missing fj PR status")?;
@@ -429,7 +445,10 @@ fn forgejo_status(text: &str, snapshot: &mut Snapshot, revision: &str) -> Result
         ),
         "unrecognized fj PR status"
     );
-    snapshot.conflict = Some(header == "Open — Merge conflicts");
+    let mut checks = ForgejoChecks {
+        conflict: header == "Open — Merge conflicts",
+        checks: Vec::new(),
+    };
     for line in lines.filter(|line| !line.trim().is_empty()) {
         let (state, name) = line
             .trim()
@@ -443,17 +462,9 @@ fn forgejo_status(text: &str, snapshot: &mut Snapshot, revision: &str) -> Result
             ),
             "unknown fj CI state"
         );
-        snapshot.checks.insert(
-            name.into(),
-            Check {
-                name: name.into(),
-                state: state.into(),
-                revision: revision.into(),
-                complete: state != "Pending",
-            },
-        );
+        checks.checks.push((name.into(), state.into()));
     }
-    Ok(())
+    Ok(checks)
 }
 
 #[cfg(test)]
@@ -461,6 +472,10 @@ mod tests {
     use super::*;
     use crate::forge::updates::UpdateKind;
     use serde_json::json;
+
+    fn forgejo_status(text: &str, snapshot: &mut Snapshot, revision: &str) -> Result<()> {
+        fj_checks(text).map(|checks| checks.record(snapshot, revision))
+    }
 
     fn github(checks: serde_json::Value) -> serde_json::Value {
         json!({"number": 7, "headRefName": "topic", "headRefOid": "abc", "state": "OPEN",
