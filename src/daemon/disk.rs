@@ -1,5 +1,6 @@
 //! Keep free space on the filesystems holding workspaces and daemon state by
-//! removing workspaces idle cleanup would remove, without their idle delay.
+//! removing workspaces idle cleanup would remove, without their idle delay,
+//! then stopping tracked executions when that cannot free enough space.
 use anyhow::Result;
 use std::{
     io,
@@ -10,10 +11,15 @@ use std::{
 };
 use tokio::time::Instant;
 
-use super::{events::EventCause, notifications::NotificationKind, workspace::Manager};
+use super::{
+    events::EventCause,
+    notifications::NotificationKind,
+    workspace::{Manager, StopRecords},
+};
 use crate::{config::overload::Disk, model::Workspace};
 
-/// Each pass inspects every workspace, so passes run at the idle sweep's pace.
+/// Each pass inspects every workspace, so a pass that could not free enough
+/// space repeats at the idle sweep's pace.
 const CLEANUP_INTERVAL: Duration = Duration::from_secs(30);
 
 /// A sampled filesystem, named by the first monitored path on it.
@@ -34,7 +40,7 @@ impl Filesystem {
 }
 
 #[derive(Default)]
-struct Monitor {
+pub(super) struct Monitor {
     last_cleanup: Option<Instant>,
 }
 
@@ -54,7 +60,7 @@ pub(super) async fn run(manager: Arc<Manager>) {
 }
 
 impl Monitor {
-    async fn check(
+    pub(super) async fn check(
         &mut self,
         manager: &Manager,
         available: impl Fn(&Path) -> io::Result<u64>,
@@ -65,18 +71,25 @@ impl Monitor {
             return Ok(());
         }
         let workspaces = manager.list_workspaces().await?;
-        let low = sample(&manager.paths.state, &workspaces, &available)
-            .into_iter()
-            .filter(|filesystem| filesystem.free < settings.cleanup_free_bytes());
-        let due = self
+        let mut low = sample(&manager.paths.state, &workspaces, &available);
+        low.retain(|filesystem| filesystem.free < settings.cleanup_free_bytes());
+        if self
             .last_cleanup
-            .is_none_or(|last| last.elapsed() >= CLEANUP_INTERVAL);
-        if !due {
-            return Ok(());
+            .is_none_or(|last| last.elapsed() >= CLEANUP_INTERVAL)
+        {
+            for filesystem in &mut low {
+                free_space(manager, settings, &workspaces, filesystem, &available).await?;
+            }
+            let exhausted = low
+                .iter()
+                .any(|filesystem| filesystem.free < settings.cleanup_free_bytes());
+            self.last_cleanup = exhausted.then(Instant::now);
         }
-        self.last_cleanup = Some(Instant::now());
-        for mut filesystem in low {
-            free_space(manager, settings, &workspaces, &mut filesystem, &available).await?;
+        if let Some(critical) = low
+            .iter()
+            .find(|filesystem| filesystem.free < settings.stop_free_bytes())
+        {
+            stop_executions(manager, critical).await?;
         }
         Ok(())
     }
@@ -159,6 +172,55 @@ async fn free_space(
     Ok(())
 }
 
+/// Stop every workspace's tracked executions as `shoal stop` does, saving
+/// what `shoal resume` restores. Executions started while space stays this
+/// low stop on the next check.
+async fn stop_executions(manager: &Manager, filesystem: &Filesystem) -> Result<()> {
+    let workspaces: Vec<String> = manager
+        .store
+        .run(|db| {
+            Ok(db
+                .prepare("SELECT DISTINCT workspace_id FROM executions")?
+                .query_map([], |row| row.get(0))?
+                .collect::<rusqlite::Result<_>>()?)
+        })
+        .await?;
+    let stops = workspaces.into_iter().map(|id| async move {
+        let workspace = manager.workspace(&id).await?;
+        let (kind, message) = match manager.stop_workspace(&id, StopRecords::Save).await {
+            Ok(()) => {
+                eprintln!("disk space protection stopped {}", workspace.name);
+                (
+                    NotificationKind::AgentStopped,
+                    format!(
+                        "Stopped tracked executions: {}; free disk space, then restore with shoal resume {}",
+                        filesystem.describe(),
+                        workspace.name
+                    ),
+                )
+            }
+            Err(error) => {
+                eprintln!("disk space protection could not stop {}: {error:#}", workspace.name);
+                (
+                    NotificationKind::StopFailed,
+                    format!(
+                        "Could not stop tracked executions: {}: {error:#}",
+                        filesystem.describe()
+                    ),
+                )
+            }
+        };
+        manager.notify(Some(&workspace.name), kind, message).await;
+        anyhow::Ok(())
+    });
+    for result in futures_util::future::join_all(stops).await {
+        if let Err(error) = result {
+            eprintln!("disk space protection: {error:#}");
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -206,10 +268,20 @@ mod tests {
             names(manager.list_workspaces().await.unwrap()),
             ["first", "third"]
         );
-        // A pass ran moments ago, so the next check waits for the interval.
-        readings.store(0, Ordering::Relaxed);
-        monitor.check(&manager, &available).await.unwrap();
-        assert_eq!(manager.list_workspaces().await.unwrap().len(), 2);
+        // That pass freed enough space, so the next low reading starts another.
+        // Space above the stop threshold stops nothing.
+        let above_stop = |_: &Path| Ok(manager.config().overload.disk.stop_free_bytes());
+        monitor.check(&manager, above_stop).await.unwrap();
+        assert_eq!(names(manager.list_workspaces().await.unwrap()), ["first"]);
+        // A pass that could not free enough space waits for the interval.
+        manager.release_hold(&held.id, "keep".into()).await.unwrap();
+        monitor.check(&manager, above_stop).await.unwrap();
+        assert_eq!(names(manager.list_workspaces().await.unwrap()), ["first"]);
+        Monitor::default()
+            .check(&manager, above_stop)
+            .await
+            .unwrap();
+        assert!(manager.list_workspaces().await.unwrap().is_empty());
 
         // Disabled protection reads nothing.
         let config = crate::config::Config::path(&manager.paths);

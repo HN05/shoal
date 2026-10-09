@@ -88,6 +88,10 @@ impl Disk {
     pub fn cleanup_free_bytes(&self) -> u64 {
         self.cleanup_free_gib << 30
     }
+
+    pub fn stop_free_bytes(&self) -> u64 {
+        self.stop_free_gib << 30
+    }
 }
 
 #[derive(Debug, PartialEq, Deserialize)]

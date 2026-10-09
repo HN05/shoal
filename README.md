@@ -186,7 +186,9 @@ for wrapper setup.
 Memory overload protection stops tracked agents by default while retaining their
 workspaces and leases. To opt out, run `shoal config set overload.memory.enabled
 false`. See [overload protection](docs/reference.md#overload-protection)
-for thresholds and timing. Stop agents manually with `shoal stop`, then restore
+for thresholds and timing. When disk space runs low, the daemon removes
+workspaces idle cleanup would remove; if space stays critical, it stops tracked
+executions until you free space and run `shoal resume`. Stop agents manually with `shoal stop`, then restore
 a stopped session with `shoal resume`. Codex and Claude automatically continue
 the workspace session after load recovers; `[agent_resume]` overrides their restore
 command or enables recovery for other agents.

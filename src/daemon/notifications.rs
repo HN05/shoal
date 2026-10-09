@@ -28,6 +28,8 @@ states!(NotificationKind {
     WorkspaceDone => "workspace_done",
     /// An automatic removal was attempted and the workspace retained.
     CleanupFailed => "cleanup_failed",
+    /// Disk protection could not stop a workspace's tracked executions.
+    StopFailed => "stop_failed",
     /// A best-effort event hook failed.
     HookFailed => "hook_failed",
     /// A workspace process asked for the user's attention.

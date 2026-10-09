@@ -125,8 +125,13 @@ When space available to unprivileged processes on a filesystem holding
 workspaces or daemon state falls below `disk.cleanup_free_gib`, the daemon
 removes the workspaces there that idle cleanup would remove, without waiting for
 their idle delay, until enough space is available. A repository with idle
-cleanup disabled keeps its workspaces. Passes run at most every 30 seconds and
-record `workspace_removed` notifications and the `disk_space` event cause.
+cleanup disabled keeps its workspaces. Removals record `workspace_removed`
+notifications and the `disk_space` event cause; a pass that cannot free enough
+space repeats at most every 30 seconds. While space stays below
+`disk.stop_free_gib` after cleanup, the daemon stops every tracked execution as
+`shoal stop` does, including ones started later, and records an `agent_stopped`
+notification per workspace, or `stop_failed` when stopping fails. Free disk
+space, then restore them with `shoal resume`. A failed reading removes and stops nothing.
 
 Configure machine-wide settings in global TOML and reload the daemon:
 
@@ -148,6 +153,7 @@ sustained_seconds = 300         # Five minutes
 [overload.disk]
 enabled = true                 # Opt out with false
 cleanup_free_gib = 5           # Remove idle cleanup candidates below this
+stop_free_gib = 2              # Stop executions below this; 1 to cleanup_free_gib
 
 [overload.recovery]
 enabled = true                 # Applies only with a configured resume command

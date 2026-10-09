@@ -807,3 +807,30 @@ async fn manual_resume_consumes_the_record_on_start_even_if_other_commands_run_o
         .unwrap();
     serving.abort();
 }
+
+#[tokio::test]
+async fn critical_disk_space_stops_executions_cleanup_cannot_remove() {
+    let (_root, manager, workspace, serving) = fixture().await;
+    let agent = launch(&manager, &workspace);
+    wait_started(&workspace).await;
+    bounded(super::disk::Monitor::default().check(&manager, |_: &std::path::Path| Ok(0)))
+        .await
+        .unwrap();
+    bounded(agent).await.unwrap().unwrap();
+    let retained = manager.inspect_workspace(&workspace.id).await.unwrap();
+    assert!(retained.executions.is_empty());
+    assert!(crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
+    let stopped = manager
+        .notifications(false, 10)
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|event| event.kind == NotificationKind::AgentStopped)
+        .unwrap();
+    assert!(
+        stopped.message.contains("shoal resume load"),
+        "{}",
+        stopped.message
+    );
+    serving.abort();
+}
