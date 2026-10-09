@@ -94,6 +94,9 @@ pub struct Manager {
     pub(super) recovery_ready: watch::Sender<Option<u64>>,
     pub(super) recovery_epoch: std::sync::atomic::AtomicU64,
     pub(super) recovery_gate: Mutex<()>,
+    /// Whether the disk monitor's latest reading found at least the cleanup
+    /// threshold free on every filesystem, so restored agents can write.
+    pub(super) disk_space_recovered: std::sync::atomic::AtomicBool,
     /// Per-workspace activity counters folded into cleanup fingerprints.
     activity: Mutex<HashMap<String, u64>>,
     /// The newest recorded notification ID; wakes `shoal notifications --follow`.
@@ -126,6 +129,7 @@ impl Manager {
             recovery_ready: watch::channel(None).0,
             recovery_epoch: std::sync::atomic::AtomicU64::new(0),
             recovery_gate: Mutex::new(()),
+            disk_space_recovered: std::sync::atomic::AtomicBool::new(false),
             activity: Mutex::new(HashMap::new()),
             notifications_changed: watch::channel(0).0,
         }))

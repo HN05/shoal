@@ -89,7 +89,7 @@ pub(super) async fn run(manager: Arc<Manager>) {
     let mut monitor = Monitor::default();
     let mut config = manager.config();
     loop {
-        // Keep publishing recovery with both protections off: an agent stopped
+        // Keep publishing recovery with every protection off: an agent stopped
         // before they were disabled still waits for it.
         tokio::time::sleep(Duration::from_secs(config.overload.poll_seconds)).await;
         let operation = manager.background_operations.read().await;
@@ -130,9 +130,13 @@ pub(super) async fn run(manager: Arc<Manager>) {
             || monitor
                 .cpu_used
                 .is_some_and(|used| used < f64::from(settings.recovery.cpu_used_percent));
+        let disk_safe = !settings.disk.enabled
+            || manager
+                .disk_space_recovered
+                .load(std::sync::atomic::Ordering::Relaxed);
         let recovered = monitor.healthy.observe(
             now,
-            memory_safe && cpu_safe,
+            memory_safe && cpu_safe && disk_safe,
             settings.recovery.sustained_seconds,
         );
         manager
@@ -161,11 +165,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn recovery_progresses_after_both_protections_are_disabled() {
+    async fn recovery_progresses_after_every_protection_is_disabled() {
         let (_root, manager) = crate::test_support::manager().await;
         let config = crate::config::Config::path(&manager.paths);
         std::fs::create_dir_all(config.parent().unwrap()).unwrap();
-        std::fs::write(&config, "[overload.memory]\nenabled = false\n").unwrap();
+        std::fs::write(
+            &config,
+            "[overload.memory]\nenabled = false\n[overload.disk]\nenabled = false\n",
+        )
+        .unwrap();
         manager.reload_config().await.unwrap();
         let mut ready = manager.recovery_ready.subscribe();
         tokio::time::pause();
@@ -179,11 +187,33 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn recovery_waits_for_free_disk_space() {
+        let (_root, manager) = crate::test_support::manager().await;
+        let mut config = crate::config::Config::default();
+        config.overload.memory.enabled = false;
+        manager.publish_config(config);
+        let mut ready = manager.recovery_ready.subscribe();
+        tokio::time::pause();
+        let monitor = tokio::spawn(run(manager.clone()));
+        tokio::time::sleep(Duration::from_secs(600)).await;
+        assert_eq!(*ready.borrow(), None);
+        manager
+            .disk_space_recovered
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+        let recovered = Instant::now();
+        wait_published(&mut ready).await;
+        let window = Duration::from_secs(manager.config().overload.recovery.sustained_seconds);
+        assert!(recovered.elapsed() >= window);
+        monitor.abort();
+    }
+
+    #[tokio::test]
     async fn changed_thresholds_restart_the_recovery_window() {
         let (_root, manager) = crate::test_support::manager().await;
         let config = |sustained_seconds| {
             let mut config = crate::config::Config::default();
             config.overload.memory.enabled = false;
+            config.overload.disk.enabled = false;
             config.overload.recovery.sustained_seconds = sustained_seconds;
             config
         };
@@ -208,6 +238,7 @@ mod tests {
         let config = |memory_used_percent| {
             let mut config = crate::config::Config::default();
             config.overload.memory.enabled = false;
+            config.overload.disk.enabled = false;
             config.overload.recovery.memory_used_percent = memory_used_percent;
             config
         };

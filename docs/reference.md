@@ -180,8 +180,9 @@ the agent identity and pressure reason before signaling the wrapper, so a wrappe
 under pressure can still be resumed after reconciliation. With one configured, the wrapper
 stays connected while the agent is stopped and automatically runs that command
 after healthy readings persist for the recovery interval. Recovery requires
-headroom below each enabled signal’s recovery threshold; thresholds must be
-positive and below their stop thresholds. Agents restore one at a time, each with
+headroom below each enabled signal’s recovery threshold, whose thresholds must be
+positive and below their stop thresholds, and with disk protection enabled at
+least `disk.cleanup_free_gib` available on every monitored filesystem. Agents restore one at a time, each with
 a fresh healthy interval, which a reload changing `[overload]` restarts. Missing
 readings, manual stop/removal, lost connections, uncertain surviving processes, or
 changed workspace ownership prevent recovery. Reloading with recovery disabled

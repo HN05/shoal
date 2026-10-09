@@ -6,7 +6,7 @@ use std::{
     io,
     os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{Arc, atomic::Ordering},
     time::Duration,
 };
 use tokio::time::Instant;
@@ -55,6 +55,7 @@ pub(super) async fn run(manager: Arc<Manager>) {
             .check(&manager, Instant::now(), crate::fsutil::available_bytes)
             .await
         {
+            manager.disk_space_recovered.store(false, Ordering::Relaxed);
             log!("disk space monitor: {error:#}");
         }
     }
@@ -73,7 +74,15 @@ impl Monitor {
             return Ok(());
         }
         let workspaces = manager.list_workspaces().await?;
-        let mut low = sample(&manager.paths.state, &workspaces, &available);
+        let (mut low, complete) = sample(&manager.paths.state, &workspaces, &available);
+        // A failed reading prevents agent recovery.
+        let recovered = complete
+            && low
+                .iter()
+                .all(|filesystem| filesystem.free >= settings.cleanup_free_bytes());
+        manager
+            .disk_space_recovered
+            .store(recovered, Ordering::Relaxed);
         low.retain(|filesystem| filesystem.free < settings.cleanup_free_bytes());
         if self
             .last_cleanup
@@ -97,14 +106,16 @@ impl Monitor {
     }
 }
 
-/// One reading per filesystem holding daemon state or a workspace. A failed
-/// reading never authorizes removal, so that filesystem is skipped.
+/// One reading per filesystem holding daemon state or a workspace, and whether
+/// every reading succeeded. A failed reading never authorizes removal, so that
+/// filesystem is skipped.
 fn sample(
     state: &Path,
     workspaces: &[Workspace],
     available: impl Fn(&Path) -> io::Result<u64>,
-) -> Vec<Filesystem> {
+) -> (Vec<Filesystem>, bool) {
     let mut filesystems: Vec<Filesystem> = Vec::new();
+    let mut complete = true;
     let paths = std::iter::once(state).chain(workspaces.iter().map(|w| w.path.as_path()));
     for path in paths {
         let Ok(device) = path.metadata().map(|metadata| metadata.dev()) else {
@@ -119,10 +130,13 @@ fn sample(
                 path: path.to_owned(),
                 free,
             }),
-            Err(error) => log!("disk space reading {}: {error}", path.display()),
+            Err(error) => {
+                log!("disk space reading {}: {error}", path.display());
+                complete = false;
+            }
         }
     }
-    filesystems
+    (filesystems, complete)
 }
 
 /// Remove cleanup candidates on the filesystem until it has enough space.
@@ -228,7 +242,7 @@ async fn stop_executions(manager: &Manager, filesystem: &Filesystem) -> Result<(
 mod tests {
     use super::*;
     use crate::test_support::{manager, repository};
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::atomic::AtomicUsize;
 
     #[tokio::test]
     async fn cleanup_removes_candidates_until_enough_space_is_free() {
@@ -286,6 +300,27 @@ mod tests {
             .await
             .unwrap();
         assert!(manager.list_workspaces().await.unwrap().is_empty());
+
+        // Agents recover only once every filesystem has the cleanup threshold.
+        let cleanup = manager.config().overload.disk.cleanup_free_bytes();
+        let recovered = |manager: &Manager| manager.disk_space_recovered.load(Ordering::Relaxed);
+        monitor
+            .check(&manager, start, |_: &Path| Ok(cleanup - 1))
+            .await
+            .unwrap();
+        assert!(!recovered(&manager));
+        monitor
+            .check(&manager, start, |_: &Path| Ok(cleanup))
+            .await
+            .unwrap();
+        assert!(recovered(&manager));
+        monitor
+            .check(&manager, start, |_: &Path| {
+                Err(io::Error::other("unreadable"))
+            })
+            .await
+            .unwrap();
+        assert!(!recovered(&manager));
 
         // Disabled protection reads nothing.
         let config = crate::config::Config::path(&manager.paths);
