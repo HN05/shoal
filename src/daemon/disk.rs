@@ -51,7 +51,7 @@ pub(super) async fn run(manager: Arc<Manager>) {
         tokio::time::sleep(Duration::from_secs(poll)).await;
         let _operation = manager.background_operations.read().await;
         if let Err(error) = monitor
-            .check(&manager, crate::fsutil::available_bytes)
+            .check(&manager, Instant::now(), crate::fsutil::available_bytes)
             .await
         {
             eprintln!("disk space monitor: {error:#}");
@@ -63,6 +63,7 @@ impl Monitor {
     pub(super) async fn check(
         &mut self,
         manager: &Manager,
+        now: Instant,
         available: impl Fn(&Path) -> io::Result<u64>,
     ) -> Result<()> {
         let config = manager.config();
@@ -75,7 +76,7 @@ impl Monitor {
         low.retain(|filesystem| filesystem.free < settings.cleanup_free_bytes());
         if self
             .last_cleanup
-            .is_none_or(|last| last.elapsed() >= CLEANUP_INTERVAL)
+            .is_none_or(|last| now.duration_since(last) >= CLEANUP_INTERVAL)
         {
             for filesystem in &mut low {
                 free_space(manager, settings, &workspaces, filesystem, &available).await?;
@@ -83,7 +84,7 @@ impl Monitor {
             let exhausted = low
                 .iter()
                 .any(|filesystem| filesystem.free < settings.cleanup_free_bytes());
-            self.last_cleanup = exhausted.then(Instant::now);
+            self.last_cleanup = exhausted.then_some(now);
         }
         if let Some(critical) = low
             .iter()
@@ -257,8 +258,9 @@ mod tests {
                 u64::MAX
             })
         };
+        let start = Instant::now();
         let mut monitor = Monitor::default();
-        monitor.check(&manager, &available).await.unwrap();
+        monitor.check(&manager, start, &available).await.unwrap();
         let names = |workspaces: Vec<Workspace>| {
             workspaces
                 .into_iter()
@@ -272,14 +274,14 @@ mod tests {
         // That pass freed enough space, so the next low reading starts another.
         // Space above the stop threshold stops nothing.
         let above_stop = |_: &Path| Ok(manager.config().overload.disk.stop_free_bytes());
-        monitor.check(&manager, above_stop).await.unwrap();
+        monitor.check(&manager, start, above_stop).await.unwrap();
         assert_eq!(names(manager.list_workspaces().await.unwrap()), ["first"]);
         // A pass that could not free enough space waits for the interval.
         manager.release_hold(&held.id, "keep".into()).await.unwrap();
-        monitor.check(&manager, above_stop).await.unwrap();
+        monitor.check(&manager, start, above_stop).await.unwrap();
         assert_eq!(names(manager.list_workspaces().await.unwrap()), ["first"]);
-        Monitor::default()
-            .check(&manager, above_stop)
+        monitor
+            .check(&manager, start + CLEANUP_INTERVAL, above_stop)
             .await
             .unwrap();
         assert!(manager.list_workspaces().await.unwrap().is_empty());
@@ -290,7 +292,7 @@ mod tests {
         std::fs::write(&config, "[overload.disk]\nenabled = false\n").unwrap();
         manager.reload_config().await.unwrap();
         Monitor::default()
-            .check(&manager, |_: &Path| -> io::Result<u64> {
+            .check(&manager, start, |_: &Path| -> io::Result<u64> {
                 panic!("disabled disk protection sampled free space")
             })
             .await

@@ -813,9 +813,13 @@ async fn critical_disk_space_stops_executions_cleanup_cannot_remove() {
     let (_root, manager, workspace, serving) = fixture().await;
     let agent = launch(&manager, &workspace);
     wait_started(&workspace).await;
-    bounded(super::disk::Monitor::default().check(&manager, |_: &std::path::Path| Ok(0)))
-        .await
-        .unwrap();
+    bounded(super::disk::Monitor::default().check(
+        &manager,
+        tokio::time::Instant::now(),
+        |_: &std::path::Path| Ok(0),
+    ))
+    .await
+    .unwrap();
     bounded(agent).await.unwrap().unwrap();
     let retained = manager.inspect_workspace(&workspace.id).await.unwrap();
     assert!(retained.executions.is_empty());
