@@ -1129,6 +1129,9 @@ simulator leases, permits, holds and failed checks block cleanup. Pushed means r
 from locally known remote branches or the local default branch; no fetch.
 Sweeps run about every 30 seconds; a failed step does not skip the others, and
 timers reset on restart. The daemon needs `lsof` on PATH.
+`shoal cleanup` removes these workspaces now, without their idle delay and also
+where idle cleanup is disabled, and reports any it retained; `--dry-run` lists them
+instead. Removals record the `manual` event cause. Workspace processes cannot run it.
 
 ```toml
 [auto_cleanup]

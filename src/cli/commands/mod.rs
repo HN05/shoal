@@ -3,6 +3,7 @@
 mod access;
 mod acquisition;
 mod base;
+mod cleanup;
 mod configuration;
 mod events;
 mod holds;
@@ -377,6 +378,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             )
             .await
         }
+        Command::Cleanup { dry_run } => cleanup::run(&ctx, dry_run).await,
         Command::Exec { workspace, command } => workspaces::exec(&ctx, workspace, command).await,
         Command::Claude { workspace, args } => agents::claude(&ctx, workspace, args).await,
         Command::Codex {

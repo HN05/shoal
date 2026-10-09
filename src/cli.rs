@@ -424,6 +424,14 @@ pub enum Command {
         #[arg(long, conflicts_with = "keep_branch")]
         delete_branch: bool,
     },
+    /// Remove every workspace automatic cleanup would remove, without waiting for its idle delay.
+    ///
+    /// Applies where idle cleanup is disabled; dirty, unpushed, held or busy workspaces are kept.
+    Cleanup {
+        /// List the workspaces without removing them.
+        #[arg(long)]
+        dry_run: bool,
+    },
     /// Run an arbitrary command in a workspace.
     Exec {
         workspace: Option<String>,

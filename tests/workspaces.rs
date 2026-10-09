@@ -608,6 +608,37 @@ fn deleted_worktree_with_interrupted_rename_can_be_removed() {
 }
 
 #[test]
+fn cleanup_removes_idle_candidates_on_request() {
+    let fixture = Fixture::new();
+    let clean = fixture.add("clean");
+    let dirty = fixture.add("dirty");
+    fs::write(
+        Path::new(dirty["path"].as_str().unwrap()).join("work"),
+        "keep",
+    )
+    .unwrap();
+    let binary = env!("CARGO_BIN_EXE_shoal");
+    let denied = fixture.run(&["exec", "dirty", "--", binary, "cleanup"]);
+    assert!(!denied.status.success());
+    assert!(String::from_utf8_lossy(&denied.stderr).contains("workspace processes can only"));
+    let preview = fixture.ok(&["cleanup", "--dry-run"]);
+    assert_eq!(preview["removed"], serde_json::json!(["clean"]));
+    assert!(Path::new(clean["path"].as_str().unwrap()).exists());
+    let report = fixture.ok(&["cleanup"]);
+    assert_eq!(report["removed"], serde_json::json!(["clean"]));
+    assert_eq!(report["retained"], serde_json::json!([]));
+    assert!(!Path::new(clean["path"].as_str().unwrap()).exists());
+    let names: Vec<_> = fixture
+        .ok(&["ls"])
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|w| w["name"].clone())
+        .collect();
+    assert_eq!(names, ["dirty"]);
+}
+
+#[test]
 fn named_workspace_uses_committed_history_and_deletes_redundant_branch() {
     let fixture = Fixture::new();
     let first = fixture.ok(&["repo", "list"]);
