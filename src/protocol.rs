@@ -43,8 +43,9 @@ pub mod timing {
     /// Observe daemon transitions promptly without busy-polling the socket.
     pub const DAEMON_POLL_INTERVAL: Duration = Duration::from_millis(100);
 
-    /// Ordinary command registration needs no slow preparation.
-    pub const EXECUTION_START_TIMEOUT: Duration = Duration::from_secs(5);
+    /// Ordinary command registration needs no slow preparation, but its process
+    /// and worktree checks run subprocesses; only guard against a hung daemon.
+    pub const EXECUTION_START_TIMEOUT: Duration = Duration::from_secs(30);
     /// Setup and landing can wait for Git gates, hooks, and upstream refreshes.
     pub const PREPARED_EXECUTION_START_TIMEOUT: Duration = Duration::from_secs(120);
     /// Wait for the daemon to persist the spawned child's process group.
