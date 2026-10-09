@@ -141,7 +141,7 @@ pub async fn sweep(manager: &Manager, timers: &mut Timers) -> Result<()> {
 
 /// The idle delay and snapshot of a ready, removable workspace; `None` when
 /// it is not, its idle cleanup is disabled, or its config cannot be read.
-async fn observe(manager: &Manager, workspace: &Workspace) -> Option<(Duration, u64)> {
+pub(super) async fn observe(manager: &Manager, workspace: &Workspace) -> Option<(Duration, u64)> {
     if workspace.state != WorkspaceState::Ready {
         return None;
     }

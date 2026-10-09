@@ -7,6 +7,7 @@ use serde::Deserialize;
 pub struct Overload {
     pub memory: Memory,
     pub cpu: Cpu,
+    pub disk: Disk,
     pub recovery: Recovery,
     pub cooldown_seconds: u64,
     pub poll_seconds: u64,
@@ -17,6 +18,7 @@ impl Default for Overload {
         Self {
             memory: Memory::default(),
             cpu: Cpu::default(),
+            disk: Disk::default(),
             recovery: Recovery::default(),
             cooldown_seconds: 5,
             poll_seconds: 2,
@@ -58,6 +60,33 @@ impl Default for Cpu {
             used_percent: 90,
             sustained_seconds: 300,
         }
+    }
+}
+
+/// Free space, in GiB, on filesystems holding workspaces or daemon state.
+#[derive(Debug, PartialEq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Disk {
+    pub enabled: bool,
+    /// Remove workspaces idle cleanup would remove, without the idle delay.
+    pub cleanup_free_gib: u64,
+    /// Stop tracked executions when cleanup cannot free enough space.
+    pub stop_free_gib: u64,
+}
+
+impl Default for Disk {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            cleanup_free_gib: 5,
+            stop_free_gib: 2,
+        }
+    }
+}
+
+impl Disk {
+    pub fn cleanup_free_bytes(&self) -> u64 {
+        self.cleanup_free_gib << 30
     }
 }
 
@@ -106,6 +135,14 @@ impl Overload {
                 && self.recovery.cpu_used_percent < self.cpu.used_percent,
             "overload.recovery.cpu_used_percent must be positive and below overload.cpu.used_percent"
         );
+        ensure!(
+            (1..=MAX_FREE_GIB).contains(&self.disk.stop_free_gib),
+            "overload.disk.stop_free_gib must be between 1 and {MAX_FREE_GIB}"
+        );
+        ensure!(
+            (self.disk.stop_free_gib..=MAX_FREE_GIB).contains(&self.disk.cleanup_free_gib),
+            "overload.disk.cleanup_free_gib must be between overload.disk.stop_free_gib and {MAX_FREE_GIB}"
+        );
         validate_seconds(
             self.recovery.sustained_seconds,
             "overload.recovery.sustained_seconds",
@@ -114,6 +151,9 @@ impl Overload {
         validate_seconds(self.cooldown_seconds, "overload.cooldown_seconds")
     }
 }
+
+/// One PiB keeps byte thresholds far from overflow.
+const MAX_FREE_GIB: u64 = 1 << 20;
 
 fn validate_seconds(value: u64, key: &str) -> Result<()> {
     ensure!(
@@ -132,6 +172,7 @@ mod tests {
         let defaults = Overload::default();
         assert!(defaults.memory.enabled);
         assert!(!defaults.cpu.enabled);
+        assert!(defaults.disk.enabled);
         defaults.validate().unwrap();
         for text in [
             "cooldown_seconds = 0",
@@ -144,6 +185,9 @@ mod tests {
             "[memory]\nused_percent = 0",
             "[memory]\nused_percent = 100",
             "[memory]\nsustained_seconds = 86401",
+            "[disk]\nstop_free_gib = 0",
+            "[disk]\ncleanup_free_gib = 1",
+            "[disk]\ncleanup_free_gib = 1048577",
         ] {
             let config: Overload = toml::from_str(text).unwrap();
             assert!(config.validate().is_err(), "{text}");

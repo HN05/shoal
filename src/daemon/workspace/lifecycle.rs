@@ -29,8 +29,8 @@ enum Removal<'a> {
         choice: BranchChoice,
         inspection: InspectionPolicy,
     },
-    /// Idle cleanup; only safe, unchanged workspaces may go.
-    Automatic { snapshot: u64 },
+    /// Idle or disk-space cleanup; only safe, unchanged workspaces may go.
+    Automatic { snapshot: u64, cause: EventCause },
     /// The directory was deleted outside Shoal; forget the workspace and
     /// release what it owned, retaining its branch.
     Deleted,
@@ -40,7 +40,7 @@ impl Removal<'_> {
     fn cause(self) -> EventCause {
         match self {
             Self::Manual { .. } => EventCause::Manual,
-            Self::Automatic { .. } => EventCause::Idle,
+            Self::Automatic { cause, .. } => cause,
             Self::Merged { .. } => EventCause::Pr,
             Self::Completed { cause, .. } => cause,
             Self::Deleted => EventCause::MissingDirectory,
@@ -224,8 +224,19 @@ impl Manager {
     }
 
     pub async fn remove_idle(&self, selector: &str, snapshot: u64) -> Result<()> {
+        self.remove_unused(selector, snapshot, EventCause::Idle)
+            .await
+    }
+
+    /// Remove an idle cleanup candidate without waiting for its idle delay.
+    pub async fn remove_for_disk_space(&self, selector: &str, snapshot: u64) -> Result<()> {
+        self.remove_unused(selector, snapshot, EventCause::DiskSpace)
+            .await
+    }
+
+    async fn remove_unused(&self, selector: &str, snapshot: u64, cause: EventCause) -> Result<()> {
         let _guard = self.pr_gate.lock().await;
-        self.remove(selector, Removal::Automatic { snapshot })
+        self.remove(selector, Removal::Automatic { snapshot, cause })
             .await
             .map(|_| ())
     }
@@ -388,7 +399,7 @@ impl Manager {
         }
         self.stop_executions(&workspace.id, removal.stop_policy())
             .await?;
-        if let Removal::Automatic { snapshot } = removal {
+        if let Removal::Automatic { snapshot, .. } = removal {
             ensure!(
                 self.cleanup_snapshot(&workspace.id).await? == Some(snapshot),
                 "workspace changed before automatic removal"
@@ -431,7 +442,7 @@ impl Manager {
                 "workspace is held; retaining it"
             );
         }
-        if let Removal::Automatic { snapshot } = removal {
+        if let Removal::Automatic { snapshot, .. } = removal {
             ensure!(
                 self.cleanup_snapshot(&workspace.id).await? == Some(snapshot),
                 "workspace changed during removal hooks"
@@ -482,7 +493,7 @@ impl Manager {
         let repo = self.repository(&workspace.repository_id).await?;
         ensure!(
             !matches!(removal, Removal::Automatic { .. }),
-            "workspace directory disappeared during idle cleanup"
+            "workspace directory disappeared during automatic cleanup"
         );
         ensure!(
             self.missing_worktree(workspace).await?.is_none(),

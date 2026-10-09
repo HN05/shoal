@@ -93,6 +93,7 @@ git --git-dir="$common" worktree add "$SHOAL_WORKSPACE_PATH" "$branch""#;
                     .await
                     .unwrap()
                     .unwrap(),
+                cause: EventCause::Idle,
             },
             Some(choice) => Removal::Manual {
                 choice,
@@ -153,7 +154,13 @@ async fn directory_activity_distinguishes_inspection_from_removal_checks() {
             },
             true,
         ),
-        (Removal::Automatic { snapshot: 0 }, true),
+        (
+            Removal::Automatic {
+                snapshot: 0,
+                cause: EventCause::Idle,
+            },
+            true,
+        ),
         (Removal::Merged { head: "" }, true),
     ] {
         let (_root, manager, workspace) = fixture().await;
@@ -201,7 +208,10 @@ async fn unknown_execution_blocks_stop_and_unattended_removal_even_when_missing(
                 choice: BranchChoice::KeepBranch,
                 inspection: InspectionPolicy::GitOnly,
             },
-            Removal::Automatic { snapshot: 0 },
+            Removal::Automatic {
+                snapshot: 0,
+                cause: EventCause::Idle,
+            },
             Removal::Merged { head: "" },
             Removal::Deleted,
         ] {

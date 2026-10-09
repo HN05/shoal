@@ -4,6 +4,7 @@ pub mod access;
 pub mod allocation;
 mod auto_update;
 mod cleanup;
+mod disk;
 pub mod doctor;
 pub mod events;
 mod execution_connection;
@@ -123,6 +124,7 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
     let mut background = JoinSet::new();
     background.spawn(cleanup::run(manager.clone()));
     background.spawn(overload::run(manager.clone()));
+    background.spawn(disk::run(manager.clone()));
     background.spawn(expire_simulators(manager.clone()));
     let mut clients = JoinSet::new();
     let mut quiescence = None;

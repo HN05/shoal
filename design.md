@@ -84,6 +84,10 @@ never replay the original task prompt. Keep waiting wrappers tracked, serialize
 restores, and preserve manual recovery across restarts. Saved recovery represents
 unfinished work until restored or explicitly discarded.
 Agent metadata is transient, so restart cannot select disconnected survivors.
+Disk protection reads available space on filesystems holding workspaces or
+daemon state. Below its cleanup threshold it removes idle cleanup candidates there
+without their idle delay, through the same removal path and repository settings;
+a failed reading authorizes nothing.
 Manual stop ends connected tracked executions through their wrappers, preserving
 work and leases. Agents save session recovery for explicit resume; user commands
 save their arguments, which resume reports once, as the restored agent's first

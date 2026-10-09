@@ -121,6 +121,13 @@ leases and records an `agent_stopped` notification.
 Ordinary commands, desktop handoffs and disconnected executions are not selected.
 Monitoring does not guarantee that the OS will never reach its OOM limit.
 
+When space available to unprivileged processes on a filesystem holding
+workspaces or daemon state falls below `disk.cleanup_free_gib`, the daemon
+removes the workspaces there that idle cleanup would remove, without waiting for
+their idle delay, until enough space is available. A repository with idle
+cleanup disabled keeps its workspaces. Passes run at most every 30 seconds and
+record `workspace_removed` notifications and the `disk_space` event cause.
+
 Configure machine-wide settings in global TOML and reload the daemon:
 
 ```toml
@@ -137,6 +144,10 @@ sustained_seconds = 0           # Stop on the first critical sample
 enabled = false                # Opt in with true
 used_percent = 90              # Aggregate busy time across all cores; 1–100
 sustained_seconds = 300         # Five minutes
+
+[overload.disk]
+enabled = true                 # Opt out with false
+cleanup_free_gib = 5           # Remove idle cleanup candidates below this
 
 [overload.recovery]
 enabled = true                 # Applies only with a configured resume command
@@ -1099,7 +1110,8 @@ an event consumer: Shoal itself does not change the issue or PR.
 
 ### Automatic cleanup
 
-Idle, clean, fully pushed worktrees are removed after 10 minutes by default.
+Idle, clean, fully pushed worktrees are removed after 10 minutes by default, or
+sooner when [disk space](#overload-protection) runs low.
 Deleted directories are forgotten even when disabled, releasing resources and
 retaining branches; moved worktrees or recorded commands need manual recovery.
 File changes (including ignored files), HEAD and commands reset the timer.
@@ -1138,7 +1150,7 @@ workspace and repository UUIDs (`workspace_id`, `repository_id`), `name`, `path`
 object with the linked issue or PR's `kind` and canonical `url`. `created` and `base_changed`
 events add `base_workspace` with the base's `id`, `name` and `branch`, or null.
 Causes are `manual`, `idle`, `issue`, `pr` (including a base workspace's merged
-PRs), `completion`, `missing_directory`, or `removed` for a base workspace's removal, and null
+PRs), `completion`, `missing_directory`, `disk_space`, or `removed` for a base workspace's removal, and null
 when inapplicable; `error` describes setup or cleanup failures. Branch changes
 are observed during daemon sweeps; detached HEAD has a null branch, and the
 recorded workspace branch remains unchanged.

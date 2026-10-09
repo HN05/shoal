@@ -39,6 +39,8 @@ states!(EventCause {
     Pr => "pr",
     Completion => "completion",
     MissingDirectory => "missing_directory",
+    /// Free disk space fell below the configured cleanup threshold.
+    DiskSpace => "disk_space",
     /// The base workspace was removed and its own base took its place.
     Removed => "removed",
 });
