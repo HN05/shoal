@@ -15842,7 +15842,12 @@ elif args[:2] == ['tab', 'rename'] and (root / 'fail-rename').exists():
     sys.exit('rename-failed')
 elif args[:2] == ['tab', 'get']:
     print(json.dumps({'result': {'tab_id': args[2]}}))
-print('{}') if args[:2] != ['tab', 'create'] else None
+elif args[:2] == ['pane', 'process-info']:
+    idle = root / 'idle-panes'
+    at_prompt = idle.exists() and args[3] in idle.read_text().split()
+    processes = {'shell_pid': 1, 'foreground_process_group_id': 1 if at_prompt else 2}
+    print(json.dumps({'result': {'process_info': processes}}))
+print('{}') if args[:2] not in (['tab', 'create'], ['pane', 'process-info']) else None
 "#,
     );
 }
@@ -15950,18 +15955,20 @@ fn herdr_handoff_preserves_choices_and_literal_arguments() {
 }
 
 #[test]
-fn herdr_resume_all_opens_a_background_tab_per_stopped_agent() {
-    let fixture = Fixture::new();
+fn herdr_resume_all_reuses_stopped_panes_and_labels_new_tabs_as_add_does() {
+    let fixture = Fixture::with_config(Some("[herdr]\ntab_name = 'resumed {branch}'\n"));
     install_fake_herdr(&fixture);
+    // The first agent's pane is back at its prompt; the second's is busy.
+    fs::write(fixture.root.path().join("idle-panes"), "w1:p5\n").unwrap();
     let mut expected = Vec::new();
-    for name in ["first", "second"] {
+    for (name, pane) in [("first", "w1:p5"), ("second", "w1:p6")] {
         let workspace = fixture.add(name);
         let id = workspace["id"].as_str().unwrap();
         let state = fixture.root.path().join("state/workspaces").join(id);
         fs::create_dir_all(&state).unwrap();
         fs::write(
             state.join(format!("{name}-agent.recovery.json")),
-            r#"{"agent":"claude"}"#,
+            format!(r#"{{"agent":"claude","herdr_pane":"{pane}"}}"#),
         )
         .unwrap();
         expected.push((
@@ -15973,23 +15980,31 @@ fn herdr_resume_all_opens_a_background_tab_per_stopped_agent() {
     let (output, transcript) = herdr_call(&fixture, &["resume", "--all"], "");
     assert!(output.status.success(), "{output:?} {transcript}");
     assert!(
-        String::from_utf8_lossy(&output.stdout).contains("Resuming 2 agents in new Herdr tabs"),
+        String::from_utf8_lossy(&output.stdout).contains("Resuming 2 agents in Herdr tabs"),
         "{output:?}"
     );
     let calls = herdr_calls(&fixture);
-    assert_eq!(calls.len(), 4, "{calls:?}");
-    for ((path, id, execution), pair) in expected.iter().zip(calls.chunks(2)) {
-        let create = &pair[0];
-        assert_eq!(create[..2], ["tab", "create"]);
-        let cwd = create.iter().position(|arg| arg == "--cwd").unwrap();
-        assert_eq!(&create[cwd + 1], path);
-        assert!(create.iter().any(|arg| arg == "--no-focus"));
-        let worker = pair[1][3].split(' ').collect::<Vec<_>>();
+    assert_eq!(calls.len(), 5, "{calls:?}");
+    let resumed = |run: &[String], (_, id, execution): &(String, String, String)| {
+        let worker = run[3].split(' ').collect::<Vec<_>>();
         assert_eq!(
             worker[worker.len() - 4..],
             ["resume", id.as_str(), "--execution", execution.as_str()]
         );
-    }
+    };
+    assert_eq!(calls[0][..4], ["pane", "process-info", "--pane", "w1:p5"]);
+    assert_eq!(calls[1][..3], ["pane", "run", "w1:p5"]);
+    resumed(&calls[1], &expected[0]);
+    assert_eq!(calls[2][..4], ["pane", "process-info", "--pane", "w1:p6"]);
+    let create = &calls[3];
+    assert_eq!(create[..2], ["tab", "create"]);
+    let cwd = create.iter().position(|arg| arg == "--cwd").unwrap();
+    assert_eq!(create[cwd + 1], expected[1].0);
+    let label = create.iter().position(|arg| arg == "--label").unwrap();
+    assert_eq!(create[label + 1], "resumed second");
+    assert!(create.iter().any(|arg| arg == "--no-focus"));
+    assert_eq!(calls[4][..3], ["pane", "run", "w1:p9"]);
+    resumed(&calls[4], &expected[1]);
 }
 
 #[test]

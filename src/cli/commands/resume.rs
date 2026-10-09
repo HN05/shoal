@@ -136,8 +136,10 @@ fn discard_saved(saved: &Saved, active: impl Fn(&str) -> bool) -> Result<Vec<Str
 }
 
 /// Resume each workspace's stopped work. Commands without an agent are
-/// reported here; one agent resumes in this terminal, several in new Herdr
-/// tabs where available, and otherwise each is listed for its own terminal.
+/// reported here. Inside Herdr an agent resumes in the pane it stopped in
+/// when that pane is back at its prompt; otherwise one agent resumes in this
+/// terminal, several in new Herdr tabs, and without Herdr each is listed for
+/// its own terminal.
 pub async fn run_all(ctx: &Context, discard: bool) -> Result<i32> {
     ensure!(
         !crate::env::inherits_scope(&ctx.paths.state),
@@ -182,40 +184,43 @@ pub async fn run_all(ctx: &Context, discard: bool) -> Result<i32> {
                 saved
                     .agents
                     .into_iter()
-                    .map(|(id, _)| (workspace.clone(), id)),
+                    .map(|(id, path)| (workspace.clone(), id, path)),
             );
         }
     }
-    if let [(workspace, id)] = sessions.as_slice()
-        && ctx.interactive()
-    {
-        return run(ctx, Some(workspace.id.clone()), Some(id.clone()), false).await;
-    }
+    let single = sessions.len() == 1 && ctx.interactive();
     let mut agents = Vec::new();
-    for (workspace, id) in &sessions {
-        let tab = herdr::available(ctx)
+    for (workspace, id, record) in &sessions {
+        let tabs = herdr::available(ctx)
             && client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone()))
                 .await?
                 .herdr
                 .new_tab;
-        if tab {
-            let args = ["resume", &workspace.id, "--execution", id].map(OsString::from);
-            herdr::run_in_tab(ctx, &workspace.path, &workspace.branch, &args).await?;
+        let args = ["resume", &workspace.id, "--execution", id].map(OsString::from);
+        let reused = tabs && resume_in_recorded_pane(ctx, record, &args).await?;
+        if single && !reused {
+            return run(ctx, Some(workspace.id.clone()), Some(id.clone()), false).await;
         }
-        agents.push(json!({"workspace": workspace.name, "execution": id, "tab": tab}));
+        if tabs && !reused {
+            let label = launch_label(ctx, workspace).await;
+            herdr::run_in_tab(ctx, &workspace.path, &label, &args).await?;
+        }
+        agents.push(json!({
+            "workspace": workspace.name,
+            "execution": id,
+            "tab": tabs,
+            "reused": reused,
+        }));
     }
     ctx.show(&json!({"commands": commands, "agents": agents}), |_| {
         let listed = agents.iter().filter(|agent| agent["tab"] == false).count();
         if listed < sessions.len() {
-            println!(
-                "Resuming {} agents in new Herdr tabs",
-                sessions.len() - listed
-            );
+            println!("Resuming {} agents in Herdr tabs", sessions.len() - listed);
         }
         if listed > 0 {
             println!("Resume each agent in its own terminal:");
         }
-        for ((workspace, id), agent) in sessions.iter().zip(&agents) {
+        for ((workspace, id, _), agent) in sessions.iter().zip(&agents) {
             if agent["tab"] == false {
                 let words = ["shoal", "resume", &workspace.name, "--execution", id];
                 println!("  {}", crate::shell::quote(&words));
@@ -223,6 +228,52 @@ pub async fn run_all(ctx: &Context, discard: bool) -> Result<i32> {
         }
     })?;
     Ok(0)
+}
+
+/// Restore the agent in the Herdr pane it stopped in, unless that pane is
+/// this terminal, busy or gone.
+async fn resume_in_recorded_pane(
+    ctx: &Context,
+    record: &std::path::Path,
+    args: &[OsString],
+) -> Result<bool> {
+    let pane = std::fs::read(record)
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<Record>(&bytes).ok())
+        .and_then(|record| record.herdr_pane)
+        .filter(|pane| herdr::current_pane().as_ref() != Some(pane));
+    match pane {
+        Some(pane) => herdr::run_at_prompt(ctx, &pane, args).await,
+        None => Ok(false),
+    }
+}
+
+/// The tab label `shoal add` would give the workspace. A failed issue lookup
+/// falls back to the branch.
+async fn launch_label(ctx: &Context, workspace: &Workspace) -> String {
+    let labelled = async {
+        let settings =
+            client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
+        let repositories = client::repositories(&ctx.paths).await?;
+        let repo = repositories
+            .iter()
+            .find(|repo| repo.id == workspace.repository_id)
+            .context("repository is no longer registered")?;
+        let issue = match &workspace.links.issue {
+            Some(url) => Some(super::issues::load(repo, url).await?),
+            None => None,
+        };
+        anyhow::Ok(herdr::tab_label(
+            settings.herdr.tab_name,
+            repo,
+            issue.as_ref(),
+            &workspace.branch,
+        ))
+    };
+    labelled.await.unwrap_or_else(|error| {
+        eprintln!("warning: cannot label the Herdr tab: {error:#}");
+        workspace.branch.clone()
+    })
 }
 
 /// Only one resume reports a command; another holding its lock skips it.

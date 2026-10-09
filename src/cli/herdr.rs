@@ -14,7 +14,9 @@ use super::{
     context::Context,
     internal,
 };
-use crate::{config::Config, env, paths::Paths, protocol::ConfigTarget, subprocess::Run};
+use crate::{
+    config::Config, env, model::Repository, paths::Paths, protocol::ConfigTarget, subprocess::Run,
+};
 
 pub struct Tab {
     id: String,
@@ -30,6 +32,15 @@ pub(in crate::cli) struct TabName {
 }
 
 impl TabName {
+    fn new(template: String, repo: &Repository, issue: Option<&Issue>) -> Self {
+        Self {
+            template,
+            repo: crate::forge::repository::name(repo).to_owned(),
+            issue_number: issue.map(|issue| issue.number),
+            issue_title: issue.map(|issue| issue.title.clone()),
+        }
+    }
+
     pub fn render(&self, branch: &str) -> String {
         crate::config::templates::render(
             &self.template,
@@ -74,16 +85,52 @@ pub(super) async fn handoff(
     if let Some(template) = settings.herdr.tab_name {
         let repos = client::repositories(&ctx.paths).await?;
         let repo = crate::forge::repository::select(&repos, &plan.repository).await?;
-        plan.tab_name = Some(TabName {
-            template,
-            repo: crate::forge::repository::name(repo).to_owned(),
-            issue_number: issue.map(|issue| issue.number),
-            issue_title: issue.map(|issue| issue.title.clone()),
-        });
+        plan.tab_name = Some(TabName::new(template, repo, issue));
     }
     let created = create_tab(ctx, plan, focus).await?;
     submit_worker(ctx, created, settings.herdr.close_when_done).await?;
     Ok(true)
+}
+
+/// The label `shoal add` gives a workspace's tab: the `tab_name` template,
+/// `<repo>#<number>` for an issue, or the branch.
+pub(in crate::cli) fn tab_label(
+    template: Option<String>,
+    repo: &Repository,
+    issue: Option<&Issue>,
+    branch: &str,
+) -> String {
+    match template {
+        Some(template) => TabName::new(template, repo, issue).render(branch),
+        None => issue.map_or_else(|| branch.to_owned(), |issue| issue.tab_label(repo)),
+    }
+}
+
+/// Run Shoal with `args` in `pane` if it is back at its shell prompt, as a
+/// stopped agent's pane is once its wrapper exits. Returns whether it ran.
+pub(in crate::cli) async fn run_at_prompt(
+    ctx: &Context,
+    pane: &str,
+    args: &[OsString],
+) -> Result<bool> {
+    if !at_prompt(pane).await {
+        return Ok(false);
+    }
+    let mut argv = shoal_argv(&ctx.paths)?;
+    argv.extend_from_slice(args);
+    run_in_pane(pane, &argv).await?;
+    Ok(true)
+}
+
+/// A pane that is gone, unreadable or running a program is not at its prompt.
+async fn at_prompt(pane: &str) -> bool {
+    let mut info = Command::new("herdr");
+    info.args(["pane", "process-info", "--pane"]).arg(pane);
+    let Ok(output) = Run::new(info).checked().await else {
+        return false;
+    };
+    serde_json::from_slice::<ProcessInfo>(&output.stdout)
+        .is_ok_and(|info| info.result.process_info.shell_in_foreground())
 }
 
 /// The Herdr pane this process runs in.
@@ -111,7 +158,7 @@ pub(in crate::cli) async fn run_in_tab(
     let created = created(tab_command(ctx, cwd, label, false)?).await?;
     let mut argv = shoal_argv(&ctx.paths)?;
     argv.extend_from_slice(args);
-    run_in_pane(&created, &argv).await
+    run_in_pane(&created.root_pane.pane_id, &argv).await
 }
 
 // The tab environment carries the plan, keeping the typed command short.
@@ -166,18 +213,18 @@ async fn submit_worker(ctx: &Context, created: CreatedResult, close_when_done: b
     if close_when_done {
         argv.push("--close-when-done".into());
     }
-    run_in_pane(&created, &argv).await
+    run_in_pane(&created.root_pane.pane_id, &argv).await
 }
 
-async fn run_in_pane(created: &CreatedResult, argv: &[OsString]) -> Result<()> {
+async fn run_in_pane(pane: &str, argv: &[OsString]) -> Result<()> {
     let mut run = Command::new("herdr");
     run.args(["pane", "run"])
-        .arg(&created.root_pane.pane_id)
+        .arg(pane)
         .arg(shell_command(argv)?);
     Run::new(run)
         .checked()
         .await
-        .context("run Shoal in the new Herdr tab (tab retained)")?;
+        .context("run Shoal in the Herdr tab (tab retained)")?;
     Ok(())
 }
 
@@ -188,6 +235,26 @@ fn shoal_argv(paths: &Paths) -> Result<Vec<OsString>> {
         argv.extend(["--state-dir".into(), paths.state.clone().into_os_string()]);
     }
     Ok(argv)
+}
+
+#[derive(Deserialize)]
+struct ProcessInfo {
+    result: ProcessInfoResult,
+}
+#[derive(Deserialize)]
+struct ProcessInfoResult {
+    process_info: PaneProcesses,
+}
+#[derive(Deserialize)]
+struct PaneProcesses {
+    foreground_process_group_id: Option<i64>,
+    shell_pid: Option<i64>,
+}
+
+impl PaneProcesses {
+    fn shell_in_foreground(&self) -> bool {
+        self.shell_pid.is_some() && self.shell_pid == self.foreground_process_group_id
+    }
 }
 
 #[derive(Deserialize)]
@@ -499,6 +566,41 @@ mod tests {
             assert!(Lifecycle::Removed.closes_tab(status));
             assert!(!Lifecycle::Active.closes_tab(status));
         }
+    }
+
+    #[test]
+    fn only_a_shell_in_the_foreground_is_at_its_prompt() {
+        let processes = |foreground: i64| {
+            let output = format!(
+                r#"{{"id":"cli:pane:process_info","result":{{"process_info":{{"foreground_process_group_id":{foreground},"foreground_processes":[],"pane_id":"w2:p6","shell_pid":58481}},"type":"pane_process_info"}}}}"#
+            );
+            serde_json::from_str::<ProcessInfo>(&output)
+                .unwrap()
+                .result
+                .process_info
+        };
+        assert!(processes(58481).shell_in_foreground());
+        assert!(!processes(58578).shell_in_foreground());
+        let unknown: ProcessInfo =
+            serde_json::from_str(r#"{"result":{"process_info":{"pane_id":"w2:p6"}}}"#).unwrap();
+        assert!(!unknown.result.process_info.shell_in_foreground());
+    }
+
+    #[test]
+    fn tabs_without_an_issue_use_the_template_or_branch() {
+        let repo = Repository {
+            id: "repo".into(),
+            path: "/repo".into(),
+            source: "https://example.com/owner/shoal.git".into(),
+            last_used: 0,
+            name: Some("shoal".into()),
+            workspaces_dir: None,
+        };
+        assert_eq!(tab_label(None, &repo, None, "topic"), "topic");
+        assert_eq!(
+            tab_label(Some("{repo}: {branch}".into()), &repo, None, "topic"),
+            "shoal: topic"
+        );
     }
 
     #[test]
