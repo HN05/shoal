@@ -61,8 +61,8 @@ mod tests {
 
     #[test]
     fn edits_dotted_and_quoted_keys_without_losing_comments() {
-        let source = "# policy\n[auto_cleanup]\nenabled = true # keep\nidle_minutes = 30\n";
-        let result = edit(source, "auto_cleanup.enabled", Some("false")).unwrap();
+        let source = "# policy\n[cleanup.auto]\nenabled = true # keep\nidle_minutes = 30\n";
+        let result = edit(source, "cleanup.auto.enabled", Some("false")).unwrap();
         assert_eq!(result, source.replace("true", "false"));
         let result = edit(&result, "commands.\"test.unit\"", Some("['cargo', 'test']")).unwrap();
         let parsed: toml::Value = toml::from_str(&result).unwrap();

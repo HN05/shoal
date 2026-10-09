@@ -51,7 +51,7 @@ when behavior changes, distinguishing decisions from proposals.
 - `shoal sync` fetches the default branch's remote and fast-forwards the local
   default branch under the creation refresh rules. It never pushes or moves
   workspace branches; agents update their branch from it with plain Git.
-- `[auto_cleanup]` has `enabled` (default true) and `idle_minutes` (default
+- `[cleanup.auto]` has `enabled` (default true) and `idle_minutes` (default
   10), resolved per workspace on each sweep. Automatic removal is only for idle,
   clean worktrees with all commits pushed or on the local default branch, or deleted worktrees. Keep one removal path for manual and automatic
   cleanup, retaining the default branch unless explicitly deleted. Only explicit

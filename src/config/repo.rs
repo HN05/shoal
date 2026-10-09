@@ -77,7 +77,12 @@ pub struct RepoConfig {
     pub resources: BTreeMap<String, crate::daemon::resources::ResourceConfig>,
     pub resource_pools: BTreeMap<String, crate::daemon::resources::PoolConfig>,
     pub simulators: SimulatorPreferences,
+    pub cleanup: Cleanup,
+    /// Former names of `[cleanup.auto]` and `[cleanup.pr]`; parsing folds them
+    /// into `cleanup` so existing configs load.
+    #[serde(skip_serializing)]
     pub auto_cleanup: AutoCleanup,
+    #[serde(skip_serializing)]
     pub pr_cleanup: PrCleanup,
     pub done: Done,
     pub review: Review,
@@ -136,7 +141,10 @@ pub fn load(workspace_dir: &Path) -> Result<RepoConfig> {
 }
 
 pub fn parse(text: &str) -> Result<RepoConfig> {
-    let config: RepoConfig = toml::from_str(text)?;
+    let mut config: RepoConfig = toml::from_str(text)?;
+    config
+        .cleanup
+        .fold_legacy(&mut config.auto_cleanup, &mut config.pr_cleanup);
     crate::config::named_commands::validate(&config.commands)?;
     crate::config::named_commands::validate(&config.agent_resume)?;
     config.agent_auth.validate()?;
@@ -146,7 +154,7 @@ pub fn parse(text: &str) -> Result<RepoConfig> {
     for &kind in crate::hooks::HookKind::ALL {
         kind.validate(kind.repository_command(&config))?;
     }
-    if let Some(minutes) = config.auto_cleanup.idle_minutes {
+    if let Some(minutes) = config.cleanup.auto.idle_minutes {
         crate::config::validate_idle_minutes(minutes)?;
     }
     crate::config::validate_port_range(config.ports.start, config.ports.end)?;
@@ -177,7 +185,26 @@ pub struct Codex {
     pub default_mode: Option<CodexMode>,
 }
 
-/// Repository values for the global `[auto_cleanup]`.
+/// Repository values for the global `[cleanup]`.
+#[derive(Debug, Default, Clone, Copy, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Cleanup {
+    pub auto: AutoCleanup,
+    pub pr: PrCleanup,
+}
+
+impl Cleanup {
+    /// Take the values the former `[auto_cleanup]` and `[pr_cleanup]` tables
+    /// set where `[cleanup]` leaves them unset, emptying those tables.
+    pub fn fold_legacy(&mut self, auto: &mut AutoCleanup, pr: &mut PrCleanup) {
+        let (auto, pr) = (std::mem::take(auto), std::mem::take(pr));
+        self.auto.enabled = self.auto.enabled.or(auto.enabled);
+        self.auto.idle_minutes = self.auto.idle_minutes.or(auto.idle_minutes);
+        self.pr.enabled = self.pr.enabled.or(pr.enabled);
+    }
+}
+
+/// Repository values for the global `[cleanup.auto]`.
 #[derive(Debug, Default, Clone, Copy, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct AutoCleanup {
@@ -207,7 +234,7 @@ pub struct Land {
     pub push: Option<bool>,
 }
 
-/// Repository value for the global `[pr_cleanup]`.
+/// Repository value for the global `[cleanup.pr]`.
 #[derive(Debug, Default, Clone, Copy, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct PrCleanup {
@@ -247,13 +274,13 @@ mod tests {
              [ports]\non_conflict = 'auto'\nstart = 3000\nend = 3100\n\
              [ports.web]\nport = 3000\n[ports.api]\nport = 4000\n\
              [resources.lock]\ncapacity = 1\n[simulators]\npreferred = ['phone']\n\
-             [auto_cleanup]\nenabled = false\nidle_minutes = 30\n",
+             [cleanup.auto]\nenabled = false\nidle_minutes = 30\n",
         )
         .unwrap();
         let local = parse(
             "setup_cmd = 'local/setup'\n[codex]\ndefault_mode = 'app'\n\
              [ports]\nend = 3050\n[ports.web]\nenv = 'LOCAL_PORT'\n\
-             [resources.signing]\ncapacity = 2\n[auto_cleanup]\nenabled = true\n",
+             [resources.signing]\ncapacity = 2\n[cleanup.auto]\nenabled = true\n",
         )
         .unwrap();
         let config = local.over(base);
@@ -277,12 +304,27 @@ mod tests {
         assert_eq!(config.ports.definitions["api"].port, Some(4000));
         assert_eq!(config.resources.len(), 2);
         assert_eq!(config.simulators.preferred, ["phone"]);
-        assert_eq!(config.auto_cleanup.enabled, Some(true));
-        assert_eq!(config.auto_cleanup.idle_minutes, Some(30));
-        assert_eq!(config.pr_cleanup.enabled, None);
-        assert!(parse("[auto_cleanup]\nidle_minutes = 0\n").is_err());
+        assert_eq!(config.cleanup.auto.enabled, Some(true));
+        assert_eq!(config.cleanup.auto.idle_minutes, Some(30));
+        assert_eq!(config.cleanup.pr.enabled, None);
+        assert!(parse("[cleanup.auto]\nidle_minutes = 0\n").is_err());
         assert!(parse("default_agent = 'happy'\n").is_err());
         assert!(parse("[codex]\ndefault_mode = 'desktop'\n").is_err());
+    }
+
+    #[test]
+    fn former_cleanup_tables_fill_options_cleanup_leaves_unset() {
+        let config = parse(
+            "[auto_cleanup]\nenabled = false\nidle_minutes = 30\n[pr_cleanup]\nenabled = false\n\
+             [cleanup.auto]\nenabled = true\n",
+        )
+        .unwrap();
+        assert_eq!(config.cleanup.auto.enabled, Some(true));
+        assert_eq!(config.cleanup.auto.idle_minutes, Some(30));
+        assert_eq!(config.cleanup.pr.enabled, Some(false));
+        assert!(parse("[auto_cleanup]\nidle_minutes = 0\n").is_err());
+        let saved = toml::to_string(&config).unwrap();
+        assert!(!saved.contains("auto_cleanup") && !saved.contains("pr_cleanup"));
     }
 
     #[test]

@@ -110,7 +110,7 @@ shoal status fix-login        # Workspace activity, changes, resources, and PR s
 shoal status pr 12            # Workspaces that link PR 12; also issue or resource
 shoal config show fix-login   # Effective settings and the source of each value
 shoal config set default_agent codex
-shoal config set auto_cleanup.enabled true auto_cleanup.idle_minutes 30  # Saved together
+shoal config set cleanup.auto.enabled true cleanup.auto.idle_minutes 30  # Saved together
 shoal config set default_agent claude --repo my-project
 shoal config unset default_agent  # Restore the default
 shoal cd fix-login             # Enter a workspace; omit the name for a picker
@@ -276,7 +276,7 @@ Configure idle cleanup in a repository's `.shoal.toml`, or for every repository 
 `~/.config/shoal/config.toml` followed by `shoal daemon reload`:
 
 ```toml
-[auto_cleanup]
+[cleanup.auto]
 enabled = false
 ```
 

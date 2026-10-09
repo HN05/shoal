@@ -46,6 +46,9 @@ pub struct Config {
     pub codex: repo::Codex,
     pub herdr: repo::Herdr,
     pub overload: overload::Overload,
+    pub cleanup: repo::Cleanup,
+    /// Former names of `[cleanup.auto]` and `[cleanup.pr]`; parsing folds them
+    /// into `cleanup` so existing configs load.
     pub auto_cleanup: repo::AutoCleanup,
     pub pr_cleanup: repo::PrCleanup,
     pub done: repo::Done,
@@ -118,6 +121,12 @@ pub struct Simulators {
     pub preferred: Vec<String>,
 }
 
+#[derive(Debug, Default, Serialize)]
+pub struct Cleanup {
+    pub auto: AutoCleanup,
+    pub pr: PrCleanup,
+}
+
 #[derive(Debug, Serialize)]
 pub struct AutoCleanup {
     pub enabled: bool,
@@ -144,7 +153,7 @@ impl AutoCleanup {
 pub fn validate_idle_minutes(minutes: u64) -> Result<()> {
     ensure!(
         minutes > 0 && minutes <= 525600,
-        "auto_cleanup.idle_minutes must be between 1 and 525600"
+        "cleanup.auto.idle_minutes must be between 1 and 525600"
     );
     Ok(())
 }
@@ -399,8 +408,7 @@ impl Config {
                 approval_lifetime: self.simulators.approval_lifetime,
                 ..Default::default()
             },
-            auto_cleanup: self.auto_cleanup,
-            pr_cleanup: self.pr_cleanup,
+            cleanup: self.cleanup,
             done: self.done,
             review: self.review,
             land: self.land,
@@ -409,10 +417,13 @@ impl Config {
     }
 
     fn parse(text: &str, paths: &Paths) -> Result<Self> {
-        let config: Self = toml::from_str(text)?;
+        let mut config: Self = toml::from_str(text)?;
+        config
+            .cleanup
+            .fold_legacy(&mut config.auto_cleanup, &mut config.pr_cleanup);
         crate::ai::validate(&config.ai, &config.commands, &paths.home)?;
         config.root_dir(paths)?;
-        if let Some(minutes) = config.auto_cleanup.idle_minutes {
+        if let Some(minutes) = config.cleanup.auto.idle_minutes {
             validate_idle_minutes(minutes)?;
         }
         config.overload.validate()?;

@@ -190,9 +190,10 @@ impl Manager {
                 || self
                     .workspace_settings(&workspace)
                     .await?
-                    .pr_cleanup
+                    .cleanup
+                    .pr
                     .enabled,
-            "PR cleanup is disabled by [pr_cleanup] enabled = false"
+            "PR cleanup is disabled by [cleanup.pr] enabled = false"
         );
         if !matches!(action, Action::Clear | Action::Unwatch { .. }) {
             self.verify_worktree(&workspace).await?;
@@ -350,7 +351,7 @@ impl Manager {
             if restacked.is_ok()
                 && settings
                     .as_ref()
-                    .is_ok_and(|settings| !settings.pr_cleanup.enabled)
+                    .is_ok_and(|settings| !settings.cleanup.pr.enabled)
             {
                 // This sweep resolved any stored stack error; others stay.
                 if registration
@@ -557,7 +558,7 @@ mod tests {
             ],
         );
         manager
-            .set_repository_config(&repo.id, Some("[pr_cleanup]\nenabled=false\n".into()))
+            .set_repository_config(&repo.id, Some("[cleanup.pr]\nenabled=false\n".into()))
             .await
             .unwrap();
         let id = workspace.id.clone();

@@ -1164,7 +1164,7 @@ fn workspace_context_adapters_preserve_directory_scope_and_picker_policy() {
 
 #[test]
 fn status_summarizes_current_workspace_work_and_supports_json() {
-    let config = format!("{RESOURCE_CONFIG}\n[pr_cleanup]\nenabled=false\n");
+    let config = format!("{RESOURCE_CONFIG}\n[cleanup.pr]\nenabled=false\n");
     let fixture = Fixture::with_config(Some(&config));
     let workspace = fixture.add("summary");
     let path = Path::new(workspace["path"].as_str().unwrap());
@@ -1378,7 +1378,7 @@ esac
 
 #[test]
 fn status_keeps_shared_state_when_the_worktree_is_missing() {
-    let fixture = Fixture::with_config(Some("[auto_cleanup]\nenabled=false\n"));
+    let fixture = Fixture::with_config(Some("[cleanup.auto]\nenabled=false\n"));
     let workspace = fixture.add("missing-status");
     fixture.ok(&["port", "acquire", "web", "missing-status"]);
     fs::remove_dir_all(workspace["path"].as_str().unwrap()).unwrap();
@@ -2627,7 +2627,7 @@ fn repository_config_sets_the_automatic_port_range() {
 fn config_show_reports_effective_values_and_their_layers() {
     let fixture = Fixture::with_config(Some(
         "default_agent = 'claude'\n[commands]\nglobal = ['global']\nshared = ['global']\n\
-         [auto_cleanup]\nenabled = false\n[ports]\nstart = 2000\nend = 6000\n",
+         [cleanup.auto]\nenabled = false\n[ports]\nstart = 2000\nend = 6000\n",
     ));
 
     // In a registered checkout without a workspace, the checkout file is the
@@ -2719,7 +2719,7 @@ fn config_show_reports_effective_values_and_their_layers() {
             "global_config",
         ),
         (
-            "auto_cleanup.enabled",
+            "cleanup.auto.enabled",
             serde_json::json!(false),
             "global_config",
         ),
@@ -2729,7 +2729,7 @@ fn config_show_reports_effective_values_and_their_layers() {
             "built_in_default",
         ),
         (
-            "auto_cleanup.idle_minutes",
+            "cleanup.auto.idle_minutes",
             serde_json::json!(10),
             "built_in_default",
         ),
@@ -5722,7 +5722,7 @@ fn inline_repository_config_edits_preserve_layers_and_serialize_updates() {
     assert_eq!(agent()["value"], "claude");
     assert_eq!(agent()["layer"], "saved_repository_config");
     for (key, value) in [
-        ("auto_cleanup.enabled", "maybe"),
+        ("cleanup.auto.enabled", "maybe"),
         ("root_dir", "/tmp/no"),
         ("default_agnet", "codex"),
     ] {
@@ -5740,9 +5740,9 @@ fn inline_repository_config_edits_preserve_layers_and_serialize_updates() {
             .run(&[
                 "config",
                 "set",
-                "auto_cleanup.idle_minutes",
+                "cleanup.auto.idle_minutes",
                 "30",
-                "auto_cleanup.enabled",
+                "cleanup.auto.enabled",
                 "maybe",
                 "--repo",
                 id,
@@ -5754,21 +5754,14 @@ fn inline_repository_config_edits_preserve_layers_and_serialize_updates() {
     fixture.ok(&[
         "config",
         "set",
-        "auto_cleanup.idle_minutes",
+        "cleanup.auto.idle_minutes",
         "30",
         "default_agent",
         "claude",
         "--repo",
         id,
     ]);
-    fixture.ok(&[
-        "config",
-        "unset",
-        "auto_cleanup",
-        "default_agent",
-        "--repo",
-        id,
-    ]);
+    fixture.ok(&["config", "unset", "cleanup", "default_agent", "--repo", id]);
     assert_eq!(agent()["value"], "codex");
     assert_eq!(agent()["layer"], "worktree_file");
     assert_eq!(
@@ -10340,7 +10333,7 @@ fn wait_pr_error(fixture: &Fixture, name: &str, message: &str) {
 
 #[test]
 fn merged_stops_agent_and_releases_resources_without_idle_delay() {
-    let fixture = Fixture::with_config(Some("[auto_cleanup]\nenabled=false\n[resources.device]\n"));
+    let fixture = Fixture::with_config(Some("[cleanup.auto]\nenabled=false\n[resources.device]\n"));
     let workspace = fixture.add("merged");
     fixture.ok(&["port", "acquire", "web", "merged"]);
     fixture.ok(&["resource", "acquire", "device", "merged"]);
@@ -10402,7 +10395,7 @@ fn merged_retains_dirty_work_and_changed_head_across_restart_and_can_be_cancelle
 
 #[test]
 fn pr_cleanup_can_be_disabled_independently() {
-    let fixture = Fixture::with_config(Some("[pr_cleanup]\nenabled=false\n"));
+    let fixture = Fixture::with_config(Some("[cleanup.pr]\nenabled=false\n"));
     fixture.add("keep");
     // Linking does not depend on PR cleanup.
     fixture.add_github_origin();
@@ -10430,7 +10423,7 @@ fn pr_cleanup_can_be_disabled_independently() {
 #[test]
 fn legacy_pr_registrations_survive_disabled_cleanup_and_clear_after_restart() {
     let mut fixture = Fixture::with_config(Some(
-        "[pr_cleanup]\nenabled=false\n[auto_cleanup]\nenabled=false\n",
+        "[cleanup.pr]\nenabled=false\n[cleanup.auto]\nenabled=false\n",
     ));
     for name in ["watch", "acknowledged"] {
         let workspace = fixture.add(name);
@@ -10478,7 +10471,7 @@ fn legacy_pr_registrations_survive_disabled_cleanup_and_clear_after_restart() {
 
 #[test]
 fn invalid_persisted_pr_registration_retains_workspace_and_can_be_cleared() {
-    let mut fixture = Fixture::with_config(Some("[auto_cleanup]\nenabled=false\n"));
+    let mut fixture = Fixture::with_config(Some("[cleanup.auto]\nenabled=false\n"));
     let workspace = fixture.add("invalid");
     let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
     for record in [
@@ -10504,10 +10497,10 @@ fn invalid_persisted_pr_registration_retains_workspace_and_can_be_cleared() {
 
 #[test]
 fn repository_config_sets_pr_cleanup_over_the_global_default() {
-    let fixture = Fixture::with_config(Some("[pr_cleanup]\nenabled=false\n"));
+    let fixture = Fixture::with_config(Some("[cleanup.pr]\nenabled=false\n"));
     fs::write(
         fixture.repo.join(".shoal.toml"),
-        "[pr_cleanup]\nenabled=true\n",
+        "[cleanup.pr]\nenabled=true\n",
     )
     .unwrap();
     git(&fixture.repo, &["add", ".shoal.toml"]);
@@ -10529,7 +10522,7 @@ fn repository_config_sets_pr_cleanup_over_the_global_default() {
     wait_removed(&fixture, "merged");
     // The saved config is the top layer.
     let saved = fixture.root.path().join("saved.toml");
-    fs::write(&saved, "[pr_cleanup]\nenabled=false\n").unwrap();
+    fs::write(&saved, "[cleanup.pr]\nenabled=false\n").unwrap();
     fixture.ok(&[
         "repo",
         "config",
@@ -10551,7 +10544,7 @@ fn repository_config_sets_pr_cleanup_over_the_global_default() {
 #[test]
 fn pr_watch_checks_github_state_and_commit_and_survives_restart() {
     let mut fixture = Fixture::with_config(Some(
-        "[auto_cleanup]\nenabled=false\n[done]\nautomatic=true\n",
+        "[cleanup.auto]\nenabled=false\n[done]\nautomatic=true\n",
     ));
     let workspace = fixture.add("watch");
     let failed = fixture.run(&["link", "pr", "56", "--workspace", "watch"]);
@@ -10720,7 +10713,7 @@ fn pr_watch_checks_forgejo_merge_and_commits_with_fixture_cli() {
 
 #[test]
 fn pr_wait_wakes_for_individual_ci_reviews_and_conflicts_with_own_scope() {
-    let mut fixture = Fixture::with_config(Some("[auto_cleanup]\nenabled=false\n"));
+    let mut fixture = Fixture::with_config(Some("[cleanup.auto]\nenabled=false\n"));
     let workspace = fixture.add("watch");
     fixture.add("other");
     fixture.add_github_origin();
@@ -10772,7 +10765,7 @@ fn pr_wait_wakes_for_individual_ci_reviews_and_conflicts_with_own_scope() {
     fixture.restart();
     // Completion being disabled does not disable activity waits.
     let path = Path::new(workspace["path"].as_str().unwrap());
-    fs::write(path.join(".shoal.toml"), "[pr_cleanup]\nenabled=false\n").unwrap();
+    fs::write(path.join(".shoal.toml"), "[cleanup.pr]\nenabled=false\n").unwrap();
     pull["statusCheckRollup"][0]["status"] = serde_json::json!("COMPLETED");
     pull["statusCheckRollup"][0]["conclusion"] = serde_json::json!("FAILURE");
     pull["mergeable"] = serde_json::json!("CONFLICTING");
@@ -10863,7 +10856,7 @@ if [ "$1" = api ]; then printf '[]'; else cat "$HOME/pr.json"; fi
 
 #[test]
 fn unified_items_link_filter_and_watch_explicit_targets_without_completion() {
-    let mut fixture = Fixture::with_config(Some("[auto_cleanup]\nenabled=false\n"));
+    let mut fixture = Fixture::with_config(Some("[cleanup.auto]\nenabled=false\n"));
     fixture.add("items");
     fixture.add("other");
     fixture.add_github_origin();
@@ -10995,7 +10988,7 @@ esac
 
 #[test]
 fn watch_explicit_forgejo_fork_pr_without_linking_or_checkout() {
-    let fixture = Fixture::with_config(Some("[auto_cleanup]\nenabled=false\n"));
+    let fixture = Fixture::with_config(Some("[cleanup.auto]\nenabled=false\n"));
     fixture.add("items");
     git(
         &fixture.repo,
@@ -11039,7 +11032,7 @@ esac
 
 #[test]
 fn watch_forgejo_issue_reports_comments_closure_and_reopening() {
-    let fixture = Fixture::with_config(Some("[auto_cleanup]\nenabled=false\n"));
+    let fixture = Fixture::with_config(Some("[cleanup.auto]\nenabled=false\n"));
     fixture.add("issue-watch");
     git(
         &fixture.repo,
@@ -11089,7 +11082,7 @@ if [ "$last" = comments ]; then cat "$HOME/comments"; else cat "$HOME/issue"; fi
 
 #[test]
 fn pr_wait_reads_forgejo_ci_from_the_api_when_fj_status_fails() {
-    let fixture = Fixture::with_config(Some("[auto_cleanup]\nenabled=false\n"));
+    let fixture = Fixture::with_config(Some("[cleanup.auto]\nenabled=false\n"));
     fixture.add("api");
     git(
         &fixture.repo,
@@ -11161,7 +11154,7 @@ esac
 
 #[test]
 fn pr_wait_reports_forgejo_reviews_when_status_lookup_fails() {
-    let fixture = Fixture::with_config(Some("[auto_cleanup]\nenabled=false\n"));
+    let fixture = Fixture::with_config(Some("[cleanup.auto]\nenabled=false\n"));
     fixture.add("watch");
     git(
         &fixture.repo,
@@ -12132,7 +12125,7 @@ fn happy_codex_prompts_are_delivered_through_a_seeded_session() {
 #[test]
 fn notifications_report_conflicts_agent_exits_and_removals_once() {
     let fixture = Fixture::with_config(Some(
-        "[auto_cleanup]\nenabled=false\n[resources.lock]\ncapacity=1\n",
+        "[cleanup.auto]\nenabled=false\n[resources.lock]\ncapacity=1\n",
     ));
     fixture.add("holder");
     fixture.add("waiter");
@@ -15250,7 +15243,7 @@ fn post_done_hook_observes_persisted_completion_and_excludes_lifecycle_and_permi
 
 #[test]
 fn done_defaults_to_cleanup_and_releases_workspace_resources() {
-    let fixture = Fixture::with_config(Some("[auto_cleanup]\nenabled=false\n[resources.device]\n"));
+    let fixture = Fixture::with_config(Some("[cleanup.auto]\nenabled=false\n[resources.device]\n"));
     let hook = install_done_hook(&fixture);
     let workspace = fixture.add("finished");
     set_repository_toml(&fixture, &format!("post_done_cmd = '{}'\n", hook.display()));
@@ -15349,7 +15342,7 @@ fn done_records_completion_without_claiming_dirty_work_is_merged() {
 fn multiple_prs_complete_once_only_after_every_merge_and_honor_done_policy() {
     for (cleanup, manual_keep) in [(false, false), (true, false), (true, true)] {
         let mut fixture = Fixture::with_config(Some(&format!(
-            "[auto_cleanup]\nenabled=false\n[done]\ncleanup={cleanup}\nautomatic=true\n"
+            "[cleanup.auto]\nenabled=false\n[done]\ncleanup={cleanup}\nautomatic=true\n"
         )));
         let hook = install_done_hook(&fixture);
         set_repository_toml(&fixture, &format!("post_done_cmd = '{}'\n", hook.display()));
@@ -15441,7 +15434,7 @@ fn multiple_prs_complete_once_only_after_every_merge_and_honor_done_policy() {
             // A changed default must not re-complete a kept assignment.
             fs::write(
                 root.join(".config/shoal/config.toml"),
-                "[auto_cleanup]\nenabled=false\n[done]\ncleanup=true\nautomatic=true\n",
+                "[cleanup.auto]\nenabled=false\n[done]\ncleanup=true\nautomatic=true\n",
             )
             .unwrap();
             fixture.restart();
@@ -15466,7 +15459,7 @@ fn multiple_prs_complete_once_only_after_every_merge_and_honor_done_policy() {
 #[test]
 fn merged_base_prs_retarget_and_restack_the_workspaces_stacked_on_them() {
     for tool in ["gh", "fj"] {
-        let mut fixture = Fixture::with_config(Some("[auto_cleanup]\nenabled=false\n"));
+        let mut fixture = Fixture::with_config(Some("[cleanup.auto]\nenabled=false\n"));
         let lower = fixture.add("lower");
         let repo = fixture.repo.to_str().unwrap().to_owned();
         fixture.ok(&["add", &repo, "upper", "--base", "lower"]);
@@ -15596,7 +15589,7 @@ fn merged_base_prs_retarget_and_restack_the_workspaces_stacked_on_them() {
 
 #[test]
 fn failed_restacks_are_reported_even_when_pr_cleanup_is_disabled() {
-    let mut fixture = Fixture::with_config(Some("[auto_cleanup]\nenabled=false\n"));
+    let mut fixture = Fixture::with_config(Some("[cleanup.auto]\nenabled=false\n"));
     let lower = fixture.add("lower");
     let repo = fixture.repo.to_str().unwrap().to_owned();
     fixture.ok(&["add", &repo, "upper", "--base", "lower"]);
@@ -15626,7 +15619,7 @@ fn failed_restacks_are_reported_even_when_pr_cleanup_is_disabled() {
     fixture.ok(&["link", "pr", "2", "--workspace", "upper"]);
     fs::write(
         root.join(".config/shoal/config.toml"),
-        "[auto_cleanup]\nenabled=false\n[pr_cleanup]\nenabled=false\n",
+        "[cleanup.auto]\nenabled=false\n[cleanup.pr]\nenabled=false\n",
     )
     .unwrap();
     // An unknown merge holds the base back and records why, without alerts.
@@ -15685,7 +15678,7 @@ fn failed_restacks_are_reported_even_when_pr_cleanup_is_disabled() {
 
 fn issue_completion_fixture(tool: &str, cleanup: bool) -> Fixture {
     let fixture = Fixture::with_config(Some(&format!(
-        "[auto_cleanup]\nenabled=false\n[done]\ncleanup={cleanup}\nautomatic=true\n"
+        "[cleanup.auto]\nenabled=false\n[done]\ncleanup={cleanup}\nautomatic=true\n"
     )));
     git(&fixture.repo, &["config", "protocol.allow", "never"]);
     git(

@@ -36,7 +36,7 @@ fn inline_edits_validate_preserve_comments_and_work_without_a_daemon() {
     assert!(saved.contains("# policy"));
     for args in [
         vec!["config", "set", "ports.start", "5000"],
-        vec!["config", "set", "auto_cleanup.enabled", "maybe"],
+        vec!["config", "set", "cleanup.auto.enabled", "maybe"],
         vec!["config", "set", "default_agnet", "codex"],
         vec!["config", "unset", "missing"],
         vec!["config", "set", "default_agent", "claude", "ports.start"],

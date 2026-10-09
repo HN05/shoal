@@ -8,8 +8,8 @@ use serde_json::Value;
 
 use crate::{
     config::{
-        self, AutoCleanup, Codex, Config, Done, Land, Ports, PrCleanup, Review, Simulators,
-        named_commands,
+        self, AutoCleanup, Cleanup, Codex, Config, Done, Land, Ports, PrCleanup, Review,
+        Simulators, named_commands,
         repo::{ConfigLayer as Layer, ConfigLayers, RepoConfig},
     },
     hooks::HookKind,
@@ -43,8 +43,7 @@ pub struct Effective {
     pub resources: BTreeMap<String, crate::daemon::resources::ResourceConfig>,
     pub resource_pools: BTreeMap<String, crate::daemon::resources::PoolConfig>,
     pub simulators: Simulators,
-    pub auto_cleanup: AutoCleanup,
-    pub pr_cleanup: PrCleanup,
+    pub cleanup: Cleanup,
     pub done: Done,
     pub review: Review,
     pub land: Land,
@@ -197,19 +196,21 @@ impl Effective {
                 )?,
                 preferred: merged.simulators.preferred,
             },
-            auto_cleanup: AutoCleanup {
-                enabled: built_in(merged.auto_cleanup.enabled, "auto_cleanup.enabled")?,
-                idle_minutes: built_in(
-                    merged.auto_cleanup.idle_minutes,
-                    "auto_cleanup.idle_minutes",
-                )?,
+            cleanup: Cleanup {
+                auto: AutoCleanup {
+                    enabled: built_in(merged.cleanup.auto.enabled, "cleanup.auto.enabled")?,
+                    idle_minutes: built_in(
+                        merged.cleanup.auto.idle_minutes,
+                        "cleanup.auto.idle_minutes",
+                    )?,
+                },
+                pr: PrCleanup {
+                    enabled: built_in(merged.cleanup.pr.enabled, "cleanup.pr.enabled")?,
+                },
             },
             done: Done {
                 cleanup: built_in(merged.done.cleanup, "done.cleanup")?,
                 automatic: built_in(merged.done.automatic, "done.automatic")?,
-            },
-            pr_cleanup: PrCleanup {
-                enabled: built_in(merged.pr_cleanup.enabled, "pr_cleanup.enabled")?,
             },
             review: Review {
                 post: built_in(merged.review.post, "review.post")?,
@@ -250,16 +251,18 @@ fn built_in() -> RepoConfig {
             approval_lifetime: Some(simulators.approval_lifetime),
             preferred: simulators.preferred,
         },
-        auto_cleanup: config::repo::AutoCleanup {
-            enabled: Some(auto_cleanup.enabled),
-            idle_minutes: Some(auto_cleanup.idle_minutes),
+        cleanup: config::repo::Cleanup {
+            auto: config::repo::AutoCleanup {
+                enabled: Some(auto_cleanup.enabled),
+                idle_minutes: Some(auto_cleanup.idle_minutes),
+            },
+            pr: config::repo::PrCleanup {
+                enabled: Some(PrCleanup::default().enabled),
+            },
         },
         done: config::repo::Done {
             cleanup: Some(Done::default().cleanup),
             automatic: Some(Done::default().automatic),
-        },
-        pr_cleanup: config::repo::PrCleanup {
-            enabled: Some(PrCleanup::default().enabled),
         },
         review: config::repo::Review {
             post: Some(Review::default().post),
@@ -537,9 +540,9 @@ fn build_fields() -> Vec<Box<dyn Field + Send + Sync>> {
         scalar!(simulators.requires_approval),
         scalar!(simulators.approval_lifetime),
         list!(simulators.preferred),
-        scalar!(auto_cleanup.enabled),
-        scalar!(auto_cleanup.idle_minutes),
-        scalar!(pr_cleanup.enabled),
+        scalar!(cleanup.auto.enabled),
+        scalar!(cleanup.auto.idle_minutes),
+        scalar!(cleanup.pr.enabled),
         scalar!(done.cleanup),
         scalar!(done.automatic),
         scalar!(review.post),
@@ -567,7 +570,7 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
 [resources.lock]\ncapacity = 1\n[resource_pools.devices]\ncapacity = 2\n\
 [resource_pools.devices.resources.phone]\ncapacity = 1\n\
 [simulators]\nrequires_approval = true\napproval_lifetime = 'workspace'\npreferred = ['phone']\n\
-[auto_cleanup]\nenabled = false\nidle_minutes = 30\n[pr_cleanup]\nenabled = false\n[done]\ncleanup = false\nautomatic = true\n[review]\npost = false\n[land]\npush = true\n";
+[cleanup.auto]\nenabled = false\nidle_minutes = 30\n[cleanup.pr]\nenabled = false\n[done]\ncleanup = false\nautomatic = true\n[review]\npost = false\n[land]\npush = true\n";
 
     fn json<T: Serialize>(value: &T) -> Value {
         serde_json::to_value(value).unwrap()
@@ -777,8 +780,10 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
             resources,
             resource_pools,
             simulators,
-            auto_cleanup,
-            pr_cleanup,
+            cleanup,
+            // Parsing folds the former names into `cleanup`.
+            auto_cleanup: _,
+            pr_cleanup: _,
             done,
             review,
             land,
@@ -818,9 +823,9 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
             ports.end.is_some(),
             simulators.requires_approval.is_some(),
             simulators.approval_lifetime.is_some(),
-            auto_cleanup.enabled.is_some(),
-            auto_cleanup.idle_minutes.is_some(),
-            pr_cleanup.enabled.is_some(),
+            cleanup.auto.enabled.is_some(),
+            cleanup.auto.idle_minutes.is_some(),
+            cleanup.pr.enabled.is_some(),
             done.cleanup.is_some(),
             done.automatic.is_some(),
             review.post.is_some(),
@@ -856,8 +861,8 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
             ("", "", ""),
             // Explicit defaults win their layer; omitted values fall through.
             (
-                "[auto_cleanup]\nenabled = true\n[codex]\ndefault_mode = 'cli'\n",
-                "[auto_cleanup]\nidle_minutes = 5\n",
+                "[cleanup.auto]\nenabled = true\n[codex]\ndefault_mode = 'cli'\n",
+                "[cleanup.auto]\nidle_minutes = 5\n",
                 "",
             ),
             // Partial nested tables merge per option across all three layers.
@@ -870,7 +875,7 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
             (
                 "[agent_auth]\ngh = '/global/gh'\n[resources.lock]\ncapacity = 1\n",
                 "[simulators]\npreferred = ['phone']\nrequires_approval = true\n",
-                "[resources.lock]\ncapacity = 3\n[pr_cleanup]\nenabled = false\n",
+                "[resources.lock]\ncapacity = 3\n[cleanup.pr]\nenabled = false\n",
             ),
         ];
         for (global, worktree, saved) in cases {
@@ -904,16 +909,16 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
             }
         }
         let entries = stack(
-            "[auto_cleanup]\nenabled = true\n",
-            "[auto_cleanup]\nidle_minutes = 5\n",
+            "[cleanup.auto]\nenabled = true\n",
+            "[cleanup.auto]\nidle_minutes = 5\n",
             "",
         )
         .report()
         .unwrap();
         let entry = |key: &str| entries.iter().find(|e| e.key == key).unwrap();
-        assert_eq!(entry("auto_cleanup.enabled").layer, Layer::GlobalConfig);
+        assert_eq!(entry("cleanup.auto.enabled").layer, Layer::GlobalConfig);
         assert_eq!(
-            entry("auto_cleanup.idle_minutes").layer,
+            entry("cleanup.auto.idle_minutes").layer,
             Layer::WorktreeFile
         );
         assert_eq!(entry("codex.default_mode").layer, Layer::BuiltInDefault);

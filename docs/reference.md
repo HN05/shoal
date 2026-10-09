@@ -1108,7 +1108,7 @@ errors in `pr_cleanup`. Invalid registrations retain the workspace.
 `shoal unlink` removes all associations; `unlink pr` or `unlink issue` removes
 one kind, and an explicit number or URL removes just that item. Removing the last
 link does not mark done or undo recorded completion; `done --keep` cancels its
-cleanup. `[pr_cleanup] enabled = false` pauses PR completion independently of idle
+cleanup. `[cleanup.pr] enabled = false` pauses PR completion independently of idle
 cleanup, globally on reload or per repository immediately; linking and unlinking
 remain available. Previous PR registration and wait command spellings remain accepted.
 
@@ -1159,13 +1159,15 @@ where idle cleanup is disabled, and reports any it retained; `--dry-run` lists t
 instead. Removals record the `manual` event cause. Workspace processes cannot run it.
 
 ```toml
-[auto_cleanup]
+[cleanup.auto]
 enabled = false # Default: true
 idle_minutes = 10
 ```
 
 Reload the daemon after changing this globally; the same table in a
 repository config applies to that repository's workspaces on the next sweep.
+The former `[auto_cleanup]` and `[pr_cleanup]` tables are still read where
+`[cleanup.auto]` and `[cleanup.pr]` leave an option unset.
 
 ### Workspace events
 

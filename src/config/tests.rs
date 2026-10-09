@@ -87,16 +87,16 @@ fn template_states_the_defaults_and_its_examples_are_valid() {
         Some(default_effective.codex.default_mode)
     );
     assert_eq!(
-        written.auto_cleanup.enabled,
-        Some(default_effective.auto_cleanup.enabled)
+        written.cleanup.auto.enabled,
+        Some(default_effective.cleanup.auto.enabled)
     );
     assert_eq!(
-        written.auto_cleanup.idle_minutes,
-        Some(default_effective.auto_cleanup.idle_minutes)
+        written.cleanup.auto.idle_minutes,
+        Some(default_effective.cleanup.auto.idle_minutes)
     );
     assert_eq!(
-        written.pr_cleanup.enabled,
-        Some(default_effective.pr_cleanup.enabled)
+        written.cleanup.pr.enabled,
+        Some(default_effective.cleanup.pr.enabled)
     );
     assert_eq!(
         (written.ports.start, written.ports.end),
@@ -106,8 +106,8 @@ fn template_states_the_defaults_and_its_examples_are_valid() {
         )
     );
     assert_eq!(
-        written_effective.auto_cleanup.delay(),
-        default_effective.auto_cleanup.delay()
+        written_effective.cleanup.auto.delay(),
+        default_effective.cleanup.auto.delay()
     );
     assert_eq!(
         (
@@ -199,48 +199,59 @@ fn default_agent_accepts_agent_spellings_only() {
 #[test]
 fn cleanup_defaults_can_be_disabled_and_typos_are_rejected() {
     let config: Config = toml::from_str("").unwrap();
-    assert_eq!(config.auto_cleanup.enabled, None);
+    assert_eq!(config.cleanup.auto.enabled, None);
     let effective = config.effective(&RepoConfig::default()).unwrap();
-    assert!(effective.auto_cleanup.enabled);
-    assert!(effective.pr_cleanup.enabled);
-    assert_eq!(effective.auto_cleanup.idle_minutes, 10);
+    assert!(effective.cleanup.auto.enabled);
+    assert!(effective.cleanup.pr.enabled);
+    assert_eq!(effective.cleanup.auto.idle_minutes, 10);
     assert_eq!(
-        toml::from_str::<Config>("[pr_cleanup]\nenabled=false")
+        toml::from_str::<Config>("[cleanup.pr]\nenabled=false")
             .unwrap()
-            .pr_cleanup
+            .cleanup
+            .pr
             .enabled,
         Some(false)
     );
-    assert!(toml::from_str::<Config>("[pr_cleanup]\nenabld=false").is_err());
+    assert!(toml::from_str::<Config>("[cleanup.pr]\nenabld=false").is_err());
     let config: Config =
-        toml::from_str("[auto_cleanup]\nenabled = false\nidle_minutes = 30\n").unwrap();
-    assert_eq!(config.auto_cleanup.enabled, Some(false));
-    assert_eq!(config.auto_cleanup.idle_minutes, Some(30));
+        toml::from_str("[cleanup.auto]\nenabled = false\nidle_minutes = 30\n").unwrap();
+    assert_eq!(config.cleanup.auto.enabled, Some(false));
+    assert_eq!(config.cleanup.auto.idle_minutes, Some(30));
     assert!(toml::from_str::<Config>("[auto_cleanpu]\nenabled = false").is_err());
+    // The former table names still load, behind the `[cleanup]` values.
+    let paths = Paths::for_test("/home/test");
+    let config = Config::parse(
+        "[auto_cleanup]\nenabled = false\n[pr_cleanup]\nenabled = false\n[cleanup.pr]\nenabled = true\n",
+        &paths,
+    )
+    .unwrap();
+    assert_eq!(config.cleanup.auto.enabled, Some(false));
+    assert_eq!(config.cleanup.pr.enabled, Some(true));
 }
 
 #[test]
 fn repository_values_win_over_global_cleanup_policy() {
     let global: Config =
-        toml::from_str("[auto_cleanup]\nenabled = false\nidle_minutes = 30\n").unwrap();
+        toml::from_str("[cleanup.auto]\nenabled = false\nidle_minutes = 30\n").unwrap();
     let repo =
-        repo::parse("[auto_cleanup]\nenabled = true\n[pr_cleanup]\nenabled = false\n").unwrap();
+        repo::parse("[cleanup.auto]\nenabled = true\n[cleanup.pr]\nenabled = false\n").unwrap();
     let effective = global.effective(&repo).unwrap();
     assert_eq!(
-        effective.auto_cleanup.delay(),
+        effective.cleanup.auto.delay(),
         Some(Duration::from_secs(1800))
     );
-    assert!(!effective.pr_cleanup.enabled);
-    let repo = repo::parse("[auto_cleanup]\nidle_minutes = 5\n").unwrap();
+    assert!(!effective.cleanup.pr.enabled);
+    let repo = repo::parse("[cleanup.auto]\nidle_minutes = 5\n").unwrap();
     let effective = global.effective(&repo).unwrap();
-    assert_eq!(effective.auto_cleanup.delay(), None);
-    assert_eq!(effective.auto_cleanup.idle_minutes, 5);
-    assert!(effective.pr_cleanup.enabled);
+    assert_eq!(effective.cleanup.auto.delay(), None);
+    assert_eq!(effective.cleanup.auto.idle_minutes, 5);
+    assert!(effective.cleanup.pr.enabled);
     assert_eq!(
         Config::default()
             .effective(&RepoConfig::default())
             .unwrap()
-            .auto_cleanup
+            .cleanup
+            .auto
             .delay(),
         Some(Duration::from_secs(600))
     );

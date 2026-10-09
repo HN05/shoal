@@ -357,7 +357,7 @@ pub(super) async fn observe(manager: &Manager, workspace: &Workspace) -> Option<
     }
     let observed = async {
         let settings = manager.workspace_settings(workspace).await?;
-        let Some(delay) = settings.auto_cleanup.delay() else {
+        let Some(delay) = settings.cleanup.auto.delay() else {
             return Ok(None);
         };
         let snapshot = manager.cleanup_snapshot(&workspace.id).await?;
@@ -949,7 +949,7 @@ mod tests {
         let final_snapshot = snapshot(&manager).await.unwrap();
         // The repository's own idle delay applies before the global default.
         manager
-            .set_repository_config(&repo.id, Some("[auto_cleanup]\nidle_minutes = 60\n".into()))
+            .set_repository_config(&repo.id, Some("[cleanup.auto]\nidle_minutes = 60\n".into()))
             .await
             .unwrap();
         let idle_for = |seconds| Idle {
@@ -994,7 +994,7 @@ mod tests {
             .unwrap();
         // The request applies where idle cleanup is disabled.
         manager
-            .set_repository_config(&repo.id, Some("[auto_cleanup]\nenabled = false\n".into()))
+            .set_repository_config(&repo.id, Some("[cleanup.auto]\nenabled = false\n".into()))
             .await
             .unwrap();
         for name in ["broken", "dirty", "held", "idle"] {
