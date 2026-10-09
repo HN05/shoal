@@ -1,4 +1,5 @@
-//! User-owned forge authentication wrappers, selected only for agent launches.
+//! User-owned forge authentication wrappers and a Git profile, selected only
+//! for agent launches.
 use crate::tools::Tool;
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
@@ -9,16 +10,36 @@ use std::{ffi::OsString, path::PathBuf};
 pub struct Config {
     pub fj: Option<PathBuf>,
     pub gh: Option<PathBuf>,
+    pub git_profile: Option<String>,
 }
 
 impl Config {
-    /// Keep the private PATH directory alive for the tracked execution, including
-    /// nested commands. Only the child's environment changes.
-    pub fn prepare(&self, paths: &crate::paths::Paths) -> Result<Option<Launch>> {
+    /// The child's environment changes for the agent's account; nested commands
+    /// inherit it.
+    pub fn prepare(
+        &self,
+        paths: &crate::paths::Paths,
+        git: &crate::git_profile::Git,
+    ) -> Result<Launch> {
+        self.validate()?;
+        let git = match &self.git_profile {
+            Some(name) => git
+                .profile(name)
+                .and_then(|profile| profile.settings())
+                .with_context(|| format!("agent_auth.git_profile {name}"))?,
+            None => Vec::new(),
+        };
+        Ok(Launch {
+            wrappers: self.wrappers(paths)?,
+            git,
+        })
+    }
+
+    /// Keep the private PATH directory alive for the tracked execution.
+    fn wrappers(&self, paths: &crate::paths::Paths) -> Result<Option<Wrappers>> {
         if self.fj.is_none() && self.gh.is_none() {
             return Ok(None);
         }
-        self.validate()?;
         let directory = paths.agent_auth_directory()?;
         for (name, path) in [
             (Tool::Forgejo.program(), &self.fj),
@@ -39,7 +60,7 @@ impl Config {
         let path = std::env::join_paths(
             std::iter::once(directory.path().to_owned()).chain(std::env::split_paths(&inherited)),
         )?;
-        Ok(Some(Launch {
+        Ok(Some(Wrappers {
             _directory: directory,
             path,
         }))
@@ -58,13 +79,55 @@ impl Config {
                 );
             }
         }
+        if let Some(name) = &self.git_profile {
+            crate::validate::name("git profile", name)?;
+        }
         Ok(())
     }
 }
 
 pub struct Launch {
+    wrappers: Option<Wrappers>,
+    git: Vec<(String, String)>,
+}
+
+struct Wrappers {
     _directory: tempfile::TempDir,
-    pub path: OsString,
+    path: OsString,
+}
+
+impl Launch {
+    /// Profile settings follow inherited `GIT_CONFIG_*` entries and take
+    /// precedence over every Git config file. Inherited author and committer
+    /// variables would override the profile's identity, so they are dropped
+    /// for each identity setting it names.
+    pub fn apply(&self, command: &mut tokio::process::Command) {
+        if let Some(wrappers) = &self.wrappers {
+            command.env("PATH", &wrappers.path);
+        }
+        if self.git.is_empty() {
+            return;
+        }
+        let inherited = std::env::var("GIT_CONFIG_COUNT")
+            .ok()
+            .and_then(|count| count.parse::<usize>().ok())
+            .unwrap_or(0);
+        for (index, (key, value)) in self.git.iter().enumerate() {
+            let index = inherited + index;
+            command
+                .env(format!("GIT_CONFIG_KEY_{index}"), key)
+                .env(format!("GIT_CONFIG_VALUE_{index}"), value);
+            for field in ["name", "email"] {
+                if key.eq_ignore_ascii_case(&format!("user.{field}")) {
+                    let field = field.to_ascii_uppercase();
+                    command
+                        .env_remove(format!("GIT_AUTHOR_{field}"))
+                        .env_remove(format!("GIT_COMMITTER_{field}"));
+                }
+            }
+        }
+        command.env("GIT_CONFIG_COUNT", (inherited + self.git.len()).to_string());
+    }
 }
 
 #[cfg(test)]
@@ -94,7 +157,7 @@ mod tests {
         for path in ["", "fj", "./fj", "~other/fj"] {
             let config = Config {
                 fj: Some(path.into()),
-                gh: None,
+                ..Default::default()
             };
             assert!(config.validate().is_err(), "{path}");
         }

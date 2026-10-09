@@ -298,13 +298,12 @@ async fn run_tracked(
     agent: Option<String>,
 ) -> Result<i32> {
     let auth = if agent.is_some() {
-        client::settings(
+        let (config, settings) = client::configuration(
             paths,
             crate::protocol::ConfigTarget::Workspace(workspace.clone()),
         )
-        .await?
-        .agent_auth
-        .prepare(paths)?
+        .await?;
+        Some(settings.agent_auth.prepare(paths, &config.git)?)
     } else {
         None
     };
@@ -574,7 +573,7 @@ fn spawn(
         .current_dir(&plan.workspace.path);
     configure_environment(&mut process, paths, plan);
     if let Some(auth) = auth {
-        process.env("PATH", &auth.path);
+        auth.apply(&mut process);
     }
     let quiet = matches!(mode, Mode::Setup { json: true });
     let (stdin, stdout, stderr) = match mode {

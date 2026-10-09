@@ -108,8 +108,18 @@ pub async fn settings(
     paths: &Paths,
     target: crate::protocol::ConfigTarget,
 ) -> Result<crate::config::Effective> {
+    Ok(configuration(paths, target).await?.1)
+}
+
+/// The global config read at launch and the settings it yields for `target`.
+pub async fn configuration(
+    paths: &Paths,
+    target: crate::protocol::ConfigTarget,
+) -> Result<(crate::config::Config, crate::config::Effective)> {
     let layers = request::<Box<ConfigLayers>>(paths, Method::LayeredConfig { target }).await?;
-    crate::config::Config::load_with_templates(paths)?.resolve(&layers)
+    let config = crate::config::Config::load_with_templates(paths)?;
+    let settings = config.resolve(&layers)?;
+    Ok((config, settings))
 }
 
 pub async fn inspect(paths: &Paths, workspace: String) -> Result<Inspection> {

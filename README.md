@@ -169,15 +169,17 @@ with `shoal env fix-login --revoke <token>`. See
 [workspace scope](docs/reference.md#scoped-workspace-commands) for token lifetime
 and cleanup behavior.
 
-For separate agent forge logins, configure executable wrappers:
+For a separate agent account, configure forge executable wrappers and a
+[Git profile](docs/reference.md#git-profiles) for the agent's commits:
 
 ```toml
 [agent_auth]
 fj = "~/bin/fj-agent"
 gh = "~/bin/gh-agent"
+git_profile = "agent"
 ```
 
-See [agent forge authentication](docs/reference.md#agent-forge-authentication)
+See [agent accounts](docs/reference.md#agent-accounts)
 for wrapper setup.
 
 Memory overload protection stops tracked agents by default while retaining their

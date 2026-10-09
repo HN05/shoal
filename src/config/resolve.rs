@@ -506,6 +506,7 @@ fn build_fields() -> Vec<Box<dyn Field + Send + Sync>> {
         })),
         scalar!(agent_auth.fj),
         scalar!(agent_auth.gh),
+        scalar!(agent_auth.git_profile),
         scalar!(git_profile),
         scalar!(default_agent),
         scalar!(codex.default_mode),
@@ -553,7 +554,7 @@ issue_template = 'issue'\nagent_template = 'agent'\ngit_profile = 'work'\n\
 default_agent = 'claude'\nsetup_cmd = 'setup'\npre_setup_cmd = 'pre-setup'\n\
 post_remove_cmd = 'post-remove'\npost_done_cmd = 'post-done'\npost_ready_cmd = 'post-ready'\npost_agent_exit_cmd = 'agent-exit'\npost_resource_acquire_cmd = 'acquire'\n\
 pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd = 'detach'\n\
-[commands]\nreview = ['review']\n[agent_resume]\nreview = ['review', '--resume']\n[agent_auth]\nfj = '/fj'\ngh = '/gh'\n[codex]\ndefault_mode = 'app'\n[herdr]\ntab_name = '{branch}'\nnew_tab = false\nfocus = false\nclose_when_done = false\n\
+[commands]\nreview = ['review']\n[agent_resume]\nreview = ['review', '--resume']\n[agent_auth]\nfj = '/fj'\ngh = '/gh'\ngit_profile = 'agent'\n[codex]\ndefault_mode = 'app'\n[herdr]\ntab_name = '{branch}'\nnew_tab = false\nfocus = false\nclose_when_done = false\n\
 [ports]\non_conflict = 'auto'\nstart = 3000\nend = 3100\n[ports.web]\nport = 3000\n\
 [resources.lock]\ncapacity = 1\n[resource_pools.devices]\ncapacity = 2\n\
 [resource_pools.devices.resources.phone]\ncapacity = 1\n\
@@ -785,6 +786,7 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
             agent_template.is_some(),
             agent_auth.fj.is_some(),
             agent_auth.gh.is_some(),
+            agent_auth.git_profile.is_some(),
             git_profile.is_some(),
             default_agent.is_some(),
             codex.default_mode.is_some(),

@@ -12608,6 +12608,65 @@ fn agent_auth_wrappers_are_inherited_without_changing_ordinary_executions() {
 }
 
 #[test]
+fn agent_git_profile_applies_only_to_agent_processes() {
+    let fixture = Fixture::with_config(Some(
+        "[git.profiles.agent]\nuser.name = 'Agent Name'\nuser.email = 'agent@example.invalid'\n",
+    ));
+    git(
+        &fixture.repo,
+        &["config", "user.email", "main@example.invalid"],
+    );
+    let workspace = fixture.add("agent-git");
+    let worktree = Path::new(workspace["path"].as_str().unwrap());
+    let commands = "[commands]\nclaude = ['sh', '-c', 'git config user.email; git config core.abbrev; git var GIT_AUTHOR_IDENT; git var GIT_COMMITTER_IDENT']\n";
+    fs::write(
+        worktree.join(".shoal.toml"),
+        format!("{commands}[agent_auth]\ngit_profile = 'agent'\n"),
+    )
+    .unwrap();
+    let output = fixture
+        .command()
+        .env("GIT_CONFIG_COUNT", "1")
+        .env("GIT_CONFIG_KEY_0", "core.abbrev")
+        .env("GIT_CONFIG_VALUE_0", "12")
+        .env("GIT_AUTHOR_EMAIL", "inherited@example.invalid")
+        .env("GIT_COMMITTER_NAME", "Inherited Name")
+        .args(["claude", "agent-git"])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let lines: Vec<_> = stdout.lines().collect();
+    assert_eq!(lines.len(), 4, "{stdout}");
+    assert_eq!(lines[..2], ["agent@example.invalid", "12"], "{stdout}");
+    for ident in &lines[2..] {
+        assert!(
+            ident.starts_with("Agent Name <agent@example.invalid> "),
+            "{stdout}"
+        );
+    }
+    let output = fixture.run(&["exec", "agent-git", "--", "git", "config", "user.email"]);
+    assert!(output.status.success());
+    assert_eq!(output.stdout, b"main@example.invalid\n");
+    fs::write(
+        worktree.join(".shoal.toml"),
+        format!("{commands}[agent_auth]\ngit_profile = 'missing'\n"),
+    )
+    .unwrap();
+    let output = fixture.run(&["claude", "agent-git"]);
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("git profile missing is not defined"),
+        "{stderr}"
+    );
+}
+
+#[test]
 fn detached_agents_use_auth_wrappers_and_invalid_wrappers_prevent_launch() {
     let fixture = Fixture::new();
     let workspace = fixture.add("detached-auth");

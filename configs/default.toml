@@ -33,6 +33,10 @@ root_dir = "~/shoal"
 # user.name = "Your Name"
 # user.email = "you@example.com"
 # commit.gpgsign = false
+# [git.profiles.agent]
+# user.name = "Agent Name"
+# user.email = "agent@example.com"
+# core.sshCommand = "ssh -i ~/.ssh/agent_key -o IdentitiesOnly=yes"
 
 # Named workspace shortcuts: shoal check [workspace] -- <extra arguments>
 [commands]
@@ -50,11 +54,13 @@ codex = ["codex", "{args}", "--sandbox", "danger-full-access", "--ask-for-approv
 # [agent_resume]
 # my-agent = ["my-agent", "resume", "{path}"]
 
-# Separate forge logins for tracked agents; user-owned executable wrappers.
-# See docs/reference.md#agent-forge-authentication for setup.
+# A separate account for tracked agents: user-owned forge executable wrappers
+# and a Git profile from [git.profiles] for the agent's Git commands.
+# See docs/reference.md#agent-accounts for setup.
 # [agent_auth]
 # fj = "~/bin/fj-agent"
 # gh = "~/bin/gh-agent"
+# git_profile = "agent"
 
 # Additional AI tools: command runs one as `shoal droid`, and
 # shoal skill install adds <skill>/SKILL.md beneath skill_dir.

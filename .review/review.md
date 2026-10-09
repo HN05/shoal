@@ -232,6 +232,8 @@ configured command for another agent, plus proven child
 - Agent forge wrappers are opt-in, resolve per tool through configuration layers,
   and change only the tracked agent's PATH, inherited by descendants. Wrappers
   own authentication; Shoal must not read tokens or switch the user's login.
+  The agent Git profile reaches only the tracked agent's environment; it never
+  writes Git config.
 - Git profiles apply only to newly created worktrees, before setup, using
   per-worktree config; other worktrees keep their settings.
 - Root help groups built-in commands by task; configured commands are discovered

@@ -516,10 +516,11 @@ to report alive, and posts the prompt (`curl`, token on stdin). The prompt is al
 saved beside the log; when Happy is not logged in or delivery fails, Shoal warns
 and leaves it there for you to send from the app.
 
-### Agent forge authentication
+### Agent accounts
 
 `[agent_auth]` selects user-owned executable wrappers for `fj` and `gh`, each
-an absolute or `~/` path, defaulting to unset. Values follow repository/global
+an absolute or `~/` path, and a `git_profile` naming one of the global
+[Git profiles](#git-profiles), all defaulting to unset. Values follow repository/global
 precedence and appear in `config show`. Tracked agent shortcuts prepend a private
 directory containing these tool names to the child's PATH; nested commands inherit
 it. Missing or non-executable wrappers fail before the agent starts. The directory
@@ -530,6 +531,14 @@ Wrappers receive arguments unchanged and must invoke the real tool by absolute
 path to avoid recursion. They own credential selection, including overriding
 inherited token variables; Shoal never reads or copies tokens. PATH selection is
 cooperative: an absolute tool path or a shell that resets PATH bypasses it.
+
+The agent Git profile reaches tracked agents through Git's `GIT_CONFIG_COUNT`
+variables, after any inherited entries, so it overrides every Git config file for
+the agent and its nested commands in any repository; the worktree's config and
+ordinary executions keep their settings. When the profile sets `user.name` or
+`user.email`, inherited `GIT_AUTHOR_*` and `GIT_COMMITTER_*` variables for that
+field are dropped. Push credentials follow profile settings such as
+`core.sshCommand`. An undefined profile fails before the agent starts.
 
 For `fj` 0.6, a separate home selects separate credentials on macOS; Linux also
 needs a separate XDG data directory. Save this as `~/bin/fj-agent`, substitute

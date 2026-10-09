@@ -33,6 +33,23 @@ fn codex_mode_defaults_to_cli_and_rejects_invalid_settings() {
 }
 
 #[test]
+fn global_git_profile_selections_must_name_defined_profiles() {
+    let paths = Paths::for_test("/home/test");
+    let profiles = "[git.profiles.agent]\nuser.email = 'agent@example.invalid'\n";
+    for key in ["git_profile", "agent_auth.git_profile"] {
+        assert!(Config::parse(&format!("{key} = 'agent'\n{profiles}"), &paths).is_ok());
+        let error = Config::parse(&format!("{key} = 'missing'\n{profiles}"), &paths)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("git profile missing is not defined"),
+            "{error}"
+        );
+    }
+    assert!(crate::config::repo::parse("[agent_auth]\ngit_profile = 'bad name'").is_err());
+}
+
+#[test]
 fn additional_hook_paths_are_validated_in_global_config() {
     let paths = Paths::for_test("/home/test");
     for &kind in crate::hooks::HookKind::ALL {

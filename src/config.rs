@@ -419,7 +419,10 @@ impl Config {
         }
         named_commands::validate(&config.commands)?;
         named_commands::validate(&config.agent_resume)?;
-        if let Some(name) = &config.git_profile {
+        for name in [&config.git_profile, &config.agent_auth.git_profile]
+            .into_iter()
+            .flatten()
+        {
             config.git.profile(name)?;
         }
         crate::daemon::resources::definitions(&config.resources, &config.resource_pools)?;
