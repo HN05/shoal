@@ -4,7 +4,7 @@ from io import BytesIO
 from pathlib import Path
 import subprocess
 import tempfile
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 from urllib.error import HTTPError
 import release
 
@@ -95,6 +95,19 @@ class ReleaseTests(unittest.TestCase):
             release.resume("0.2.0")
             run.assert_any_call("git", "checkout", "--detach", "a" * 40)
             publish.assert_called_once_with("0.2.0", False, merged_commit="a" * 40)
+
+    def test_publish_merged_fetches_server_merge_before_checkout(self):
+        sha = "a" * 40
+        with patch.object(release, "merged_release", return_value=("0.2.0", sha)), \
+                patch.object(release, "run") as run, \
+                patch.object(release, "publish") as publish:
+            release.publish_merged({}, "HN05/shoal", 7)
+        run.assert_has_calls([
+            call("git", "fetch", "origin",
+                 "+refs/heads/main:refs/remotes/origin/main", "--tags"),
+            call("git", "checkout", "--detach", sha),
+        ])
+        publish.assert_called_once_with("0.2.0", False, merged_commit=sha)
 
     def test_resume_refuses_a_dirty_checkout_before_fetching(self):
         with patch.object(release, "git", return_value="dirty"), \

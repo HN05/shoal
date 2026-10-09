@@ -207,6 +207,9 @@ def merged_release(pr, repository, number):
 
 def publish_merged(pr, repository, number):
     version, sha = merged_release(pr, repository, number)
+    # The merge API may create a new commit on main that was not in the
+    # workflow's initial clone. Fetch it before checking out the server result.
+    run("git", "fetch", "origin", "+refs/heads/main:refs/remotes/origin/main", "--tags")
     run("git", "checkout", "--detach", sha)
     publish(version, False, merged_commit=sha)
 
