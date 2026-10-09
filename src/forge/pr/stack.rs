@@ -86,8 +86,8 @@ impl Manager {
         for (url, kind) in items {
             let retargeted = match kind {
                 ItemKind::Pr => {
-                    self.retarget_stacked(&workspace, &url, &base.branch, target)
-                        .await
+                    self.retarget_stacked(&workspace, &url, base, head, target)
+                        .await?
                 }
                 ItemKind::Issue => None,
             };
@@ -103,6 +103,7 @@ impl Manager {
                 delivery: uuid::Uuid::new_v4().to_string(),
             });
         }
+        self.ensure_base_unchanged(base, head).await?;
         let (id, base_id) = (workspace.id, base.id.clone());
         self.store
             .run(move |db| {
@@ -128,29 +129,49 @@ impl Manager {
     }
 
     /// Retarget a stacked PR that still targets the merged base branch,
-    /// describing the outcome for the agent's update.
+    /// describing the outcome for the agent's update. Changed ownership or
+    /// base HEAD aborts the restack instead.
     async fn retarget_stacked(
         &self,
         workspace: &Workspace,
         url: &str,
-        branch: &str,
+        base: &Workspace,
+        head: &str,
         target: &str,
-    ) -> Option<String> {
-        let result = async {
+    ) -> Result<Option<String>> {
+        let lookup = async {
             let (forge, number, _) = self.pr_forge(workspace, url).await?;
-            if forge.pull_request(&workspace.path, url).await?.base != branch {
-                return Ok(false);
-            }
-            forge.retarget(&workspace.path, number, target).await?;
-            Ok::<_, anyhow::Error>(true)
+            let current = forge.pull_request(&workspace.path, url).await?.base;
+            Ok::<_, anyhow::Error>((current == base.branch).then_some((forge, number)))
         }
         .await;
-        match result {
-            Ok(true) => Some(format!("; Shoal retargeted this PR to {target}")),
-            Ok(false) => None,
-            Err(error) => Some(format!(
-                "; retargeting this PR to {target} failed: {error:#}"
-            )),
-        }
+        let (forge, number) = match lookup {
+            Ok(Some(pr)) => pr,
+            Ok(None) => return Ok(None),
+            Err(error) => {
+                return Ok(Some(format!(
+                    "; retargeting this PR to {target} failed: {error:#}"
+                )));
+            }
+        };
+        // Lookups take time; recheck what authorizes the write right before it.
+        self.verify_worktree(workspace).await?;
+        self.ensure_base_unchanged(base, head).await?;
+        Ok(Some(
+            match forge.retarget(&workspace.path, number, target).await {
+                Ok(()) => format!("; Shoal retargeted this PR to {target}"),
+                Err(error) => format!("; retargeting this PR to {target} failed: {error:#}"),
+            },
+        ))
+    }
+
+    /// The rebase cutoff in the update is the base HEAD read before restacking.
+    async fn ensure_base_unchanged(&self, base: &Workspace, head: &str) -> Result<()> {
+        self.verify_worktree(base).await?;
+        anyhow::ensure!(
+            current_head(base).await? == head,
+            "the base workspace's HEAD changed while restacking; retrying next sweep"
+        );
+        Ok(())
     }
 }
