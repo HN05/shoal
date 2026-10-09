@@ -12,7 +12,7 @@ use tokio::{
 
 use super::{
     execution_recovery,
-    workspace::{ExecutionKind, Manager, ReattachedExecution, StartedExecution},
+    workspace::{ExecutionKind, Manager, ReattachedExecution, StartedExecution, StopRequest},
 };
 use crate::daemon::log;
 use crate::{
@@ -236,9 +236,14 @@ async fn relay(
                                 }
                             } else if reattach && manager.shutting_down() {
                                 Control::Detach
-                            } else if kind == ExecutionKind::Command && let Some(reason) = manager.resumable_stop_reason(execution_id).await {
-                                Control::Pause { reason: Some(reason) }
-                            } else { Control::Stop };
+                            } else {
+                                match manager.stop_request(execution_id).await {
+                                    Some(StopRequest { reason, save: true }) if kind == ExecutionKind::Command => {
+                                        Control::Pause { reason: Some(reason) }
+                                    }
+                                    request => Control::Stop { reason: request.map(|request| request.reason) },
+                                }
+                            };
                             protocol::write(writer, &control).await?;
                             if matches!(control, Control::Detach) {
                                 return Ok(Ended::Detached);
@@ -280,7 +285,9 @@ async fn relay(
                         sent_stop = false;
                         protocol::write(writer, &Control::Resume { ports }).await?;
                     }
-                    Action::Stop => protocol::write(writer, &Control::Stop).await?,
+                    Action::Stop(reason) => {
+                        protocol::write(writer, &Control::Stop { reason }).await?
+                    }
                     Action::Finished(exit_code) => return Ok(Ended::Finished(exit_code)),
                 }
             }

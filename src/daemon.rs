@@ -44,7 +44,7 @@ use tokio::{
 pub(crate) use log::log;
 use ports::Acquisition;
 use scope::Caller;
-use workspace::{ExecutionKind, Manager, StopRecords};
+use workspace::{ExecutionKind, Manager, StopRequest};
 
 use crate::{
     paths::Paths,
@@ -535,7 +535,7 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         }
         Method::StopWorkspace { workspace } => {
             manager
-                .stop_workspace(&workspace, StopRecords::manual())
+                .stop_workspace(&workspace, StopRequest::manual())
                 .await?;
             Body::Ok
         }

@@ -239,7 +239,7 @@ async fn unknown_execution_blocks_stop_and_unattended_removal_even_when_missing(
             let error = manager
                 .stop_workspace(
                     &workspace.id,
-                    crate::daemon::workspace::StopRecords::manual(),
+                    crate::daemon::workspace::StopRequest::manual(),
                 )
                 .await
                 .unwrap_err();
@@ -252,7 +252,11 @@ async fn unknown_execution_blocks_stop_and_unattended_removal_even_when_missing(
             // would reject this removal. Stopping for removal must leave the
             // record intact until the workspace itself is successfully removed.
             let stopped = manager
-                .stop_executions(&workspace.id, removal.stop_policy())
+                .stop_executions(
+                    &workspace.id,
+                    removal.stop_policy(),
+                    &crate::daemon::workspace::StopRequest::removal(),
+                )
                 .await;
             assert_eq!(stopped.is_err(), retained);
             assert_eq!(
@@ -314,7 +318,7 @@ async fn stale_birth_identity_never_authorizes_signaling_a_live_group() {
         let error = manager
             .stop_workspace(
                 &workspace.id,
-                crate::daemon::workspace::StopRecords::manual(),
+                crate::daemon::workspace::StopRequest::manual(),
             )
             .await
             .unwrap_err();

@@ -9,7 +9,8 @@ use crate::{model::PortReservation, protocol::ExecutionEvent};
 
 pub(super) enum Action {
     Resume(Vec<PortReservation>),
-    Stop,
+    /// Cancel the restore, with the reason the wrapper shows.
+    Stop(Option<String>),
     Finished(i32),
 }
 
@@ -23,7 +24,7 @@ pub(super) async fn pause(
 ) -> Result<Action> {
     ensure!(recover, "execution is not eligible for overload recovery");
     if !manager.agent_was_overloaded(execution_id).await {
-        return Ok(Action::Stop);
+        return Ok(Action::Stop(requested_reason(manager, execution_id).await));
     }
     manager
         .pause_agent_execution(execution_id, workspace_id)
@@ -36,8 +37,13 @@ pub(super) async fn pause(
             ExecutionEvent::Finished { exit_code } => return Ok(Action::Finished(exit_code)),
             _ => return Err(anyhow::anyhow!("unexpected event during overload recovery")),
         },
-        changed = stop.changed() => { changed?; return Ok(Action::Stop); }
-        () = recovery_disabled(manager) => return Ok(Action::Stop),
+        changed = stop.changed() => {
+            changed?;
+            return Ok(Action::Stop(requested_reason(manager, execution_id).await));
+        }
+        () = recovery_disabled(manager) => {
+            return Ok(Action::Stop(Some("automatic recovery was disabled".into())));
+        }
         ready = manager.await_overload_recovery(workspace_id) => ready,
     };
     let resume = async {
@@ -53,9 +59,19 @@ pub(super) async fn pause(
         Ok(action) => Ok(action),
         Err(error) => {
             log!("agent recovery cancelled: {error:#}");
-            Ok(Action::Stop)
+            Ok(Action::Stop(Some(format!(
+                "automatic restore failed: {error:#}"
+            ))))
         }
     }
+}
+
+/// Why a stop cancelled the restore, such as `shoal stop`.
+async fn requested_reason(manager: &Manager, execution_id: &str) -> Option<String> {
+    manager
+        .stop_request(execution_id)
+        .await
+        .map(|request| request.reason)
 }
 
 /// Resolves once a reload disables overload recovery, so a waiting agent
@@ -80,6 +96,6 @@ async fn prepare_resume(
     if manager.resume_agent_execution(execution_id).await? {
         Ok(Action::Resume(ports))
     } else {
-        Ok(Action::Stop)
+        Ok(Action::Stop(requested_reason(manager, execution_id).await))
     }
 }

@@ -404,8 +404,12 @@ impl Manager {
                 "HEAD changed before completion cleanup"
             );
         }
-        self.stop_executions(&workspace.id, removal.stop_policy())
-            .await?;
+        self.stop_executions(
+            &workspace.id,
+            removal.stop_policy(),
+            &super::StopRequest::removal(),
+        )
+        .await?;
         if let Removal::Automatic { snapshot, .. } = removal {
             ensure!(
                 self.cleanup_snapshot(&workspace.id).await? == Some(snapshot),
@@ -515,8 +519,12 @@ impl Manager {
                 "commands are recorded; stop them with shoal stop or shoal rm"
             );
         }
-        self.stop_executions(&workspace.id, removal.stop_policy())
-            .await?;
+        self.stop_executions(
+            &workspace.id,
+            removal.stop_policy(),
+            &super::StopRequest::removal(),
+        )
+        .await?;
         self.remove_simulators(&workspace.id).await?;
         if self.is_registered_worktree(workspace).await? {
             // Prune only this owned registration, through Worktrunk, and

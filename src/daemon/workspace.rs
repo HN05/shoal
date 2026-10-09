@@ -19,7 +19,7 @@ mod stack;
 mod status;
 
 pub(crate) use agents::Protection;
-pub use executions::{ExecutionKind, StopRecords};
+pub use executions::{ExecutionKind, StopRequest};
 pub(crate) use executions::{ReattachedExecution, StartedExecution};
 pub(crate) use stack::record_base_changed;
 
@@ -87,9 +87,8 @@ pub struct Manager {
     /// Connected executions and the channel that asks their wrapper to stop.
     connections: Mutex<HashMap<String, watch::Sender<bool>>>,
     agents: Mutex<HashMap<String, agents::Agent>>,
-    /// Connected executions whose pending stop saves what `shoal resume`
-    /// needs, with the reason their wrappers show.
-    resumable_stops: Mutex<HashMap<String, String>>,
+    /// Why the daemon asked connected executions to stop.
+    stop_requests: Mutex<HashMap<String, executions::StopRequest>>,
     /// Set under the connections lock once shutdown stops executions.
     shutting_down: std::sync::atomic::AtomicBool,
     pub(super) recovery_ready: watch::Sender<Option<u64>>,
@@ -125,7 +124,7 @@ impl Manager {
             scopes: Mutex::new(HashMap::new()),
             connections: Mutex::new(HashMap::new()),
             agents: Mutex::new(HashMap::new()),
-            resumable_stops: Mutex::new(HashMap::new()),
+            stop_requests: Mutex::new(HashMap::new()),
             shutting_down: std::sync::atomic::AtomicBool::new(false),
             recovery_ready: watch::channel(None).0,
             recovery_epoch: std::sync::atomic::AtomicU64::new(0),

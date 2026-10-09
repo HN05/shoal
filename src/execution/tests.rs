@@ -50,7 +50,9 @@ async fn adjacent_controls_child() {
             reason: "critical memory pressure".into(),
             resumes_when: "system load is healthy".into(),
         },
-        Control::Stop,
+        Control::Stop {
+            reason: Some("stopped by shoal stop".into()),
+        },
     ] {
         protocol::write(&mut bytes, &control).await.unwrap();
     }
@@ -99,7 +101,10 @@ async fn adjacent_controls_child() {
                 stop: Halt::Protection { recover: true, reason, .. },
             } if reason == "critical memory pressure"
         ));
-        assert!(recovery::wait(&mut link).await.unwrap().is_none());
+        assert!(matches!(
+            recovery::wait(&mut link).await.unwrap(),
+            recovery::Waited::Cancelled(Some(reason)) if reason == "stopped by shoal stop"
+        ));
         assert!(
             report_completion(&mut link, 143, &Mode::Command { record: false })
                 .await
@@ -244,9 +249,14 @@ async fn reattachment_child() {
         )
         .await
         .unwrap();
-        protocol::write(daemon.get_mut(), &Control::Stop)
-            .await
-            .unwrap();
+        protocol::write(
+            daemon.get_mut(),
+            &Control::Stop {
+                reason: Some("the workspace is being removed".into()),
+            },
+        )
+        .await
+        .unwrap();
         acknowledge_finish(&mut daemon, 143).await;
     };
     let wrapper = async {
@@ -261,7 +271,10 @@ async fn reattachment_child() {
         )
         .await
         .unwrap();
-        assert!(matches!(outcome, Outcome::Exited(143)));
+        assert!(matches!(
+            outcome,
+            Outcome::Stopped { code: 143, reason } if reason == "the workspace is being removed"
+        ));
         assert!(report_completion(&mut link, 143, &mode).await.unwrap());
     };
     tokio::join!(restarted, wrapper);
@@ -332,8 +345,8 @@ async fn reattachment_child() {
             outcome,
             Outcome::Paused {
                 code: 143,
-                stop: Halt::Pause { reason: None },
-            }
+                stop: Halt::Pause { reason: Some(reason) },
+            } if reason.contains("execution record is missing")
         ));
         let refusal = link.refusal().unwrap().to_string();
         assert!(refusal.contains("execution record is missing"), "{refusal}");
@@ -342,7 +355,7 @@ async fn reattachment_child() {
 }
 
 #[test]
-fn only_protection_reasons_are_saved_and_pauses_state_theirs() {
+fn stopped_lines_name_the_cause_and_only_protection_saves_it() {
     let restore = "restore with shoal resume worker --execution id";
     let protection = Halt::Protection {
         recover: false,
@@ -355,7 +368,7 @@ fn only_protection_reasons_are_saved_and_pauses_state_theirs() {
     );
     assert_eq!(
         protection.manual_restore(restore),
-        "shoal: agent stopped; once free disk space reaches 5 GiB, restore with shoal resume worker --execution id"
+        "shoal: agent stopped: free disk space is below 2 GiB; once free disk space reaches 5 GiB, restore with shoal resume worker --execution id"
     );
     let stop = Halt::Pause {
         reason: Some("stopped by shoal stop".into()),

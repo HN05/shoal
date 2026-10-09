@@ -56,19 +56,34 @@ pub(super) enum StopPolicy {
     ForRemoval,
 }
 
-/// Whether a workspace stop saves agent sessions and interrupted commands for
-/// `shoal resume`, and why their wrappers stopped them.
+/// Why the daemon stops executions, which their wrappers show, and whether
+/// the stop saves agent sessions and interrupted commands for `shoal resume`.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum StopRecords {
-    Save { reason: String },
-    Skip,
+pub struct StopRequest {
+    pub reason: String,
+    pub save: bool,
 }
 
-impl StopRecords {
+impl StopRequest {
     /// The stop `shoal stop` requests.
     pub fn manual() -> Self {
-        Self::Save {
+        Self {
             reason: "stopped by shoal stop".into(),
+            save: true,
+        }
+    }
+
+    pub fn doctor() -> Self {
+        Self {
+            reason: "stopped by shoal doctor".into(),
+            save: false,
+        }
+    }
+
+    pub(super) fn removal() -> Self {
+        Self {
+            reason: "the workspace is being removed".into(),
+            save: false,
         }
     }
 }
@@ -578,7 +593,7 @@ impl Manager {
     /// Drop what the daemon kept in memory for a removed connection.
     async fn forget_connection(&self, id: &str) {
         self.agents.lock().await.remove(id);
-        self.resumable_stops.lock().await.remove(id);
+        self.stop_requests.lock().await.remove(id);
         self.scopes
             .lock()
             .await
@@ -614,36 +629,36 @@ impl Manager {
     }
 
     /// Stop every execution, cancelling agents' waiting automatic restores.
-    pub async fn stop_workspace(&self, selector: &str, records: StopRecords) -> Result<()> {
-        self.stop_workspace_executions(selector, records, Protected::Stop)
+    pub async fn stop_workspace(&self, selector: &str, request: StopRequest) -> Result<()> {
+        self.stop_workspace_executions(selector, request, Protected::Stop)
             .await
     }
 
     /// Stop executions other than agents that protection already stopped,
     /// saving records as `shoal stop` does.
     pub async fn stop_unprotected(&self, selector: &str, reason: String) -> Result<()> {
-        self.stop_workspace_executions(selector, StopRecords::Save { reason }, Protected::Keep)
+        let request = StopRequest { reason, save: true };
+        self.stop_workspace_executions(selector, request, Protected::Keep)
             .await
     }
 
     async fn stop_workspace_executions(
         &self,
         selector: &str,
-        records: StopRecords,
+        request: StopRequest,
         protected: Protected,
     ) -> Result<()> {
         let workspace = self.workspace(selector).await?;
         self.reserve_lifecycle(&workspace.id, WorkspaceState::Stopping)
             .await?;
-        let result = async {
-            if let StopRecords::Save { reason } = records {
-                self.save_records_on_stop(&workspace.id, reason, protected)
-                    .await?;
-            }
-            self.stop_executions_keeping(&workspace.id, StopPolicy::RequireCompleteProof, protected)
-                .await
-        }
-        .await;
+        let result = self
+            .stop_executions_keeping(
+                &workspace.id,
+                StopPolicy::RequireCompleteProof,
+                &request,
+                protected,
+            )
+            .await;
         self.set_state(
             &workspace.id,
             workspace.state,
@@ -655,30 +670,6 @@ impl Manager {
         )
         .await?;
         result
-    }
-
-    /// Wrappers decide what to save; setup and landing save nothing.
-    async fn save_records_on_stop(
-        &self,
-        workspace_id: &str,
-        reason: String,
-        protected: Protected,
-    ) -> Result<()> {
-        let executions = self.inspect_workspace(workspace_id).await?.executions;
-        let agents = self.agents.lock().await;
-        let stopping = executions.into_iter().filter(|execution| {
-            protected == Protected::Stop
-                || !agents
-                    .get(&execution.id)
-                    .is_some_and(|agent| agent.protected())
-        });
-        let stopping: Vec<_> = stopping.map(|execution| execution.id).collect();
-        drop(agents);
-        self.resumable_stops
-            .lock()
-            .await
-            .extend(stopping.into_iter().map(|id| (id, reason.clone())));
-        Ok(())
     }
 
     /// Before the daemon exits, ask every connected execution to stop. Wrappers
@@ -693,12 +684,18 @@ impl Manager {
             let connections = self.connections.lock().await;
             self.shutting_down.store(true, Ordering::Relaxed);
             let mut agents = self.agents.lock().await;
-            let mut saving = self.resumable_stops.lock().await;
+            let mut requests = self.stop_requests.lock().await;
             for (id, sender) in connections.iter().filter(|(_, sender)| !sender.is_closed()) {
                 if let Some(agent) = agents.get_mut(id) {
                     agent.cancel_recovery();
                 }
-                saving.insert(id.clone(), "the Shoal daemon shut down".into());
+                requests.insert(
+                    id.clone(),
+                    StopRequest {
+                        reason: "the Shoal daemon shut down".into(),
+                        save: true,
+                    },
+                );
                 let _ = sender.send(true);
             }
         }
@@ -712,9 +709,9 @@ impl Manager {
         self.shutting_down.load(Ordering::Relaxed)
     }
 
-    /// The reason a pending stop saves records for `shoal resume`, if it does.
-    pub(crate) async fn resumable_stop_reason(&self, id: &str) -> Option<String> {
-        self.resumable_stops.lock().await.get(id).cloned()
+    /// Why the daemon asked a connected execution to stop, if it did.
+    pub(crate) async fn stop_request(&self, id: &str) -> Option<StopRequest> {
+        self.stop_requests.lock().await.get(id).cloned()
     }
 
     async fn stop_disconnected(&self, execution: &Execution, policy: StopPolicy) -> Result<()> {
@@ -751,15 +748,22 @@ impl Manager {
     }
 
     /// Ask connected wrappers to stop and signal disconnected survivors.
-    pub(super) async fn stop_executions(&self, id: &str, policy: StopPolicy) -> Result<()> {
-        self.stop_executions_keeping(id, policy, Protected::Stop)
+    pub(super) async fn stop_executions(
+        &self,
+        id: &str,
+        policy: StopPolicy,
+        request: &StopRequest,
+    ) -> Result<()> {
+        self.stop_executions_keeping(id, policy, request, Protected::Stop)
             .await
     }
 
+    /// Wrappers decide what to save; setup and landing save nothing.
     async fn stop_executions_keeping(
         &self,
         id: &str,
         policy: StopPolicy,
+        request: &StopRequest,
         protected: Protected,
     ) -> Result<()> {
         let id = id.to_owned();
@@ -788,6 +792,10 @@ impl Manager {
                             }
                             agent.cancel_recovery();
                         }
+                        self.stop_requests
+                            .lock()
+                            .await
+                            .insert(execution.id.clone(), request.clone());
                         sender
                             .send(true)
                             .context("execution disconnected during stop")?;

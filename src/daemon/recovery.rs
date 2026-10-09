@@ -5,7 +5,7 @@ use std::{collections::HashSet, path::PathBuf};
 
 use crate::daemon::log;
 use crate::{
-    daemon::workspace::{Manager, StopRecords},
+    daemon::workspace::{Manager, StopRequest},
     model::Workspace,
     process::{execution::Processes, identity as process},
     state::{ExecutionState, WorkspaceState, states},
@@ -149,7 +149,9 @@ impl Manager {
             );
             if running
                 && quiescent
-                && let Err(error) = self.stop_workspace(&workspace.id, StopRecords::Skip).await
+                && let Err(error) = self
+                    .stop_workspace(&workspace.id, StopRequest::doctor())
+                    .await
             {
                 report.issues.push(format!("connected stop: {error:#}"));
             }

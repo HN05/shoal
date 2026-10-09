@@ -194,23 +194,30 @@ pub(super) fn save_command(
     Ok(path)
 }
 
-pub(super) async fn wait(
-    link: &mut super::Link,
-) -> Result<Option<Vec<crate::model::PortReservation>>> {
+/// How a stopped agent's wait for automatic recovery ended.
+#[derive(Debug)]
+pub(super) enum Waited {
+    Resume(Vec<crate::model::PortReservation>),
+    /// The restore was cancelled, with the daemon's reason if it gave one.
+    Cancelled(Option<String>),
+}
+
+pub(super) async fn wait(link: &mut super::Link) -> Result<Waited> {
     use crate::protocol::Control;
     use tokio::signal::unix::{SignalKind, signal};
     let mut interrupt = signal(SignalKind::interrupt())?;
     let mut terminate = signal(SignalKind::terminate())?;
     let mut quit = signal(SignalKind::quit())?;
+    let signalled = || Ok(Waited::Cancelled(Some("interrupted".into())));
     tokio::select! {
         control = link.control() => match control? {
-            Control::Resume { ports } => Ok(Some(ports)),
-            Control::Stop => Ok(None),
+            Control::Resume { ports } => Ok(Waited::Resume(ports)),
+            Control::Stop { reason } => Ok(Waited::Cancelled(reason)),
             _ => anyhow::bail!("unexpected recovery control"),
         },
-        _ = interrupt.recv() => Ok(None),
-        _ = terminate.recv() => Ok(None),
-        _ = quit.recv() => Ok(None),
+        _ = interrupt.recv() => signalled(),
+        _ = terminate.recv() => signalled(),
+        _ = quit.recv() => signalled(),
     }
 }
 

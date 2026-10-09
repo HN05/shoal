@@ -381,6 +381,15 @@ async fn run_tracked(
         }
         match outcome {
             Ok(Outcome::Exited(code)) => break Ok(code),
+            Ok(Outcome::Stopped { code, reason }) => {
+                let stopped = if recovery.is_some() {
+                    "agent"
+                } else {
+                    "command"
+                };
+                eprintln!("shoal: {stopped} stopped: {reason}");
+                break Ok(code);
+            }
             Ok(Outcome::Paused { code, stop }) => {
                 if let Some(recovery) = &recovery {
                     let automatic = recovery.automatic && stop.recovers();
@@ -407,16 +416,25 @@ async fn run_tracked(
                             && automatic
                         {
                             eprintln!(
-                                "shoal: waiting until {resumes_when}; the agent resumes automatically"
+                                "shoal: agent stopped{}; waiting until {resumes_when}; the agent resumes automatically",
+                                stop.stated_reason()
                             );
-                            if let Some(ports) = recovery::wait(&mut link).await? {
-                                plan.ports = ports;
-                                next_command = recovery.command.clone();
-                                eprintln!("shoal: restoring agent session");
-                                continue;
-                            }
-                            if saved.is_ok() {
-                                eprintln!("shoal: automatic restore cancelled; {restore}");
+                            match recovery::wait(&mut link).await? {
+                                recovery::Waited::Resume(ports) => {
+                                    plan.ports = ports;
+                                    next_command = recovery.command.clone();
+                                    eprintln!("shoal: restoring agent session");
+                                    continue;
+                                }
+                                recovery::Waited::Cancelled(cancelled) if saved.is_ok() => {
+                                    let cancelled = cancelled.map(|reason| format!(": {reason}"));
+                                    eprintln!(
+                                        "shoal: agent stopped{}; automatic restore cancelled{}; {restore}",
+                                        stop.stated_reason(),
+                                        cancelled.unwrap_or_default()
+                                    );
+                                }
+                                recovery::Waited::Cancelled(_) => {}
                             }
                         }
                     }
@@ -461,7 +479,15 @@ async fn run_tracked(
 
 enum Outcome {
     Exited(i32),
-    Paused { code: i32, stop: Halt },
+    /// The daemon stopped the command without saving it.
+    Stopped {
+        code: i32,
+        reason: String,
+    },
+    Paused {
+        code: i32,
+        stop: Halt,
+    },
 }
 
 /// Why the daemon stopped a command it expects to be restored.
@@ -489,27 +515,27 @@ impl Halt {
         }
     }
 
-    /// A pause reason for the stopped line; protection already named its
-    /// reason when the stop arrived.
+    /// The cause for every line after the stop.
     fn stated_reason(&self) -> String {
         match self {
-            Self::Pause {
+            Self::Protection { reason, .. }
+            | Self::Pause {
                 reason: Some(reason),
             } => format!(": {reason}"),
-            _ => String::new(),
+            Self::Pause { reason: None } => String::new(),
         }
     }
 
     /// The line for an agent that does not restore itself.
     fn manual_restore(&self, restore: &str) -> String {
-        match self {
-            Self::Protection { resumes_when, .. } => {
-                format!("shoal: agent stopped; once {resumes_when}, {restore}")
-            }
-            Self::Pause { .. } => {
-                format!("shoal: agent stopped{}; {restore}", self.stated_reason())
-            }
-        }
+        let condition = match self {
+            Self::Protection { resumes_when, .. } => format!("once {resumes_when}, "),
+            Self::Pause { .. } => String::new(),
+        };
+        format!(
+            "shoal: agent stopped{}; {condition}{restore}",
+            self.stated_reason()
+        )
     }
 }
 
@@ -566,6 +592,7 @@ async fn supervise(
     // foreground group.
     group.send(libc::SIGCONT);
     let mut recovery = None;
+    let mut stopped = None;
     // While the daemon is away the link reattaches in the background and the
     // command keeps the terminal; nothing is written to it.
     let status = loop {
@@ -596,9 +623,11 @@ async fn supervise(
                     Ok(Control::Pause { reason }) => recovery = Some(Halt::Pause { reason }),
                     // A refused reattachment saves the session as a stop does.
                     Err(error) if error.is::<Refused>() => {
-                        recovery = Some(Halt::Pause { reason: None });
+                        recovery = Some(Halt::Pause {
+                            reason: Some(error.to_string()),
+                        });
                     }
-                    Ok(Control::Stop) => {},
+                    Ok(Control::Stop { reason }) => stopped = reason,
                     Ok(_) => bail!("unexpected execution control"),
                     Err(error) => return Err(error.context(
                         "daemon disconnected; command stopped, execution requires reconciliation",
@@ -613,12 +642,11 @@ async fn supervise(
     };
     // A command owns its process group; descendants do not outlive its lease.
     drop(group);
-    Ok(match recovery {
-        Some(stop) => Outcome::Paused {
-            code: exit_code(status),
-            stop,
-        },
-        None => Outcome::Exited(exit_code(status)),
+    let code = exit_code(status);
+    Ok(match (recovery, stopped) {
+        (Some(stop), _) => Outcome::Paused { code, stop },
+        (None, Some(reason)) => Outcome::Stopped { code, reason },
+        (None, None) => Outcome::Exited(code),
     })
 }
 

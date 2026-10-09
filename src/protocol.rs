@@ -649,7 +649,11 @@ pub enum ExecutionEvent {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Control {
     Started,
-    Stop,
+    /// Stop without saving anything to resume. Older wrappers ignore the reason.
+    Stop {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reason: Option<String>,
+    },
     /// Stop and save what `shoal resume` restores. Older wrappers ignore the
     /// reason.
     Pause {
@@ -870,6 +874,8 @@ mod tests {
     fn pause_reasons_are_optional_on_the_wire() {
         let control: Control = serde_json::from_value(json!({"type": "pause"})).unwrap();
         assert!(matches!(control, Control::Pause { reason: None }));
+        let control: Control = serde_json::from_value(json!({"type": "stop"})).unwrap();
+        assert!(matches!(control, Control::Stop { reason: None }));
         let wire = serde_json::to_value(Control::Pause {
             reason: Some("shoal stop".into()),
         })

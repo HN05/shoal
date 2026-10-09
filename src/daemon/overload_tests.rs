@@ -414,7 +414,7 @@ async fn resume_without_an_agent_reports_stopped_commands_once() {
         "daemon::overload_tests::tracked_command_child",
     );
     wait_launched(&manager, &workspace, "command-started", 1).await;
-    bounded(manager.stop_workspace(&workspace.id, StopRecords::manual()))
+    bounded(manager.stop_workspace(&workspace.id, StopRequest::manual()))
         .await
         .unwrap();
     bounded(command).await.unwrap().unwrap();
@@ -486,7 +486,7 @@ async fn manual_stop_cancels_waiting_recovery_and_leaves_a_restore_record() {
             .await
     );
     wait_paused(&manager, &workspace).await;
-    bounded(manager.stop_workspace(&workspace.id, StopRecords::manual()))
+    bounded(manager.stop_workspace(&workspace.id, StopRequest::manual()))
         .await
         .unwrap();
     bounded(launched).await.unwrap().unwrap();
@@ -603,7 +603,7 @@ async fn discard_clears_pending_recovery_without_launching_an_agent() {
         .await
         .is_err()
     );
-    bounded(manager.stop_workspace(&workspace.id, StopRecords::manual()))
+    bounded(manager.stop_workspace(&workspace.id, StopRequest::manual()))
         .await
         .unwrap();
     bounded(launched).await.unwrap().unwrap();
@@ -778,7 +778,7 @@ async fn manual_resume_consumes_the_record_on_start_even_if_other_commands_run_o
             .await
     );
     wait_paused(&manager, &workspace).await;
-    bounded(manager.stop_workspace(&workspace.id, StopRecords::manual()))
+    bounded(manager.stop_workspace(&workspace.id, StopRequest::manual()))
         .await
         .unwrap();
     bounded(launched).await.unwrap().unwrap();
