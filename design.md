@@ -632,7 +632,9 @@ acknowledgements; legacy single-watch records retain their stored and JSON shape
 Ambiguous records and conflicting actions are rejected. Own-workspace `watch`
 polls linked issue and PR activity independently of cleanup, with kind filters
 or an explicit item that does not change associations. It reports comments or
-reviews, completed CI checks, new merge conflicts, closure, reopening or merging. It shares a
+reviews, completed CI checks, new merge conflicts, closure, reopening or merging. Forgejo CI
+and mergeability fall back to the anonymous API, which reads the PR head without a
+login, when `fj pr status` fails. The watch shares a
 persistent cursor per workspace and item, reporting existing activity on the first
 wait and changes between waits thereafter; cancelling the watch discards that cursor.
 Activity lookups run outside completion serialization; persisting results

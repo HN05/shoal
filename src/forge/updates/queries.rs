@@ -4,8 +4,9 @@ use crate::forge::{
     pr::state::{CheckResult, PrState, PrStatus, Verdict, fj_reviews, github_reviews, summarize},
     strip_bidi_isolates,
 };
-use anyhow::{Context, Result, ensure};
-use std::path::Path;
+use crate::tools::Tool;
+use anyhow::{Context, Result, anyhow, ensure};
+use std::{path::Path, time::Duration};
 
 impl ForgeRepo {
     pub(crate) async fn issue_activity(&self, path: &Path, number: u64) -> Result<Snapshot> {
@@ -186,12 +187,49 @@ impl ForgeRepo {
         Ok(snapshot)
     }
 
+    /// `fj pr status` 0.6 reads CI from the PR commit with the newest timestamp. When a
+    /// rebase gives every commit the same timestamp it picks the oldest, and fails when
+    /// that commit has no CI. Forgejo's API reads the head commit, but without a login
+    /// reaches only public repositories, so it is the fallback.
     async fn forgejo_checks(&self, path: &Path, id: &str) -> Result<ForgejoChecks> {
         let args = [
             "--style", "minimal", "pr", "status", id, "--host", &self.host,
         ];
-        let output = self.kind.query(path, &args, Query::Pull("")).await?;
-        fj_checks(&output)
+        let error = match self.kind.query(path, &args, Query::Pull("")).await {
+            Ok(output) => match fj_checks(&output) {
+                Ok(checks) => return Ok(checks),
+                Err(error) => error,
+            },
+            Err(error) => error,
+        };
+        self.forgejo_api_checks(id).await.map_err(|fallback| {
+            anyhow!("{error:#}; the anonymous Forgejo API also failed: {fallback:#}")
+        })
+    }
+
+    async fn forgejo_api_checks(&self, id: &str) -> Result<ForgejoChecks> {
+        let pull = self.forgejo_api(&format!("pulls/{id}")).await?;
+        let head = pull["head"]["sha"]
+            .as_str()
+            .context("Forgejo PR has no head commit")?;
+        let combined = self
+            .forgejo_api(&format!("commits/{head}/status?limit=50"))
+            .await?;
+        api_checks(&pull, &combined)
+    }
+
+    async fn forgejo_api(&self, endpoint: &str) -> Result<serde_json::Value> {
+        let url = format!(
+            "{}://{}/api/v1/repos/{}/{endpoint}",
+            self.web_scheme, self.host, self.path
+        );
+        let mut curl = tokio::process::Command::new(Tool::Curl.program());
+        curl.args(["-q", "-sS", "-f", "-H", "Accept: application/json", &url]);
+        let output = crate::subprocess::Run::new(curl)
+            .timeout(Duration::from_secs(20))
+            .output()
+            .await?;
+        serde_json::from_str(&output).with_context(|| format!("invalid response from {url}"))
     }
 }
 
@@ -462,6 +500,46 @@ fn fj_checks(text: &str) -> Result<ForgejoChecks> {
             ),
             "unknown fj CI state"
         );
+        checks.checks.push((name.into(), state.into()));
+    }
+    Ok(checks)
+}
+
+/// Mirrors `fj pr status`: a `WIP:` title marks a draft, which reports no conflicts.
+fn api_checks(pull: &serde_json::Value, combined: &serde_json::Value) -> Result<ForgejoChecks> {
+    let draft = pull["title"]
+        .as_str()
+        .context("Forgejo PR has no title")?
+        .starts_with("WIP:");
+    let mergeable = pull["mergeable"]
+        .as_bool()
+        .context("Forgejo PR has no mergeability")?;
+    // A commit without statuses has `"statuses": null`.
+    let statuses = match &combined["statuses"] {
+        serde_json::Value::Null => &[][..],
+        statuses => statuses.as_array().context("invalid Forgejo CI statuses")?,
+    };
+    ensure!(
+        combined["total_count"].as_u64() == Some(statuses.len() as u64),
+        "Forgejo returned a partial page of CI statuses"
+    );
+    let mut checks = ForgejoChecks {
+        conflict: !draft && !mergeable,
+        checks: Vec::new(),
+    };
+    for status in statuses {
+        let name = status["context"]
+            .as_str()
+            .context("Forgejo CI status has no context")?;
+        let state = match status["status"].as_str() {
+            Some("pending") => "Pending",
+            Some("success") => "Success",
+            Some("failure") => "Failure",
+            Some("warning") => "Warning",
+            Some("skipped") => "Skipped",
+            Some("error") => "Error",
+            _ => anyhow::bail!("unknown Forgejo CI state"),
+        };
         checks.checks.push((name.into(), state.into()));
     }
     Ok(checks)
@@ -746,5 +824,37 @@ mod tests {
         let mut unknown = Snapshot::default();
         unknown.retain_failed_checks(&recovered);
         assert_eq!(unknown.conflict, Some(true));
+    }
+
+    #[test]
+    fn forgejo_api_checks_match_fj_status() {
+        let pull = json!({"title": "Topic", "mergeable": false, "head": {"sha": "abc"}});
+        let combined = json!({"total_count": 2, "statuses": [
+            {"context": "ci / rust", "status": "success"},
+            {"context": "review", "status": "pending"}
+        ]});
+        let mut api = Snapshot::default();
+        api_checks(&pull, &combined)
+            .unwrap()
+            .record(&mut api, "rev-1");
+        let mut fj = Snapshot::default();
+        forgejo_status(
+            "Open — Merge conflicts\n- Success — ci / rust\n- Pending — review\n",
+            &mut fj,
+            "rev-1",
+        )
+        .unwrap();
+        assert_eq!(api.conflict, Some(true));
+        assert!(fj.changes(&api, "pr").is_empty());
+        assert_eq!(api.checks, fj.checks);
+
+        let draft = json!({"title": "WIP: Topic", "mergeable": false});
+        let none = json!({"total_count": 0, "statuses": null});
+        let checks = api_checks(&draft, &none).unwrap();
+        assert!(!checks.conflict && checks.checks.is_empty());
+        let partial = json!({"total_count": 3, "statuses": combined["statuses"]});
+        assert!(api_checks(&pull, &partial).is_err());
+        let unknown = json!({"total_count": 1, "statuses": [{"context": "rust", "status": ""}]});
+        assert!(api_checks(&pull, &unknown).is_err());
     }
 }

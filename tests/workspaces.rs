@@ -10789,6 +10789,78 @@ if [ "$last" = comments ]; then cat "$HOME/comments"; else cat "$HOME/issue"; fi
 }
 
 #[test]
+fn pr_wait_reads_forgejo_ci_from_the_api_when_fj_status_fails() {
+    let fixture = Fixture::with_config(Some("[auto_cleanup]\nenabled=false\n"));
+    fixture.add("api");
+    git(
+        &fixture.repo,
+        &[
+            "remote",
+            "add",
+            "origin",
+            "https://forge.example/team/repo.git",
+        ],
+    );
+    let bin = fixture.root.path().join("bin");
+    fs::create_dir(&bin).unwrap();
+    fs::write(
+        bin.join("fj"),
+        r#"#!/bin/sh
+case " $* " in
+ *' status '*) echo 'unknown variant ``' >&2; exit 1;;
+ *' review '*|*' comments '*) ;;
+ *' commits '*) printf 'commit 2222222222222222222222222222222222222222\n';;
+ *) printf 'Title #7\nBy user — Open — +1 -0\nFrom `api` into `main`\n';;
+esac
+"#,
+    )
+    .unwrap();
+    let curl_args = fixture.root.path().join("curl-args");
+    fs::write(
+        bin.join("curl"),
+        format!(
+            r#"#!/bin/sh
+for arg; do url=$arg; done
+echo "$url" >> {}
+case "$url" in
+ */api/v1/repos/team/repo/pulls/7) echo '{{"title":"Topic","mergeable":false,"head":{{"sha":"2222222222222222222222222222222222222222"}}}}';;
+ */api/v1/repos/team/repo/commits/2222222222222222222222222222222222222222/status?limit=50)
+  echo '{{"total_count":2,"statuses":[{{"context":"rust","status":"failure"}},{{"context":"gate","status":"pending"}}]}}';;
+ *) exit 22;;
+esac
+"#,
+            curl_args.display()
+        ),
+    )
+    .unwrap();
+    for tool in ["fj", "curl"] {
+        fs::set_permissions(bin.join(tool), fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    fixture.ok(&["link", "pr", "7", "--workspace", "api"]);
+    let watched = fixture.ok(&["watch", "pr", "--workspace", "api"]);
+    let updates = watched["updates"].as_array().unwrap();
+    assert_eq!(
+        updates
+            .iter()
+            .map(|update| (
+                update["kind"].as_str().unwrap(),
+                update["message"].as_str().unwrap()
+            ))
+            .collect::<Vec<_>>(),
+        [
+            ("ci_completed", "rust: Failure"),
+            ("merge_conflict", "PR has merge conflicts")
+        ],
+        "{watched}"
+    );
+    assert!(
+        fs::read_to_string(&curl_args)
+            .unwrap()
+            .starts_with("https://forge.example/api/v1/repos/team/repo/pulls/7\n")
+    );
+}
+
+#[test]
 fn pr_wait_reports_forgejo_reviews_when_status_lookup_fails() {
     let fixture = Fixture::with_config(Some("[auto_cleanup]\nenabled=false\n"));
     fixture.add("watch");
@@ -10805,6 +10877,8 @@ fn pr_wait_reports_forgejo_reviews_when_status_lookup_fails() {
     fs::create_dir(&bin).unwrap();
     fs::write(bin.join("fj"), "#!/bin/sh\ncase \" $* \" in\n *' status '*) cat \"$HOME/status\";;\n *' review '*) cat \"$HOME/reviews\";;\n *' comments '*) cat \"$HOME/comments\";;\n *' commits '*) printf 'commit 1111111111111111111111111111111111111111\\n';;\n *) printf 'Title #7\\nBy user — Open — +1 -0\\nFrom `watch` into `main`\\n';;\nesac\n").unwrap();
     fs::set_permissions(bin.join("fj"), fs::Permissions::from_mode(0o755)).unwrap();
+    fs::write(bin.join("curl"), "#!/bin/sh\nexit 22\n").unwrap();
+    fs::set_permissions(bin.join("curl"), fs::Permissions::from_mode(0o755)).unwrap();
     fs::write(
         fixture.root.path().join("status"),
         "Open — Can be merged\n- Success — review/default\n- Pending — rust\n",
