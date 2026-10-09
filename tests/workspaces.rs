@@ -162,6 +162,7 @@ impl Fixture {
 
     fn interactive_command(&self, command: &mut Command, answer: &str) -> (Output, String) {
         use std::{io::Read, os::unix::process::CommandExt};
+        command.env("PATH", self.interactive_path());
         let (mut master, slave) = pty::open();
         // A tracked command needs a controlling terminal to transfer foreground
         // ownership to its child, not just file descriptors that pass isatty.
@@ -203,6 +204,32 @@ impl Fixture {
         (
             child.wait_with_output().unwrap(),
             String::from_utf8(transcript).unwrap(),
+        )
+    }
+
+    /// Interactive commands open pickers for whatever agents and fzf they find,
+    /// so they see only the fixture's `bin`, the runner's Git and Worktrunk, and
+    /// system directories.
+    fn interactive_path(&self) -> String {
+        let tools = self.root.path().join("runner-bin");
+        if !tools.exists() {
+            fs::create_dir(&tools).unwrap();
+            for program in ["git", "wt"] {
+                let path = std::env::split_paths(&std::env::var_os("PATH").unwrap())
+                    .map(|dir| dir.join(program))
+                    .find(|path| {
+                        path.metadata().is_ok_and(|meta| {
+                            meta.is_file() && meta.permissions().mode() & 0o111 != 0
+                        })
+                    })
+                    .unwrap_or_else(|| panic!("{program} is not on PATH"));
+                std::os::unix::fs::symlink(path, tools.join(program)).unwrap();
+            }
+        }
+        format!(
+            "{}:{}:/usr/bin:/bin",
+            self.root.path().join("bin").display(),
+            tools.display()
         )
     }
 }
@@ -9986,6 +10013,7 @@ fn interactive_add_picks_existing_branch_and_reopens_workspace() {
         let output = fixture
             .command()
             .env("SHOAL_SHELL_DIRECTIVE", &directive)
+            .env("PATH", fixture.interactive_path())
             .args(["add", fixture.repo.to_str().unwrap()])
             .stdin(slave.try_clone().unwrap())
             .stderr(slave)
