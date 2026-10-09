@@ -647,7 +647,9 @@ upstream, or merged into the default) and otherwise requires an explicit keep or
 delete choice. The default branch is retained unless deletion is explicit.
 Automatic cleanup removes only clean, idle worktrees whose commits are all on a
 remote or the default branch, with no executions, directory users, leases, or
-permits, rechecked immediately before deletion, without fetching. `repo rm`
+permits, rechecked immediately before deletion, without fetching. `shoal cleanup`
+removes those candidates on request without their idle delay, including where idle
+cleanup is disabled; it is unavailable to scoped callers. `repo rm`
 deletes the checkout and every workspace through that path, refuses external
 worktrees and dangerous paths, persists progress, and blocks new workspaces until
 an interrupted removal is retried.

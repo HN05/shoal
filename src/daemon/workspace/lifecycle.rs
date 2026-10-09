@@ -234,6 +234,13 @@ impl Manager {
             .await
     }
 
+    /// Remove an idle cleanup candidate on the user's request, without
+    /// waiting for its idle delay.
+    pub async fn remove_on_request(&self, selector: &str, snapshot: u64) -> Result<()> {
+        self.remove_unused(selector, snapshot, EventCause::Manual)
+            .await
+    }
+
     async fn remove_unused(&self, selector: &str, snapshot: u64, cause: EventCause) -> Result<()> {
         let _guard = self.pr_gate.lock().await;
         self.remove(selector, Removal::Automatic { snapshot, cause })

@@ -267,6 +267,10 @@ pub enum Method {
         choice: BranchChoice,
         caller_pid: u32,
     },
+    /// Remove idle cleanup candidates without waiting for their idle delay.
+    Cleanup {
+        dry_run: bool,
+    },
     Diagnose,
     Doctor {
         workspace: Option<String>,
@@ -514,6 +518,7 @@ response_bodies! {
     ReviewMarks(Vec<crate::model::ReviewMark>),
     WorkspaceStatus(WorkspaceStatus),
     WorkspaceEnv(std::collections::BTreeMap<String, String>),
+    Cleanup(crate::daemon::cleanup::ManualCleanup),
     Diagnostics(Vec<crate::daemon::doctor::Check>),
     Doctor(Vec<Report>),
     Execution(ExecutionPlan),

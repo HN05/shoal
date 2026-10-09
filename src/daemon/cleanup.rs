@@ -1,6 +1,8 @@
 //! Automatic removal of idle, clean, fully pushed worktrees, and of workspaces
-//! whose directory was deleted outside Shoal.
+//! whose directory was deleted outside Shoal; the user can remove the idle
+//! candidates on request.
 use anyhow::{Result, ensure};
+use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, hash_map::DefaultHasher},
     fs,
@@ -366,6 +368,64 @@ pub(super) async fn observe(manager: &Manager, workspace: &Workspace) -> Option<
         log!("auto cleanup skipped {}: {error:#}", workspace.name);
         None
     })
+}
+
+/// The workspaces a manual cleanup removed, or would remove in a dry run,
+/// and the candidates it retained.
+#[derive(Debug, Default, Serialize, Deserialize)]
+pub struct ManualCleanup {
+    pub dry_run: bool,
+    pub removed: Vec<String>,
+    pub retained: Vec<Retained>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Retained {
+    pub workspace: String,
+    pub error: String,
+}
+
+/// Remove every workspace idle cleanup would remove, now: the user's request
+/// replaces the idle delay and applies where idle cleanup is disabled.
+pub async fn on_request(manager: &Manager, dry_run: bool) -> Result<ManualCleanup> {
+    let mut report = ManualCleanup {
+        dry_run,
+        ..ManualCleanup::default()
+    };
+    for workspace in manager.list_workspaces().await? {
+        if workspace.state != WorkspaceState::Ready {
+            continue;
+        }
+        let snapshot = match manager.cleanup_snapshot(&workspace.id).await {
+            Ok(Some(snapshot)) => snapshot,
+            Ok(None) => continue,
+            Err(error) => {
+                log!("manual cleanup skipped {}: {error:#}", workspace.name);
+                continue;
+            }
+        };
+        if dry_run {
+            report.removed.push(workspace.name);
+            continue;
+        }
+        match manager.remove_on_request(&workspace.id, snapshot).await {
+            Ok(()) => {
+                log!("manual cleanup removed {}", workspace.name);
+                report.removed.push(workspace.name);
+            }
+            Err(error) => {
+                manager
+                    .record_retained(&workspace.id, EventCause::Manual, &error)
+                    .await?;
+                log!("manual cleanup retained {}: {error:#}", workspace.name);
+                report.retained.push(Retained {
+                    workspace: workspace.name,
+                    error: format!("{error:#}"),
+                });
+            }
+        }
+    }
+    Ok(report)
 }
 
 /// A deleted worktree is forgotten unless it was moved or still has commands
@@ -917,6 +977,57 @@ mod tests {
             .unwrap(),
             ""
         );
+    }
+
+    #[tokio::test]
+    async fn requested_cleanup_removes_candidates_without_idle_delay() {
+        use crate::test_support::{manager, repository};
+        let (temp, manager) = manager().await;
+        let checkout = repository(temp.path(), "repo");
+        let repo = manager
+            .register_repository(checkout.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        // The request applies where idle cleanup is disabled.
+        manager
+            .set_repository_config(&repo.id, Some("[auto_cleanup]\nenabled = false\n".into()))
+            .await
+            .unwrap();
+        for name in ["dirty", "held", "idle"] {
+            manager
+                .create_workspace(&repo.id, name.into(), None, None, None)
+                .await
+                .unwrap();
+        }
+        let dirty = manager.workspace("dirty").await.unwrap();
+        fs::write(dirty.path.join("work"), "retain me").unwrap();
+        let held = manager.workspace("held").await.unwrap();
+        manager
+            .acquire_hold(&held.id, "keep".into(), None)
+            .await
+            .unwrap();
+        let names = |manager: &Arc<Manager>| {
+            let manager = manager.clone();
+            async move {
+                manager
+                    .list_workspaces()
+                    .await
+                    .unwrap()
+                    .into_iter()
+                    .map(|workspace| workspace.name)
+                    .collect::<Vec<_>>()
+            }
+        };
+
+        let preview = on_request(&manager, true).await.unwrap();
+        assert_eq!(preview.removed, ["idle"]);
+        assert_eq!(names(&manager).await, ["dirty", "held", "idle"]);
+
+        let report = on_request(&manager, false).await.unwrap();
+        assert!(!report.dry_run);
+        assert_eq!(report.removed, ["idle"]);
+        assert!(report.retained.is_empty());
+        assert_eq!(names(&manager).await, ["dirty", "held"]);
     }
 
     #[tokio::test]

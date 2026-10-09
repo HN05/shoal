@@ -3,7 +3,7 @@
 pub mod access;
 pub mod allocation;
 mod auto_update;
-mod cleanup;
+pub mod cleanup;
 mod disk;
 pub mod doctor;
 pub mod events;
@@ -561,6 +561,7 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
                 .remove_workspace(&workspace, choice, removal_inspection(caller_pid))
                 .await?,
         ),
+        Method::Cleanup { dry_run } => Body::Cleanup(cleanup::on_request(manager, dry_run).await?),
         Method::Diagnose => Body::Diagnostics(manager.diagnose().await?),
         Method::Doctor { workspace, options } => Body::Doctor(
             manager
