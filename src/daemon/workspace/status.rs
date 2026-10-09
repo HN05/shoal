@@ -46,6 +46,7 @@ impl Manager {
             diff,
             diff_error,
             unread_notifications,
+            cleanup_error: self.cleanup_problem(),
             prs,
         })
     }

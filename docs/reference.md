@@ -322,7 +322,9 @@ own stdin, stdout, stderr, and exit code.
 since its fork point, what it holds, and each watched PR as the forge reports it
 now: open, merged or closed, merge conflicts, each CI check's result, and a
 review state from each reviewer's latest approval or change request. A failed
-PR lookup reports its error on that PR without failing the command. `--json`
+PR lookup reports its error on that PR without failing the command. When the
+daemon's automatic cleanup is failing or has not finished a pass for 10 minutes,
+status says so in `cleanup_error` and `doctor` reports the error. `--json`
 returns the same data, with PRs in `prs`; `inspect` keeps the raw workspace and
 execution records. Workspace records from `ls --json` and `inspect --json` include
 `links.issue` and linked PR URLs in `links.prs`; an acknowledgement without a PR
@@ -1182,7 +1184,7 @@ simulator request that found no capacity (naming the workspaces holding the
 pool), a preferred port in use, a tracked agent
 exiting (with its code, or a note to run `doctor` when it left processes
 behind), and workspaces it removed or retained on its own through PR, merge, or
-idle cleanup. `shoal notify` adds a one-line message (at most 512 bytes, without
+idle cleanup, and automatic cleanup that starts failing. `shoal notify` adds a one-line message (at most 512 bytes, without
 control characters) for a workspace; agents use it to ask for attention without
 marking the assignment done. Each line shows the local time, the workspace, and the message;
 `--json` returns records with `kind`, `created_at`, and `read`. On a terminal,

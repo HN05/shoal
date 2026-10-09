@@ -686,6 +686,8 @@ registered workspaces are excluded from idle cleanup until cleared or removed.
 An invalid record retains its workspace without blocking cleanup of others.
 A failed sweep step does not skip the others.
 Background loops restart after a panic, and a failed daemon log write never stops them.
+Failing or stalled cleanup shows in `doctor` and workspace status and notifies once
+per run of failed passes.
 
 `doctor` reports current issues by default, falling back to the recorded
 failure and repair guidance; repair restores verified worktrees and clears

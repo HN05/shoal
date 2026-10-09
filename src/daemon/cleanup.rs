@@ -6,19 +6,190 @@ use std::{
     fs,
     hash::{Hash, Hasher},
     path::Path,
-    sync::Arc,
+    sync::{Arc, PoisonError},
     time::Duration,
 };
 use tokio::time::{Instant, sleep};
 
-use crate::daemon::log;
 use crate::{
-    daemon::{events::EventCause, notifications::NotificationKind, workspace::Manager},
+    daemon::{
+        doctor::{Check, CheckStatus},
+        events::EventCause,
+        log,
+        notifications::NotificationKind,
+        workspace::Manager,
+    },
     model::Workspace,
     state::WorkspaceState,
+    time::{local_seconds, unix_seconds},
 };
 
 const SWEEP_INTERVAL: Duration = Duration::from_secs(30);
+/// A pass normally finishes within seconds; none for this long means the
+/// loop is stuck or has stopped.
+const STALLED_AFTER: Duration = Duration::from_secs(10 * 60);
+
+/// The outcome of recent passes, reported by doctor and workspace status.
+pub struct Health {
+    started: Moment,
+    finished: Option<Moment>,
+    failure: Option<Failure>,
+}
+
+/// A point in time measured both ways: the monotonic clock excludes sleep, so
+/// a Mac waking up does not look like a stalled loop, and the Unix seconds
+/// are what messages show.
+#[derive(Clone, Copy)]
+struct Moment {
+    at: Instant,
+    unix: u64,
+}
+
+impl Moment {
+    fn now() -> Self {
+        Self {
+            at: Instant::now(),
+            unix: unix_seconds(),
+        }
+    }
+}
+
+/// Consecutive failed passes.
+struct Failure {
+    since: u64,
+    passes: u64,
+    error: String,
+    notified: bool,
+}
+
+impl Default for Health {
+    fn default() -> Self {
+        Self {
+            started: Moment::now(),
+            finished: None,
+            failure: None,
+        }
+    }
+}
+
+impl Health {
+    fn check(&self, now: Instant) -> Check {
+        let (status, message) = if let Some(failure) = &self.failure {
+            (
+                CheckStatus::Error,
+                format!(
+                    "Automatic cleanup failed {} consecutive passes since {}: {}",
+                    failure.passes,
+                    local_seconds(failure.since as i64),
+                    failure.error
+                ),
+            )
+        } else if self.stalled(now) {
+            (CheckStatus::Error, self.stalled_message())
+        } else if let Some(finished) = self.finished {
+            (
+                CheckStatus::Ok,
+                format!(
+                    "Automatic cleanup last finished a pass at {}",
+                    local_seconds(finished.unix as i64)
+                ),
+            )
+        } else {
+            (
+                CheckStatus::Ok,
+                "Automatic cleanup has not finished its first pass yet".to_owned(),
+            )
+        };
+        Check::new("cleanup", status, message)
+    }
+
+    /// A short description of a failing or stalled loop for workspace status.
+    fn problem(&self, now: Instant) -> Option<String> {
+        if let Some(failure) = &self.failure {
+            Some(format!(
+                "Automatic cleanup failing since {}; run shoal doctor",
+                local_seconds(failure.since as i64)
+            ))
+        } else if self.stalled(now) {
+            Some(format!("{}; run shoal doctor", self.stalled_message()))
+        } else {
+            None
+        }
+    }
+
+    fn stalled(&self, now: Instant) -> bool {
+        now.duration_since(self.finished.unwrap_or(self.started).at) >= STALLED_AFTER
+    }
+
+    fn stalled_message(&self) -> String {
+        match self.finished {
+            Some(finished) => format!(
+                "Automatic cleanup has not finished a pass since {}",
+                local_seconds(finished.unix as i64)
+            ),
+            None => format!(
+                "Automatic cleanup has not finished a pass since the daemon started at {}",
+                local_seconds(self.started.unix as i64)
+            ),
+        }
+    }
+
+    /// Record a finished pass; returns the error to tell the user about when
+    /// a failure has not been reported yet.
+    fn record(&mut self, now: Moment, result: &Result<()>) -> Option<String> {
+        self.finished = Some(now);
+        let Err(error) = result else {
+            self.failure = None;
+            return None;
+        };
+        let failure = self.failure.get_or_insert(Failure {
+            since: now.unix,
+            passes: 0,
+            error: String::new(),
+            notified: false,
+        });
+        failure.passes += 1;
+        failure.error = format!("{error:#}");
+        (!failure.notified).then(|| failure.error.clone())
+    }
+}
+
+impl Manager {
+    fn cleanup_health(&self) -> std::sync::MutexGuard<'_, Health> {
+        self.cleanup_health
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+    }
+
+    pub fn cleanup_check(&self) -> Check {
+        self.cleanup_health().check(Instant::now())
+    }
+
+    /// Why automatic cleanup is not working, if it is not.
+    pub fn cleanup_problem(&self) -> Option<String> {
+        self.cleanup_health().problem(Instant::now())
+    }
+
+    /// Notify the user when passes start failing. A notification that cannot
+    /// be recorded, as when the disk is full, is retried on the next pass.
+    async fn record_sweep(&self, result: Result<()>) {
+        let Some(error) = self.cleanup_health().record(Moment::now(), &result) else {
+            return;
+        };
+        let message = format!("automatic cleanup failed: {error}");
+        match self
+            .record_notification(None, NotificationKind::CleanupFailed, message)
+            .await
+        {
+            Ok(()) => {
+                if let Some(failure) = &mut self.cleanup_health().failure {
+                    failure.notified = true;
+                }
+            }
+            Err(error) => log!("notification not recorded: {error:#}"),
+        }
+    }
+}
 
 /// When a workspace was last seen unchanged in a removable state.
 struct Idle {
@@ -241,9 +412,11 @@ pub async fn run(manager: Arc<Manager>) {
     loop {
         {
             let _operation = manager.background_operations.read().await;
-            if let Err(error) = sweep(&manager, &mut timers).await {
+            let result = sweep(&manager, &mut timers).await;
+            if let Err(error) = &result {
                 log!("auto cleanup: {error:#}");
             }
+            manager.record_sweep(result).await;
         }
         tokio::select! {
             _ = sleep(SWEEP_INTERVAL) => {},
@@ -266,6 +439,103 @@ mod tests {
         timers.idle.remove("w");
         assert!(!timers.observe("w", 2, now + delay * 3, delay));
         assert!(timers.observe("w", 2, now + delay * 4, delay));
+    }
+
+    #[test]
+    fn health_reports_failing_and_stalled_cleanup() {
+        let mut health = Health::default();
+        let (start, unix) = (health.started.at, health.started.unix);
+        let after = |seconds| start + Duration::from_secs(seconds);
+        // Wall time runs on while the Mac sleeps; the monotonic clock does not.
+        let moment = |seconds, slept| Moment {
+            at: after(seconds),
+            unix: unix + seconds + slept,
+        };
+        assert_eq!(health.check(start).status, CheckStatus::Ok);
+        assert_eq!(health.problem(start), None);
+        let stalled = start + STALLED_AFTER;
+        assert_eq!(health.check(stalled).status, CheckStatus::Error);
+        assert!(
+            health
+                .problem(stalled)
+                .unwrap()
+                .contains("since the daemon started")
+        );
+
+        assert_eq!(health.record(moment(30, 0), &Ok(())), None);
+        assert_eq!(health.record(moment(60, 3600), &Ok(())), None);
+        assert_eq!(health.check(after(90)).status, CheckStatus::Ok);
+
+        let failed = Err(anyhow::anyhow!("issue cleanup: disk is full"));
+        assert_eq!(
+            health.record(moment(90, 3600), &failed).as_deref(),
+            Some("issue cleanup: disk is full")
+        );
+        assert_eq!(
+            health.record(moment(120, 3600), &failed).as_deref(),
+            Some("issue cleanup: disk is full"),
+            "an unrecorded notification is retried"
+        );
+        health.failure.as_mut().unwrap().notified = true;
+        assert_eq!(health.record(moment(150, 3600), &failed), None);
+        let check = health.check(after(150));
+        assert_eq!(check.status, CheckStatus::Error);
+        assert!(
+            check.message.contains("failed 3 consecutive passes"),
+            "{}",
+            check.message
+        );
+        assert!(check.message.ends_with("issue cleanup: disk is full"));
+        assert!(
+            health
+                .problem(after(150))
+                .unwrap()
+                .contains("run shoal doctor")
+        );
+
+        assert_eq!(health.record(moment(180, 3600), &Ok(())), None);
+        assert_eq!(health.check(after(180)).status, CheckStatus::Ok);
+        assert_eq!(health.problem(after(180)), None);
+        assert_eq!(
+            health.check(after(180) + STALLED_AFTER).status,
+            CheckStatus::Error
+        );
+    }
+
+    #[tokio::test]
+    async fn failing_passes_notify_once_and_show_in_status() {
+        use crate::test_support::{manager, repository};
+        let (temp, manager) = manager().await;
+        let checkout = repository(temp.path(), "repo");
+        let repo = manager
+            .register_repository(checkout.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        let workspace = manager
+            .create_workspace(&repo.id, "done".into(), None, None, None)
+            .await
+            .unwrap();
+        for _ in 0..2 {
+            manager
+                .record_sweep(Err(anyhow::anyhow!("completion cleanup: disk is full")))
+                .await;
+        }
+        let notifications = manager.notifications(true, 100).await.unwrap();
+        assert_eq!(notifications.len(), 1);
+        assert_eq!(notifications[0].workspace, None);
+        assert_eq!(notifications[0].kind, NotificationKind::CleanupFailed);
+        assert_eq!(
+            notifications[0].message,
+            "automatic cleanup failed: completion cleanup: disk is full"
+        );
+        assert_eq!(manager.cleanup_check().status, CheckStatus::Error);
+        let status = manager.workspace_status(&workspace.id).await.unwrap();
+        assert!(status.cleanup_error.unwrap().contains("failing since"));
+
+        manager.record_sweep(Ok(())).await;
+        assert_eq!(manager.cleanup_check().status, CheckStatus::Ok);
+        let status = manager.workspace_status(&workspace.id).await.unwrap();
+        assert_eq!(status.cleanup_error, None);
     }
 
     #[tokio::test]

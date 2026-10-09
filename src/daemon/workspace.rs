@@ -66,6 +66,7 @@ pub struct Manager {
     pub(super) background_operations: Arc<RwLock<()>>,
     pub(crate) pr_gate: Mutex<()>,
     pub cleanup_notify: tokio::sync::Notify,
+    pub(super) cleanup_health: std::sync::Mutex<super::cleanup::Health>,
     /// The global file as last loaded; a reload replaces it for later reads
     /// and wakes subscribers.
     config: watch::Sender<Arc<Config>>,
@@ -108,6 +109,7 @@ impl Manager {
             config_reload: Mutex::new(()),
             pr_gate: Mutex::new(()),
             cleanup_notify: tokio::sync::Notify::new(),
+            cleanup_health: Default::default(),
             store: Store::open(paths.database()).await?,
             background_operations: Arc::new(RwLock::new(())),
             paths,

@@ -63,7 +63,11 @@ pub fn worktrees_check_name(repository: &str) -> String {
 pub fn unavailable_checks() -> Vec<Check> {
     Tool::dependencies()
         .map(|(tool, _)| tool.check_name())
-        .chain([worktrees_check_name("*"), "workspaces".to_owned()])
+        .chain([
+            "cleanup".to_owned(),
+            worktrees_check_name("*"),
+            "workspaces".to_owned(),
+        ])
         .map(|name| {
             Check::new(
                 name,
@@ -77,6 +81,7 @@ pub fn unavailable_checks() -> Vec<Check> {
 impl Manager {
     pub async fn diagnose(&self) -> Result<Vec<Check>> {
         let mut checks = dependencies(std::env::var_os("PATH").as_deref());
+        checks.push(self.cleanup_check());
         for repo in self.repositories().await? {
             let Some(root) = &repo.workspaces_dir else {
                 continue;

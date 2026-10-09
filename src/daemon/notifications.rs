@@ -27,7 +27,8 @@ states!(NotificationKind {
     WorkspaceRemoved => "workspace_removed",
     /// An agent explicitly marked its assignment finished.
     WorkspaceDone => "workspace_done",
-    /// An automatic removal was attempted and the workspace retained.
+    /// An automatic removal was attempted and the workspace retained, or a
+    /// cleanup pass failed.
     CleanupFailed => "cleanup_failed",
     /// Disk protection could not stop a workspace's tracked executions.
     StopFailed => "stop_failed",
@@ -105,7 +106,7 @@ impl Manager {
         .await
     }
 
-    async fn record_notification(
+    pub(super) async fn record_notification(
         &self,
         workspace: Option<&str>,
         kind: NotificationKind,

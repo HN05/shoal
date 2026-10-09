@@ -1178,6 +1178,9 @@ fn render_status(status: &WorkspaceStatus, json: bool) {
         }
         None => println!("PR watch:      none"),
     }
+    if let Some(error) = &status.cleanup_error {
+        println!("Auto cleanup:  {}", palette.paint(Style::Warning, error));
+    }
     if workspace.review.is_empty() {
         println!("Review:        none");
     } else {

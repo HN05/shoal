@@ -772,6 +772,7 @@ fn doctor_reports_a_stopped_daemon_without_creating_state() {
             "dependency:wt",
             "dependency:lsof",
             "dependency:fzf",
+            "cleanup",
             "worktrees:*",
             "workspaces"
         ]
