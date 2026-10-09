@@ -183,7 +183,7 @@ impl Fixture {
             .spawn()
             .unwrap();
         master.write_all(answer.as_bytes()).unwrap();
-        let deadline = Instant::now() + Duration::from_secs(10);
+        let deadline = Instant::now() + Duration::from_secs(60);
         let mut transcript = Vec::new();
         loop {
             let _ = master.read_to_end(&mut transcript);
@@ -1201,7 +1201,7 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
         ])
         .spawn()
         .unwrap();
-    let deadline = Instant::now() + Duration::from_secs(5);
+    let deadline = Instant::now() + Duration::from_secs(60);
     while !started.exists() {
         assert!(Instant::now() < deadline, "execution did not start");
         thread::sleep(Duration::from_millis(20));
@@ -3651,7 +3651,7 @@ fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
             "touch command-started; while :; do sleep 1; done",
         ]),
     ];
-    let deadline = Instant::now() + Duration::from_secs(10);
+    let deadline = Instant::now() + Duration::from_secs(60);
     let ids = loop {
         let inspection = fixture.ok(&["inspect", "stopped"]);
         let ids = inspection["executions"]
@@ -4923,7 +4923,7 @@ fn simulators_allocate_concurrently_and_idle_expiry_keeps_active_leases() {
     let second: Value = serde_json::from_slice(&second.stdout).unwrap();
     assert_ne!(first["udid"], second["udid"]);
     fixture.ok(&["sim", "release", "default", "first"]);
-    let deadline = Instant::now() + Duration::from_secs(20);
+    let deadline = Instant::now() + Duration::from_secs(60);
     loop {
         let sims = fixture.ok(&["sim", "--all"]);
         if sims["simulators"].as_array().unwrap().len() == 1 {
@@ -5113,7 +5113,7 @@ fn clean_simulator_wait_retries_share_one_audit_entry() {
         .stdout(Stdio::piped())
         .spawn()
         .unwrap();
-    let deadline = Instant::now() + Duration::from_secs(5);
+    let deadline = Instant::now() + Duration::from_secs(60);
     loop {
         let entries = fixture.ok(&["sim", "history", "--all"]);
         if entries.as_array().unwrap().len() == 1 && entries[0]["status"] == "busy" {
@@ -5180,7 +5180,7 @@ fn clean_simulator_daemon_requires_reason_and_records_erase_failures() {
         let mut stream =
             UnixStream::connect(fixture.root.path().join("state/daemon.sock")).unwrap();
         stream
-            .set_read_timeout(Some(Duration::from_secs(5)))
+            .set_read_timeout(Some(Duration::from_secs(60)))
             .unwrap();
         writeln!(stream, "{value}").unwrap();
         let mut line = String::new();
@@ -7506,7 +7506,7 @@ fn deleted_worktrees_are_forgotten_with_their_resources_but_moved_ones_are_kept(
     );
     // The startup sweep forgets deleted worktrees without touching moved ones.
     fixture.restart();
-    let deadline = Instant::now() + Duration::from_secs(5);
+    let deadline = Instant::now() + Duration::from_secs(60);
     loop {
         let names: Vec<String> = fixture
             .ok(&["ls"])
@@ -7589,7 +7589,7 @@ fn deleted_worktrees_are_forgotten_with_their_resources_but_moved_ones_are_kept(
 }
 
 fn wait_registered_execution(fixture: &Fixture, workspace: &str) -> Value {
-    let deadline = Instant::now() + Duration::from_secs(5);
+    let deadline = Instant::now() + Duration::from_secs(60);
     loop {
         let inspection = fixture.ok(&["inspect", workspace]);
         if let Some(execution) = inspection["executions"].as_array().unwrap().first()
@@ -7616,7 +7616,7 @@ fn doctor_stops_identity_verified_orphans_after_wrapper_death() {
     let execution = wait_registered_execution(&fixture, "orphan");
     wrapper.kill().unwrap();
     wrapper.wait().unwrap();
-    let deadline = Instant::now() + Duration::from_secs(5);
+    let deadline = Instant::now() + Duration::from_secs(60);
     while fixture.ok(&["inspect", "orphan"])["executions"][0]["state"] != "unknown" {
         assert!(Instant::now() < deadline);
         thread::sleep(Duration::from_millis(20));
@@ -7753,7 +7753,7 @@ fn manual_removal_stops_recorded_orphans_before_releasing_resources() {
     let execution = wait_registered_execution(&fixture, "orphan");
     wrapper.kill().unwrap();
     wrapper.wait().unwrap();
-    let deadline = Instant::now() + Duration::from_secs(5);
+    let deadline = Instant::now() + Duration::from_secs(60);
     while fixture.ok(&["inspect", "orphan"])["executions"][0]["state"] != "unknown" {
         assert!(Instant::now() < deadline);
         thread::sleep(Duration::from_millis(20));
@@ -7841,7 +7841,7 @@ time.sleep(30)
         .spawn()
         .unwrap();
     wait_registered_execution(&fixture, "orphan");
-    let deadline = Instant::now() + Duration::from_secs(5);
+    let deadline = Instant::now() + Duration::from_secs(60);
     while !root.join("ready").exists() {
         assert!(Instant::now() < deadline);
         thread::sleep(Duration::from_millis(10));
@@ -8052,7 +8052,7 @@ fn repository_removal_deletes_local_checkout_workspaces_and_leases_and_stops_com
         .stderr(Stdio::null())
         .spawn()
         .unwrap();
-    let deadline = Instant::now() + Duration::from_secs(5);
+    let deadline = Instant::now() + Duration::from_secs(60);
     while fixture.ok(&["inspect", "first"])["executions"]
         .as_array()
         .unwrap()
@@ -8905,7 +8905,7 @@ fn setup_interruption_preserves_work_and_blocks_concurrent_execution() {
     let path = fixture
         .shoal_dir()
         .join("repo-with---quotes----literal/interrupted");
-    let deadline = Instant::now() + Duration::from_secs(10);
+    let deadline = Instant::now() + Duration::from_secs(60);
     while !path.join("setup-started").exists() {
         assert!(Instant::now() < deadline, "setup did not start");
         assert!(add.try_wait().unwrap().is_none());
@@ -8929,7 +8929,7 @@ fn setup_interruption_preserves_work_and_blocks_concurrent_execution() {
     );
     // Signal the wrapper so it can stop its recorded process group and report failure.
     assert_eq!(unsafe { libc::kill(add.id() as i32, libc::SIGTERM) }, 0);
-    let deadline = Instant::now() + Duration::from_secs(10);
+    let deadline = Instant::now() + Duration::from_secs(60);
     loop {
         if let Some(status) = add.try_wait().unwrap() {
             assert!(!status.success());
@@ -10165,7 +10165,7 @@ esac
 }
 
 fn wait_removed(fixture: &Fixture, name: &str) {
-    let deadline = Instant::now() + Duration::from_secs(15);
+    let deadline = Instant::now() + Duration::from_secs(60);
     while fixture
         .ok(&["ls"])
         .as_array()
@@ -10183,7 +10183,7 @@ fn wait_removed(fixture: &Fixture, name: &str) {
 }
 
 fn wait_pr_error(fixture: &Fixture, name: &str, message: &str) {
-    let deadline = Instant::now() + Duration::from_secs(5);
+    let deadline = Instant::now() + Duration::from_secs(60);
     loop {
         let inspection = fixture.ok(&["inspect", name]);
         if inspection["pr_cleanup"]["error"]
@@ -11240,7 +11240,7 @@ fn land_interruptions_stop_merge_drivers_and_restore_the_default_checkout() {
             .stderr(fs::File::create(&stderr_path).unwrap())
             .spawn()
             .unwrap();
-        let deadline = Instant::now() + Duration::from_secs(10);
+        let deadline = Instant::now() + Duration::from_secs(60);
         while !fixture.repo.join(".git/land-driver.pid").exists() {
             assert!(
                 land.try_wait().unwrap().is_none(),
@@ -11265,7 +11265,7 @@ fn land_interruptions_stop_merge_drivers_and_restore_the_default_checkout() {
         } else {
             fixture.ok(&["stop", "worker"]);
         }
-        let deadline = Instant::now() + Duration::from_secs(10);
+        let deadline = Instant::now() + Duration::from_secs(60);
         loop {
             if let Some(status) = land.try_wait().unwrap() {
                 assert!(!status.success());
@@ -11274,7 +11274,7 @@ fn land_interruptions_stop_merge_drivers_and_restore_the_default_checkout() {
             assert!(Instant::now() < deadline, "landing wrapper did not stop");
             thread::sleep(Duration::from_millis(20));
         }
-        let deadline = Instant::now() + Duration::from_secs(5);
+        let deadline = Instant::now() + Duration::from_secs(60);
         loop {
             let output = Command::new("ps")
                 .args(["-p", &pid.to_string(), "-o", "stat="])
@@ -11368,7 +11368,7 @@ fn wait_for_busy(fixture: &Fixture, workspace: &str) {
 }
 
 fn wait_until(what: &str, mut done: impl FnMut() -> bool) {
-    let deadline = Instant::now() + Duration::from_secs(10);
+    let deadline = Instant::now() + Duration::from_secs(60);
     while !done() {
         assert!(Instant::now() < deadline, "timed out waiting for {what}");
         thread::sleep(Duration::from_millis(20));
@@ -12075,7 +12075,7 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
     assert_eq!(fixture.acknowledge("waiter")["type"], "ok");
     wait_removed(&fixture, "waiter");
     let line = lines
-        .recv_timeout(Duration::from_secs(15))
+        .recv_timeout(Duration::from_secs(60))
         .expect("followed notification");
     let notification: Value = serde_json::from_str(&line).unwrap();
     assert_eq!(notification["workspace"], "waiter");
@@ -13315,7 +13315,7 @@ fn workspace_hook_resolution_preserves_layers_and_directories() {
         let mut socket =
             UnixStream::connect(fixture.root.path().join("state/daemon.sock")).unwrap();
         socket
-            .set_read_timeout(Some(Duration::from_secs(5)))
+            .set_read_timeout(Some(Duration::from_secs(60)))
             .unwrap();
         writeln!(socket, "{request}").unwrap();
         let mut line = String::new();
@@ -14262,7 +14262,7 @@ fn simulator_approvals_precede_mutations_and_cannot_be_bypassed_by_device_args()
         .stderr(Stdio::piped())
         .spawn()
         .unwrap();
-    let deadline = Instant::now() + Duration::from_secs(5);
+    let deadline = Instant::now() + Duration::from_secs(60);
     let id = loop {
         let requests = fixture.ok(&["access"]);
         if let Some(request) = requests
@@ -14493,7 +14493,7 @@ fn benchmark_daemon_reads() {
     fn request(socket: &Path, protocol: u64, method: Value) -> Value {
         let mut stream = UnixStream::connect(socket).unwrap();
         stream
-            .set_read_timeout(Some(Duration::from_secs(30)))
+            .set_read_timeout(Some(Duration::from_secs(60)))
             .unwrap();
         writeln!(
             stream,

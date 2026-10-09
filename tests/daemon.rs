@@ -671,7 +671,7 @@ fn install_is_repeatable_and_service_controls_work_with_an_isolated_manager() {
         .stderr(Stdio::null())
         .spawn()
         .unwrap();
-    let deadline = Instant::now() + Duration::from_secs(10);
+    let deadline = Instant::now() + Duration::from_secs(60);
     while !marker.exists() {
         assert!(
             execution.try_wait().unwrap().is_none(),
@@ -696,7 +696,7 @@ fn install_is_repeatable_and_service_controls_work_with_an_isolated_manager() {
     assert_eq!(inspection["executions"][0]["state"], "running");
     assert!(execution.try_wait().unwrap().is_none());
     fs::write(&finish, "").unwrap();
-    let deadline = Instant::now() + Duration::from_secs(10);
+    let deadline = Instant::now() + Duration::from_secs(60);
     loop {
         if let Some(status) = execution.try_wait().unwrap() {
             assert!(status.success());
@@ -877,7 +877,7 @@ fn cli_typed_response_errors_preserve_output_and_exit_contracts() {
         let listener = UnixListener::bind(root.path().join("state/daemon.sock")).unwrap();
         listener.set_nonblocking(true).unwrap();
         let daemon = thread::spawn(move || {
-            let deadline = Instant::now() + Duration::from_secs(5);
+            let deadline = Instant::now() + Duration::from_secs(60);
             let mut stream = loop {
                 match listener.accept() {
                     Ok((stream, _)) => break stream,

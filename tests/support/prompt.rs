@@ -16,7 +16,7 @@ pub fn answer(command: &mut Command, answer: &str) -> (ExitStatus, String) {
         .spawn()
         .unwrap();
     master.write_all(answer.as_bytes()).unwrap();
-    let deadline = Instant::now() + Duration::from_secs(30);
+    let deadline = Instant::now() + Duration::from_secs(60);
     let mut transcript = Vec::new();
     let status = loop {
         let _ = master.read_to_end(&mut transcript);

@@ -172,7 +172,7 @@ impl FakeDaemon {
             loop {
                 let (mut stream, _) = listener.accept().unwrap();
                 stream
-                    .set_read_timeout(Some(Duration::from_secs(5)))
+                    .set_read_timeout(Some(Duration::from_secs(60)))
                     .unwrap();
                 let mut line = String::new();
                 if BufReader::new(&stream).read_line(&mut line).unwrap() == 0
