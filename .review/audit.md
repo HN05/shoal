@@ -76,8 +76,9 @@ which it matters.
 
 ## Documentation
 
-Compare `README.md`, `docs/reference.md` and `design.md` with the implemented
-CLI, configuration and daemon behavior. Report renamed or removed commands and
+Check the documentation that describes the selected area. Compare `README.md`,
+`docs/reference.md`, `design.md` and `AGENTS.md` with the implemented CLI,
+configuration and daemon behavior. Report renamed or removed commands and
 options, changed defaults and examples that no longer work. Treat `design.md`
 proposals that are not implemented yet as design, not as wrong documentation,
 unless the text presents them as current behavior.
