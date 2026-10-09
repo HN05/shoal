@@ -752,10 +752,11 @@ pub enum ConfigCommand {
     Show { workspace: Option<String> },
     /// Install a packaged global config, keeping the old file as config.toml.backup.
     Install {
+        /// Packaged config; omit to choose one.
         #[arg(value_parser = clap::builder::PossibleValuesParser::new(
             crate::config::PACKAGED.iter().map(|(name, _)| *name)
         ))]
-        name: String,
+        name: Option<String>,
     },
     /// Rewrite the config with the defaults; the old file becomes config.toml.backup.
     Reset,

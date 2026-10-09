@@ -92,6 +92,21 @@ pub(super) async fn install(
     Ok(0)
 }
 
+/// The named packaged config, else one chosen from the packaged configs.
+pub(super) fn packaged_config(ctx: &Context, name: Option<String>) -> Result<String> {
+    match name {
+        Some(name) => Ok(name),
+        None => ui::pick(
+            ctx,
+            "Config> ",
+            crate::config::PACKAGED
+                .iter()
+                .map(|(name, _)| ((*name).to_owned(), (*name).to_owned()))
+                .collect(),
+        ),
+    }
+}
+
 /// Install the packaged config `name`, or the default one for `None`.
 pub(super) async fn install_config(ctx: &Context, name: Option<String>) -> Result<i32> {
     let (name, (config, backup)) = match name {

@@ -1,6 +1,9 @@
 mod support;
 
-use std::{fs, path::Path, process::Command};
+#[path = "support/pty.rs"]
+mod pty;
+
+use std::{fs, os::unix::fs::PermissionsExt, path::Path, process::Command};
 
 fn command(home: &Path) -> Command {
     let mut command = support::cli(home);
@@ -180,6 +183,36 @@ fn unknown_names_and_scoped_calls_leave_config_and_backup_untouched() {
     assert_eq!(fs::read_to_string(config).unwrap(), "keep config");
     assert_eq!(fs::read_to_string(backup).unwrap(), "keep backup");
     assert!(!home.path().join("state").exists());
+}
+
+#[test]
+fn install_picks_an_omitted_packaged_config() {
+    let home = tempfile::tempdir().unwrap();
+    let config = home.path().join("xdg/shoal/config.toml");
+    let missing = command(home.path())
+        .args(["config", "install"])
+        .output()
+        .unwrap();
+    assert!(String::from_utf8_lossy(&missing.stderr).contains("missing argument"));
+    let fzf = home.path().join("bin/fzf");
+    fs::create_dir_all(fzf.parent().unwrap()).unwrap();
+    fs::write(
+        &fzf,
+        "#!/bin/sh\ncat > \"$HOME/rows\"\nhead -n 1 \"$HOME/rows\"\n",
+    )
+    .unwrap();
+    fs::set_permissions(&fzf, fs::Permissions::from_mode(0o755)).unwrap();
+    let (_master, slave) = pty::open();
+    let output = command(home.path())
+        .args(["config", "install"])
+        .stdin(slave.try_clone().unwrap())
+        .stderr(slave)
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let rows = fs::read_to_string(home.path().join("rows")).unwrap();
+    assert!(rows.contains("default\tdefault"), "{rows:?}");
+    assert!(config.exists());
 }
 
 #[test]

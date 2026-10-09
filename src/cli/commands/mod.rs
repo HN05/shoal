@@ -445,7 +445,10 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             }
             ConfigCommand::Show { workspace } => configuration::show(&ctx, workspace).await,
             ConfigCommand::Reset => service::install_config(&ctx, None).await,
-            ConfigCommand::Install { name } => service::install_config(&ctx, Some(name)).await,
+            ConfigCommand::Install { name } => {
+                let name = service::packaged_config(&ctx, name)?;
+                service::install_config(&ctx, Some(name)).await
+            }
         },
         Command::Install {
             dry_run,
