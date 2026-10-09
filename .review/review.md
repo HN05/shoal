@@ -196,8 +196,9 @@ instead of the PR delivery guidance below.
   fields once and travel with the plan; branch fields update after allocation.
   Preparation failures keep the tab readable; agent exits keep the tab open,
   and completion or workspace removal closes it.
-  Default focus follows the resolved launch: shells receive focus, agents stay
-  in the background, and explicit focus settings override either default.
+  Default focus follows the resolved launch: agents started with an issue prompt
+  or forwarded arguments stay in the background, tabs waiting for input receive
+  focus, and explicit focus settings override either default.
   JSON, help, noninteractive and `--here` calls run in place. Shell and untracked
   desktop handoffs retain the tab.
 - Agent pickers offer “No agent”: issue creation continues without a launch,
