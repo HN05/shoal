@@ -45,11 +45,11 @@ daemon, and skill path; to switch, run `shoal daemon stop`, uninstall, install
 the other channel, and `shoal daemon start`. State and skill links live outside
 the package and survive. Skill links follow Homebrew's stable `opt` path, and
 the next `shoal` command [updates installed skills](#agent-skill-outside-project-repositories).
-Packagers can set `SHOAL_SKILL_PATH` to an absolute skill file at runtime,
-overriding the path given in `SHOAL_BUILD_SKILL_PATH` at build time. Without either,
-an adjacent `shoal-skill` symlink can point through a stable installation prefix;
-relative targets resolve lexically against its directory. Without that link,
-installation copies the embedded skill.
+Packagers can set `SHOAL_SKILLS_DIR` to an absolute directory holding every
+bundled `<skill>/SKILL.md` at runtime, overriding `SHOAL_BUILD_SKILLS_DIR` at
+build time. Without either, an adjacent `shoal-skills` symlink can point through
+a stable installation prefix; relative targets resolve lexically against its
+directory. Without that link, installation copies the embedded skills.
 
 ## Daemon
 
