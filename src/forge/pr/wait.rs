@@ -292,6 +292,34 @@ impl Manager {
     }
 }
 
+/// Queue an update for the workspace's next watch of `update.url`, ahead of
+/// newly observed activity.
+pub(super) fn queue_update(
+    db: &rusqlite::Connection,
+    workspace_id: &str,
+    update: Update,
+) -> Result<()> {
+    let previous: Option<String> = db
+        .query_row(
+            "SELECT record FROM pr_activity WHERE workspace_id=?1 AND url=?2",
+            params![workspace_id, update.url],
+            |row| row.get(0),
+        )
+        .optional()?;
+    let mut record: ActivityRecord = previous
+        .map(|text| serde_json::from_str(&text))
+        .transpose()?
+        .unwrap_or_default();
+    let url = update.url.clone();
+    record.pending.push(update);
+    db.execute(
+        "INSERT INTO pr_activity(workspace_id,url,record) VALUES (?1,?2,?3)
+         ON CONFLICT(workspace_id,url) DO UPDATE SET record=excluded.record",
+        params![workspace_id, url, serde_json::to_string(&record)?],
+    )?;
+    Ok(())
+}
+
 pub(crate) fn linked_items(
     db: &rusqlite::Connection,
     id: &str,

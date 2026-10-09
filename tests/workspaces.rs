@@ -15066,6 +15066,140 @@ fn multiple_prs_complete_once_only_after_every_merge_and_honor_done_policy() {
     }
 }
 
+#[test]
+fn merged_base_prs_retarget_and_restack_the_workspaces_stacked_on_them() {
+    for tool in ["gh", "fj"] {
+        let mut fixture = Fixture::with_config(Some("[auto_cleanup]\nenabled=false\n"));
+        let lower = fixture.add("lower");
+        let repo = fixture.repo.to_str().unwrap().to_owned();
+        fixture.ok(&["add", &repo, "upper", "--base", "lower"]);
+        let origin = if tool == "gh" {
+            "git@github.com:team/project.git"
+        } else {
+            "https://forge.example/team/project.git"
+        };
+        git(&fixture.repo, &["remote", "add", "origin", origin]);
+        git(
+            &fixture.repo,
+            &[
+                "symbolic-ref",
+                "refs/remotes/origin/HEAD",
+                "refs/remotes/origin/main",
+            ],
+        );
+        let root = fixture.root.path().to_owned();
+        let bin = root.join("bin");
+        fs::create_dir_all(&bin).unwrap();
+        // gh edits directly; fj cannot, so Shoal PATCHes the API through curl.
+        let scripts = [
+            (
+                "gh",
+                "if [ \"$2\" = edit ]; then echo \"$3 $7\" >> \"$HOME/edits\"; else cat \"$HOME/pr-$3\"; fi",
+            ),
+            (
+                "fj",
+                "if [ \"$8\" = commits ]; then echo \"commit $(cat \"$HOME/head\")\"; else cat \"$HOME/pr-$5\"; fi",
+            ),
+            (
+                "curl",
+                "printf '%s\\n' \"$@\" > \"$HOME/curl-args\"; cat > \"$HOME/curl-stdin\"; echo \"2 main\" >> \"$HOME/edits\"",
+            ),
+        ];
+        for (name, body) in scripts {
+            fs::write(bin.join(name), format!("#!/bin/sh\n{body}\n")).unwrap();
+            fs::set_permissions(bin.join(name), fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let keys = if cfg!(target_os = "macos") {
+            root.join("Library/Application Support/forgejo-cli.forgejo-cli/keys.json")
+        } else {
+            root.join(".local/share/forgejo-cli/keys.json")
+        };
+        fs::create_dir_all(keys.parent().unwrap()).unwrap();
+        fs::write(
+            &keys,
+            r#"{"hosts":{"forge.example":{"type":"Application","token":"secret123"}}}"#,
+        )
+        .unwrap();
+        let head = git(
+            Path::new(lower["path"].as_str().unwrap()),
+            &["rev-parse", "HEAD"],
+        );
+        let head = head.trim();
+        fs::write(root.join("head"), head).unwrap();
+        let write_pr = |number: u64, state: &str, head_branch: &str, base: &str| {
+            let text = if tool == "gh" {
+                serde_json::json!({"number": number, "state": state.to_uppercase(), "title": "Stacked",
+                    "headRefName": head_branch, "baseRefName": base, "isCrossRepository": false,
+                    "commits": [{"oid": head}]})
+                .to_string()
+            } else {
+                format!(
+                    "Stacked #{number}\nBy user — {state} — +1 -0\nFrom `{head_branch}` into `{base}`\n"
+                )
+            };
+            fs::write(root.join(format!("pr-{number}")), text).unwrap();
+        };
+        write_pr(1, "Open", "lower", "main");
+        write_pr(2, "Open", "upper", "lower");
+        fixture.ok(&["link", "pr", "1", "--workspace", "lower"]);
+        fixture.ok(&["link", "pr", "2", "--workspace", "upper"]);
+        fixture.restart();
+        assert_eq!(
+            fixture.ok(&["inspect", "upper"])["workspace"]["base_workspace"]["name"],
+            "lower"
+        );
+
+        write_pr(1, "Merged", "lower", "main");
+        fixture.restart();
+        wait_until("restacked upper", || {
+            fixture.ok(&["inspect", "upper"])["workspace"]["base_workspace"].is_null()
+        });
+        assert_eq!(fs::read_to_string(root.join("edits")).unwrap(), "2 main\n");
+        if tool == "fj" {
+            let args = fs::read_to_string(root.join("curl-args")).unwrap();
+            assert!(args.contains("PATCH\n"), "{args}");
+            assert!(args.contains("{\"base\":\"main\"}\n"), "{args}");
+            assert!(
+                args.contains("https://forge.example/api/v1/repos/team/project/pulls/2\n"),
+                "{args}"
+            );
+            assert!(!args.contains("secret123"), "{args}");
+            let config = fs::read_to_string(root.join("curl-stdin")).unwrap();
+            assert_eq!(config, "header = \"Authorization: token secret123\"\n");
+        }
+        let updates = fixture.ok(&["watch", "pr", "--workspace", "upper", "--timeout", "1"]);
+        let update = &updates["updates"][0];
+        assert_eq!(update["kind"], "base_merged");
+        let message = update["message"].as_str().unwrap();
+        assert!(
+            message.contains("Shoal retargeted this PR to main"),
+            "{message}"
+        );
+        assert!(
+            message.contains(&format!("git rebase --onto origin/main {head}")),
+            "{message}"
+        );
+        let events = fixture
+            .command()
+            .args(["--json", "events"])
+            .output()
+            .unwrap();
+        let restacked = String::from_utf8(events.stdout)
+            .unwrap()
+            .lines()
+            .any(|line| {
+                let event: Value = serde_json::from_str(line).unwrap();
+                event["kind"] == "base_changed"
+                    && event["name"] == "upper"
+                    && event["cause"] == "pr"
+            });
+        assert!(restacked);
+        // Moved workspaces are not restacked again.
+        fixture.restart();
+        assert_eq!(fs::read_to_string(root.join("edits")).unwrap(), "2 main\n");
+    }
+}
+
 fn issue_completion_fixture(tool: &str, cleanup: bool) -> Fixture {
     let fixture = Fixture::with_config(Some(&format!(
         "[auto_cleanup]\nenabled=false\n[done]\ncleanup={cleanup}\nautomatic=true\n"

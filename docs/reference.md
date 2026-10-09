@@ -671,6 +671,15 @@ workspace moves the workspaces stacked on it to its own base workspace, or to
 none. `status` shows both directions; `ls --json` and `inspect` give
 `base_workspace` (`id`, `name`, `branch`, or null) and `stacked_workspaces`.
 
+Once every watched PR of a base workspace has merged, the daemon moves the
+workspaces stacked on it to its own base workspace and retargets their linked
+PRs that still target its branch to the branch it merged into. Their next
+`watch` returns a `base_merged` update with the rebase command; the agent
+rebases and force-pushes its branch. GitHub PRs are retargeted with `gh pr edit`.
+fj cannot change a base, so Forgejo PRs are retargeted through Forgejo's API with
+the token fj saved for that host, read for the request and passed to curl on
+stdin; a missing login or failed request is reported in the update.
+
 ### Repositories
 
 Register a local checkout in place (no remote required) or a clone URL. Each
@@ -1018,7 +1027,8 @@ filters by kind. `watch <url>`, `watch pr <number-or-url>` and
 `watch issue <number-or-url>` select an explicit item in the workspace's repository
 without linking it or changing completion policy; explicit PR watches also accept
 PRs whose head branch is in a fork. Watches return on comments,
-reviews, completed CI checks, new merge conflicts, closure, reopening or merging.
+reviews, completed CI checks, new merge conflicts, closure, reopening, merging,
+or a merged base workspace.
 Each update includes its item URL, kind and message; `--json` returns an `updates`
 array. The first watch reports existing activity; subsequent watches share a
 cursor per workspace and item across restarts. Pending updates replay until the
@@ -1114,7 +1124,7 @@ workspace and repository UUIDs (`workspace_id`, `repository_id`), `name`, `path`
 object with the linked issue or PR's `kind` and canonical `url`. `created` and `base_changed`
 events add `base_workspace` with the base's `id`, `name` and `branch`, or null.
 Causes are `manual`, `idle`, `issue`, `pr`, `completion`, `missing_directory`, or
-`removed` for a base workspace's removal, and null
+`pr` when a base workspace's PRs merged, `removed` for a base workspace's removal, and null
 when inapplicable; `error` describes setup or cleanup failures. Branch changes
 are observed during daemon sweeps; detached HEAD has a null branch, and the
 recorded workspace branch remains unchanged.

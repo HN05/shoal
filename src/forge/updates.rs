@@ -20,6 +20,8 @@ crate::state::states!(UpdateKind {
     Merged => "merged",
     Reopened => "reopened",
     LookupFailed => "lookup_failed",
+    /// The base workspace's PRs merged; rebase onto their target branch.
+    BaseMerged => "base_merged",
 });
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -1,4 +1,5 @@
 //! Persisted opt-in PR watches and manual merge acknowledgements.
+mod stack;
 pub mod state;
 pub mod wait;
 use anyhow::{Context, Result, ensure};
@@ -331,6 +332,13 @@ impl Manager {
                     continue;
                 }
             };
+            // Before cleanup can remove a merged base; a failed lookup retries next sweep.
+            if let Err(error) = self.advance_stack(&workspace, &registration.kind).await {
+                eprintln!(
+                    "stacked workspaces of {} not updated: {error:#}",
+                    workspace.name
+                );
+            }
             // A repository that disabled PR cleanup keeps its watches waiting;
             // unreadable config is recorded like a failed lookup.
             let settings = self.workspace_settings(&workspace).await;

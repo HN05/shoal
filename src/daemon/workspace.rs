@@ -20,6 +20,7 @@ mod status;
 
 pub use executions::{ExecutionKind, StopRecords};
 pub(crate) use executions::{ReattachedExecution, StartedExecution};
+pub(crate) use stack::record_base_changed;
 
 use crate::{
     config::Config,

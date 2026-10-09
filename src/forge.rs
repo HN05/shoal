@@ -1,4 +1,5 @@
-//! Forge identity and read-only issue/PR queries using the user's gh/fj login.
+//! Forge identity and issue/PR queries using the user's gh/fj login; the one
+//! write retargets stacked PRs.
 pub mod issue;
 pub mod link;
 pub mod list;
@@ -6,6 +7,7 @@ mod locator;
 pub mod pr;
 mod remote_url;
 pub mod repository;
+mod retarget;
 pub mod updates;
 
 use crate::tools::Tool;
