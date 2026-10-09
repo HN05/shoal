@@ -8,7 +8,7 @@ use serde_json::Value;
 
 use crate::{
     config::{
-        self, AutoCleanup, Codex, Config, Done, Ports, PrCleanup, Review, Simulators,
+        self, AutoCleanup, Codex, Config, Done, Land, Ports, PrCleanup, Review, Simulators,
         named_commands,
         repo::{ConfigLayer as Layer, ConfigLayers, RepoConfig},
     },
@@ -47,6 +47,7 @@ pub struct Effective {
     pub pr_cleanup: PrCleanup,
     pub done: Done,
     pub review: Review,
+    pub land: Land,
 }
 
 /// One effective value and the layer that supplied it.
@@ -213,6 +214,9 @@ impl Effective {
             review: Review {
                 post: built_in(merged.review.post, "review.post")?,
             },
+            land: Land {
+                push: built_in(merged.land.push, "land.push")?,
+            },
         })
     }
 }
@@ -259,6 +263,9 @@ fn built_in() -> RepoConfig {
         },
         review: config::repo::Review {
             post: Some(Review::default().post),
+        },
+        land: config::repo::Land {
+            push: Some(Land::default().push),
         },
         ..Default::default()
     }
@@ -536,6 +543,7 @@ fn build_fields() -> Vec<Box<dyn Field + Send + Sync>> {
         scalar!(done.cleanup),
         scalar!(done.automatic),
         scalar!(review.post),
+        scalar!(land.push),
     ];
     fields.extend(rest);
     fields
@@ -559,7 +567,7 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
 [resources.lock]\ncapacity = 1\n[resource_pools.devices]\ncapacity = 2\n\
 [resource_pools.devices.resources.phone]\ncapacity = 1\n\
 [simulators]\nrequires_approval = true\napproval_lifetime = 'workspace'\npreferred = ['phone']\n\
-[auto_cleanup]\nenabled = false\nidle_minutes = 30\n[pr_cleanup]\nenabled = false\n[done]\ncleanup = false\nautomatic = true\n[review]\npost = false\n";
+[auto_cleanup]\nenabled = false\nidle_minutes = 30\n[pr_cleanup]\nenabled = false\n[done]\ncleanup = false\nautomatic = true\n[review]\npost = false\n[land]\npush = true\n";
 
     fn json<T: Serialize>(value: &T) -> Value {
         serde_json::to_value(value).unwrap()
@@ -773,6 +781,7 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
             pr_cleanup,
             done,
             review,
+            land,
         } = full.clone();
         assert!(
             !commands.is_empty()
@@ -815,6 +824,7 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
             done.cleanup.is_some(),
             done.automatic.is_some(),
             review.post.is_some(),
+            land.push.is_some(),
         ] {
             assert!(present, "the fixture must set every option");
         }

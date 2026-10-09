@@ -279,9 +279,12 @@ pub enum Command {
     /// Merge this workspace into the default branch, then optionally push it.
     Land {
         workspace: Option<String>,
-        /// Push the default branch to its upstream after landing.
-        #[arg(long)]
+        /// Push the default branch to its upstream after landing, overriding [land] push.
+        #[arg(long, overrides_with = "no_push")]
         push: bool,
+        /// Keep the landing local, overriding [land] push.
+        #[arg(long, overrides_with = "push")]
+        no_push: bool,
     },
     #[command(name = internal::LAND, hide = true)]
     LandInternal {

@@ -859,18 +859,24 @@ output. Nothing is stashed, reset, or pushed.
 ### Land into the default branch
 
 `shoal land [workspace]` merges the workspace's recorded branch into the
-repository default branch for repositories without a remote or pull-request
-flow. `--push` then pushes the default branch to its upstream, an alternative to
-a pull request; it refuses a default branch without one before merging, and a
-failed push keeps the landed merge. When the default branch has an upstream, Shoal fetches
-and fast-forwards it first, preserving an ahead branch and refusing divergence or
-a failed fetch. The default branch cannot be held by a managed workspace, and any
-other checkout of it must be clean. The workspace must be clean and on its recorded
-branch. Git fast-forwards or creates a merge commit in the default checkout. A
-merge that does not apply cleanly is
-aborted: run `shoal merge <default>` in the workspace, resolve there, and land
+repository default branch for repositories without a pull-request flow. When the
+default branch has an upstream, Shoal fetches and fast-forwards it first,
+preserving an ahead branch and refusing divergence or a failed fetch. The default
+branch cannot be held by a managed workspace, and any other checkout of it must be
+clean. The workspace must be clean and on its recorded branch. Git fast-forwards or
+creates a merge commit in the default checkout. A merge that does not apply cleanly
+is aborted: run `shoal merge <default>` in the workspace, resolve there, and land
 again. Scoped agents cannot land. Landed commits count as pushed for `rm` and
 automatic cleanup.
+
+With `[land] push`, or `--push` for one run, Shoal pushes the default branch to
+its upstream after merging; `--no-push` keeps one landing local. A default branch without an
+upstream is refused before merging, and a failed push keeps the landed merge.
+
+```toml
+[land]
+push = false # Default: false
+```
 
 ### Diff
 

@@ -11276,13 +11276,22 @@ fn land_merges_into_main_without_a_remote_and_is_denied_to_scoped_processes() {
     let denied = fixture.run(&["exec", "worker", "--", binary, "land-internal", "{}"]);
     assert!(!denied.status.success());
     assert!(String::from_utf8_lossy(&denied.stderr).contains("only an authorized landing"));
-    let unpushable = fixture.run(&["land", "--push", "worker"]);
+    let repo = fixture.ok(&["repo", "list"])[0]["id"].clone();
+    fixture.ok(&[
+        "config",
+        "set",
+        "land.push",
+        "true",
+        "--repo",
+        repo.as_str().unwrap(),
+    ]);
+    let unpushable = fixture.run(&["land", "worker"]);
     assert!(!unpushable.status.success());
     assert!(
         String::from_utf8_lossy(&unpushable.stderr).contains("main has no upstream to push to")
     );
     assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), before);
-    let result = fixture.ok(&["land", "worker"]);
+    let result = fixture.ok(&["land", "--no-push", "worker"]);
     assert_eq!(result["updated"], true);
     assert_eq!(result["fast_forward"], true);
     assert_eq!(result["default_branch"], "main");
@@ -11293,7 +11302,10 @@ fn land_merges_into_main_without_a_remote_and_is_denied_to_scoped_processes() {
         fs::read_to_string(fixture.repo.join("landed")).unwrap(),
         "from the workspace\n"
     );
-    assert_eq!(fixture.ok(&["land", "worker"])["updated"], false);
+    assert_eq!(
+        fixture.ok(&["land", "--no-push", "worker"])["updated"],
+        false
+    );
     // Landed work needs no branch choice.
     assert_eq!(fixture.ok(&["rm", "worker"])["branch_deleted"], true);
 }

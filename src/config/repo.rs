@@ -81,6 +81,7 @@ pub struct RepoConfig {
     pub pr_cleanup: PrCleanup,
     pub done: Done,
     pub review: Review,
+    pub land: Land,
 }
 
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
@@ -197,6 +198,13 @@ pub struct Done {
 #[serde(default, deny_unknown_fields)]
 pub struct Review {
     pub post: Option<bool>,
+}
+
+/// Whether `shoal land` pushes the default branch to its upstream afterwards.
+#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Land {
+    pub push: Option<bool>,
 }
 
 /// Repository value for the global `[pr_cleanup]`.

@@ -65,8 +65,22 @@ pub(super) async fn environment(
     Ok(0)
 }
 
-pub(super) async fn land(ctx: &Context, workspace: Option<String>, push: bool) -> Result<i32> {
+/// `push` overrides `[land] push` when given.
+pub(super) async fn land(
+    ctx: &Context,
+    workspace: Option<String>,
+    push: Option<bool>,
+) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    let push = match push {
+        Some(push) => push,
+        None => {
+            client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.clone()))
+                .await?
+                .land
+                .push
+        }
+    };
     execution::land(&ctx.paths, workspace, ctx.json, push).await
 }
 

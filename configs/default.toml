@@ -157,3 +157,7 @@ automatic = false
 # Agent reviews of PRs and issues post their findings; --post and --no-post override it.
 [review]
 post = true
+
+# Push the default branch to its upstream after shoal land; --push and --no-push override it.
+[land]
+push = false

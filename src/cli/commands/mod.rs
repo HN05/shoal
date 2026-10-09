@@ -323,7 +323,11 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             review::start(&ctx, target, reviewer, args).await
         }
         Command::Sync { repository } => repositories::sync(&ctx, repository).await,
-        Command::Land { workspace, push } => workspaces::land(&ctx, workspace, push).await,
+        Command::Land {
+            workspace,
+            push,
+            no_push,
+        } => workspaces::land(&ctx, workspace, (push || no_push).then_some(push)).await,
         Command::LandInternal { push, plan } => workspaces::land_worker(&ctx, plan, push).await,
         Command::Undone { workspace } => workspaces::undone(&ctx, workspace).await,
         Command::Notify { message, workspace } => {
