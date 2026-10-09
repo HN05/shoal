@@ -184,8 +184,9 @@ impl Manager {
     pub async fn set_pr(&self, selector: &str, action: Action) -> Result<()> {
         let _guard = self.pr_gate.lock().await;
         let workspace = self.workspace(selector).await?;
+        // Links serve more than cleanup; only an acknowledgement exists for it alone.
         ensure!(
-            matches!(action, Action::Clear | Action::Unwatch { .. })
+            !matches!(action, Action::Acknowledge)
                 || self
                     .workspace_settings(&workspace)
                     .await?

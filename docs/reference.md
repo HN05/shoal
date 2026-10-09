@@ -258,8 +258,8 @@ Choosing “No agent” creates the workspace without a launch. Issue prompts us
 once; options after `--` go to the agent. Codex uses CLI mode for issue prompts.
 
 PR links open their head branch against the refreshed remote base, reusing an
-owned workspace when present, and link the PR once the workspace is ready unless
-`[pr_cleanup] enabled = false`; a refused link only warns. Fork PRs cannot be opened. Branch URLs use
+owned workspace when present, and link the PR once the workspace is ready; a
+refused link only warns. Fork PRs cannot be opened. Branch URLs use
 GitHub's `/tree/<branch>` or Forgejo's `/src/branch/<branch>` route and open the
 origin branch, preserving slashes and decoding URL escapes. Setup, hooks and
 existing-branch ownership checks apply. These forms launch an agent with `--agent`.
@@ -1109,8 +1109,8 @@ errors in `pr_cleanup`. Invalid registrations retain the workspace.
 one kind, and an explicit number or URL removes just that item. Removing the last
 link does not mark done or undo recorded completion; `done --keep` cancels its
 cleanup. `[pr_cleanup] enabled = false` pauses PR completion independently of idle
-cleanup, globally on reload or per repository immediately; unlinking remains
-available. Previous PR registration and wait command spellings remain accepted.
+cleanup, globally on reload or per repository immediately; linking and unlinking
+remain available. Previous PR registration and wait command spellings remain accepted.
 
 ### Ready for review
 

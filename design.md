@@ -667,7 +667,8 @@ cleanup is disabled; it is unavailable to scoped callers. `repo rm`
 deletes the checkout and every workspace through that path, refuses external
 worktrees and dangerous paths, persists progress, and blocks new workspaces until
 an interrupted removal is retried.
-PR cleanup is separately enabled by default: persisted watches use the
+PR cleanup is separately enabled by default; disabling it pauses PR completion
+without affecting links, which serve more than cleanup. Persisted watches use the
 user's gh/fj login, resolve numbers against the workspace's origin into stored
 URLs bound to that repository. Top-level `link` and `unlink` manage associations;
 unlinking can select one item, one kind or the entire set. PR links accumulate

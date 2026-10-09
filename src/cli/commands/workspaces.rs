@@ -353,14 +353,9 @@ async fn execute_add_with_target(
     agent.launch(ctx, workspace, issue, args).await
 }
 
-/// Link the PR a workspace was opened on, unless PR cleanup is disabled. The
-/// workspace already exists, so a refused link only warns.
+/// Link the PR a workspace was opened on. The workspace already exists, so a
+/// refused link only warns.
 async fn link_pull(ctx: &Context, workspace: &Workspace, url: String) -> Result<()> {
-    let settings =
-        client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
-    if !settings.pr_cleanup.enabled {
-        return Ok(());
-    }
     let linked = request::<()>(
         &ctx.paths,
         Method::SetPr {

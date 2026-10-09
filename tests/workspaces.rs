@@ -10404,6 +10404,18 @@ fn merged_retains_dirty_work_and_changed_head_across_restart_and_can_be_cancelle
 fn pr_cleanup_can_be_disabled_independently() {
     let fixture = Fixture::with_config(Some("[pr_cleanup]\nenabled=false\n"));
     fixture.add("keep");
+    // Linking does not depend on PR cleanup.
+    fixture.add_github_origin();
+    install_test_script(
+        &fixture.root.path().join("bin/gh"),
+        "#!/bin/sh\necho '{\"number\":7,\"state\":\"OPEN\",\"headRefName\":\"keep\",\"commits\":[]}'\n",
+    );
+    fixture.ok(&["link", "pr", "7", "--workspace", "keep"]);
+    assert_eq!(
+        fixture.ok(&["inspect", "keep"])["workspace"]["links"]["prs"],
+        serde_json::json!(["https://github.com/team/project/pull/7"])
+    );
+    fixture.ok(&["unlink", "pr", "--workspace", "keep"]);
     let output = fixture.acknowledge("keep");
     assert_eq!(output["type"], "error");
     assert!(
@@ -10439,9 +10451,6 @@ fn legacy_pr_registrations_survive_disabled_cleanup_and_clear_after_restart() {
         .unwrap();
         fixture.restart();
         assert_eq!(fixture.ok(&["inspect", name])["pr_cleanup"], record);
-        let output = fixture.run(&["link", "pr", "7", "--workspace", name]);
-        assert!(!output.status.success());
-        assert!(String::from_utf8_lossy(&output.stderr).contains("PR cleanup is disabled"));
         assert_eq!(fixture.acknowledge(name)["type"], "error");
         assert_eq!(fixture.ok(&["inspect", name])["pr_cleanup"], record);
         // Clear remains allowed while disabled, including for a scoped caller.
