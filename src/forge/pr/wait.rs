@@ -273,12 +273,12 @@ impl Manager {
                 };
                 for (url, record) in records {
                     let mut record: ActivityRecord = serde_json::from_str(&record)?;
-                    if record
+                    let pending = record.pending.len();
+                    // Updates queued after the acknowledged delivery stay pending.
+                    record
                         .pending
-                        .first()
-                        .is_some_and(|update| deliveries.contains(&update.delivery))
-                    {
-                        record.pending.clear();
+                        .retain(|update| !deliveries.contains(&update.delivery));
+                    if record.pending.len() != pending {
                         tx.execute(
                             "UPDATE pr_activity SET record=?1 WHERE workspace_id=?2 AND url=?3",
                             params![serde_json::to_string(&record)?, workspace.id, url],
