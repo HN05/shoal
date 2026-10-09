@@ -48,15 +48,7 @@ impl Manager {
                     params![id, base],
                 )?;
                 if changed > 0 {
-                    tx.execute(
-                        "INSERT INTO workspace_events(record) SELECT json_object(
-                            'kind',?2,'workspace_id',id,'repository_id',repository_id,
-                            'name',name,'path',path,'branch',branch,'cause',?3,'error',NULL,
-                            'base_workspace',json((SELECT json_object('id',id,'name',name,'branch',branch)
-                                FROM workspaces WHERE id=?4))
-                        ) FROM workspaces WHERE id=?1",
-                        params![id, EventKind::BaseChanged, EventCause::Manual, base],
-                    )?;
+                    record_base_changed(&tx, &id, EventCause::Manual)?;
                 }
                 tx.commit()?;
                 Ok(())
@@ -64,6 +56,20 @@ impl Manager {
             .await?;
         self.workspace(&workspace.id).await
     }
+}
+
+/// Journal the workspace's current base workspace.
+pub(crate) fn record_base_changed(db: &Connection, id: &str, cause: EventCause) -> Result<()> {
+    db.execute(
+        "INSERT INTO workspace_events(record) SELECT json_object(
+            'kind',?2,'workspace_id',stacked.id,'repository_id',stacked.repository_id,
+            'name',stacked.name,'path',stacked.path,'branch',stacked.branch,'cause',?3,'error',NULL,
+            'base_workspace',json((SELECT json_object('id',id,'name',name,'branch',branch)
+                FROM workspaces WHERE id=stacked.base_workspace_id))
+        ) FROM workspaces stacked WHERE stacked.id=?1",
+        params![id, EventKind::BaseChanged, cause],
+    )?;
+    Ok(())
 }
 
 /// A workspace of the repository named by ID, name or branch.
