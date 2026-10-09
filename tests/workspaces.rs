@@ -13973,6 +13973,21 @@ fn acquire_picks_an_omitted_resource_of_its_kind() {
 }
 
 #[test]
+fn acquire_port_picks_an_omitted_configured_port() {
+    let fixture = Fixture::new();
+    fixture.add("server");
+    let none = fixture.run(&["acquire", "port", "--workspace", "server"]);
+    assert!(String::from_utf8_lossy(&none.stderr).contains("no configured ports"));
+    set_repository_toml(&fixture, "[ports.web]\n[ports.api]\n");
+    let (output, rows) = fixture.pick(&["acquire", "port", "--workspace", "server"], "web", "");
+    assert!(output.status.success(), "{output:?}");
+    assert!(rows.contains("api\t") && rows.contains("web\t"), "{rows:?}");
+    let reserved = fixture.ok(&["leases", "port", "--workspace", "server"])["reserved"].clone();
+    assert_eq!(reserved.as_array().unwrap().len(), 1, "{reserved}");
+    assert_eq!(reserved[0]["name"], "web");
+}
+
+#[test]
 fn repository_resources_select_registrations_by_remote_url() {
     let fixture = Fixture::new();
     let related = init_repo(fixture.root.path(), "server", &[("tracked", "server\n")]);

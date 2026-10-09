@@ -1,5 +1,5 @@
 //! CLI port reservations and interactive conflict suggestions.
-use anyhow::Result;
+use anyhow::{Result, ensure};
 use serde_json::json;
 
 use crate::{
@@ -160,6 +160,33 @@ pub(super) async fn overview(ctx: &Context, scope: WorkspaceScope) -> Result<i32
         })?;
     }
     Ok(0)
+}
+
+/// Choose a configured port of the workspace's repository.
+pub(super) async fn pick_configured(ctx: &Context, workspace: &str) -> Result<String> {
+    let overview = request::<PortOverview>(
+        &ctx.paths,
+        Method::PortOverview {
+            workspace: workspace.to_owned(),
+        },
+    )
+    .await?;
+    ensure!(
+        !overview.configured.is_empty(),
+        "no configured ports; name the port to reserve"
+    );
+    let entries = overview
+        .configured
+        .into_iter()
+        .map(|(name, definition)| {
+            let label = match definition.port {
+                Some(port) => format!("{name} ({port})"),
+                None => name.clone(),
+            };
+            (name, label)
+        })
+        .collect();
+    ui::pick(ctx, "Port> ", entries)
 }
 
 pub(super) fn render_overview(overview: &PortOverview, palette: Palette) {

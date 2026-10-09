@@ -853,7 +853,8 @@ pub struct LeaseOptions {
 pub enum AcquireKind {
     /// Reserve a named TCP port, or return the existing reservation.
     Port {
-        name: String,
+        /// Port name; omit to choose a configured port.
+        name: Option<String>,
         #[arg(long)]
         port: Option<u16>,
         /// Environment variable exported to subsequent exec/claude/codex commands.

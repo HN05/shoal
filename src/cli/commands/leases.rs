@@ -37,6 +37,10 @@ pub(super) async fn acquire(
             reason,
             on_conflict,
         } => {
+            let name = match name {
+                Some(name) => name,
+                None => ports::pick_configured(ctx, &workspace).await?,
+            };
             let request = PortRequest {
                 port,
                 env_var: env,
