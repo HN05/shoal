@@ -5,8 +5,8 @@ workspaces, ports, simulator leases and permits. `AGENTS.md` holds the working
 rules and `design.md` the product decisions; `docs/reference.md` documents
 behavior. When a change touches lifecycle, ownership, resource leases or
 removal, check it against the rule those files state before judging it.
-Repository code audits use [audit.md](audit.md) for inspection and reporting
-instructions instead of the PR delivery guidance below.
+Repository code audits use [audit.md](audit.md) for inspection instructions
+instead of the PR delivery guidance below.
 
 ## What matters most
 

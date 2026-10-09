@@ -5,11 +5,14 @@ on:
     - cron: '47 5 * * 1'
   workflow_dispatch:
     inputs:
+      focus:
+        description: Audit focus (bugs, maintainability, testing, performance or docs)
+        default: bugs
       ref:
         description: Branch, tag or commit (empty uses the default branch)
         default: ''
       scope:
-        description: Paths, area or theme (empty rotates focused areas)
+        description: Paths or area (empty uses this week's area)
         default: ''
 
 concurrency:
@@ -18,25 +21,44 @@ concurrency:
 
 jobs:
   audit:
-    name: review-bot audit
+    name: review-bot audit (${{ matrix.focus }})
     runs-on: docker
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        focus: ${{ fromJSON(github.event_name == 'workflow_dispatch' && format('["{0}"]', inputs.focus) || '["bugs","maintainability","testing","performance","docs"]') }}
     container:
       image: docker.io/library/node:22-bookworm
       volumes:
         - /var/lib/review-bot/claude:/var/lib/review-bot/claude
         - /var/lib/review-bot/codex:/var/lib/review-bot/codex
     steps:
+      - name: Select this week's area
+        id: scope
+        shell: bash
+        run: |
+          # Every focus audits the same area in a given ISO week.
+          areas=(
+            'Workspace ownership, creation, adoption and removal (src/daemon/workspace, src/removal, src/git)'
+            'Daemon lifecycle, persisted state and recovery (src/daemon.rs, src/daemon/store, src/daemon/recovery.rs, src/daemon/handoff.rs, src/daemon/auto_update.rs)'
+            'Execution wrapper and tracked processes (src/execution, src/process, src/daemon/execution_connection.rs, src/daemon/execution_recovery.rs)'
+            'Resource leases: ports, simulators and permits (src/daemon/ports, src/daemon/resources, src/sim)'
+            'CLI, configuration and forge integration (src/cli, src/config, src/forge)'
+            'Tests, CI and release tooling (tests, .forgejo, scripts)'
+          )
+          week=$((10#$(date -u +%V)))
+          echo "area=${areas[week % ${#areas[@]}]}" >> "$GITHUB_OUTPUT"
       - uses: https://git.henriknordvik.com/HN05/review-bot@main
         with:
           mode: audit
           agent: codex
+          audit-focus: ${{ matrix.focus }}
           audit-ref: ${{ inputs.ref || '' }}
-          audit-scope: >-
-            ${{ inputs.scope || 'Rotate one focused area of the CLI, daemon, tests or CI from prior audit coverage: correctness, ownership, code quality and maintainability' }}
+          audit-scope: ${{ inputs.scope || steps.scope.outputs.area }}
           audit-instructions-file: .review/audit.md
           audit-timeout-seconds: '900'
-          # Reuse a writable shared mount to serialize report updates across containers.
+          # Reuse a writable shared mount to serialize issue creation across containers.
           audit-lock-dir: /var/lib/review-bot/codex/audit-locks
           audit-max-subagents: '0'
           codex-model: ${{ vars.AUDIT_CODEX_MODEL || 'gpt-6-astra' }}

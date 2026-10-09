@@ -112,10 +112,9 @@ the replacement under the same service PID. Read-only streams reconnect after th
 handoff, preserving event cursors; foreground daemons keep explicit restart control.
 
 Advisory repository reviews default to Codex, retaining configured agent overrides
-and automatic fallback. Repository code audits rotate focused read-only inspections
-and maintain one recurring report issue with triage in comments. Failed or
-incomplete attempts retain the last successful findings; audit results are
-advisory and do not gate merges.
+and automatic fallback. Repository code audits run read-only inspections per focus on a weekly
+rotating area and open one issue per new finding. Failed or incomplete attempts
+open no issues; audit results are advisory and do not gate merges.
 
 Distribution is a Homebrew formula in the shared HN05 tap: releases install
 checksummed prebuilt Linux and macOS binaries on x86_64 and arm64; `--HEAD`

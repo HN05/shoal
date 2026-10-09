@@ -173,11 +173,12 @@ Opening a ready PR already requests its review; never add reviewer request label
 with its opening classification labels. Claude and Codex use independent queues,
 so one of each can run concurrently. Review and audit workflows follow review-bot's
 latest `main` commit.
-`.forgejo/workflows/audit.yml` runs a weekly read-only code audit of rotating
-focused areas, or manually with a selected ref and scope, using `.review/audit.md`.
-It discovers or creates
-one recurring report issue; findings are advisory and never a required check.
-Keep triage in issue comments so report updates preserve it.
+`.forgejo/workflows/audit.yml` runs a weekly read-only code audit using
+`.review/audit.md`: one job per focus (bugs, maintainability, testing, performance
+and docs) on an area that rotates by ISO week, or manually with a selected focus,
+ref and scope. It opens one issue per new finding, labelled `audit/<focus>`;
+findings are advisory and never a required check. Close an audit issue when it is
+fixed, or explain in a comment or with `audit/wontfix` why it will not be.
 Issues and PRs carry `area/`, `type/` and `complexity/` labels; `.forgejo/scripts/labels.sh`
 creates the scheme. Push the branch and let CI verify instead of running the
 full suite locally first.
