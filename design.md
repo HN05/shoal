@@ -696,7 +696,9 @@ Survivors are signaled only after verifying PID birth identity and same-user
 ownership; acknowledgement cannot override visible live processes. Recheck
 unreadable process identities before treating visibility as incomplete; an
 identity that has exited or is exiting no longer blocks the ownership proof, and
-one whose exec has not yet published its environment is read again within a
+an inaccessible macOS identity is treated as a different process because it
+cannot be a same-user process Shoal started. One whose exec has not yet
+published its environment is read again within a
 bounded settle wait before it counts as unreadable. A reported command
 exit clears its execution and permits setup readiness only when marker, child and
 group evidence has no survivors and environment visibility is complete; a settled

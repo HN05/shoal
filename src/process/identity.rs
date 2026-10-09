@@ -239,13 +239,20 @@ fn bsd_info(pid: u32) -> Result<Option<libc::proc_bsdinfo>> {
     };
     if result == 0 {
         let error = std::io::Error::last_os_error();
-        if matches!(error.raw_os_error(), Some(libc::ESRCH | libc::ENOENT)) {
+        if process_identity_unavailable(error.raw_os_error()) {
             return Ok(None);
         }
         return Err(error).context("inspect process identity");
     }
     ensure!(result as usize == size, "incomplete process identity");
     Ok(Some(unsafe { info.assume_init() }))
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn process_identity_unavailable(errno: Option<i32>) -> bool {
+    // EPERM means proc_pidinfo could not inspect another user's process. It
+    // cannot be an execution Shoal started, so treat it as a different PID.
+    matches!(errno, Some(libc::ESRCH | libc::ENOENT | libc::EPERM))
 }
 
 #[cfg(target_os = "macos")]
@@ -518,6 +525,16 @@ pub async fn stop_verified(targets: &[Identity]) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn process_identity_unavailable_includes_inaccessible_processes() {
+        assert!(process_identity_unavailable(Some(libc::ESRCH)));
+        assert!(process_identity_unavailable(Some(libc::ENOENT)));
+        assert!(process_identity_unavailable(Some(libc::EPERM)));
+        assert!(!process_identity_unavailable(Some(libc::EACCES)));
+        assert!(!process_identity_unavailable(None));
+    }
+
     #[test]
     #[ignore = "helper child launched by ownership test"]
     fn marked_child() {
