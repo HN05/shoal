@@ -235,10 +235,15 @@ impl Tab {
         }
     }
 
-    async fn exists(&self) -> bool {
+    /// The tab's agent state; `None` once the tab is gone.
+    async fn agent_status(&self) -> Option<AgentStatus> {
         let mut get = Command::new("herdr");
         get.args(["tab", "get"]).arg(&self.id);
-        Run::new(get).checked().await.is_ok()
+        let output = Run::new(get).checked().await.ok()?;
+        Some(
+            serde_json::from_slice::<TabInfo>(&output.stdout)
+                .map_or(AgentStatus::Unknown, |info| info.result.tab.agent_status),
+        )
     }
 
     pub async fn shell(&self, cwd: &Path) -> Result<i32> {
@@ -301,14 +306,16 @@ pub async fn watch(ctx: &Context, workspace: String, tab: String) -> Result<i32>
     // A missing daemon or a failed query does not prove completion or removal.
     // Retain the observer across daemon restarts, but not deletion of its state.
     while ctx.paths.state.exists() {
-        match workspace_finished(ctx, &workspace).await {
-            Ok(true) => {
-                if tab.exists().await {
+        match workspace_lifecycle(ctx, &workspace).await {
+            Ok(Lifecycle::Active) => {}
+            Ok(lifecycle) => match tab.agent_status().await {
+                None => break,
+                Some(status) if lifecycle.closes_tab(status) => {
                     tab.close().await;
+                    break;
                 }
-                break;
-            }
-            Ok(false) => {}
+                Some(_) => {}
+            },
             Err(error) if error.is::<client::ProtocolMismatch>() => {
                 if let Some(installed) = executable.as_ref().filter(|exe| exe.replaced()) {
                     return Err(installed.exec());
@@ -367,9 +374,33 @@ fn file_identity(path: &Path) -> Option<FileIdentity> {
     ))
 }
 
-async fn workspace_finished(ctx: &Context, workspace: &str) -> Result<bool> {
+#[derive(Debug, PartialEq)]
+enum Lifecycle {
+    Active,
+    Completed { running: bool },
+    Removed,
+}
+
+impl Lifecycle {
+    /// Completion waits for the agent's final response: its tracked execution
+    /// resolves, or Herdr reports that the agent finished its turn.
+    fn closes_tab(&self, agent: AgentStatus) -> bool {
+        match self {
+            Self::Active => false,
+            Self::Completed { running } => {
+                !running || matches!(agent, AgentStatus::Idle | AgentStatus::Done)
+            }
+            Self::Removed => true,
+        }
+    }
+}
+
+async fn workspace_lifecycle(ctx: &Context, workspace: &str) -> Result<Lifecycle> {
     match client::inspect(&ctx.paths, workspace.into()).await {
-        Ok(inspection) => Ok(inspection.completion.is_some() && inspection.executions.is_empty()),
+        Ok(inspection) if inspection.completion.is_some() => Ok(Lifecycle::Completed {
+            running: !inspection.executions.is_empty(),
+        }),
+        Ok(_) => Ok(Lifecycle::Active),
         Err(error) => {
             if client::workspaces(&ctx.paths)
                 .await?
@@ -378,9 +409,36 @@ async fn workspace_finished(ctx: &Context, workspace: &str) -> Result<bool> {
             {
                 return Err(error);
             }
-            Ok(true)
+            Ok(Lifecycle::Removed)
         }
     }
+}
+
+#[derive(Deserialize)]
+struct TabInfo {
+    result: TabInfoResult,
+}
+#[derive(Deserialize)]
+struct TabInfoResult {
+    tab: TabState,
+}
+#[derive(Deserialize)]
+struct TabState {
+    #[serde(default)]
+    agent_status: AgentStatus,
+}
+
+/// Herdr's view of the agent in a tab; `Done` is a finished turn not yet seen.
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+enum AgentStatus {
+    Idle,
+    Working,
+    Blocked,
+    Done,
+    #[default]
+    #[serde(other)]
+    Unknown,
 }
 
 #[cfg(test)]
@@ -404,13 +462,57 @@ mod tests {
                 child: None,
                 group_id: None,
             };
-            assert!(!inspect_finished(true, vec![execution]).await);
+            assert_eq!(
+                inspect_lifecycle(true, vec![execution]).await,
+                Lifecycle::Completed { running: true }
+            );
         }
-        assert!(inspect_finished(true, vec![]).await);
-        assert!(!inspect_finished(false, vec![]).await);
+        assert_eq!(
+            inspect_lifecycle(true, vec![]).await,
+            Lifecycle::Completed { running: false }
+        );
+        assert_eq!(inspect_lifecycle(false, vec![]).await, Lifecycle::Active);
     }
 
-    async fn inspect_finished(completed: bool, executions: Vec<Execution>) -> bool {
+    #[test]
+    fn completion_closes_the_tab_once_the_agent_finishes_its_turn() {
+        use AgentStatus::*;
+        let running = Lifecycle::Completed { running: true };
+        for status in [Idle, Done] {
+            assert!(running.closes_tab(status));
+        }
+        for status in [Working, Blocked, Unknown] {
+            assert!(!running.closes_tab(status));
+        }
+        for status in [Idle, Working, Blocked, Done, Unknown] {
+            assert!(Lifecycle::Completed { running: false }.closes_tab(status));
+            assert!(Lifecycle::Removed.closes_tab(status));
+            assert!(!Lifecycle::Active.closes_tab(status));
+        }
+    }
+
+    #[test]
+    fn tab_info_reads_the_agent_status() {
+        let status = |value: &str| {
+            let output = format!(
+                r#"{{"id":"cli:tab:get","result":{{"tab":{{"agent_status":"{value}","tab_id":"w2:t1"}},"type":"tab_info"}}}}"#
+            );
+            serde_json::from_str::<TabInfo>(&output)
+                .unwrap()
+                .result
+                .tab
+                .agent_status
+        };
+        assert_eq!(status("done"), AgentStatus::Done);
+        assert_eq!(status("idle"), AgentStatus::Idle);
+        assert_eq!(status("working"), AgentStatus::Working);
+        assert_eq!(status("sleeping"), AgentStatus::Unknown);
+        let older: TabInfo =
+            serde_json::from_str(r#"{"result":{"tab":{"tab_id":"w2:t1"}}}"#).unwrap();
+        assert_eq!(older.result.tab.agent_status, AgentStatus::Unknown);
+    }
+
+    async fn inspect_lifecycle(completed: bool, executions: Vec<Execution>) -> Lifecycle {
         let temp = tempfile::tempdir().unwrap();
         let paths = Paths::for_test(temp.path());
         paths.prepare().unwrap();
@@ -449,11 +551,11 @@ mod tests {
             .await
             .unwrap();
         });
-        let finished = workspace_finished(&Context::new(paths, true), "workspace")
+        let lifecycle = workspace_lifecycle(&Context::new(paths, true), "workspace")
             .await
             .unwrap();
         server.await.unwrap();
-        finished
+        lifecycle
     }
 
     #[test]

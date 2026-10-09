@@ -329,7 +329,9 @@ explicit focus setting overrides this choice.
 The worker drops the plan before starting children; a retained tab's shell keeps
 it, inert, while a non-default state directory is passed only to the worker.
 Herdr tabs remain open after tracked agent exits. Completion closes them only
-after tracked executions have resolved; removal closes them immediately.
+after tracked executions have resolved or Herdr reports the agent's turn finished
+(`idle` or `done`), since interactive agents stay running at their prompt; removal
+closes them immediately.
 Preparation failures and shell or untracked desktop handoffs retain them until
 that lifecycle change. A tab watcher refused for a protocol mismatch restarts
 from its executable path once another binary is installed there, so tabs opened
