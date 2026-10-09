@@ -886,7 +886,7 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
         );
     }
     for command in [
-        "rm", "cd", "exec", "diff", "status", "inspect", "continue", "done",
+        "rm", "cd", "exec", "diff", "status", "inspect", "done", "undone",
     ] {
         assert!(
             complete(&[command, "fi"], fixture.root.path()).contains(&"first".into()),
@@ -4399,7 +4399,7 @@ fn execution_scope_limits_management_and_expires() {
         vec!["setup", "other"],
         vec!["link", "pr", "42", "--workspace", "other"],
         vec!["unlink", "pr", "--workspace", "other"],
-        vec!["continue", "other"],
+        vec!["undone", "other"],
         vec!["done", "other", "--keep"],
         vec!["done", "other", "--cleanup"],
         vec!["config", "show", "other"],
@@ -10444,7 +10444,6 @@ fn pr_wait_wakes_for_individual_ci_reviews_and_conflicts_with_own_scope() {
     )
     .unwrap();
     fixture.ok(&["link", "pr", "7", "--workspace", "watch"]);
-    fixture.ok(&["continue", "watch"]);
     let binary = env!("CARGO_BIN_EXE_shoal");
     let first = fixture.ok(&["exec", "watch", "--", binary, "--json", "watch", "pr"]);
     assert_eq!(first["timed_out"], false);
@@ -10541,7 +10540,6 @@ esac
         "--workspace",
         "items",
     ]);
-    fixture.ok(&["continue", "items"]);
     let binary = env!("CARGO_BIN_EXE_shoal");
     let filtered = fixture.ok(&["exec", "items", "--", binary, "--json", "watch", "pr"]);
     assert_eq!(filtered["updates"].as_array().unwrap().len(), 1);
@@ -10692,7 +10690,6 @@ fn watch_forgejo_issue_reports_comments_closure_and_reopening() {
             "https://forge.example/team/repo.git",
         ],
     );
-    fixture.ok(&["continue", "issue-watch"]);
     let bin = fixture.root.path().join("bin");
     fs::create_dir(&bin).unwrap();
     fs::write(
@@ -15599,69 +15596,28 @@ fn wait_for_herdr_close(fixture: &Fixture) {
 }
 
 #[test]
-fn scoped_continuation_survives_restart_and_explicit_done_cleans_up() {
-    for tool in ["gh", "fj"] {
-        let mut fixture = issue_completion_fixture(tool, true);
-        let hook = install_done_hook(&fixture);
-        set_repository_toml(&fixture, &format!("post_done_cmd = '{}'\n", hook.display()));
-        fixture.ok(&[
+fn scoped_undone_withdraws_completion_without_keeping_the_workspace() {
+    let mut fixture = issue_completion_fixture("gh", true);
+    let scoped = |fixture: &Fixture, args: &[&str]| {
+        let mut command = vec![
             "exec",
             "issue-work",
             "--",
             env!("CARGO_BIN_EXE_shoal"),
             "--json",
-            "continue",
-        ]);
-        write_issue_state(&fixture, tool, "Closed");
-        fixture.restart();
-        // Repeating the request leaves the persisted choice intact.
-        fixture.ok(&["continue", "issue-work"]);
-        let inspection = fixture.ok(&["inspect", "issue-work"]);
-        assert_eq!(inspection["manual_completion"], true);
-        assert!(inspection["completion"].is_null());
-        assert!(!fixture.root.path().join("done-events").exists());
-        let status = fixture
-            .command()
-            .args(["status", "issue-work"])
-            .output()
-            .unwrap();
-        assert!(status.status.success());
-        assert!(String::from_utf8_lossy(&status.stdout).contains("waiting for explicit done"));
-        // Merged watches remain registered without completing the assignment.
-        let path = Path::new(inspection["workspace"]["path"].as_str().unwrap());
-        let head = git(path, &["rev-parse", "HEAD"]).trim().to_owned();
-        let response = if tool == "gh" {
-            serde_json::json!({
-                "number": 1, "state": "MERGED", "headRefName": "issue-work",
-                "commits": [{"oid": head}],
-            })
-            .to_string()
-        } else {
-            "Title #1\nBy user — Merged — +1 -0\nFrom `issue-work` into `main`\n".into()
-        };
-        fs::write(fixture.root.path().join("pr-response"), response).unwrap();
-        fs::write(
-            fixture.root.path().join("commits"),
-            format!("commit {head} (+1, -0)\nAuthor: Test\n"),
-        )
-        .unwrap();
-        fs::write(fixture.root.path().join("bin").join(tool),
-            "#!/bin/sh\nfor arg; do if [ \"$arg\" = pr ]; then pr=true; fi; last=$arg; done\nif [ \"$last\" = commits ]; then cat \"$HOME/commits\"; elif [ \"$pr\" = true ]; then cat \"$HOME/pr-response\"; else cat \"$HOME/issue-response\"; fi\n"
-        ).unwrap();
-        fixture.ok(&["link", "pr", "1", "--workspace", "issue-work"]);
-        fixture.restart();
-        fixture.ok(&["continue", "issue-work"]);
-        assert!(fixture.ok(&["inspect", "issue-work"])["completion"].is_null());
-        fixture.ok(&["done", "issue-work"]);
-        wait_removed(&fixture, "issue-work");
-        assert_eq!(
-            fs::read_to_string(fixture.root.path().join("done-events"))
-                .unwrap()
-                .lines()
-                .count(),
-            1
-        );
-    }
+        ];
+        command.extend_from_slice(args);
+        fixture.ok(&command)
+    };
+    scoped(&fixture, &["done", "--keep"]);
+    let undone = scoped(&fixture, &["undone"]);
+    assert_eq!(undone["withdrawn"]["cleanup"], false);
+    assert!(scoped(&fixture, &["undone"])["withdrawn"].is_null());
+    assert!(fixture.ok(&["inspect", "issue-work"])["completion"].is_null());
+    // Only holds keep a workspace; issue closure completes and removes it.
+    write_issue_state(&fixture, "gh", "Closed");
+    fixture.restart();
+    wait_removed(&fixture, "issue-work");
 }
 
 #[test]

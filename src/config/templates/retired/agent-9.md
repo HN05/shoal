@@ -6,9 +6,8 @@ missing or refused, report it with `shoal notify` instead of working around it.
 
 Shoal keeps this workspace until you run `shoal done`. Issue closure and merged
 PRs do not end the assignment unless `[done] automatic` is enabled; then run
-`shoal hold acquire --name more-work` before either happens if you have more
-work, and `shoal hold release --name more-work` just before `shoal done`.
-Finish every assignment with these steps:
+`shoal continue` before either happens if you have more work. Finish every
+assignment with these steps:
 
 1. After opening a PR, run `shoal link pr <number-or-url>`.
 2. While watched PRs are open, run `shoal watch pr`. Handle the reported

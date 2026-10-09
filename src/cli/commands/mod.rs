@@ -305,7 +305,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         Command::Sync { repository } => repositories::sync(&ctx, repository).await,
         Command::Land { workspace } => workspaces::land(&ctx, workspace).await,
         Command::LandInternal { plan } => workspaces::land_worker(&ctx, plan).await,
-        Command::Continue { workspace } => workspaces::continue_work(&ctx, workspace).await,
+        Command::Undone { workspace } => workspaces::undone(&ctx, workspace).await,
         Command::Notify { message, workspace } => {
             notifications::send(&ctx, workspace, message).await
         }

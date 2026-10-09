@@ -72,7 +72,6 @@ shoal adopt ../existing-worktree             # Take ownership, including automat
 shoal adopt --copy ../existing-worktree      # Copy work into Shoal's default directory
 shoal rename fix-login fix/login             # Rename its branch and workspace together
 shoal add https://github.com/owner/repo/issues/68 # Create from an issue
-shoal continue                          # Defer automatic completion until shoal done
 shoal add https://github.com/owner/repo/issues/34  # Add an issue, PR, or branch link
 shoal link https://github.com/owner/repo/issues/34  # Link an issue to the current workspace
 shoal unlink issue                         # Remove the linked issue
@@ -127,6 +126,7 @@ shoal resume --all            # Restore stopped agents; report stopped commands
 shoal done fix-login          # Mark finished and request safe cleanup
 shoal done --keep fix-login   # Mark finished; keep for review
 shoal done --cleanup fix-login # Override a configured keep default
+shoal undone fix-login        # Withdraw a recorded done
 shoal rm fix-login            # Remove the workspace
 shoal link pr 42              # Link a PR (or paste its URL)
 shoal link pr 43              # Link another; all must merge before cleanup after done

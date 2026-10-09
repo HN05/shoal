@@ -885,13 +885,11 @@ cleanup = true    # Default: true
 automatic = false # Default: false
 ```
 
-`shoal continue [workspace]` cancels pending completion and defers issue, PR and
-idle cleanup until an explicit `shoal done`. Scoped agents may continue only their
-own workspace. The choice persists across restarts, leaves tracked commands
-running, and is shown as `manual_completion` in `status` and `inspect`. Issue
-associations and PR watches remain registered; `done` still applies their merge
-requirements and its usual keep/cleanup choice. With automatic completion, call
-`continue` before closing the issue or merging the PR to prevent cleanup from starting.
+`shoal undone [workspace]` withdraws a recorded completion; `--json` returns
+`{"withdrawn": <completion>}`, with null when none was recorded. Scoped agents may mark only their own workspace undone.
+Issue associations and PR watches remain registered. It does not keep the workspace:
+cleanup proceeds as if `done` had not run, and automatic completion can record it
+again. A [hold](#workspace-holds) keeps a workspace that has more work.
 
 `post_done_cmd` runs in the daemon after recording completion, before cleanup,
 with the worktree as its working directory, no terminal, and a 60-second limit.
@@ -943,6 +941,8 @@ They persist across command exits and daemon restarts and block automatic remova
 while the worktree exists. Automatic completion still records `done`; releasing
 the last hold lets cleanup recheck its usual conditions. Idle cleanup restarts its
 timer after release. Explicit removal and deleted-directory cleanup release holds.
+Upgrading turns a `shoal continue` from earlier versions into a hold named
+`continue`, which the next explicit `done` releases.
 
 Reacquiring a name returns the original hold, including its reason. Acquisition
 requires a ready, verified worktree and is excluded while a resource hook runs.
@@ -972,14 +972,13 @@ cursor per workspace and item across restarts. Pending updates replay until the
 CLI acknowledges successful output. Unlinking discards that item's cursor.
 `--timeout <seconds>` bounds the wait (1–3600, default 3600); expiration returns
 an empty array and `timed_out: true`. Scoped callers can watch only in their own
-workspace. Activity polling continues when completion is deferred or PR cleanup
-is disabled. Lookup failures report errors or `lookup_failed` updates; a source
+workspace. Activity polling continues when PR cleanup is disabled. Lookup failures report errors or `lookup_failed` updates; a source
 that keeps failing with the same error is reported again every 10 minutes. Forgejo
 comment and review changes are grouped; CI results follow `fj pr status` contexts.
 
 Once every linked PR has merged and at least one contains current HEAD, a
-workspace marked `done` is cleaned up. With automatic completion and no
-continuation, Shoal records `done` itself, using `[done] cleanup` and preserving
+workspace marked `done` is cleaned up. With automatic completion, Shoal records
+`done` itself, using `[done] cleanup` and preserving
 any previously recorded completion choice. A confirmed
 set survives restart without completing again. Cleanup uses normal branch retention and resource release, retaining dirty
 or newer work. `inspect` shows lookup and removal
@@ -1054,8 +1053,8 @@ Scoped callers cannot read events.
 Each JSON line has `type: "event"`, an increasing `id`, Unix-seconds `created_at`,
 workspace and repository UUIDs (`workspace_id`, `repository_id`), `name`, `path`,
 `branch`, `kind`, `cause`, and `error`. Kinds are `created`, `ready`, `setup_failed`,
-`completed`, `continued`, `removed`, `retained`, `branch_changed`, `review_ready`
-and `review_cleared`. Review events add a `review` object with the mark's `kind`,
+`completed`, `undone`, `removed`, `retained`, `branch_changed`, `review_ready`
+and `review_cleared`; history from earlier versions may also contain `continued`. Review events add a `review` object with the mark's `kind`,
 `url` (both null for a workspace mark) and `head`. Causes are
 `manual`, `idle`, `issue`, `pr`, `completion`, or `missing_directory`, and null
 when inapplicable; `error` describes setup or cleanup failures. Branch changes

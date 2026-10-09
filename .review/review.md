@@ -62,7 +62,7 @@ instructions instead of the PR delivery guidance below.
   only (CLI refusals also follow ancestry for the same state directory); workspace allocation/removal/recovery and shared repository/service
   administration stay denied, while own-workspace setup, rename, PR registration,
   merge acknowledgements, messages to the user, ready-for-review marks,
-  assignment continuation/completion,
+  assignment completion and its withdrawal,
   own-repository sync and
   effective-configuration reads are allowed;
   only unscoped callers export or revoke environment tokens. Export requires a
@@ -167,8 +167,8 @@ instructions instead of the PR delivery guidance below.
   register the repository URL and otherwise name the registration command. Lookup failures or already-closed issues create nothing. The
   canonical URL persists before tracked setup or agent launch and cannot be replaced.
   Reopening follows the issue association before its derived local branch name.
-  Assignment continuation cancels pending completion and defers issue, PR and idle
-  cleanup until explicit done, across restarts, preserving associations and merge checks.
+  Withdrawing completion preserves associations and merge checks but never defers
+  cleanup; only holds keep a workspace.
   Associated issues suppress idle cleanup; with automatic completion they complete
   the assignment once confirmed closed, without replacing an existing completion or
   bypassing removal checks.

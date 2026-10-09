@@ -269,7 +269,7 @@ inherit a daemon-validated scope token that
 confines them to their own workspace: status, inspect, execute, setup, and resources.
 `land`, creation, removal, reconciliation, other workspaces, repository
 administration, and service control need an unscoped caller. PR registration,
-manual merge acknowledgement, assignment continuation/completion, and syncing the
+manual merge acknowledgement, assignment completion and its withdrawal, and syncing the
 caller's own repository are own-workspace exceptions.
 Effective configuration may be read for the caller's own workspace; changing it
 needs an unscoped caller.
@@ -564,9 +564,9 @@ false) lets issue closure and merged PR watches record it, so a merge or closure
 never removes a workspace whose agent is still working; agent instructions make
 `done` the last step of every assignment. Completion
 is persisted separately from lifecycle readiness, binds to HEAD, and notifies the
-user; it does not assert that work was merged. Own-workspace continuation cancels
-pending completion and defers issue, PR and idle cleanup until explicit completion,
-persisting across restarts while preserving associations and merge requirements.
+user; it does not assert that work was merged. Own-workspace withdrawal removes a
+recorded completion and preserves associations and merge requirements, but never
+defers cleanup: holds are the one mechanism that keeps a workspace.
 The daemon runs `post_done_cmd`
 after persisting explicit or automatic completion and before cleanup, using normal
 config precedence and the worktree's hook identity plus the keep/cleanup choice.

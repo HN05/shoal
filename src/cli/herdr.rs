@@ -380,7 +380,6 @@ mod tests {
                     error: None,
                 }),
                 executions,
-                manual_completion: false,
                 issue: None,
                 pr_cleanup: None,
                 ports: vec![],

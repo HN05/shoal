@@ -34,7 +34,7 @@ fn lifecycle_events_commit_and_roll_back_with_state() -> Result<()> {
         [],
     )?;
     db.execute(
-        "INSERT INTO workspace_continuation(workspace_id) VALUES ('w')",
+        "DELETE FROM workspace_completion WHERE workspace_id='w'",
         [],
     )?;
     db.execute(
@@ -58,7 +58,7 @@ fn lifecycle_events_commit_and_roll_back_with_state() -> Result<()> {
             "setup_failed",
             "ready",
             "completed",
-            "continued",
+            "undone",
             "branch_changed"
         ]
     );
@@ -110,10 +110,12 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
         "workspace_branch_changed",
         "workspace_completed",
         "workspace_completed_again",
-        "workspace_continued",
+        "workspace_undone",
     ] {
         db.execute_batch(&format!("DROP TRIGGER {trigger};"))?;
     }
     db.execute_batch("DROP TABLE workspace_events; ALTER TABLE workspaces DROP COLUMN observed_branch; ALTER TABLE workspace_completion DROP COLUMN cause;")?;
+    // Migration 31 adds this column again when the emulated database upgrades.
+    db.execute_batch("ALTER TABLE workspace_holds DROP COLUMN from_continuation;")?;
     Ok(())
 }

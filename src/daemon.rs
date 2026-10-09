@@ -454,9 +454,8 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
                 .find_workspaces(&target, caller.map(|c| c.workspace_id.as_str()))
                 .await?,
         ),
-        Method::WorkspaceContinue { workspace } => {
-            manager.continue_workspace(&workspace).await?;
-            Body::Ok
+        Method::WorkspaceUndone { workspace } => {
+            Body::WithdrawnCompletion(manager.undo_done(&workspace).await?)
         }
         Method::AcknowledgePrUpdates {
             workspace,

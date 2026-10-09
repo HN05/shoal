@@ -29,41 +29,33 @@ impl Manager {
             .await
     }
 
-    pub async fn manual_completion(&self, id: &str) -> Result<bool> {
-        let id = id.to_owned();
-        self.store
-            .run(move |db| {
-                store::exists(
-                    db,
-                    "SELECT 1 FROM workspace_continuation WHERE workspace_id=?1",
-                    [id],
-                )
-            })
-            .await
-    }
-
-    /// Keep an unfinished assignment alive until an explicit done signal.
-    pub async fn continue_workspace(&self, selector: &str) -> Result<()> {
+    /// Withdraw a recorded completion; only holds keep the workspace.
+    pub async fn undo_done(&self, selector: &str) -> Result<Option<Completion>> {
         let _guard = self.pr_gate.lock().await;
         let workspace = self.workspace(selector).await?;
         self.verify_worktree(&workspace).await?;
-        self.store
+        let completion = self
+            .store
             .run(move |db| {
                 let tx = db.transaction()?;
                 store::require_ready(&tx, &workspace.id)?;
-                tx.execute(
-                    "INSERT INTO workspace_continuation(workspace_id) VALUES (?1)
-                     ON CONFLICT(workspace_id) DO NOTHING",
-                    [&workspace.id],
-                )?;
-                tx.execute(
-                    "DELETE FROM workspace_completion WHERE workspace_id=?1",
-                    [&workspace.id],
-                )?;
+                let record: Option<String> = tx
+                    .query_row(
+                        "DELETE FROM workspace_completion WHERE workspace_id=?1 RETURNING record",
+                        [&workspace.id],
+                        |row| row.get(0),
+                    )
+                    .optional()?;
+                // An unreadable record stays in place for diagnosis.
+                let completion = record
+                    .map(|record| serde_json::from_str(&record))
+                    .transpose()?;
                 tx.commit()?;
-                Ok(())
+                Ok(completion)
             })
-            .await
+            .await?;
+        self.cleanup_notify.notify_one();
+        Ok(completion)
     }
 
     pub async fn mark_done(&self, selector: &str, cleanup: Option<bool>) -> Result<Completion> {
@@ -114,10 +106,14 @@ impl Manager {
                  ON CONFLICT(workspace_id) DO UPDATE SET record=excluded.record,cause=excluded.cause",
                     rusqlite::params![id, record, cause],
                 )?;
-                tx.execute(
-                    "DELETE FROM workspace_continuation WHERE workspace_id=?1",
-                    [&id],
-                )?;
+                if cause == EventCause::Manual {
+                    // Like the continuation it replaced, a hold made from one by
+                    // migration 31 ends at the next explicit done.
+                    tx.execute(
+                        "DELETE FROM workspace_holds WHERE workspace_id=?1 AND from_continuation",
+                        [&id],
+                    )?;
+                }
                 tx.commit()?;
                 Ok(())
             })
@@ -155,9 +151,6 @@ impl Manager {
     /// A keep choice also blocks older PR watches. A completion must never
     /// authorize removal of a later revision of the assignment.
     pub(crate) async fn completion_allows_cleanup(&self, workspace: &Workspace) -> Result<bool> {
-        if self.manual_completion(&workspace.id).await? {
-            return Ok(false);
-        }
         let Some(completion) = self.completion(&workspace.id).await? else {
             return Ok(true);
         };

@@ -12,7 +12,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 30;
+const SCHEMA_VERSION: i64 = 31;
 
 #[cfg(test)]
 mod benchmark;
@@ -324,6 +324,7 @@ const MIGRATIONS: &[(i64, &str, Option<Precondition>)] = &[
         None,
     ),
     (30, include_str!("store/workspace_review.sql"), None),
+    (31, include_str!("store/workspace_undone.sql"), None),
 ];
 
 fn migrate(db: &mut Connection) -> Result<()> {
@@ -644,6 +645,9 @@ mod tests {
         if version >= 30 {
             db.execute_batch(include_str!("store/workspace_review.sql"))?;
         }
+        if version >= 31 {
+            db.execute_batch(include_str!("store/workspace_undone.sql"))?;
+        }
         db.pragma_update(None, "user_version", version)?;
         db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
@@ -687,6 +691,26 @@ mod tests {
             migrate(&mut db)?;
             assert_eq!(schema_snapshot(&db)?, expected);
         }
+        Ok(())
+    }
+
+    #[test]
+    fn continued_workspaces_keep_their_protection_as_holds() -> Result<()> {
+        let mut db = historical_database(30)?;
+        db.execute(
+            "INSERT INTO workspace_continuation(workspace_id) VALUES ('workspace')",
+            [],
+        )?;
+        migrate(&mut db)?;
+        let hold: (String, String, bool) = db.query_row(
+            "SELECT name,reason,from_continuation FROM workspace_holds WHERE workspace_id='workspace'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )?;
+        assert_eq!(
+            hold,
+            ("continue".into(), "Kept by shoal continue".into(), true)
+        );
         Ok(())
     }
 

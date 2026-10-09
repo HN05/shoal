@@ -53,9 +53,12 @@ attention without finishing, such as when you need a decision, run
 `shoal notify "<one-line message>"`. Neither affects completion or cleanup.
 
 `[done] automatic = true` also marks the assignment done when the associated
-issue closes or every watched PR merges. With it, call `shoal continue` before
-closing the issue or merging a watched PR when you receive more work; it defers
-issue, PR and idle cleanup until you explicitly call `shoal done`.
+issue closes or every watched PR merges. With it, run
+`shoal hold acquire --name more-work` before closing the issue or merging a
+watched PR when you receive more work; the hold keeps the workspace until
+`shoal hold release --name more-work`, which you run just before `shoal done`.
+`shoal undone` withdraws a `shoal done` you ran too early. It does not keep the
+workspace.
 
 ## Workspace context
 

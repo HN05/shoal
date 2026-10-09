@@ -1102,9 +1102,6 @@ fn render_status(status: &WorkspaceStatus, json: bool) {
             println!("  {}", palette.paint(Style::Warning, error));
         }
     }
-    if inspection.manual_completion {
-        println!("Completion:    waiting for explicit done");
-    }
     if let Some(completion) = &inspection.completion {
         println!(
             "Completion:    done ({})",
@@ -1329,10 +1326,16 @@ pub(super) async fn exec(
     execution::run_command(&ctx.paths, workspace, command).await
 }
 
-pub(super) async fn continue_work(ctx: &Context, workspace: Option<String>) -> Result<i32> {
+pub(super) async fn undone(ctx: &Context, workspace: Option<String>) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    request::<()>(&ctx.paths, Method::WorkspaceContinue { workspace }).await?;
-    ctx.emit("Assignment continues; call shoal done when finished.", ())?;
+    let withdrawn: Option<Completion> =
+        request(&ctx.paths, Method::WorkspaceUndone { workspace }).await?;
+    let message = if withdrawn.is_some() {
+        "Completion withdrawn; run shoal done when finished."
+    } else {
+        "No completion recorded."
+    };
+    ctx.emit(message, json!({ "withdrawn": withdrawn }))?;
     Ok(0)
 }
 

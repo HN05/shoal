@@ -25,7 +25,7 @@ use crate::{
     sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
 };
 
-pub const VERSION: u32 = 68;
+pub const VERSION: u32 = 69;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -176,7 +176,7 @@ pub enum Method {
     HoldList {
         workspace: String,
     },
-    WorkspaceContinue {
+    WorkspaceUndone {
         workspace: String,
     },
     WorkspaceDone {
@@ -485,6 +485,7 @@ response_bodies! {
     OpenedWorkspace(crate::git::existing_branch::OpenedWorkspace),
     Inspection(Inspection),
     Completion(crate::model::Completion),
+    WithdrawnCompletion(Option<crate::model::Completion>),
     ReviewMarks(Vec<crate::model::ReviewMark>),
     WorkspaceStatus(WorkspaceStatus),
     WorkspaceEnv(std::collections::BTreeMap<String, String>),

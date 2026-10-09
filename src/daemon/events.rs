@@ -13,7 +13,10 @@ states!(EventKind {
     Ready => "ready",
     SetupFailed => "setup_failed",
     Completed => "completed",
+    /// Recorded only by earlier versions, before `undone` replaced continuation.
     Continued => "continued",
+    /// A recorded completion was withdrawn.
+    Undone => "undone",
     Removed => "removed",
     Retained => "retained",
     BranchChanged => "branch_changed",

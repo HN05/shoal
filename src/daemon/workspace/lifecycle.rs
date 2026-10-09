@@ -189,8 +189,7 @@ impl Manager {
         if crate::execution::recovery::pending(&self.paths, id)? {
             return Ok(None);
         }
-        if self.manual_completion(id).await?
-            || self.completion(id).await?.is_some()
+        if self.completion(id).await?.is_some()
             || self.pr_registration(id).await?.is_some()
             || self.issue_registration(id).await?.is_some()
         {

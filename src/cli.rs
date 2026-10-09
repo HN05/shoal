@@ -184,8 +184,6 @@ pub enum Command {
     },
     /// Run or retry workspace setup.
     Setup { workspace: Option<String> },
-    /// Continue working until explicit done, deferring issue, PR and idle cleanup.
-    Continue { workspace: Option<String> },
     /// Send the user a notification about a workspace without marking it done.
     Notify {
         /// One line of text, such as "PR #12 is ready to merge".
@@ -204,6 +202,8 @@ pub enum Command {
         #[arg(long)]
         cleanup: bool,
     },
+    /// Withdraw a recorded completion without keeping the workspace.
+    Undone { workspace: Option<String> },
     /// Hold a workspace against automatic cleanup.
     #[command(args_conflicts_with_subcommands = true)]
     Hold {
@@ -504,7 +504,7 @@ pub struct ItemArgs {
 
 #[derive(Debug, Subcommand)]
 pub enum HoldCommand {
-    /// Keep a workspace while an external session is open.
+    /// Keep a workspace against automatic cleanup until the hold is released.
     Acquire {
         workspace: Option<String>,
         #[arg(long)]
