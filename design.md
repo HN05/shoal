@@ -476,9 +476,11 @@ Skills are split by role: `shoal-worker` covers an agent's own workspace and
 role loads the other's commands. Both are installed together at user scope,
 for every tool whose skill directory already exists unless a tool is named,
 independent of the daemon and never from a scoped execution; their availability
-registers nothing. Installation removes the retired `shoal/SKILL.md`, which
-Shoal owned, and no other file. Global `[ai.<name>]` settings name skill
-directories, with defaults for built-in providers. Skill directories describe
+registers nothing. Each skill directory records what Shoal installed there;
+Shoal owns a skill only while it matches that record, so it updates or removes
+only those, and treats files from before the record as its own. A changed skill
+stays as the user left it unless installation is forced. Global `[ai.<name>]`
+settings name skill directories, with defaults for built-in providers. Skill directories describe
 the machine and cannot be set per repository; provider launchers join named
 commands without tool-specific integrations. Packaged skills resolve the runtime
 `SHOAL_SKILLS_DIR`, build-time directory, then an adjacent `shoal-skills` symlink

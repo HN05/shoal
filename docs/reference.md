@@ -1547,3 +1547,8 @@ packaged skill so upgrades apply automatically; Cargo installs copy it, so
 rerun after upgrading. Other files in the skill directory are preserved. Run it
 outside scoped executions. `shoal skill` prints the instructions (`--json`
 returns a `skill` field).
+
+Shoal records what it installed in `.shoal-skills.json` in each skill directory.
+Installation removes skills a later version retired. A skill changed since
+Shoal installed it is kept and reported; `--force` replaces it. Skills installed
+before the record existed are treated as unchanged.

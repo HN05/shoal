@@ -1,7 +1,10 @@
 //! User-level skill delivery; no daemon, repository, or agent process is needed.
+mod record;
+
 use crate::fsutil::{self, Permissions, ReplaceOptions};
 use std::{
-    fs,
+    collections::BTreeMap,
+    fs, io,
     os::unix::fs::symlink,
     path::{Path, PathBuf},
 };
@@ -13,6 +16,7 @@ use crate::{
     cli::{SkillCommand, SkillName},
     paths::Paths,
 };
+use record::{Entry, Record};
 
 /// Bundled skills by name; a packaged directory holds `<name>/SKILL.md` for each.
 const SKILLS: [(&str, &str); 2] = [
@@ -25,7 +29,7 @@ const SKILLS: [(&str, &str); 2] = [
         include_str!("../../../skills/shoal-orchestrator/SKILL.md"),
     ),
 ];
-/// The single skill earlier versions installed, replaced by `SKILLS`.
+/// The single skill installed before Shoal recorded its installations.
 const RETIRED: &str = "shoal";
 
 pub(super) fn run(
@@ -34,7 +38,7 @@ pub(super) fn run(
     json_output: bool,
     state_dir: Option<PathBuf>,
 ) -> Result<i32> {
-    let Some(SkillCommand::Install { agent }) = command else {
+    let Some(SkillCommand::Install { agent, force }) = command else {
         let (name, contents) = match name {
             SkillName::Worker => SKILLS[0],
             SkillName::Orchestrator => SKILLS[1],
@@ -69,36 +73,129 @@ pub(super) fn run(
         })?;
         vec![(agent.clone(), directory)]
     };
+    let source = packaged()?;
     let mut installed = Vec::new();
-    let configured_source = std::env::var_os(crate::env::SKILLS_DIR)
-        .map(PathBuf::from)
-        .or_else(|| crate::env::COMPILED_SKILLS_DIR.map(PathBuf::from));
-    let source = packaged_source(configured_source, &std::env::current_exe()?)?;
-    let mut written = std::collections::BTreeSet::new();
+    let mut kept = Vec::new();
+    // Tools that share a directory share one installation.
+    let mut outcomes = BTreeMap::new();
     for (agent, directory) in destinations {
-        // Tools that share a directory share one installation.
-        let shared = !written.insert(directory.clone());
-        for (name, contents) in SKILLS {
+        if !outcomes.contains_key(&directory) {
+            let outcome = refresh(&directory, source.as_deref(), *force)?;
+            outcomes.insert(directory.clone(), outcome);
+        }
+        let outcome = &outcomes[&directory];
+        for name in &outcome.installed {
             let path = skill_file(&directory, name);
-            let packaged = source.as_ref().map(|source| skill_file(source, name));
-            if !shared {
-                install(&path, packaged.as_deref(), contents)?;
-            }
             if !json_output {
                 println!("Installed {agent} skill {name} at {}", path.display());
             }
             installed.push(json!({"agent": agent, "skill": name, "path": path}));
         }
-        if !shared {
-            remove_retired(&directory.join(RETIRED))?;
+        for name in &outcome.kept {
+            let path = skill_file(&directory, name);
+            if !json_output {
+                println!(
+                    "Kept modified {agent} skill {name} at {}; use --force to replace it",
+                    path.display()
+                );
+            }
+            kept.push(json!({"agent": agent, "skill": name, "path": path}));
         }
     }
     if json_output {
-        println!("{}", json!({"installed": installed}));
-    } else if installed.is_empty() {
+        println!("{}", json!({"installed": installed, "kept": kept}));
+    } else if outcomes.is_empty() {
         println!("No skill directories found; run `shoal skill install <tool>` to create one");
     }
     Ok(0)
+}
+
+fn packaged() -> Result<Option<PathBuf>> {
+    let configured = std::env::var_os(crate::env::SKILLS_DIR)
+        .map(PathBuf::from)
+        .or_else(|| crate::env::COMPILED_SKILLS_DIR.map(PathBuf::from));
+    packaged_source(configured, &std::env::current_exe()?)
+}
+
+#[derive(Debug, Default)]
+struct Outcome {
+    /// Bundled skills installed as this version provides them.
+    installed: Vec<&'static str>,
+    /// Skills left as the user changed them.
+    kept: Vec<String>,
+}
+
+/// Install the bundled skills in `directory` and remove retired ones Shoal
+/// still owns. A recorded skill whose file differs from what Shoal wrote
+/// belongs to the user; files from before the record existed are Shoal's.
+fn refresh(directory: &Path, source: Option<&Path>, force: bool) -> Result<Outcome> {
+    let loaded = Record::load(directory)?;
+    let mut record = loaded.clone().unwrap_or_default();
+    let mut outcome = Outcome::default();
+    for (name, contents) in SKILLS {
+        let path = skill_file(directory, name);
+        let expected = match source {
+            Some(source) => Entry::Link(skill_file(source, name)),
+            None => Entry::copy(contents.as_bytes()),
+        };
+        let present = exists(&path)?;
+        // A concurrent install may already have written this version.
+        let current = expected.matches(&path)?;
+        let owned = match record.skills.get(name) {
+            None => true,
+            Some(Entry::Kept) => !present,
+            Some(previous) => !present || current || previous.matches(&path)?,
+        };
+        if owned || force {
+            if !current {
+                install(
+                    &path,
+                    source.map(|source| skill_file(source, name)).as_deref(),
+                    contents,
+                )?;
+            }
+            record.skills.insert(name.to_owned(), expected);
+            outcome.installed.push(name);
+        } else {
+            record.skills.insert(name.to_owned(), Entry::Kept);
+            outcome.kept.push(name.to_owned());
+        }
+    }
+    let retired: Vec<_> = record
+        .skills
+        .keys()
+        .filter(|name| !SKILLS.iter().any(|(bundled, _)| bundled == name))
+        .cloned()
+        .collect();
+    for name in retired {
+        let entry = record
+            .skills
+            .remove(&name)
+            .expect("retired names are recorded");
+        let path = skill_file(directory, &name);
+        if entry.matches(&path)? {
+            remove_skill(&directory.join(&name))?;
+        } else if entry != Entry::Kept && exists(&path)? {
+            outcome.kept.push(name);
+        }
+    }
+    if loaded.is_none() {
+        remove_skill(&directory.join(RETIRED))?;
+    }
+    if loaded.as_ref() != Some(&record) {
+        fs::create_dir_all(directory)
+            .with_context(|| format!("create skill directory {}", directory.display()))?;
+        record.save(directory)?;
+    }
+    Ok(outcome)
+}
+
+fn exists(path: &Path) -> Result<bool> {
+    match fs::symlink_metadata(path) {
+        Ok(_) => Ok(true),
+        Err(error) if record::is_absent(&error) => Ok(false),
+        Err(error) => Err(error).with_context(|| format!("inspect {}", path.display())),
+    }
 }
 
 fn packaged_source(configured: Option<PathBuf>, executable: &Path) -> Result<Option<PathBuf>> {
@@ -180,20 +277,29 @@ fn install(path: &Path, source: Option<&Path>, contents: &str) -> Result<()> {
     Ok(())
 }
 
-/// Remove the retired skill's `SKILL.md`, which Shoal owned, and its directory
-/// once empty; other files keep the directory.
-fn remove_retired(directory: &Path) -> Result<()> {
+/// Remove a retired skill's `SKILL.md`, which Shoal owned, and its directory
+/// once empty; other files keep the directory. Returns whether it was there.
+fn remove_skill(directory: &Path) -> Result<bool> {
     let path = directory.join("SKILL.md");
     match fs::symlink_metadata(&path) {
-        Ok(metadata) if !metadata.is_dir() => fs::remove_file(&path)
-            .with_context(|| format!("remove retired skill {}", path.display()))?,
-        Ok(_) => return Ok(()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Ok(metadata) if !metadata.is_dir() => match fs::remove_file(&path) {
+            // A concurrent refresh removed it first.
+            Err(error) if record::is_absent(&error) => return Ok(false),
+            result => result.with_context(|| format!("remove retired skill {}", path.display()))?,
+        },
+        Ok(_) => return Ok(false),
+        Err(error) if record::is_absent(&error) => return Ok(false),
         Err(error) => return Err(error).with_context(|| format!("inspect {}", path.display())),
     }
     match fs::remove_dir(directory) {
-        Err(error) if error.kind() == std::io::ErrorKind::DirectoryNotEmpty => Ok(()),
-        result => result.with_context(|| format!("remove {}", directory.display())),
+        Err(error)
+            if error.kind() == io::ErrorKind::DirectoryNotEmpty || record::is_absent(&error) =>
+        {
+            Ok(true)
+        }
+        result => result
+            .map(|()| true)
+            .with_context(|| format!("remove {}", directory.display())),
     }
 }
 
@@ -299,23 +405,121 @@ mod tests {
         );
     }
 
+    fn record(directory: &Path, entries: &[(&str, Entry)]) {
+        let mut record = Record::load(directory).unwrap().unwrap_or_default();
+        for (name, entry) in entries {
+            record.skills.insert((*name).to_owned(), entry.clone());
+        }
+        record.save(directory).unwrap();
+    }
+
+    #[test]
+    fn install_replaces_skills_shoal_owns_and_keeps_user_changes() {
+        let root = tempfile::tempdir().unwrap();
+        let directory = root.path();
+        let (worker, orchestrator) = (SKILLS[0].0, SKILLS[1].0);
+        let read = |name| fs::read_to_string(skill_file(directory, name)).unwrap();
+        // Skills from before the record existed are Shoal's.
+        for (name, _) in SKILLS {
+            fs::create_dir_all(directory.join(name)).unwrap();
+            fs::write(skill_file(directory, name), "old").unwrap();
+        }
+        refresh(directory, None, false).unwrap();
+        assert_eq!(read(worker), SKILLS[0].1);
+        // A recorded copy from an earlier version is replaced; an edited one is kept.
+        fs::write(skill_file(directory, worker), "old").unwrap();
+        fs::write(skill_file(directory, orchestrator), "edited").unwrap();
+        record(
+            directory,
+            &[
+                (worker, Entry::copy(b"old")),
+                (orchestrator, Entry::copy(b"old")),
+            ],
+        );
+        for _ in 0..2 {
+            let outcome = refresh(directory, None, false).unwrap();
+            assert_eq!(outcome.installed, [worker]);
+            assert_eq!(outcome.kept, [orchestrator]);
+            assert_eq!(read(worker), SKILLS[0].1);
+            assert_eq!(read(orchestrator), "edited");
+        }
+        let outcome = refresh(directory, None, true).unwrap();
+        assert!(outcome.kept.is_empty());
+        assert_eq!(read(orchestrator), SKILLS[1].1);
+        // A removed skill is restored.
+        fs::remove_file(skill_file(directory, worker)).unwrap();
+        refresh(directory, None, false).unwrap();
+        assert_eq!(read(worker), SKILLS[0].1);
+    }
+
+    #[test]
+    fn install_removes_retired_skills_only_while_unchanged() {
+        let root = tempfile::tempdir().unwrap();
+        let directory = root.path().join("skills");
+        let source = root.path().join("package");
+        for (name, _) in SKILLS {
+            fs::create_dir_all(source.join(name)).unwrap();
+            fs::write(skill_file(&source, name), "packaged").unwrap();
+        }
+        refresh(&directory, Some(&source), false).unwrap();
+        for name in ["linked", "copied", "edited", "kept"] {
+            fs::create_dir_all(directory.join(name)).unwrap();
+        }
+        // An upgraded package no longer holds the linked skill.
+        symlink(
+            skill_file(&source, "linked"),
+            skill_file(&directory, "linked"),
+        )
+        .unwrap();
+        fs::write(skill_file(&directory, "copied"), "retired").unwrap();
+        fs::write(directory.join("copied/notes.md"), "keep").unwrap();
+        fs::write(skill_file(&directory, "edited"), "edited").unwrap();
+        fs::write(skill_file(&directory, "kept"), "kept").unwrap();
+        record(
+            &directory,
+            &[
+                ("linked", Entry::Link(skill_file(&source, "linked"))),
+                ("copied", Entry::copy(b"retired")),
+                ("edited", Entry::copy(b"retired")),
+                ("kept", Entry::Kept),
+            ],
+        );
+        let outcome = refresh(&directory, Some(&source), false).unwrap();
+        assert_eq!(outcome.kept, ["edited"]);
+        assert!(!directory.join("linked").exists());
+        assert_eq!(fs::read_dir(directory.join("copied")).unwrap().count(), 1);
+        for name in ["edited", "kept"] {
+            assert!(skill_file(&directory, name).exists());
+        }
+        let names: Vec<_> = Record::load(&directory)
+            .unwrap()
+            .unwrap()
+            .skills
+            .into_keys()
+            .collect();
+        assert_eq!(names, [SKILLS[1].0, SKILLS[0].0]);
+        // A retired skill is reported once, then belongs to the user.
+        let outcome = refresh(&directory, Some(&source), false).unwrap();
+        assert!(outcome.kept.is_empty());
+    }
+
     #[test]
     fn retired_skill_is_removed_without_other_files() {
         let root = tempfile::tempdir().unwrap();
         let retired = root.path().join(RETIRED);
-        remove_retired(&retired).unwrap();
+        remove_skill(&retired).unwrap();
         fs::create_dir(&retired).unwrap();
         // A dangling link from an upgraded package is removed like a copy.
         symlink(root.path().join("missing.md"), retired.join("SKILL.md")).unwrap();
         fs::write(retired.join("notes.md"), "keep").unwrap();
-        remove_retired(&retired).unwrap();
+        remove_skill(&retired).unwrap();
         assert_eq!(fs::read_dir(&retired).unwrap().count(), 1);
         fs::write(retired.join("SKILL.md"), "old").unwrap();
         fs::remove_file(retired.join("notes.md")).unwrap();
-        remove_retired(&retired).unwrap();
+        remove_skill(&retired).unwrap();
         assert!(!retired.exists());
         fs::create_dir_all(retired.join("SKILL.md")).unwrap();
-        remove_retired(&retired).unwrap();
+        remove_skill(&retired).unwrap();
         assert!(retired.join("SKILL.md").is_dir());
     }
 }

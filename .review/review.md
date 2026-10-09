@@ -309,8 +309,9 @@ configured command for another agent, plus proven child
   directory, then an adjacent `shoal-skills` symlink. Explicit paths must be
   absolute; relative link targets resolve lexically against the link's
   directory. The source must hold every bundled skill and stays uncanonicalized
-  so stable prefixes follow upgrades. Installation removes only the retired
-  `shoal/SKILL.md`, never other files in skill directories.
+  so stable prefixes follow upgrades. Shoal changes or removes only skills that
+  still match its per-directory record, plus unrecorded files from earlier
+  versions, never other files in skill directories.
 - Tests run in temporary state directories and repositories without the launching
   environment's Shoal variables or configuration locations, use the isolated
   xcrun fixture, and never install services or touch personal simulators.

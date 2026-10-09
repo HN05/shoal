@@ -250,13 +250,12 @@ fn skill_install_refreshes_only_selected_tool_and_preserves_siblings() {
     fs::write(&source, "personal source\n").unwrap();
     symlink(&source, directory.join("SKILL.md")).unwrap();
     fs::write(directory.join("notes.md"), "keep me\n").unwrap();
-    for _ in 0..2 {
-        success(
-            cli(home.path())
-                .args(["skill", "install", "codex"])
-                .output()
-                .unwrap(),
-        );
+    // A skill from before Shoal recorded installations is Shoal's to replace.
+    for args in [
+        vec!["skill", "install", "codex"],
+        vec!["skill", "install", "codex", "--force"],
+    ] {
+        success(cli(home.path()).args(&args).output().unwrap());
         assert_eq!(fs::read(directory.join("SKILL.md")).unwrap(), WORKER);
         assert_eq!(fs::read_to_string(&source).unwrap(), "personal source\n");
         assert_eq!(
@@ -264,9 +263,19 @@ fn skill_install_refreshes_only_selected_tool_and_preserves_siblings() {
             "keep me\n"
         );
         assert!(!home.path().join(".claude").exists());
-        // Refresh old contents on the next call, without leaving temporary files.
-        fs::write(directory.join("SKILL.md"), "old installed skill\n").unwrap();
+        // An edit after installation survives until a forced install, without
+        // leaving temporary files.
+        fs::write(directory.join("SKILL.md"), "edited skill\n").unwrap();
         assert_eq!(fs::read_dir(&directory).unwrap().count(), 2);
+        let output = cli(home.path())
+            .args(["skill", "install", "codex"])
+            .output()
+            .unwrap();
+        assert!(String::from_utf8_lossy(&success(output)).contains("Kept modified codex skill"));
+        assert_eq!(
+            fs::read_to_string(directory.join("SKILL.md")).unwrap(),
+            "edited skill\n"
+        );
     }
 }
 
@@ -296,15 +305,18 @@ fn skill_install_honors_claude_override_and_rejects_invalid_paths_before_writes(
     fs::remove_file(&directory).unwrap();
     fs::create_dir(&directory).unwrap();
     fs::write(directory.join("keep"), "keep").unwrap();
-    assert!(
-        !cli(home.path())
+    let install = |force: bool| {
+        let mut command = cli(home.path());
+        command
             .env("CLAUDE_CONFIG_DIR", &config)
-            .args(["skill", "install", "claude"])
-            .output()
-            .unwrap()
-            .status
-            .success()
-    );
+            .args(["skill", "install", "claude"]);
+        if force {
+            command.arg("--force");
+        }
+        command.output().unwrap()
+    };
+    success(install(false));
+    assert!(!install(true).status.success());
     assert_eq!(fs::read_to_string(directory.join("keep")).unwrap(), "keep");
 }
 
