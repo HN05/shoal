@@ -371,7 +371,7 @@ pub(super) async fn observe(manager: &Manager, workspace: &Workspace) -> Option<
 }
 
 /// The workspaces a manual cleanup removed, or would remove in a dry run,
-/// and the candidates it retained.
+/// and those it retained because inspection or removal failed.
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct ManualCleanup {
     pub dry_run: bool,
@@ -401,6 +401,10 @@ pub async fn on_request(manager: &Manager, dry_run: bool) -> Result<ManualCleanu
             Ok(None) => continue,
             Err(error) => {
                 log!("manual cleanup skipped {}: {error:#}", workspace.name);
+                report.retained.push(Retained {
+                    workspace: workspace.name,
+                    error: format!("{error:#}"),
+                });
                 continue;
             }
         };
@@ -993,12 +997,15 @@ mod tests {
             .set_repository_config(&repo.id, Some("[auto_cleanup]\nenabled = false\n".into()))
             .await
             .unwrap();
-        for name in ["dirty", "held", "idle"] {
+        for name in ["broken", "dirty", "held", "idle"] {
             manager
                 .create_workspace(&repo.id, name.into(), None, None, None)
                 .await
                 .unwrap();
         }
+        // An inspection failure is reported rather than read as nothing to do.
+        let broken = manager.workspace("broken").await.unwrap();
+        fs::remove_file(broken.path.join(".git")).unwrap();
         let dirty = manager.workspace("dirty").await.unwrap();
         fs::write(dirty.path.join("work"), "retain me").unwrap();
         let held = manager.workspace("held").await.unwrap();
@@ -1019,15 +1026,24 @@ mod tests {
             }
         };
 
+        let retained = |report: &ManualCleanup| {
+            report
+                .retained
+                .iter()
+                .map(|retained| retained.workspace.clone())
+                .collect::<Vec<_>>()
+        };
+
         let preview = on_request(&manager, true).await.unwrap();
         assert_eq!(preview.removed, ["idle"]);
-        assert_eq!(names(&manager).await, ["dirty", "held", "idle"]);
+        assert_eq!(retained(&preview), ["broken"]);
+        assert_eq!(names(&manager).await, ["broken", "dirty", "held", "idle"]);
 
         let report = on_request(&manager, false).await.unwrap();
         assert!(!report.dry_run);
         assert_eq!(report.removed, ["idle"]);
-        assert!(report.retained.is_empty());
-        assert_eq!(names(&manager).await, ["dirty", "held"]);
+        assert_eq!(retained(&report), ["broken"]);
+        assert_eq!(names(&manager).await, ["broken", "dirty", "held"]);
     }
 
     #[tokio::test]
