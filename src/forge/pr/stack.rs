@@ -16,37 +16,47 @@ impl Manager {
     /// Once every watched PR of `base` has merged, retarget the PRs of the
     /// workspaces stacked on it to the branch it merged into, stack them on
     /// its own base, and queue a `base_merged` update for their next watch.
+    /// `Ok(false)` while a failed lookup leaves the merge unknown: the base's
+    /// cleanup waits for the next sweep without reporting a failure.
     pub(super) async fn advance_stack(
         &self,
         base: &Workspace,
         registration: &RegistrationKind,
-    ) -> Result<()> {
+    ) -> Result<bool> {
         let RegistrationKind::Watch { urls, .. } = registration else {
-            return Ok(());
+            return Ok(true);
         };
         if base.stacked_workspaces.is_empty() {
-            return Ok(());
+            return Ok(true);
         }
-        let mut target = None;
         for url in urls {
-            let (forge, number, _) = self.pr_forge(base, url).await?;
-            if forge
-                .merged_commits(&base.path, number, &base.branch)
-                .await?
-                .is_none()
-            {
-                return Ok(());
+            match self.base_pr_merged(base, url).await {
+                Ok(true) => {}
+                Ok(false) => return Ok(true),
+                Err(error) => {
+                    eprintln!("could not check whether {url} merged: {error:#}");
+                    return Ok(false);
+                }
             }
-            target = Some(forge.pull_request(&base.path, url).await?.base);
         }
-        let Some(target) = target else {
-            return Ok(());
+        let Some(url) = urls.last() else {
+            return Ok(true);
         };
+        let (forge, _, _) = self.pr_forge(base, url).await?;
+        let target = forge.pull_request(&base.path, url).await?.base;
         let head = current_head(base).await?;
         for stacked in &base.stacked_workspaces {
             self.restack(stacked, base, &target, &head).await?;
         }
-        Ok(())
+        Ok(true)
+    }
+
+    async fn base_pr_merged(&self, base: &Workspace, url: &str) -> Result<bool> {
+        let (forge, number, _) = self.pr_forge(base, url).await?;
+        Ok(forge
+            .merged_commits(&base.path, number, &base.branch)
+            .await?
+            .is_some())
     }
 
     async fn restack(

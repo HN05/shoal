@@ -334,12 +334,16 @@ impl Manager {
             };
             // A base stays until its stacked workspaces moved; a failure retries next sweep.
             let restacked = self.advance_stack(&workspace, &registration.kind).await;
+            if matches!(restacked, Ok(false)) {
+                continue;
+            }
             // A repository that disabled PR cleanup keeps its watches waiting;
             // unreadable config is recorded like a failed lookup.
             let settings = self.workspace_settings(&workspace).await;
-            if settings
-                .as_ref()
-                .is_ok_and(|settings| !settings.pr_cleanup.enabled)
+            if restacked.is_ok()
+                && settings
+                    .as_ref()
+                    .is_ok_and(|settings| !settings.pr_cleanup.enabled)
             {
                 continue;
             }

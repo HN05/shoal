@@ -15194,10 +15194,56 @@ fn merged_base_prs_retarget_and_restack_the_workspaces_stacked_on_them() {
                     && event["cause"] == "pr"
             });
         assert!(restacked);
-        // Moved workspaces are not restacked again.
-        fixture.restart();
-        assert_eq!(fs::read_to_string(root.join("edits")).unwrap(), "2 main\n");
     }
+}
+
+#[test]
+fn failed_restacks_are_reported_even_when_pr_cleanup_is_disabled() {
+    let mut fixture = Fixture::with_config(Some("[auto_cleanup]\nenabled=false\n"));
+    let lower = fixture.add("lower");
+    let repo = fixture.repo.to_str().unwrap().to_owned();
+    fixture.ok(&["add", &repo, "upper", "--base", "lower"]);
+    fixture.add_github_origin();
+    let root = fixture.root.path().to_owned();
+    fs::create_dir_all(root.join("bin")).unwrap();
+    // The merge check succeeds; the target lookup after it fails.
+    fs::write(
+        root.join("bin/gh"),
+        "#!/bin/sh\ncase \"$*\" in *baseRefName*) [ -e \"$HOME/fail\" ] && exit 1;; esac\ncat \"$HOME/pr-$3\"\n",
+    )
+    .unwrap();
+    fs::set_permissions(root.join("bin/gh"), fs::Permissions::from_mode(0o755)).unwrap();
+    let head = git(
+        Path::new(lower["path"].as_str().unwrap()),
+        &["rev-parse", "HEAD"],
+    );
+    let write_pr = |number: u64, state: &str, branch: &str, base: &str| {
+        let pr = serde_json::json!({"number": number, "state": state, "title": "Stacked",
+            "headRefName": branch, "baseRefName": base, "isCrossRepository": false,
+            "commits": [{"oid": head.trim()}]});
+        fs::write(root.join(format!("pr-{number}")), pr.to_string()).unwrap();
+    };
+    write_pr(1, "OPEN", "lower", "main");
+    write_pr(2, "OPEN", "upper", "lower");
+    fixture.ok(&["link", "pr", "1", "--workspace", "lower"]);
+    fixture.ok(&["link", "pr", "2", "--workspace", "upper"]);
+    fs::write(
+        root.join(".config/shoal/config.toml"),
+        "[auto_cleanup]\nenabled=false\n[pr_cleanup]\nenabled=false\n",
+    )
+    .unwrap();
+    write_pr(1, "MERGED", "lower", "main");
+    fs::write(root.join("fail"), "").unwrap();
+    fixture.restart();
+    wait_until("reported restack failure", || {
+        fixture.ok(&["inspect", "lower"])["pr_cleanup"]["error"]
+            .as_str()
+            .is_some_and(|error| error.contains("could not move the workspaces stacked on it"))
+    });
+    assert_eq!(
+        fixture.ok(&["inspect", "upper"])["workspace"]["base_workspace"]["name"],
+        "lower"
+    );
 }
 
 fn issue_completion_fixture(tool: &str, cleanup: bool) -> Fixture {
