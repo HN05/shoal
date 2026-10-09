@@ -1,0 +1,82 @@
+# Nightly flaky-test hunt: runs the whole test suite repeatedly on main and
+# writes every test that failed into one evergreen issue. Kept out of ci.yml so
+# it never gates a pull request; a flaky test found here is fixed before it
+# fails someone's PR. Unlike deps.yml, a finding fails the run, so the failure
+# notification reaches the owner as well as the issue.
+
+name: flaky
+
+on:
+  schedule:
+    # Off the hour, and after the night's merges have landed.
+    - cron: '41 2 * * *'
+  # `fj actions dispatch flaky.yml main` to hunt after fixing a flaky test.
+  workflow_dispatch:
+
+concurrency:
+  group: flaky
+  # Two runs would fight over one issue body; let the first finish.
+  cancel-in-progress: false
+
+env:
+  # Same build settings as ci.yml, so a test fails here the way it fails there.
+  CARGO_INCREMENTAL: "0"
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_TEST_DEBUG: "0"
+  # Rounds of `cargo test`; each takes about as long as ci.yml's test step.
+  ROUNDS: "10"
+
+jobs:
+  hunt:
+    name: flaky-test hunt
+    runs-on: docker
+    container:
+      # Same image and /tmp as ci.yml's rust job; bump every tag together.
+      image: git.henriknordvik.com/hn05/ci-shoal:1.98
+      options: --tmpfs /tmp:rw,exec,nosuid,mode=1777,size=8g
+    env:
+      CARGO_TARGET_DIR: /ci-target
+    steps:
+      - name: Checkout
+        run: |
+          # A scheduled event carries no head commit on every Forgejo version.
+          ref='${{ github.sha }}'
+          [ -n "$ref" ] || ref='${{ github.ref_name }}'
+          git init -q .
+          git remote add origin "${{ github.server_url }}/${{ github.repository }}.git"
+          git -c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:${{ github.token }}' | base64 | tr -d '\n')" \
+            fetch -q --depth 1 origin "$ref"
+          git checkout -q FETCH_HEAD
+
+      # One step, because the /ci-target slot lasts as long as the step's shell.
+      - name: Run the suite repeatedly (holding a /ci-target slot)
+        env:
+          # Forgejo's run URL takes the run number, not the internal run id.
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_number }}
+          SOURCE: ${{ github.server_url }}/${{ github.repository }}/src/branch/main/.forgejo/workflows/flaky.yml
+        run: |
+          . .forgejo/scripts/lock-target-dir.sh
+          cargo clean -p shoal
+          # Findings are published before the run fails on them.
+          rc=0
+          .forgejo/scripts/flaky-report.sh "$ROUNDS" > report.md || rc=$?
+          echo "REPORT_RC=$rc" >> "$GITHUB_ENV"
+          cat report.md
+
+      - name: Publish into the evergreen issue
+        env:
+          FORGE_API: ${{ github.api_url }}
+          FORGE_REPO: ${{ github.repository }}
+          FORGE_TOKEN: ${{ github.token }}
+          # Only used the first time, when the issue has to be created.
+          ISSUE_TITLE: Flaky test report
+          ISSUE_LABELS: area/infra,tracking
+        run: .forgejo/scripts/publish-report.sh report.md
+
+      - name: Fail if a test failed or a round broke
+        run: |
+          case "$REPORT_RC" in
+            0) ;;
+            1) echo "::error::a test failed on unchanged code; the issue lists it"; exit 1 ;;
+            *) echo "::error::a round produced no test results; see the step above"; exit 1 ;;
+          esac

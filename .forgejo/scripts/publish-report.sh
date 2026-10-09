@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# Publish a report body into the evergreen dependency-report issue.
+# Publish a report body into its evergreen issue (dependency or flaky-test report).
 #
 #   publish-report.sh <body-file>
 #

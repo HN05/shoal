@@ -1,4 +1,4 @@
-# CI image for ci.yml, deps.yml and release.yml. Everything the jobs would
+# CI image for the Forgejo workflows. Everything the jobs would
 # otherwise install per run lives here, and the tag is the Rust version: never a
 # floating tag, so a run can say which toolchain it used.
 #

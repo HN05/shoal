@@ -168,6 +168,10 @@ instead of waiting, and runs `cargo clean -p shoal`.
 main`) and rewrites one evergreen `tracking` issue, found by the marker comment
 in its body, with `cargo audit` and `cargo outdated` findings. It is never a
 required check; findings do not fail it, a tool that could not run does.
+`.forgejo/workflows/flaky.yml` runs `cargo test` repeatedly on `main` every
+night (and on `fj actions dispatch flaky.yml main`) and rewrites the evergreen
+`Flaky test report` issue with every test that failed; a failure fails the run.
+It is never a required check.
 `.forgejo/workflows/review.yml` posts an advisory review-bot review when a PR
 opens and whenever `review/default`, `review/claude` or `review/codex` is
 added; `review/none` suppresses it. `.review/review.md` is its project brief;
