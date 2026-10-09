@@ -97,6 +97,14 @@ enabled = false
 used_percent = 90
 sustained_seconds = 300
 
+[overload.disk]
+# Available space on filesystems holding workspaces or daemon state, in GiB.
+enabled = true
+# Remove workspaces idle cleanup would remove, without waiting for the delay.
+cleanup_free_gib = 5
+# Stop tracked executions when cleanup cannot free enough space.
+stop_free_gib = 2
+
 [overload.recovery]
 # Automatically restore agents with a configured [agent_resume] command.
 enabled = true
