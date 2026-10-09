@@ -191,15 +191,15 @@ pub(super) fn save_command(
 }
 
 pub(super) async fn wait(
-    stream: &mut tokio::io::BufReader<tokio::net::UnixStream>,
+    link: &mut super::Link,
 ) -> Result<Option<Vec<crate::model::PortReservation>>> {
-    use crate::protocol::{self, Control};
+    use crate::protocol::Control;
     use tokio::signal::unix::{SignalKind, signal};
     let mut interrupt = signal(SignalKind::interrupt())?;
     let mut terminate = signal(SignalKind::terminate())?;
     let mut quit = signal(SignalKind::quit())?;
     tokio::select! {
-        control = protocol::read_buffered::<Control>(stream) => match control? {
+        control = link.recv() => match control? {
             Control::Resume { ports } => Ok(Some(ports)),
             Control::Stop => Ok(None),
             _ => anyhow::bail!("unexpected recovery control"),

@@ -4,8 +4,11 @@ use std::io;
 
 use anyhow::{Context, Result, ensure};
 use tokio::{
-    io::BufReader,
-    net::UnixStream,
+    io::{AsyncBufRead, BufReader},
+    net::{
+        UnixStream,
+        unix::{OwnedReadHalf, OwnedWriteHalf},
+    },
     time::{Instant, sleep, timeout},
 };
 
@@ -36,21 +39,43 @@ pub async fn open(paths: &Paths, method: Method) -> Result<(UnixStream, Body)> {
 
 /// Preserve frames read alongside the initial reply for long-lived streams.
 pub async fn open_buffered(paths: &Paths, method: Method) -> Result<(BufReader<UnixStream>, Body)> {
-    let mut stream = UnixStream::connect(&paths.socket).await.with_context(|| {
+    let mut stream = connect(paths).await?;
+    let request = Request::new(method);
+    protocol::write(&mut stream, &request).await?;
+    let mut stream = BufReader::new(stream);
+    let body = reply(&mut stream, &request).await?;
+    Ok((stream, body))
+}
+
+/// [`open_buffered`] with the stream split, so a task can own the receive half.
+pub async fn open_split(
+    paths: &Paths,
+    method: Method,
+) -> Result<(BufReader<OwnedReadHalf>, OwnedWriteHalf, Body)> {
+    let (reader, mut writer) = connect(paths).await?.into_split();
+    let request = Request::new(method);
+    protocol::write(&mut writer, &request).await?;
+    let mut reader = BufReader::new(reader);
+    let body = reply(&mut reader, &request).await?;
+    Ok((reader, writer, body))
+}
+
+async fn connect(paths: &Paths) -> Result<UnixStream> {
+    UnixStream::connect(&paths.socket).await.with_context(|| {
         format!(
             "connect to {}; run `shoal install` or `shoal daemon start`",
             paths.socket.display()
         )
-    })?;
-    let request = Request::new(method);
-    protocol::write(&mut stream, &request).await?;
-    let mut stream = BufReader::new(stream);
-    let reply: Response = protocol::read_buffered(&mut stream).await?;
+    })
+}
+
+async fn reply(stream: &mut (impl AsyncBufRead + Unpin), request: &Request) -> Result<Body> {
+    let reply: Response = protocol::read_buffered(stream).await?;
     if reply.protocol != protocol::VERSION {
         return Err(ProtocolMismatch.into());
     }
     ensure!(reply.id == request.id, "unexpected daemon response ID");
-    Ok((stream, reply.body))
+    Ok(reply.body)
 }
 
 /// One request; daemon errors become `code: message` failures.

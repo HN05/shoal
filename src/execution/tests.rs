@@ -1,5 +1,6 @@
 use super::*;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
+use crate::protocol;
+use tokio::{io::AsyncWriteExt, net::UnixStream};
 
 #[tokio::test]
 async fn adjacent_controls_survive_start_and_recovery_transitions() {
@@ -52,10 +53,10 @@ async fn adjacent_controls_child() {
     ] {
         protocol::write(&mut bytes, &control).await.unwrap();
     }
+    // Deliver every control in one write, so they share a socket read.
     server.write_all(&bytes).await.unwrap();
-    let mut stream = BufReader::new(client);
-    // Force read-ahead before supervision, independent of socket scheduling.
-    assert_eq!(stream.fill_buf().await.unwrap(), bytes);
+    let (reader, writer) = client.into_split();
+    let mut link = Link::new(BufReader::new(reader), writer);
     let daemon = async {
         let mut server = BufReader::new(server);
         assert!(matches!(
@@ -76,7 +77,7 @@ async fn adjacent_controls_child() {
     };
     let wrapper = async {
         let outcome = supervise(
-            &mut stream,
+            &mut link,
             &paths,
             &plan,
             &[
@@ -98,9 +99,9 @@ async fn adjacent_controls_child() {
                 reason: Some(reason),
             } if reason == "critical memory pressure"
         ));
-        assert!(recovery::wait(&mut stream).await.unwrap().is_none());
+        assert!(recovery::wait(&mut link).await.unwrap().is_none());
         assert!(
-            report_completion(&mut stream, 143, &Mode::Command { record: false })
+            report_completion(&mut link, 143, &Mode::Command { record: false })
                 .await
                 .unwrap()
         );
