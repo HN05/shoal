@@ -609,6 +609,45 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn acknowledgement_keeps_updates_queued_after_the_delivery() {
+        let (root, manager) = manager().await;
+        let repo_path = repository(root.path(), "repo");
+        let repo = manager
+            .register_repository(repo_path.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        let workspace = manager
+            .create_workspace(&repo.id, "queued".into(), None, None, None)
+            .await
+            .unwrap();
+        register_watch(&manager, &workspace.id, "pr").await;
+        let delivered = manager
+            .record_pr_activity(&workspace.id, vec![("pr".into(), snapshot("review"))])
+            .await
+            .unwrap();
+        let queued = Update {
+            url: "pr".into(),
+            kind: UpdateKind::BaseMerged,
+            message: "base merged".into(),
+            delivery: "queued".into(),
+        };
+        let (id, update) = (workspace.id.clone(), queued.clone());
+        manager
+            .store
+            .run(move |db| queue_update(db, &id, update))
+            .await
+            .unwrap();
+        manager
+            .acknowledge_pr_updates(&workspace.id, vec![delivered[0].delivery.clone()])
+            .await
+            .unwrap();
+        assert_eq!(
+            manager.pending_pr_activity(&workspace.id).await.unwrap(),
+            [queued]
+        );
+    }
+
+    #[tokio::test]
     async fn cursors_survive_restart_are_workspace_owned_and_clear_on_unwatch() {
         let (root, manager) = manager().await;
         let repo_path = repository(root.path(), "repo");
