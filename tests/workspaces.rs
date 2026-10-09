@@ -13933,6 +13933,38 @@ fn repository_resources_return_checkouts_and_preserve_them_on_cleanup() {
 }
 
 #[test]
+fn acquire_picks_an_omitted_resource_of_its_kind() {
+    let fixture = Fixture::with_config(Some("[resources.lock]\n[resources.workers]\ncapacity=2\n"));
+    let related = init_repo(fixture.root.path(), "server", &[("tracked", "server\n")]);
+    fixture.ok(&["repo", "add", related.to_str().unwrap(), "--name", "server"]);
+    set_repository_toml(&fixture, "[resources.server]\nkind='repo'\nrepo='server'\n");
+    fixture.add("consumer");
+    let args = ["acquire", "resource", "--workspace", "consumer"];
+    let (output, rows) = fixture.pick(&args, "workers", "");
+    assert!(output.status.success(), "{output:?}");
+    assert!(
+        rows.contains("lock\t") && rows.contains("workers\t"),
+        "{rows:?}"
+    );
+    assert!(!rows.contains("server\t"), "{rows:?}");
+    let (output, rows) = fixture.pick(
+        &["acquire", "repo", "--workspace", "consumer"],
+        "server",
+        "",
+    );
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(rows.lines().count(), 1, "{rows:?}");
+    let pools: Vec<_> = fixture.ok(&["inspect", "consumer"])["resources"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|lease| lease["pool"].as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(pools.len(), 2, "{pools:?}");
+    assert!(pools.contains(&"workers".into()) && pools.contains(&"server".into()));
+}
+
+#[test]
 fn repository_resources_select_registrations_by_remote_url() {
     let fixture = Fixture::new();
     let related = init_repo(fixture.root.path(), "server", &[("tracked", "server\n")]);

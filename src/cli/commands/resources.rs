@@ -1,5 +1,5 @@
 //! CLI requests and rendering for cooperative resources.
-use anyhow::Result;
+use anyhow::{Result, ensure};
 use serde_json::json;
 
 use super::{
@@ -174,6 +174,21 @@ pub(super) async fn fetch_overview(
         request::<Overview>(&ctx.paths, Method::ResourceOverview { workspace }).await?;
     members.retain(&mut overview);
     Ok(overview)
+}
+
+/// Choose a configured pool with `members` for the workspace.
+pub(super) async fn pick_pool(ctx: &Context, workspace: &str, members: Members) -> Result<String> {
+    let overview = fetch_overview(ctx, workspace.to_owned(), members).await?;
+    ensure!(!overview.pools.is_empty(), "no configured resources");
+    let entries = overview
+        .pools
+        .into_iter()
+        .map(|pool| {
+            let label = format!("{} ({})", pool.name, pool.scope);
+            (pool.name, label)
+        })
+        .collect();
+    ui::pick(ctx, "Resource> ", entries)
 }
 
 pub(super) async fn overview(

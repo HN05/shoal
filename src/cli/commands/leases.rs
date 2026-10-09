@@ -69,10 +69,18 @@ pub(super) async fn acquire(
             mode,
             lease,
         } => {
+            let pool = match pool {
+                Some(pool) => pool,
+                None => resources::pick_pool(ctx, &workspace, Members::Locks).await?,
+            };
             let request = resource_request(pool, member, mode, None, &lease);
             resources::acquire(ctx, workspace, request, lease.wait).await
         }
         AcquireKind::Repo { resource, lease } => {
+            let resource = match resource {
+                Some(resource) => resource,
+                None => resources::pick_pool(ctx, &workspace, Members::Repositories).await?,
+            };
             let request = resource_request(
                 resource,
                 None,

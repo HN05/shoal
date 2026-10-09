@@ -885,7 +885,8 @@ pub enum AcquireKind {
     },
     /// Acquire a permit or reader/writer lock from a configured pool.
     Resource {
-        pool: String,
+        /// Configured resource or pool; omit to choose one.
+        pool: Option<String>,
         /// Pool member to acquire instead of any available one.
         #[arg(long)]
         member: Option<String>,
@@ -897,9 +898,9 @@ pub enum AcquireKind {
     },
     /// Borrow a configured related repository's checkout for reading.
     Repo {
-        /// Configured `kind = "repo"` resource name.
+        /// Configured `kind = "repo"` resource name; omit to choose one.
         #[arg(value_name = "NAME")]
-        resource: String,
+        resource: Option<String>,
         #[command(flatten)]
         lease: LeaseOptions,
     },
