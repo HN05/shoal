@@ -323,11 +323,18 @@ impl Manager {
     async fn prepare_post_remove_hook(
         &self,
         workspace: &Workspace,
-    ) -> Result<Option<(PathBuf, PathBuf)>> {
+    ) -> Result<
+        Option<(
+            PathBuf,
+            PathBuf,
+            std::collections::BTreeMap<String, std::ffi::OsString>,
+        )>,
+    > {
         match self.workspace_hook(workspace, HookKind::PostRemove).await? {
             Some(command) => {
                 let checkout = self.repository(&workspace.repository_id).await?.path;
-                Ok(Some((command, checkout)))
+                let configured_env = self.configured_workspace_environment(workspace).await?;
+                Ok(Some((command, checkout, configured_env)))
             }
             None => Ok(None),
         }
@@ -353,17 +360,22 @@ impl Manager {
         &self,
         workspace: &Workspace,
         mut outcome: RemovalResult,
-        post_remove: Option<(PathBuf, PathBuf)>,
+        post_remove: Option<(
+            PathBuf,
+            PathBuf,
+            std::collections::BTreeMap<String, std::ffi::OsString>,
+        )>,
     ) -> RemovalResult {
         self.forget_workspace(&workspace.id).await;
         // Session logs are run data owned by the record just deleted.
         let _ = std::fs::remove_dir_all(self.paths.workspace_state(&workspace.id));
-        if let Some((command, checkout)) = post_remove
+        if let Some((command, checkout, configured_env)) = post_remove
             && let Err(error) = hooks::run_detached(
                 Hook::PostRemove(&checkout),
                 workspace,
                 &command,
                 &self.paths,
+                &configured_env,
             )
             .await
         {
@@ -432,7 +444,15 @@ impl Manager {
         let head_before_hooks = crate::git::run(&workspace.path, &["rev-parse", "HEAD"]).await?;
         // The hook sees the worktree intact; a failing hook retains it.
         if let Some(command) = self.workspace_hook(workspace, HookKind::PreRemove).await? {
-            hooks::run_detached(Hook::PreRemove, workspace, &command, &self.paths).await?;
+            let configured_env = self.configured_workspace_environment(workspace).await?;
+            hooks::run_detached(
+                Hook::PreRemove,
+                workspace,
+                &command,
+                &self.paths,
+                &configured_env,
+            )
+            .await?;
         }
         let release_hook = self
             .workspace_hook(workspace, HookKind::PreResourceRelease)

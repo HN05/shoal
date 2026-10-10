@@ -128,21 +128,24 @@ impl Manager {
             },
         )
         .await;
-        if let Some(command) = command
-            && let Err(error) = hooks::run_detached(
+        if let Some(command) = command {
+            let configured_env = self.configured_workspace_environment(workspace).await?;
+            if let Err(error) = hooks::run_detached(
                 Hook::PostDone(&completion),
                 workspace,
                 &command,
                 &self.paths,
+                &configured_env,
             )
             .await
-        {
-            self.notify(
-                Some(&workspace.name),
-                NotificationKind::HookFailed,
-                format!("assignment finished; {error:#}"),
-            )
-            .await;
+            {
+                self.notify(
+                    Some(&workspace.name),
+                    NotificationKind::HookFailed,
+                    format!("assignment finished; {error:#}"),
+                )
+                .await;
+            }
         }
         self.cleanup_notify.notify_one();
         Ok(completion)

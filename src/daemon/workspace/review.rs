@@ -72,17 +72,24 @@ impl Manager {
         let marks = self
             .record_marks(&workspace.id, selection, explicit, head)
             .await?;
-        if let Some(command) = command
-            && let Err(error) =
-                hooks::run_detached(Hook::PostReady(&marks), &workspace, &command, &self.paths)
-                    .await
-        {
-            self.notify(
-                Some(&workspace.name),
-                NotificationKind::HookFailed,
-                format!("marked ready for review; {error:#}"),
+        if let Some(command) = command {
+            let configured_env = self.configured_workspace_environment(&workspace).await?;
+            if let Err(error) = hooks::run_detached(
+                Hook::PostReady(&marks),
+                &workspace,
+                &command,
+                &self.paths,
+                &configured_env,
             )
-            .await;
+            .await
+            {
+                self.notify(
+                    Some(&workspace.name),
+                    NotificationKind::HookFailed,
+                    format!("marked ready for review; {error:#}"),
+                )
+                .await;
+            }
         }
         Ok(marks)
     }

@@ -742,6 +742,7 @@ fn configure_environment(process: &mut Command, paths: &Paths, plan: &ExecutionP
             &plan.scope_token,
         ))
         .env(env::EXECUTION_ID, &plan.id);
+    process.envs(&plan.environment);
 }
 
 /// Report the exit code, resending it to a reattached daemon when the

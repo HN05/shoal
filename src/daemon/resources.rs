@@ -624,11 +624,15 @@ impl Manager {
         if let Allocation::Granted(lease) = &acquisition
             && let Some(command) = hook
         {
+            let configured_env = self
+                .configured_workspace_environment(&hook_workspace)
+                .await?;
             crate::hooks::run_detached(
                 crate::hooks::Hook::PostResourceAcquire(lease),
                 &hook_workspace,
                 &command,
                 &self.paths,
+                &configured_env,
             )
             .await
             .context("resource lease retained; repeat acquire to retry the hook, or release it")?;
@@ -705,11 +709,13 @@ impl Manager {
     ) -> Result<()> {
         if let Some(command) = command {
             self.verify_worktree(workspace).await?;
+            let configured_env = self.configured_workspace_environment(workspace).await?;
             crate::hooks::run_detached(
                 crate::hooks::Hook::PreResourceRelease(lease),
                 workspace,
                 command,
                 &self.paths,
+                &configured_env,
             )
             .await
             .context("resource lease retained; retry release after fixing its hook")?;

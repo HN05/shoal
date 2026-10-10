@@ -245,6 +245,8 @@ pub struct ExecutionPlan {
     /// Absolute setup command path when the execution runs configured setup.
     pub setup_cmd: Option<PathBuf>,
     pub ports: Vec<PortReservation>,
+    #[serde(default)]
+    pub environment: std::collections::BTreeMap<String, std::ffi::OsString>,
     pub land: Option<Box<LandPlan>>,
 }
 

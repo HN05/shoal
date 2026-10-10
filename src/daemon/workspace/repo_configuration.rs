@@ -11,6 +11,7 @@ use crate::{
 };
 use anyhow::{Context, Result};
 use rusqlite::{OptionalExtension, params};
+use std::collections::BTreeMap;
 
 impl Manager {
     pub async fn repository_config(
@@ -176,5 +177,20 @@ impl Manager {
         workspace: &Workspace,
     ) -> Result<Effective> {
         config.resolve(&self.workspace_layers(workspace).await?)
+    }
+
+    pub(crate) async fn configured_workspace_environment(
+        &self,
+        workspace: &Workspace,
+    ) -> Result<BTreeMap<String, std::ffi::OsString>> {
+        let settings = self.workspace_settings(workspace).await?;
+        let repository = self.repository(&workspace.repository_id).await?;
+        let ports = self.list_ports(Some(&workspace.id)).await?;
+        Ok(crate::env::render_configured_environment(
+            &settings.env,
+            workspace,
+            crate::forge::repository::name(&repository),
+            &ports,
+        ))
     }
 }

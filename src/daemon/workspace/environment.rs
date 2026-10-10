@@ -41,6 +41,10 @@ impl Manager {
         let _guard = self.lock_repository_git(&workspace.repository_id).await;
         let workspace = self.workspace(&workspace.id).await?;
         self.verify_worktree(&workspace).await?;
+        let configured = self.workspace_settings(&workspace).await?.env;
+        let repository_name =
+            crate::forge::repository::name(&self.repository(&workspace.repository_id).await?)
+                .to_owned();
         let workspace_id = workspace.id.clone();
         let token = Uuid::new_v4().to_string();
         let paths = self.paths.clone();
@@ -49,7 +53,14 @@ impl Manager {
                 let tx = db.transaction()?;
                 store::require_ready(&tx, &workspace_id)?;
                 let ports = store::ports(&tx, Some(&workspace_id))?;
-                let values = env::workspace_environment(&workspace, &paths, &ports, &token)
+                let mut values = env::workspace_environment(&workspace, &paths, &ports, &token);
+                values.extend(env::render_configured_environment(
+                    &configured,
+                    &workspace,
+                    &repository_name,
+                    &ports,
+                ));
+                let values = values
                     .into_iter()
                     .map(|(name, value)| {
                         let value = value.into_string().ok().with_context(|| {

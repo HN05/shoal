@@ -126,6 +126,7 @@ struct RegisteredExecution {
     workspace: Workspace,
     scope_token: String,
     ports: Vec<PortReservation>,
+    environment: std::collections::BTreeMap<String, std::ffi::OsString>,
     stop: watch::Receiver<bool>,
 }
 
@@ -209,6 +210,7 @@ impl Manager {
                 scope_token: registered.scope_token,
                 setup_cmd,
                 ports: registered.ports,
+                environment: registered.environment,
                 land,
             },
             stop: registered.stop,
@@ -235,6 +237,8 @@ impl Manager {
         ensure!(workspace.path.is_dir(), "workspace directory is missing");
         self.verify_worktree(&workspace).await?;
         self.touch(&workspace.id).await;
+        let settings = self.workspace_settings(&workspace).await?;
+        let repository = self.repository(&workspace.repository_id).await?;
         let id = Uuid::new_v4().to_string();
         let scope_token = Uuid::new_v4().to_string();
         // Only commands may reattach: setup and landing hold daemon gates
@@ -261,6 +265,12 @@ impl Manager {
                 Ok(ports)
             })
             .await?;
+        let environment = crate::env::render_configured_environment(
+            &settings.env,
+            &workspace,
+            crate::forge::repository::name(&repository),
+            &ports,
+        );
         let (sender, receiver) = watch::channel(false);
         connections.insert(id.clone(), sender);
         self.issue_scope(
@@ -279,6 +289,7 @@ impl Manager {
             workspace,
             scope_token,
             ports,
+            environment,
             stop: receiver,
         })
     }
@@ -297,6 +308,7 @@ impl Manager {
                     workspace,
                     command,
                     &self.paths,
+                    &registered.environment,
                 )
                 .await?;
                 self.verify_worktree(workspace).await
