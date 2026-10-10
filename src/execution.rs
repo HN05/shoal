@@ -26,7 +26,7 @@ use tokio::{
 use crate::{
     cli::{
         client,
-        internal::{InternalCommand, internal_command},
+        internal::{Worker, internal_command},
     },
     daemon::workspace::ExecutionKind,
     env,
@@ -220,7 +220,7 @@ pub async fn launch_detached(
     let command = internal_command(
         paths,
         false,
-        InternalCommand::Detached {
+        Worker::Detached {
             workspace: &workspace.id,
             log: &log,
             agent,
@@ -348,7 +348,7 @@ async fn run_tracked(
         internal_command(
             paths,
             matches!(mode, Mode::Land { json: true, .. }),
-            InternalCommand::Land {
+            Worker::Land {
                 plan: &serde_json::to_string(land)?,
                 push: matches!(mode, Mode::Land { push: true, .. }),
             },

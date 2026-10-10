@@ -209,7 +209,7 @@ async fn created(create: Command) -> Result<CreatedResult> {
 
 async fn submit_worker(ctx: &Context, created: CreatedResult, close_when_done: bool) -> Result<()> {
     let mut argv = shoal_argv(&ctx.paths)?;
-    argv.push(internal::HERDR.into());
+    argv.extend([internal::GROUP.into(), internal::HERDR.into()]);
     if close_when_done {
         argv.push("--close-when-done".into());
     }
@@ -345,7 +345,7 @@ impl Tab {
         let argv = internal::internal_command(
             &ctx.paths,
             ctx.json,
-            internal::InternalCommand::HerdrWatch {
+            internal::Worker::HerdrWatch {
                 workspace,
                 tab: &self.id,
             },
@@ -743,12 +743,12 @@ mod tests {
 
     #[test]
     fn shell_command_quotes_only_words_that_need_it() {
-        let argv: Vec<OsString> = ["/opt/bin/shoal", "herdr-internal", "a b", "it's", ""]
+        let argv: Vec<OsString> = ["/opt/bin/shoal", "internal", "herdr", "a b", "it's", ""]
             .map(Into::into)
             .into();
         assert_eq!(
             shell_command(&argv).unwrap(),
-            r#"/opt/bin/shoal herdr-internal 'a b' 'it'\''s' ''"#
+            r#"/opt/bin/shoal internal herdr 'a b' 'it'\''s' ''"#
         );
     }
 }

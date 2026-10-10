@@ -4,12 +4,14 @@ use anyhow::Result;
 
 use crate::paths::Paths;
 
-pub const HERDR: &str = "herdr-internal";
-pub const HERDR_WATCH: &str = "herdr-watch-internal";
-pub const LAND: &str = "land-internal";
-pub const DETACHED: &str = "detached-internal";
+/// The hidden command that holds every worker below.
+pub const GROUP: &str = "internal";
+pub const HERDR: &str = "herdr";
+pub const HERDR_WATCH: &str = "herdr-watch";
+pub const LAND: &str = "land";
+pub const DETACHED: &str = "detached";
 
-pub enum InternalCommand<'a> {
+pub enum Worker<'a> {
     HerdrWatch {
         workspace: &'a str,
         tab: &'a str,
@@ -27,11 +29,7 @@ pub enum InternalCommand<'a> {
 }
 
 /// Build an argv for this executable, preserving the caller's resolved globals.
-pub fn internal_command(
-    paths: &Paths,
-    json: bool,
-    command: InternalCommand<'_>,
-) -> Result<Vec<OsString>> {
+pub fn internal_command(paths: &Paths, json: bool, worker: Worker<'_>) -> Result<Vec<OsString>> {
     let mut args = vec![
         crate::fsutil::invoked_executable()?.into_os_string(),
         "--state-dir".into(),
@@ -40,18 +38,19 @@ pub fn internal_command(
     if json {
         args.push("--json".into());
     }
-    match command {
-        InternalCommand::HerdrWatch { workspace, tab } => {
+    args.push(GROUP.into());
+    match worker {
+        Worker::HerdrWatch { workspace, tab } => {
             args.extend([HERDR_WATCH.into(), workspace.into(), tab.into()]);
         }
-        InternalCommand::Land { plan, push } => {
+        Worker::Land { plan, push } => {
             args.push(LAND.into());
             if push {
                 args.push("--push".into());
             }
             args.push(plan.into());
         }
-        InternalCommand::Detached {
+        Worker::Detached {
             workspace,
             log,
             agent,
@@ -80,24 +79,27 @@ mod tests {
     use clap::Parser;
 
     use super::*;
-    use crate::cli::{Cli, Command};
+    use crate::cli::{Cli, Command, InternalCommand};
 
-    fn parse(command: InternalCommand<'_>, json: bool) -> Command {
+    fn parse(worker: Worker<'_>, json: bool) -> InternalCommand {
         let root = tempfile::tempdir().unwrap();
         let paths = Paths::for_test(root.path().join("home with spaces"));
-        let args = internal_command(&paths, json, command).unwrap();
+        let args = internal_command(&paths, json, worker).unwrap();
         assert_eq!(args[0], std::env::current_exe().unwrap());
         let cli = Cli::try_parse_from(args).unwrap();
         assert_eq!(cli.state_dir, Some(paths.state));
         assert_eq!(cli.json, json);
-        cli.command.unwrap()
+        let Some(Command::Internal { command }) = cli.command else {
+            panic!("expected an internal command");
+        };
+        command
     }
 
     #[test]
     fn herdr_watch_round_trips_workspace_and_tab() {
         for json in [false, true] {
-            let Command::HerdrWatchInternal { workspace, tab } = parse(
-                InternalCommand::HerdrWatch {
+            let InternalCommand::HerdrWatch { workspace, tab } = parse(
+                Worker::HerdrWatch {
                     workspace: "workspace-id",
                     tab: "w1:t9",
                 },
@@ -114,10 +116,10 @@ mod tests {
     fn land_round_trips_serialized_plan_and_globals() {
         let plan = r#"{"path":"/a path/with \"quotes\""}"#;
         for (json, push) in [(false, false), (true, true)] {
-            let Command::LandInternal {
+            let InternalCommand::Land {
                 plan: parsed_plan,
                 push: parsed_push,
-            } = parse(InternalCommand::Land { plan, push }, json)
+            } = parse(Worker::Land { plan, push }, json)
             else {
                 panic!("expected land worker");
             };
@@ -138,13 +140,13 @@ mod tests {
         ];
         for json in [false, true] {
             for agent in [None, Some("happy-codex")] {
-                let Command::DetachedInternal {
+                let InternalCommand::Detached {
                     workspace,
                     log: parsed_log,
                     agent: parsed_agent,
                     command: parsed_command,
                 } = parse(
-                    InternalCommand::Detached {
+                    Worker::Detached {
                         workspace: "workspace-id",
                         log,
                         agent,

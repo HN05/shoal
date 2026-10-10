@@ -40,7 +40,7 @@ use serde_json::json;
 use crate::{
     agent::CodexMode,
     cli::{
-        Cli, Command, ConfigCommand, ShellCommand, WorkspaceScope, agents, client,
+        Cli, Command, ConfigCommand, InternalCommand, ShellCommand, WorkspaceScope, agents, client,
         context::Context,
         output::{Palette, Style},
     },
@@ -294,13 +294,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             copy,
         } => workspaces::adopt(&ctx, path, repository, copy).await,
         Command::Rename { workspace, branch } => workspaces::rename(&ctx, workspace, branch).await,
-        Command::HerdrInternal {
-            close_when_done,
-            plan,
-        } => super::herdr::worker(ctx, close_when_done, &plan).await,
-        Command::HerdrWatchInternal { workspace, tab } => {
-            super::herdr::watch(&ctx, workspace, tab).await
-        }
+        Command::Internal { command } => internal(ctx, command).await,
         Command::Setup { workspace } => workspaces::setup(&ctx, workspace).await,
         Command::Ls { ready } => workspaces::list(&ctx, ready).await,
         Command::Hold { command, scope } => holds::run(&ctx, command, scope).await,
@@ -336,7 +330,6 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             push,
             no_push,
         } => workspaces::land(&ctx, workspace, (push || no_push).then_some(push)).await,
-        Command::LandInternal { push, plan } => workspaces::land_worker(&ctx, plan, push).await,
         Command::Undone { workspace } => workspaces::undone(&ctx, workspace).await,
         Command::Notify { message, workspace } => {
             notifications::send(&ctx, workspace, message).await
@@ -424,14 +417,6 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             prompt,
             args,
         } => agents::happy(&ctx, agent, workspace, prompt, args).await,
-        Command::DetachedInternal {
-            workspace,
-            log,
-            agent,
-            command,
-        } => {
-            crate::execution::run_detached_wrapper(&ctx.paths, workspace, log, command, agent).await
-        }
         Command::Acquire { kind, workspace } => leases::acquire(&ctx, kind, workspace).await,
         Command::Release { kind, workspace } => leases::release(&ctx, kind, workspace).await,
         Command::Leases {
@@ -478,6 +463,28 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             executable,
         } => service::install(&ctx, dry_run, executable).await,
         Command::Daemon { command } => service::run(ctx, command, cli.daemon_handoff).await,
+    }
+}
+
+/// Workers Shoal starts for itself.
+async fn internal(ctx: Context, command: InternalCommand) -> Result<i32> {
+    match command {
+        InternalCommand::Herdr {
+            close_when_done,
+            plan,
+        } => super::herdr::worker(ctx, close_when_done, &plan).await,
+        InternalCommand::HerdrWatch { workspace, tab } => {
+            super::herdr::watch(&ctx, workspace, tab).await
+        }
+        InternalCommand::Land { push, plan } => workspaces::land_worker(&ctx, plan, push).await,
+        InternalCommand::Detached {
+            workspace,
+            log,
+            agent,
+            command,
+        } => {
+            crate::execution::run_detached_wrapper(&ctx.paths, workspace, log, command, agent).await
+        }
     }
 }
 

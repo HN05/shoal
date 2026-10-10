@@ -11358,7 +11358,7 @@ fn land_merges_into_main_without_a_remote_and_is_denied_to_scoped_processes() {
     let denied = fixture.run(&["exec", "worker", "--", binary, "--json", "land"]);
     assert!(!denied.status.success());
     assert!(String::from_utf8_lossy(&denied.stderr).contains("cannot land"));
-    let denied = fixture.run(&["exec", "worker", "--", binary, "land-internal", "{}"]);
+    let denied = fixture.run(&["exec", "worker", "--", binary, "internal", "land", "{}"]);
     assert!(!denied.status.success());
     assert!(String::from_utf8_lossy(&denied.stderr).contains("only an authorized landing"));
     let repo = fixture.ok(&["repo", "list"])[0]["id"].clone();
@@ -13061,7 +13061,8 @@ fn detached_agents_use_auth_wrappers_and_invalid_wrappers_prevent_launch() {
     .unwrap();
     let log = fixture.root.path().join("agent.log");
     let output = fixture.run(&[
-        "detached-internal",
+        "internal",
+        "detached",
         "detached-auth",
         "--log",
         log.to_str().unwrap(),
@@ -16278,7 +16279,8 @@ fn herdr_handoff_preserves_choices_and_literal_arguments() {
         [
             "--state-dir",
             state.to_str().unwrap(),
-            "herdr-internal",
+            "internal",
+            "herdr",
             "--close-when-done"
         ]
     );

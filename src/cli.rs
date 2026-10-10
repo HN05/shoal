@@ -333,21 +333,12 @@ pub enum Command {
         #[arg(long, overrides_with = "push")]
         no_push: bool,
     },
-    #[command(name = internal::LAND, hide = true)]
-    LandInternal {
-        #[arg(long)]
-        push: bool,
-        plan: String,
+    /// Commands Shoal itself runs, not part of the interface for people.
+    #[command(name = internal::GROUP, hide = true)]
+    Internal {
+        #[command(subcommand)]
+        command: InternalCommand,
     },
-    #[command(name = internal::HERDR, hide = true)]
-    HerdrInternal {
-        #[arg(long)]
-        close_when_done: bool,
-        #[arg(env = crate::env::HERDR_PLAN, hide_env_values = true)]
-        plan: String,
-    },
-    #[command(name = internal::HERDR_WATCH, hide = true)]
-    HerdrWatchInternal { workspace: String, tab: String },
     /// Acquire a port, simulator, resource permit, or related repository.
     Acquire {
         #[command(subcommand)]
@@ -531,17 +522,6 @@ pub enum Command {
         prompt: Option<String>,
         #[arg(last = true)]
         args: Vec<OsString>,
-    },
-    /// Internal detached execution wrapper; reports the launch on stdout, then keeps tracking it.
-    #[command(name = internal::DETACHED, hide = true)]
-    DetachedInternal {
-        workspace: String,
-        #[arg(long)]
-        log: PathBuf,
-        #[arg(long)]
-        agent: Option<String>,
-        #[arg(last = true, required = true)]
-        command: Vec<OsString>,
     },
     /// Show and change Shoal configuration.
     Config {
@@ -784,6 +764,36 @@ pub enum PortCommand {
     Release {
         name: String,
         workspace: Option<String>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum InternalCommand {
+    #[command(name = internal::LAND)]
+    Land {
+        #[arg(long)]
+        push: bool,
+        plan: String,
+    },
+    #[command(name = internal::HERDR)]
+    Herdr {
+        #[arg(long)]
+        close_when_done: bool,
+        #[arg(env = crate::env::HERDR_PLAN, hide_env_values = true)]
+        plan: String,
+    },
+    #[command(name = internal::HERDR_WATCH)]
+    HerdrWatch { workspace: String, tab: String },
+    /// Detached execution wrapper; reports the launch on stdout, then keeps tracking it.
+    #[command(name = internal::DETACHED)]
+    Detached {
+        workspace: String,
+        #[arg(long)]
+        log: PathBuf,
+        #[arg(long)]
+        agent: Option<String>,
+        #[arg(last = true, required = true)]
+        command: Vec<OsString>,
     },
 }
 
