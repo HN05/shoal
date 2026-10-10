@@ -183,6 +183,7 @@ For a separate agent account, configure forge executable wrappers and a
 ```toml
 [agent_auth]
 fj = "~/bin/fj-agent"
+fj_home = "~/.local/share/shoal-auth/fj"  # the HOME fj-agent runs fj with
 gh = "~/bin/gh-agent"
 git_profile = "agent"
 ```

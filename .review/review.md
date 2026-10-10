@@ -243,10 +243,12 @@ configured command for another agent, plus proven child
   process group; the reattach request stays accepted at every protocol version.
   Detached wrappers never write to the terminal while their command runs.
 - Agent forge wrappers are opt-in, resolve per tool through configuration layers,
-  and change only the tracked agent's PATH, inherited by descendants. Wrappers
-  own authentication; Shoal must not read tokens or switch the user's login.
-  The agent Git profile reaches only the tracked agent's environment; it never
-  writes Git config.
+  and change only the PATH of a tracked agent, inherited by descendants, and of
+  the `gh` requests Shoal makes for a workspace. Wrappers own authentication;
+  Shoal reads only fj's saved token, per request, never storing or logging it,
+  and never switches the user's login. Forge changes for a workspace use the
+  agent account except merging, which uses the user's. The agent Git profile
+  reaches only the tracked agent's environment; it never writes Git config.
 - Git profiles apply only to newly created worktrees, before setup, using
   per-worktree config; other worktrees keep their settings.
 - Root help groups built-in commands by task; configured commands are discovered

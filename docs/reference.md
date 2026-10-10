@@ -583,8 +583,9 @@ and leaves it there for you to send from the app.
 ### Agent accounts
 
 `[agent_auth]` selects user-owned executable wrappers for `fj` and `gh`, each
-an absolute or `~/` path, and a `git_profile` naming one of the global
-[Git profiles](#git-profiles), all defaulting to unset. Values follow repository/global
+an absolute or `~/` path, `fj_home`, the HOME the `fj` wrapper runs `fj` with,
+and a `git_profile` naming one of the global [Git profiles](#git-profiles), all
+defaulting to unset. Values follow repository/global
 precedence and appear in `config show`. Tracked agent shortcuts prepend a private
 directory containing these tool names to the child's PATH; nested commands inherit
 it. Missing or non-executable wrappers fail before the agent starts. The directory
@@ -593,8 +594,14 @@ user-owned. Issue lookup before launch uses the invoking CLI's login.
 
 Wrappers receive arguments unchanged and must invoke the real tool by absolute
 path to avoid recursion. They own credential selection, including overriding
-inherited token variables; Shoal never reads or copies tokens. PATH selection is
-cooperative: an absolute tool path or a shell that resets PATH bypasses it.
+inherited token variables. PATH selection is cooperative: an absolute tool path
+or a shell that resets PATH bypasses it.
+
+Issue and PR changes Shoal makes for a workspace use the agent account. On
+GitHub they run `gh api` through the `gh` wrapper. On Forgejo they use the token
+the agent's `fj` saved under `fj_home`, read for each request and passed to curl
+on stdin; with an `fj` wrapper but no `fj_home` they fail rather than use your
+login. Options left unset use your own logins, as the agent would.
 
 The agent Git profile reaches tracked agents through Git's `GIT_CONFIG_COUNT`
 variables, after any inherited entries, so it overrides every Git config file for
@@ -616,7 +623,8 @@ exec env HOME="$agent_home" XDG_DATA_HOME="$agent_home/.local/share" \
 ```
 
 Run `~/bin/fj-agent auth login` (or `auth add-token`) yourself to authenticate
-as the agent account. Only the `fj` process receives the separate home.
+as the agent account, and set `fj_home = "~/.local/share/shoal-auth/fj"` so
+Shoal finds that login. Only the `fj` process receives the separate home.
 
 For `gh`, changing `GH_CONFIG_DIR` alone can still reach your system keyring.
 A wrapper can instead obtain an agent token from your credential manager and

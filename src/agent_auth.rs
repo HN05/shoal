@@ -9,6 +9,9 @@ use std::{ffi::OsString, path::PathBuf};
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
     pub fj: Option<PathBuf>,
+    /// The HOME the agent's `fj` runs with, holding the login Shoal uses for
+    /// the agent's Forgejo API requests.
+    pub fj_home: Option<PathBuf>,
     pub gh: Option<PathBuf>,
     pub git_profile: Option<String>,
 }
@@ -69,13 +72,14 @@ impl Config {
     pub fn validate(&self) -> Result<()> {
         for (name, path) in [
             (Tool::Forgejo.program(), &self.fj),
+            ("fj_home", &self.fj_home),
             (Tool::GitHub.program(), &self.gh),
         ] {
             if let Some(path) = path {
                 ensure!(
                     (path.is_absolute() || path.starts_with("~/"))
                         && !path.as_os_str().as_encoded_bytes().contains(&0),
-                    "agent_auth.{name} must be an absolute or ~/ executable path"
+                    "agent_auth.{name} must be an absolute or ~/ path"
                 );
             }
         }

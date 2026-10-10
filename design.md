@@ -22,7 +22,10 @@ adapters retain their tool-specific setup. Opt-in forge authentication wrappers
 are user-owned executables selected per tool through repository/global config;
 tracked agents receive them on a private PATH inherited by their descendants.
 Wrappers own credentials and tool-specific environment changes; Shoal stores no
-tokens and does not switch the user's or daemon's login. An agent Git profile
+tokens and does not switch the user's or daemon's login. Forge changes Shoal
+makes for a workspace act as the agent too: through the `gh` wrapper, and on
+Forgejo with the token the agent's fj saved under the configured `fj_home`,
+because fj has no API passthrough. An agent Git profile
 selected the same way reaches tracked agents as Git's environment-level config,
 so the agent's commands use it in any repository while the worktree's config and
 other executions keep theirs. Desktop handoffs have no authentication override

@@ -69,13 +69,13 @@ impl ForgeRepo {
     /// The response body, or null for an empty one.
     pub(crate) async fn send(&self, account: &Account, request: &Request) -> Result<Value> {
         match self.kind {
-            ForgeKind::GitHub => self.github_send(request).await,
+            ForgeKind::GitHub => self.github_send(account, request).await,
             ForgeKind::Forgejo => self.forgejo_send(account, request).await,
         }
         .with_context(|| format!("{} {}", request.method.as_str(), request.endpoint))
     }
 
-    async fn github_send(&self, request: &Request) -> Result<Value> {
+    async fn github_send(&self, account: &Account, request: &Request) -> Result<Value> {
         let mut gh = Command::new(Tool::GitHub.program());
         gh.env("NO_COLOR", "1")
             .env("GH_PROMPT_DISABLED", "1")
@@ -90,6 +90,7 @@ impl ForgeRepo {
         if request.body.is_some() {
             gh.args(["--input", "-"]);
         }
+        account.apply(&mut gh);
         let body = request.body.as_ref().map(Value::to_string);
         let output = crate::subprocess::Run::new(gh)
             .input(body.unwrap_or_default())
@@ -220,17 +221,23 @@ pub(super) fn authorization(token: String) -> Vec<u8> {
     format!("header = \"Authorization: token {token}\"\n").into_bytes()
 }
 
-/// Where fj keeps its logins.
+/// Where fj keeps the user's logins.
 pub(super) fn fj_keys_path() -> Result<PathBuf> {
-    let home = crate::fsutil::home_dir()?;
-    Ok(if cfg!(target_os = "macos") {
+    let data = std::env::var_os("XDG_DATA_HOME")
+        .filter(|dir| !dir.is_empty())
+        .map(PathBuf::from);
+    Ok(fj_keys_at(&crate::fsutil::home_dir()?, data))
+}
+
+/// Where fj run with `home` keeps its logins; `data` is its XDG data
+/// directory, which Linux honors.
+pub(super) fn fj_keys_at(home: &Path, data: Option<PathBuf>) -> PathBuf {
+    if cfg!(target_os = "macos") {
         home.join("Library/Application Support/forgejo-cli.forgejo-cli/keys.json")
     } else {
-        std::env::var_os("XDG_DATA_HOME")
-            .filter(|dir| !dir.is_empty())
-            .map_or_else(|| home.join(".local/share"), PathBuf::from)
+        data.unwrap_or_else(|| home.join(".local/share"))
             .join("forgejo-cli/keys.json")
-    })
+    }
 }
 
 /// The token fj saved for exactly this host.

@@ -277,3 +277,79 @@ fn item_actions_send_rest_requests_and_record_events() {
         );
     }
 }
+
+#[test]
+fn changes_use_the_agent_account_and_merges_the_users() {
+    for forge in [Forge::GitHub, Forge::Forgejo] {
+        let config =
+            "[agent_auth]\ngh = '~/agent-gh'\nfj = '~/agent-fj'\nfj_home = '~/agent-home'\n";
+        let fixture = Fixture::new(forge, config);
+        let root = fixture.root.path();
+        for (name, body) in [
+            (
+                "agent-gh",
+                "AGENT=agent exec python3 \"$HOME/forge.py\" \"$@\"",
+            ),
+            ("agent-fj", "exit 1"),
+        ] {
+            fs::write(root.join(name), format!("#!/bin/sh\n{body}\n")).unwrap();
+            fs::set_permissions(root.join(name), fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let (agent, user) = match forge {
+            Forge::GitHub => (json!("agent"), Value::Null),
+            Forge::Forgejo => {
+                let host = fixture.web.split('/').nth(2).unwrap().to_owned();
+                let keys = if cfg!(target_os = "macos") {
+                    "agent-home/Library/Application Support/forgejo-cli.forgejo-cli/keys.json"
+                } else {
+                    "agent-home/.local/share/forgejo-cli/keys.json"
+                };
+                fixture.write_keys(&root.join(keys), &host, "agenttoken");
+                (json!("token agenttoken"), json!("token usertoken"))
+            }
+        };
+        let endpoint = "repos/team/project/pulls/8";
+        fixture.respond(json!({
+            format!("GET {endpoint}"): {"body": pull(8, "open", "Fix", &[])},
+            "POST repos/team/project/issues/8/comments": {"body": {}},
+            format!("PUT {endpoint}/merge"): {"body": {}},
+            format!("POST {endpoint}/merge"): {"body": {}},
+        }));
+        let act = |action: Value| {
+            fixture.request(json!({"item_action": {"workspace": "topic", "kind": "pr",
+                "item": "8", "action": action}}))
+        };
+        assert_eq!(
+            act(json!({"action": "comment", "body": "hi"}))["type"],
+            "item"
+        );
+        let merged = act(json!({"action": "merge", "method": "rebase", "delete_branch": false}));
+        assert_eq!(merged["type"], "item", "{merged}");
+        let auth: Vec<_> = fixture
+            .requests()
+            .into_iter()
+            .filter(|request| !request[0].as_str().unwrap().starts_with("GET"))
+            .map(|request| request[2].clone())
+            .collect();
+        assert_eq!(auth, [agent, user]);
+    }
+
+    // An fj wrapper whose home Shoal does not know cannot stand in for the agent.
+    let fixture = Fixture::new(Forge::Forgejo, "[agent_auth]\nfj = '~/agent-fj'\n");
+    fs::write(fixture.root.path().join("agent-fj"), "#!/bin/sh\n").unwrap();
+    fs::set_permissions(
+        fixture.root.path().join("agent-fj"),
+        fs::Permissions::from_mode(0o755),
+    )
+    .unwrap();
+    let refused = fixture.request(json!({"item_action": {"workspace": "topic", "kind": "pr",
+        "item": "8", "action": {"action": "close"}}}));
+    assert!(
+        refused["data"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("agent_auth.fj_home"),
+        "{refused}"
+    );
+    assert!(fixture.requests().is_empty());
+}

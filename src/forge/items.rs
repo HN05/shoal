@@ -30,8 +30,13 @@ impl Manager {
             ItemKind::Issue => forge.issue(&input)?,
             ItemKind::Pr => forge.pull(&input)?,
         };
+        // Merging is the user's decision; every other change is the agent's.
+        let account = match action {
+            Action::Merge { .. } => Account::user(),
+            _ => self.agent_account(&workspace).await?,
+        };
         let item = forge
-            .act(&Account::user(), kind, number, &action)
+            .act(&account, kind, number, &action)
             .await
             .with_context(|| format!("could not {} {url}", action.name()))?;
         let id = workspace.id.clone();
@@ -40,6 +45,13 @@ impl Manager {
             .run(move |db| events::record_item(db, &id, kind, &url, name))
             .await?;
         Ok(item)
+    }
+}
+
+impl Manager {
+    pub(super) async fn agent_account(&self, workspace: &Workspace) -> Result<Account> {
+        let settings = self.workspace_settings(workspace).await?;
+        Account::agent(&settings.agent_auth, &self.paths, &self.config().git)
     }
 }
 
