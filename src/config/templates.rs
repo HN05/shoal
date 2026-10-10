@@ -24,6 +24,7 @@ const AGENT_RETIRED: &[&str] = &[
     include_str!("templates/retired/agent-8.md"),
     include_str!("templates/retired/agent-9.md"),
     include_str!("templates/retired/agent-10.md"),
+    include_str!("templates/retired/agent-11.md"),
 ];
 
 pub fn read(directory: &Path, name: &str) -> Result<Option<String>> {

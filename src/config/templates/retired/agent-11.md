@@ -14,8 +14,7 @@ PRs do not end the assignment unless `[done] automatic` is enabled; then run
 work, and `shoal hold release --name more-work` just before `shoal done`.
 Finish every assignment with these steps:
 
-1. Open the PR with `shoal pr open`, which pushes the branch and links the PR.
-   Link a PR opened another way with `shoal link pr <number-or-url>`.
+1. After opening a PR, run `shoal link pr <number-or-url>`.
 2. While watched PRs are open, run `shoal watch pr`. Handle the reported
    comments, reviews, CI results and merge conflicts, then wait again; a timeout
    means no update. When a PR is ready to merge, run `shoal ready`, and again
