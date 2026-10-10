@@ -137,8 +137,9 @@ once `disk.cleanup_free_gib` is available; otherwise free disk space, then run
 `shoal resume`. A filesystem whose reading fails is skipped, so it removes and
 stops nothing, and no agent restores until every reading succeeds.
 
-Before stopping anything, Shoal warns the agents. While memory or CPU is past
-its `[overload.warning]` threshold and that protection is enabled, the daemon queues an [agent message](#agent-messages) for each
+Before stopping anything, Shoal warns the agents. While memory, CPU or free
+disk space is past its `[overload.warning]` threshold and that protection is
+enabled, the daemon queues an [agent message](#agent-messages) for each
 workspace with a running agent, naming the threshold and asking it to reduce
 load. CPU must stay above its warning threshold for `cpu_sustained_seconds`.
 Each workspace hears about each signal at most once per `repeat_minutes`, and
@@ -173,6 +174,7 @@ enabled = true                 # Message running agents before a stop
 memory_used_percent = 90       # Linux; macOS warns at native warning pressure
 cpu_used_percent = 80
 cpu_sustained_seconds = 60
+disk_free_gib = 10
 repeat_minutes = 30            # Least time between repeats per signal and workspace
 
 [overload.recovery]

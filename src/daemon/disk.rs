@@ -14,6 +14,7 @@ use tokio::time::Instant;
 use super::{
     events::EventCause,
     notifications::NotificationKind,
+    warnings::{self, Signal, Warnings},
     workspace::{Manager, Protection},
 };
 use crate::daemon::log;
@@ -43,6 +44,7 @@ impl Filesystem {
 #[derive(Default)]
 pub(super) struct Monitor {
     last_cleanup: Option<Instant>,
+    warnings: Warnings,
 }
 
 pub(super) async fn run(manager: Arc<Manager>) {
@@ -85,6 +87,17 @@ impl Monitor {
                 .iter()
                 .all(|filesystem| filesystem.free >= settings.cleanup_free_bytes());
         manager.publish_disk_reading(recovered.then_some(generation));
+        if config.overload.warning.enabled
+            && let Some(lowest) = low
+                .iter()
+                .filter(|filesystem| filesystem.free < config.overload.warning.disk_free_bytes())
+                .min_by_key(|filesystem| filesystem.free)
+        {
+            let message = warnings::disk(&config.overload, &lowest.describe());
+            self.warnings
+                .warn(manager, now, Signal::Disk, &message)
+                .await;
+        }
         low.retain(|filesystem| filesystem.free < settings.cleanup_free_bytes());
         if self
             .last_cleanup
@@ -416,5 +429,68 @@ mod tests {
             .await
             .unwrap();
         assert!(!recovered(&manager));
+    }
+
+    #[tokio::test]
+    async fn low_space_warns_running_agents_before_cleanup_starts() {
+        let (root, manager) = manager().await;
+        let checkout = repository(root.path(), "repo");
+        let repo = manager
+            .register_repository(checkout.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        let workspace = manager
+            .create_workspace(&repo.id, "agent".into(), None, None, None)
+            .await
+            .unwrap();
+        let execution = manager
+            .begin_execution(
+                &workspace.id,
+                None,
+                crate::daemon::workspace::ExecutionKind::Command,
+                None,
+            )
+            .await
+            .unwrap();
+        manager
+            .track_agent(
+                &execution.plan.id,
+                "claude",
+                &workspace.id,
+                &workspace.name,
+                false,
+                Duration::ZERO,
+            )
+            .await;
+        let config = manager.config();
+        let above_warning = config.overload.warning.disk_free_bytes();
+        let mut monitor = Monitor::default();
+        monitor
+            .check(&manager, Instant::now(), |_: &Path| Ok(above_warning))
+            .await
+            .unwrap();
+        assert!(
+            manager
+                .agent_messages(&workspace.id)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        let low = above_warning - 1;
+        monitor
+            .check(&manager, Instant::now(), |_: &Path| Ok(low))
+            .await
+            .unwrap();
+        let messages = manager.agent_messages(&workspace.id).await.unwrap();
+        assert_eq!(messages.len(), 1);
+        assert!(
+            messages[0]
+                .message
+                .starts_with("Free disk space is low: 10.0 GiB available at "),
+            "{}",
+            messages[0].message
+        );
+        // Space above the cleanup threshold removes nothing.
+        assert_eq!(manager.list_workspaces().await.unwrap().len(), 1);
     }
 }

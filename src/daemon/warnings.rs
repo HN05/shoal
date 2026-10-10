@@ -10,6 +10,7 @@ use crate::{config::overload::Overload, daemon::log};
 pub(super) enum Signal {
     Memory,
     Cpu,
+    Disk,
 }
 
 /// When each workspace was last warned about each signal.
@@ -66,6 +67,14 @@ pub(super) fn cpu(settings: &Overload) -> String {
         settings.warning.cpu_sustained_seconds,
         settings.cpu.sustained_seconds,
         settings.cpu.used_percent,
+    )
+}
+
+/// `available` describes the filesystem with the least free space.
+pub(super) fn disk(settings: &Overload, available: &str) -> String {
+    format!(
+        "Free disk space is low: {available}; Shoal stops running agents and tracked commands below {} GiB. Delete build output and caches you no longer need, and avoid large downloads.",
+        settings.disk.stop_free_gib,
     )
 }
 
@@ -135,7 +144,12 @@ mod tests {
             .warn(&manager, later, Signal::Memory, &memory(&settings))
             .await;
         warnings
-            .warn(&manager, later, Signal::Cpu, &cpu(&settings))
+            .warn(
+                &manager,
+                later,
+                Signal::Disk,
+                &disk(&settings, "1.0 GiB available at /"),
+            )
             .await;
         assert_eq!(count("first").await, 1);
         assert_eq!(count("second").await, 2);
@@ -151,7 +165,12 @@ mod tests {
     #[test]
     fn warnings_are_single_lines_within_the_message_limit() {
         let settings = Overload::default();
-        for message in [memory(&settings), cpu(&settings)] {
+        let path = format!("/{}", "x".repeat(200));
+        for message in [
+            memory(&settings),
+            cpu(&settings),
+            disk(&settings, &format!("3.2 GiB available at {path}")),
+        ] {
             crate::validate::message(&message).unwrap();
         }
     }

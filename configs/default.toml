@@ -120,6 +120,7 @@ enabled = true
 memory_used_percent = 90
 cpu_used_percent = 80
 cpu_sustained_seconds = 60
+disk_free_gib = 10
 # Least time between repeated warnings about one signal to one workspace.
 repeat_minutes = 30
 

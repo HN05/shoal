@@ -126,6 +126,7 @@ pub struct Warning {
     pub memory_used_percent: u8,
     pub cpu_used_percent: u8,
     pub cpu_sustained_seconds: u64,
+    pub disk_free_gib: u64,
     /// The least time between warnings about one signal to one workspace.
     pub repeat_minutes: u64,
 }
@@ -137,8 +138,15 @@ impl Default for Warning {
             memory_used_percent: 90,
             cpu_used_percent: 80,
             cpu_sustained_seconds: 60,
+            disk_free_gib: 10,
             repeat_minutes: 30,
         }
+    }
+}
+
+impl Warning {
+    pub fn disk_free_bytes(&self) -> u64 {
+        self.disk_free_gib << 30
     }
 }
 
@@ -194,6 +202,10 @@ impl Overload {
             "overload.warning.cpu_sustained_seconds",
         )?;
         ensure!(
+            (1..=MAX_FREE_GIB).contains(&self.warning.disk_free_gib),
+            "overload.warning.disk_free_gib must be between 1 and {MAX_FREE_GIB}"
+        );
+        ensure!(
             (1..=1440).contains(&self.warning.repeat_minutes),
             "overload.warning.repeat_minutes must be between 1 and 1440"
         );
@@ -241,6 +253,7 @@ mod tests {
             "[warning]\nmemory_used_percent = 100",
             "[warning]\ncpu_used_percent = 0",
             "[warning]\ncpu_sustained_seconds = 0",
+            "[warning]\ndisk_free_gib = 0",
             "[warning]\nrepeat_minutes = 0",
         ] {
             let config: Overload = toml::from_str(text).unwrap();
