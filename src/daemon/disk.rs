@@ -71,6 +71,8 @@ impl Monitor {
         let config = manager.config();
         let settings = &config.overload.disk;
         if !settings.enabled {
+            // Re-enabling waits for a fresh reading before recovery.
+            manager.disk_space_recovered.store(false, Ordering::Relaxed);
             return Ok(());
         }
         let workspaces = manager.list_workspaces().await?;
@@ -108,7 +110,8 @@ impl Monitor {
 
 /// One reading per filesystem holding daemon state or a workspace, and whether
 /// every reading succeeded. A failed reading never authorizes removal, so that
-/// filesystem is skipped.
+/// filesystem is skipped. A deleted workspace awaits cleanup and is skipped
+/// without failing the sample; daemon state must be readable.
 fn sample(
     state: &Path,
     workspaces: &[Workspace],
@@ -117,8 +120,9 @@ fn sample(
     let mut filesystems: Vec<Filesystem> = Vec::new();
     let mut complete = true;
     let paths = std::iter::once(state).chain(workspaces.iter().map(|w| w.path.as_path()));
-    for path in paths {
+    for (index, path) in paths.enumerate() {
         let Ok(device) = path.metadata().map(|metadata| metadata.dev()) else {
+            complete &= index != 0;
             continue;
         };
         if filesystems.iter().any(|f| f.device == device) {
@@ -350,7 +354,13 @@ mod tests {
             .unwrap();
         assert!(!recovered(&manager));
 
-        // Disabled protection reads nothing.
+        // Unreadable daemon state is never a healthy reading.
+        let (filesystems, complete) =
+            sample(&root.path().join("missing"), &[], |_: &Path| Ok(u64::MAX));
+        assert!(filesystems.is_empty() && !complete);
+
+        // Disabled protection reads nothing and forgets its last reading.
+        manager.disk_space_recovered.store(true, Ordering::Relaxed);
         let config = crate::config::Config::path(&manager.paths);
         std::fs::create_dir_all(config.parent().unwrap()).unwrap();
         std::fs::write(&config, "[overload.disk]\nenabled = false\n").unwrap();
@@ -361,5 +371,6 @@ mod tests {
             })
             .await
             .unwrap();
+        assert!(!recovered(&manager));
     }
 }
