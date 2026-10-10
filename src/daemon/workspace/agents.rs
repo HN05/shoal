@@ -402,11 +402,11 @@ impl Manager {
             ..
         } = agent;
         let recovery = if !agent.recover {
-            "automatic recovery unavailable: configure [agent_resume] with a session restore command"
+            "automatic recovery unavailable: configure [agent_resume] with a session restore command".into()
         } else if !self.config().overload.recovery.enabled {
-            "automatic recovery disabled by overload.recovery.enabled"
+            "automatic recovery disabled by overload.recovery.enabled".into()
         } else {
-            &format!(
+            format!(
                 "automatic session restore waits until {}",
                 protection.resumes_when
             )
