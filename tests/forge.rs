@@ -312,7 +312,7 @@ fn changes_use_the_agent_account_and_merges_the_users() {
         fixture.respond(json!({
             format!("GET {endpoint}"): {"body": pull(8, "open", "Fix", &[])},
             "POST repos/team/project/issues/8/comments": {"body": {}},
-            format!("PUT {endpoint}/merge"): {"body": {}},
+            format!("PUT {endpoint}/merge"): {"body": {"merged": true}},
             format!("POST {endpoint}/merge"): {"body": {}},
         }));
         let act = |action: Value| {
@@ -633,4 +633,49 @@ fn pr_open_refuses_unverified_or_switched_worktrees_before_pushing() {
     fs::write(&marker, owner).unwrap();
     git(path, &["switch", "-q", "--detach"]);
     refused("not on its recorded branch");
+}
+
+#[test]
+fn an_unconfirmed_github_merge_fails_and_keeps_the_branch() {
+    let fixture = Fixture::new(Forge::GitHub, "");
+    let endpoint = "repos/team/project/pulls/8";
+    fixture.respond(json!({
+        format!("GET {endpoint}"): {"body": pull(8, "open", "Fix", &[])},
+        format!("PUT {endpoint}/merge"): {"body": {"merged": false,
+            "message": "Head branch was modified"}},
+        "DELETE repos/team/project/git/refs/heads/topic": {"status": 204},
+    }));
+    let output = fixture.run(&[
+        "pr",
+        "merge",
+        "8",
+        "--workspace",
+        "topic",
+        "--method",
+        "squash",
+        "--delete-branch",
+    ]);
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("Head branch was modified"),
+        "{output:?}"
+    );
+    let sent: Vec<_> = fixture
+        .requests()
+        .into_iter()
+        .map(|request| request[0].clone())
+        .collect();
+    assert_eq!(
+        sent,
+        [
+            json!(format!("GET {endpoint}")),
+            json!(format!("PUT {endpoint}/merge"))
+        ]
+    );
+    assert!(
+        !fixture
+            .events()
+            .iter()
+            .any(|event| event["kind"] == "item_changed")
+    );
 }

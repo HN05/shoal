@@ -44,6 +44,8 @@ pub(crate) struct Request {
     pub method: HttpMethod,
     pub endpoint: String,
     pub body: Option<Value>,
+    /// A response field that must be `true` for the request to have worked.
+    pub confirm: Option<&'static str>,
 }
 
 impl Request {
@@ -56,7 +58,13 @@ impl Request {
             method,
             endpoint,
             body,
+            confirm: None,
         }
+    }
+
+    pub fn confirming(mut self, field: &'static str) -> Self {
+        self.confirm = Some(field);
+        self
     }
 }
 
@@ -68,10 +76,23 @@ impl ForgeRepo {
 
     /// The response body, or null for an empty one.
     pub(crate) async fn send(&self, account: &Account, request: &Request) -> Result<Value> {
-        match self.kind {
-            ForgeKind::GitHub => self.github_send(account, request).await,
-            ForgeKind::Forgejo => self.forgejo_send(account, request).await,
+        async {
+            let body = match self.kind {
+                ForgeKind::GitHub => self.github_send(account, request).await,
+                ForgeKind::Forgejo => self.forgejo_send(account, request).await,
+            }?;
+            if let Some(field) = request.confirm {
+                ensure!(
+                    body[field] == true,
+                    "{}",
+                    body["message"]
+                        .as_str()
+                        .unwrap_or("the forge did not confirm the change")
+                );
+            }
+            Ok(body)
         }
+        .await
         .with_context(|| format!("{} {}", request.method.as_str(), request.endpoint))
     }
 

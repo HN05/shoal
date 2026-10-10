@@ -167,11 +167,15 @@ impl ForgeRepo {
                 let pr = item.pr.as_ref().context("only PRs merge")?;
                 match self.kind {
                     ForgeKind::GitHub => {
-                        let mut requests = vec![Request::new(
-                            HttpMethod::Put,
-                            pulls("merge"),
-                            Some(json!({ "merge_method": method.as_str() })),
-                        )];
+                        // GitHub can answer success without merging.
+                        let mut requests = vec![
+                            Request::new(
+                                HttpMethod::Put,
+                                pulls("merge"),
+                                Some(json!({ "merge_method": method.as_str() })),
+                            )
+                            .confirming("merged"),
+                        ];
                         // A fork's branch is not this repository's to delete.
                         if *delete_branch
                             && current.head_repository.as_deref() == Some(self.path.as_str())
@@ -475,6 +479,10 @@ mod tests {
                     Value::Null
                 ),
             ]
+        );
+        assert_eq!(
+            github.plan(&pr(&github, false, &[]), &merge).unwrap()[0].confirm,
+            Some("merged")
         );
         let mut fork = pr(&github, false, &[]);
         fork.head_repository = Some("someone/repo".into());
