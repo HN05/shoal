@@ -63,6 +63,18 @@ pub struct Workspace {
     /// Workspaces that record this one as their base.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub stacked_workspaces: Vec<WorkspaceRef>,
+    /// The workspaces attempting the same task as this one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub swarm: Option<Swarm>,
+}
+
+/// Workspaces of one repository that attempt the same task until one is picked.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Swarm {
+    /// The task the swarm's branches are named after.
+    pub task: String,
+    /// The swarm's other workspaces.
+    pub workspaces: Vec<WorkspaceRef>,
 }
 
 /// Another workspace a record refers to, with its current name and branch.
@@ -138,6 +150,7 @@ impl Workspace {
             agent_state: None,
             base_workspace: None,
             stacked_workspaces: Vec::new(),
+            swarm: None,
             links: WorkspaceLinks::default(),
             running: false,
         }

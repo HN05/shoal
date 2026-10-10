@@ -18,6 +18,7 @@ mod repo_removal;
 pub(crate) mod review;
 mod stack;
 mod status;
+mod swarm;
 
 pub(crate) use agents::Protection;
 pub use executions::{ExecutionKind, StopRequest};
@@ -41,7 +42,11 @@ use std::{collections::HashMap, fs, sync::Arc};
 use tokio::sync::{Mutex, OwnedMutexGuard, RwLock, watch};
 
 pub(crate) enum WorkspaceSource {
-    New(Option<String>),
+    /// A new branch from an optional base ref, attempting a swarm's task.
+    New {
+        base: Option<String>,
+        swarm: Option<String>,
+    },
     /// An existing branch, with an optional base ref overriding the default branch.
     Existing(crate::git::existing_branch::Branch, Option<String>),
 }
@@ -315,18 +320,43 @@ impl Manager {
         git_profile: Option<&str>,
         path: Option<std::path::PathBuf>,
     ) -> Result<Workspace> {
+        let source = WorkspaceSource::New { base, swarm: None };
+        self.create_new_workspace(repository, name, source, git_profile, path)
+            .await
+    }
+
+    /// Create a workspace that joins the repository's swarm for `task`.
+    pub async fn create_swarm_workspace(
+        &self,
+        repository: impl Into<crate::forge::repository::Selector>,
+        name: String,
+        base: Option<String>,
+        git_profile: Option<&str>,
+        path: Option<std::path::PathBuf>,
+        task: String,
+    ) -> Result<Workspace> {
+        ensure!(!task.trim().is_empty(), "a swarm needs a task name");
+        let source = WorkspaceSource::New {
+            base,
+            swarm: Some(task),
+        };
+        self.create_new_workspace(repository, name, source, git_profile, path)
+            .await
+    }
+
+    async fn create_new_workspace(
+        &self,
+        repository: impl Into<crate::forge::repository::Selector>,
+        name: String,
+        source: WorkspaceSource,
+        git_profile: Option<&str>,
+        path: Option<std::path::PathBuf>,
+    ) -> Result<Workspace> {
         let (repo, _guard) = self.lock_repository(repository).await?;
         git::check_branch_name(Some(&repo.path), &name).await?;
         let branch = self.available_branch(&repo, &name).await?;
-        self.create_branch_workspace(
-            &repo,
-            name,
-            branch,
-            WorkspaceSource::New(base),
-            git_profile,
-            path,
-        )
-        .await
+        self.create_branch_workspace(&repo, name, branch, source, git_profile, path)
+            .await
     }
 
     // The caller holds the per-repository Git gate through materialization.
@@ -342,9 +372,9 @@ impl Manager {
         if let Some(name) = git_profile {
             self.config().git.profile(name)?;
         }
-        let (base, existing) = match source {
-            WorkspaceSource::New(base) => (base, None),
-            WorkspaceSource::Existing(branch, base) => (base, Some(branch)),
+        let (base, existing, swarm) = match source {
+            WorkspaceSource::New { base, swarm } => (base, None, swarm),
+            WorkspaceSource::Existing(branch, base) => (base, Some(branch), None),
         };
         let base_branch = match &base {
             Some(base) => stack::base_branch(&repo.path, base).await?,
@@ -370,7 +400,7 @@ impl Manager {
             "workspace path already exists: {}",
             workspace.path.display()
         );
-        self.insert_workspace(workspace.clone(), base_branch)
+        self.insert_workspace(workspace.clone(), base_branch, swarm)
             .await?;
         let result = self
             .materialize_worktree(repo, &workspace, base, existing, git_profile)
@@ -396,8 +426,14 @@ impl Manager {
         self.workspace(&workspace.id).await
     }
 
-    /// Record a new workspace, stacked on the workspace that owns `base_branch`.
-    async fn insert_workspace(&self, record: Workspace, base_branch: Option<String>) -> Result<()> {
+    /// Record a new workspace, stacked on the workspace that owns
+    /// `base_branch` and in the swarm for the `swarm` task.
+    async fn insert_workspace(
+        &self,
+        record: Workspace,
+        base_branch: Option<String>,
+        swarm: Option<String>,
+    ) -> Result<()> {
         self.store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
@@ -429,7 +465,7 @@ impl Manager {
                     None => None,
                 };
                 tx.execute(
-                    "INSERT INTO workspaces (id,repository_id,name,path,branch,state,git_dir,git_dir_id,base_commit,base_ref,setup_finished,observed_branch,base_workspace_id) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?5,?12)",
+                    "INSERT INTO workspaces (id,repository_id,name,path,branch,state,git_dir,git_dir_id,base_commit,base_ref,setup_finished,observed_branch,base_workspace_id,swarm) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?5,?12,?13)",
                     params![
                         record.id,
                         record.repository_id,
@@ -443,6 +479,7 @@ impl Manager {
                         record.base_ref,
                         record.state == WorkspaceState::Ready,
                         base_workspace,
+                        swarm,
                     ],
                 )?;
                 tx.execute(
@@ -762,6 +799,7 @@ fn load_details(db: &rusqlite::Connection, workspace: &mut Workspace) -> Result<
     workspace.review = review::list(db, &workspace.id)?;
     workspace.agent_state = agent_state::get(db, &workspace.id)?;
     stack::load(db, workspace)?;
+    swarm::load(db, workspace)?;
     workspace.links = store::workspace_links(db, &workspace.id)?;
     workspace.running = store::exists(
         db,

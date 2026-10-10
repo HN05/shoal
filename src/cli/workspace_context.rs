@@ -61,6 +61,7 @@ mod tests {
             agent_state: None,
             base_workspace: None,
             stacked_workspaces: Vec::new(),
+            swarm: None,
             links: crate::model::WorkspaceLinks::default(),
             running: false,
             id: format!("id-{name}"),

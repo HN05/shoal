@@ -705,6 +705,7 @@ async fn open_add_workspace(
                 name,
                 base,
                 git_profile,
+                swarm: None,
             },
         )
         .await?;

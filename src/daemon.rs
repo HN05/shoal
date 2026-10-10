@@ -435,11 +435,26 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             name,
             base,
             git_profile,
-        } => Body::Workspace(
-            manager
-                .create_workspace(&repository, name, base, git_profile.as_deref(), path)
-                .await?,
-        ),
+            swarm,
+        } => Body::Workspace(match swarm {
+            Some(task) => {
+                manager
+                    .create_swarm_workspace(
+                        &repository,
+                        name,
+                        base,
+                        git_profile.as_deref(),
+                        path,
+                        task,
+                    )
+                    .await?
+            }
+            None => {
+                manager
+                    .create_workspace(&repository, name, base, git_profile.as_deref(), path)
+                    .await?
+            }
+        }),
         Method::AdoptWorkspace {
             repository,
             path,

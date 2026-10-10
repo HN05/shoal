@@ -147,11 +147,12 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
         "workspace_completed_again",
         "workspace_undone",
         "workspace_base_removed",
+        "workspace_swarm_removed",
     ] {
         db.execute_batch(&format!("DROP TRIGGER {trigger};"))?;
     }
     db.execute_batch("DROP TABLE workspace_events; ALTER TABLE workspaces DROP COLUMN observed_branch; ALTER TABLE workspace_completion DROP COLUMN cause;")?;
-    // Migrations 31 to 35 add these columns again when the emulated database
+    // Migrations 31 to 38 add these columns again when the emulated database
     // upgrades.
     db.execute_batch("ALTER TABLE workspace_holds DROP COLUMN from_continuation;")?;
     db.execute_batch("ALTER TABLE executions DROP COLUMN scope_token;")?;
@@ -159,5 +160,6 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
         "DROP INDEX workspaces_base; ALTER TABLE workspaces DROP COLUMN base_workspace_id;",
     )?;
     db.execute_batch("ALTER TABLE workspace_issue DROP COLUMN title;")?;
+    db.execute_batch("DROP INDEX workspaces_swarm; ALTER TABLE workspaces DROP COLUMN swarm;")?;
     Ok(())
 }

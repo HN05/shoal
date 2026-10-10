@@ -168,6 +168,9 @@ pub enum Method {
         name: String,
         base: Option<String>,
         git_profile: Option<String>,
+        /// The task of the swarm the workspace joins.
+        #[serde(default)]
+        swarm: Option<String>,
     },
     AdoptWorkspace {
         repository: crate::forge::repository::Selector,

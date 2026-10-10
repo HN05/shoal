@@ -111,7 +111,7 @@ pub(super) fn load(db: &Connection, workspace: &mut Workspace) -> Result<()> {
     Ok(())
 }
 
-fn row(row: &rusqlite::Row<'_>) -> rusqlite::Result<WorkspaceRef> {
+pub(super) fn row(row: &rusqlite::Row<'_>) -> rusqlite::Result<WorkspaceRef> {
     Ok(WorkspaceRef {
         id: row.get(0)?,
         name: row.get(1)?,
