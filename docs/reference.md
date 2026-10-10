@@ -404,8 +404,8 @@ prompted to report findings, not to change files, commit, push, or post.
 `shoal review <pr-url>` or `shoal review --pr <number-or-url>` looks up the PR
 with your `gh`/`fj` login and reviews it the same way in the workspace that owns
 its head branch, fast-forwarded to the pushed head and refused when diverged, or
-opens one from origin whose base is the PR's refreshed `origin/<base>` and links
-the PR as `shoal add` does; fork PRs are refused. `--repo` selects the PR's repository,
+opens one from origin whose base is the PR's refreshed `origin/<base>`. Either
+workspace links the PR as `shoal add` does; fork PRs are refused. `--repo` selects the PR's repository,
 which otherwise follows `shoal add`.
 `shoal review <issue-url>` or `shoal review --issue <number-or-url>` has an agent
 refine the issue before implementation: it checks the issue against the code and

@@ -2535,10 +2535,13 @@ fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
         git(&author, &["rev-parse", "stack/base"])
     );
 
+    // Reviewing in the owner links the PR as well.
+    fixture.ok(&["unlink", "pr", url, "--workspace", "stack-top"]);
     commit("more");
     git(&author, &["push", "origin", "stack/top"]);
     let output = review(&["https://forge.example/team/project/pulls/7", "--no-post"]);
     assert!(output.status.success(), "{output:?}");
+    assert_eq!(linked_prs(), serde_json::json!([url]));
     assert!(
         String::from_utf8_lossy(&output.stdout).contains("or comment on the forge unless asked"),
         "{output:?}"

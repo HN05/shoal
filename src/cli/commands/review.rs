@@ -197,6 +197,7 @@ async fn pull_request(
     let workspace = match owner {
         Some(workspace) => {
             update_to_head(&repo.path, &workspace, &pull.head).await?;
+            let workspace = super::workspaces::link_pull(ctx, workspace, pull.url.clone()).await?;
             eprintln!(
                 "Reviewing PR #{} in workspace {}",
                 pull.number, workspace.name
