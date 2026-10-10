@@ -484,8 +484,10 @@ exit 0 once the agent exits or you detach. A launch without a terminal, inside a
 zmx session (`ZMX_SESSION` is set), or in a Herdr pane with `herdr.enabled` runs
 in place.
 
-Sessions are named after the workspace, suffixed `-2`, `-3`, ... when the name
-is in use, and labelled `shoal.workspace=<id>`; reattach with `zmx attach <name>`.
+`shoal attach [workspace]` reattaches to the workspace's session, with a picker
+or `--session <name>` when it has several. Sessions are named after the
+workspace, suffixed `-2`, `-3`, ... when the name is in use, and labelled
+`shoal.workspace=<id>`, so `zmx ls` and `zmx attach` work as well.
 
 Inside Herdr (`HERDR_ENV=1`), interactive `shoal add` looks up
 the issue and resolves repository, branch, and agent choices in the caller's pane,

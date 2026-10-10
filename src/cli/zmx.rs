@@ -33,6 +33,20 @@ pub struct Session {
     pub clients: u32,
 }
 
+impl Session {
+    /// The name, agent, and whether a terminal is attached.
+    pub fn label(&self) -> String {
+        let mut label = self.name.clone();
+        if let Some(agent) = &self.agent {
+            label.push_str(&format!("  {agent}"));
+        }
+        if self.clients > 0 {
+            label.push_str("  attached");
+        }
+        label
+    }
+}
+
 /// Whether a terminal agent launch runs in a zmx session: it needs a terminal
 /// to attach, never nests, and leaves an enabled Herdr pane to Herdr, which
 /// reads the agent's state from the process in the pane.
@@ -75,6 +89,17 @@ pub(in crate::cli) async fn run(
         .env_remove(env::SHELL_DIRECTIVE);
     let status = zmx.status().await.context("run zmx")?;
     finish(workspace, &name, status).await
+}
+
+/// Attach this terminal to `session`, reporting a detach as `run` does.
+pub(in crate::cli) async fn attach(workspace: &Workspace, session: &str) -> Result<i32> {
+    ensure_program("attach", Tool::Zmx.program())?;
+    let status = Command::new(Tool::Zmx.program())
+        .args(["attach", session])
+        .status()
+        .await
+        .context("run zmx")?;
+    finish(workspace, session, status).await
 }
 
 async fn finish(workspace: &Workspace, name: &str, status: ExitStatus) -> Result<i32> {

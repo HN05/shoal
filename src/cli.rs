@@ -191,6 +191,16 @@ pub enum Command {
         #[arg(long)]
         discard: bool,
     },
+    /// Attach this terminal to a workspace's agent session; Ctrl-\ detaches.
+    ///
+    /// Terminal agents run in zmx sessions that keep running after their
+    /// terminal closes or detaches.
+    Attach {
+        workspace: Option<String>,
+        /// Session to attach when the workspace has several.
+        #[arg(long)]
+        session: Option<String>,
+    },
     /// Run or retry workspace setup.
     Setup { workspace: Option<String> },
     /// Send the user a notification about a workspace without marking it done.

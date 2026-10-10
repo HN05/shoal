@@ -17299,3 +17299,68 @@ fn terminal_agents_run_tracked_in_a_labelled_zmx_session_unless_nested_or_detach
         "persist tracked\npersist-2 tracked\nouter tracked\nnone tracked\n"
     );
 }
+
+#[test]
+fn attach_selects_a_session_of_the_workspace() {
+    let fixture = Fixture::new();
+    let workspace = fixture.add("persist");
+    let other = fixture.add("other");
+    let home = fixture.root.path();
+    let attached = || {
+        zmx_calls(&fixture)
+            .into_iter()
+            .rfind(|call| call[0] == "attach")
+            .unwrap()
+    };
+    let (output, transcript) = fixture.interactive(&["attach", "persist"], "");
+    assert!(!output.status.success());
+    assert!(
+        transcript.contains("persist has no agent sessions"),
+        "{transcript}"
+    );
+
+    let session = |name: &str, workspace: &Value| {
+        format!(
+            "  name={name}\tpid=1\tclients=0\tshoal.agent=claude\tshoal.workspace={}\n",
+            workspace["id"].as_str().unwrap()
+        )
+    };
+    fs::write(
+        home.join("zmx-sessions"),
+        session("persist", &workspace) + &session("other", &other),
+    )
+    .unwrap();
+    let (output, transcript) = fixture.interactive(&["attach", "persist"], "");
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert_eq!(attached(), ["attach", "persist"]);
+    // The fake session is still listed afterwards, as after a detach.
+    assert!(
+        transcript.contains("detached from persist; run `shoal attach persist` to return"),
+        "{transcript}"
+    );
+
+    fs::write(
+        home.join("zmx-sessions"),
+        session("persist", &workspace) + &session("persist-2", &workspace),
+    )
+    .unwrap();
+    let (output, rows) = fixture.pick(&["attach", "persist"], "1", "");
+    assert!(output.status.success(), "{output:?}");
+    assert!(rows.contains("persist-2  claude"), "{rows}");
+    assert_eq!(attached(), ["attach", "persist-2"]);
+    let (output, transcript) =
+        fixture.interactive(&["attach", "persist", "--session", "persist"], "");
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert_eq!(attached(), ["attach", "persist"]);
+    let (output, transcript) =
+        fixture.interactive(&["attach", "persist", "--session", "other"], "");
+    assert!(!output.status.success());
+    assert!(
+        transcript.contains("persist has no session other"),
+        "{transcript}"
+    );
+
+    let output = fixture.run(&["attach", "persist"]);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("attach requires a terminal"));
+}

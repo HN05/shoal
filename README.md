@@ -122,6 +122,7 @@ shoal run check fix-login      # With [commands] check = ["cargo", "test"] in co
 shoal run                     # List configured commands, arguments, and source layers
 shoal claude fix-login         # Run Claude Code
 shoal codex fix-login --app    # Open in the Codex desktop app
+shoal attach fix-login         # Reattach to the workspace's agent session; Ctrl-\ detaches
 shoal happy claude fix-login   # Detached Happy session, visible in the Happy app
 shoal diff fix-login           # Changes since the branch's fork point
 shoal conflicts --workspace fix-login  # Whether the branch merges cleanly into main
@@ -175,7 +176,7 @@ an issue before implementation. See the
 review and exporting feedback to an agent.
 
 CLI agents run in [zmx](https://github.com/neurosnap/zmx) sessions that keep
-running when you detach with Ctrl-\ or close the terminal; `zmx attach` returns
+running when you detach with Ctrl-\ or close the terminal; `shoal attach` returns
 to one. Happy sessions run detached, log
 to a file Shoal names, and stop with `shoal stop`. The Codex shortcut disables
 Codex's sandbox and approval prompts; use `shoal exec fix-login -- codex` for a
