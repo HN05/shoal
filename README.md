@@ -82,7 +82,8 @@ shoal watch pr 505                         # Watch an explicit PR
 ```
 
 Inside Herdr, `add` opens a new tab after your choices; use `--here`
-to run in the current pane. See [Herdr settings](docs/reference.md#agents).
+to run in the current pane, or `herdr.enabled = false` to treat Herdr as a plain
+terminal. See [Herdr settings](docs/reference.md#agents).
 
 Use `--agent claude` for Claude Code, `opencode`, `pi` or `grok` for those
 tools, or `--agent happy-claude`/`happy-codex` for

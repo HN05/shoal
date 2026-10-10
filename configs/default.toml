@@ -69,6 +69,8 @@ codex = ["codex", "{args}", "--sandbox", "danger-full-access", "--ask-for-approv
 # skill_dir = "~/.factory/skills"
 
 [herdr]
+# Use Herdr tabs and panes; false runs as in a plain terminal.
+enabled = true
 # Run issue/add in a new tab inside Herdr, after interactive choices.
 new_tab = true
 # Focus workspace shells by default, leaving agent launches in the background.

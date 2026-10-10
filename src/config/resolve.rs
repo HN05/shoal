@@ -164,6 +164,7 @@ impl Effective {
             git_profile: merged.git_profile,
             default_agent: merged.default_agent,
             herdr: config::Herdr {
+                enabled: built_in(merged.herdr.enabled, "herdr.enabled")?,
                 tab_name: merged.herdr.tab_name,
                 new_tab: built_in(merged.herdr.new_tab, "herdr.new_tab")?,
                 focus: merged.herdr.focus,
@@ -232,6 +233,7 @@ fn built_in() -> RepoConfig {
         issue_template: Some(config::templates::ISSUE_DEFAULT.into()),
         commands: named_commands::defaults(),
         herdr: config::repo::Herdr {
+            enabled: Some(true),
             tab_name: None,
             new_tab: Some(true),
             focus: None,
@@ -520,6 +522,7 @@ fn build_fields() -> Vec<Box<dyn Field + Send + Sync>> {
         scalar!(git_profile),
         scalar!(default_agent),
         scalar!(codex.default_mode),
+        scalar!(herdr.enabled),
         scalar!(herdr.new_tab),
         scalar!(herdr.tab_name),
         scalar!(herdr.focus),
@@ -565,7 +568,7 @@ issue_template = 'issue'\nagent_template = 'agent'\ngit_profile = 'work'\n\
 default_agent = 'claude'\nsetup_cmd = 'setup'\npre_setup_cmd = 'pre-setup'\n\
 post_remove_cmd = 'post-remove'\npost_done_cmd = 'post-done'\npost_ready_cmd = 'post-ready'\npost_agent_exit_cmd = 'agent-exit'\npost_resource_acquire_cmd = 'acquire'\n\
 pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd = 'detach'\n\
-[commands]\nreview = ['review']\n[agent_resume]\nreview = ['review', '--resume']\n[agent_auth]\nfj = '/fj'\ngh = '/gh'\ngit_profile = 'agent'\n[codex]\ndefault_mode = 'app'\n[herdr]\ntab_name = '{branch}'\nnew_tab = false\nfocus = false\nclose_when_done = false\n\
+[commands]\nreview = ['review']\n[agent_resume]\nreview = ['review', '--resume']\n[agent_auth]\nfj = '/fj'\ngh = '/gh'\ngit_profile = 'agent'\n[codex]\ndefault_mode = 'app'\n[herdr]\nenabled = false\ntab_name = '{branch}'\nnew_tab = false\nfocus = false\nclose_when_done = false\n\
 [ports]\non_conflict = 'auto'\nstart = 3000\nend = 3100\n[ports.web]\nport = 3000\n\
 [resources.lock]\ncapacity = 1\n[resource_pools.devices]\ncapacity = 2\n\
 [resource_pools.devices.resources.phone]\ncapacity = 1\n\
@@ -688,18 +691,18 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
     #[test]
     fn herdr_defaults_and_options_resolve_independently() {
         let defaults = stack("", "", "").resolve().unwrap().herdr;
-        assert!(defaults.new_tab && defaults.close_when_done);
+        assert!(defaults.enabled && defaults.new_tab && defaults.close_when_done);
         assert_eq!(defaults.focus, None);
         assert_eq!(defaults.tab_name, None);
         let settings = stack(
-            "[herdr]\nnew_tab = false\nfocus = false\n",
+            "[herdr]\nenabled = false\nnew_tab = false\nfocus = false\n",
             "[herdr]\nnew_tab = true\nclose_when_done = false\n",
             "[herdr]\nfocus = true\n",
         )
         .resolve()
         .unwrap()
         .herdr;
-        assert!(settings.new_tab && !settings.close_when_done);
+        assert!(!settings.enabled && settings.new_tab && !settings.close_when_done);
         assert_eq!(settings.focus, Some(true));
         assert_eq!(
             stack("[herdr]\nfocus = false\n", "", "")
@@ -804,6 +807,7 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
             git_profile.is_some(),
             default_agent.is_some(),
             codex.default_mode.is_some(),
+            herdr.enabled.is_some(),
             herdr.tab_name.is_some(),
             herdr.new_tab.is_some(),
             herdr.focus.is_some(),

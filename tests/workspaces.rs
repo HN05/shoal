@@ -16398,6 +16398,55 @@ fn herdr_resume_all_reuses_stopped_panes_and_labels_new_tabs_as_add_does() {
 }
 
 #[test]
+fn herdr_resume_honors_new_tab_and_enabled_settings() {
+    let fixture = Fixture::with_config(Some("[herdr]\nnew_tab = false\n"));
+    install_fake_herdr(&fixture);
+    fs::write(fixture.root.path().join("idle-panes"), "w1:p5\n").unwrap();
+    for (name, pane) in [("first", "w1:p5"), ("second", "w1:p6")] {
+        let workspace = fixture.add(name);
+        let state = fixture
+            .root
+            .path()
+            .join("state/workspaces")
+            .join(workspace["id"].as_str().unwrap());
+        fs::create_dir_all(&state).unwrap();
+        fs::write(
+            state.join(format!("{name}-agent.recovery.json")),
+            format!(r#"{{"agent":"claude","herdr_pane":"{pane}"}}"#),
+        )
+        .unwrap();
+    }
+    // Without new tabs, an idle recorded pane is still reused.
+    let (output, transcript) = herdr_call(&fixture, &["resume", "--all"], "");
+    assert!(output.status.success(), "{output:?} {transcript}");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("Resuming 1 agents in Herdr tabs"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("--execution second-agent"), "{stdout}");
+    let calls = herdr_calls(&fixture);
+    assert_eq!(calls.len(), 3, "{calls:?}");
+    assert_eq!(calls[1][..3], ["pane", "run", "w1:p5"]);
+    assert!(calls.iter().all(|call| call[..2] != ["tab", "create"]));
+
+    // Disabled, Herdr is never called and every agent is listed.
+    fs::remove_file(fixture.root.path().join("herdr-calls")).unwrap();
+    fs::write(
+        fixture.root.path().join(".config/shoal/config.toml"),
+        "[herdr]\nenabled = false\n",
+    )
+    .unwrap();
+    let (output, transcript) = herdr_call(&fixture, &["resume", "--all"], "");
+    assert!(output.status.success(), "{output:?} {transcript}");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(!stdout.contains("Herdr tabs"), "{stdout}");
+    assert!(stdout.contains("--execution first-agent"), "{stdout}");
+    assert!(stdout.contains("--execution second-agent"), "{stdout}");
+    assert!(!fixture.root.path().join("herdr-calls").exists());
+}
+
+#[test]
 fn herdr_reports_issue_lookup_errors_before_the_agent_picker() {
     let fixture = Fixture::new();
     fixture.add_github_origin();
@@ -16734,18 +16783,15 @@ fn herdr_opt_out_and_noninteractive_calls_stay_in_place() {
     let (help, _) = herdr_call(&fixture, &["add", "--help"], "");
     assert!(help.status.success());
     assert!(!fixture.root.path().join("herdr-calls").exists());
-    fs::write(
-        fixture.repo.join(".shoal.toml"),
-        "[herdr]\nnew_tab = false\n",
-    )
-    .unwrap();
-    let (disabled, _) = herdr_call(
-        &fixture,
-        &["add", fixture.repo.to_str().unwrap(), "disabled"],
-        "",
-    );
-    assert!(disabled.status.success(), "{disabled:?}");
-    assert!(!fixture.root.path().join("herdr-calls").exists());
+    for (name, config) in [
+        ("no-tab", "[herdr]\nnew_tab = false\n"),
+        ("disabled", "[herdr]\nenabled = false\n"),
+    ] {
+        fs::write(fixture.repo.join(".shoal.toml"), config).unwrap();
+        let (output, _) = herdr_call(&fixture, &["add", fixture.repo.to_str().unwrap(), name], "");
+        assert!(output.status.success(), "{output:?}");
+        assert!(!fixture.root.path().join("herdr-calls").exists());
+    }
 }
 
 #[test]

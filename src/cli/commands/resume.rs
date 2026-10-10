@@ -6,6 +6,7 @@ use crate::{
         herdr,
         ui::{self, Fallback},
     },
+    config::Herdr,
     execution::recovery::{Record, Recovery, Saved, SavedCommand, consume},
     model::Workspace,
     protocol::ConfigTarget,
@@ -191,16 +192,13 @@ pub async fn run_all(ctx: &Context, discard: bool) -> Result<i32> {
     let single = sessions.len() == 1 && ctx.interactive();
     let mut agents = Vec::new();
     for (workspace, id, record) in &sessions {
-        let tabs = herdr::available(ctx)
-            && client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone()))
-                .await?
-                .herdr
-                .new_tab;
+        let integration = herdr_settings(ctx, workspace).await?;
         let args = ["resume", &workspace.id, "--execution", id].map(OsString::from);
-        let reused = tabs && resume_in_recorded_pane(ctx, record, &args).await?;
+        let reused = integration.is_some() && resume_in_recorded_pane(ctx, record, &args).await?;
         if single && !reused {
             return run(ctx, Some(workspace.id.clone()), Some(id.clone()), false).await;
         }
+        let tabs = reused || integration.is_some_and(|settings| settings.new_tab);
         if tabs && !reused {
             let label = launch_label(ctx, workspace).await;
             herdr::run_in_tab(ctx, &workspace.path, &label, &args).await?;
@@ -228,6 +226,17 @@ pub async fn run_all(ctx: &Context, discard: bool) -> Result<i32> {
         }
     })?;
     Ok(0)
+}
+
+/// The workspace's Herdr settings when this terminal is a Herdr pane and the
+/// integration is enabled.
+async fn herdr_settings(ctx: &Context, workspace: &Workspace) -> Result<Option<Herdr>> {
+    if !herdr::available(ctx) {
+        return Ok(None);
+    }
+    let settings =
+        client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
+    Ok(Some(settings.herdr).filter(|herdr| herdr.enabled))
 }
 
 /// Restore the agent in the Herdr pane it stopped in, unless that pane is

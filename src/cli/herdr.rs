@@ -74,7 +74,7 @@ pub(super) async fn handoff(
         ConfigTarget::Repository(plan.repository.clone()),
     )
     .await?;
-    if !settings.herdr.new_tab {
+    if !(settings.herdr.enabled && settings.herdr.new_tab) {
         return Ok(false);
     }
     ensure!(

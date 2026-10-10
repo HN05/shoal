@@ -328,6 +328,8 @@ is removed; they register no execution and do not prevent cleanup.
 Root help groups built-in commands by task; configured commands are discovered
 through `run`.
 
+`herdr.enabled = false` turns off every Herdr call, so a Herdr pane behaves as a
+plain terminal; `new_tab` only governs opening new tabs.
 The CLI owns Herdr tab handoffs after issue lookup and interactive workspace and
 agent choices and labels the tab `<repo>#<number>` for an issue, otherwise with the
 allocated workspace branch by default. An optional `herdr.tab_name` template
