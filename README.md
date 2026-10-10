@@ -115,7 +115,7 @@ shoal config set default_agent claude --repo my-project
 shoal config unset default_agent  # Restore the default
 shoal cd fix-login             # Enter a workspace; omit the name for a picker
 shoal exec fix-login -- cargo test
-shoal edit fix-login           # Open in $EDITOR, or [commands] edit = ["zed", "{path}"]
+shoal edit fix-login           # Open in $VISUAL/$EDITOR, or [commands] edit = ["zed", "{path}"]
 shoal run check fix-login      # With [commands] check = ["cargo", "test"] in config
 shoal run                     # List configured commands, arguments, and source layers
 shoal claude fix-login         # Run Claude Code

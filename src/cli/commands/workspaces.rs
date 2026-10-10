@@ -1476,7 +1476,7 @@ pub(super) async fn exec(
     execution::run_command(&ctx.paths, workspace, command).await
 }
 
-/// The configured command `shoal edit` runs instead of `$EDITOR`.
+/// The configured command `shoal edit` runs instead of `$VISUAL` or `$EDITOR`.
 const EDIT: &str = "edit";
 
 pub(super) async fn edit(
@@ -1489,7 +1489,7 @@ pub(super) async fn edit(
     if settings.commands.contains_key(EDIT) {
         return crate::config::named_commands::run(ctx, EDIT, Some(workspace), args).await;
     }
-    let mut command = editor(std::env::var_os("EDITOR"))?;
+    let mut command = editor([std::env::var_os("VISUAL"), std::env::var_os("EDITOR")])?;
     command.push(
         client::inspect(&ctx.paths, workspace.clone())
             .await?
@@ -1501,12 +1501,14 @@ pub(super) async fn edit(
     execution::run_command(&ctx.paths, workspace, command).await
 }
 
-/// `$EDITOR` as an argument array: split on whitespace, as in `code --wait`,
-/// unless it is not UTF-8.
-fn editor(value: Option<OsString>) -> Result<Vec<OsString>> {
-    let value = value
-        .filter(|value| !value.to_string_lossy().trim().is_empty())
-        .context("set $EDITOR or configure [commands] edit to open a workspace")?;
+/// The first set of `$VISUAL` and `$EDITOR` as an argument array: split on
+/// whitespace, as in `code --wait`, unless it is not UTF-8.
+fn editor(values: [Option<OsString>; 2]) -> Result<Vec<OsString>> {
+    let value = values
+        .into_iter()
+        .flatten()
+        .find(|value| !value.to_string_lossy().trim().is_empty())
+        .context("set $VISUAL, $EDITOR or [commands] edit to open a workspace")?;
     Ok(match value.to_str() {
         Some(value) => value.split_whitespace().map(OsString::from).collect(),
         None => vec![value],
@@ -1626,13 +1628,16 @@ mod tests {
     use std::ffi::OsString;
 
     #[test]
-    fn editor_splits_on_whitespace_and_requires_a_value() {
+    fn editor_prefers_visual_splits_on_whitespace_and_requires_a_value() {
         assert_eq!(
-            editor(Some(" code  --wait ".into())).unwrap(),
+            editor([Some(" code  --wait ".into()), Some("vi".into())]).unwrap(),
             [OsString::from("code"), OsString::from("--wait")]
         );
+        for visual in [None, Some(" ".into())] {
+            assert_eq!(editor([visual, Some("vi".into())]).unwrap(), ["vi"]);
+        }
         for missing in [None, Some(OsString::new()), Some(" ".into())] {
-            assert!(editor(missing).is_err());
+            assert!(editor([missing.clone(), missing]).is_err());
         }
     }
 }

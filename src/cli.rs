@@ -267,7 +267,7 @@ pub enum Command {
     Cd { workspace: Option<String> },
     /// Open a workspace in an editor.
     ///
-    /// Runs the configured `edit` command, otherwise `$EDITOR` with the workspace path.
+    /// Runs the configured `edit` command, otherwise `$VISUAL` or `$EDITOR` with the workspace path.
     Edit {
         workspace: Option<String>,
         /// Arguments forwarded to the editor.

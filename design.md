@@ -404,7 +404,7 @@ names report a command error with suggestions for similar built-ins and never
 open a picker. Workspace fields expand once within individual
 arguments; a standalone `{args}` places the caller's literal arguments.
 `{diff_base}` lazily uses `diff`'s daemon lookup. Built-in `edit` runs the
-`edit` command, otherwise `$EDITOR` with the workspace path, through the same
+`edit` command, otherwise `$VISUAL` or `$EDITOR` with the workspace path, through the same
 wrapper, so the editor gets scope and port variables and counts as activity.
 Built-in `review` chooses
 between the `review` command and an agent prompted to report, not change, the

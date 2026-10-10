@@ -12676,18 +12676,20 @@ fn edit_runs_the_editor_or_the_configured_edit_command() {
     let fixture = Fixture::new();
     let workspace = fixture.add("editing");
     let path = workspace["path"].as_str().unwrap();
-    let edit = |editor: Option<&str>| {
+    let edit = |visual: Option<&str>, editor: Option<&str>| {
         let mut command = fixture.command();
-        command.env_remove("EDITOR");
-        if let Some(editor) = editor {
-            command.env("EDITOR", editor);
+        for (name, value) in [("VISUAL", visual), ("EDITOR", editor)] {
+            match value {
+                Some(value) => command.env(name, value),
+                None => command.env_remove(name),
+            };
         }
         command
             .args(["edit", "editing", "--", "--flag"])
             .output()
             .unwrap()
     };
-    let output = edit(Some("printf %s|"));
+    let output = edit(Some("printf %s|"), Some("false"));
     assert!(
         output.status.success(),
         "{}",
@@ -12697,11 +12699,14 @@ fn edit_runs_the_editor_or_the_configured_edit_command() {
         String::from_utf8_lossy(&output.stdout),
         format!("{path}|--flag|")
     );
-    let output = edit(None);
+    assert_eq!(
+        edit(None, Some("printf %s|")).stdout,
+        format!("{path}|--flag|").as_bytes()
+    );
+    let output = edit(None, None);
     assert!(!output.status.success());
     assert!(
-        String::from_utf8_lossy(&output.stderr)
-            .contains("set $EDITOR or configure [commands] edit")
+        String::from_utf8_lossy(&output.stderr).contains("set $VISUAL, $EDITOR or [commands] edit")
     );
 
     fs::write(
@@ -12709,7 +12714,7 @@ fn edit_runs_the_editor_or_the_configured_edit_command() {
         "[commands]\nedit = ['printf', '%s|', '{branch}']\n",
     )
     .unwrap();
-    assert_eq!(edit(Some("false")).stdout, b"editing|--flag|");
+    assert_eq!(edit(Some("false"), None).stdout, b"editing|--flag|");
 }
 
 #[test]
