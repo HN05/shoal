@@ -224,9 +224,9 @@ removing it moves its stacked workspaces down to its own base and journals the
 change. When every watched PR of the base merges and covers its HEAD, the PR sweep does the same
 before cleanup can remove it, retargets stacked PRs still targeting its branch,
 and queues a watch update; agents rebase their own branches, since Shoal never
-moves workspace branches. Retargeting is Shoal's only forge write: `gh pr edit`,
-or Forgejo's API with fj's saved token for that host because fj cannot edit a
-base. Adoption
+moves workspace branches. Retargeting is Shoal's only forge write, through the
+forge's REST API: `gh api`, which owns GitHub's login, or curl with the token fj
+saved for a Forgejo host. Adoption
 takes a path; the CLI infers its repository from the owning checkout, then a unique
 `origin` remote match, then a picker, with `--repo` as the override. Explicit
 adoption accepts an unlocked linked worktree root on a local branch of the registered repository with no ownership

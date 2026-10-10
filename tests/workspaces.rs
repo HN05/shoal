@@ -11145,9 +11145,9 @@ esac
 for arg; do url=$arg; done
 echo "$url" >> {}
 case "$url" in
- */api/v1/repos/team/repo/pulls/7) echo '{{"title":"Topic","mergeable":false,"head":{{"sha":"2222222222222222222222222222222222222222"}}}}';;
+ */api/v1/repos/team/repo/pulls/7) echo '{{"title":"Topic","mergeable":false,"head":{{"sha":"2222222222222222222222222222222222222222"}}}}'; printf 200;;
  */api/v1/repos/team/repo/commits/2222222222222222222222222222222222222222/status?limit=50)
-  echo '{{"total_count":2,"statuses":[{{"context":"rust","status":"failure"}},{{"context":"gate","status":"pending"}}]}}';;
+  echo '{{"total_count":2,"statuses":[{{"context":"rust","status":"failure"}},{{"context":"gate","status":"pending"}}]}}'; printf 200;;
  *) exit 22;;
 esac
 "#,
@@ -15746,11 +15746,11 @@ fn merged_base_prs_retarget_and_restack_the_workspaces_stacked_on_them() {
         let root = fixture.root.path().to_owned();
         let bin = root.join("bin");
         fs::create_dir_all(&bin).unwrap();
-        // gh edits directly; fj cannot, so Shoal PATCHes the API through curl.
+        // Both forges PATCH the PR through their API: gh api, or curl with fj's token.
         let scripts = [
             (
                 "gh",
-                "if [ \"$2\" = edit ]; then echo \"$3 $7\" >> \"$HOME/edits\"; else cat \"$HOME/pr-$3\"; fi",
+                "if [ \"$1\" = api ]; then echo \"$5 $6 $(cat)\" >> \"$HOME/edits\"; echo '{}'; else cat \"$HOME/pr-$3\"; fi",
             ),
             (
                 "fj",
@@ -15758,7 +15758,7 @@ fn merged_base_prs_retarget_and_restack_the_workspaces_stacked_on_them() {
             ),
             (
                 "curl",
-                "printf '%s\\n' \"$@\" > \"$HOME/curl-args\"; cat > \"$HOME/curl-stdin\"; echo \"2 main\" >> \"$HOME/edits\"",
+                "case \"$*\" in *PATCH*) printf '%s\\n' \"$@\" > \"$HOME/curl-args\"; cat > \"$HOME/curl-stdin\"; echo \"2 main\" >> \"$HOME/edits\";; *) cat > /dev/null;; esac; printf '{}\\n200'",
             ),
         ];
         for (name, body) in scripts {
@@ -15810,8 +15810,14 @@ fn merged_base_prs_retarget_and_restack_the_workspaces_stacked_on_them() {
         wait_until("restacked upper", || {
             fixture.ok(&["inspect", "upper"])["workspace"]["base_workspace"].is_null()
         });
-        assert_eq!(fs::read_to_string(root.join("edits")).unwrap(), "2 main\n");
-        if tool == "fj" {
+        let edits = fs::read_to_string(root.join("edits")).unwrap();
+        if tool == "gh" {
+            assert_eq!(
+                edits,
+                "PATCH repos/team/project/pulls/2 {\"base\":\"main\"}\n"
+            );
+        } else {
+            assert_eq!(edits, "2 main\n");
             let args = fs::read_to_string(root.join("curl-args")).unwrap();
             assert!(args.contains("PATCH\n"), "{args}");
             assert!(args.contains("{\"base\":\"main\"}\n"), "{args}");

@@ -749,10 +749,10 @@ merged commits, the daemon moves the
 workspaces stacked on it to its own base workspace and retargets their linked
 PRs that still target its branch to the branch it merged into. Their next
 `watch` returns a `base_merged` update with the rebase command; the agent
-rebases and force-pushes its branch. GitHub PRs are retargeted with `gh pr edit`.
-fj cannot change a base, so Forgejo PRs are retargeted through Forgejo's API with
-the token fj saved for that host, read for the request and passed to curl on
-stdin; a missing login or failed request is reported in the update.
+rebases and force-pushes its branch. The PR is retargeted through the forge's
+API with the user's login: `gh api` on GitHub, and on Forgejo curl with the token
+fj saved for that host, read for the request and passed on stdin. A missing
+login or failed request is reported in the update.
 
 ### Repositories
 

@@ -1,5 +1,6 @@
 //! Forge identity and issue/PR queries using the user's gh/fj login; the one
-//! write retargets stacked PRs.
+//! write retargets stacked PRs, through the REST transport in `api`.
+mod account;
 mod api;
 pub mod issue;
 pub mod link;

@@ -157,12 +157,10 @@ impl Manager {
         // Lookups take time; recheck what authorizes the write right before it.
         self.verify_worktree(workspace).await?;
         self.ensure_base_unchanged(base, head).await?;
-        Ok(Some(
-            match forge.retarget(&workspace.path, number, target).await {
-                Ok(()) => format!("; Shoal retargeted this PR to {target}"),
-                Err(error) => format!("; retargeting this PR to {target} failed: {error:#}"),
-            },
-        ))
+        Ok(Some(match forge.retarget(number, target).await {
+            Ok(()) => format!("; Shoal retargeted this PR to {target}"),
+            Err(error) => format!("; retargeting this PR to {target} failed: {error:#}"),
+        }))
     }
 
     /// The rebase cutoff in the update is the base HEAD read before restacking.
