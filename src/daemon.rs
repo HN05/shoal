@@ -493,11 +493,10 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::WorkspaceStatus { workspace } => {
             Body::WorkspaceStatus(manager.workspace_status(&workspace).await?)
         }
-        Method::ViewItems {
+        Method::SelectItems {
             workspace,
             selection,
-            comments,
-        } => Body::ItemViews(manager.view_items(&workspace, &selection, comments).await?),
+        } => Body::SelectedItems(manager.select_items(&workspace, &selection).await?),
         Method::FindWorkspaces { target } => Body::Workspaces(
             manager
                 .find_workspaces(&target, caller.map(|c| c.workspace_id.as_str()))

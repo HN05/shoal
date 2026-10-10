@@ -1,6 +1,6 @@
 //! An issue's or PR's content, status and discussion, read on request so
 //! callers need not know whether the forge is GitHub or Forgejo.
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, ensure};
 use futures_util::future::try_join_all;
@@ -12,6 +12,36 @@ use super::{
     link::ItemKind,
     pr::state::{CheckResult, PrStatus, ReviewState},
 };
+
+/// The items a view selects and the worktree whose origin and forge login
+/// look them up. Lookups run in the CLI: discussion can exceed a protocol frame.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Selected {
+    pub path: PathBuf,
+    pub items: Vec<SelectedItem>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SelectedItem {
+    pub url: String,
+    pub kind: ItemKind,
+}
+
+impl Selected {
+    /// Each item as the forge reports it now, in selection order.
+    pub(crate) async fn view(&self, comments: bool) -> Result<Vec<ItemView>> {
+        let remote = super::repository::remote_url_from_path(&self.path)
+            .await?
+            .context("item lookup needs an origin remote")?;
+        let forge = ForgeRepo::parse(&remote)?;
+        Ok(futures_util::future::join_all(
+            self.items
+                .iter()
+                .map(|item| forge.view(&self.path, item.kind, &item.url, comments)),
+        )
+        .await)
+    }
+}
 
 /// A failed lookup leaves `details` empty, or the discussion it would have
 /// filled, and records its error instead of failing the request.

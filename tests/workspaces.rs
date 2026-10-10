@@ -11371,9 +11371,11 @@ fn view_shows_linked_items_with_status_and_discussion() {
     .unwrap();
     fs::set_permissions(bin.join("gh"), fs::Permissions::from_mode(0o755)).unwrap();
     let root = fixture.root.path();
+    // Longer than a protocol frame: lookups run in the CLI.
+    let body = "Steps ".repeat(20_000);
     fs::write(
         root.join("issue.json"),
-        serde_json::json!({"number":3,"title":"Crash","body":"Steps","state":"OPEN",
+        serde_json::json!({"number":3,"title":"Crash","body":body,"state":"OPEN",
             "author":{"login":"ann"},"labels":[{"name":"bug"}],"createdAt":"t0",
             "comments":[{"author":{"login":"bob"},"createdAt":"t1","body":"Same here"}]})
         .to_string(),
@@ -11409,6 +11411,7 @@ fn view_shows_linked_items_with_status_and_discussion() {
     let issue = views.iter().find(|view| view["kind"] == "issue").unwrap();
     assert_eq!(issue["url"], "https://github.com/team/project/issues/3");
     assert_eq!(issue["state"], "open");
+    assert_eq!(issue["body"], body);
     assert_eq!(issue["comments"][0]["body"], "Same here");
     let pr = views.iter().find(|view| view["kind"] == "pr").unwrap();
     assert_eq!(pr["pr"]["merge_conflicts"], true);

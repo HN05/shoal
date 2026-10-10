@@ -10,7 +10,7 @@ use crate::{
     },
     forge::{
         link::{ItemKind, Selection},
-        view::{Details, ItemView, PrDetails, Review},
+        view::{Details, ItemView, PrDetails, Review, Selected},
     },
     protocol::Method,
 };
@@ -20,15 +20,17 @@ pub(super) async fn view(ctx: &Context, items: ItemArgs, no_comments: bool) -> R
     let selection = Selection::parse(items.kind_or_url, items.item)?;
     let workspace =
         ui::select_workspace(ctx, items.workspace, ui::Fallback::CurrentDirectory).await?;
-    let views: Vec<ItemView> = client::request(
+    let selected: Selected = client::request(
         &ctx.paths,
-        Method::ViewItems {
+        Method::SelectItems {
             workspace,
             selection,
-            comments: !no_comments,
         },
     )
     .await?;
+    let views = ctx
+        .progress("Reading items", selected.view(!no_comments))
+        .await?;
     let palette = Palette::stdout(ctx.json);
     ctx.show(&views, |views| {
         for (index, view) in views.iter().enumerate() {

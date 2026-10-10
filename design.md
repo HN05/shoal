@@ -652,10 +652,11 @@ Issue associations suppress idle cleanup. With automatic completion, the daemon
 polls their repository-bound URLs using its existing forge login and records
 completion once closure is confirmed, honoring the done default without replacing an existing completion.
 Lookup failures retain the workspace; reopening the issue does not undo completion.
-Item views are read-only daemon lookups with the same login, so agents read issues
-and PRs without knowing the forge: `gh` for GitHub, and Forgejo's API with fj's
-saved token for the host, or anonymously without one, because fj has no
-structured output.
+Item views let agents read issues and PRs without knowing the forge. The daemon
+selects linked or explicit items; the CLI looks them up with the user's forge
+login, because discussion can exceed a protocol frame: `gh` for GitHub, and
+Forgejo's API with fj's saved token for the host, or anonymously without one,
+because fj has no structured output.
 
 Manual and automatic cleanup share one path: establish ownership, stop owned
 executions, run removal hooks, remove owned simulators, remove the worktree,
