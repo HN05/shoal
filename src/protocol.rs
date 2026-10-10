@@ -26,7 +26,7 @@ use crate::{
     sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
 };
 
-pub const VERSION: u32 = 76;
+pub const VERSION: u32 = 77;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -249,6 +249,14 @@ pub enum Method {
     },
     InspectWorkspace {
         workspace: String,
+    },
+    /// Change an issue or PR of the workspace's repository: the one `item`
+    /// names, or the workspace's linked one of `kind`.
+    ItemAction {
+        workspace: String,
+        kind: crate::forge::link::ItemKind,
+        item: Option<String>,
+        action: crate::forge::action::Action,
     },
     WorkspaceEnv {
         workspace: String,
@@ -546,6 +554,7 @@ response_bodies! {
     Branches(Vec<crate::git::existing_branch::Branch>),
     OpenedWorkspace(crate::git::existing_branch::OpenedWorkspace),
     Inspection(Inspection),
+    Item(crate::forge::item::Item),
     Completion(crate::model::Completion),
     WithdrawnCompletion(Option<crate::model::Completion>),
     ReviewMarks(Vec<crate::model::ReviewMark>),

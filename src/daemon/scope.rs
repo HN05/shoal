@@ -3,6 +3,7 @@
 //! the OS user.
 use crate::{
     daemon::workspace::{ExecutionKind, Manager},
+    forge::action::Action,
     protocol::{ConfigTarget, Method},
 };
 use anyhow::{Result, bail, ensure};
@@ -82,6 +83,11 @@ pub async fn authorize(
         | Method::SimAcquire { workspace, .. }
         | Method::SimRelease { workspace, .. }
         | Method::InspectWorkspace { workspace }
+        | Method::ItemAction {
+            workspace,
+            action: Action::Edit(_) | Action::Comment { .. } | Action::Close | Action::Reopen,
+            ..
+        }
         | Method::WorkspaceStatus { workspace }
         | Method::SelectItems { workspace, .. }
         | Method::DiffBase { workspace }
@@ -115,6 +121,10 @@ pub async fn authorize(
             );
             Some(workspace)
         }
+        Method::ItemAction {
+            action: Action::Merge { .. },
+            ..
+        } => bail!("merging is the user's decision; ask them with shoal notify"),
         Method::Execute {
             kind: ExecutionKind::Land,
             ..

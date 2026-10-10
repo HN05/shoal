@@ -32,6 +32,8 @@ states!(EventKind {
     Unlinked => "unlinked",
     /// The workspace's agent reported a turn state, or its execution ended.
     AgentState => "agent_state",
+    /// Shoal changed an issue or PR for the workspace.
+    ItemChanged => "item_changed",
 });
 
 states!(EventCause {
@@ -73,6 +75,9 @@ pub struct EventDetails {
     pub link: Option<Box<LinkEvent>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_state: Option<AgentStateEvent>,
+    /// The issue or PR Shoal changed, and how.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub item: Option<Box<ItemEvent>>,
 }
 
 /// Distinguish an absent field from an explicit null.
@@ -114,6 +119,14 @@ pub struct AgentStateEvent {
 pub struct LinkEvent {
     pub kind: crate::forge::link::ItemKind,
     pub url: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ItemEvent {
+    pub kind: crate::forge::link::ItemKind,
+    pub url: String,
+    /// The action's name, such as `edit` or `merge`.
+    pub action: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -178,6 +191,25 @@ pub(crate) fn record_link(
              'link',json_object('kind',?3,'url',?4))
          FROM workspaces WHERE id=?1",
         params![id, event_kind, kind, url],
+    )?;
+    Ok(())
+}
+
+/// Record a change Shoal made to one of the workspace's issues or PRs.
+pub(crate) fn record_item(
+    db: &Connection,
+    id: &str,
+    kind: crate::forge::link::ItemKind,
+    url: &str,
+    action: &str,
+) -> Result<()> {
+    db.execute(
+        "INSERT INTO workspace_events(record)
+         SELECT json_object('kind',?2,'workspace_id',id,'repository_id',repository_id,
+             'name',name,'path',path,'branch',branch,'cause',NULL,'error',NULL,
+             'item',json_object('kind',?3,'url',?4,'action',?5))
+         FROM workspaces WHERE id=?1",
+        params![id, EventKind::ItemChanged, kind, url, action],
     )?;
     Ok(())
 }

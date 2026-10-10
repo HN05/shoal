@@ -20,14 +20,20 @@ const PAGE_SIZE: usize = 50;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum HttpMethod {
     Get,
+    Post,
     Patch,
+    Put,
+    Delete,
 }
 
 impl HttpMethod {
-    fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::Get => "GET",
+            Self::Post => "POST",
             Self::Patch => "PATCH",
+            Self::Put => "PUT",
+            Self::Delete => "DELETE",
         }
     }
 }

@@ -480,6 +480,12 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::SetBaseWorkspace { workspace, base } => {
             Body::Workspace(manager.set_base_workspace(&workspace, base).await?)
         }
+        Method::ItemAction {
+            workspace,
+            kind,
+            item,
+            action,
+        } => Body::Item(manager.item_action(&workspace, kind, item, action).await?),
         Method::InspectWorkspace { workspace } => {
             Body::Inspection(manager.inspect_workspace(&workspace).await?)
         }
