@@ -72,21 +72,48 @@ async fn merge_conflicts(repo: &Path, head: &str, target: &str) -> Result<Vec<St
             .context("check merge conflicts; Git 2.38 or newer is required")?;
         return Ok(Vec::new());
     }
-    let stdout = String::from_utf8(output?.stdout).context("Git paths are not UTF-8")?;
-    // The tree ID, then each conflicted path, all NUL-terminated.
-    Ok(stdout
-        .split('\0')
-        .skip(1)
+    let output = output?;
+    let stdout = String::from_utf8(output.stdout).context("Git paths are not UTF-8")?;
+    // Git also exits 1 for some failures, which print no tree or paths.
+    conflicted_paths(&stdout).with_context(|| {
+        format!(
+            "git merge-tree failed: {}",
+            subprocess::diagnostic(&output.stderr)
+        )
+    })
+}
+
+/// The paths after the tree ID in `-z` output, or `None` when it is not a
+/// conflict result.
+fn conflicted_paths(stdout: &str) -> Option<Vec<String>> {
+    let mut fields = stdout.split('\0');
+    let tree = fields.next()?;
+    let tree_id = matches!(tree.len(), 40 | 64) && tree.bytes().all(|b| b.is_ascii_hexdigit());
+    let paths: Vec<_> = fields
         .filter(|path| !path.is_empty())
         .map(str::to_owned)
-        .collect())
+        .collect();
+    (tree_id && !paths.is_empty()).then_some(paths)
 }
 
 #[cfg(test)]
 mod tests {
     use std::fs;
 
+    use super::conflicted_paths;
     use crate::test_support::{commit, git, manager, repository};
+
+    #[test]
+    fn only_a_tree_id_with_paths_is_a_conflict_result() {
+        let tree = "26b77343eb53870bab71a317fc36bfeb93a4b67b";
+        assert_eq!(
+            conflicted_paths(&format!("{tree}\0f\0g\0")).unwrap(),
+            ["f", "g"]
+        );
+        for failure in ["", &format!("{tree}\0"), "not a tree\0f\0"] {
+            assert_eq!(conflicted_paths(failure), None);
+        }
+    }
 
     #[tokio::test]
     async fn conflicts_compare_committed_head_with_the_default_or_named_branch() {
@@ -140,6 +167,10 @@ mod tests {
             .await
             .unwrap_err();
         assert!(format!("{error:#}").contains("cannot resolve missing"));
+        let lone = git(&repo, &["commit-tree", "main^{tree}", "-m", "lone"]);
+        git(&repo, &["branch", "lone", lone.trim()]);
+        let unrelated = manager.check_conflicts(&workspace.id, Some("lone".into()));
+        assert!(format!("{:#}", unrelated.await.unwrap_err()).contains("unrelated histories"));
 
         let base = manager
             .create_workspace(&repo_id, "base".into(), None, None, None)
