@@ -10783,6 +10783,68 @@ fn pr_wait_wakes_for_individual_ci_reviews_and_conflicts_with_own_scope() {
 }
 
 #[test]
+fn a_newer_pr_wait_supersedes_the_older_one_without_taking_its_updates() {
+    let fixture = Fixture::with_config(Some("[auto_cleanup]\nenabled=false\n"));
+    fixture.add("waits");
+    fixture.add_github_origin();
+    let bin = fixture.root.path().join("bin");
+    fs::create_dir(&bin).unwrap();
+    // Lookups after linking block until released, so the first wait is still polling when
+    // the second starts.
+    fs::write(
+        bin.join("gh"),
+        r#"#!/bin/sh
+if [ -f "$HOME/block" ]; then
+  touch "$HOME/polled"
+  while test ! -f "$HOME/release"; do sleep 0.02; done
+fi
+if [ "$1" = api ]; then printf '[]'; else cat "$HOME/pr.json"; fi
+"#,
+    )
+    .unwrap();
+    fs::set_permissions(bin.join("gh"), fs::Permissions::from_mode(0o755)).unwrap();
+    fs::write(fixture.root.path().join("pr.json"), serde_json::json!({"number":7,"state":"OPEN","headRefName":"waits","headRefOid":"head",
+        "commits":[],"comments":[{"id":1,"body":"review"}],"reviews":[],"statusCheckRollup":[],"mergeable":"MERGEABLE"}).to_string()).unwrap();
+    fixture.ok(&["link", "pr", "7", "--workspace", "waits"]);
+    fs::write(fixture.root.path().join("block"), "").unwrap();
+    let wait = || {
+        fixture
+            .command()
+            .args(["--json", "watch", "pr", "--workspace", "waits"])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap()
+    };
+    let mut older = wait();
+    let polled = fixture.root.path().join("polled");
+    wait_until("the first wait's lookup", || polled.exists());
+    let newer = wait();
+    wait_until("the superseded wait", || {
+        older.try_wait().unwrap().is_some()
+    });
+    let output = older.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let superseded: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(superseded["superseded"], true);
+    assert!(superseded["updates"].as_array().unwrap().is_empty());
+    fs::write(fixture.root.path().join("release"), "").unwrap();
+    let output = newer.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let received: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(received["superseded"], false);
+    assert_eq!(received["updates"][0]["kind"], "comment");
+}
+
+#[test]
 fn unified_items_link_filter_and_watch_explicit_targets_without_completion() {
     let mut fixture = Fixture::with_config(Some("[auto_cleanup]\nenabled=false\n"));
     fixture.add("items");

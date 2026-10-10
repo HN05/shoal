@@ -29,6 +29,8 @@ the returned `updates` by inspecting their PR URLs, then wait again. Comments
 and reviews wake the wait, as does each completed CI check or a merge conflict;
 respond to available review findings while other checks run. The first wait
 includes existing activity; later waits share a persistent cursor per workspace.
+Run one wait at a time and read its result: a newer wait in the workspace
+supersedes a running one, which returns `superseded: true` without updates.
 `--timeout <seconds>` bounds the wait (default 3600, maximum 3600); `timed_out`
 with empty `updates` means no update. A `lookup_failed` entry names a failed
 activity lookup and repeats every 10 minutes while it persists; until that source

@@ -1484,6 +1484,9 @@ pub(super) async fn watch_items(
         if updates.timed_out {
             println!("No item updates before timeout.");
         }
+        if updates.superseded {
+            println!("A newer wait in this workspace receives the updates.");
+        }
     })?;
     std::io::Write::flush(&mut std::io::stdout())?;
     if updates.updates.is_empty() {

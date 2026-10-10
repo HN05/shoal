@@ -690,6 +690,10 @@ Activity lookups run outside completion serialization; persisting results
 rechecks the watch set so cancelled watches cannot recreate their cursors.
 Unacknowledged deliveries persist with the cursor so timeout or disconnection
 cannot discard unseen updates; the CLI acknowledges after successful output.
+Waits share the cursor, so a newer wait in a workspace supersedes the running one
+before it takes updates, and an acknowledgement arriving while a newer wait runs
+leaves the updates pending for it; competing waits would consume updates the agent
+never reads.
 Unavailable activity sources are explicit failures, never successful checks or
 proof of mergeability; a persisting failure is reported again on an interval so it
 cannot silence a wait while hiding a new conflict. Waiting does not resume stopped

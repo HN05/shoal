@@ -1,9 +1,14 @@
 //! Workspace-owned activity cursors; waiting does not change completion policy.
-use std::time::Duration;
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 use anyhow::{Context, Result, ensure};
 use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
+use tokio::sync::Notify;
 
 use super::{RegistrationKind, current_head};
 use crate::{
@@ -23,6 +28,71 @@ const POLL_INTERVAL: Duration = Duration::from_secs(30);
 pub struct Updates {
     pub updates: Vec<Update>,
     pub timed_out: bool,
+    /// A newer wait in the same workspace took over before this one received
+    /// updates; they stay pending for the newer wait.
+    #[serde(default)]
+    pub superseded: bool,
+}
+
+/// The running wait of each workspace, identified by its supersession signal.
+/// Waits share one cursor per item, so a newer wait supersedes the older one
+/// instead of competing for its updates.
+#[derive(Default)]
+pub(crate) struct ActiveWaits(Mutex<HashMap<String, Arc<Notify>>>);
+
+struct ActiveWait<'a> {
+    waits: &'a ActiveWaits,
+    workspace: String,
+    superseded: Arc<Notify>,
+}
+
+impl ActiveWaits {
+    fn start(&self, workspace: &str) -> ActiveWait<'_> {
+        let superseded = Arc::new(Notify::new());
+        let older = self
+            .0
+            .lock()
+            .expect("active waits lock")
+            .insert(workspace.to_owned(), superseded.clone());
+        if let Some(older) = older {
+            older.notify_one();
+        }
+        ActiveWait {
+            waits: self,
+            workspace: workspace.to_owned(),
+            superseded,
+        }
+    }
+}
+
+impl ActiveWaits {
+    fn running(&self, workspace: &str) -> bool {
+        self.0
+            .lock()
+            .expect("active waits lock")
+            .contains_key(workspace)
+    }
+}
+
+impl ActiveWait<'_> {
+    fn is_current_in(&self, waits: &HashMap<String, Arc<Notify>>) -> bool {
+        waits
+            .get(&self.workspace)
+            .is_some_and(|current| Arc::ptr_eq(current, &self.superseded))
+    }
+
+    fn is_current(&self) -> bool {
+        self.is_current_in(&self.waits.0.lock().expect("active waits lock"))
+    }
+}
+
+impl Drop for ActiveWait<'_> {
+    fn drop(&mut self) {
+        let mut waits = self.waits.0.lock().expect("active waits lock");
+        if self.is_current_in(&waits) {
+            waits.remove(&self.workspace);
+        }
+    }
 }
 
 #[derive(Default, Serialize, Deserialize)]
@@ -62,10 +132,18 @@ impl Manager {
             "explicit items need a kind"
         );
         let workspace = self.workspace(selector).await?;
-        wait_for_updates(seconds, || {
-            self.poll_item_activity(&workspace.id, selection)
-        })
-        .await
+        let wait = self.item_waits.start(&workspace.id);
+        // A cancelled poll leaves its deliveries pending for the newer wait.
+        let updates = tokio::select! {
+            updates = wait_for_updates(seconds, || {
+                self.poll_item_activity(&workspace.id, selection)
+            }) => updates?,
+            () = wait.superseded.notified() => return Ok(Updates::superseded()),
+        };
+        if !wait.is_current() {
+            return Ok(Updates::superseded());
+        }
+        Ok(updates)
     }
 
     async fn poll_item_activity(&self, id: &str, selection: &Selection) -> Result<Vec<Update>> {
@@ -258,6 +336,11 @@ impl Manager {
     ) -> Result<()> {
         let workspace = self.workspace(selector).await?;
         let _guard = self.pr_gate.lock().await;
+        // A delivering wait has ended, so a running wait started after it and
+        // must report these updates as well.
+        if self.item_waits.running(&workspace.id) {
+            return Ok(());
+        }
         self.store
             .run(move |db| {
                 let tx = db.transaction()?;
@@ -357,6 +440,16 @@ pub(crate) fn linked_items(
     Ok(items)
 }
 
+impl Updates {
+    fn superseded() -> Self {
+        Self {
+            updates: Vec::new(),
+            timed_out: false,
+            superseded: true,
+        }
+    }
+}
+
 async fn wait_for_updates<F: std::future::Future<Output = Result<Vec<Update>>>>(
     seconds: u64,
     mut poll: impl FnMut() -> F,
@@ -371,6 +464,7 @@ async fn wait_for_updates<F: std::future::Future<Output = Result<Vec<Update>>>>(
                 return Ok(Updates {
                     updates: Vec::new(),
                     timed_out: true,
+                    superseded: false,
                 });
             }
         };
@@ -378,6 +472,7 @@ async fn wait_for_updates<F: std::future::Future<Output = Result<Vec<Update>>>>(
             return Ok(Updates {
                 updates,
                 timed_out: false,
+                superseded: false,
             });
         }
         let now = tokio::time::Instant::now();
@@ -385,6 +480,7 @@ async fn wait_for_updates<F: std::future::Future<Output = Result<Vec<Update>>>>(
             return Ok(Updates {
                 updates: Vec::new(),
                 timed_out: true,
+                superseded: false,
             });
         }
         tokio::time::sleep(POLL_INTERVAL.min(deadline - now)).await;
@@ -436,6 +532,21 @@ mod tests {
             .await
             .unwrap_err();
         assert_eq!(error.to_string(), "lookup failed");
+    }
+
+    #[tokio::test]
+    async fn a_newer_wait_supersedes_the_older_one_per_workspace() {
+        let waits = ActiveWaits::default();
+        let older = waits.start("one");
+        let other = waits.start("two");
+        let newer = waits.start("one");
+        older.superseded.notified().await;
+        assert!(!older.is_current());
+        assert!(newer.is_current() && other.is_current());
+        drop(older);
+        assert!(newer.is_current());
+        drop(newer);
+        assert!(!waits.0.lock().unwrap().contains_key("one"));
     }
 
     fn snapshot(message: &str) -> Snapshot {
@@ -609,7 +720,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn acknowledgement_keeps_updates_queued_after_the_delivery() {
+    async fn acknowledgement_keeps_queued_updates_and_those_a_newer_wait_needs() {
         let (root, manager) = manager().await;
         let repo_path = repository(root.path(), "repo");
         let repo = manager
@@ -637,6 +748,16 @@ mod tests {
             .run(move |db| queue_update(db, &id, update))
             .await
             .unwrap();
+        let newer = manager.item_waits.start(&workspace.id);
+        manager
+            .acknowledge_pr_updates(&workspace.id, vec![delivered[0].delivery.clone()])
+            .await
+            .unwrap();
+        assert_eq!(
+            manager.pending_pr_activity(&workspace.id).await.unwrap(),
+            [delivered[0].clone(), queued.clone()]
+        );
+        drop(newer);
         manager
             .acknowledge_pr_updates(&workspace.id, vec![delivered[0].delivery.clone()])
             .await
