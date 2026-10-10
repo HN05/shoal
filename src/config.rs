@@ -1,7 +1,7 @@
 pub mod edit;
 pub mod named_commands;
 pub mod overload;
-mod placeholders;
+pub(crate) mod placeholders;
 pub mod repo;
 pub mod report;
 pub mod resolve;
@@ -11,7 +11,7 @@ mod tests;
 
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
-use std::{fs, path::PathBuf, time::Duration};
+use std::{collections::BTreeMap, fs, path::PathBuf, time::Duration};
 
 use crate::fsutil::{self, Permissions, ReplaceOptions};
 use crate::paths::Paths;
@@ -55,6 +55,8 @@ pub struct Config {
     pub review: repo::Review,
     pub land: repo::Land,
     pub ports: PortRange,
+    /// Environment variables layered per repository and rendered for a workspace.
+    pub env: BTreeMap<String, String>,
     pub resources: std::collections::BTreeMap<String, crate::daemon::resources::ResourceConfig>,
     pub resource_pools: std::collections::BTreeMap<String, crate::daemon::resources::PoolConfig>,
     pub simulators: crate::sim::SimConfig,
@@ -401,6 +403,7 @@ impl Config {
                 end: self.ports.end,
                 ..Default::default()
             },
+            env: self.env.clone(),
             resources: self.resources.clone(),
             resource_pools: self.resource_pools.clone(),
             simulators: repo::SimulatorPreferences {
@@ -444,6 +447,7 @@ impl Config {
             config.git.profile(name)?;
         }
         crate::daemon::resources::definitions(&config.resources, &config.resource_pools)?;
+        crate::env::validate_configured_environment(&config.env)?;
         // A global file is complete on its own: its bounds must combine with
         // the built-in defaults, so `config set ports.end 4000` is refused
         // rather than failing every later command.

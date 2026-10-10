@@ -401,3 +401,30 @@ fn done_cleanup_defaults_on_and_can_be_overridden_per_repository() {
     assert!(global.effective(&repo).unwrap().done.cleanup);
     assert!(toml::from_str::<Config>("[done]\ncleanup = 'yes'").is_err());
 }
+
+#[test]
+fn environment_entries_validate_in_global_and_repository_config() {
+    let paths = Paths::for_test("/home/test");
+    for text in [
+        "[env]\nSESSION = '{workspace}'\nempty = ''\n_1 = '$HOME $(false)'",
+        "[env]\nPATH = '/custom/bin'",
+    ] {
+        assert!(Config::parse(text, &paths).is_ok(), "{text}");
+        assert!(repo::parse(text).is_ok(), "{text}");
+    }
+    for text in [
+        "[env]\nSHOAL_SCOPE_TOKEN = 'bad'",
+        "[env]\nSHOAL_PORT_WEB = 'bad'",
+        "[env]\n'bad=name' = 'bad'",
+        "[env]\n'' = 'bad'",
+        "[env]\n'1BAD' = 'bad'",
+        "[env]\n'BAD-NAME' = 'bad'",
+        "[env]\nBAD = 1",
+        "[env]\nBAD = false",
+        r#"[env]
+BAD = "a\u0000b""#,
+    ] {
+        assert!(Config::parse(text, &paths).is_err(), "{text}");
+        assert!(repo::parse(text).is_err(), "{text}");
+    }
+}

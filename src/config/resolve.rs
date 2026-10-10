@@ -40,6 +40,7 @@ pub struct Effective {
     pub post_setup_cmd: Option<String>,
     pub pre_remove_cmd: Option<String>,
     pub ports: Ports,
+    pub env: BTreeMap<String, String>,
     pub resources: BTreeMap<String, crate::daemon::resources::ResourceConfig>,
     pub resource_pools: BTreeMap<String, crate::daemon::resources::PoolConfig>,
     pub simulators: Simulators,
@@ -184,6 +185,7 @@ impl Effective {
             post_setup_cmd: merged.post_setup_cmd,
             pre_remove_cmd: merged.pre_remove_cmd,
             ports,
+            env: merged.env,
             resources: merged.resources,
             resource_pools: merged.resource_pools,
             simulators: Simulators {
@@ -539,6 +541,7 @@ fn build_fields() -> Vec<Box<dyn Field + Send + Sync>> {
         scalar!(ports.start),
         scalar!(ports.end),
         named!("ports", ports.definitions),
+        named!("env", env),
         named!("resources", resources),
         named!("resource_pools", resource_pools),
         scalar!(simulators.requires_approval),
@@ -569,7 +572,8 @@ issue_template = 'issue'\nagent_template = 'agent'\ngit_profile = 'work'\n\
 default_agent = 'claude'\nsetup_cmd = 'setup'\npre_setup_cmd = 'pre-setup'\n\
 post_remove_cmd = 'post-remove'\npost_done_cmd = 'post-done'\npost_ready_cmd = 'post-ready'\npost_agent_exit_cmd = 'agent-exit'\npost_resource_acquire_cmd = 'acquire'\n\
 pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd = 'detach'\n\
-[commands]\nreview = ['review']\n[agent_resume]\nreview = ['review', '--resume']\n[agent_auth]\nfj = '/fj'\nfj_home = '/fj-home'\ngh = '/gh'\ngit_profile = 'agent'\n[codex]\ndefault_mode = 'app'\n[herdr]\nenabled = false\ntab_name = '{branch}'\nnew_tab = false\nfocus = false\nclose_when_done = false\n\
+[env]\nSESSION = '{workspace}'\n[commands]\nreview = ['review']\n[agent_resume]\nreview = ['review', '--resume']\n[agent_auth]\nfj = '/fj'\nfj_home = '/fj-home'\ngh = '/gh'\ngit_profile = 'agent'\n[codex]\ndefault_mode = 'app'\n[herdr]\nenabled = false\ntab_name = '{branch}'\nnew_tab = false\nfocus = false\nclose_when_done = false\n\
+
 [ports]\non_conflict = 'auto'\nstart = 3000\nend = 3100\n[ports.web]\nport = 3000\n\
 [resources.lock]\ncapacity = 1\n[resource_pools.devices]\ncapacity = 2\n\
 [resource_pools.devices.resources.phone]\ncapacity = 1\n\
@@ -781,6 +785,7 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
             post_setup_cmd,
             pre_remove_cmd,
             ports,
+            env,
             resources,
             resource_pools,
             simulators,
@@ -794,6 +799,7 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
         } = full.clone();
         assert!(
             !commands.is_empty()
+                && !env.is_empty()
                 && !agent_resume.is_empty()
                 && !resources.is_empty()
                 && !resource_pools.is_empty()
@@ -1047,6 +1053,40 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
                 "{kind:?}"
             );
         }
+    }
+
+    #[test]
+    fn environment_values_layer_and_report_each_name() {
+        let layered = stack(
+            "[env]\nGLOBAL = 'global'\nSESSION = 'global'\nEMPTY = 'global'",
+            "[env]\nFILE = 'file'\nSESSION = 'file'",
+            "[env]\nSESSION = '{workspace}'\nEMPTY = ''",
+        );
+        let effective = layered.clone().resolve().unwrap();
+        assert_eq!(
+            effective.env,
+            BTreeMap::from([
+                ("GLOBAL".into(), "global".into()),
+                ("FILE".into(), "file".into()),
+                ("SESSION".into(), "{workspace}".into()),
+                ("EMPTY".into(), "".into()),
+            ])
+        );
+        let entries = layered.report().unwrap();
+        for (name, value, layer) in [
+            ("GLOBAL", "global", Layer::GlobalConfig),
+            ("FILE", "file", Layer::WorktreeFile),
+            ("SESSION", "{workspace}", Layer::SavedRepositoryConfig),
+            ("EMPTY", "", Layer::SavedRepositoryConfig),
+        ] {
+            let entry = entries
+                .iter()
+                .find(|entry| entry.key == format!("env.{name}"))
+                .unwrap();
+            assert_eq!(entry.value, value);
+            assert_eq!(entry.layer, layer);
+        }
+        assert!(stack("", "", "").resolve().unwrap().env.is_empty());
     }
 
     #[test]
