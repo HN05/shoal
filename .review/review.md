@@ -249,7 +249,8 @@ configured command for another agent, plus proven child
   Shoal reads only fj's saved token, per request, never storing or logging it,
   and never switches the user's login. Forge changes for a workspace use the
   agent account except merging, which uses the user's. The agent Git profile
-  reaches only the tracked agent's environment; it never writes Git config.
+  reaches only a tracked agent's environment and the push of `shoal pr open`;
+  it never writes Git config.
 - Git profiles apply only to newly created worktrees, before setup, using
   per-worktree config; other worktrees keep their settings.
 - Root help groups built-in commands by task; configured commands are discovered
