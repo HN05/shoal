@@ -58,8 +58,10 @@ impl Manager {
 
 impl Manager {
     pub(super) async fn agent_account(&self, workspace: &Workspace) -> Result<Account> {
-        let settings = self.workspace_settings(workspace).await?;
-        Account::agent(&settings.agent_auth, &self.paths, &self.config().git)
+        // One snapshot, so a reload cannot pair a profile with another map.
+        let config = self.config();
+        let settings = self.workspace_settings_from(&config, workspace).await?;
+        Account::agent(&settings.agent_auth, &self.paths, &config.git)
     }
 }
 
