@@ -368,8 +368,12 @@ mod tests {
             .await
             .unwrap();
         assert!(recovered(&manager));
-        // A reload, even back to the same settings, waits for a new reading.
+        // A reload, even back to the same settings, waits for a new reading,
+        // including one published after the reload from an earlier snapshot.
+        let sampled = manager.config_generation.load(Ordering::SeqCst);
         manager.reload_config().await.unwrap();
+        assert!(!recovered(&manager));
+        manager.publish_disk_reading(Some(sampled));
         assert!(!recovered(&manager));
         monitor
             .check(&manager, start, |_: &Path| Ok(cleanup))
