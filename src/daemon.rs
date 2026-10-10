@@ -528,6 +528,14 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             workspace,
             selection,
         } => Body::ReviewMarks(manager.clear_ready(&workspace, selection).await?),
+        Method::SetAgentState { workspace, state } => {
+            let execution = caller.and_then(Caller::execution_id).map(str::to_owned);
+            Body::AgentStatus(
+                manager
+                    .set_agent_state(&workspace, state, execution)
+                    .await?,
+            )
+        }
         Method::WorkspaceDone { workspace, cleanup } => {
             Body::Completion(manager.mark_done(&workspace, cleanup).await?)
         }

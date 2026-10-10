@@ -1,5 +1,6 @@
 //! Shared daemon state, workspace lookup, and worktree creation.
 mod adoption;
+pub(crate) mod agent_state;
 mod agents;
 mod done;
 mod environment;
@@ -759,6 +760,7 @@ async fn existing_base(repo: &crate::model::Repository, branch: &str) -> Result<
 fn load_details(db: &rusqlite::Connection, workspace: &mut Workspace) -> Result<()> {
     workspace.holds = holds::list(db, &workspace.id)?;
     workspace.review = review::list(db, &workspace.id)?;
+    workspace.agent_state = agent_state::get(db, &workspace.id)?;
     stack::load(db, workspace)?;
     workspace.links = store::workspace_links(db, &workspace.id)?;
     workspace.running = store::exists(

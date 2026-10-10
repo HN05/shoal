@@ -7,7 +7,7 @@ use crate::{
     daemon::resources::ResourceLease,
     process::identity::Identity,
     sim::Simulator,
-    state::{ExecutionState, WorkspaceState},
+    state::{AgentState, ExecutionState, WorkspaceState},
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -50,6 +50,8 @@ pub struct Workspace {
     pub holds: Vec<WorkspaceHold>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub review: Vec<ReviewMark>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_state: Option<AgentStatus>,
     #[serde(default)]
     pub links: WorkspaceLinks,
     /// Whether an agent or command started through Shoal is running here.
@@ -95,6 +97,13 @@ pub struct ReviewMark {
     pub stale: Option<bool>,
 }
 
+/// The turn state a workspace's agent last reported, and since when.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgentStatus {
+    pub state: AgentState,
+    pub since: i64,
+}
+
 /// A caller-named claim that a workspace is still in use.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorkspaceHold {
@@ -126,6 +135,7 @@ impl Workspace {
             git_dir_id: None,
             holds: Vec::new(),
             review: Vec::new(),
+            agent_state: None,
             base_workspace: None,
             stacked_workspaces: Vec::new(),
             links: WorkspaceLinks::default(),

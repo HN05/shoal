@@ -113,6 +113,14 @@ states!(ExecutionState {
     Running => "running",
     Unknown => "unknown",
 });
+states!(AgentState: ValueEnum {
+    /// The agent is working on a turn.
+    Working => "working",
+    /// The agent stopped mid-turn for the user, such as a permission prompt.
+    Waiting => "waiting",
+    /// The agent finished its turn.
+    Idle => "idle",
+});
 
 #[cfg(test)]
 mod tests {

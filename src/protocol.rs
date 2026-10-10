@@ -26,7 +26,7 @@ use crate::{
     sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
 };
 
-pub const VERSION: u32 = 75;
+pub const VERSION: u32 = 76;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -210,6 +210,11 @@ pub enum Method {
     ClearReady {
         workspace: String,
         selection: crate::forge::link::Selection,
+    },
+    /// The caller's execution, when scoped, is recorded as the reporter.
+    SetAgentState {
+        workspace: String,
+        state: crate::state::AgentState,
     },
     SetIssue {
         workspace: String,
@@ -544,6 +549,7 @@ response_bodies! {
     Completion(crate::model::Completion),
     WithdrawnCompletion(Option<crate::model::Completion>),
     ReviewMarks(Vec<crate::model::ReviewMark>),
+    AgentStatus(crate::model::AgentStatus),
     WorkspaceStatus(WorkspaceStatus),
     SelectedItems(crate::forge::view::Selected),
     WorkspaceEnv(std::collections::BTreeMap<String, String>),

@@ -515,6 +515,15 @@ journal events, and `post_ready_cmd` runs after each explicit mark under the
 completion hook rules; failure notifies and keeps the marks. Shoal does not act
 on the forge for a mark. Proposal: an opt-in that undrafts a linked PR (#454).
 
+Agent state is the turn state a workspace's agent reports from its hooks:
+`working`, `waiting` for the user mid-turn, or `idle` after its turn. Like
+ready marks it is a status signal for integrations that never notifies,
+completes, or affects idle cleanup and overload decisions. A workspace keeps the
+latest report; a report from a tracked execution ends with that execution's
+record, while one from outside lasts until replaced or removal. Changes and
+endings are journal events; repeating the current state is not a change and
+keeps its start time.
+
 Skills are split by role: `shoal-worker` covers an agent's own workspace and
 `shoal-orchestrator` covers unscoped coordination from a console, so neither
 role loads the other's commands. Both are installed together at user scope,

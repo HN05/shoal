@@ -58,6 +58,7 @@ mod tests {
         Workspace {
             holds: Vec::new(),
             review: Vec::new(),
+            agent_state: None,
             base_workspace: None,
             stacked_workspaces: Vec::new(),
             links: crate::model::WorkspaceLinks::default(),

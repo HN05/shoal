@@ -30,6 +30,8 @@ states!(EventKind {
     Linked => "linked",
     /// A workspace link was removed.
     Unlinked => "unlinked",
+    /// The workspace's agent reported a turn state, or its execution ended.
+    AgentState => "agent_state",
 });
 
 states!(EventCause {
@@ -69,6 +71,8 @@ pub struct EventDetails {
     /// The issue or PR link changed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub link: Option<Box<LinkEvent>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_state: Option<AgentStateEvent>,
 }
 
 /// Distinguish an absent field from an explicit null.
@@ -98,6 +102,12 @@ pub struct ReviewEvent {
     pub kind: Option<crate::forge::link::ItemKind>,
     pub url: Option<String>,
     pub head: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentStateEvent {
+    /// Null once the execution that reported the state has ended.
+    pub state: Option<crate::state::AgentState>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
