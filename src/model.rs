@@ -244,6 +244,8 @@ pub struct ExecutionPlan {
     pub scope_token: String,
     /// Absolute setup command path when the execution runs configured setup.
     pub setup_cmd: Option<PathBuf>,
+    /// Copy the main checkout's ignored files before the setup command.
+    pub copy_ignored: bool,
     pub ports: Vec<PortReservation>,
     pub land: Option<Box<LandPlan>>,
 }

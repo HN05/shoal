@@ -361,6 +361,14 @@ async fn run_tracked(
                 push: matches!(mode, Mode::Land { push: true, .. }),
             },
         )?
+    } else if plan.copy_ignored {
+        internal_command(
+            paths,
+            false,
+            Worker::CopyIgnored {
+                setup_cmd: plan.setup_cmd.as_deref(),
+            },
+        )?
     } else {
         match &plan.setup_cmd {
             Some(path) => vec![path.as_os_str().to_owned()],

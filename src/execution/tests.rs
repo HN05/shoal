@@ -38,6 +38,7 @@ async fn adjacent_controls_child() {
         ),
         scope_token: "test-scope".into(),
         setup_cmd: None,
+        copy_ignored: false,
         ports: vec![],
         land: None,
     };
@@ -213,6 +214,7 @@ async fn reattachment_child() {
         ),
         scope_token: "test-scope".into(),
         setup_cmd: None,
+        copy_ignored: false,
         ports: vec![],
         land: None,
     };

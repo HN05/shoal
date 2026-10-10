@@ -265,6 +265,9 @@ failures retain the workspace and report the command's exit status and the
 blocking evidence. Other failures let interactive callers choose delete, ignore
 (which repairs verified state first), or keep. JSON callers get a nonzero exit.
 `setup` reruns setup explicitly; nothing retries automatically.
+Optional `copy_ignored` starts tracked setup by copying the repository checkout's
+ignored files through Worktrunk, so local files like `.env` arrive without a
+setup script and failures gate readiness; `.worktreeinclude` selects what to copy.
 
 Hooks are deliberately untracked user processes with the workspace identity
 but no scope token, because their purpose is to start or stop things that

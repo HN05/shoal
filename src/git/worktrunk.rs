@@ -1,4 +1,4 @@
-//! Worktree creation and removal through Worktrunk (`wt`).
+//! Worktree creation, removal and ignored-file copies through Worktrunk (`wt`).
 use crate::tools::Tool;
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, de::DeserializeOwned};
@@ -142,6 +142,19 @@ fn default_branch_override(command: &mut Command, reference: &str) -> Result<()>
             "worktrunk.default-branch",
         )
         .env(format!("GIT_CONFIG_VALUE_{count}"), reference);
+    Ok(())
+}
+
+/// Copy ignored files from the primary worktree into `workspace_dir`,
+/// skipping files that already exist there. Output goes to the caller's terminal.
+pub async fn copy_ignored(worktrunk_config: &Path, workspace_dir: &Path) -> Result<()> {
+    let mut command = command(workspace_dir, worktrunk_config);
+    let status = command
+        .args(["step", "copy-ignored"])
+        .status()
+        .await
+        .context("run wt; ensure it is installed and on PATH")?;
+    ensure!(status.success(), "wt step copy-ignored failed ({status})");
     Ok(())
 }
 
