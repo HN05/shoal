@@ -229,7 +229,8 @@ base. A swarm is the task name recorded on each of its workspaces, not a record
 of its own: workspaces of one repository with the same task form it, so a later
 swarm for the task joins it, and it ends when one workspace remains. Every
 attempt is an ordinary new workspace that links the issue and watches its own
-PRs. Adoption
+PRs. Picking removes the other attempts through the normal removal path and
+never renames the kept branch, which may already back a PR. Adoption
 takes a path; the CLI infers its repository from the owning checkout, then a unique
 `origin` remote match, then a picker, with `--repo` as the override. Explicit
 adoption accepts an unlocked linked worktree root on a local branch of the registered repository with no ownership

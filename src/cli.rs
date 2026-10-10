@@ -719,6 +719,20 @@ pub enum SwarmCommand {
         #[arg(last = true)]
         args: Vec<OsString>,
     },
+    /// Keep one workspace of a swarm and remove the others as rm does.
+    ///
+    /// The kept branch is not renamed; the removed workspaces' PRs stay open.
+    Pick {
+        workspace: Option<String>,
+        #[command(flatten)]
+        confirmation: ConfirmationArgs,
+        /// Retain the removed workspaces' branches, including when they contain work.
+        #[arg(long, conflicts_with = "delete_branch")]
+        keep_branch: bool,
+        /// Delete the removed workspaces' branches, including uncommitted and differing work.
+        #[arg(long, conflicts_with = "keep_branch")]
+        delete_branch: bool,
+    },
 }
 
 #[derive(Debug, Subcommand)]

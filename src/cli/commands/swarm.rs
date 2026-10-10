@@ -1,12 +1,17 @@
 //! Swarms: one task attempted in several workspaces, of which one is kept.
 use std::{collections::HashSet, ffi::OsString};
 
-use anyhow::{Result, ensure};
+use anyhow::{Context as _, Result, ensure};
 
 use super::workspaces::{self, AddPlan, AgentLaunch, Creation};
 use crate::{
     agent::Agent,
-    cli::{SwarmCommand, agents, client, context::Context, herdr, ui},
+    cli::{
+        SwarmCommand, agents, client,
+        context::Context,
+        herdr,
+        ui::{self, Fallback},
+    },
     forge::IssueInput,
     git,
     model::Workspace,
@@ -38,6 +43,19 @@ pub(super) async fn run(ctx: &Context, command: SwarmCommand) -> Result<i32> {
                 git_profile,
             };
             add(ctx, input, args).await
+        }
+        SwarmCommand::Pick {
+            workspace,
+            confirmation,
+            keep_branch,
+            delete_branch,
+        } => {
+            let removal = Removal {
+                yes: confirmation.yes,
+                keep_branch,
+                delete_branch,
+            };
+            pick(ctx, workspace, removal).await
         }
     }
 }
@@ -141,6 +159,50 @@ async fn add(ctx: &Context, input: SwarmInput, args: Vec<OsString>) -> Result<i3
             return Ok(code);
         }
     }
+    Ok(0)
+}
+
+/// The branch choice and confirmation for each removed workspace, as for `rm`.
+struct Removal {
+    yes: bool,
+    keep_branch: bool,
+    delete_branch: bool,
+}
+
+/// Keep the workspace and remove the swarm's other workspaces through the
+/// normal removal path. Their linked PRs are reported, not closed.
+async fn pick(ctx: &Context, workspace: Option<String>, removal: Removal) -> Result<i32> {
+    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    let kept = client::inspect(&ctx.paths, workspace).await?.workspace;
+    let swarm = kept
+        .swarm
+        .with_context(|| format!("workspace {} is not in a swarm", kept.name))?;
+    let mut prs = Vec::new();
+    let mut removed = serde_json::Map::new();
+    for other in &swarm.workspaces {
+        let linked = client::inspect(&ctx.paths, other.id.clone()).await?;
+        prs.extend(linked.workspace.links.prs);
+        let result = workspaces::remove_workspace(
+            ctx,
+            other.id.clone(),
+            removal.yes,
+            removal.keep_branch,
+            removal.delete_branch,
+        )
+        .await?;
+        if !ctx.json {
+            println!("{}: {}", other.name, result.message());
+        }
+        removed.insert(other.name.clone(), serde_json::to_value(result)?);
+    }
+    let mut text = format!("Picked {}", kept.name);
+    if !prs.is_empty() {
+        text.push_str(&format!("\nPRs of removed workspaces: {}", prs.join(", ")));
+    }
+    ctx.emit(
+        &text,
+        serde_json::json!({"workspace": kept.name, "removed": removed, "prs": prs}),
+    )?;
     Ok(0)
 }
 

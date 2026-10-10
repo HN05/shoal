@@ -77,6 +77,7 @@ shoal rename fix-login fix/login             # Rename its branch and workspace t
 shoal add https://github.com/owner/repo/issues/68 # Create from an issue
 shoal add https://github.com/owner/repo/issues/34  # Add an issue, PR, or branch link
 shoal swarm add 34 --agents codex,claude      # Attempt issue 34 with both agents
+shoal swarm pick issue-34-fix-codex           # Keep one attempt, remove the others
 shoal link https://github.com/owner/repo/issues/34  # Link an issue to the current workspace
 shoal unlink issue                         # Remove the linked issue
 shoal watch pr 505                         # Watch an explicit PR

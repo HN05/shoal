@@ -767,6 +767,11 @@ agents are refused before anything is created, and Happy agents start detached.
 `status` shows the task and the other workspaces; `ls --json` and `inspect` give
 `swarm` (`task` and its other `workspaces`), absent outside a swarm.
 
+`shoal swarm pick <workspace>` keeps that workspace and removes the swarm's other
+workspaces through `rm`'s branch choice and confirmation, which `--keep-branch`,
+`--delete-branch` and `--yes` answer for each. The kept branch keeps its name;
+the removed workspaces' linked PRs stay open on the forge and are listed.
+
 ### Repositories
 
 Register a local checkout in place (no remote required) or a clone URL. Each

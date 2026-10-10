@@ -12062,9 +12062,30 @@ fn swarm_attempts_an_issue_once_per_agent() {
             "https://github.com/team/project/issues/34"
         );
     }
-    for name in &names {
-        fixture.ok(&["rm", name, "--yes", "--delete-branch"]);
-    }
+    let picked = fixture.ok(&["swarm", "pick", &names[1], "--yes", "--delete-branch"]);
+    assert_eq!(picked["workspace"], names[1].as_str());
+    assert_eq!(picked["removed"][&names[0]]["removed"], true, "{picked}");
+    assert_eq!(picked["prs"], serde_json::json!([]));
+    let names_left: Vec<_> = fixture
+        .ok(&["ls"])
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|workspace| workspace["name"].as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(names_left, [names[1].clone()]);
+    assert_eq!(git(&fixture.repo, &["branch", "--list", &names[0]]), "");
+    // The last workspace leaves the swarm, so there is nothing left to pick.
+    assert_eq!(
+        fixture.ok(&["status", &names[1]])["workspace"]["swarm"],
+        Value::Null
+    );
+    let refused = fixture.run(&["swarm", "pick", &names[1]]);
+    assert!(
+        String::from_utf8_lossy(&refused.stderr).contains("not in a swarm"),
+        "{refused:?}"
+    );
+    fixture.ok(&["rm", &names[1], "--yes", "--delete-branch"]);
 }
 
 /// A local stand-in for Happy's server; killed when dropped.

@@ -1369,6 +1369,40 @@ pub(super) async fn remove(
     delete_branch: bool,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    let removed = remove_workspace(ctx, workspace, yes, keep_branch, delete_branch).await?;
+    ctx.emit_styled(Style::Success, &removed.message(), &removed)?;
+    Ok(0)
+}
+
+/// A removal's result with the holds the workspace had.
+#[derive(serde::Serialize)]
+pub(super) struct Removed {
+    #[serde(flatten)]
+    result: RemovalResult,
+    holds: Vec<crate::model::WorkspaceHold>,
+}
+
+impl Removed {
+    pub(super) fn message(&self) -> String {
+        match (&self.result.branch, self.result.branch_outcome.is_deleted()) {
+            (Some(branch), true) => format!("Workspace and Git branch {branch} removed"),
+            (Some(branch), false) => format!(
+                "Workspace removed; Git branch {branch} retained ({})",
+                self.result.branch_outcome
+            ),
+            (None, _) => "Workspace removed".into(),
+        }
+    }
+}
+
+/// Remove a workspace after the branch choice and confirmation `rm` asks for.
+pub(super) async fn remove_workspace(
+    ctx: &Context,
+    workspace: String,
+    yes: bool,
+    keep_branch: bool,
+    delete_branch: bool,
+) -> Result<Removed> {
     let caller_pid = std::process::id();
     let check = request::<RemovalCheck>(
         &ctx.paths,
@@ -1420,10 +1454,10 @@ pub(super) async fn remove(
     if let Some(error) = &result.hook_error {
         eprintln!("warning: {error}");
     }
-    let mut output = serde_json::to_value(&result)?;
-    output["holds"] = serde_json::to_value(&check.workspace.holds)?;
-    ctx.emit_styled(Style::Success, &removal_message(&result), &output)?;
-    Ok(0)
+    Ok(Removed {
+        result,
+        holds: check.workspace.holds,
+    })
 }
 
 fn confirm_removal(ctx: &Context, check: &RemovalCheck, choice: BranchChoice) -> Result<()> {
@@ -1483,17 +1517,6 @@ async fn escape_destination(ctx: &Context, workspace: &Workspace) -> Result<Opti
         .and_then(|r| r.workspaces_dir)
         .filter(|p| p.is_dir());
     Ok(Some(repository.unwrap_or_else(|| ctx.paths.home.clone())))
-}
-
-fn removal_message(result: &RemovalResult) -> String {
-    match (&result.branch, result.branch_outcome.is_deleted()) {
-        (Some(branch), true) => format!("Workspace and Git branch {branch} removed"),
-        (Some(branch), false) => format!(
-            "Workspace removed; Git branch {branch} retained ({})",
-            result.branch_outcome
-        ),
-        (None, _) => "Workspace removed".into(),
-    }
 }
 
 pub(super) async fn exec(
