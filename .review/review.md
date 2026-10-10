@@ -218,6 +218,9 @@ instead of the PR delivery guidance below.
   and timing; retain work and leases, notify with the pressure reason and recovery
   path, distinguish automatic recovery from manual or unavailable recovery, and never select disconnected
   executions. Failed readings reset the sustained timer and authorize no stop.
+  Below each enabled protection's stop threshold, `[overload.warning]` queues an
+  agent message for every workspace with a running agent, at most once per signal
+  and workspace per repeat interval; warnings never stop, clean up or notify.
   Automatic recovery uses built-in Codex and Claude session restore commands or a
 configured command for another agent, plus proven child
   termination, verified ready workspace ownership and sustained healthy headroom.

@@ -21,6 +21,7 @@ pub mod recovery;
 pub mod resources;
 pub mod scope;
 pub mod store;
+mod warnings;
 pub mod workspace;
 
 use std::{

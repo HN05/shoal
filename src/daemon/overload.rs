@@ -3,7 +3,10 @@
 use std::{sync::Arc, time::Duration};
 use tokio::time::Instant;
 
-use super::workspace::Manager;
+use super::{
+    warnings::{self, Signal, Warnings},
+    workspace::Manager,
+};
 use crate::daemon::log;
 
 #[derive(Default)]
@@ -25,6 +28,7 @@ impl Sustained {
 struct Monitor {
     memory: Sustained,
     cpu: Sustained,
+    cpu_warning: Sustained,
     healthy: Sustained,
     recovery_epoch: u64,
     cpu_used: Option<f64>,
@@ -45,6 +49,7 @@ impl Monitor {
         }) {
             self.memory = Sustained::default();
             self.cpu = Sustained::default();
+            self.cpu_warning = Sustained::default();
             self.healthy = Sustained::default();
             self.previous_cpu = None;
         }
@@ -83,10 +88,42 @@ impl Monitor {
             None
         }
     }
+
+    /// Signals past their warning thresholds, after [`Self::reason`] has
+    /// taken this sample's CPU reading. Each warns only while its protection is
+    /// enabled; a failed reading warns about nothing.
+    fn warnings(
+        &mut self,
+        now: Instant,
+        settings: &crate::config::overload::Overload,
+        memory: anyhow::Result<bool>,
+    ) -> Vec<(Signal, String)> {
+        let warning = &settings.warning;
+        let enabled = |protection| warning.enabled && protection;
+        let cpu = self.cpu_warning.observe(
+            now,
+            enabled(settings.cpu.enabled)
+                && self
+                    .cpu_used
+                    .is_some_and(|used| used >= f64::from(warning.cpu_used_percent)),
+            warning.cpu_sustained_seconds,
+        );
+        let memory = enabled(settings.memory.enabled) && memory.unwrap_or(false);
+        let mut signals = Vec::new();
+        if memory {
+            signals.push((Signal::Memory, warnings::memory(settings)));
+        }
+        if cpu {
+            signals.push((Signal::Cpu, warnings::cpu(settings)));
+        }
+        signals
+    }
 }
 
 pub(super) async fn run(manager: Arc<Manager>) {
     let mut monitor = Monitor::default();
+    // Outlives monitor resets, so a stop does not repeat earlier warnings.
+    let mut warned = Warnings::default();
     let mut config = manager.config();
     loop {
         // Keep publishing recovery with every protection off: an agent stopped
@@ -116,6 +153,14 @@ pub(super) async fn run(manager: Arc<Manager>) {
         };
         let now = Instant::now();
         let reason = monitor.reason(now, settings, memory, cpu);
+        let memory_warning = if settings.warning.enabled && settings.memory.enabled {
+            crate::process::load::memory_warning(settings.warning.memory_used_percent)
+        } else {
+            Ok(false)
+        };
+        for (signal, message) in monitor.warnings(now, settings, memory_warning) {
+            warned.warn(&manager, now, signal, &message).await;
+        }
         let epoch = manager
             .recovery_epoch
             .load(std::sync::atomic::Ordering::Relaxed);
@@ -347,6 +392,54 @@ mod tests {
                 ticks(5)
             ),
             Some("critical memory pressure")
+        );
+    }
+
+    #[test]
+    fn warnings_follow_enabled_protections_and_sustained_cpu() {
+        let start = Instant::now();
+        let mut settings = crate::config::overload::Overload {
+            poll_seconds: 100,
+            ..Default::default()
+        };
+        let mut monitor = Monitor::default();
+        let signals = |warnings: Vec<(Signal, String)>| {
+            warnings
+                .into_iter()
+                .map(|(signal, _)| signal)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            signals(monitor.warnings(start, &settings, Ok(true))),
+            [Signal::Memory]
+        );
+        assert!(
+            monitor
+                .warnings(start, &settings, Err(anyhow::anyhow!("unavailable")))
+                .is_empty()
+        );
+        settings.memory.enabled = false;
+        assert!(monitor.warnings(start, &settings, Ok(true)).is_empty());
+        settings.memory.enabled = true;
+        settings.warning.enabled = false;
+        assert!(monitor.warnings(start, &settings, Ok(true)).is_empty());
+        settings.warning.enabled = true;
+
+        // CPU warns only while its protection is enabled, after the warning
+        // threshold has held for its sustained time.
+        settings.cpu.enabled = true;
+        monitor.cpu_used = Some(85.0);
+        assert!(monitor.warnings(start, &settings, Ok(false)).is_empty());
+        let sustained = Duration::from_secs(settings.warning.cpu_sustained_seconds);
+        assert_eq!(
+            signals(monitor.warnings(start + sustained, &settings, Ok(false))),
+            [Signal::Cpu]
+        );
+        monitor.cpu_used = Some(79.0);
+        assert!(
+            monitor
+                .warnings(start + sustained * 2, &settings, Ok(false))
+                .is_empty()
         );
     }
 

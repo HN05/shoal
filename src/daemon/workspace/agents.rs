@@ -323,6 +323,19 @@ impl Manager {
         Ok(())
     }
 
+    /// Workspaces with a connected agent that is not being stopped.
+    pub(crate) async fn running_agent_workspaces(&self) -> Vec<String> {
+        let agents = self.agents.lock().await;
+        let mut workspaces: Vec<_> = agents
+            .values()
+            .filter(|agent| !agent.stop.is_closed() && !*agent.stop.borrow())
+            .map(|agent| agent.workspace_id.clone())
+            .collect();
+        workspaces.sort();
+        workspaces.dedup();
+        workspaces
+    }
+
     pub(crate) async fn stop_agent_for_overload(&self, reason: &str) -> bool {
         !self
             .stop_agents(&Protection::load(reason), Select::Newest)

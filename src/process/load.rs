@@ -201,6 +201,11 @@ mod cpu_tests {
     }
 }
 
+/// Warnings start where recovery headroom ends: native warning pressure on macOS.
+pub fn memory_warning(used_percent: u8) -> Result<bool> {
+    Ok(!safe_memory(used_percent)?)
+}
+
 /// Recovery requires headroom, and native normal pressure on macOS.
 pub fn safe_memory(used_percent: u8) -> Result<bool> {
     #[cfg(target_os = "macos")]

@@ -113,6 +113,16 @@ memory_used_percent = 85
 cpu_used_percent = 75
 sustained_seconds = 60
 
+[overload.warning]
+# Message running agents to reduce load before an enabled protection stops them.
+enabled = true
+# Linux usage; macOS warns at native warning pressure.
+memory_used_percent = 90
+cpu_used_percent = 80
+cpu_sustained_seconds = 60
+# Least time between repeated warnings about one signal to one workspace.
+repeat_minutes = 30
+
 [cleanup.auto]
 # Remove idle, clean, pushed or landed workspaces automatically.
 enabled = true

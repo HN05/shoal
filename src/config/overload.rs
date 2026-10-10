@@ -9,6 +9,7 @@ pub struct Overload {
     pub cpu: Cpu,
     pub disk: Disk,
     pub recovery: Recovery,
+    pub warning: Warning,
     pub cooldown_seconds: u64,
     pub poll_seconds: u64,
 }
@@ -20,6 +21,7 @@ impl Default for Overload {
             cpu: Cpu::default(),
             disk: Disk::default(),
             recovery: Recovery::default(),
+            warning: Warning::default(),
             cooldown_seconds: 5,
             poll_seconds: 2,
         }
@@ -114,6 +116,32 @@ impl Default for Recovery {
     }
 }
 
+/// Thresholds, normally below each enabled protection's stop threshold, at
+/// which Shoal messages running agents so they can reduce load first.
+#[derive(Debug, PartialEq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Warning {
+    pub enabled: bool,
+    /// Linux only; macOS warns at native warning pressure.
+    pub memory_used_percent: u8,
+    pub cpu_used_percent: u8,
+    pub cpu_sustained_seconds: u64,
+    /// The least time between warnings about one signal to one workspace.
+    pub repeat_minutes: u64,
+}
+
+impl Default for Warning {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            memory_used_percent: 90,
+            cpu_used_percent: 80,
+            cpu_sustained_seconds: 60,
+            repeat_minutes: 30,
+        }
+    }
+}
+
 impl Overload {
     pub fn validate(&self) -> Result<()> {
         ensure!(
@@ -151,6 +179,24 @@ impl Overload {
             self.recovery.sustained_seconds,
             "overload.recovery.sustained_seconds",
         )?;
+        // Warnings are not checked against stop thresholds, so existing
+        // configurations stay valid; a warning at or above one comes with the stop.
+        ensure!(
+            (1..=99).contains(&self.warning.memory_used_percent),
+            "overload.warning.memory_used_percent must be between 1 and 99"
+        );
+        ensure!(
+            (1..=100).contains(&self.warning.cpu_used_percent),
+            "overload.warning.cpu_used_percent must be between 1 and 100"
+        );
+        validate_seconds(
+            self.warning.cpu_sustained_seconds,
+            "overload.warning.cpu_sustained_seconds",
+        )?;
+        ensure!(
+            (1..=1440).contains(&self.warning.repeat_minutes),
+            "overload.warning.repeat_minutes must be between 1 and 1440"
+        );
         validate_seconds(self.poll_seconds, "overload.poll_seconds")?;
         validate_seconds(self.cooldown_seconds, "overload.cooldown_seconds")
     }
@@ -192,10 +238,19 @@ mod tests {
             "[disk]\nstop_free_gib = 0",
             "[disk]\ncleanup_free_gib = 1",
             "[disk]\ncleanup_free_gib = 1048577",
+            "[warning]\nmemory_used_percent = 100",
+            "[warning]\ncpu_used_percent = 0",
+            "[warning]\ncpu_sustained_seconds = 0",
+            "[warning]\nrepeat_minutes = 0",
         ] {
             let config: Overload = toml::from_str(text).unwrap();
             assert!(config.validate().is_err(), "{text}");
         }
+        // Lowering a stop threshold below the default warning stays valid.
+        let config: Overload =
+            toml::from_str("[memory]\nused_percent = 85\n[recovery]\nmemory_used_percent = 80")
+                .unwrap();
+        config.validate().unwrap();
         let config: Overload = toml::from_str("[memory]\nenabled = false").unwrap();
         assert!(!config.memory.enabled);
         assert_eq!(config.memory.used_percent, defaults.memory.used_percent);

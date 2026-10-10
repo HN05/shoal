@@ -88,6 +88,12 @@ never replay the original task prompt. Keep waiting wrappers tracked, serialize
 restores, and preserve manual recovery across restarts. Saved recovery represents
 unfinished work until restored or explicitly discarded.
 Agent metadata is transient, so restart cannot select disconnected survivors.
+Warnings come first: below each enabled protection's stop threshold, the daemon
+queues an agent message for every workspace with a running agent, so agents can
+reduce load before anything stops. Warnings repeat per signal and workspace only
+after an interval and never stop, clean up or notify. Their thresholds are not
+validated against stop thresholds, so lowering a stop threshold never invalidates
+an existing configuration.
 Disk protection reads available space on filesystems holding workspaces or
 daemon state. Below its cleanup threshold it removes idle cleanup candidates there
 without their idle delay, through the same removal path and repository settings.
