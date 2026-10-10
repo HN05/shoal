@@ -2,6 +2,7 @@
 //! daemon modules own lifecycle and allocation policy.
 mod access;
 mod acquisition;
+mod agent_state;
 mod base;
 mod cleanup;
 mod configuration;
@@ -348,6 +349,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
                 messages::show(&ctx, workspace).await
             }
         }
+        Command::AgentState { state, workspace } => agent_state::run(&ctx, workspace, state).await,
         Command::Done {
             workspace,
             keep,

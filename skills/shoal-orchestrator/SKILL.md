@@ -51,7 +51,8 @@ shoal --json events --follow --since <id>
 Notifications report agent exits, messages agents sent with `shoal notify`,
 busy resources, pending access requests and cleanup Shoal did on its own; reading them marks them read. Events stream
 workspace lifecycle changes, including `review_ready` marks agents set with
-`shoal ready`, without consuming notifications; resume from the
+`shoal ready` and `agent_state` turn states (`working`, `waiting`, `idle`) their
+hooks report, which `ls` and `status` also show, without consuming notifications; resume from the
 last `id` you handled and resync with `shoal --json ls` after a `gap`.
 
 ## Resource access requests

@@ -318,8 +318,8 @@ Its rows, like `shoal ls` and workspace pickers, are aligned and marked ● read
 rows span several, its status and the linked issue's title. The status is the
 state unless ready; for a ready workspace it is, in order of precedence,
 `stopped` when `shoal stop` saved agents or commands for `shoal resume`,
-`ready for review`, `running` while an agent or command runs,
-`ready for review (outdated)`, or `idle`. Branches and paths are in `shoal status`.
+`waiting for input`, `ready for review`, the other [agent states](#agent-state),
+`running` while an agent or command runs, `ready for review (outdated)`, or `idle`. Branches and paths are in `shoal status`.
 Enter enters the selection; Ctrl-D deletes, Ctrl-E
 runs Claude/Codex CLI, starts a Happy session, opens Codex/T3 apps, or runs a shell command, Ctrl-A adds,
 Ctrl-O inspects, Ctrl-S stops, Ctrl-F shows the diff. Each action returns to your
@@ -1193,6 +1193,23 @@ the JSON array of marks just recorded. Failure records `hook_failed` and keeps
 the marks; every `shoal ready` runs it again. Forge actions belong in this hook or
 an event consumer: Shoal itself does not change the issue or PR.
 
+### Agent state
+
+```sh
+shoal agent-state working   # Also waiting (for the user mid-turn) or idle (turn finished)
+```
+
+Agent hooks report the agent's turn state with this command, and integrations
+read it instead of each inferring it from the terminal. `ls` and `status` show
+`working`, `waiting for input` or `turn finished`; `status`, `inspect` and `ls --json`
+give `agent_state` with `state` and the Unix-seconds `since` it began. A state
+reported from a tracked execution ends with that execution; one reported from
+outside lasts until the next report or removal. Each change, and each end, is
+a [workspace event](#workspace-events); repeating the current state is not a
+change. Agent state never notifies, records completion, or affects cleanup.
+Scoped callers report only for their own workspace; `--workspace` selects
+another one for unscoped callers.
+
 ### Automatic cleanup
 
 Idle, clean, fully pushed worktrees are removed after 10 minutes by default, or
@@ -1236,9 +1253,10 @@ Each JSON line has `type: "event"`, an increasing `id`, Unix-seconds `created_at
 workspace and repository UUIDs (`workspace_id`, `repository_id`), `name`, `path`,
 `branch`, `kind`, `cause`, and `error`. Kinds are `created`, `ready`, `setup_failed`,
 `completed`, `undone`, `removed`, `retained`, `branch_changed`, `review_ready`,
-`review_cleared`, `linked`, `unlinked` and `base_changed`; history from earlier versions may also contain `continued`. Review events add a `review` object with the mark's `kind`,
+`review_cleared`, `linked`, `unlinked`, `base_changed` and `agent_state`; history from earlier versions may also contain `continued`. Review events add a `review` object with the mark's `kind`,
 `url` (both null for a workspace mark) and `head`. Link events add a `link`
-object with the linked issue or PR's `kind` and canonical `url`. `created` and `base_changed`
+object with the linked issue or PR's `kind` and canonical `url`. Agent state
+events add `agent_state` with the reported `state`, null when its execution ended. `created` and `base_changed`
 events add `base_workspace` with the base's `id`, `name` and `branch`, or null.
 Causes are `manual`, `idle`, `issue`, `pr` (including a base workspace's merged
 PRs), `completion`, `missing_directory`, `disk_space`, or `removed` for a base workspace's removal, and null
@@ -1442,8 +1460,8 @@ yourself that such processes stopped, use `--repair --acknowledge-stopped`; visi
 
 ### Scoped workspace commands
 
-PR watches, merge acknowledgements, `notify`, `messages`, `ready` and `unready` are
-own-workspace scope exceptions.
+PR watches, merge acknowledgements, `notify`, `messages`, `ready`, `unready`
+and `agent-state` are own-workspace scope exceptions.
 Processes carrying a Shoal scope token are confined to their own worktree:
 `status`, inspect, execute, `merge`, `diff`, `setup`, and resources. They may read
 effective configuration for their own workspace, but cannot change configuration.

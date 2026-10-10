@@ -22,7 +22,7 @@ use crate::{
     model::{Repository, ReviewMark, Workspace},
     paths::Paths,
     removal::{BranchChoice, RemovalCheck},
-    state::WorkspaceState,
+    state::{AgentState, WorkspaceState},
 };
 
 fn require_interactive(ctx: &Context) -> Result<()> {
@@ -458,9 +458,19 @@ pub fn stopped_workspaces(paths: &Paths, workspaces: &[Workspace]) -> HashSet<St
         .collect()
 }
 
-/// What a workspace is doing: its state unless ready, then stopped work, a
-/// current ready-for-review mark, a running agent or command, an outdated mark,
-/// or idle.
+/// How lists and status name an agent's reported turn state. A finished turn
+/// is not called idle, which in lists means nothing runs.
+pub fn agent_state_label(state: AgentState) -> &'static str {
+    match state {
+        AgentState::Working => "working",
+        AgentState::Waiting => "waiting for input",
+        AgentState::Idle => "turn finished",
+    }
+}
+
+/// What a workspace is doing: its state unless ready, then stopped work, an
+/// agent waiting for input, a current ready-for-review mark, the agent's other
+/// turn states, a running agent or command, an outdated mark, or idle.
 fn status_cell(workspace: &Workspace, stopped: bool) -> Cell {
     if workspace.state != WorkspaceState::Ready {
         return (
@@ -469,10 +479,15 @@ fn status_cell(workspace: &Workspace, stopped: bool) -> Cell {
         );
     }
     let outdated = workspace.review.iter().any(|mark| mark.stale == Some(true));
+    let agent = workspace.agent_state.map(|status| status.state);
     let (text, style) = if stopped {
         ("stopped", Style::Warning)
+    } else if agent == Some(AgentState::Waiting) {
+        (agent_state_label(AgentState::Waiting), Style::Warning)
     } else if !workspace.review.is_empty() && !outdated {
         ("ready for review", Style::Success)
+    } else if let Some(state) = agent {
+        (agent_state_label(state), Style::Heading)
     } else if workspace.running {
         ("running", Style::Heading)
     } else if outdated {
@@ -730,7 +745,7 @@ mod tests {
     #[test]
     fn workspace_rows_align_status_and_titles() {
         let plain = Palette::stdout(true);
-        let mut workspaces = [
+        let mut workspaces = vec![
             workspace("a", "fix-login", "fix-login", WorkspaceState::Ready),
             workspace("a", "x", "feature/x", WorkspaceState::Failed),
             workspace("a", "new", "new", WorkspaceState::Preparing),
@@ -750,6 +765,19 @@ mod tests {
         workspaces[4].running = true;
         workspaces[4].review = vec![mark(false)];
         workspaces[5].review = vec![mark(true)];
+        let agent = |state| Some(crate::model::AgentStatus { state, since: 0 });
+        // Waiting for input outranks a current mark; other turn states do not.
+        workspaces.extend([
+            workspace("a", "asking", "asking", WorkspaceState::Ready),
+            workspace("a", "marked", "marked", WorkspaceState::Ready),
+            workspace("a", "agent", "agent", WorkspaceState::Ready),
+        ]);
+        workspaces[6].review = vec![mark(false)];
+        workspaces[6].agent_state = agent(AgentState::Waiting);
+        workspaces[7].review = vec![mark(false)];
+        workspaces[7].agent_state = agent(AgentState::Working);
+        workspaces[8].running = true;
+        workspaces[8].agent_state = agent(AgentState::Idle);
         assert_eq!(
             workspace_rows(
                 &workspaces,
@@ -764,6 +792,9 @@ mod tests {
                 "● busy       running                      Refine the list view",
                 "● review     ready for review",
                 "● quiet      ready for review (outdated)",
+                "● asking     waiting for input",
+                "● marked     ready for review",
+                "● agent      turn finished",
             ]
         );
         let repositories = [("a".into(), "shoal".into()), ("b".into(), "app".into())];

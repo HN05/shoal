@@ -216,6 +216,14 @@ pub enum Command {
         #[arg(long, conflicts_with = "workspace")]
         hook: bool,
     },
+    /// Report the agent's turn state; Shoal's agent hooks call it.
+    #[command(hide = true)]
+    AgentState {
+        state: crate::state::AgentState,
+        /// Workspace to use; defaults to the current workspace or picker.
+        #[arg(long)]
+        workspace: Option<String>,
+    },
     /// Mark the assignment finished; by default stop tracked commands and clean up safely.
     Done {
         workspace: Option<String>,

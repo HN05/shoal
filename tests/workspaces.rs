@@ -14112,6 +14112,61 @@ fn the_user_messages_agents_who_read_their_own_messages_once() {
 }
 
 #[test]
+fn agents_report_their_turn_state_until_their_execution_ends() {
+    let fixture = Fixture::new();
+    fixture.add("reporter");
+    fixture.add("other");
+    let output = scoped_command(
+        &fixture,
+        "reporter",
+        &["agent-state", "waiting", "--workspace", "other"],
+    );
+    assert!(!output.status.success(), "{output:?}");
+    // The execution reports, then lists itself while its state is current.
+    let output = fixture
+        .command()
+        .args(["exec", "reporter", "--", "sh", "-c"])
+        .arg(r#""$0" agent-state waiting >/dev/null && "$0" ls && "$0" status"#)
+        .arg(env!("CARGO_BIN_EXE_shoal"))
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let shown = String::from_utf8(output.stdout).unwrap();
+    assert!(
+        shown
+            .lines()
+            .any(|line| line.contains("reporter") && line.contains("waiting for input")),
+        "{shown}"
+    );
+    assert!(
+        shown.contains("Agent state:   waiting for input"),
+        "{shown}"
+    );
+    assert!(
+        fixture.ok(&["status", "reporter"])["workspace"]
+            .get("agent_state")
+            .is_none()
+    );
+    let events = fixture
+        .command()
+        .args(["--json", "events"])
+        .output()
+        .unwrap();
+    assert!(events.status.success());
+    let states: Vec<Value> = String::from_utf8(events.stdout)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).unwrap())
+        .filter(|event| event["kind"] == "agent_state")
+        .map(|event| {
+            assert_eq!(event["name"], "reporter");
+            event["agent_state"]["state"].clone()
+        })
+        .collect();
+    assert_eq!(states, [Value::from("waiting"), Value::Null]);
+}
+
+#[test]
 fn agents_mark_their_workspace_ready_for_review_until_new_commits() {
     let fixture = Fixture::new();
     let added = fixture.add("reviewed");

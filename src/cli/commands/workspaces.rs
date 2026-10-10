@@ -1203,6 +1203,13 @@ fn render_status(status: &WorkspaceStatus, json: bool) {
         );
     }
 
+    println!(
+        "Agent state:   {}",
+        workspace
+            .agent_state
+            .map_or("none", |status| { ui::agent_state_label(status.state) })
+    );
+
     println!("Ports:         {}", inspection.ports.len());
     for port in &inspection.ports {
         println!("  {}={} ({})", port.name, port.port, port.env_var);
