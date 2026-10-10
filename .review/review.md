@@ -63,8 +63,8 @@ instead of the PR delivery guidance below.
   only (CLI refusals also follow ancestry for the same state directory); workspace allocation/removal/recovery and shared repository/service
   administration stay denied, while own-workspace setup, rename, base workspace, PR registration,
   merge acknowledgements, messages to the user, reading their own agent messages, ready-for-review marks,
-  assignment completion and its withdrawal,
-  own-repository sync and
+  assignment completion and its withdrawal, opening and changing issues and PRs
+  of the own repository except merging, own-repository sync and
   effective-configuration reads are allowed;
   only unscoped callers export or revoke environment tokens. Export requires a
   ready, verified worktree; tokens persist across restart until revocation or
