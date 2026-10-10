@@ -134,7 +134,8 @@ memory protection does, then every other tracked execution as `shoal stop` does,
 including ones started later, recording `agent_stopped` notifications, or
 `stop_failed` when stopping fails. Agents restore under the recovery rules below
 once `disk.cleanup_free_gib` is available; otherwise free disk space, then run
-`shoal resume`. A failed reading removes and stops nothing.
+`shoal resume`. A filesystem whose reading fails is skipped, so it removes and
+stops nothing, and no agent restores until every reading succeeds.
 
 Configure machine-wide settings in global TOML and reload the daemon:
 

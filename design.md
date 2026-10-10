@@ -91,7 +91,8 @@ without their idle delay, through the same removal path and repository settings.
 When that cannot keep space above its stop threshold, it stops every agent as
 overload protection does and every other tracked execution as manual stop does,
 since any of them may be writing. Agents restore once space reaches the cleanup
-threshold, so restores cannot refill the disk at once; commands stay explicit. A failed reading authorizes nothing.
+threshold, so restores cannot refill the disk at once; commands stay explicit. A failed reading authorizes nothing on its filesystem
+and blocks recovery; readings of other filesystems still protect them.
 Manual stop ends connected tracked executions through their wrappers, preserving
 work and leases. Agents save session recovery for explicit resume; user commands
 save their arguments, which resume reports once, as the restored agent's first
