@@ -183,6 +183,11 @@ impl Manager {
 
     pub async fn set_pr(&self, selector: &str, action: Action) -> Result<()> {
         let _guard = self.pr_gate.lock().await;
+        self.set_pr_gated(selector, action).await
+    }
+
+    /// [`Self::set_pr`] for a caller already holding `pr_gate`.
+    pub(crate) async fn set_pr_gated(&self, selector: &str, action: Action) -> Result<()> {
         let workspace = self.workspace(selector).await?;
         // Links serve more than cleanup; only an acknowledgement exists for it alone.
         ensure!(

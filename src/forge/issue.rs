@@ -50,6 +50,16 @@ impl Manager {
         title: Option<String>,
     ) -> Result<()> {
         let _guard = self.pr_gate.lock().await;
+        self.set_issue_gated(selector, input, title).await
+    }
+
+    /// [`Self::set_issue`] for a caller already holding `pr_gate`.
+    pub(crate) async fn set_issue_gated(
+        &self,
+        selector: &str,
+        input: &str,
+        title: Option<String>,
+    ) -> Result<()> {
         let workspace = self.workspace(selector).await?;
         self.verify_worktree(&workspace).await?;
         let (_, _, url) = self.issue_forge(&workspace, input).await?;

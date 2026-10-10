@@ -68,6 +68,9 @@ impl Manager {
     /// link it when `link` is set.
     pub async fn open_issue(&self, selector: &str, issue: NewIssue, link: bool) -> Result<Opened> {
         anyhow::ensure!(!issue.title.trim().is_empty(), "the issue needs a title");
+        // Cleanup holds the gate, so it cannot remove the workspace between
+        // opening the issue and linking it.
+        let _gate = self.pr_gate.lock().await;
         let workspace = self.workspace(selector).await?;
         self.verify_worktree(&workspace).await?;
         // Refuse before creating anything that could not then be linked.
@@ -89,7 +92,7 @@ impl Manager {
             .run(move |db| events::record_item(db, &id, ItemKind::Issue, &url, "open"))
             .await?;
         if link {
-            self.set_issue(&workspace.id, &item.url, Some(item.title.clone()))
+            self.set_issue_gated(&workspace.id, &item.url, Some(item.title.clone()))
                 .await
                 .with_context(|| format!("{} was opened, but linking it failed", item.url))?;
         }
@@ -105,6 +108,9 @@ impl Manager {
     /// Link the open PR of the workspace's branch, or open one as its agent
     /// account and link it, so a PR Shoal opens is never left unlinked.
     pub async fn open_pull(&self, selector: &str, options: PullOptions) -> Result<Opened> {
+        // Cleanup holds the gate, so it cannot remove the workspace between
+        // opening the PR and linking it.
+        let _gate = self.pr_gate.lock().await;
         let workspace = self.workspace(selector).await?;
         self.verify_worktree(&workspace).await?;
         super::pr::current_head(&workspace).await?;
@@ -127,7 +133,7 @@ impl Manager {
                 .run(move |db| events::record_item(db, &id, ItemKind::Pr, &url, "open"))
                 .await?;
         }
-        self.set_pr(
+        self.set_pr_gated(
             &workspace.id,
             super::pr::Action::Watch {
                 url: item.url.clone(),
