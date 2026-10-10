@@ -679,3 +679,28 @@ fn an_unconfirmed_github_merge_fails_and_keeps_the_branch() {
             .any(|event| event["kind"] == "item_changed")
     );
 }
+
+#[test]
+fn issue_open_with_link_refuses_before_creating_when_an_issue_is_linked() {
+    let fixture = Fixture::new(Forge::GitHub, "");
+    fixture.respond(json!({
+        "issue view 34": {"body": {"number": 34, "state": "OPEN", "title": "Assignment",
+            "body": "", "comments": []}},
+    }));
+    fixture.ok(&["link", "issue", "34", "--workspace", "topic"]);
+    fixture.requests();
+    let output = fixture.run(&[
+        "issue",
+        "open",
+        "--workspace",
+        "topic",
+        "--title",
+        "Follow-up",
+        "--link",
+    ]);
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("already has a linked issue"),
+        "{output:?}"
+    );
+    assert!(fixture.requests().is_empty());
+}

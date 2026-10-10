@@ -62,10 +62,7 @@ impl Manager {
                     |row| row.get(0),
                 )?;
                 ensure!(
-                    matches!(
-                        state,
-                        WorkspaceState::Ready | WorkspaceState::Preparing | WorkspaceState::Failed
-                    ),
+                    state.accepts_issue(),
                     "workspace cannot accept an issue in its current state"
                 );
                 let existing: Option<String> = tx

@@ -109,6 +109,14 @@ states!(WorkspaceState {
     Reconciling => "reconciling",
     Failed => "failed",
 });
+
+impl WorkspaceState {
+    /// A workspace being stopped, removed or reconciled takes no new issue link.
+    pub fn accepts_issue(self) -> bool {
+        matches!(self, Self::Ready | Self::Preparing | Self::Failed)
+    }
+}
+
 states!(ExecutionState {
     Running => "running",
     Unknown => "unknown",

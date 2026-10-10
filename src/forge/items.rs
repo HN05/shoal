@@ -70,6 +70,17 @@ impl Manager {
         anyhow::ensure!(!issue.title.trim().is_empty(), "the issue needs a title");
         let workspace = self.workspace(selector).await?;
         self.verify_worktree(&workspace).await?;
+        // Refuse before creating anything that could not then be linked.
+        if link {
+            anyhow::ensure!(
+                workspace.links.issue.is_none(),
+                "the workspace already has a linked issue; open the issue without --link"
+            );
+            anyhow::ensure!(
+                workspace.state.accepts_issue(),
+                "workspace cannot accept an issue in its current state"
+            );
+        }
         let forge = workspace_forge(&workspace).await?;
         let account = self.agent_account(&workspace).await?;
         let item = forge.create_issue(&account, &issue).await?;
