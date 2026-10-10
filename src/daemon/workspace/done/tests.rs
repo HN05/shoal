@@ -263,8 +263,8 @@ async fn explicit_done_releases_only_the_hold_migrated_from_continuation() {
             // A user hold with the same name and reason is not the migrated one.
             db.execute(
                 "INSERT INTO workspace_holds(workspace_id,name,reason,created_at,from_continuation)
-                 VALUES (?1,'continue','Kept by shoal continue',1,1),
-                        (?1,'thread','Kept by shoal continue',1,0)",
+                 VALUES (?1,'continue','Converted from an earlier Shoal version',1,1),
+                        (?1,'thread','Converted from an earlier Shoal version',1,0)",
                 [id],
             )?;
             Ok(())

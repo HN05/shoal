@@ -1049,7 +1049,8 @@ while the worktree exists. Automatic completion still records `done`; releasing
 the last hold lets cleanup recheck its usual conditions. Idle cleanup restarts its
 timer after release. Explicit removal and deleted-directory cleanup release holds.
 Upgrading turns a `shoal continue` from earlier versions into a hold named
-`continue`, which the next explicit `done` releases.
+`continue` with the reason “Converted from an earlier Shoal version”, which the
+next explicit `done` releases.
 
 Reacquiring a name returns the original hold, including its reason. Acquisition
 requires a ready, verified worktree and is excluded while a resource hook runs.

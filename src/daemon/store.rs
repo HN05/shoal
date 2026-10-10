@@ -12,7 +12,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 33;
+const SCHEMA_VERSION: i64 = 34;
 
 #[cfg(test)]
 mod benchmark;
@@ -331,6 +331,13 @@ const MIGRATIONS: &[(i64, &str, Option<Precondition>)] = &[
         None,
     ),
     (33, include_str!("store/workspace_base.sql"), None),
+    // Name the upgrade, not the retired command, as the migrated hold's reason.
+    (
+        34,
+        "UPDATE workspace_holds SET reason='Converted from an earlier Shoal version'
+            WHERE from_continuation AND reason='Kept by shoal continue';",
+        None,
+    ),
 ];
 
 fn migrate(db: &mut Connection) -> Result<()> {
@@ -752,7 +759,38 @@ mod tests {
         )?;
         assert_eq!(
             hold,
-            ("continue".into(), "Kept by shoal continue".into(), true)
+            (
+                "continue".into(),
+                "Converted from an earlier Shoal version".into(),
+                true
+            )
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn migrated_hold_reason_no_longer_names_the_retired_command() -> Result<()> {
+        let mut db = historical_database(33)?;
+        db.execute_batch(
+            "INSERT INTO workspace_holds(workspace_id,name,reason,created_at,from_continuation)
+                VALUES ('workspace','continue','Kept by shoal continue',1,1);
+            INSERT INTO workspaces(id,repository_id,name,path,branch,state)
+                VALUES ('other','repo','other','/other','other','ready');
+            INSERT INTO workspace_holds(workspace_id,name,reason,created_at,from_continuation)
+                VALUES ('other','thread','Kept by shoal continue',1,0);",
+        )?;
+        migrate(&mut db)?;
+        let reasons = db
+            .prepare("SELECT reason FROM workspace_holds ORDER BY workspace_id")?
+            .query_map([], |r| r.get::<_, String>(0))?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        // A user hold with the same reason keeps it.
+        assert_eq!(
+            reasons,
+            [
+                "Kept by shoal continue",
+                "Converted from an earlier Shoal version"
+            ]
         );
         Ok(())
     }
