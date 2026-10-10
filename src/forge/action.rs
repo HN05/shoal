@@ -212,9 +212,12 @@ impl ForgeRepo {
         let draft = edit
             .draft
             .filter(|draft| item.pr.as_ref().is_some_and(|pr| pr.draft != *draft));
-        if let (Some(draft), ForgeKind::Forgejo) = (draft, self.kind) {
+        // Forgejo keeps draft state in the title, so a new title carries it too.
+        if let (Some(pr), ForgeKind::Forgejo) = (&item.pr, self.kind)
+            && (title.is_some() || draft.is_some())
+        {
             let current = title.as_deref().unwrap_or(&item.title);
-            title = Some(draft_title(current, draft));
+            title = Some(draft_title(current, draft.unwrap_or(pr.draft)));
         }
         if let Some(title) = title {
             fields.insert("title".into(), title.into());
@@ -435,6 +438,19 @@ mod tests {
         assert_eq!(
             requests(&forgejo, &pr(&forgejo, false, &[]), draft_with_title)[0].2,
             json!({"title": "WIP: Other"})
+        );
+        // A new title alone keeps a Forgejo draft a draft, and a ready PR ready.
+        let retitle = Action::Edit(Edit {
+            title: Some("New".into()),
+            ..Edit::default()
+        });
+        assert_eq!(
+            requests(&forgejo, &pr(&forgejo, true, &[]), retitle.clone())[0].2,
+            json!({"title": "WIP: New"})
+        );
+        assert_eq!(
+            requests(&forgejo, &pr(&forgejo, false, &[]), retitle)[0].2,
+            json!({"title": "New"})
         );
     }
 
