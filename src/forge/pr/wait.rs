@@ -12,7 +12,7 @@ use tokio::sync::Notify;
 
 use super::{RegistrationKind, current_head};
 use crate::{
-    daemon::{store, workspace::Manager},
+    daemon::{agent_messages::AgentMessage, store, workspace::Manager},
     forge::{
         ForgeRepo,
         link::{ItemKind, Selection},
@@ -27,6 +27,9 @@ const POLL_INTERVAL: Duration = Duration::from_secs(30);
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Updates {
     pub updates: Vec<Update>,
+    /// Agent messages end a wait on their own, ahead of item activity.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub messages: Vec<AgentMessage>,
     pub timed_out: bool,
     /// A newer wait in the same workspace took over before this one received
     /// updates; they stay pending for the newer wait.
@@ -140,17 +143,45 @@ impl Manager {
         );
         let workspace = self.workspace(selector).await?;
         let wait = self.item_waits.start(&workspace.id);
-        // A cancelled poll leaves its deliveries pending for the newer wait.
-        let updates = tokio::select! {
-            updates = wait_for_updates(seconds, || {
-                self.poll_item_activity(&workspace.id, selection)
-            }) => updates?,
-            () = wait.superseded.notified() => return Ok(Updates::superseded()),
-        };
-        if !wait.is_current() {
-            return Ok(Updates::superseded());
+        // Subscribe before reading, so a message queued in between still wakes.
+        let mut queued = self.agent_messages_changed.subscribe();
+        let mut messages = self.agent_messages(&workspace.id).await?;
+        if messages.is_empty() {
+            // A cancelled poll leaves its deliveries pending for the newer wait.
+            tokio::select! {
+                updates = wait_for_updates(seconds, || {
+                    self.poll_item_activity(&workspace.id, selection)
+                }) => {
+                    let updates = updates?;
+                    if !wait.is_current() {
+                        return Ok(Updates::superseded());
+                    }
+                    return Ok(updates);
+                }
+                next = self.next_agent_messages(&workspace.id, &mut queued) => messages = next?,
+                () = wait.superseded.notified() => return Ok(Updates::superseded()),
+            }
         }
-        Ok(updates)
+        Ok(Updates {
+            updates: Vec::new(),
+            messages,
+            timed_out: false,
+            superseded: false,
+        })
+    }
+
+    async fn next_agent_messages(
+        &self,
+        id: &str,
+        queued: &mut tokio::sync::watch::Receiver<u64>,
+    ) -> Result<Vec<AgentMessage>> {
+        loop {
+            queued.changed().await?;
+            let messages = self.agent_messages(id).await?;
+            if !messages.is_empty() {
+                return Ok(messages);
+            }
+        }
     }
 
     async fn poll_item_activity(&self, id: &str, selection: &Selection) -> Result<Vec<Update>> {
@@ -487,6 +518,7 @@ impl Updates {
     fn superseded() -> Self {
         Self {
             updates: Vec::new(),
+            messages: Vec::new(),
             timed_out: false,
             superseded: true,
         }
@@ -515,6 +547,7 @@ async fn wait_for_updates<F: std::future::Future<Output = Result<Vec<Update>>>>(
             Err(_) => {
                 return Ok(Updates {
                     updates: Vec::new(),
+                    messages: Vec::new(),
                     timed_out: true,
                     superseded: false,
                 });
@@ -523,6 +556,7 @@ async fn wait_for_updates<F: std::future::Future<Output = Result<Vec<Update>>>>(
         if !updates.is_empty() {
             return Ok(Updates {
                 updates,
+                messages: Vec::new(),
                 timed_out: false,
                 superseded: false,
             });
@@ -531,6 +565,7 @@ async fn wait_for_updates<F: std::future::Future<Output = Result<Vec<Update>>>>(
         if now >= deadline {
             return Ok(Updates {
                 updates: Vec::new(),
+                messages: Vec::new(),
                 timed_out: true,
                 superseded: false,
             });
@@ -599,6 +634,46 @@ mod tests {
         assert!(newer.is_current());
         drop(newer);
         assert!(!waits.0.lock().unwrap().contains_key("one"));
+    }
+
+    #[tokio::test]
+    async fn agent_messages_end_a_watch_before_item_activity() {
+        let (root, manager) = manager().await;
+        let repo_path = repository(root.path(), "repo");
+        let repo = manager
+            .register_repository(repo_path.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        let workspace = manager
+            .create_workspace(&repo.id, "messages".into(), None, None, None)
+            .await
+            .unwrap();
+        // Waiting would fail without a linked PR; a queued message answers first.
+        manager
+            .send_agent_message(&workspace.id, "Rebase onto main".into())
+            .await
+            .unwrap();
+        let updates = manager.wait_prs(&workspace.id, 60).await.unwrap();
+        assert!(updates.updates.is_empty() && !updates.timed_out);
+        assert_eq!(updates.messages[0].message, "Rebase onto main");
+        manager
+            .mark_agent_messages_delivered(&workspace.id, vec![updates.messages[0].id])
+            .await
+            .unwrap();
+        assert!(manager.wait_prs(&workspace.id, 60).await.is_err());
+
+        let mut queued = manager.agent_messages_changed.subscribe();
+        let waiting = {
+            let manager = manager.clone();
+            let id = workspace.id.clone();
+            tokio::spawn(async move { manager.next_agent_messages(&id, &mut queued).await })
+        };
+        manager
+            .send_agent_message(&workspace.id, "Stop the dev server".into())
+            .await
+            .unwrap();
+        let messages = waiting.await.unwrap().unwrap();
+        assert_eq!(messages[0].message, "Stop the dev server");
     }
 
     fn snapshot(message: &str) -> Snapshot {

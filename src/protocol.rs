@@ -238,6 +238,9 @@ pub enum Method {
     AcknowledgePrUpdates {
         workspace: String,
         deliveries: Vec<String>,
+        /// Agent messages the watch printed.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        messages: Vec<i64>,
     },
     InspectWorkspace {
         workspace: String,

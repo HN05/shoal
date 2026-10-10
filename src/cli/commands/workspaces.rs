@@ -1543,6 +1543,9 @@ pub(super) async fn watch_items(
     .await?;
     let updates = crate::forge::pr::wait::Updates::try_from(body)?;
     ctx.show(&updates, |updates| {
+        for message in &updates.messages {
+            println!("Message: {}", message.message);
+        }
         for update in &updates.updates {
             println!("{} [{}]: {}", update.url, update.kind, update.message);
         }
@@ -1554,7 +1557,7 @@ pub(super) async fn watch_items(
         }
     })?;
     std::io::Write::flush(&mut std::io::stdout())?;
-    if updates.updates.is_empty() {
+    if updates.updates.is_empty() && updates.messages.is_empty() {
         return Ok(0);
     }
     request::<()>(
@@ -1566,6 +1569,7 @@ pub(super) async fn watch_items(
                 .iter()
                 .map(|update| update.delivery.clone())
                 .collect(),
+            messages: updates.messages.iter().map(|message| message.id).collect(),
         },
     )
     .await?;

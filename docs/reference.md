@@ -1112,8 +1112,11 @@ or a merged base workspace.
 An unfiltered `shoal watch` without a linked PR also returns when the workspace
 branch newly conflicts with the default target of `shoal conflicts`, naming the
 branch and the conflicted paths; with nothing linked, it waits for that alone.
+A new [agent message](#agent-messages) ends a watch at once, ahead of item
+activity, even when the watch would otherwise fail for lack of linked items.
 Each update includes its item URL, kind and message; `--json` returns an `updates`
-array. The first watch reports existing activity; subsequent watches share a
+array, and a `messages` array when agent messages arrived. The first watch
+reports existing activity; subsequent watches share a
 cursor per workspace and item across restarts. Pending updates replay until the
 CLI acknowledges successful output. Unlinking discards that item's cursor.
 `--timeout <seconds>` bounds the wait (1–3600, default 3600); expiration returns
@@ -1267,7 +1270,8 @@ shoal messages [workspace]     # New messages, oldest first, shown once
 
 `shoal message` queues a one-line message, with the same limits as `notify`, for
 the agents working in a workspace. Shoal never types into an agent's terminal;
-agents read messages with `shoal messages`, which deletes each message it shows.
+agents read messages with `shoal messages` or `shoal watch`, which delete each
+message once they have printed it.
 An identical message that is still unread is not queued again, and a workspace
 holds at most 50 unread messages. Scoped commands may read their own workspace's
 messages but cannot send any. Removing the workspace deletes its messages.

@@ -509,7 +509,11 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::AcknowledgePrUpdates {
             workspace,
             deliveries,
+            messages,
         } => {
+            manager
+                .mark_agent_messages_delivered(&workspace, messages)
+                .await?;
             manager
                 .acknowledge_pr_updates(&workspace, deliveries)
                 .await?;
