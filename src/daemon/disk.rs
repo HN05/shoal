@@ -55,7 +55,7 @@ pub(super) async fn run(manager: Arc<Manager>) {
             .check(&manager, Instant::now(), crate::fsutil::available_bytes)
             .await
         {
-            manager.disk_space_recovered.store(false, Ordering::Relaxed);
+            manager.publish_disk_reading(None);
             log!("disk space monitor: {error:#}");
         }
     }
@@ -72,7 +72,7 @@ impl Monitor {
         let settings = &config.overload.disk;
         if !settings.enabled {
             // Re-enabling waits for a fresh reading before recovery.
-            manager.disk_space_recovered.store(false, Ordering::Relaxed);
+            manager.publish_disk_reading(None);
             return Ok(());
         }
         let workspaces = manager.list_workspaces().await?;
@@ -82,9 +82,7 @@ impl Monitor {
             && low
                 .iter()
                 .all(|filesystem| filesystem.free >= settings.cleanup_free_bytes());
-        manager
-            .disk_space_recovered
-            .store(recovered, Ordering::Relaxed);
+        manager.publish_disk_reading(recovered.then(|| settings.cleanup_free_bytes()));
         low.retain(|filesystem| filesystem.free < settings.cleanup_free_bytes());
         if self
             .last_cleanup
@@ -108,6 +106,20 @@ impl Monitor {
     }
 }
 
+impl Manager {
+    fn publish_disk_reading(&self, recovered_at: Option<u64>) {
+        self.disk_recovered_at
+            .store(recovered_at.unwrap_or(0), Ordering::Relaxed);
+    }
+
+    /// Whether the latest reading found `cleanup_free_bytes` free everywhere.
+    /// A reading taken under a lower threshold, before a reload, does not count.
+    pub(super) fn disk_space_recovered(&self, cleanup_free_bytes: u64) -> bool {
+        let recovered_at = self.disk_recovered_at.load(Ordering::Relaxed);
+        recovered_at != 0 && recovered_at >= cleanup_free_bytes
+    }
+}
+
 /// One reading per filesystem holding daemon state or a workspace, and whether
 /// every reading succeeded. A failed reading never authorizes removal, so that
 /// filesystem is skipped. A deleted workspace awaits cleanup and is skipped
@@ -121,9 +133,15 @@ fn sample(
     let mut complete = true;
     let paths = std::iter::once(state).chain(workspaces.iter().map(|w| w.path.as_path()));
     for (index, path) in paths.enumerate() {
-        let Ok(device) = path.metadata().map(|metadata| metadata.dev()) else {
-            complete &= index != 0;
-            continue;
+        let device = match path.metadata() {
+            Ok(metadata) => metadata.dev(),
+            Err(error) => {
+                if index == 0 || error.kind() != io::ErrorKind::NotFound {
+                    log!("disk space reading {}: {error}", path.display());
+                    complete = false;
+                }
+                continue;
+            }
         };
         if filesystems.iter().any(|f| f.device == device) {
             continue;
@@ -335,7 +353,7 @@ mod tests {
 
         // Agents recover only once every filesystem has the cleanup threshold.
         let cleanup = manager.config().overload.disk.cleanup_free_bytes();
-        let recovered = |manager: &Manager| manager.disk_space_recovered.load(Ordering::Relaxed);
+        let recovered = |manager: &Manager| manager.disk_space_recovered(cleanup);
         monitor
             .check(&manager, start, |_: &Path| Ok(cleanup - 1))
             .await
@@ -346,6 +364,8 @@ mod tests {
             .await
             .unwrap();
         assert!(recovered(&manager));
+        // A reading under a lower threshold does not satisfy a raised one.
+        assert!(!manager.disk_space_recovered(cleanup + 1));
         monitor
             .check(&manager, start, |_: &Path| {
                 Err(io::Error::other("unreadable"))
@@ -354,13 +374,23 @@ mod tests {
             .unwrap();
         assert!(!recovered(&manager));
 
-        // Unreadable daemon state is never a healthy reading.
-        let (filesystems, complete) =
-            sample(&root.path().join("missing"), &[], |_: &Path| Ok(u64::MAX));
+        // Unreadable daemon state is never a healthy reading, and only a
+        // deleted workspace is skipped without failing the sample.
+        let unreadable = |path: &Path| sample(path, &[], |_: &Path| Ok(u64::MAX));
+        let (filesystems, complete) = unreadable(&root.path().join("missing"));
         assert!(filesystems.is_empty() && !complete);
+        let mut workspace = held.clone();
+        workspace.path = root.path().join("deleted");
+        let (_, complete) = sample(root.path(), &[workspace.clone()], |_: &Path| Ok(u64::MAX));
+        assert!(complete);
+        let file = root.path().join("file");
+        std::fs::write(&file, "").unwrap();
+        workspace.path = file.join("below-a-file");
+        let (_, complete) = sample(root.path(), &[workspace], |_: &Path| Ok(u64::MAX));
+        assert!(!complete);
 
         // Disabled protection reads nothing and forgets its last reading.
-        manager.disk_space_recovered.store(true, Ordering::Relaxed);
+        manager.publish_disk_reading(Some(cleanup));
         let config = crate::config::Config::path(&manager.paths);
         std::fs::create_dir_all(config.parent().unwrap()).unwrap();
         std::fs::write(&config, "[overload.disk]\nenabled = false\n").unwrap();
