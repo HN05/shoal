@@ -48,12 +48,13 @@ pub(super) async fn link(ctx: &Context, items: ItemArgs) -> Result<i32> {
             Ok(0)
         }
         ItemKind::Issue => {
+            let title = issue_title(ctx, &workspace, &input).await;
             client::request::<()>(
                 &ctx.paths,
                 Method::SetIssue {
                     workspace,
                     url: input,
-                    title: None,
+                    title,
                 },
             )
             .await?;
@@ -64,6 +65,36 @@ pub(super) async fn link(ctx: &Context, items: ItemArgs) -> Result<i32> {
             Ok(0)
         }
     }
+}
+
+/// The title lists show for the workspace; linking proceeds without one when
+/// the forge cannot be read.
+async fn issue_title(ctx: &Context, workspace: &str, input: &str) -> Option<String> {
+    let title = async {
+        let repo = workspace_repository(ctx, workspace).await?;
+        anyhow::Ok(super::issues::load(&repo, input).await?.title)
+    };
+    match title.await {
+        Ok(title) => Some(title),
+        Err(error) => {
+            eprintln!("Issue title unavailable: {error:#}");
+            None
+        }
+    }
+}
+
+async fn workspace_repository(ctx: &Context, workspace: &str) -> Result<Repository> {
+    let repository = client::workspaces(&ctx.paths)
+        .await?
+        .into_iter()
+        .find(|w| w.id == workspace || w.name == workspace)
+        .with_context(|| format!("unknown workspace: {workspace}"))?
+        .repository_id;
+    client::repositories(&ctx.paths)
+        .await?
+        .into_iter()
+        .find(|repo| repo.id == repository)
+        .context("workspace repository is missing")
 }
 
 /// Choose an open issue or PR of the workspace's repository, asking for the
@@ -81,18 +112,8 @@ async fn pick_open_item(
             &[(ItemKind::Issue, "Issue"), (ItemKind::Pr, "Pull request")],
         )?,
     };
-    let repository = client::workspaces(&ctx.paths)
-        .await?
-        .into_iter()
-        .find(|w| w.id == workspace || w.name == workspace)
-        .with_context(|| format!("unknown workspace: {workspace}"))?
-        .repository_id;
-    let repos = client::repositories(&ctx.paths).await?;
-    let repo = repos
-        .iter()
-        .find(|repo| repo.id == repository)
-        .context("workspace repository is missing")?;
-    let forge = super::issues::origin_forge(repo).await?;
+    let repo = workspace_repository(ctx, workspace).await?;
+    let forge = super::issues::origin_forge(&repo).await?;
     let number = match kind {
         ItemKind::Issue => {
             let issues = forge.open_issues(&repo.path).await?;

@@ -10297,6 +10297,10 @@ esac
         workspace["workspace"]["links"]["issue"],
         "https://github.com/team/project/issues/34"
     );
+    assert_eq!(
+        workspace["workspace"]["links"]["issue_title"],
+        "Fix API timeout"
+    );
 }
 
 fn wait_removed(fixture: &Fixture, name: &str) {

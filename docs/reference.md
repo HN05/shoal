@@ -1073,6 +1073,8 @@ confirmation and includes them in its JSON result; `--yes` skips confirmation.
 kind explicitly. Use `--workspace` to select a workspace instead of the current
 context. Numbers resolve against its origin and URLs must match it. An issue
 association is idempotent and must be unlinked before linking a different issue.
+Linking an issue records its title for workspace lists; when the forge cannot be
+read, the link is recorded without one and a warning names the error.
 PR links accumulate without duplicates and must name the recorded workspace
 branch. Linked items suppress idle cleanup.
 
