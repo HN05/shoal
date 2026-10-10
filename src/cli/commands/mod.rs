@@ -25,6 +25,7 @@ mod service;
 mod simulators;
 mod skill;
 mod stop;
+mod swarm;
 mod view;
 pub(in crate::cli) mod workspaces;
 
@@ -275,6 +276,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
                     base,
                     git_profile,
                     pr: None,
+                    swarm: None,
                 },
                 agent,
                 args,
@@ -282,6 +284,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             )
             .await
         }
+        Command::Swarm { command } => swarm::run(&ctx, command).await,
         Command::Link { items } => links::link(&ctx, items).await,
         Command::Unlink { items } => links::unlink(&ctx, items).await,
         Command::View { items, no_comments } => view::view(&ctx, items, no_comments).await,

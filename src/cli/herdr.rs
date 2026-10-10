@@ -74,7 +74,7 @@ pub(super) async fn handoff(
         ConfigTarget::Repository(plan.repository.clone()),
     )
     .await?;
-    if !settings.herdr.new_tab {
+    if !opens_tabs(ctx, &settings) {
         return Ok(false);
     }
     ensure!(
@@ -90,6 +90,11 @@ pub(super) async fn handoff(
     let created = create_tab(ctx, plan, focus).await?;
     submit_worker(ctx, created, settings.herdr.close_when_done).await?;
     Ok(true)
+}
+
+/// Whether `shoal add` hands work in this repository to new Herdr tabs.
+pub(in crate::cli) fn opens_tabs(ctx: &Context, settings: &crate::config::Effective) -> bool {
+    available(ctx) && settings.herdr.new_tab
 }
 
 /// The label `shoal add` gives a workspace's tab: the `tab_name` template,

@@ -216,6 +216,9 @@ pub(in crate::cli) struct Creation {
     /// The PR whose head branch is opened; it is linked once the workspace is ready.
     #[serde(default)]
     pub pr: Option<String>,
+    /// The task of the swarm a new branch's workspace joins.
+    #[serde(default)]
+    pub swarm: Option<String>,
 }
 
 pub(super) enum AgentLaunch {
@@ -298,6 +301,29 @@ pub(in crate::cli) struct AddPlan {
 }
 
 impl AddPlan {
+    /// One attempt of a swarm: a new branch for `agent`, which receives the
+    /// issue's prompt or the forwarded arguments.
+    pub(super) fn attempt(
+        repository: crate::forge::repository::Selector,
+        creation: Creation,
+        tab_label: Option<String>,
+        issue: Option<String>,
+        agent: Option<Agent>,
+        args: Vec<OsString>,
+    ) -> Self {
+        // Each attempt runs in its own tab, so Codex runs as a CLI agent.
+        let codex_mode = matches!(agent, Some(Agent::Codex)).then_some(CodexMode::Cli);
+        Self {
+            repository,
+            creation,
+            tab_label,
+            tab_name: None,
+            issue,
+            agent: ResolvedAddAgent { agent, codex_mode },
+            args,
+        }
+    }
+
     /// Whether the agent starts with input: an issue prompt or forwarded arguments.
     /// A workspace shell or an agent without input waits for the user.
     pub fn runs_unattended(&self) -> bool {
@@ -339,22 +365,21 @@ async fn execute_add_with_target(
     let AddPlan {
         repository: _,
         creation,
-        tab_label: _,
+        tab_label,
         tab_name,
         issue: _,
         agent,
         args,
     } = plan;
     let pr = creation.pr.clone();
+    // A swarm creates several workspaces, so none becomes the shell's directory.
+    let navigate = creation.swarm.is_none();
     let opened = open_add_workspace(ctx, &target, creation).await?;
     if let Some(tab) = &ctx.herdr_tab {
         tab.watch_workspace(ctx, &opened.workspace.id)?;
         let label = match tab_name {
             Some(name) => name.render(&opened.workspace.branch),
-            None => match &issue {
-                Some(issue) => issue.tab_label(target.repository(ctx).await?),
-                None => opened.workspace.branch.clone(),
-            },
+            None => tab_label.unwrap_or_else(|| opened.workspace.branch.clone()),
         };
         tab.rename(&label).await;
     }
@@ -369,7 +394,7 @@ async fn execute_add_with_target(
         )
         .await?;
     }
-    let Some(workspace) = finish_add_workspace(ctx, opened, pr).await? else {
+    let Some(workspace) = finish_add_workspace(ctx, opened, pr, navigate).await? else {
         return Ok(1);
     };
     agent.launch(ctx, workspace, issue, args).await
@@ -397,13 +422,13 @@ pub(super) async fn link_pull(
     Ok(client::inspect(&ctx.paths, workspace.id).await?.workspace)
 }
 
-struct AddTarget {
-    selector: crate::forge::repository::Selector,
+pub(super) struct AddTarget {
+    pub(super) selector: crate::forge::repository::Selector,
     repositories: tokio::sync::OnceCell<Vec<Repository>>,
 }
 
 impl AddTarget {
-    async fn repository(&self, ctx: &Context) -> Result<&Repository> {
+    pub(super) async fn repository(&self, ctx: &Context) -> Result<&Repository> {
         let repos = self
             .repositories
             .get_or_try_init(|| client::repositories(&ctx.paths))
@@ -412,7 +437,7 @@ impl AddTarget {
     }
 }
 
-async fn resolve_add_target(
+pub(super) async fn resolve_add_target(
     ctx: &Context,
     repository: Option<String>,
     issue: Option<&str>,
@@ -681,6 +706,7 @@ async fn open_add_workspace(
         base,
         git_profile,
         pr: _,
+        swarm,
     } = creation;
     let repository = target.selector.clone();
     if let Some(branch) = existing {
@@ -705,7 +731,7 @@ async fn open_add_workspace(
                 name,
                 base,
                 git_profile,
-                swarm: None,
+                swarm,
             },
         )
         .await?;
@@ -752,6 +778,7 @@ async fn finish_add_workspace(
     ctx: &Context,
     opened: OpenedWorkspace,
     pr: Option<String>,
+    navigate: bool,
 ) -> Result<Option<Workspace>> {
     let OpenedWorkspace {
         mut workspace,
@@ -776,7 +803,7 @@ async fn finish_add_workspace(
         ),
         &workspace,
     )?;
-    if ctx.herdr_tab.is_none() {
+    if navigate && ctx.herdr_tab.is_none() {
         shell::navigate(&workspace.path, ctx.json)?;
     }
     if !reused {
@@ -1151,6 +1178,7 @@ fn render_status(status: &WorkspaceStatus, json: bool) {
     println!("Path:          {}", workspace.path.display());
     println!("Branch:        {}", workspace.branch);
     super::base::render(workspace);
+    super::swarm::render(workspace);
     println!(
         "Setup:         {}",
         if status.setup_finished {

@@ -76,6 +76,7 @@ shoal adopt --copy ../existing-worktree      # Copy work into Shoal's default di
 shoal rename fix-login fix/login             # Rename its branch and workspace together
 shoal add https://github.com/owner/repo/issues/68 # Create from an issue
 shoal add https://github.com/owner/repo/issues/34  # Add an issue, PR, or branch link
+shoal swarm add 34 --agents codex,claude      # Attempt issue 34 with both agents
 shoal link https://github.com/owner/repo/issues/34  # Link an issue to the current workspace
 shoal unlink issue                         # Remove the linked issue
 shoal watch pr 505                         # Watch an explicit PR

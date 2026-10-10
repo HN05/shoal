@@ -125,6 +125,11 @@ pub enum Command {
         #[arg(last = true)]
         args: Vec<OsString>,
     },
+    /// Run one task in several workspaces with different agents and keep one.
+    Swarm {
+        #[command(subcommand)]
+        command: SwarmCommand,
+    },
     /// Link an issue or PR; URLs identify the kind, numbers need pr/issue.
     Link {
         #[command(flatten)]
@@ -678,6 +683,41 @@ pub enum SkillCommand {
         /// Replace skills changed or removed since Shoal installed them.
         #[arg(long)]
         force: bool,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum SwarmCommand {
+    /// Create one workspace per attempt from the same base and prompt.
+    ///
+    /// Branches are named after the task and each attempt's agent. CLI agents
+    /// start in their own Herdr tabs; outside Herdr, use Happy agents.
+    Add {
+        /// Registered repository, or an issue number or URL.
+        target: Option<String>,
+        /// Task name the branches start with; defaults to the issue's branch name.
+        task: Option<String>,
+        /// Repository for an issue number or link.
+        #[arg(long = "repo")]
+        repository: Option<String>,
+        /// Use a forge issue number or URL as the task and every agent's prompt.
+        #[arg(long)]
+        issue: Option<String>,
+        /// Agents to start, one attempt each; defaults to default_agent.
+        #[arg(long, value_delimiter = ',', value_parser = AgentParser)]
+        agents: Vec<Agent>,
+        /// Attempts for each agent.
+        #[arg(long, default_value_t = 1, value_parser = clap::value_parser!(u8).range(1..))]
+        count: u8,
+        /// Starting Git ref for every attempt (defaults to the repository's default branch).
+        #[arg(long, value_name = "REF")]
+        base: Option<String>,
+        /// Apply a named Git profile to every attempt's worktree.
+        #[arg(long)]
+        git_profile: Option<String>,
+        /// Arguments forwarded to every agent, such as a prompt.
+        #[arg(last = true)]
+        args: Vec<OsString>,
     },
 }
 

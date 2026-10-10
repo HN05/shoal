@@ -11998,6 +11998,75 @@ fn happy_issue_prompts_reach_claude_and_are_saved_for_codex() {
     }
 }
 
+#[test]
+fn swarm_attempts_an_issue_once_per_agent() {
+    let fixture = Fixture::new();
+    let record = install_fake_happy(&fixture);
+    let gh = fixture.root.path().join("bin/gh");
+    fs::write(
+        &gh,
+        format!(
+            "#!/bin/sh\nprintf '%s' '{}'\n",
+            serde_json::json!({"state":"OPEN", "number": 34, "title": "Fix API timeout", "body": "Keep it alive."})
+        ),
+    )
+    .unwrap();
+    fs::set_permissions(&gh, fs::Permissions::from_mode(0o700)).unwrap();
+    fixture.add_github_origin();
+    let repo = fixture.repo.to_str().unwrap();
+    let refused = fixture.run(&[
+        "swarm",
+        "add",
+        repo,
+        "--issue",
+        "34",
+        "--agents",
+        "codex,claude",
+    ]);
+    assert!(!refused.status.success());
+    assert!(
+        String::from_utf8_lossy(&refused.stderr).contains("Herdr tab"),
+        "{refused:?}"
+    );
+    let output = fixture
+        .command()
+        .args([
+            "--json",
+            "swarm",
+            "add",
+            repo,
+            "--issue",
+            "34",
+            "--base",
+            "HEAD",
+            "--agents",
+            "happy-codex,happy-claude",
+        ])
+        .env("HAPPY_RECORD", &record)
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let task = "issue-34-fix-api-timeout";
+    let names = [
+        format!("{task}-happy-codex"),
+        format!("{task}-happy-claude"),
+    ];
+    for (name, other) in [(&names[0], &names[1]), (&names[1], &names[0])] {
+        let status = fixture.ok(&["status", name]);
+        let workspace = &status["workspace"];
+        assert_eq!(workspace["branch"], name.as_str());
+        assert_eq!(workspace["swarm"]["task"], task);
+        assert_eq!(workspace["swarm"]["workspaces"][0]["name"], other.as_str());
+        assert_eq!(
+            workspace["links"]["issue"],
+            "https://github.com/team/project/issues/34"
+        );
+    }
+    for name in &names {
+        fixture.ok(&["rm", name, "--yes", "--delete-branch"]);
+    }
+}
+
 /// A local stand-in for Happy's server; killed when dropped.
 struct FakeHappyServer {
     child: Child,

@@ -745,6 +745,28 @@ fj cannot change a base, so Forgejo PRs are retargeted through Forgejo's API wit
 the token fj saved for that host, read for the request and passed to curl on
 stdin; a missing login or failed request is reported in the update.
 
+### Swarms
+
+A swarm attempts one task in several workspaces, one per agent attempt, from the
+same base ref and prompt.
+
+```sh
+shoal swarm add my-project fix-login --agents codex,claude -- "Fix the login timeout"
+shoal swarm add 563 --agents claude --count 3   # Three Claude Code attempts at issue 563
+```
+
+`--agents` names one attempt per agent and defaults to `default_agent`; `--count`
+repeats each agent. A swarm needs two attempts. The task names every branch as
+`<task>-<agent>`, suffixed with `-2`, `-3`, etc. while the workspace name is in
+use, and shortened to keep the names distinct within the name length limit. An
+issue number or URL, positional or `--issue`, supplies the task as its derived
+branch name, links the issue to every attempt and gives every agent its prompt;
+otherwise arguments after `--` reach every agent. Inside Herdr each attempt opens
+its own tab, labelled with the issue and agent for an issue. Outside Herdr CLI
+agents are refused before anything is created, and Happy agents start detached.
+`status` shows the task and the other workspaces; `ls --json` and `inspect` give
+`swarm` (`task` and its other `workspaces`), absent outside a swarm.
+
 ### Repositories
 
 Register a local checkout in place (no remote required) or a clone URL. Each

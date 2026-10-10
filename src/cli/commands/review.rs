@@ -213,6 +213,7 @@ async fn pull_request(
                 base: Some(tracking),
                 git_profile: None,
                 pr: Some(pull.url.clone()),
+                swarm: None,
             };
             let code = super::workspaces::add(
                 ctx,
@@ -266,6 +267,7 @@ async fn issue(
                 base: None,
                 git_profile: None,
                 pr: None,
+                swarm: None,
             };
             let code = super::workspaces::add(
                 ctx,
