@@ -148,6 +148,7 @@ impl Manager {
             return Ok(());
         }
         self.verify_worktree(workspace).await?;
+        let configured_env = self.configured_workspace_environment(workspace).await?;
         hooks::run_detached(
             Hook::PostAgentExit {
                 agent,
@@ -157,6 +158,7 @@ impl Manager {
             workspace,
             &command,
             &self.paths,
+            &configured_env,
         )
         .await
     }

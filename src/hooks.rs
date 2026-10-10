@@ -1,5 +1,5 @@
 //! Untracked user hooks receive workspace identity without an execution scope.
-use std::{path::Path, process::Stdio, time::Duration};
+use std::{collections::BTreeMap, ffi::OsString, path::Path, process::Stdio, time::Duration};
 
 use anyhow::{Context, Result, ensure};
 use tokio::process::Command;
@@ -134,6 +134,7 @@ fn command(
     workspace: &Workspace,
     executable: &Path,
     paths: &Paths,
+    configured_env: &BTreeMap<String, OsString>,
 ) -> Result<Command> {
     let mut command = Command::new(executable);
     env::apply_workspace_identity(&mut command, workspace, paths);
@@ -156,6 +157,7 @@ fn command(
         .env_remove(env::SCOPE_TOKEN)
         .env_remove(env::EXECUTION_ID)
         .env_remove(env::RESERVED_PORT_ENV)
+        .envs(configured_env)
         .process_group(0)
         .kill_on_drop(true);
     if let Hook::PostResourceAcquire(lease) | Hook::PreResourceRelease(lease) = hook {
@@ -202,10 +204,11 @@ pub async fn run_interactive(
     executable: &Path,
     paths: &Paths,
     quiet: bool,
+    configured_env: &BTreeMap<String, OsString>,
 ) -> Result<()> {
     let background_terminal = crate::execution::Terminal::stdin_is_background();
     let mut terminal = crate::execution::Terminal::capture(false)?;
-    let mut child = command(hook, workspace, executable, paths)?
+    let mut child = command(hook, workspace, executable, paths, configured_env)?
         .stdin(if quiet || background_terminal {
             Stdio::null()
         } else {
@@ -245,12 +248,14 @@ pub async fn run_detached(
     workspace: &Workspace,
     executable: &Path,
     paths: &Paths,
+    configured_env: &BTreeMap<String, OsString>,
 ) -> Result<()> {
-    let output = crate::subprocess::Run::new(command(hook, workspace, executable, paths)?)
-        .timeout(DETACHED_TIMEOUT)
-        .capture()
-        .await
-        .with_context(|| format!("run {} {}", hook.kind().key(), executable.display()))?;
+    let output =
+        crate::subprocess::Run::new(command(hook, workspace, executable, paths, configured_env)?)
+            .timeout(DETACHED_TIMEOUT)
+            .capture()
+            .await
+            .with_context(|| format!("run {} {}", hook.kind().key(), executable.display()))?;
     let diagnostic = crate::subprocess::diagnostic(&output.stderr);
     ensure!(
         output.status.success(),

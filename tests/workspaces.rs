@@ -3150,6 +3150,38 @@ fn execution_preserves_pipes_exit_code_environment_and_current_workspace() {
 }
 
 #[test]
+fn configured_environment_renders_for_tracked_commands() {
+    let fixture = Fixture::with_config(Some(
+        "[env]\nSESSION = '{workspace}'\nPROFILE = '{workspace_path}/.profile'\nREPO = '{repo}'\nBRANCH = '{branch}'\nLITERAL = '{workspace}'\n",
+    ));
+    fixture.add("env-values");
+    let output = fixture
+        .command()
+        .args([
+            "exec",
+            "env-values",
+            "--",
+            "sh",
+            "-c",
+            "printf '%s\\n%s\\n%s\\n%s\\n%s' \"$SESSION\" \"$PROFILE\" \"$REPO\" \"$BRANCH\" \"$LITERAL\"",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let lines: Vec<_> = String::from_utf8(output.stdout)
+        .unwrap()
+        .lines()
+        .map(str::to_owned)
+        .collect();
+    assert_eq!(lines[0], "env-values");
+    assert!(lines[1].ends_with("/env-values/.profile"));
+    assert_eq!(lines[2], "repo with ' quotes & $literal");
+    assert_eq!(lines[3], "env-values");
+    assert_eq!(lines[4], "env-values");
+    fixture.ok(&["rm", "env-values"]);
+}
+
+#[test]
 fn add_starts_agents_only_after_creation_and_preserves_workspace_on_exit() {
     let fixture = Fixture::new();
     let bin = fixture.root.path().join("add-agent-bin");

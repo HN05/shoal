@@ -39,6 +39,7 @@ async fn adjacent_controls_child() {
         scope_token: "test-scope".into(),
         setup_cmd: None,
         ports: vec![],
+        environment: Default::default(),
         land: None,
     };
     let (client, mut server) = UnixStream::pair().unwrap();
@@ -214,6 +215,7 @@ async fn reattachment_child() {
         scope_token: "test-scope".into(),
         setup_cmd: None,
         ports: vec![],
+        environment: Default::default(),
         land: None,
     };
     let mode = Mode::Command { record: false };

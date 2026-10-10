@@ -920,7 +920,30 @@ async fn run_post_setup(ctx: &Context, workspace: &Workspace) -> Result<()> {
     )
     .await?;
     if let Some(command) = command {
-        hooks::run_interactive(Hook::PostSetup, workspace, &command, &ctx.paths, ctx.json).await?;
+        let settings =
+            client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
+        let repo = client::repositories(&ctx.paths)
+            .await?
+            .into_iter()
+            .find(|repo| repo.id == workspace.repository_id)
+            .context("workspace repository is missing")?;
+        let configured_env = crate::env::render_configured_environment(
+            &settings.env,
+            workspace,
+            repository::name(&repo),
+            &client::inspect(&ctx.paths, workspace.id.clone())
+                .await?
+                .ports,
+        );
+        hooks::run_interactive(
+            Hook::PostSetup,
+            workspace,
+            &command,
+            &ctx.paths,
+            ctx.json,
+            &configured_env,
+        )
+        .await?;
     }
     Ok(())
 }
