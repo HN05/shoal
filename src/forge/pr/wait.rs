@@ -37,8 +37,8 @@ pub struct Updates {
 /// The running wait of each workspace, identified by its supersession signal.
 /// Waits share one cursor per item, so a newer wait supersedes the older one
 /// instead of competing for its updates.
-#[derive(Default)]
-pub(crate) struct ActiveWaits(Mutex<HashMap<String, Arc<Notify>>>);
+#[derive(Default, Clone)]
+pub(crate) struct ActiveWaits(Arc<Mutex<HashMap<String, Arc<Notify>>>>);
 
 struct ActiveWait<'a> {
     waits: &'a ActiveWaits,
@@ -66,11 +66,18 @@ impl ActiveWaits {
 }
 
 impl ActiveWaits {
-    fn running(&self, workspace: &str) -> bool {
-        self.0
-            .lock()
-            .expect("active waits lock")
-            .contains_key(workspace)
+    /// Run `operation` unless a wait runs in the workspace; no wait can start
+    /// while it runs.
+    fn unless_running(
+        &self,
+        workspace: &str,
+        operation: impl FnOnce() -> Result<()>,
+    ) -> Result<()> {
+        let waits = self.0.lock().expect("active waits lock");
+        if waits.contains_key(workspace) {
+            return Ok(());
+        }
+        operation()
     }
 }
 
@@ -336,11 +343,7 @@ impl Manager {
     ) -> Result<()> {
         let workspace = self.workspace(selector).await?;
         let _guard = self.pr_gate.lock().await;
-        // A delivering wait has ended, so a running wait started after it and
-        // must report these updates as well.
-        if self.item_waits.running(&workspace.id) {
-            return Ok(());
-        }
+        let waits = self.item_waits.clone();
         self.store
             .run(move |db| {
                 let tx = db.transaction()?;
@@ -368,8 +371,9 @@ impl Manager {
                         )?;
                     }
                 }
-                tx.commit()?;
-                Ok(())
+                // A delivering wait has ended, so a running wait started after
+                // it and must report these updates as well.
+                waits.unless_running(&workspace.id, || Ok(tx.commit()?))
             })
             .await
     }
