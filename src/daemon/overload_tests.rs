@@ -136,11 +136,18 @@ async fn built_in_restore_child() {
             .unwrap()
             .hook_args()
             .unwrap();
+        let mut prompt = String::from(
+            "Shoal resumed this session. Continue working on the unfinished assignment from where you left off.",
+        );
+        if let Some(handoff) = handoff {
+            prompt.push_str("\n\n");
+            prompt.push_str(handoff);
+        }
         let expected: Vec<std::ffi::OsString> = restore
             .iter()
             .map(std::ffi::OsString::from)
             .chain(hooks)
-            .chain(handoff.map(std::ffi::OsString::from))
+            .chain([std::ffi::OsString::from(prompt)])
             .collect();
         assert_eq!(recovery.command, expected);
     }
@@ -174,7 +181,25 @@ async fn built_in_restore_child() {
     assert!(prompted.handoff_delivered);
     assert_eq!(
         prompted.command,
-        ["saved-session", "--", "handoff"].map(std::ffi::OsString::from)
+        [
+            "saved-session",
+            "--",
+            "Shoal resumed this session. Continue working on the unfinished assignment from where you left off.\n\nhandoff",
+        ]
+        .map(std::ffi::OsString::from)
+    );
+    let prompted = Recovery::resolve(&manager.paths, &workspace, "codex", None)
+        .await
+        .unwrap();
+    assert!(!prompted.handoff_delivered);
+    assert_eq!(
+        prompted.command,
+        [
+            "saved-session",
+            "--",
+            "Shoal resumed this session. Continue working on the unfinished assignment from where you left off.",
+        ]
+        .map(std::ffi::OsString::from)
     );
     serving.abort();
 }

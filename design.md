@@ -83,8 +83,9 @@ agent recovery record with the stop reason before delivering the stop, so a lost
 the handoff; failure to save warns without disabling overload protection. Agent
 session recovery is automatic for built-in Codex and Claude resume commands, or
 when explicitly configured for another agent, and load and disk space have
-recovered;
-never replay the original task prompt. Keep waiting wrappers tracked, serialize
+recovered. Manual and automatic restores prompt the agent to continue its
+unfinished assignment; configured restore commands receive that prompt through
+`{prompt}`. Never replay the original task prompt. Keep waiting wrappers tracked, serialize
 restores, and preserve manual recovery across restarts. Saved recovery represents
 unfinished work until restored or explicitly discarded.
 Agent metadata is transient, so restart cannot select disconnected survivors.

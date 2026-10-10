@@ -3783,7 +3783,13 @@ fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
         prompts[0].contains("- sh -c 'touch command-started; while :; do sleep 1; done'"),
         "{restored}"
     );
-    assert_eq!(prompts[1], "");
+    for prompt in &prompts[..2] {
+        assert!(
+            prompt.contains("Continue working on the unfinished assignment"),
+            "{restored}"
+        );
+    }
+    assert!(!prompts[1].contains("command-started"), "{restored}");
     assert!(!state.exists() || fs::read_dir(&state).unwrap().next().is_none());
     let output = fixture.run(&["exec", "stopped", "--", env!("CARGO_BIN_EXE_shoal"), "stop"]);
     assert!(!output.status.success());

@@ -52,8 +52,8 @@ impl Recovery {
         })
     }
 
-    /// `handoff` becomes the restored session's first prompt where the restore
-    /// command accepts one: built-in agents and `{prompt}` in `[agent_resume]`.
+    /// Ask the restored session to continue, including `handoff` where the
+    /// command accepts a prompt: built-in agents and `{prompt}` in `[agent_resume]`.
     pub(crate) async fn resolve(
         paths: &Paths,
         workspace: &Workspace,
@@ -66,7 +66,14 @@ impl Recovery {
         let configured = settings.agent_resume.get(&name);
         let builtin = matches!(name.as_str(), "codex" | "claude");
         let automatic = configured.is_some() || builtin;
-        let prompt = std::ffi::OsStr::new(handoff.unwrap_or_default());
+        let mut message = String::from(
+            "Shoal resumed this session. Continue working on the unfinished assignment from where you left off.",
+        );
+        if let Some(handoff) = handoff {
+            message.push_str("\n\n");
+            message.push_str(handoff);
+        }
+        let prompt = std::ffi::OsStr::new(&message);
         let (command, handoff_delivered) = if let Some(argv) = configured {
             let command = named_commands::expand_with_fields(
                 paths,
@@ -92,9 +99,7 @@ impl Recovery {
                 args.extend(agent.hook_args()?);
             }
             if builtin {
-                if handoff.is_some() {
-                    args.push(prompt.to_owned());
-                }
+                args.push(prompt.to_owned());
                 let command =
                     named_commands::expand(paths, &settings.commands, &name, workspace, args)
                         .await?;

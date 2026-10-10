@@ -193,7 +193,9 @@ Resume commands are argument arrays in `[agent_resume]`, keyed by the tracked
 agent name. They use the same workspace substitutions and repository layering as
 `[commands]`; they must restore a session without repeating the initial prompt.
 Codex and Claude automatically continue the latest session in the workspace by
-default, without a session picker; other agents need an entry in `[agent_resume]`.
+default, without a session picker, with a prompt to continue their unfinished
+assignment on manual or automatic resume. Configured commands receive that
+prompt through `{prompt}`; other agents need an entry in `[agent_resume]`.
 A failed command lookup warns and
 disables automatic recovery for that launch. Overload notifications include the
 pressure reason, execution ID, and automatic or manual recovery path. Shoal saves
@@ -221,7 +223,7 @@ Run stop and resume outside scoped executions.
 
 `shoal resume [workspace]` restores a saved agent recovery record after its
 wrapper exits; use `--execution <id>` when several agents stopped in one workspace.
-Stopped commands become the restored session's first prompt, asking the agent to
+Stopped commands are included in the continuation prompt, asking the agent to
 rerun the ones still needed: built-in agents receive it as their prompt argument,
 and `[agent_resume]` commands through `{prompt}`. Otherwise, and when no agent was
 stopped, resume prints them as `shoal exec` commands. Either way they are reported once.

@@ -226,7 +226,8 @@ configured command for another agent, plus proven child
   termination, verified ready workspace ownership and sustained healthy headroom.
   Keep waiting wrappers tracked, serialize restores and honor manual stop/removal.
   Persist overload recovery and its reason before delivering the stop, reporting save failures
-  without disabling protection. Persist manual recovery without replaying the original prompt; consume the
+  without disabling protection. Manual and automatic restores prompt agents to continue unfinished
+  work, through `{prompt}` for configured commands, without replaying the original prompt; consume the
   selected record only after its replacement process is registered. Unrelated
   executions do not block manual recovery.
   Critical disk space stops every agent the same way, restoring once the cleanup
