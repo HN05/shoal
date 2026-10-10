@@ -130,8 +130,7 @@ pub(super) async fn run(manager: Arc<Manager>) {
             || monitor
                 .cpu_used
                 .is_some_and(|used| used < f64::from(settings.recovery.cpu_used_percent));
-        let disk_safe = !settings.disk.enabled
-            || manager.disk_space_recovered(settings.disk.cleanup_free_bytes());
+        let disk_safe = !settings.disk.enabled || manager.disk_space_recovered();
         let recovered = monitor.healthy.observe(
             now,
             memory_safe && cpu_safe && disk_safe,
@@ -195,10 +194,10 @@ mod tests {
         let monitor = tokio::spawn(run(manager.clone()));
         tokio::time::sleep(Duration::from_secs(600)).await;
         assert_eq!(*ready.borrow(), None);
-        let cleanup = manager.config().overload.disk.cleanup_free_bytes();
-        manager
-            .disk_recovered_at
-            .store(cleanup, std::sync::atomic::Ordering::Relaxed);
+        let generation = manager
+            .config_generation
+            .load(std::sync::atomic::Ordering::SeqCst);
+        manager.publish_disk_reading(Some(generation));
         let recovered = Instant::now();
         wait_published(&mut ready).await;
         let window = Duration::from_secs(manager.config().overload.recovery.sustained_seconds);

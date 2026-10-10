@@ -68,6 +68,8 @@ impl Monitor {
         now: Instant,
         available: impl Fn(&Path) -> io::Result<u64>,
     ) -> Result<()> {
+        // Before the config: a reload in between makes this reading stale.
+        let generation = manager.config_generation.load(Ordering::SeqCst);
         let config = manager.config();
         let settings = &config.overload.disk;
         if !settings.enabled {
@@ -82,7 +84,7 @@ impl Monitor {
             && low
                 .iter()
                 .all(|filesystem| filesystem.free >= settings.cleanup_free_bytes());
-        manager.publish_disk_reading(recovered.then(|| settings.cleanup_free_bytes()));
+        manager.publish_disk_reading(recovered.then_some(generation));
         low.retain(|filesystem| filesystem.free < settings.cleanup_free_bytes());
         if self
             .last_cleanup
@@ -107,16 +109,18 @@ impl Monitor {
 }
 
 impl Manager {
-    fn publish_disk_reading(&self, recovered_at: Option<u64>) {
-        self.disk_recovered_at
-            .store(recovered_at.unwrap_or(0), Ordering::Relaxed);
+    /// Record the configuration generation under which a reading found the
+    /// cleanup threshold free everywhere, or that the latest one did not.
+    pub(super) fn publish_disk_reading(&self, recovered_in: Option<u64>) {
+        let encoded = recovered_in.map_or(0, |generation| generation + 1);
+        self.disk_recovered_in.store(encoded, Ordering::SeqCst);
     }
 
-    /// Whether the latest reading found `cleanup_free_bytes` free everywhere.
-    /// A reading taken under a lower threshold, before a reload, does not count.
-    pub(super) fn disk_space_recovered(&self, cleanup_free_bytes: u64) -> bool {
-        let recovered_at = self.disk_recovered_at.load(Ordering::Relaxed);
-        recovered_at != 0 && recovered_at >= cleanup_free_bytes
+    /// Whether the latest reading found the cleanup threshold free everywhere
+    /// under the current configuration; a reload waits for a new reading.
+    pub(super) fn disk_space_recovered(&self) -> bool {
+        let current = self.config_generation.load(Ordering::SeqCst);
+        self.disk_recovered_in.load(Ordering::SeqCst) == current + 1
     }
 }
 
@@ -353,7 +357,7 @@ mod tests {
 
         // Agents recover only once every filesystem has the cleanup threshold.
         let cleanup = manager.config().overload.disk.cleanup_free_bytes();
-        let recovered = |manager: &Manager| manager.disk_space_recovered(cleanup);
+        let recovered = |manager: &Manager| manager.disk_space_recovered();
         monitor
             .check(&manager, start, |_: &Path| Ok(cleanup - 1))
             .await
@@ -364,8 +368,14 @@ mod tests {
             .await
             .unwrap();
         assert!(recovered(&manager));
-        // A reading under a lower threshold does not satisfy a raised one.
-        assert!(!manager.disk_space_recovered(cleanup + 1));
+        // A reload, even back to the same settings, waits for a new reading.
+        manager.reload_config().await.unwrap();
+        assert!(!recovered(&manager));
+        monitor
+            .check(&manager, start, |_: &Path| Ok(cleanup))
+            .await
+            .unwrap();
+        assert!(recovered(&manager));
         monitor
             .check(&manager, start, |_: &Path| {
                 Err(io::Error::other("unreadable"))
@@ -390,7 +400,7 @@ mod tests {
         assert!(!complete);
 
         // Disabled protection reads nothing and forgets its last reading.
-        manager.publish_disk_reading(Some(cleanup));
+        manager.publish_disk_reading(Some(manager.config_generation.load(Ordering::SeqCst)));
         let config = crate::config::Config::path(&manager.paths);
         std::fs::create_dir_all(config.parent().unwrap()).unwrap();
         std::fs::write(&config, "[overload.disk]\nenabled = false\n").unwrap();

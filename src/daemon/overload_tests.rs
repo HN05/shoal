@@ -878,12 +878,11 @@ async fn critical_disk_space_stops_commands_and_restores_agents_once_space_recov
     );
     // Later critical readings leave the waiting agent's restore in place.
     bounded(monitor.check(&manager, now, empty)).await.unwrap();
-    let cleanup = manager.config().overload.disk.cleanup_free_bytes();
-    assert!(!manager.disk_space_recovered(cleanup));
+    assert!(!manager.disk_space_recovered());
     bounded(monitor.check(&manager, now, |_: &std::path::Path| Ok(u64::MAX)))
         .await
         .unwrap();
-    assert!(manager.disk_space_recovered(cleanup));
+    assert!(manager.disk_space_recovered());
     publish_recovery(&manager);
     assert_eq!(bounded(agent).await.unwrap().unwrap(), 0);
     assert_eq!(

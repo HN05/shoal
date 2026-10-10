@@ -94,9 +94,13 @@ pub struct Manager {
     pub(super) recovery_ready: watch::Sender<Option<u64>>,
     pub(super) recovery_epoch: std::sync::atomic::AtomicU64,
     pub(super) recovery_gate: Mutex<()>,
-    /// The cleanup threshold in bytes that the disk monitor's latest reading
-    /// found free on every filesystem, or zero, so restored agents can write.
-    pub(super) disk_recovered_at: std::sync::atomic::AtomicU64,
+    /// Counts published configurations, so a reading taken under an earlier
+    /// one cannot pass for a current one.
+    pub(super) config_generation: std::sync::atomic::AtomicU64,
+    /// One more than the configuration generation under which the disk
+    /// monitor's latest reading found the cleanup threshold free on every
+    /// filesystem, so restored agents can write; zero for none.
+    pub(super) disk_recovered_in: std::sync::atomic::AtomicU64,
     /// Per-workspace activity counters folded into cleanup fingerprints.
     activity: Mutex<HashMap<String, u64>>,
     /// The newest recorded notification ID; wakes `shoal notifications --follow`.
@@ -129,7 +133,8 @@ impl Manager {
             recovery_ready: watch::channel(None).0,
             recovery_epoch: std::sync::atomic::AtomicU64::new(0),
             recovery_gate: Mutex::new(()),
-            disk_recovered_at: std::sync::atomic::AtomicU64::new(0),
+            config_generation: std::sync::atomic::AtomicU64::new(0),
+            disk_recovered_in: std::sync::atomic::AtomicU64::new(0),
             activity: Mutex::new(HashMap::new()),
             notifications_changed: watch::channel(0).0,
         }))
@@ -154,6 +159,9 @@ impl Manager {
             self.reset_overload_recovery();
         }
         self.config.send_replace(Arc::new(config));
+        // After the swap: a reader that sees the new generation sees this config.
+        self.config_generation
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
     }
 
     /// Replace the global config with the file's current contents for later
