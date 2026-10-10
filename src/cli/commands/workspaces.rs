@@ -16,6 +16,7 @@ use crate::{
         context::Context,
         output::{Palette, Style},
         ui::{self, Fallback},
+        zmx,
     },
     daemon::recovery::{ReconcileOptions, Report},
     env, execution,
@@ -1085,8 +1086,7 @@ pub(super) async fn status(
 ) -> Result<i32> {
     let Some(target) = status_target(workspace.as_deref(), item)? else {
         let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-        let status =
-            request::<WorkspaceStatus>(&ctx.paths, Method::WorkspaceStatus { workspace }).await?;
+        let status = StatusView::request(ctx, workspace).await?;
         ctx.show(&status, |status| render_status(status, ctx.json))?;
         return Ok(0);
     };
@@ -1094,10 +1094,7 @@ pub(super) async fn status(
         request::<Vec<Workspace>>(&ctx.paths, Method::FindWorkspaces { target }).await?;
     let mut statuses = Vec::new();
     for workspace in workspaces {
-        let workspace = workspace.id;
-        statuses.push(
-            request::<WorkspaceStatus>(&ctx.paths, Method::WorkspaceStatus { workspace }).await?,
-        );
+        statuses.push(StatusView::request(ctx, workspace.id).await?);
     }
     ctx.show(&statuses, |statuses| {
         for (index, status) in statuses.iter().enumerate() {
@@ -1108,6 +1105,34 @@ pub(super) async fn status(
         }
     })?;
     Ok(0)
+}
+
+/// The daemon's workspace status with the zmx sessions the CLI finds.
+#[derive(serde::Serialize)]
+struct StatusView {
+    #[serde(flatten)]
+    status: WorkspaceStatus,
+    sessions: Vec<zmx::Session>,
+    /// Why sessions could not be listed; status still reports the rest.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sessions_error: Option<String>,
+}
+
+impl StatusView {
+    async fn request(ctx: &Context, workspace: String) -> Result<Self> {
+        let status =
+            request::<WorkspaceStatus>(&ctx.paths, Method::WorkspaceStatus { workspace }).await?;
+        let (sessions, sessions_error) = match zmx::sessions(&status.inspection.workspace.id).await
+        {
+            Ok(sessions) => (sessions, None),
+            Err(error) => (Vec::new(), Some(format!("{error:#}"))),
+        };
+        Ok(Self {
+            status,
+            sessions,
+            sessions_error,
+        })
+    }
 }
 
 /// Items and resources find the workspaces that link or hold them; anything
@@ -1138,7 +1163,8 @@ fn status_target(first: Option<&str>, item: Option<String>) -> Result<Option<Wor
     }
 }
 
-fn render_status(status: &WorkspaceStatus, json: bool) {
+fn render_status(view: &StatusView, json: bool) {
+    let status = &view.status;
     let palette = Palette::stdout(json);
     let inspection = &status.inspection;
     let workspace = &inspection.workspace;
@@ -1201,6 +1227,14 @@ fn render_status(status: &WorkspaceStatus, json: bool) {
             palette.execution_state(execution.state),
             pid
         );
+    }
+
+    println!("Sessions:      {}", view.sessions.len());
+    for session in &view.sessions {
+        println!("  {}", session.label());
+    }
+    if let Some(error) = &view.sessions_error {
+        println!("  {}", palette.paint(Style::Warning, error));
     }
 
     println!(

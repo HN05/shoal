@@ -6821,8 +6821,8 @@ head -n 1 "$HOME/picker-input"
                 )
             } else {
                 (
-                    "ctrl-d,ctrl-e,ctrl-a,ctrl-o,ctrl-s,ctrl-f",
-                    "enter: enter   ctrl-d: delete   ctrl-e: execute   ctrl-a: add   ctrl-o: inspect   ctrl-s: stop   ctrl-f: diff",
+                    "ctrl-d,ctrl-e,ctrl-a,ctrl-o,ctrl-s,ctrl-t,ctrl-f",
+                    "enter: enter   ctrl-d: delete   ctrl-e: execute   ctrl-a: add   ctrl-o: inspect   ctrl-s: stop   ctrl-t: attach   ctrl-f: diff",
                 )
             };
             assert!(args.contains(&format!("--expect={keys}\n--header\n{header}\n")));
@@ -17363,4 +17363,48 @@ fn attach_selects_a_session_of_the_workspace() {
     let output = fixture.run(&["attach", "persist"]);
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("attach requires a terminal"));
+}
+
+#[test]
+fn status_lists_workspace_sessions_and_survives_a_failed_listing() {
+    let fixture = Fixture::new();
+    let workspace = fixture.add("persist");
+    let other = fixture.add("other");
+    let home = fixture.root.path();
+    install_test_script(&home.join("bin/zmx"), PASSTHROUGH_ZMX);
+    fs::write(
+        home.join("zmx-sessions"),
+        format!(
+            "  name=persist\tpid=1\tclients=1\tshoal.agent=claude\tshoal.workspace={}\n  \
+             name=other\tpid=2\tclients=0\tshoal.workspace={}\n",
+            workspace["id"].as_str().unwrap(),
+            other["id"].as_str().unwrap()
+        ),
+    )
+    .unwrap();
+    let status = fixture.ok(&["status", "persist"]);
+    assert_eq!(
+        status["sessions"],
+        serde_json::json!([{"name": "persist", "agent": "claude", "clients": 1}])
+    );
+    let output = fixture.run(&["status", "persist"]);
+    let text = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        text.contains("Sessions:      1\n  persist  claude  attached\n"),
+        "{text}"
+    );
+
+    install_test_script(
+        &home.join("bin/zmx"),
+        "#!/bin/sh\necho broken >&2\nexit 1\n",
+    );
+    let status = fixture.ok(&["status", "persist"]);
+    assert_eq!(status["sessions"], serde_json::json!([]));
+    assert!(
+        status["sessions_error"]
+            .as_str()
+            .unwrap()
+            .contains("list zmx sessions"),
+        "{status}"
+    );
 }

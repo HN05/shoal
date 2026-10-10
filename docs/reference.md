@@ -485,9 +485,9 @@ zmx session (`ZMX_SESSION` is set), or in a Herdr pane with `herdr.enabled` runs
 in place.
 
 `shoal attach [workspace]` reattaches to the workspace's session, with a picker
-or `--session <name>` when it has several. Sessions are named after the
-workspace, suffixed `-2`, `-3`, ... when the name is in use, and labelled
-`shoal.workspace=<id>`, so `zmx ls` and `zmx attach` work as well.
+or `--session <name>` when it has several; `shoal status` lists them. Sessions
+are named after the workspace, suffixed `-2`, `-3`, ... when the name is in use,
+and labelled `shoal.workspace=<id>`, so `zmx ls` and `zmx attach` work as well.
 
 Inside Herdr (`HERDR_ENV=1`), interactive `shoal add` looks up
 the issue and resolves repository, branch, and agent choices in the caller's pane,

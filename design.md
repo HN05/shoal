@@ -367,11 +367,11 @@ multiplexers that re-render output through their own emulator, like tmux, were
 rejected for breaking them. zmx is a required dependency. The tracked wrapper
 runs inside the session's pty, so tracking, scope, stop and recovery are
 unchanged and the daemon still never touches terminal I/O. Sessions are named
-after their workspace and labelled with its ID, which `attach` looks up through
-`zmx list`. Launches without a terminal, inside a zmx session, or in a Herdr
-pane with the integration enabled run in place, since Herdr reads agent state
-from the pane's process. zmx reports no exit status, so a session launch exits
-0; the daemon still records the agent's exit.
+after their workspace and labelled with its ID, which `attach` and `status` look
+up through `zmx list`. Launches without a terminal, inside a zmx session, or in
+a Herdr pane with the integration enabled run in place, since Herdr reads agent
+state from the pane's process. zmx reports no exit status, so a session launch
+exits 0; the daemon still records the agent's exit.
 
 Single-workspace actions select an explicit target, otherwise the caller's scoped
 workspace or the workspace containing the current directory, then an interactive

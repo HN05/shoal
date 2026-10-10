@@ -24,6 +24,7 @@ enum MenuAction {
     Add,
     Inspect,
     Stop,
+    Attach,
     Diff,
 }
 
@@ -34,6 +35,7 @@ const BINDINGS: &[(&str, &str, MenuAction)] = &[
     ("ctrl-a", "add", MenuAction::Add),
     ("ctrl-o", "inspect", MenuAction::Inspect),
     ("ctrl-s", "stop", MenuAction::Stop),
+    ("ctrl-t", "attach", MenuAction::Attach),
     ("ctrl-f", "diff", MenuAction::Diff),
 ];
 
@@ -103,6 +105,10 @@ pub(super) async fn choose(ctx: &Context) -> Result<Command> {
                 workspace,
                 all: false,
             },
+        },
+        MenuAction::Attach => Command::Attach {
+            workspace,
+            session: None,
         },
         MenuAction::Diff => Command::Diff { workspace },
         MenuAction::Execute => execute_command(ctx, workspace).await?,
