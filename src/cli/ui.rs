@@ -441,7 +441,7 @@ pub async fn workspace_picker(ctx: &Context) -> Result<String> {
 
 pub fn pick_workspace(ctx: &Context, workspaces: Vec<Workspace>) -> Result<String> {
     let stopped = stopped_workspaces(&ctx.paths, &workspaces);
-    let rows = workspace_rows(&workspaces, &[], &stopped, true, Palette::stderr(ctx.json));
+    let rows = workspace_rows(&workspaces, &[], &stopped, Palette::stderr(ctx.json));
     pick(
         ctx,
         "Workspace> ",
@@ -458,52 +458,49 @@ pub fn stopped_workspaces(paths: &Paths, workspaces: &[Workspace]) -> HashSet<St
         .collect()
 }
 
-/// Non-ready states, then a ready workspace's stopped work or ready-for-review marks.
-fn state_cell(workspace: &Workspace, stopped: bool) -> Cell {
+/// What a workspace is doing: its state unless ready, then stopped work, a
+/// current ready-for-review mark, a running agent or command, an outdated mark,
+/// or idle.
+fn status_cell(workspace: &Workspace, stopped: bool) -> Cell {
     if workspace.state != WorkspaceState::Ready {
         return (
             workspace.state.to_string(),
             Some(workspace_state_style(workspace.state)),
         );
     }
-    if stopped {
-        return ("stopped".into(), Some(Style::Warning));
-    }
-    if workspace.review.is_empty() {
-        return (String::new(), None);
-    }
-    if workspace.review.iter().any(|mark| mark.stale == Some(true)) {
-        ("ready for review (outdated)".into(), Some(Style::Warning))
+    let outdated = workspace.review.iter().any(|mark| mark.stale == Some(true));
+    let (text, style) = if stopped {
+        ("stopped", Style::Warning)
+    } else if !workspace.review.is_empty() && !outdated {
+        ("ready for review", Style::Success)
+    } else if workspace.running {
+        ("running", Style::Heading)
+    } else if outdated {
+        ("ready for review (outdated)", Style::Warning)
     } else {
-        ("ready for review".into(), Some(Style::Success))
-    }
+        ("idle", Style::Muted)
+    };
+    (text.into(), Some(style))
 }
 
-/// One aligned row per workspace: a state marker and the name, then only the
-/// columns that tell rows apart. Repositories (`(id, name)` pairs) appear when
-/// the rows span several, a branch where it differs from the name, and the
-/// state cell when it is not empty.
+/// One aligned row per workspace: a state marker, the name, the repository
+/// when the rows span several (`(id, name)` pairs), the status, and the linked
+/// issue's title when known.
 pub fn workspace_rows(
     workspaces: &[Workspace],
     repositories: &[(String, String)],
     stopped: &HashSet<String>,
-    path: bool,
     palette: Palette,
 ) -> Vec<String> {
-    let shown = |show: bool, text: String| if show { text } else { String::new() };
-    let cells: Vec<[Cell; 5]> = workspaces
+    let cells: Vec<[Cell; 4]> = workspaces
         .iter()
         .zip(repository_column(workspaces, repositories))
         .map(|(w, repository)| {
             [
                 (w.name.clone(), Some(Style::Heading)),
                 (repository, None),
-                (shown(w.branch != w.name, w.branch.clone()), None),
-                state_cell(w, stopped.contains(&w.id)),
-                (
-                    shown(path, w.path.display().to_string()),
-                    Some(Style::Muted),
-                ),
+                status_cell(w, stopped.contains(&w.id)),
+                (w.links.issue_title.clone().unwrap_or_default(), None),
             ]
         })
         .collect();
@@ -731,25 +728,42 @@ mod tests {
     }
 
     #[test]
-    fn workspace_rows_align_and_show_only_distinguishing_columns() {
+    fn workspace_rows_align_status_and_titles() {
         let plain = Palette::stdout(true);
-        let workspaces = [
+        let mut workspaces = [
             workspace("a", "fix-login", "fix-login", WorkspaceState::Ready),
             workspace("a", "x", "feature/x", WorkspaceState::Failed),
             workspace("a", "new", "new", WorkspaceState::Preparing),
+            workspace("a", "busy", "busy", WorkspaceState::Ready),
+            workspace("a", "review", "review", WorkspaceState::Ready),
+            workspace("a", "quiet", "quiet", WorkspaceState::Ready),
         ];
+        workspaces[3].running = true;
+        workspaces[3].links.issue_title = Some("Refine the list view".into());
+        let mark = |stale| crate::model::ReviewMark {
+            kind: None,
+            url: None,
+            head: "head".into(),
+            created_at: 0,
+            stale: Some(stale),
+        };
+        workspaces[4].running = true;
+        workspaces[4].review = vec![mark(false)];
+        workspaces[5].review = vec![mark(true)];
         assert_eq!(
             workspace_rows(
                 &workspaces,
                 &[("a".into(), "shoal".into())],
                 &HashSet::from([workspaces[0].id.clone(), workspaces[1].id.clone()]),
-                false,
                 plain
             ),
             [
-                "● fix-login             stopped",
-                "✗ x          feature/x  failed",
-                "◌ new                   preparing",
+                "● fix-login  stopped",
+                "✗ x          failed",
+                "◌ new        preparing",
+                "● busy       running                      Refine the list view",
+                "● review     ready for review",
+                "● quiet      ready for review (outdated)",
             ]
         );
         let repositories = [("a".into(), "shoal".into()), ("b".into(), "app".into())];
@@ -758,11 +772,8 @@ mod tests {
             workspace("b", "y", "y", WorkspaceState::Ready),
         ];
         assert_eq!(
-            workspace_rows(&workspaces, &repositories, &HashSet::new(), true, plain),
-            [
-                "● fix-login  shoal  /work/fix-login",
-                "● y          app    /work/y",
-            ]
+            workspace_rows(&workspaces, &repositories, &HashSet::new(), plain),
+            ["● fix-login  shoal  idle", "● y          app    idle"]
         );
     }
 

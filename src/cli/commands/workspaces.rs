@@ -1028,7 +1028,7 @@ pub(super) async fn list(ctx: &Context, ready: bool) -> Result<i32> {
         ui::review_rows(&workspaces, &repositories, Palette::stdout(ctx.json))
     } else {
         let stopped = ui::stopped_workspaces(&ctx.paths, &workspaces);
-        ui::workspace_rows(&workspaces, &[], &stopped, true, Palette::stdout(ctx.json))
+        ui::workspace_rows(&workspaces, &[], &stopped, Palette::stdout(ctx.json))
     };
     ctx.show(&workspaces, |_| {
         for row in rows {

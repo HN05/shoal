@@ -296,11 +296,12 @@ shoal rm fix-login                       # Remove; choose what to keep if work d
 Bare `shoal` opens an fzf list of workspaces (`shoal --help`, or bare `shoal`
 without a terminal, prints commands grouped by task and a starting workflow).
 Its rows, like `shoal ls` and workspace pickers, are aligned and marked ● ready,
-◌ in progress or ✗ failed, naming the branch only where it differs from the
-workspace name and the state unless ready, or `stopped` when `shoal stop` saved
-agents or commands for `shoal resume`, which replaces a ready-for-review mark; the
-menu names repositories when
-workspaces span several.
+◌ in progress or ✗ failed. Each names the workspace, its repository when the
+rows span several, its status and the linked issue's title. The status is the
+state unless ready; for a ready workspace it is, in order of precedence,
+`stopped` when `shoal stop` saved agents or commands for `shoal resume`,
+`ready for review`, `running` while an agent or command runs,
+`ready for review (outdated)`, or `idle`. Branches and paths are in `shoal status`.
 Enter enters the selection; Ctrl-D deletes, Ctrl-E
 runs Claude/Codex CLI, starts a Happy session, opens Codex/T3 apps, or runs a shell command, Ctrl-A adds,
 Ctrl-O inspects, Ctrl-S stops, Ctrl-F shows the diff. Each action returns to your

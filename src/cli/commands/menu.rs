@@ -51,7 +51,7 @@ pub(super) async fn choose(ctx: &Context) -> Result<Command> {
     let workspaces = client::workspaces(&ctx.paths).await?;
     let palette = Palette::stderr(ctx.json);
     let stopped = ui::stopped_workspaces(&ctx.paths, &workspaces);
-    let rows = ui::workspace_rows(&workspaces, &repos, &stopped, false, palette);
+    let rows = ui::workspace_rows(&workspaces, &repos, &stopped, palette);
     let mut entries: Vec<_> = workspaces.into_iter().map(|w| w.id).zip(rows).collect();
     let scoped = env::is_scoped();
     if !scoped {

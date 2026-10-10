@@ -3595,7 +3595,7 @@ fn stop_all_stops_running_workspaces_and_marks_them_stopped() {
                 .unwrap(),
         );
     }
-    fixture.add("idle");
+    fixture.add("unused");
     let deadline = Instant::now() + Duration::from_secs(60);
     for name in ["first", "second"] {
         while fixture.ok(&["inspect", name])["executions"]
@@ -3623,7 +3623,9 @@ fn stop_all_stops_running_workspaces_and_marks_them_stopped() {
     let listed = fixture.run(&["ls"]);
     let listed = String::from_utf8_lossy(&listed.stdout);
     for line in listed.lines() {
-        assert_eq!(line.contains("stopped"), !line.contains("idle"), "{listed}");
+        let unused = line.contains("unused");
+        assert_eq!(line.contains("stopped"), !unused, "{listed}");
+        assert_eq!(line.contains("idle"), unused, "{listed}");
     }
     // Without agents, every workspace's commands are reported once.
     let resumed = fixture.ok(&["resume", "--all"]);
