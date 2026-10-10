@@ -10974,9 +10974,20 @@ esac
     assert!(fixture.ok(&["inspect", "items"])["issue"].is_null());
     assert!(fixture.ok(&["inspect", "items"])["pr_cleanup"].is_null());
     // With nothing linked, a watch waits for branch conflicts alone.
-    let branch = fixture.ok(&["watch", "--workspace", "items", "--timeout", "1"]);
-    assert_eq!(branch["timed_out"], true);
-    assert!(branch["updates"].as_array().unwrap().is_empty());
+    let items = PathBuf::from(
+        fixture.ok(&["inspect", "items"])["workspace"]["path"]
+            .as_str()
+            .unwrap(),
+    );
+    commit_file(&items, "conflict", "workspace\n");
+    commit_file(&fixture.repo, "conflict", "main\n");
+    let branch = fixture.ok(&["watch", "--workspace", "items"]);
+    assert_eq!(branch["updates"][0]["kind"], "merge_conflict");
+    assert_eq!(branch["updates"][0]["url"], "items");
+    assert_eq!(
+        branch["updates"][0]["message"],
+        "Conflicts with main: conflict"
+    );
     let pr_file = fixture.root.path().join("pr.json");
     let mut fork: Value = serde_json::from_str(&fs::read_to_string(&pr_file).unwrap()).unwrap();
     fork["isCrossRepository"] = serde_json::json!(true);
