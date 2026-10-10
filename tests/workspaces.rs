@@ -16173,8 +16173,6 @@ fn already_closed_issues_are_rejected_before_creating_workspaces() {
     }
 }
 
-/// Agent launches need their executables on PATH, which interactive commands
-/// limit to the fixture's `bin`.
 /// Runs a session's command in place of a zmx session, recording each call
 /// and serving the sessions listed in `$HOME/zmx-sessions`.
 const PASSTHROUGH_ZMX: &str = r#"#!/usr/bin/env python3
@@ -16206,6 +16204,8 @@ fn zmx_calls(fixture: &Fixture) -> Vec<Vec<String>> {
         .collect()
 }
 
+/// Agent launches need their executables on PATH, which interactive commands
+/// limit to the fixture's `bin`.
 fn install_fake_agents(fixture: &Fixture, agents: &[&str]) {
     for agent in agents {
         install_test_script(&fixture.root.path().join("bin").join(agent), "#!/bin/sh\n");
@@ -17407,4 +17407,35 @@ fn status_lists_workspace_sessions_and_survives_a_failed_listing() {
             .contains("list zmx sessions"),
         "{status}"
     );
+}
+
+#[test]
+fn terminal_agent_launches_refuse_a_missing_zmx_before_creating_anything() {
+    let fixture = Fixture::new();
+    install_fake_agents(&fixture, &["claude"]);
+    let path = fixture.interactive_path();
+    fs::remove_file(fixture.root.path().join("runner-bin/zmx")).unwrap();
+    let repo = fixture.repo.to_str().unwrap();
+    let (output, transcript) = fixture.terminal_command(
+        fixture
+            .command()
+            .args(["add", repo, "no-zmx", "--agent", "claude"]),
+        "",
+        true,
+    );
+    assert!(!output.status.success(), "{transcript}");
+    assert!(
+        transcript.contains("cannot start claude: zmx is not installed or not on PATH"),
+        "{transcript}"
+    );
+    assert!(!fixture.run(&["inspect", "no-zmx"]).status.success());
+
+    // Without a terminal the agent runs in place and needs no zmx.
+    let output = fixture
+        .command()
+        .args(["add", repo, "no-zmx", "--agent", "claude"])
+        .env("PATH", path)
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
 }

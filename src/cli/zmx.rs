@@ -51,10 +51,14 @@ impl Session {
 /// to attach, never nests, and leaves an enabled Herdr pane to Herdr, which
 /// reads the agent's state from the process in the pane.
 pub(in crate::cli) fn hosts(settings: &Effective) -> bool {
+    on_terminal() && !(settings.herdr.enabled && herdr::current_pane().is_some())
+}
+
+/// Whether this process could attach a new session: a terminal outside zmx.
+pub(in crate::cli) fn on_terminal() -> bool {
     std::io::stdin().is_terminal()
         && std::io::stdout().is_terminal()
         && std::env::var_os(SESSION_VAR).is_none()
-        && !(settings.herdr.enabled && herdr::current_pane().is_some())
 }
 
 /// Start `command` as `agent`'s tracked execution in a new session and attach
@@ -67,6 +71,7 @@ pub(in crate::cli) async fn run(
     records: &[PathBuf],
     command: &[OsString],
 ) -> Result<i32> {
+    // Launches check zmx before any work; resumed agents reach it here.
     ensure_program(agent, Tool::Zmx.program())?;
     let taken = list().await?.into_iter().map(|session| session.0).collect();
     let name = free_name(&workspace.name, &taken);

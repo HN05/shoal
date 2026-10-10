@@ -482,7 +482,8 @@ again. The tracked wrapper runs inside the session, so stop, resume, scope and
 cleanup treat the agent as before. zmx reports no exit status: these launches
 exit 0 once the agent exits or you detach. A launch without a terminal, inside a
 zmx session (`ZMX_SESSION` is set), or in a Herdr pane with `herdr.enabled` runs
-in place.
+in place. On a terminal outside zmx, a missing zmx refuses the agent as a missing
+agent executable does.
 
 `shoal attach [workspace]` reattaches to the workspace's session, with a picker
 or `--session <name>` when it has several; `shoal status` lists them. Sessions

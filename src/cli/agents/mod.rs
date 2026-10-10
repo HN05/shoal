@@ -121,14 +121,21 @@ pub(in crate::cli) fn ensure_program(name: &str, program: &str) -> Result<()> {
     Ok(())
 }
 
-/// The executables an agent starts; `None` when it has no launcher.
+/// The executables an agent starts; `None` when it has no launcher. Terminal
+/// agents launched on a terminal also start zmx.
 fn programs<'a>(agent: &'a Agent, commands: &'a Commands) -> Option<Vec<&'a str>> {
     match agent {
         Agent::Happy(agent) => Some(vec!["happy", agent.as_str()]),
         Agent::Codex | Agent::Claude | Agent::Custom(_) => commands
             .get(&String::from(agent.clone()))
             .and_then(|argv| argv.first())
-            .map(|program| vec![program.as_str()]),
+            .map(|program| {
+                let mut programs = vec![program.as_str()];
+                if super::zmx::on_terminal() {
+                    programs.push(Tool::Zmx.program());
+                }
+                programs
+            }),
     }
 }
 
