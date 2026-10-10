@@ -4,10 +4,6 @@ the `shoal-worker` skill for Shoal commands, including shared resources.
 Leave Shoal's daemon and installation to the user: when a Shoal command is
 missing or refused, report it with `shoal notify` instead of working around it.
 
-The user and Shoal may send you messages, such as a request to free memory or
-disk space. They arrive as context after tool calls or in `shoal watch` output,
-and `shoal messages` shows new ones. Follow them.
-
 Shoal keeps this workspace until you run `shoal done`. Issue closure and merged
 PRs do not end the assignment unless `[done] automatic` is enabled; then run
 `shoal hold acquire --name more-work` before either happens if you have more

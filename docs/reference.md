@@ -1272,6 +1272,16 @@ shoal messages [workspace]     # New messages, oldest first, shown once
 the agents working in a workspace. Shoal never types into an agent's terminal;
 agents read messages with `shoal messages` or `shoal watch`, which delete each
 message once they have printed it.
+
+`shoal claude`, `shoal codex` and their automatic or `shoal resume` restores
+register `shoal messages --hook` for the `PostToolUse` and `UserPromptSubmit`
+events, so a working agent receives new messages as additional context after its
+next tool call or prompt. Codex runs the hook only after you trust it in Codex's
+hook review. The hook reads the event from stdin and prints nothing when there
+are no messages; failures go to stderr and never fail the agent. Other agents
+whose hooks accept Claude Code's `hookSpecificOutput.additionalContext` output can
+run the same command; the rest rely on `shoal messages` and `shoal watch`, which
+the default agent template mentions.
 An identical message that is still unread is not queued again, and a workspace
 holds at most 50 unread messages. Scoped commands may read their own workspace's
 messages but cannot send any. Removing the workspace deletes its messages.

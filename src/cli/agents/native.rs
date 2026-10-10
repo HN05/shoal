@@ -31,6 +31,7 @@ pub(in crate::cli) async fn claude(
     trust_claude(ctx, &launch.workspace).await;
     let args = templates::instruction_args(BuiltinAgent::Claude, launch.instructions())
         .into_iter()
+        .chain(BuiltinAgent::Claude.message_hook_args()?)
         .chain(args)
         .collect();
     launch.run(ctx, "claude", args, "").await
@@ -56,6 +57,7 @@ pub(in crate::cli) async fn codex(
     trust_codex(ctx, &launch.workspace).await;
     let args = templates::instruction_args(BuiltinAgent::Codex, launch.instructions())
         .into_iter()
+        .chain(BuiltinAgent::Codex.message_hook_args()?)
         .chain(args)
         .collect();
     launch.run(ctx, "codex", args, "").await

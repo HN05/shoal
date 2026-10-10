@@ -341,7 +341,13 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             notifications::send(&ctx, workspace, message).await
         }
         Command::Message { message, workspace } => messages::send(&ctx, workspace, message).await,
-        Command::Messages { workspace } => messages::show(&ctx, workspace).await,
+        Command::Messages { workspace, hook } => {
+            if hook {
+                messages::hook(&ctx).await
+            } else {
+                messages::show(&ctx, workspace).await
+            }
+        }
         Command::Done {
             workspace,
             keep,

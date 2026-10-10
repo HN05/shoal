@@ -3331,12 +3331,22 @@ fn codex_default_mode_is_read_at_launch_and_explicit_modes_override_it() {
                 String::from_utf8_lossy(&output.stderr)
             );
             let app = mode == Some("--app") || (mode.is_none() && !config.is_empty());
-            let expected = if app {
-                format!("\napp\n{path}\nliteral spaces; $(false)\n")
+            let stdout = String::from_utf8(output.stdout).unwrap();
+            if app {
+                assert_eq!(stdout, format!("\napp\n{path}\nliteral spaces; $(false)\n"));
             } else {
-                "default-mode\nliteral spaces; $(false)\n--sandbox\ndanger-full-access\n--ask-for-approval=never\n".into()
-            };
-            assert_eq!(String::from_utf8(output.stdout).unwrap(), expected);
+                let lines: Vec<_> = stdout.lines().collect();
+                assert_eq!(
+                    without_message_hooks(&lines[1..]),
+                    [
+                        "literal spaces; $(false)",
+                        "--sandbox",
+                        "danger-full-access",
+                        "--ask-for-approval=never"
+                    ]
+                );
+                assert_eq!(lines[0], "default-mode");
+            }
             assert_eq!(
                 fixture.ok(&["inspect", "default-mode"])["executions"],
                 serde_json::json!([])
@@ -3516,7 +3526,7 @@ fn agent_templates_resolve_per_launch_and_reach_native_instruction_options() {
                 .unwrap();
             assert!(output.status.success(), "{output:?}");
             let stdout = String::from_utf8(output.stdout).unwrap();
-            let args: Vec<_> = stdout.split('\0').collect();
+            let args = without_message_hooks(&stdout.split('\0').collect::<Vec<_>>());
             if expected.is_empty() {
                 assert_eq!(args[0], "user prompt");
             } else {
@@ -14061,6 +14071,40 @@ fn the_user_messages_agents_who_read_their_own_messages_once() {
     assert_eq!(messages[0]["message"], "Stop the dev server");
     assert_eq!(messages.as_array().unwrap().len(), 1);
     assert_eq!(fixture.ok(&["messages", "receiver"]), serde_json::json!([]));
+
+    // Agent hooks print nothing without messages, then deliver new ones as
+    // context for the event they answer.
+    let hook = |stdin: &str| {
+        let mut child = fixture
+            .command()
+            .args(["exec", "receiver", "--", env!("CARGO_BIN_EXE_shoal")])
+            .args(["messages", "--hook"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap();
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(stdin.as_bytes())
+            .unwrap();
+        let output = child.wait_with_output().unwrap();
+        assert!(output.status.success(), "{output:?}");
+        String::from_utf8(output.stdout).unwrap()
+    };
+    let event = r#"{"hook_event_name":"PostToolUse","tool_name":"Bash"}"#;
+    assert_eq!(hook(event), "");
+    fixture.ok(&["message", "Free disk space", "--workspace", "receiver"]);
+    let output: Value = serde_json::from_str(&hook(event)).unwrap();
+    assert_eq!(
+        output["hookSpecificOutput"],
+        serde_json::json!({
+            "hookEventName": "PostToolUse",
+            "additionalContext": "New Shoal messages for this workspace:\n- Free disk space"
+        })
+    );
+    assert_eq!(hook(event), "");
 }
 
 #[test]
@@ -14140,6 +14184,28 @@ fn agents_mark_their_workspace_ready_for_review_until_new_commits() {
             .get("review")
             .is_none()
     );
+}
+
+/// Agent arguments without the hooks that deliver agent messages, which
+/// built-in launches always register.
+fn without_message_hooks<'a>(args: &[&'a str]) -> Vec<&'a str> {
+    let mut remaining = Vec::new();
+    let mut hooks = 0;
+    let mut args = args.iter();
+    while let Some(&arg) = args.next() {
+        match (arg, args.clone().next()) {
+            ("--settings", Some(value)) if value.contains("messages --hook") => {}
+            ("-c", Some(value)) if value.starts_with("hooks.") => {}
+            _ => {
+                remaining.push(arg);
+                continue;
+            }
+        }
+        args.next();
+        hooks += 1;
+    }
+    assert!(hooks > 0, "no message hooks registered");
+    remaining
 }
 
 fn scoped_command(fixture: &Fixture, workspace: &str, args: &[&str]) -> Output {

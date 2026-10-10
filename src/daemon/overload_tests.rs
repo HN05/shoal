@@ -108,35 +108,21 @@ async fn built_in_restore_child() {
         "[commands]\ncodex = ['codex-fixture', '{args}']\nclaude = ['claude-fixture', '{args}']\n",
     )
     .unwrap();
-    for (agent, handoff, expected) in [
-        (
-            "codex",
-            None,
-            vec![
-                "codex-fixture",
-                "resume",
-                "--last",
-                "-c",
-                "features.worktrees=false",
-            ],
-        ),
-        ("claude", None, vec!["claude-fixture", "--continue"]),
-        (
-            "codex",
-            Some("handoff"),
-            vec![
-                "codex-fixture",
-                "resume",
-                "--last",
-                "-c",
-                "features.worktrees=false",
-                "handoff",
-            ],
-        ),
+    let codex = [
+        "codex-fixture",
+        "resume",
+        "--last",
+        "-c",
+        "features.worktrees=false",
+    ];
+    for (agent, handoff, restore) in [
+        ("codex", None, &codex[..]),
+        ("claude", None, &["claude-fixture", "--continue"][..]),
+        ("codex", Some("handoff"), &codex[..]),
         (
             "claude",
             Some("handoff"),
-            vec!["claude-fixture", "--continue", "handoff"],
+            &["claude-fixture", "--continue"][..],
         ),
     ] {
         let recovery = Recovery::resolve(&manager.paths, &workspace, agent, handoff)
@@ -144,13 +130,19 @@ async fn built_in_restore_child() {
             .unwrap();
         assert!(recovery.automatic);
         assert_eq!(recovery.handoff_delivered, handoff.is_some());
-        assert_eq!(
-            recovery.command,
-            expected
-                .iter()
-                .map(std::ffi::OsString::from)
-                .collect::<Vec<_>>()
-        );
+        // Restored sessions keep receiving agent messages.
+        let hooks = agent
+            .parse::<crate::agent::BuiltinAgent>()
+            .unwrap()
+            .message_hook_args()
+            .unwrap();
+        let expected: Vec<std::ffi::OsString> = restore
+            .iter()
+            .map(std::ffi::OsString::from)
+            .chain(hooks)
+            .chain(handoff.map(std::ffi::OsString::from))
+            .collect();
+        assert_eq!(recovery.command, expected);
     }
     let unsupported = Recovery::resolve(&manager.paths, &workspace, "custom", None)
         .await

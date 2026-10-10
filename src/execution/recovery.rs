@@ -88,6 +88,9 @@ impl Recovery {
                 "claude" => vec!["--continue".into()],
                 _ => vec![],
             };
+            if let Ok(agent) = name.parse::<crate::agent::BuiltinAgent>() {
+                args.extend(agent.message_hook_args()?);
+            }
             if builtin {
                 if handoff.is_some() {
                     args.push(prompt.to_owned());

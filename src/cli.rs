@@ -209,7 +209,13 @@ pub enum Command {
         workspace: Option<String>,
     },
     /// Show the workspace's new agent messages once.
-    Messages { workspace: Option<String> },
+    Messages {
+        workspace: Option<String>,
+        /// Run as an agent hook: read the hook event on stdin, print new
+        /// messages as additional context, and never fail the agent.
+        #[arg(long, conflicts_with = "workspace")]
+        hook: bool,
+    },
     /// Mark the assignment finished; by default stop tracked commands and clean up safely.
     Done {
         workspace: Option<String>,

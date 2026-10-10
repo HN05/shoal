@@ -70,6 +70,14 @@ watched PR when you receive more work; the hold keeps the workspace until
 `shoal undone` withdraws a `shoal done` you ran too early. It does not keep the
 workspace.
 
+## Messages
+
+The user and Shoal can send messages to your workspace, such as a request to
+free memory or disk space. Claude Code and Codex launched through Shoal receive
+them as context after tool calls; a new message also ends `shoal --json watch pr`
+with a `messages` array, and `shoal --json messages` shows new ones. Each
+message is shown once. Follow it.
+
 ## Workspace context
 
 Inside Shoal's tracked execution wrapper, commands inherit scope
