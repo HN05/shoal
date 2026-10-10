@@ -12,7 +12,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 35;
+const SCHEMA_VERSION: i64 = 36;
 
 #[cfg(test)]
 mod benchmark;
@@ -339,6 +339,7 @@ const MIGRATIONS: &[(i64, &str, Option<Precondition>)] = &[
         None,
     ),
     (35, "ALTER TABLE workspace_issue ADD COLUMN title TEXT;", None),
+    (36, include_str!("store/agent_messages.sql"), None),
 ];
 
 fn migrate(db: &mut Connection) -> Result<()> {
@@ -707,6 +708,9 @@ mod tests {
         }
         if version >= 35 {
             db.execute_batch("ALTER TABLE workspace_issue ADD COLUMN title TEXT;")?;
+        }
+        if version >= 36 {
+            db.execute_batch(include_str!("store/agent_messages.sql"))?;
         }
         db.pragma_update(None, "user_version", version)?;
         db.execute_batch(

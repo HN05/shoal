@@ -40,7 +40,7 @@ when behavior changes, distinguishing decisions from proposals.
   ancestry for the same state directory, so a cleared token does not unscope. Enforce own-worktree resource access
   in the daemon and deny workspace allocation/removal/recovery and shared
   repository/service administration; own-workspace setup, rename, base workspace, issue/PR links and watches, merge
-  acknowledgements, messages to the user, ready-for-review marks, assignment completion and withdrawal, and own-repository
+  acknowledgements, messages to the user, reading their own agent messages, ready-for-review marks, assignment completion and withdrawal, and own-repository
   sync are allowed.
   Scope is cooperative, not a boundary against hostile same-user processes.
 - Notifications are daemon records the CLI shows: record them where the daemon

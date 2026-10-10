@@ -11,6 +11,7 @@ pub(super) mod issues;
 mod leases;
 mod links;
 mod menu;
+mod messages;
 mod notifications;
 mod ports;
 mod recovery;
@@ -339,6 +340,8 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         Command::Notify { message, workspace } => {
             notifications::send(&ctx, workspace, message).await
         }
+        Command::Message { message, workspace } => messages::send(&ctx, workspace, message).await,
+        Command::Messages { workspace } => messages::show(&ctx, workspace).await,
         Command::Done {
             workspace,
             keep,

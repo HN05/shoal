@@ -1258,6 +1258,20 @@ Scoped commands cannot read notifications but may notify about their own
 workspace. Read entries older than the newest
 500 are dropped; unread ones stay.
 
+### Agent messages
+
+```sh
+shoal message "Stop the dev server" [--workspace W]  # Queue one for a workspace's agents
+shoal messages [workspace]     # New messages, oldest first, shown once
+```
+
+`shoal message` queues a one-line message, with the same limits as `notify`, for
+the agents working in a workspace. Shoal never types into an agent's terminal;
+agents read messages with `shoal messages`, which deletes each message it shows.
+An identical message that is still unread is not queued again, and a workspace
+holds at most 50 unread messages. Scoped commands may read their own workspace's
+messages but cannot send any. Removing the workspace deletes its messages.
+
 ### Leases
 
 `shoal acquire <kind>` reserves a port, simulator, resource permit, or related
@@ -1396,7 +1410,7 @@ yourself that such processes stopped, use `--repair --acknowledge-stopped`; visi
 
 ### Scoped workspace commands
 
-PR watches, merge acknowledgements, `notify`, `ready` and `unready` are
+PR watches, merge acknowledgements, `notify`, `messages`, `ready` and `unready` are
 own-workspace scope exceptions.
 Processes carrying a Shoal scope token are confined to their own worktree:
 `status`, inspect, execute, `merge`, `diff`, `setup`, and resources. They may read

@@ -488,6 +488,12 @@ and daemon hook rules with the agent name, reported code, and process-completion
 status. Failure notifies without changing the exit result or marking completion;
 removal uses its own hooks. Desktop or push delivery was considered and not adopted.
 
+Messages to agents travel the other way: the user queues them for a workspace,
+and the daemon holds them until an agent in that workspace reads them, then
+deletes them. Shoal never writes to an agent's terminal, which it does not own;
+agents read messages through Shoal commands. Identical unread messages collapse,
+and scoped processes may read their own workspace's messages but not send any.
+
 Ready-for-review marks are the agent's status signal for integrations, separate
 from messages and completion: they never notify, complete, or change cleanup. A
 mark covers a linked issue or PR, or the workspace when nothing is linked, and

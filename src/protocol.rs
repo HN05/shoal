@@ -26,7 +26,7 @@ use crate::{
     sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
 };
 
-pub const VERSION: u32 = 74;
+pub const VERSION: u32 = 75;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -333,6 +333,19 @@ pub enum Method {
         workspace: String,
         message: String,
     },
+    /// A message from the user to a workspace's agents.
+    SendAgentMessage {
+        workspace: String,
+        message: String,
+    },
+    /// The workspace's undelivered agent messages, oldest first.
+    AgentMessages {
+        workspace: String,
+    },
+    MarkAgentMessagesDelivered {
+        workspace: String,
+        ids: Vec<i64>,
+    },
     /// Long-lived: unread notifications, then new ones as they are recorded,
     /// each as a [`Body::Notification`] response and marked read on delivery.
     WatchNotifications,
@@ -543,6 +556,7 @@ response_bodies! {
     LayeredConfig(Box<ConfigLayers>),
     SyncedRepository(SyncedRepository),
     Notifications(Vec<Notification>),
+    AgentMessages(Vec<crate::daemon::agent_messages::AgentMessage>),
     Notification(Notification),
     EventItem(EventItem),
     PrUpdates(crate::forge::pr::wait::Updates),

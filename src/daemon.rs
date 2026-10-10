@@ -1,6 +1,7 @@
 //! The per-user daemon: owns shared state, serves protocol requests over a
 //! Unix socket, and runs background cleanup.
 pub mod access;
+pub mod agent_messages;
 pub mod allocation;
 mod auto_update;
 pub mod cleanup;
@@ -599,6 +600,19 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         }
         Method::SendMessage { workspace, message } => {
             manager.send_message(&workspace, message).await?;
+            Body::Ok
+        }
+        Method::SendAgentMessage { workspace, message } => {
+            manager.send_agent_message(&workspace, message).await?;
+            Body::Ok
+        }
+        Method::AgentMessages { workspace } => {
+            Body::AgentMessages(manager.agent_messages(&workspace).await?)
+        }
+        Method::MarkAgentMessagesDelivered { workspace, ids } => {
+            manager
+                .mark_agent_messages_delivered(&workspace, ids)
+                .await?;
             Body::Ok
         }
         Method::MarkNotificationsRead { ids } => {

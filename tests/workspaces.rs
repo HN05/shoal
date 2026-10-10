@@ -14042,6 +14042,28 @@ fn agents_notify_the_user_about_their_own_workspace_without_completing_it() {
 }
 
 #[test]
+fn the_user_messages_agents_who_read_their_own_messages_once() {
+    let fixture = Fixture::new();
+    fixture.add("receiver");
+    fixture.add("other");
+    fixture.ok(&["message", "Stop the dev server", "--workspace", "receiver"]);
+    let output = scoped_command(
+        &fixture,
+        "receiver",
+        &["message", "hello", "--workspace", "receiver"],
+    );
+    assert!(!output.status.success(), "agents cannot send: {output:?}");
+    let output = scoped_command(&fixture, "receiver", &["messages", "other"]);
+    assert!(!output.status.success(), "{output:?}");
+    let output = scoped_command(&fixture, "receiver", &["messages"]);
+    assert!(output.status.success(), "{output:?}");
+    let messages: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(messages[0]["message"], "Stop the dev server");
+    assert_eq!(messages.as_array().unwrap().len(), 1);
+    assert_eq!(fixture.ok(&["messages", "receiver"]), serde_json::json!([]));
+}
+
+#[test]
 fn agents_mark_their_workspace_ready_for_review_until_new_commits() {
     let fixture = Fixture::new();
     let added = fixture.add("reviewed");

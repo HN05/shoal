@@ -62,7 +62,7 @@ instead of the PR delivery guidance below.
   environments carry a scope token and get own-worktree access
   only (CLI refusals also follow ancestry for the same state directory); workspace allocation/removal/recovery and shared repository/service
   administration stay denied, while own-workspace setup, rename, base workspace, PR registration,
-  merge acknowledgements, messages to the user, ready-for-review marks,
+  merge acknowledgements, messages to the user, reading their own agent messages, ready-for-review marks,
   assignment completion and its withdrawal,
   own-repository sync and
   effective-configuration reads are allowed;
@@ -71,7 +71,9 @@ instead of the PR delivery guidance below.
   workspace removal, without execution tracking or cleanup protection.
   Notifications are read by the unscoped user only and never fail the
   operation they record; an agent message is the operation, so its failure is
-  returned, and it never records completion. Workspace events are an unscoped, durable lifecycle
+  returned, and it never records completion. Only unscoped callers queue messages
+  for a workspace's agents; Shoal never writes to an agent's terminal, and delivery
+  deletes a message. Workspace events are an unscoped, durable lifecycle
   stream with replay gaps, independent of notification read state. Ready-for-review
   marks bind to HEAD, cover only linked items or the unlinked workspace, record
   journal events, and never notify, complete, or change cleanup; `post_ready_cmd`

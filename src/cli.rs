@@ -200,6 +200,16 @@ pub enum Command {
         #[arg(long)]
         workspace: Option<String>,
     },
+    /// Queue a message for the agents working in a workspace.
+    Message {
+        /// One line of text, such as "Stop the dev server before running tests".
+        message: String,
+        /// Workspace to use; defaults to the current workspace or picker.
+        #[arg(long)]
+        workspace: Option<String>,
+    },
+    /// Show the workspace's new agent messages once.
+    Messages { workspace: Option<String> },
     /// Mark the assignment finished; by default stop tracked commands and clean up safely.
     Done {
         workspace: Option<String>,
