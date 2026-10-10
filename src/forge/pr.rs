@@ -19,6 +19,16 @@ use crate::{
     model::Workspace,
 };
 
+/// How a new PR watch is checked before it is recorded.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum WatchCheck {
+    /// Look the PR up with the user's login.
+    Lookup,
+    /// The caller just read the PR from the forge with the workspace branch as
+    /// its head, so a lookup that could fail now must not leave it unlinked.
+    Known,
+}
+
 /// Prefixes errors from moving stacked workspaces, which a later sweep clears.
 const STACK_ERROR: &str = "could not move the workspaces stacked on it";
 
@@ -183,11 +193,17 @@ impl Manager {
 
     pub async fn set_pr(&self, selector: &str, action: Action) -> Result<()> {
         let _guard = self.pr_gate.lock().await;
-        self.set_pr_gated(selector, action).await
+        self.set_pr_gated(selector, action, WatchCheck::Lookup)
+            .await
     }
 
     /// [`Self::set_pr`] for a caller already holding `pr_gate`.
-    pub(crate) async fn set_pr_gated(&self, selector: &str, action: Action) -> Result<()> {
+    pub(crate) async fn set_pr_gated(
+        &self,
+        selector: &str,
+        action: Action,
+        check: WatchCheck,
+    ) -> Result<()> {
         let workspace = self.workspace(selector).await?;
         // Links serve more than cleanup; only an acknowledgement exists for it alone.
         ensure!(
@@ -222,9 +238,11 @@ impl Manager {
                 current_head(&workspace).await?;
                 let (forge, number, url) = self.pr_forge(&workspace, &input).await?;
                 // Detect missing tools/login, wrong branches and invalid PRs now.
-                forge
-                    .merged_commits(&workspace.path, number, &workspace.branch)
-                    .await?;
+                if check == WatchCheck::Lookup {
+                    forge
+                        .merged_commits(&workspace.path, number, &workspace.branch)
+                        .await?;
+                }
                 let (mut urls, mut merged_head) = match self.pr_registration(&workspace.id).await? {
                     Some(Registration {
                         kind: RegistrationKind::Watch { urls, merged_head },

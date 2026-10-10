@@ -133,11 +133,19 @@ impl Manager {
                 .run(move |db| events::record_item(db, &id, ItemKind::Pr, &url, "open"))
                 .await?;
         }
+        anyhow::ensure!(
+            item.pr
+                .as_ref()
+                .is_some_and(|pr| pr.head == workspace.branch),
+            "{} does not have the workspace branch as its head",
+            item.url
+        );
         self.set_pr_gated(
             &workspace.id,
             super::pr::Action::Watch {
                 url: item.url.clone(),
             },
+            super::pr::WatchCheck::Known,
         )
         .await
         .with_context(|| format!("{} is open, but linking it failed", item.url))?;

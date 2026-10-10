@@ -515,11 +515,7 @@ fn pr_open_pushes_creates_and_links_or_finds_the_open_pr() {
             &fixture.repo,
             &["config", "remote.origin.pushurl", remote.to_str().unwrap()],
         );
-        // Linking checks the PR through the CLI: gh's JSON, or fj's text.
-        let fj = "#!/bin/sh\ncase \" $* \" in\n *' commits '*) ;;\n *) printf 'Fix #%s\\nBy user — Open — +1 -0\\nFrom `topic` into `main`\\n' \"$5\";;\nesac\n";
-        fs::create_dir_all(root.join("bin")).unwrap();
-        fs::write(root.join("bin/fj"), fj).unwrap();
-        fs::set_permissions(root.join("bin/fj"), fs::Permissions::from_mode(0o755)).unwrap();
+        // Linking a PR Shoal just read needs no lookup through the user's gh or fj.
         let list = match forge {
             Forge::GitHub => "GET repos/team/project/pulls?state=open&head=team%3Atopic",
             Forge::Forgejo => "GET repos/team/project/pulls?state=open&limit=50&page=1",
@@ -530,8 +526,6 @@ fn pr_open_pushes_creates_and_links_or_finds_the_open_pr() {
             list: {"body": []},
             "POST repos/team/project/pulls": {"status": 201, "body": {"number": 9}},
             "GET repos/team/project/pulls/9": {"body": pull(9, "open", "Fix", &[])},
-            "pr view 9": {"body": {"number": 9, "state": "OPEN", "headRefName": "topic",
-                "commits": []}},
         }));
         let expected = if forge == Forge::GitHub {
             fixture.ok(&["link", "issue", "34", "--workspace", "topic"]);
