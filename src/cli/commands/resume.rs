@@ -5,6 +5,7 @@ use crate::{
         context::Context,
         herdr,
         ui::{self, Fallback},
+        zmx,
     },
     config::Herdr,
     execution::recovery::{Record, Recovery, Saved, SavedCommand, consume},
@@ -99,6 +100,11 @@ pub async fn run(
     }
     let mut records = vec![selected];
     records.extend(saved.commands.into_iter().map(|command| command.path));
+    let settings =
+        client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
+    if zmx::hosts(&settings) {
+        return zmx::run(ctx, workspace, &recovery.agent, &records, &recovery.command).await;
+    }
     crate::execution::run_recovery(
         &ctx.paths,
         workspace.id.clone(),

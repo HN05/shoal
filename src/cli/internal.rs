@@ -1,4 +1,7 @@
-use std::{ffi::OsString, path::Path};
+use std::{
+    ffi::OsString,
+    path::{Path, PathBuf},
+};
 
 use anyhow::Result;
 
@@ -10,6 +13,7 @@ pub const HERDR: &str = "herdr";
 pub const HERDR_WATCH: &str = "herdr-watch";
 pub const LAND: &str = "land";
 pub const DETACHED: &str = "detached";
+pub const SESSION: &str = "session";
 
 pub enum Worker<'a> {
     HerdrWatch {
@@ -24,6 +28,14 @@ pub enum Worker<'a> {
         workspace: &'a str,
         log: &'a Path,
         agent: Option<&'a str>,
+        command: &'a [OsString],
+    },
+    /// A tracked agent inside a zmx session; `records` are recovery records
+    /// the launch consumes once it starts.
+    Session {
+        workspace: &'a str,
+        agent: &'a str,
+        records: &'a [PathBuf],
         command: &'a [OsString],
     },
 }
@@ -64,6 +76,19 @@ pub fn internal_command(paths: &Paths, json: bool, worker: Worker<'_>) -> Result
             ]);
             if let Some(agent) = agent {
                 args.extend(["--agent".into(), agent.into()]);
+            }
+            args.push("--".into());
+            args.extend_from_slice(command);
+        }
+        Worker::Session {
+            workspace,
+            agent,
+            records,
+            command,
+        } => {
+            args.extend([SESSION.into(), workspace.into(), agent.into()]);
+            for record in records {
+                args.extend(["--record".into(), record.as_os_str().to_owned()]);
             }
             args.push("--".into());
             args.extend_from_slice(command);
@@ -162,6 +187,42 @@ mod tests {
                 assert_eq!(parsed_agent.as_deref(), agent);
                 assert_eq!(parsed_command, command);
             }
+        }
+    }
+
+    #[test]
+    fn session_round_trips_records_and_literal_arguments() {
+        let command = vec![
+            "claude".into(),
+            "--".into(),
+            "literal ; $value".into(),
+            OsString::from_vec(vec![0xff]),
+        ];
+        for records in [
+            vec![],
+            vec![PathBuf::from("/state/a record.json"), "/b".into()],
+        ] {
+            let InternalCommand::Session {
+                workspace,
+                agent,
+                records: parsed_records,
+                command: parsed_command,
+            } = parse(
+                Worker::Session {
+                    workspace: "workspace-id",
+                    agent: "claude",
+                    records: &records,
+                    command: &command,
+                },
+                false,
+            )
+            else {
+                panic!("expected session worker");
+            };
+            assert_eq!(workspace, "workspace-id");
+            assert_eq!(agent, "claude");
+            assert_eq!(parsed_records, records);
+            assert_eq!(parsed_command, command);
         }
     }
 }

@@ -779,6 +779,7 @@ fn doctor_reports_a_stopped_daemon_without_creating_state() {
             "dependency:git",
             "dependency:wt",
             "dependency:lsof",
+            "dependency:zmx",
             "dependency:fzf",
             "cleanup",
             "worktrees:*",
@@ -828,7 +829,7 @@ fn doctor_checks_the_daemon_path_even_when_the_cli_has_dependencies() {
     let daemon = Daemon::with_path(Some(empty.path()));
     let report = doctor_report(daemon.root.path());
     assert_eq!(report["checks"][0]["status"], "ok");
-    for name in ["git", "wt", "lsof", "fzf"] {
+    for name in ["git", "wt", "lsof", "zmx", "fzf"] {
         let check = report["checks"]
             .as_array()
             .unwrap()

@@ -171,6 +171,17 @@ impl Fixture {
     }
 
     fn interactive_command(&self, command: &mut Command, answer: &str) -> (Output, String) {
+        self.terminal_command(command, answer, false)
+    }
+
+    /// Run `command` as `interactive_command` does, with stdout on the
+    /// terminal too when `terminal_stdout` is set.
+    fn terminal_command(
+        &self,
+        command: &mut Command,
+        answer: &str,
+        terminal_stdout: bool,
+    ) -> (Output, String) {
         command.env("PATH", self.interactive_path());
         prompt::answer(
             command,
@@ -178,6 +189,7 @@ impl Fixture {
             prompt::AnswerOptions {
                 controlling_terminal: true,
                 kill_on_timeout: true,
+                terminal_stdout,
             },
         )
     }
@@ -220,6 +232,7 @@ impl Fixture {
                     .unwrap_or_else(|| panic!("{program} is not on PATH"));
                 std::os::unix::fs::symlink(path, tools.join(program)).unwrap();
             }
+            install_test_script(&tools.join("zmx"), PASSTHROUGH_ZMX);
         }
         format!(
             "{}:{}:/usr/bin:/bin",
@@ -16162,6 +16175,37 @@ fn already_closed_issues_are_rejected_before_creating_workspaces() {
 
 /// Agent launches need their executables on PATH, which interactive commands
 /// limit to the fixture's `bin`.
+/// Runs a session's command in place of a zmx session, recording each call
+/// and serving the sessions listed in `$HOME/zmx-sessions`.
+const PASSTHROUGH_ZMX: &str = r#"#!/usr/bin/env python3
+import json, os, sys
+from pathlib import Path
+root = Path(os.environ['HOME'])
+args = sys.argv[1:]
+with (root / 'zmx-calls').open('a') as calls:
+    calls.write(json.dumps(args) + '\n')
+if args[:1] == ['list']:
+    sessions = root / 'zmx-sessions'
+    print(sessions.read_text() if sessions.exists() else 'no sessions found')
+elif args[:1] == ['attach']:
+    args = args[1:]
+    if args[:1] == ['--labels']:
+        args = args[2:]
+    if len(args) > 1:
+        os.environ['ZMX_SESSION'] = args[0]
+        os.execvp(args[1], args[1:])
+else:
+    sys.exit(1)
+"#;
+
+fn zmx_calls(fixture: &Fixture) -> Vec<Vec<String>> {
+    fs::read_to_string(fixture.root.path().join("zmx-calls"))
+        .unwrap_or_default()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect()
+}
+
 fn install_fake_agents(fixture: &Fixture, agents: &[&str]) {
     for agent in agents {
         install_test_script(&fixture.root.path().join("bin").join(agent), "#!/bin/sh\n");
@@ -17194,4 +17238,64 @@ fn holds_allow_watched_prs_to_record_completion_before_cleanup() {
     );
     fixture.ok(&["hold", "release", "watched-held", "--name", "thread"]);
     wait_removed(&fixture, "watched-held");
+}
+
+#[test]
+fn terminal_agents_run_tracked_in_a_labelled_zmx_session_unless_nested_or_detached() {
+    let fixture = Fixture::new();
+    let workspace = fixture.add("persist");
+    let id = workspace["id"].as_str().unwrap();
+    let home = fixture.root.path();
+    install_test_script(
+        &home.join("bin/claude"),
+        "#!/bin/sh\nprintf '%s %s\\n' \"${ZMX_SESSION:-none}\" \"${SHOAL_EXECUTION_ID:+tracked}\" >> \"$HOME/agent-runs\"\n",
+    );
+    let runs = || fs::read_to_string(home.join("agent-runs")).unwrap_or_default();
+
+    let launch = |command: &mut Command| fixture.terminal_command(command, "", true);
+    let (output, transcript) = launch(fixture.command().args(["claude", "persist"]));
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    let calls = zmx_calls(&fixture);
+    assert_eq!(calls[0], ["list"]);
+    let labels = format!("shoal.workspace={id} shoal.agent=claude");
+    assert_eq!(calls[1][..4], ["attach", "--labels", &labels, "persist"]);
+    let worker = &calls[1][4..];
+    let session = worker.iter().position(|arg| arg == "session").unwrap();
+    assert_eq!(worker[session - 1], "internal");
+    assert_eq!(
+        worker[session + 1..session + 5],
+        [id, "claude", "--", "claude"]
+    );
+    assert_eq!(runs(), "persist tracked\n");
+
+    // A session name in use gets the next suffix.
+    fs::write(
+        home.join("zmx-sessions"),
+        format!("  name=persist\tpid=1\tclients=0\tshoal.workspace={id}\n"),
+    )
+    .unwrap();
+    let (output, transcript) = launch(fixture.command().args(["claude", "persist"]));
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    let attaches = |calls: Vec<Vec<String>>| calls.into_iter().filter(|call| call[0] == "attach");
+    assert_eq!(
+        attaches(zmx_calls(&fixture)).next_back().unwrap()[3],
+        "persist-2"
+    );
+
+    // Inside a session or without a terminal, the agent runs in place.
+    let before = zmx_calls(&fixture).len();
+    let (output, transcript) = launch(
+        fixture
+            .command()
+            .env("ZMX_SESSION", "outer")
+            .args(["claude", "persist"]),
+    );
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    let output = fixture.run(&["claude", "persist"]);
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(zmx_calls(&fixture).len(), before);
+    assert_eq!(
+        runs(),
+        "persist tracked\npersist-2 tracked\nouter tracked\nnone tracked\n"
+    );
 }

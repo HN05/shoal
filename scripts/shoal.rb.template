@@ -14,6 +14,7 @@ class Shoal < Formula
 
   depends_on "fzf"
   depends_on "git"
+  depends_on "neurosnap/tap/zmx"
   depends_on "worktrunk"
   uses_from_macos "lsof"
 

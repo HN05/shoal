@@ -13,6 +13,7 @@ use crate::{
         client,
         context::Context,
         ui::{self, Fallback},
+        zmx,
     },
     config::{Effective, named_commands, templates},
     execution,
@@ -136,6 +137,9 @@ impl ResolvedLaunch {
             &[("{prompt}", OsStr::new(prompt))],
         )
         .await?;
+        if zmx::hosts(&self.settings) {
+            return zmx::run(ctx, &self.workspace, name, &[], &command).await;
+        }
         execution::run(&ctx.paths, self.workspace.id, command, Some(name.into())).await
     }
 }

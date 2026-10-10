@@ -166,7 +166,8 @@ mod tests {
         assert_eq!(checks[0].status, CheckStatus::Ok);
         assert_eq!(checks[1].status, CheckStatus::Error);
         assert_eq!(checks[2].status, CheckStatus::Error);
-        assert_eq!(checks[3].status, CheckStatus::Warning);
+        assert_eq!(checks[3].status, CheckStatus::Error);
+        assert_eq!(checks[4].status, CheckStatus::Warning);
         assert!(
             dependencies(None)
                 .iter()

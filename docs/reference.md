@@ -466,12 +466,26 @@ the post-setup hook succeed; arguments after `--` go to the agent. Shoal refuses
 an agent whose executable is not on PATH before creating anything, and leaves
 it and its shortcut command out of the agent picker, the workspace menu and tab
 completion. CLI agents
-run through the tracked execution wrapper and return the
+run through the tracked execution wrapper and, when run in place, return the
 agent's exit code, restoring OS terminal settings even after interruption. When
 `TERM` is nonempty and not `dumb`, it also resets emulator input modes for the shell;
 the workspace is retained even when launch fails. With shell
 integration, your shell enters the new workspace after the agent exits.
 `--json` emits the workspace record first, then the agent's unmodified output.
+
+On a terminal, CLI agent launches (`shoal claude`, `shoal codex`, other AI
+tools, `add --agent` and `resume`) run in a [zmx](https://github.com/neurosnap/zmx)
+session, so the agent keeps running when you detach with Ctrl-\ or close the
+terminal. zmx passes the agent's output to your terminal unchanged, so images and
+other terminal protocols keep working, and restores the screen when you attach
+again. The tracked wrapper runs inside the session, so stop, resume, scope and
+cleanup treat the agent as before. zmx reports no exit status: these launches
+exit 0 once the agent exits or you detach. A launch without a terminal, inside a
+zmx session (`ZMX_SESSION` is set), or in a Herdr pane with `herdr.enabled` runs
+in place.
+
+Sessions are named after the workspace, suffixed `-2`, `-3`, ... when the name
+is in use, and labelled `shoal.workspace=<id>`; reattach with `zmx attach <name>`.
 
 Inside Herdr (`HERDR_ENV=1`), interactive `shoal add` looks up
 the issue and resolves repository, branch, and agent choices in the caller's pane,
@@ -1492,7 +1506,7 @@ shoal doctor fix-login --repair --reclaim  # Re-establish ownership after checki
 
 Exit 2 while findings or incomplete checks remain, 0 when clear. JSON contains
 `checks` and `workspaces`. Environment checks cover daemon reachability and
-version, executable `git`, `wt`, `lsof`, and `fzf` (for interactive pickers) on
+version, executable `git`, `wt`, `lsof`, `zmx`, and `fzf` (for interactive pickers) on
 the daemon's PATH, Git worktrees under registered repository roots that Shoal
 does not track, and shell integration in the calling shell. They run regardless
 of the workspace selection and only diagnose, even with `--repair`. An unavailable or mismatched daemon leaves its

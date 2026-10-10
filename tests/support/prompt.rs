@@ -10,6 +10,8 @@ use std::{
 pub struct AnswerOptions {
     pub controlling_terminal: bool,
     pub kill_on_timeout: bool,
+    /// Put stdout on the terminal too; the transcript then holds it.
+    pub terminal_stdout: bool,
 }
 
 impl Default for AnswerOptions {
@@ -17,6 +19,7 @@ impl Default for AnswerOptions {
         Self {
             controlling_terminal: false,
             kill_on_timeout: true,
+            terminal_stdout: false,
         }
     }
 }
@@ -42,7 +45,11 @@ pub fn answer(command: &mut Command, answer: &str, options: AnswerOptions) -> (O
     let mut child = command
         .stdin(slave.try_clone().unwrap())
         .stderr(slave.try_clone().unwrap())
-        .stdout(Stdio::piped())
+        .stdout(if options.terminal_stdout {
+            Stdio::from(slave.try_clone().unwrap())
+        } else {
+            Stdio::piped()
+        })
         .spawn()
         .unwrap();
     master.write_all(answer.as_bytes()).unwrap();

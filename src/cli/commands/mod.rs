@@ -491,6 +491,20 @@ async fn internal(ctx: Context, command: InternalCommand) -> Result<i32> {
         } => {
             crate::execution::run_detached_wrapper(&ctx.paths, workspace, log, command, agent).await
         }
+        InternalCommand::Session {
+            workspace,
+            agent,
+            records,
+            command,
+        } if records.is_empty() => {
+            crate::execution::run(&ctx.paths, workspace, command, Some(agent)).await
+        }
+        InternalCommand::Session {
+            workspace,
+            agent,
+            records,
+            command,
+        } => crate::execution::run_recovery(&ctx.paths, workspace, command, agent, records).await,
     }
 }
 

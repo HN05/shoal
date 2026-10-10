@@ -42,6 +42,7 @@ the daemon. Prebuilt binaries do not require Rust.
 | Git 2.43+ (`git`) | Repository and branch operations |
 | [Worktrunk](https://worktrunk.dev/) (`wt`, tested with 0.77.0) | Creating and removing worktrees |
 | `lsof` | Checking whether a workspace is in use before cleanup |
+| [zmx](https://github.com/neurosnap/zmx) | Agent sessions that keep running after you detach |
 | `ps` (included with macOS; typically `procps` or `procps-ng` on Linux) | Tracking and stopping processes |
 | [fzf](https://github.com/junegunn/fzf) | Interactive menus and pickers |
 
@@ -173,7 +174,9 @@ an issue before implementation. See the
 [command and review configuration](docs/reference.md#configured-commands) for uncommitted
 review and exporting feedback to an agent.
 
-CLI agents run in the terminal through Shoal; Happy sessions run detached, log
+CLI agents run in [zmx](https://github.com/neurosnap/zmx) sessions that keep
+running when you detach with Ctrl-\ or close the terminal; `zmx attach` returns
+to one. Happy sessions run detached, log
 to a file Shoal names, and stop with `shoal stop`. The Codex shortcut disables
 Codex's sandbox and approval prompts; use `shoal exec fix-login -- codex` for a
 custom invocation. Shoal's resource scope is cooperative, not a filesystem sandbox.

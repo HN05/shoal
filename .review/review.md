@@ -280,7 +280,10 @@ configured command for another agent, plus proven child
   group and OS terminal settings after commands and interactive hooks. When `TERM` is
   nonempty and not `dumb`, it also resets emulator input modes for the shell, writing
   best-effort cleanup to the terminal rather than redirected output; stop requests
-  give the entire command process group a shared grace period, even after its leader exits. The daemon owns
+  give the entire command process group a shared grace period, even after its leader exits.
+  Terminal agent launches put the tracked wrapper inside a zmx session, never a
+  terminal emulator between agent and terminal; launches without a terminal, inside
+  zmx, or in an enabled Herdr pane run in place. The daemon owns
   state and prepares each execution kind before shared registration through one
   request. Reported exits clear executions and permit setup readiness only after
   marker, child and group survivors are gone and environment visibility is complete;

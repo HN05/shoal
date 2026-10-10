@@ -10,6 +10,7 @@ pub mod output;
 mod progress;
 pub mod ui;
 pub mod workspace_context;
+mod zmx;
 
 use std::{ffi::OsString, path::PathBuf};
 
@@ -973,6 +974,16 @@ pub enum InternalCommand {
         log: PathBuf,
         #[arg(long)]
         agent: Option<String>,
+        #[arg(last = true, required = true)]
+        command: Vec<OsString>,
+    },
+    /// Tracked agent inside a zmx session; consumes recovery records once started.
+    #[command(name = internal::SESSION)]
+    Session {
+        workspace: String,
+        agent: String,
+        #[arg(long = "record")]
+        records: Vec<PathBuf>,
         #[arg(last = true, required = true)]
         command: Vec<OsString>,
     },
