@@ -897,7 +897,7 @@ mod tests {
                 "branch": "feature", "state": "failed", "error": "setup error",
                 "base_commit": "abc", "base_ref": "refs/heads/main",
                 "git_dir": "/git/worktrees/worker", "git_dir_id": "1:2",
-                "base_workspace": null, "links": {"issue": null, "prs": []}
+                "base_workspace": null, "links": {"issue": null, "prs": []}, "running": false
             }),
         )?;
         check_columns(
