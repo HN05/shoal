@@ -3216,12 +3216,9 @@ exit 7
             )
         };
         assert!(
-            String::from_utf8(output.stdout)
-                .unwrap()
-                .ends_with(&format!(
-                    "{}\n{args}",
-                    fs::canonicalize(path).unwrap().display()
-                ))
+            strip_message_hooks(&String::from_utf8(output.stdout).unwrap(), '\n').ends_with(
+                &format!("{}\n{args}", fs::canonicalize(path).unwrap().display())
+            )
         );
     }
 
@@ -3426,7 +3423,7 @@ fn agent_shortcuts_forward_arguments_without_starting_real_agents() {
             String::from_utf8_lossy(&output.stderr)
         );
         assert_eq!(
-            String::from_utf8(output.stdout).unwrap(),
+            strip_message_hooks(&String::from_utf8(output.stdout).unwrap(), '\n'),
             format!(
                 "shortcut\n--version\nhello with spaces\n{}",
                 if agent == "claude" {
@@ -3452,7 +3449,10 @@ fn agent_shortcuts_forward_arguments_without_starting_real_agents() {
             .output()
             .unwrap();
         assert!(output.status.success());
-        assert_eq!(output.stdout, b"shortcut\n");
+        assert_eq!(
+            strip_message_hooks(&String::from_utf8(output.stdout).unwrap(), '\n'),
+            "shortcut\n"
+        );
     }
 }
 
@@ -9427,7 +9427,7 @@ fn add_from_issue_uses_existing_forge_cli_and_passes_context_to_agents() {
         } else {
             assert!(invocation.contains("--host\0forge.example\0--remote\0origin\0"));
         }
-        let invocation = fs::read_to_string(&agent_args).unwrap();
+        let invocation = strip_message_hooks(&fs::read_to_string(&agent_args).unwrap(), '\0');
         let prompt = invocation.split('\0').next().unwrap();
         assert!(prompt.contains(title));
         assert!(prompt.contains(&url));
@@ -9483,7 +9483,11 @@ fn issue_templates_append_saved_or_worktree_context_to_global() {
 printf '%s' '{"state":"OPEN","number":44,"title":"Literal {body}","body":"$(false)"}'
 "#,
         ),
-        ("claude", "#!/bin/sh\nprintf '%s' \"$1\"\n"),
+        // The prompt follows the message hook settings.
+        (
+            "claude",
+            "#!/bin/sh\n[ \"$1\" = --settings ] && shift 2\nprintf '%s' \"$1\"\n",
+        ),
     ] {
         let path = bin.join(tool);
         fs::write(&path, script).unwrap();
@@ -9682,7 +9686,7 @@ fn add_item_finds_the_repository_and_starts_the_default_agent() {
         assert!(fs::read_to_string(&issue_args).unwrap().contains(&format!(
             "issue\0view\0{number}\0--repo\0github.com/team/project\0"
         )));
-        let invocation = fs::read_to_string(&agent_args).unwrap();
+        let invocation = strip_message_hooks(&fs::read_to_string(&agent_args).unwrap(), '\0');
         let mut parts = invocation.split('\0');
         assert_eq!(parts.next(), Some(expected));
         let prompt = parts.next().unwrap();
@@ -12741,7 +12745,7 @@ fn cli_agent_command_defaults_can_be_replaced_at_launch() {
         String::from_utf8_lossy(&output.stderr)
     );
     assert_eq!(
-        String::from_utf8(output.stdout).unwrap(),
+        strip_message_hooks(&String::from_utf8(output.stdout).unwrap(), '\n'),
         format!(
             "configured-agent\n{{path}}\ntwo words\nconfigured-agent\n{}\nprompt=\n",
             path.display()
@@ -12757,7 +12761,7 @@ fn cli_agent_command_defaults_can_be_replaced_at_launch() {
     ]);
     assert!(output.status.success());
     assert_eq!(
-        String::from_utf8(output.stdout).unwrap(),
+        strip_message_hooks(&String::from_utf8(output.stdout).unwrap(), '\n'),
         format!(
             "configured-agent\n{{path}}\ntwo words\nconfigured-agent\n{}\nprompt=\n",
             path.display()
@@ -12773,8 +12777,8 @@ fn cli_agent_command_defaults_can_be_replaced_at_launch() {
     ]);
     assert!(output.status.success());
     assert_eq!(
-        output.stdout,
-        b"--model\nexample\ncustom default\nprompt=\n"
+        strip_message_hooks(&String::from_utf8(output.stdout).unwrap(), '\n'),
+        "--model\nexample\ncustom default\nprompt=\n"
     );
     let output = fixture.run(&[
         "run",
@@ -12786,8 +12790,8 @@ fn cli_agent_command_defaults_can_be_replaced_at_launch() {
     ]);
     assert!(output.status.success());
     assert_eq!(
-        output.stdout,
-        b"--model\nexample\ncustom default\nprompt=\n"
+        strip_message_hooks(&String::from_utf8(output.stdout).unwrap(), '\n'),
+        "--model\nexample\ncustom default\nprompt=\n"
     );
 }
 
@@ -14187,10 +14191,9 @@ fn agents_mark_their_workspace_ready_for_review_until_new_commits() {
 }
 
 /// Agent arguments without the hooks that deliver agent messages, which
-/// built-in launches always register.
+/// built-in launches register.
 fn without_message_hooks<'a>(args: &[&'a str]) -> Vec<&'a str> {
     let mut remaining = Vec::new();
-    let mut hooks = 0;
     let mut args = args.iter();
     while let Some(&arg) = args.next() {
         match (arg, args.clone().next()) {
@@ -14202,10 +14205,13 @@ fn without_message_hooks<'a>(args: &[&'a str]) -> Vec<&'a str> {
             }
         }
         args.next();
-        hooks += 1;
     }
-    assert!(hooks > 0, "no message hooks registered");
     remaining
+}
+
+/// Captured agent arguments, one per `separator`, without message hooks.
+fn strip_message_hooks(text: &str, separator: char) -> String {
+    without_message_hooks(&text.split(separator).collect::<Vec<_>>()).join(&separator.to_string())
 }
 
 fn scoped_command(fixture: &Fixture, workspace: &str, args: &[&str]) -> Output {
