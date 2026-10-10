@@ -61,6 +61,7 @@ mod tests {
             base_workspace: None,
             stacked_workspaces: Vec::new(),
             links: crate::model::WorkspaceLinks::default(),
+            running: false,
             id: format!("id-{name}"),
             repository_id: "repo".into(),
             name: name.into(),

@@ -52,6 +52,9 @@ pub struct Workspace {
     pub review: Vec<ReviewMark>,
     #[serde(default)]
     pub links: WorkspaceLinks,
+    /// Whether an agent or command started through Shoal is running here.
+    #[serde(default)]
+    pub running: bool,
     /// The workspace whose branch this one's branch builds on.
     #[serde(default)]
     pub base_workspace: Option<WorkspaceRef>,
@@ -126,6 +129,7 @@ impl Workspace {
             base_workspace: None,
             stacked_workspaces: Vec::new(),
             links: WorkspaceLinks::default(),
+            running: false,
         }
     }
 

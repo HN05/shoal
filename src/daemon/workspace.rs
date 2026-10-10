@@ -236,10 +236,7 @@ impl Manager {
                     .query_map([], store::workspace)?
                     .collect::<rusqlite::Result<Vec<_>>>()?;
                 for workspace in &mut workspaces {
-                    workspace.holds = holds::list(db, &workspace.id)?;
-                    workspace.review = review::list(db, &workspace.id)?;
-                    stack::load(db, workspace)?;
-                    workspace.links = store::workspace_links(db, &workspace.id)?;
+                    load_details(db, workspace)?;
                 }
                 Ok(workspaces)
             })
@@ -269,10 +266,7 @@ impl Manager {
                     )
                     .optional()?
                     .with_context(|| format!("unknown workspace: {selector}"))?;
-                workspace.holds = holds::list(db, &workspace.id)?;
-                workspace.review = review::list(db, &workspace.id)?;
-                stack::load(db, &mut workspace)?;
-                workspace.links = store::workspace_links(db, &workspace.id)?;
+                load_details(db, &mut workspace)?;
                 Ok(workspace)
             })
             .await
@@ -758,6 +752,20 @@ async fn existing_base(repo: &crate::model::Repository, branch: &str) -> Result<
     )
 }
 
+/// Fill in what a workspace record reads from its related tables.
+fn load_details(db: &rusqlite::Connection, workspace: &mut Workspace) -> Result<()> {
+    workspace.holds = holds::list(db, &workspace.id)?;
+    workspace.review = review::list(db, &workspace.id)?;
+    stack::load(db, workspace)?;
+    workspace.links = store::workspace_links(db, &workspace.id)?;
+    workspace.running = store::exists(
+        db,
+        "SELECT 1 FROM executions WHERE workspace_id=?1 AND state=?2",
+        rusqlite::params![workspace.id, crate::state::ExecutionState::Running],
+    )?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -784,5 +792,40 @@ mod tests {
         );
         // A snapshot taken before the reload keeps the settings it started with.
         assert_eq!(before.simulators.default, None);
+    }
+
+    #[tokio::test]
+    async fn records_report_only_running_executions() {
+        let (root, manager) = crate::test_support::manager().await;
+        let path = crate::test_support::repository(root.path(), "repo");
+        let repo = manager
+            .register_repository(path.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        let workspace = manager
+            .create_workspace(&repo.id, "busy".into(), None, None, None)
+            .await
+            .unwrap();
+        assert!(!manager.workspace(&workspace.id).await.unwrap().running);
+        for (state, running) in [("running", true), ("unknown", false)] {
+            let id = workspace.id.clone();
+            manager
+                .store
+                .run(move |db| {
+                    db.execute(
+                        "INSERT OR REPLACE INTO executions(id,workspace_id,state) VALUES ('run',?1,?2)",
+                        [&id, state],
+                    )?;
+                    Ok(())
+                })
+                .await
+                .unwrap();
+            assert_eq!(
+                manager.workspace(&workspace.id).await.unwrap().running,
+                running
+            );
+            assert_eq!(manager.list_workspaces().await.unwrap()[0].running, running);
+        }
+        manager.store.shutdown().await;
     }
 }
