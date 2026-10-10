@@ -30,6 +30,9 @@ selected the same way reaches tracked agents as Git's environment-level config,
 so the agent's commands use it in any repository while the worktree's config and
 other executions keep theirs. Desktop handoffs have no authentication override
 because they may reuse an existing process.
+The generic repository `[env]` table is available to tracked executions and hooks:
+it renders workspace identity and reserved ports into user-selected variables
+without managing the integrated tool.
 
 ## Architecture
 
@@ -620,6 +623,10 @@ and leave existing leases alone. Repository config cannot expand machine
 policy: `root_dir`, simulator limits and profiles, Git profile definitions, and global resource
 definitions stay global; global pools span repositories, repository pools span
 that repository's worktrees.
+The repository `[env]` table layers by variable name and is rendered once when a
+workspace execution or hook starts. It accepts workspace, path, repository, branch,
+and reserved-port fields; values are literal strings after substitution, and
+`SHOAL_*` names remain owned by Shoal.
 
 Ports are cooperative TCP reservations: probe, record, export to later
 executions, never hold a socket. Simulator leases are exclusive over

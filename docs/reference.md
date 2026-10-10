@@ -1548,6 +1548,12 @@ Git operations.
 `shoal env [workspace] --json` returns an object mapping environment variable names
 to strings, using the same workspace identity and current port exports as tracked
 executions, with a fresh `SHOAL_SCOPE_TOKEN` and no `SHOAL_EXECUTION_ID`.
+The `[env]` table adds user-defined variables to tracked executions, lifecycle hooks,
+and this exported environment. Values resolve from saved repository config, the
+worktree file, global config, then the default, and substitute `{workspace}`,
+`{workspace_path}` (also `{path}`), `{repo}`, `{branch}`, and reserved `{port.NAME}`
+fields once. Unknown fields remain literal, inserted values are not expanded, and
+`SHOAL_*` names are reserved for Shoal.
 Only unscoped callers can export or revoke tokens, and export requires a ready,
 verified worktree. Add the returned variables to the processes your app starts.
 Each exported token survives daemon restarts until `shoal env [workspace] --revoke

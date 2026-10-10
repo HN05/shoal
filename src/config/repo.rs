@@ -74,6 +74,7 @@ pub struct RepoConfig {
     /// Runs untracked before the worktree is removed, e.g. to close that session.
     pub pre_remove_cmd: Option<String>,
     pub ports: PortDefaults,
+    pub env: BTreeMap<String, String>,
     pub resources: BTreeMap<String, crate::daemon::resources::ResourceConfig>,
     pub resource_pools: BTreeMap<String, crate::daemon::resources::PoolConfig>,
     pub simulators: SimulatorPreferences,
@@ -167,6 +168,7 @@ pub fn parse(text: &str) -> Result<RepoConfig> {
         );
     }
     crate::daemon::resources::definitions(&config.resources, &config.resource_pools)?;
+    crate::env::validate_configured_environment(&config.env)?;
     Ok(config)
 }
 

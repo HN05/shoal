@@ -5,6 +5,7 @@ use std::{collections::BTreeMap, ffi::OsString, path::PathBuf};
 use tokio::process::Command;
 
 use crate::{
+    config::placeholders,
     model::{PortReservation, Workspace},
     paths::Paths,
 };
@@ -61,6 +62,60 @@ pub const COMPILED_SKILLS_DIR: Option<&str> = option_env!("SHOAL_BUILD_SKILLS_DI
 pub const CLAUDE_CONFIG_DIR: &str = "CLAUDE_CONFIG_DIR";
 /// Codex's user configuration and state directory override.
 pub const CODEX_HOME: &str = "CODEX_HOME";
+
+/// Validate names configured in `[env]` before they reach a process.
+pub fn validate_configured_environment(values: &BTreeMap<String, String>) -> Result<()> {
+    for (name, value) in values {
+        ensure!(
+            name.bytes()
+                .next()
+                .is_some_and(|byte| byte.is_ascii_alphabetic() || byte == b'_')
+                && name
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_'),
+            "invalid [env] variable name: {name}"
+        );
+        ensure!(
+            !name.starts_with(PREFIX),
+            "[env] variable conflicts with Shoal's execution environment: {name}"
+        );
+        ensure!(!value.contains('\0'), "[env] value for {name} contains NUL");
+    }
+    Ok(())
+}
+
+/// Render configured values once for one workspace. Inserted values are never
+/// scanned again, matching the prompt template substitution rules.
+pub fn render_configured_environment(
+    values: &BTreeMap<String, String>,
+    workspace: &Workspace,
+    repository_name: &str,
+    ports: &[PortReservation],
+) -> BTreeMap<String, OsString> {
+    let mut fields = vec![
+        ("{workspace}", std::ffi::OsStr::new(&workspace.name)),
+        ("{workspace_path}", workspace.path.as_os_str()),
+        ("{path}", workspace.path.as_os_str()),
+        ("{repo}", std::ffi::OsStr::new(repository_name)),
+        ("{branch}", std::ffi::OsStr::new(&workspace.branch)),
+    ];
+    let mut port_values = Vec::new();
+    for port in ports {
+        let value = port.port.to_string();
+        port_values.push((format!("{{port.{}}}", port.name), value.clone()));
+        port_values.push((format!("{{port_{}}}", port.name), value.clone()));
+        port_values.push((format!("{{{}}}", port.name), value));
+    }
+    fields.extend(
+        port_values
+            .iter()
+            .map(|(name, value)| (name.as_str(), std::ffi::OsStr::new(value))),
+    );
+    values
+        .iter()
+        .map(|(name, value)| (name.clone(), placeholders::render_os(value, &fields)))
+        .collect()
+}
 
 pub fn codex_home() -> Result<Option<PathBuf>> {
     absolute_dir_var(CODEX_HOME)
@@ -183,5 +238,73 @@ fn same_directory(a: &std::path::Path, b: &std::path::Path) -> bool {
     match (std::fs::canonicalize(a), std::fs::canonicalize(b)) {
         (Ok(a), Ok(b)) => a == b,
         _ => a == b,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::ffi::OsStr;
+
+    #[test]
+    fn configured_values_render_identity_and_only_reserved_ports_once() {
+        let workspace = Workspace::new_record(
+            "repo".into(),
+            "task-{branch}".into(),
+            PathBuf::from("/tmp/{repo}/$(false) 日本語"),
+            "feature/session".into(),
+            crate::state::WorkspaceState::Ready,
+        );
+        let ports = vec![PortReservation {
+            workspace_id: workspace.id.clone(),
+            name: "web".into(),
+            port: 3000,
+            env_var: "WEB_PORT".into(),
+            reason: None,
+        }];
+        let values = BTreeMap::from([
+            ("SESSION".into(), "{repo}:{workspace}:{branch}".into()),
+            ("PROFILE".into(), "{workspace_path}/profile:{path}".into()),
+            (
+                "URL".into(),
+                "http://localhost:{port.web}/{port.missing}".into(),
+            ),
+            (
+                "LITERAL".into(),
+                "$HOME $(false) {unknown} {SESSION}".into(),
+            ),
+            ("EMPTY".into(), "".into()),
+        ]);
+        let rendered =
+            render_configured_environment(&values, &workspace, "project-{workspace}", &ports);
+        assert_eq!(
+            rendered["SESSION"],
+            "project-{workspace}:task-{branch}:feature/session"
+        );
+        assert_eq!(
+            rendered["PROFILE"],
+            "/tmp/{repo}/$(false) 日本語/profile:/tmp/{repo}/$(false) 日本語"
+        );
+        assert_eq!(rendered["URL"], "http://localhost:3000/{port.missing}");
+        assert_eq!(rendered["LITERAL"], "$HOME $(false) {unknown} {SESSION}");
+        assert_eq!(rendered["EMPTY"], "");
+    }
+
+    #[test]
+    fn configured_paths_preserve_non_utf8_bytes() {
+        use std::os::unix::ffi::{OsStrExt, OsStringExt};
+        let workspace = Workspace::new_record(
+            "repo".into(),
+            "worker".into(),
+            PathBuf::from(OsString::from_vec(b"/tmp/\xff".to_vec())),
+            "worker".into(),
+            crate::state::WorkspaceState::Ready,
+        );
+        let values = BTreeMap::from([("PROFILE".into(), "{workspace_path}/profile".into())]);
+        let rendered = render_configured_environment(&values, &workspace, "repo", &[]);
+        assert_eq!(
+            rendered["PROFILE"].as_os_str(),
+            OsStr::from_bytes(b"/tmp/\xff/profile")
+        );
     }
 }

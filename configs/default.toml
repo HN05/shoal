@@ -140,6 +140,12 @@ enabled = true
 start = 49152
 end = 65535
 
+# Variables exported to tracked executions and hooks. Values substitute
+# {workspace}, {workspace_path}, {repo}, {branch}, and {port.NAME} once.
+# [env]
+# AGENT_BROWSER_SESSION = "{workspace}"
+# AGENT_BROWSER_PROFILE = "{workspace_path}/.agent-browser"
+
 [simulators]
 # Xcode simulator leases (macOS).
 max_booted = 2

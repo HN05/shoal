@@ -268,6 +268,16 @@ agent exits, removal, and resource acquisition/release, for example to open a tm
 external device. See [setup and hooks](docs/reference.md#workspace-setup-and-hooks)
 and [resource hooks](docs/reference.md#resource-hooks) for configuration and failure behavior.
 
+Use `[env]` to give tracked executions and hooks workspace-specific variables. Values
+substitute `{workspace}`, `{workspace_path}`, `{repo}`, `{branch}`, and reserved
+`{port.NAME}` values once; inserted text is not evaluated. For example:
+
+```toml
+[env]
+AGENT_BROWSER_SESSION = "{workspace}"
+AGENT_BROWSER_PROFILE = "{workspace_path}/.agent-browser"
+```
+
 ## Cleanup
 
 `shoal rm` removes a workspace and its resources, prompting when needed about
