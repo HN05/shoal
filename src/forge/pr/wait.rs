@@ -167,12 +167,26 @@ impl Manager {
             return Ok(pending);
         }
         drop(guard);
-        let mut observations = self.item_activity(&workspace, items, selection).await?;
+        let items = self.item_activity(&workspace, items, selection).await;
+        let mut observations = Vec::new();
         if let Some(branch) = branch {
             let check = self.check_conflicts(id, None).await;
             observations.push((branch, Snapshot::branch_conflicts(check)));
         }
-        self.record_activity(id, observations, selection).await
+        match items {
+            Ok(items) => {
+                observations.splice(0..0, items);
+                self.record_activity(id, observations, selection).await
+            }
+            // A failed item lookup must not hold back the branch's conflicts.
+            Err(error) => {
+                let updates = self.record_activity(id, observations, selection).await?;
+                if updates.is_empty() {
+                    return Err(error);
+                }
+                Ok(updates)
+            }
+        }
     }
 
     async fn item_activity(
@@ -996,5 +1010,45 @@ mod tests {
         };
         let error = manager.poll_item_activity(&workspace.id, &issues).await;
         assert!(error.unwrap_err().to_string().contains("no linked items"));
+
+        // A failing issue lookup still lets a new branch conflict through.
+        let id = workspace.id.clone();
+        manager
+            .store
+            .run(move |db| {
+                db.execute(
+                    "INSERT INTO workspace_issue(workspace_id,url) VALUES (?1,'issue')",
+                    [id],
+                )?;
+                Ok(())
+            })
+            .await
+            .unwrap();
+        let error = poll().await.unwrap_err();
+        assert!(error.to_string().contains("origin remote"));
+        std::fs::write(repo_path.join("other"), "main\n").unwrap();
+        crate::test_support::commit(&repo_path, "other");
+        std::fs::write(workspace.path.join("other"), "workspace\n").unwrap();
+        crate::test_support::commit(&workspace.path, "other");
+        let previous = manager.record_activity(
+            &workspace.id,
+            vec![(workspace.branch.clone(), resolved_branch(&workspace.id))],
+            &all,
+        );
+        assert!(previous.await.unwrap().is_empty());
+        let updates = poll().await.unwrap();
+        assert_eq!(updates.len(), 1);
+        assert_eq!(updates[0].message, "Conflicts with main: other, tracked");
+    }
+
+    fn resolved_branch(workspace_id: &str) -> Snapshot {
+        Snapshot::branch_conflicts(Ok(crate::model::ConflictCheck {
+            workspace_id: workspace_id.into(),
+            target: "main".into(),
+            target_commit: String::new(),
+            head: String::new(),
+            conflicts: false,
+            files: Vec::new(),
+        }))
     }
 }
