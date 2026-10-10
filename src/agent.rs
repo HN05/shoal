@@ -1,4 +1,6 @@
 //! Shared agent identities and launch modes, independent of launch adapters.
+pub mod state_hooks;
+
 use crate::state::states;
 
 states!(BuiltinAgent: Variants {
@@ -106,21 +108,30 @@ impl From<Agent> for String {
 const MESSAGE_HOOK_EVENTS: [&str; 2] = ["PostToolUse", "UserPromptSubmit"];
 
 impl BuiltinAgent {
-    /// Arguments that register `shoal messages --hook` for this agent's
-    /// session. The hook inherits the execution's scope and state directory.
-    pub fn message_hook_args(self) -> std::io::Result<Vec<std::ffi::OsString>> {
+    /// Arguments that register Shoal's hooks for this agent's session:
+    /// `shoal messages --hook`, and for Claude Code its turn state. The hooks
+    /// inherit the execution's scope and state directory.
+    pub fn hook_args(self) -> std::io::Result<Vec<std::ffi::OsString>> {
         let shoal = crate::fsutil::invoked_executable()?;
-        let command = format!(
-            "{} messages --hook",
-            crate::shell::quote(&[&shoal.to_string_lossy()])
-        );
+        let shoal = crate::shell::quote(&[&shoal.to_string_lossy()]);
+        let command = format!("{shoal} messages --hook");
         let handler = serde_json::json!({"type": "command", "command": command, "timeout": 10});
         Ok(match self {
             Self::Claude => {
-                let hooks: serde_json::Map<_, _> = MESSAGE_HOOK_EVENTS
+                // One `--settings` carries every hook; Claude Code merges it
+                // with the user's own settings.
+                let mut hooks = serde_json::Map::new();
+                let groups = MESSAGE_HOOK_EVENTS
                     .iter()
-                    .map(|event| ((*event).into(), serde_json::json!([{"hooks": [handler]}])))
-                    .collect();
+                    .map(|event| (*event, serde_json::json!({"hooks": [handler]})))
+                    .chain(state_hooks::claude(&shoal));
+                for (event, group) in groups {
+                    if let serde_json::Value::Array(groups) =
+                        hooks.entry(event).or_insert_with(|| serde_json::json!([]))
+                    {
+                        groups.push(group);
+                    }
+                }
                 vec![
                     "--settings".into(),
                     serde_json::json!({"hooks": hooks}).to_string().into(),
@@ -145,7 +156,7 @@ mod tests {
 
     #[test]
     fn message_hooks_run_shoal_after_tool_calls_and_prompts() {
-        let claude = BuiltinAgent::Claude.message_hook_args().unwrap();
+        let claude = BuiltinAgent::Claude.hook_args().unwrap();
         assert_eq!(claude[0], "--settings");
         let settings: serde_json::Value =
             serde_json::from_str(claude[1].to_str().unwrap()).unwrap();
@@ -155,7 +166,12 @@ mod tests {
                 .unwrap();
             assert!(command.ends_with(" messages --hook"), "{command}");
         }
-        let codex = BuiltinAgent::Codex.message_hook_args().unwrap();
+        // The same settings report Claude Code's turn state.
+        let stop = settings["hooks"]["Stop"][0]["hooks"][0]["command"]
+            .as_str()
+            .unwrap();
+        assert!(stop.contains(" agent-state idle "), "{stop}");
+        let codex = BuiltinAgent::Codex.hook_args().unwrap();
         assert_eq!(codex.len(), 4);
         for (flag, event) in codex.chunks(2).zip(MESSAGE_HOOK_EVENTS) {
             assert_eq!(flag[0], "-c");

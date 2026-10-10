@@ -1200,7 +1200,13 @@ shoal agent-state working   # Also waiting (for the user mid-turn) or idle (turn
 ```
 
 Agent hooks report the agent's turn state with this command, and integrations
-read it instead of each inferring it from the terminal. `ls` and `status` show
+read it instead of each inferring it from the terminal. Shoal's terminal
+Claude Code launches, including `add --agent` and resumed sessions, register
+the hooks with the [message hooks](#agent-messages); Happy sessions do not.
+Claude Code has no hook for an interrupted turn, which shows `working` until
+Claude Code notifies that its prompt is waiting for input. Codex reports no
+state yet: its `notify` program runs only after a turn, which cannot tell a
+later turn's work apart. Other agents can call the command from their own hooks. `ls` and `status` show
 `working`, `waiting for input` or `turn finished`; `status`, `inspect` and `ls --json`
 give `agent_state` with `state` and the Unix-seconds `since` it began. A state
 reported from a tracked execution ends with that execution; one reported from

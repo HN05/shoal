@@ -522,7 +522,13 @@ completes, or affects idle cleanup and overload decisions. A workspace keeps the
 latest report; a report from a tracked execution ends with that execution's
 record, while one from outside lasts until replaced or removal. Changes and
 endings are journal events; repeating the current state is not a change and
-keeps its start time.
+keeps its start time. Shoal's terminal Claude Code launches, resumed ones
+included, add the state hooks to the launch option that carries its message
+hooks (Happy sessions do not), so Claude Code's own configuration stays the
+user's; an interrupted turn has no hook and ends with Claude Code's idle-prompt
+notification. Codex reports no state yet: its `notify` runs only after a turn,
+so a busy agent would show as finished. Proposal: report it from the Codex
+hooks that deliver messages.
 
 Skills are split by role: `shoal-worker` covers an agent's own workspace and
 `shoal-orchestrator` covers unscoped coordination from a console, so neither

@@ -134,7 +134,7 @@ async fn built_in_restore_child() {
         let hooks = agent
             .parse::<crate::agent::BuiltinAgent>()
             .unwrap()
-            .message_hook_args()
+            .hook_args()
             .unwrap();
         let expected: Vec<std::ffi::OsString> = restore
             .iter()
