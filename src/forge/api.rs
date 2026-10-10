@@ -107,7 +107,12 @@ impl ForgeRepo {
                     .trim()
             );
         }
-        json_body(&stdout)
+        let body = json_body(&stdout)?;
+        // GraphQL reports a failed mutation in a successful response.
+        if let Some(errors) = graphql_errors(&body) {
+            bail!("{errors}");
+        }
+        Ok(body)
     }
 
     async fn forgejo_send(&self, account: &Account, request: &Request) -> Result<Value> {
@@ -212,6 +217,20 @@ fn json_body(text: &str) -> Result<Value> {
     serde_json::from_str(text).context("invalid JSON response")
 }
 
+/// The messages of a GraphQL response's `errors`, when it has any.
+fn graphql_errors(body: &Value) -> Option<String> {
+    let errors = body["errors"]
+        .as_array()
+        .filter(|errors| !errors.is_empty())?;
+    Some(
+        errors
+            .iter()
+            .map(|error| error["message"].as_str().unwrap_or("GraphQL error"))
+            .collect::<Vec<_>>()
+            .join("; "),
+    )
+}
+
 /// The message a forge's JSON error body carries.
 fn error_message(text: &str) -> Option<String> {
     let body: Value = serde_json::from_str(text).ok()?;
@@ -302,6 +321,20 @@ mod tests {
         let error = forgejo_response("<html>busy</html>\n502").unwrap_err();
         assert_eq!(format!("{error:#}"), "HTTP 502: <html>busy</html>");
         assert!(forgejo_response("{}").is_err());
+    }
+
+    #[test]
+    fn graphql_errors_fail_a_successful_response() {
+        let failed = serde_json::json!({"data": null, "errors": [{"message": "not allowed"}, {}]});
+        assert_eq!(
+            graphql_errors(&failed).unwrap(),
+            "not allowed; GraphQL error"
+        );
+        assert_eq!(
+            graphql_errors(&serde_json::json!({"data": {}, "errors": []})),
+            None
+        );
+        assert_eq!(graphql_errors(&serde_json::json!([])), None);
     }
 
     #[test]
