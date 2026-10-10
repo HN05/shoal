@@ -15,7 +15,7 @@ fn git(repo: &Path, args: &[&str]) -> String {
     String::from_utf8(output.stdout).unwrap()
 }
 
-/// Exercise the real adapter against the CI-pinned Worktrunk (0.78.0).
+/// Exercise the real adapter against the CI-pinned Worktrunk (0.80.0).
 /// Its selector expands @; its Git worktree command interprets full object
 /// IDs according to the repository's object format. Other hex lengths and
 /// nested components remain literal. A successful exit alone is insufficient:

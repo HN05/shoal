@@ -22,7 +22,7 @@ fn changed_file_preview_bounds_entries_and_encoded_bytes() {
 
 #[test]
 fn branch_outcome_spellings_and_deletion_are_preserved() {
-    // Worktrunk 0.78.0: src/commands/worktree/types.rs,
+    // Worktrunk 0.80.0: src/commands/worktree/types.rs,
     // BranchFate::json_outcome. Only `deleted` confirms deletion, even though
     // Worktrunk's own BranchFate::deleted also counts the deferred intention.
     let cases = [

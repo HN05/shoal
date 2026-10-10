@@ -8,7 +8,7 @@ fn creation_requires_created_action_and_canonical_path() {
     std::fs::create_dir(&workspace).unwrap();
     let alias = root.path().join("alias");
     std::os::unix::fs::symlink(&workspace, &alias).unwrap();
-    // Worktrunk 0.78.0: SwitchJsonOutput::from_result and emit_switch_json
+    // Worktrunk 0.80.0: SwitchJsonOutput::from_result and emit_switch_json
     // in src/commands/worktree/switch.rs. The response is a single object.
     let mut fixture = json!({
         "action": "created", "path": alias, "branch": "topic",
@@ -64,7 +64,7 @@ fn creation_rejects_missing_malformed_and_non_object_results() {
 fn removal_normalizes_single_results_and_preserves_every_outcome() {
     let root = tempfile::tempdir().unwrap();
     let missing = root.path().join("missing");
-    // Worktrunk 0.78.0: RemovalPlan::to_json / BranchFate::json_outcome in
+    // Worktrunk 0.80.0: RemovalPlan::to_json / BranchFate::json_outcome in
     // src/commands/worktree/types.rs; commands/remove.rs emits an array.
     // Keep Shoal's compatibility with a bare result object at this boundary.
     for outcome in [

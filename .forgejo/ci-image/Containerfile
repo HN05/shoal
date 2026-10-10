@@ -35,7 +35,7 @@ RUN rustup component add rustfmt clippy \
 # drops the registry it downloaded: layers are additive, so sources left here
 # would survive a later RUN that deletes them, and the runner mounts the host's
 # registry over that path at run time anyway.
-RUN cargo install --locked worktrunk --version 0.78.0 \
+RUN cargo install --locked worktrunk --version 0.80.0 \
  && rm -rf "$CARGO_HOME/registry"
 
 # cargo-audit and cargo-outdated feed deps.yml's weekly report, which parses
