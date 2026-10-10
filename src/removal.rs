@@ -39,7 +39,7 @@ pub enum BranchChoice {
     DeleteBranch,
 }
 
-/// Worktrunk 0.78.0's `BranchFate::json_outcome` vocabulary, plus Shoal's
+/// Worktrunk 0.80.0's `BranchFate::json_outcome` vocabulary, plus Shoal's
 /// synthetic outcome for an already-missing worktree registration.
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", from = "String")]

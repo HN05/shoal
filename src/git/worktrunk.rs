@@ -14,7 +14,7 @@ use crate::{
 #[cfg(test)]
 mod tests;
 
-/// Fields consumed from Worktrunk 0.78.0's SwitchJsonOutput. Other fields are
+/// Fields consumed from Worktrunk 0.80.0's SwitchJsonOutput. Other fields are
 /// informational; only `created` (not `existing` or `already_at`) is success.
 #[derive(Debug, Deserialize)]
 struct CreationOutput {
@@ -22,7 +22,7 @@ struct CreationOutput {
     path: PathBuf,
 }
 
-/// Fields consumed from RemovalPlan::to_json in Worktrunk 0.78.0. A detached
+/// Fields consumed from RemovalPlan::to_json in Worktrunk 0.80.0. A detached
 /// worktree has no branch. Extra fields vary for worktree/branch-only removal.
 #[derive(Deserialize)]
 struct RemovalOutput {
@@ -78,7 +78,7 @@ fn decode_removal(output: &str, workspace_dir: &Path) -> Result<RemovalResult> {
 }
 
 /// Names that cannot portably identify a literal branch through Worktrunk.
-/// Worktrunk 0.78.0 expands `@`; Git treats `HEAD` and full object IDs
+/// Worktrunk 0.80.0 expands `@`; Git treats `HEAD` and full object IDs
 /// specially. Reserve both supported object-ID lengths regardless of the
 /// repository's format. Check the whole name, not individual components:
 /// `topic/HEAD` and `HEAD/topic` are literal branches.
