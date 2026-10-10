@@ -324,12 +324,12 @@ pub enum Command {
         /// Registered repository; defaults to the current checkout or workspace.
         repository: Option<String>,
     },
-    /// Change, comment on, close, reopen or merge a PR of the workspace's repository.
+    /// Open the workspace's PR, or change, comment on, close, reopen or merge a PR.
     Pr {
         #[command(subcommand)]
         command: PrCommand,
     },
-    /// Change, comment on, close or reopen an issue of the workspace's repository.
+    /// Open, change, comment on, close or reopen an issue of the workspace's repository.
     Issue {
         #[command(subcommand)]
         command: IssueCommand,
@@ -549,6 +549,29 @@ pub enum Command {
 
 #[derive(Debug, Subcommand)]
 pub enum PrCommand {
+    /// Push the workspace branch, open a PR for it or find its open PR, and link it.
+    Open {
+        /// Workspace to use; defaults to the current workspace or picker.
+        #[arg(long)]
+        workspace: Option<String>,
+        /// PR title; defaults to the linked issue's title, then the last commit's subject.
+        #[arg(long)]
+        title: Option<String>,
+        #[command(flatten)]
+        body: BodyArgs,
+        /// Base branch; defaults to the base workspace's branch, then the default branch.
+        #[arg(long)]
+        base: Option<String>,
+        /// Open the PR as a draft.
+        #[arg(long)]
+        draft: bool,
+        /// Add a label; repeat for more.
+        #[arg(long = "label", value_name = "LABEL")]
+        labels: Vec<String>,
+        /// Request a review; repeat for more.
+        #[arg(long = "reviewer", value_name = "LOGIN")]
+        reviewers: Vec<String>,
+    },
     /// Change a PR's title, description, base, labels, reviewers or draft state.
     Edit {
         #[command(flatten)]

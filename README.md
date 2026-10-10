@@ -136,6 +136,7 @@ shoal done --keep fix-login   # Mark finished; keep for review
 shoal done --cleanup fix-login # Override a configured keep default
 shoal undone fix-login        # Withdraw a recorded done
 shoal rm fix-login            # Remove the workspace
+shoal pr open                 # Push, then link the branch's open PR or open one
 shoal pr edit --draft         # Change the linked PR's text, labels, reviewers or draft
 shoal pr comment --body Done  # Comment on the linked PR; close and reopen work too
 shoal pr merge 42 --method rebase # Merge a PR yourself; agents cannot

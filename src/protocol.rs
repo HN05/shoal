@@ -250,6 +250,18 @@ pub enum Method {
     InspectWorkspace {
         workspace: String,
     },
+    /// The workspace record once its worktree identity is verified, and with
+    /// `on_branch` that it is on its recorded branch, before the CLI changes Git
+    /// state through it.
+    VerifyWorkspace {
+        workspace: String,
+        on_branch: bool,
+    },
+    /// Link the open PR of the workspace's branch, or open one and link it.
+    OpenPull {
+        workspace: String,
+        options: crate::forge::create::PullOptions,
+    },
     /// Open an issue in the workspace's repository, linking it when `link` is set.
     OpenIssue {
         workspace: String,

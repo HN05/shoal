@@ -503,3 +503,134 @@ fn issues_open_with_labels_and_link_on_request() {
         }
     }
 }
+
+#[test]
+fn pr_open_pushes_creates_and_links_or_finds_the_open_pr() {
+    for forge in [Forge::GitHub, Forge::Forgejo] {
+        let fixture = Fixture::new(forge, "");
+        let root = fixture.root.path();
+        let remote = root.join("remote.git");
+        git(root, &["init", "--bare", "-q", remote.to_str().unwrap()]);
+        git(
+            &fixture.repo,
+            &["config", "remote.origin.pushurl", remote.to_str().unwrap()],
+        );
+        // Linking checks the PR through the CLI: gh's JSON, or fj's text.
+        let fj = "#!/bin/sh\ncase \" $* \" in\n *' commits '*) ;;\n *) printf 'Fix #%s\\nBy user — Open — +1 -0\\nFrom `topic` into `main`\\n' \"$5\";;\nesac\n";
+        fs::create_dir_all(root.join("bin")).unwrap();
+        fs::write(root.join("bin/fj"), fj).unwrap();
+        fs::set_permissions(root.join("bin/fj"), fs::Permissions::from_mode(0o755)).unwrap();
+        let list = match forge {
+            Forge::GitHub => "GET repos/team/project/pulls?state=open&head=team%3Atopic",
+            Forge::Forgejo => "GET repos/team/project/pulls?state=open&limit=50&page=1",
+        };
+        fixture.respond(json!({
+            "issue view 34": {"body": {"number": 34, "state": "OPEN", "title": "Fix API timeout",
+                "body": "", "comments": []}},
+            list: {"body": []},
+            "POST repos/team/project/pulls": {"status": 201, "body": {"number": 9}},
+            "GET repos/team/project/pulls/9": {"body": pull(9, "open", "Fix", &[])},
+            "pr view 9": {"body": {"number": 9, "state": "OPEN", "headRefName": "topic",
+                "commits": []}},
+        }));
+        let expected = if forge == Forge::GitHub {
+            fixture.ok(&["link", "issue", "34", "--workspace", "topic"]);
+            json!({"title": "Fix API timeout", "body": "Closes #34", "head": "topic",
+                "base": "main", "draft": false})
+        } else {
+            json!({"title": "initial", "body": "", "head": "topic", "base": "main"})
+        };
+        fixture.requests();
+
+        let opened = fixture.ok(&["pr", "open", "--workspace", "topic"]);
+        let url = format!(
+            "{}/{}/9",
+            fixture.web,
+            if forge == Forge::GitHub {
+                "pull"
+            } else {
+                "pulls"
+            }
+        );
+        assert_eq!(opened["url"], url);
+        assert_eq!(
+            (&opened["created"], &opened["linked"]),
+            (&json!(true), &json!(true))
+        );
+        let created = fixture
+            .requests()
+            .into_iter()
+            .find(|request| request[0] == "POST repos/team/project/pulls")
+            .unwrap();
+        assert_eq!(created[1], expected);
+        let path = fixture.ok(&["inspect", "topic"])["workspace"]["path"].clone();
+        assert_eq!(
+            git(&remote, &["rev-parse", "refs/heads/topic"]),
+            git(Path::new(path.as_str().unwrap()), &["rev-parse", "HEAD"])
+        );
+        let links = fixture.ok(&["inspect", "topic"])["workspace"]["links"]["prs"].clone();
+        assert_eq!(links, json!([url]));
+
+        // An open PR for the branch is linked instead of opening another.
+        fixture.ok(&["unlink", "pr", "--workspace", "topic"]);
+        let mut responses: Value =
+            serde_json::from_str(&fs::read_to_string(root.join("forge/responses.json")).unwrap())
+                .unwrap();
+        let mut fork = pull(5, "open", "Fork", &[]);
+        fork["head"]["repo"]["full_name"] = json!("someone/project");
+        responses[list] = json!({"body": [fork, pull(9, "open", "Fix", &[])]});
+        fixture.respond(responses);
+        let found = fixture.ok(&["pr", "open", "--workspace", "topic"]);
+        assert_eq!(
+            (&found["url"], &found["created"]),
+            (&json!(url), &json!(false))
+        );
+        assert!(
+            !fixture
+                .requests()
+                .iter()
+                .any(|request| request[0] == "POST repos/team/project/pulls")
+        );
+    }
+}
+
+#[test]
+fn pr_open_refuses_unverified_or_switched_worktrees_before_pushing() {
+    let fixture = Fixture::new(Forge::GitHub, "");
+    let root = fixture.root.path();
+    let remote = root.join("remote.git");
+    git(root, &["init", "--bare", "-q", remote.to_str().unwrap()]);
+    git(
+        &fixture.repo,
+        &["config", "remote.origin.pushurl", remote.to_str().unwrap()],
+    );
+    let workspace = fixture.ok(&["inspect", "topic"])["workspace"].clone();
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    let refused = |message: &str| {
+        let output = fixture.run(&["pr", "open", "--workspace", "topic"]);
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains(message),
+            "{output:?}"
+        );
+        let pushed = support::isolated(root, "git")
+            .args([
+                "-C",
+                remote.to_str().unwrap(),
+                "rev-parse",
+                "-q",
+                "--verify",
+            ])
+            .arg("refs/heads/topic")
+            .output()
+            .unwrap();
+        assert!(!pushed.status.success());
+        assert!(fixture.requests().is_empty());
+    };
+    let marker = Path::new(workspace["git_dir"].as_str().unwrap()).join("shoal-workspace");
+    let owner = fs::read_to_string(&marker).unwrap();
+    fs::write(&marker, "another-workspace\n").unwrap();
+    refused("another Shoal workspace");
+    fs::write(&marker, owner).unwrap();
+    git(path, &["switch", "-q", "--detach"]);
+    refused("not on its recorded branch");
+}

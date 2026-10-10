@@ -3,8 +3,13 @@
 use anyhow::{Context, Result, bail};
 
 use super::{
-    ForgeRepo, account::Account, action::Action, create::NewIssue, item::Item, item::Opened,
-    link::ItemKind, repository,
+    ForgeRepo,
+    account::Account,
+    action::Action,
+    create::{NewIssue, NewPull, PullOptions},
+    item::{Item, Opened},
+    link::ItemKind,
+    repository,
 };
 use crate::{
     daemon::{events, workspace::Manager},
@@ -85,6 +90,114 @@ impl Manager {
     }
 }
 
+impl Manager {
+    /// Link the open PR of the workspace's branch, or open one as its agent
+    /// account and link it, so a PR Shoal opens is never left unlinked.
+    pub async fn open_pull(&self, selector: &str, options: PullOptions) -> Result<Opened> {
+        let workspace = self.workspace(selector).await?;
+        self.verify_worktree(&workspace).await?;
+        super::pr::current_head(&workspace).await?;
+        let forge = workspace_forge(&workspace).await?;
+        let account = self.agent_account(&workspace).await?;
+        let existing = forge.open_pull_for(&account, &workspace.branch).await?;
+        let (item, created) = match existing {
+            Some(number) => (
+                forge.read(&account, ItemKind::Pr, number).await?.item,
+                false,
+            ),
+            None => {
+                let pull = new_pull(&workspace, &forge, &account, options).await?;
+                (forge.create_pull(&account, &pull).await?, true)
+            }
+        };
+        if created {
+            let (id, url) = (workspace.id.clone(), item.url.clone());
+            self.store
+                .run(move |db| events::record_item(db, &id, ItemKind::Pr, &url, "open"))
+                .await?;
+        }
+        self.set_pr(
+            &workspace.id,
+            super::pr::Action::Watch {
+                url: item.url.clone(),
+            },
+        )
+        .await
+        .with_context(|| format!("{} is open, but linking it failed", item.url))?;
+        Ok(Opened {
+            item,
+            created,
+            linked: true,
+        })
+    }
+}
+
+/// Fill what the caller left unset: the title from the linked issue, then
+/// the last commit; a closing reference to the linked issue; the base
+/// workspace's branch, then the default branch.
+async fn new_pull(
+    workspace: &Workspace,
+    forge: &ForgeRepo,
+    account: &Account,
+    options: PullOptions,
+) -> Result<NewPull> {
+    let issue = match &workspace.links.issue {
+        Some(url) => Some(forge.issue(url)?.0),
+        None => None,
+    };
+    let title = match (options.title, &workspace.links.issue_title, issue) {
+        (Some(title), _, _) => title,
+        (None, Some(title), _) => title.clone(),
+        (None, None, Some(number)) => {
+            forge
+                .read(account, ItemKind::Issue, number)
+                .await?
+                .item
+                .title
+        }
+        (None, None, None) => crate::git::run(&workspace.path, &["log", "-1", "--format=%s"])
+            .await?
+            .trim()
+            .to_owned(),
+    };
+    let base = match (options.base, &workspace.base_workspace) {
+        (Some(base), _) => base,
+        (None, Some(base)) => base.branch.clone(),
+        (None, None) => {
+            crate::git::default_branch::resolve(
+                &workspace.path,
+                crate::git::default_branch::DefaultBranchLookup::Discover,
+            )
+            .await?
+        }
+    };
+    Ok(NewPull {
+        title,
+        body: description(options.body, issue),
+        head: workspace.branch.clone(),
+        base,
+        draft: options.draft,
+        labels: options.labels,
+        reviewers: options.reviewers,
+    })
+}
+
+/// A linked issue closes with the PR unless the description already says so.
+fn description(body: Option<String>, issue: Option<u64>) -> String {
+    let body = body.unwrap_or_default();
+    let Some(number) = issue else {
+        return body;
+    };
+    let closing = format!("Closes #{number}");
+    if body.lines().any(|line| line.trim() == closing) {
+        body
+    } else if body.trim().is_empty() {
+        closing
+    } else {
+        format!("{}\n\n{closing}", body.trim_end())
+    }
+}
+
 /// The forge of the workspace's `origin`.
 pub(super) async fn workspace_forge(workspace: &Workspace) -> Result<ForgeRepo> {
     let remote = repository::remote_url_from_path(&workspace.path)
@@ -105,5 +218,29 @@ fn linked(workspace: &Workspace, kind: ItemKind) -> Result<String> {
             [] => bail!("no PR is linked; pass a number or URL"),
             _ => bail!("several PRs are linked; pass a number or URL"),
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn linked_issue_adds_one_closing_line() {
+        assert_eq!(description(None, None), "");
+        assert_eq!(description(Some("Fix".into()), None), "Fix");
+        assert_eq!(description(None, Some(7)), "Closes #7");
+        assert_eq!(
+            description(Some("Fix\n".into()), Some(7)),
+            "Fix\n\nCloses #7"
+        );
+        assert_eq!(
+            description(Some("Fix\n\nCloses #7\n".into()), Some(7)),
+            "Fix\n\nCloses #7\n"
+        );
+        assert_eq!(
+            description(Some("Closes #70".into()), Some(7)),
+            "Closes #70\n\nCloses #7"
+        );
     }
 }

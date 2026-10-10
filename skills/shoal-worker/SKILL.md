@@ -1,6 +1,6 @@
 ---
 name: shoal-worker
-description: Use inside a Shoal workspace to finish assignments with `shoal done`, mark work ready for review, notify the user, watch and wait on PRs, sync the default branch from its remote, reserve ports, lease Xcode simulators, and acquire resource permits during development or testing. Applies to agents launched through Shoal or working directly in a Shoal worktree.
+description: Use inside a Shoal workspace to finish assignments with `shoal done`, mark work ready for review, notify the user, open, change, watch and wait on PRs and issues, sync the default branch from its remote, reserve ports, lease Xcode simulators, and acquire resource permits during development or testing. Applies to agents launched through Shoal or working directly in a Shoal worktree.
 ---
 
 # Shoal worker
@@ -18,8 +18,11 @@ PRs do not end the assignment unless `[done] automatic` is enabled (see below). 
 assignment is finished: every watched PR merged, or no PR needed. Never end a
 session without it.
 
-Change your PR or issue through Shoal, which acts as your agent account and
-records the change: `shoal --json pr edit` (`--title`, `--body-file`,
+Open your PR with `shoal --json pr open`: it pushes your branch, then links the
+branch's open PR or opens one (`--title`, `--body-file`, `--label`, `--draft`;
+a linked issue supplies the default title and `Closes #<number>`). Change your
+PR or issue through Shoal, which acts as your agent account and records the
+change: `shoal --json pr edit` (`--title`, `--body-file`,
 `--add-label`, `--add-reviewer`, `--draft`/`--no-draft`), `pr comment
 --body-file`, `pr close`, and the same `issue` commands. They default to the
 linked item; pass a number or URL for another item in the repository. File
@@ -27,7 +30,7 @@ follow-up work with `shoal issue open --title`; it stays unlinked without
 `--link`. Merging is
 the user's: `shoal pr merge` refuses workspace processes.
 
-Register each PR with `shoal link pr <number-or-url>`. Watches accumulate per
+Register a PR opened another way with `shoal link pr <number-or-url>`. Watches accumulate per
 workspace; after `done`, cleanup waits until all have merged and the merged set
 contains current HEAD. `shoal unlink pr <number-or-url>` unlinks one PR;
 omit its number or URL to unlink all PRs. Closed, unmerged PRs keep waiting, so cancel their

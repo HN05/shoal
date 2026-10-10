@@ -1,6 +1,8 @@
 //! `shoal pr` and `shoal issue`: ask the daemon to open or change an item of
 //! the workspace's repository and report it as the forge now does.
-use anyhow::{Context as _, Result};
+use std::ffi::OsString;
+
+use anyhow::{Context as _, Result, ensure};
 
 use crate::{
     cli::{
@@ -8,15 +10,37 @@ use crate::{
     },
     forge::{
         action::{Action, Edit},
-        create::NewIssue,
+        create::{NewIssue, PullOptions},
         item::{Item, Opened},
         link::ItemKind,
     },
+    git,
+    model::Workspace,
     protocol::Method,
+    tools::Tool,
 };
 
 pub(super) async fn pr(ctx: &Context, command: PrCommand) -> Result<i32> {
     let (item, action, outcome) = match command {
+        PrCommand::Open {
+            workspace,
+            title,
+            body,
+            base,
+            draft,
+            labels,
+            reviewers,
+        } => {
+            let options = PullOptions {
+                title,
+                body: read_body(body)?,
+                base,
+                draft,
+                labels,
+                reviewers,
+            };
+            return open_pr(ctx, workspace, options).await;
+        }
         PrCommand::Edit {
             item,
             edit,
@@ -102,6 +126,68 @@ async fn act(
     .await?;
     ctx.emit(&format!("{outcome}: {}", item.url), &item)?;
     Ok(0)
+}
+
+/// Verify the worktree before anything leaves it, push without forcing, then
+/// let the daemon find or open the PR and link it.
+async fn open_pr(ctx: &Context, workspace: Option<String>, options: PullOptions) -> Result<i32> {
+    let workspace = ui::select_workspace(ctx, workspace, ui::Fallback::CurrentDirectory).await?;
+    let workspace: Workspace = client::request(
+        &ctx.paths,
+        Method::VerifyWorkspace {
+            workspace,
+            on_branch: true,
+        },
+    )
+    .await?;
+    push(ctx, &workspace).await?;
+    let opened: Opened = client::request(
+        &ctx.paths,
+        Method::OpenPull {
+            workspace: workspace.id,
+            options,
+        },
+    )
+    .await?;
+    let outcome = if opened.created {
+        "PR opened"
+    } else {
+        "Open PR found"
+    };
+    ctx.emit(
+        &format!(
+            "{outcome} and linked: {}\nRun shoal watch pr for updates and shoal done once the assignment is finished.",
+            opened.item.url
+        ),
+        &opened,
+    )?;
+    Ok(0)
+}
+
+/// Push as a tracked command under the agent account, with the user's Git
+/// configuration and hooks.
+async fn push(ctx: &Context, workspace: &Workspace) -> Result<()> {
+    let branch = git::local_ref(&workspace.branch);
+    let command = [
+        Tool::Git.program(),
+        "push",
+        "--set-upstream",
+        "--",
+        "origin",
+        &format!("{branch}:{branch}"),
+    ];
+    let code = crate::execution::publish(
+        &ctx.paths,
+        workspace.id.clone(),
+        command.map(OsString::from).to_vec(),
+    )
+    .await?;
+    ensure!(
+        code == 0,
+        "git push of {} to origin failed (exit {code})",
+        workspace.branch
+    );
+    Ok(())
 }
 
 async fn open_issue(

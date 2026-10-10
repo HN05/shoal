@@ -91,6 +91,9 @@ enum Mode {
         json: bool,
         push: bool,
     },
+    /// A command publishing for the workspace under its agent account, with
+    /// output on stderr so stdout stays for the caller's result.
+    Publish,
     /// The repository's configured setup command; `json` keeps stdout clean.
     Setup {
         json: bool,
@@ -100,9 +103,10 @@ enum Mode {
 impl Mode {
     fn kind(&self) -> ExecutionKind {
         match self {
-            Self::Command { .. } | Self::Recovery { .. } | Self::Detached { .. } => {
-                ExecutionKind::Command
-            }
+            Self::Command { .. }
+            | Self::Recovery { .. }
+            | Self::Detached { .. }
+            | Self::Publish => ExecutionKind::Command,
             Self::Land { .. } => ExecutionKind::Land,
             Self::Setup { .. } => ExecutionKind::Setup,
         }
@@ -283,6 +287,10 @@ fn log_tail(log: &Path) -> String {
     lines.into_iter().rev().collect::<Vec<_>>().join("\n")
 }
 
+pub async fn publish(paths: &Paths, workspace: String, command: Vec<OsString>) -> Result<i32> {
+    run_tracked(paths, workspace, command, Mode::Publish, None).await
+}
+
 pub async fn land(paths: &Paths, workspace: String, json: bool, push: bool) -> Result<i32> {
     run_tracked(paths, workspace, vec![], Mode::Land { json, push }, None).await
 }
@@ -298,7 +306,7 @@ async fn run_tracked(
     mode: Mode,
     agent: Option<String>,
 ) -> Result<i32> {
-    let auth = if agent.is_some() {
+    let auth = if agent.is_some() || matches!(mode, Mode::Publish) {
         let (config, settings) = client::configuration(
             paths,
             crate::protocol::ConfigTarget::Workspace(workspace.clone()),
@@ -685,6 +693,11 @@ fn spawn(
             let copy = file.try_clone()?;
             (Stdio::null(), Stdio::from(file), Stdio::from(copy))
         }
+        Mode::Publish => (
+            Stdio::inherit(),
+            Stdio::from(std::io::stderr()),
+            Stdio::inherit(),
+        ),
         _ if quiet => (
             Stdio::null(),
             Stdio::from(std::io::stderr()),

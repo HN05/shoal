@@ -157,13 +157,27 @@ impl ForgeRepo {
 
     /// Every item of a paginated list endpoint.
     pub(super) async fn forgejo_api_pages(&self, endpoint: &str) -> Result<Vec<serde_json::Value>> {
+        self.forgejo_pages(&Account::user(), &self.repo_endpoint(endpoint))
+            .await
+            .context("Forgejo API request failed; private repositories need an fj login")
+    }
+
+    /// Every item of a paginated Forgejo list endpoint, read as `account`.
+    pub(super) async fn forgejo_pages(
+        &self,
+        account: &Account,
+        endpoint: &str,
+    ) -> Result<Vec<Value>> {
         let separator = if endpoint.contains('?') { '&' } else { '?' };
         let mut items = Vec::new();
         for page in 1.. {
             let response = self
-                .forgejo_api(&format!(
-                    "{endpoint}{separator}limit={PAGE_SIZE}&page={page}"
-                ))
+                .send(
+                    account,
+                    &Request::get(format!(
+                        "{endpoint}{separator}limit={PAGE_SIZE}&page={page}"
+                    )),
+                )
                 .await?;
             let batch = response
                 .as_array()
@@ -175,6 +189,19 @@ impl ForgeRepo {
         }
         Ok(items)
     }
+}
+
+/// Percent-encode `text` for a URL path or query, keeping `/` when `slash`.
+pub(crate) fn encode(text: &str, slash: bool) -> String {
+    let mut encoded = String::new();
+    for byte in text.bytes() {
+        if byte.is_ascii_alphanumeric() || b"-._~".contains(&byte) || (slash && byte == b'/') {
+            encoded.push(byte.into());
+        } else {
+            encoded.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    encoded
 }
 
 /// A JSON body, or null for an empty one.
@@ -275,6 +302,12 @@ mod tests {
         let error = forgejo_response("<html>busy</html>\n502").unwrap_err();
         assert_eq!(format!("{error:#}"), "HTTP 502: <html>busy</html>");
         assert!(forgejo_response("{}").is_err());
+    }
+
+    #[test]
+    fn encoding_keeps_unreserved_characters() {
+        assert_eq!(encode("feat/a b#1", true), "feat/a%20b%231");
+        assert_eq!(encode("feat/ü", false), "feat%2F%C3%BC");
     }
 
     #[test]

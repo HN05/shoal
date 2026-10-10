@@ -1121,6 +1121,7 @@ confirmation and includes them in its JSON result; `--yes` skips confirmation.
 ### Issue and PR actions
 
 ```sh
+shoal pr open --label area/cli      # push, then link the branch's open PR or open one
 shoal pr edit --title "Fix login" --add-label bug --draft
 shoal pr comment --body-file notes.md
 shoal pr close 12                   # reopen works the same way
@@ -1128,6 +1129,18 @@ shoal pr merge --method rebase --delete-branch
 shoal issue edit --add-label bug    # comment, close and reopen work too
 shoal issue open --title "Flaky watch test" --label bug
 ```
+
+`shoal pr open` verifies the workspace's worktree identity and that it is on its
+recorded branch, then pushes the branch to `origin` without forcing, setting
+its upstream, as a tracked command with your Git configuration and hooks and
+its output on stderr. The daemon then links the open PR whose head is that
+branch in the repository, or opens one and links it. A new PR's title is
+`--title`, else the linked issue's title, else the last commit's subject; its
+description is `--body` or `--body-file`, followed by `Closes #<number>` for a
+linked issue unless a line already says so; its base is `--base`, else the base
+workspace's branch, else the default branch. `--draft`, repeated `--label` and
+repeated `--reviewer` also apply only to a new PR. Its JSON adds `created`
+(false for a PR it found) and `linked`.
 
 `shoal pr` and `shoal issue` change an item of the workspace's repository: the
 number or URL given, otherwise the linked issue or the only linked PR. `edit`

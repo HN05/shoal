@@ -178,7 +178,10 @@ impl ForgeRepo {
                         {
                             requests.push(Request::new(
                                 HttpMethod::Delete,
-                                self.repo_endpoint(&format!("git/refs/heads/{}", pr.head)),
+                                self.repo_endpoint(&format!(
+                                    "git/refs/heads/{}",
+                                    super::api::encode(&pr.head, true)
+                                )),
                                 None,
                             ));
                         }

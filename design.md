@@ -527,6 +527,12 @@ a workspace's linked issue is its assignment, while an issue an agent opens is
 usually follow-up work. Browsing across repositories and review
 tooling stay with clients.
 
+`shoal pr open` pushes, then finds or opens the branch's PR and links it in one
+daemon request, so a PR Shoal opens is never left unlinked. A new PR is ready
+unless `--draft` is given, because opening a ready PR is what requests review.
+Its options are modeled rather than passed through to a CLI, so they mean the
+same on every forge.
+
 Ready-for-review marks are the agent's status signal for integrations, separate
 from messages and completion: they never notify, complete, or change cleanup. A
 mark covers a linked issue or PR, or the workspace when nothing is linked, and

@@ -486,6 +486,20 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             item,
             action,
         } => Body::Item(manager.item_action(&workspace, kind, item, action).await?),
+        Method::VerifyWorkspace {
+            workspace,
+            on_branch,
+        } => {
+            let workspace = manager.workspace(&workspace).await?;
+            manager.verify_worktree(&workspace).await?;
+            if on_branch {
+                crate::forge::pr::current_head(&workspace).await?;
+            }
+            Body::Workspace(workspace)
+        }
+        Method::OpenPull { workspace, options } => {
+            Body::Opened(manager.open_pull(&workspace, options).await?)
+        }
         Method::OpenIssue {
             workspace,
             issue,
