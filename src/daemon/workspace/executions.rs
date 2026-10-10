@@ -144,6 +144,7 @@ pub(crate) struct StartedExecution {
 #[derive(Default)]
 struct PreparedExecution {
     setup_cmd: Option<PathBuf>,
+    copy_ignored: bool,
     pre_setup: Option<PathBuf>,
     registration_guard: Option<OwnedMutexGuard<()>>,
     lifetime_guard: Option<OwnedMutexGuard<()>>,
@@ -219,6 +220,7 @@ impl Manager {
             .await?;
         let PreparedExecution {
             setup_cmd,
+            copy_ignored,
             pre_setup,
             registration_guard,
             lifetime_guard,
@@ -244,6 +246,7 @@ impl Manager {
                 workspace: registered.workspace,
                 scope_token: registered.scope_token,
                 setup_cmd,
+                copy_ignored,
                 ports: registered.ports,
                 environment: registered.environment,
                 land,
@@ -413,9 +416,10 @@ impl Manager {
                 self.ensure_no_pending_rename(&workspace.id).await?;
                 let setup_cmd = self.workspace_hook(workspace, HookKind::Setup).await?;
                 let pre_setup = self.workspace_hook(workspace, HookKind::PreSetup).await?;
+                let copy_ignored = self.workspace_settings(workspace).await?.copy_ignored;
                 ensure!(
-                    setup_cmd.is_some() || pre_setup.is_some(),
-                    "no setup_cmd configured"
+                    setup_cmd.is_some() || pre_setup.is_some() || copy_ignored,
+                    "no setup configured; set setup_cmd, pre_setup_cmd or copy_ignored"
                 );
                 let mode = if pre_setup.is_some() {
                     GuardMode::Exclusive
@@ -425,6 +429,7 @@ impl Manager {
                 let resources = self.resource_guard(&workspace.id, mode).await?;
                 Ok(PreparedExecution {
                     setup_cmd,
+                    copy_ignored,
                     pre_setup,
                     registration_guard: Some(git_guard),
                     _resources: Some(resources),

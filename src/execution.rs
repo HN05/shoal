@@ -638,6 +638,15 @@ fn execution_command(
             },
         );
     }
+    if plan.copy_ignored {
+        return internal_command(
+            paths,
+            false,
+            Worker::CopyIgnored {
+                setup_cmd: plan.setup_cmd.as_deref(),
+            },
+        );
+    }
     Ok(match &plan.setup_cmd {
         Some(path) => vec![path.as_os_str().to_owned()],
         None => command,

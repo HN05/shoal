@@ -17,6 +17,7 @@ pub const SESSION: &str = "session";
 pub const SECRET_TOOL: &str = "secret-tool";
 pub const QUEUE_START: &str = "queue-start";
 pub const ADD: &str = "add";
+pub const COPY_IGNORED: &str = "copy-ignored";
 
 pub enum Worker<'a> {
     HerdrWatch {
@@ -53,6 +54,10 @@ pub enum Worker<'a> {
     },
     /// Add the workspace planned in the environment in this detached session.
     Add,
+    /// Copy the checkout's ignored files, then run setup.
+    CopyIgnored {
+        setup_cmd: Option<&'a Path>,
+    },
 }
 
 /// This executable for a command a terminal runs as typed. The terminal
@@ -139,6 +144,12 @@ pub fn internal_command(paths: &Paths, json: bool, worker: Worker<'_>) -> Result
         }
         Worker::QueueStart { entry } => args.extend([QUEUE_START.into(), entry.into()]),
         Worker::Add => args.push(ADD.into()),
+        Worker::CopyIgnored { setup_cmd } => {
+            args.push(COPY_IGNORED.into());
+            if let Some(setup_cmd) = setup_cmd {
+                args.extend(["--".into(), setup_cmd.as_os_str().to_owned()]);
+            }
+        }
     }
     Ok(args)
 }
@@ -222,6 +233,19 @@ mod tests {
             };
             assert_eq!(parsed_plan, plan);
             assert_eq!(parsed_push, push);
+        }
+    }
+
+    #[test]
+    fn copy_ignored_round_trips_optional_setup_command() {
+        for setup_cmd in [None, Some(Path::new("/repo/--setup 'literal'.sh"))] {
+            let InternalCommand::CopyIgnored {
+                setup_cmd: parsed_setup_cmd,
+            } = parse(Worker::CopyIgnored { setup_cmd }, false)
+            else {
+                panic!("expected copy-ignored worker");
+            };
+            assert_eq!(parsed_setup_cmd.as_deref(), setup_cmd);
         }
     }
 

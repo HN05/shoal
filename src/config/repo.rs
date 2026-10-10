@@ -67,6 +67,8 @@ pub struct RepoConfig {
     pub focus: Option<bool>,
     pub codex: Codex,
     pub herdr: Herdr,
+    /// Copy the main checkout's ignored files into the worktree before setup.
+    pub copy_ignored: Option<bool>,
     pub setup_cmd: Option<String>,
     pub pre_setup_cmd: Option<String>,
     pub post_remove_cmd: Option<String>,

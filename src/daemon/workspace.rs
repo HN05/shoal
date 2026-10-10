@@ -639,7 +639,9 @@ impl Manager {
         self.apply_workspace_git_profile(workspace, &config, &settings, git_profile)
             .await?;
         self.apply_seed(repo, workspace, &settings).await;
-        Ok(settings.setup_cmd.is_some() || settings.pre_setup_cmd.is_some())
+        Ok(settings.setup_cmd.is_some()
+            || settings.pre_setup_cmd.is_some()
+            || settings.copy_ignored)
     }
 
     /// Select the effective base for the source branch.

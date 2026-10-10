@@ -32,6 +32,7 @@ pub struct Effective {
     pub focus: Option<bool>,
     pub codex: Codex,
     pub herdr: config::Herdr,
+    pub copy_ignored: bool,
     pub setup_cmd: Option<String>,
     pub pre_setup_cmd: Option<String>,
     pub post_remove_cmd: Option<String>,
@@ -185,6 +186,7 @@ impl Effective {
             codex: Codex {
                 default_mode: built_in(merged.codex.default_mode, "codex.default_mode")?,
             },
+            copy_ignored: built_in(merged.copy_ignored, "copy_ignored")?,
             setup_cmd: merged.setup_cmd,
             pre_setup_cmd: merged.pre_setup_cmd,
             post_remove_cmd: merged.post_remove_cmd,
@@ -291,6 +293,7 @@ fn built_in() -> RepoConfig {
         codex: config::repo::Codex {
             default_mode: Some(Codex::default().default_mode),
         },
+        copy_ignored: Some(false),
         ports: config::repo::PortDefaults {
             on_conflict: Some(ports.on_conflict),
             start: Some(ports.start),
@@ -604,6 +607,7 @@ fn build_fields() -> Vec<Box<dyn Field + Send + Sync>> {
         scalar!(herdr.new_tab),
         scalar!(herdr.tab_name),
         scalar!(herdr.close_when_done),
+        scalar!(copy_ignored),
     ];
     fields.extend(
         HookKind::ALL
@@ -655,7 +659,7 @@ mod tests {
     /// fails the destructuring below until the fixture states it too.
     const FULL: &str = "\
 issue_template = 'issue'\nagent_template = 'agent'\nchat_template = 'chat'\ngit_profile = 'work'\n\
-default_agent = 'claude'\nmax_agents = 2\nfocus = false\nsetup_cmd = 'setup'\npre_setup_cmd = 'pre-setup'\n\
+default_agent = 'claude'\nmax_agents = 2\nfocus = false\ncopy_ignored = true\nsetup_cmd = 'setup'\npre_setup_cmd = 'pre-setup'\n\
 post_remove_cmd = 'post-remove'\npost_done_cmd = 'post-done'\npost_ready_cmd = 'post-ready'\npost_agent_exit_cmd = 'agent-exit'\npost_resource_acquire_cmd = 'acquire'\n\
 pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd = 'detach'\n\
 [env]\nSESSION = '{workspace}'\n[caches.go]\nscope = 'shared'\n[secrets.TOKEN]\ncommand = ['token']\n[commands]\nreview = ['review']\n[agent_resume]\nreview = ['review', '--resume']\n[agent_auth]\nfj = '/fj'\nfj_home = '/fj-home'\ngh = '/gh'\nglab = '/glab'\ntea = '/tea'\ngit_profile = 'agent'\n[codex]\ndefault_mode = 'app'\n[herdr]\nenabled = false\ntab_name = '{branch}'\nnew_tab = false\nclose_when_done = false\n\
@@ -873,6 +877,7 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
             focus,
             codex,
             herdr,
+            copy_ignored,
             setup_cmd,
             pre_setup_cmd,
             post_remove_cmd,
@@ -935,6 +940,7 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
             herdr.tab_name.is_some(),
             herdr.new_tab.is_some(),
             herdr.close_when_done.is_some(),
+            copy_ignored.is_some(),
             setup_cmd.is_some(),
             pre_setup_cmd.is_some(),
             post_remove_cmd.is_some(),
