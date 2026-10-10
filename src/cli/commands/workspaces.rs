@@ -136,6 +136,24 @@ pub(super) async fn land_worker(ctx: &Context, plan: String, push: bool) -> Resu
     Ok(0)
 }
 
+/// Copy the main checkout's ignored files inside tracked setup, then become
+/// the setup command so its exit status and signals are the execution's.
+pub(super) async fn copy_ignored_worker(ctx: &Context, setup_cmd: Option<PathBuf>) -> Result<i32> {
+    ensure!(
+        env::is_scoped(),
+        "copy-ignored worker requires a tracked execution"
+    );
+    // Tracked setup runs in the workspace root.
+    let workspace = std::env::current_dir()?;
+    git::worktrunk::copy_ignored(&ctx.paths.worktrunk_config(), &workspace).await?;
+    let Some(setup_cmd) = setup_cmd else {
+        return Ok(0);
+    };
+    let error =
+        std::os::unix::process::CommandExt::exec(&mut std::process::Command::new(&setup_cmd));
+    Err(error).with_context(|| format!("run {}", setup_cmd.display()))
+}
+
 pub(super) async fn diff(ctx: &Context, workspace: Option<String>) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let base = request::<DiffBase>(&ctx.paths, Method::DiffBase { workspace }).await?;

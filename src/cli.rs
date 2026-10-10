@@ -976,6 +976,12 @@ pub enum InternalCommand {
         #[arg(last = true, required = true)]
         command: Vec<OsString>,
     },
+    /// Copy the main checkout's ignored files inside tracked setup, then run setup.
+    #[command(name = internal::COPY_IGNORED)]
+    CopyIgnored {
+        #[arg(last = true)]
+        setup_cmd: Option<PathBuf>,
+    },
 }
 
 #[derive(Debug, Subcommand)]

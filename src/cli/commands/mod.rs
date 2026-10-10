@@ -483,6 +483,9 @@ async fn internal(ctx: Context, command: InternalCommand) -> Result<i32> {
             super::herdr::watch(&ctx, workspace, tab).await
         }
         InternalCommand::Land { push, plan } => workspaces::land_worker(&ctx, plan, push).await,
+        InternalCommand::CopyIgnored { setup_cmd } => {
+            workspaces::copy_ignored_worker(&ctx, setup_cmd).await
+        }
         InternalCommand::Detached {
             workspace,
             log,

@@ -484,7 +484,9 @@ impl Manager {
         let settings = self.workspace_settings_from(&config, workspace).await?;
         self.apply_workspace_git_profile(workspace, &config, &settings, git_profile)
             .await?;
-        Ok(settings.setup_cmd.is_some() || settings.pre_setup_cmd.is_some())
+        Ok(settings.setup_cmd.is_some()
+            || settings.pre_setup_cmd.is_some()
+            || settings.copy_ignored)
     }
 
     /// Select the effective base and, for new branches only, refresh the local

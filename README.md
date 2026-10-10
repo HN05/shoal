@@ -263,7 +263,9 @@ Select a named Git identity with `git_profile = "work"` in that file, or use
 `shoal add my-project feature --git-profile work`. Define the profile
 in global config; see [Git profiles](docs/reference.md#git-profiles).
 
-The same file can name a `setup_cmd` and hooks around setup, assignment completion,
+The same file can set `copy_ignored = true` to copy ignored local files such as
+`.env` from the repository checkout into new workspaces, and name a `setup_cmd`
+and hooks around setup, assignment completion,
 agent exits, removal, and resource acquisition/release, for example to open a tmux session or prepare an
 external device. See [setup and hooks](docs/reference.md#workspace-setup-and-hooks)
 and [resource hooks](docs/reference.md#resource-hooks) for configuration and failure behavior.

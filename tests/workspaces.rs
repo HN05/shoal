@@ -8728,6 +8728,41 @@ printf '%s' "$SHOAL_WORKSPACE" > setup-workspace
 }
 
 #[test]
+fn copy_ignored_copies_main_checkout_files_before_setup() {
+    let fixture = Fixture::new();
+    fs::write(fixture.repo.join(".gitignore"), ".env\nlocal/\n").unwrap();
+    fs::write(
+        fixture.repo.join("setup.sh"),
+        "#!/bin/sh\ncat .env local/signing > setup-saw\n",
+    )
+    .unwrap();
+    fs::set_permissions(
+        fixture.repo.join("setup.sh"),
+        fs::Permissions::from_mode(0o755),
+    )
+    .unwrap();
+    commit_resource_config(
+        &fixture.repo,
+        "copy_ignored = true\nsetup_cmd = 'setup.sh'\n",
+    );
+    fs::write(fixture.repo.join(".env"), "TOKEN=1\n").unwrap();
+    fs::create_dir(fixture.repo.join("local")).unwrap();
+    fs::write(fixture.repo.join("local/signing"), "team\n").unwrap();
+    let workspace = fixture.ok(&["add", fixture.repo.to_str().unwrap(), "copied"]);
+    assert_eq!(workspace["state"], "ready");
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    assert_eq!(
+        fs::read_to_string(path.join("setup-saw")).unwrap(),
+        "TOKEN=1\nteam\n"
+    );
+
+    // Rerunning setup keeps files the workspace already has.
+    fs::write(path.join(".env"), "TOKEN=2\n").unwrap();
+    assert_eq!(fixture.ok(&["setup", "copied"])["state"], "ready");
+    assert_eq!(fs::read_to_string(path.join(".env")).unwrap(), "TOKEN=2\n");
+}
+
+#[test]
 fn setup_cmd_local_override_absolute_path_failure_and_retry() {
     let fixture = Fixture::new();
     commit_resource_config(&fixture.repo, "setup_cmd = 'must-not-run'\n");
