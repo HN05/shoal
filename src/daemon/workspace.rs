@@ -380,7 +380,7 @@ impl Manager {
             Some(base) => stack::base_branch(&repo.path, base).await?,
             None => None,
         };
-        let name = derive_workspace_name(&name);
+        let name = crate::validate::workspace_name(&name);
         let path = match path {
             Some(path) => self.workspace_location(repo, &path).await?,
             None => self.workspaces_dir(repo).await?.join(&name),
@@ -744,26 +744,6 @@ impl Manager {
             .lock()
             .await
             .retain(|_, caller| caller.workspace_id != id);
-    }
-}
-
-/// Keep directory/selector names portable without restricting Git branch syntax.
-fn derive_workspace_name(branch: &str) -> String {
-    let name: String = branch
-        .chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() || matches!(c, '-' | '_') {
-                c
-            } else {
-                '-'
-            }
-        })
-        .collect();
-    let name = name.trim_start_matches(['-', '_']);
-    if name.is_empty() {
-        "workspace".into()
-    } else {
-        name.chars().take(crate::validate::MAX_NAME_LEN).collect()
     }
 }
 

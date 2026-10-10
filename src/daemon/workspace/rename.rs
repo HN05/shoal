@@ -111,7 +111,7 @@ impl Manager {
         caller_execution: Option<&str>,
     ) -> Result<()> {
         let workspace = workspace.clone();
-        let name = super::derive_workspace_name(branch);
+        let name = crate::validate::workspace_name(branch);
         let branch = branch.to_owned();
         let caller_execution = caller_execution.map(str::to_owned);
         self.store

@@ -1,7 +1,5 @@
 //! Explicitly transfer a linked worktree into Shoal's normal lifecycle.
-use super::{
-    Manager, derive_workspace_name, existing_base, identity::directory_identity, ownership,
-};
+use super::{Manager, existing_base, identity::directory_identity, ownership};
 use crate::daemon::log;
 use crate::{
     git::{self, worktrunk},
@@ -96,7 +94,7 @@ impl Manager {
             git_dir_id: Some(identity),
             ..Workspace::new_record(
                 repo.id.clone(),
-                derive_workspace_name(branch),
+                crate::validate::workspace_name(branch),
                 path,
                 branch.into(),
                 WorkspaceState::Ready,
@@ -127,7 +125,7 @@ impl Manager {
         source_branch: &str,
     ) -> Result<Workspace> {
         let branch = self.available_branch(repo, source_branch).await?;
-        let name = derive_workspace_name(&branch);
+        let name = crate::validate::workspace_name(&branch);
         let destination = self.workspaces_dir(repo).await?.join(&name);
         let destination = self.workspace_location(repo, &destination).await?;
         ensure!(

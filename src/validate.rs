@@ -20,6 +20,27 @@ pub fn name(kind: &str, value: &str) -> Result<()> {
     Ok(())
 }
 
+/// The portable workspace name derived from a Git branch, which keeps
+/// directory and selector names portable without restricting branch syntax.
+pub fn workspace_name(branch: &str) -> String {
+    let name: String = branch
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '-' | '_') {
+                c
+            } else {
+                '-'
+            }
+        })
+        .collect();
+    let name = name.trim_start_matches(['-', '_']);
+    if name.is_empty() {
+        "workspace".into()
+    } else {
+        name.chars().take(MAX_NAME_LEN).collect()
+    }
+}
+
 /// Lowercase identifier used for ports and resources, which also map onto
 /// environment variables and configuration keys.
 pub fn lowercase_name(kind: &str, value: &str) -> Result<()> {
