@@ -1126,6 +1126,7 @@ shoal pr comment --body-file notes.md
 shoal pr close 12                   # reopen works the same way
 shoal pr merge --method rebase --delete-branch
 shoal issue edit --add-label bug    # comment, close and reopen work too
+shoal issue open --title "Flaky watch test" --label bug
 ```
 
 `shoal pr` and `shoal issue` change an item of the workspace's repository: the
@@ -1137,6 +1138,9 @@ and a failed request stops the rest with the forge's message. Labels are
 replaced as a set by name; Forgejo's draft state is the title's `WIP: ` prefix.
 `merge` takes `--method merge|rebase|squash`; `--delete-branch` deletes the
 PR's branch on the forge when it is in the repository, never a local branch.
+`issue open` takes `--title`, `--body` or `--body-file`, and repeated `--label`;
+the new issue is linked only with `--link`, which fails while another issue is
+linked. Its JSON adds `created` and `linked`.
 
 The daemon sends each change through the forge's REST API as the workspace's
 [agent account](#agent-accounts), except `merge`, which uses your login and is

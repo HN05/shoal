@@ -1,5 +1,5 @@
-//! `shoal pr` and `shoal issue`: ask the daemon to change an item of the
-//! workspace's repository and report it as the forge now does.
+//! `shoal pr` and `shoal issue`: ask the daemon to open or change an item of
+//! the workspace's repository and report it as the forge now does.
 use anyhow::{Context as _, Result};
 
 use crate::{
@@ -8,7 +8,8 @@ use crate::{
     },
     forge::{
         action::{Action, Edit},
-        item::Item,
+        create::NewIssue,
+        item::{Item, Opened},
         link::ItemKind,
     },
     protocol::Method,
@@ -55,6 +56,20 @@ pub(super) async fn pr(ctx: &Context, command: PrCommand) -> Result<i32> {
 
 pub(super) async fn issue(ctx: &Context, command: IssueCommand) -> Result<i32> {
     let (item, action, outcome) = match command {
+        IssueCommand::Open {
+            workspace,
+            title,
+            body,
+            labels,
+            link,
+        } => {
+            let issue = NewIssue {
+                title,
+                body: read_body(body)?.unwrap_or_default(),
+                labels,
+            };
+            return open_issue(ctx, workspace, issue, link).await;
+        }
         IssueCommand::Edit { item, edit } => {
             (item, Action::Edit(edit_fields(edit)?), "Issue updated")
         }
@@ -86,6 +101,30 @@ async fn act(
     )
     .await?;
     ctx.emit(&format!("{outcome}: {}", item.url), &item)?;
+    Ok(0)
+}
+
+async fn open_issue(
+    ctx: &Context,
+    workspace: Option<String>,
+    issue: NewIssue,
+    link: bool,
+) -> Result<i32> {
+    let workspace = ui::select_workspace(ctx, workspace, ui::Fallback::CurrentDirectory).await?;
+    let opened: Opened = client::request(
+        &ctx.paths,
+        Method::OpenIssue {
+            workspace,
+            issue,
+            link,
+        },
+    )
+    .await?;
+    let linked = if opened.linked { " and linked" } else { "" };
+    ctx.emit(
+        &format!("Issue opened{linked}: {}", opened.item.url),
+        &opened,
+    )?;
     Ok(0)
 }
 

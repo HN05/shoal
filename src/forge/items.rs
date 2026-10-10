@@ -2,7 +2,10 @@
 //! scope rules apply and each change reaches the event journal.
 use anyhow::{Context, Result, bail};
 
-use super::{ForgeRepo, account::Account, action::Action, item::Item, link::ItemKind, repository};
+use super::{
+    ForgeRepo, account::Account, action::Action, create::NewIssue, item::Item, item::Opened,
+    link::ItemKind, repository,
+};
 use crate::{
     daemon::{events, workspace::Manager},
     model::Workspace,
@@ -52,6 +55,33 @@ impl Manager {
     pub(super) async fn agent_account(&self, workspace: &Workspace) -> Result<Account> {
         let settings = self.workspace_settings(workspace).await?;
         Account::agent(&settings.agent_auth, &self.paths, &self.config().git)
+    }
+}
+
+impl Manager {
+    /// Open an issue in the workspace's repository as its agent account, and
+    /// link it when `link` is set.
+    pub async fn open_issue(&self, selector: &str, issue: NewIssue, link: bool) -> Result<Opened> {
+        anyhow::ensure!(!issue.title.trim().is_empty(), "the issue needs a title");
+        let workspace = self.workspace(selector).await?;
+        self.verify_worktree(&workspace).await?;
+        let forge = workspace_forge(&workspace).await?;
+        let account = self.agent_account(&workspace).await?;
+        let item = forge.create_issue(&account, &issue).await?;
+        let (id, url) = (workspace.id.clone(), item.url.clone());
+        self.store
+            .run(move |db| events::record_item(db, &id, ItemKind::Issue, &url, "open"))
+            .await?;
+        if link {
+            self.set_issue(&workspace.id, &item.url, Some(item.title.clone()))
+                .await
+                .with_context(|| format!("{} was opened, but linking it failed", item.url))?;
+        }
+        Ok(Opened {
+            item,
+            created: true,
+            linked: link,
+        })
     }
 }
 

@@ -486,6 +486,11 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             item,
             action,
         } => Body::Item(manager.item_action(&workspace, kind, item, action).await?),
+        Method::OpenIssue {
+            workspace,
+            issue,
+            link,
+        } => Body::Opened(manager.open_issue(&workspace, issue, link).await?),
         Method::InspectWorkspace { workspace } => {
             Body::Inspection(manager.inspect_workspace(&workspace).await?)
         }

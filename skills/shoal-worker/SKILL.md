@@ -22,7 +22,9 @@ Change your PR or issue through Shoal, which acts as your agent account and
 records the change: `shoal --json pr edit` (`--title`, `--body-file`,
 `--add-label`, `--add-reviewer`, `--draft`/`--no-draft`), `pr comment
 --body-file`, `pr close`, and the same `issue` commands. They default to the
-linked item; pass a number or URL for another item in the repository. Merging is
+linked item; pass a number or URL for another item in the repository. File
+follow-up work with `shoal issue open --title`; it stays unlinked without
+`--link`. Merging is
 the user's: `shoal pr merge` refuses workspace processes.
 
 Register each PR with `shoal link pr <number-or-url>`. Watches accumulate per

@@ -522,7 +522,9 @@ state in the title, so callers see the same item either way. Actions run in the
 daemon, where scope applies: they act as the workspace's agent account, and
 merging stays the user's decision, so scoped callers cannot merge. Each action
 returns the item as the forge reports it afterwards and records an
-`item_changed` event for integrations. Browsing across repositories and review
+`item_changed` event for integrations. A new issue is linked only on request:
+a workspace's linked issue is its assignment, while an issue an agent opens is
+usually follow-up work. Browsing across repositories and review
 tooling stay with clients.
 
 Ready-for-review marks are the agent's status signal for integrations, separate

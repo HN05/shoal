@@ -250,6 +250,12 @@ pub enum Method {
     InspectWorkspace {
         workspace: String,
     },
+    /// Open an issue in the workspace's repository, linking it when `link` is set.
+    OpenIssue {
+        workspace: String,
+        issue: crate::forge::create::NewIssue,
+        link: bool,
+    },
     /// Change an issue or PR of the workspace's repository: the one `item`
     /// names, or the workspace's linked one of `kind`.
     ItemAction {
@@ -555,6 +561,7 @@ response_bodies! {
     OpenedWorkspace(crate::git::existing_branch::OpenedWorkspace),
     Inspection(Inspection),
     Item(crate::forge::item::Item),
+    Opened(crate::forge::item::Opened),
     Completion(crate::model::Completion),
     WithdrawnCompletion(Option<crate::model::Completion>),
     ReviewMarks(Vec<crate::model::ReviewMark>),

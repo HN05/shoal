@@ -603,6 +603,23 @@ pub enum PrCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum IssueCommand {
+    /// Open an issue in the workspace's repository.
+    Open {
+        /// Workspace to use; defaults to the current workspace or picker.
+        #[arg(long)]
+        workspace: Option<String>,
+        /// Issue title.
+        #[arg(long)]
+        title: String,
+        #[command(flatten)]
+        body: BodyArgs,
+        /// Add a label; repeat for more.
+        #[arg(long = "label", value_name = "LABEL")]
+        labels: Vec<String>,
+        /// Link the new issue to the workspace.
+        #[arg(long)]
+        link: bool,
+    },
     /// Change an issue's title, description or labels.
     Edit {
         #[command(flatten)]

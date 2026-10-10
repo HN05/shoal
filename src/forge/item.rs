@@ -36,6 +36,15 @@ pub struct PrSummary {
     pub draft: bool,
 }
 
+/// An item Shoal opened, or the open PR it found for a branch instead.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Opened {
+    #[serde(flatten)]
+    pub item: Item,
+    pub created: bool,
+    pub linked: bool,
+}
+
 /// An item with the forge-specific facts some actions need.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Current {

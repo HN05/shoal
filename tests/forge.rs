@@ -425,3 +425,81 @@ fn pr_and_issue_commands_act_on_linked_or_named_items() {
     );
     assert!(fixture.requests().is_empty());
 }
+
+#[test]
+fn issues_open_with_labels_and_link_on_request() {
+    for forge in [Forge::GitHub, Forge::Forgejo] {
+        let fixture = Fixture::new(forge, "");
+        let created = json!({"number": 40, "title": "Flaky", "state": "open",
+            "labels": [{"name": "bug"}]});
+        fixture.respond(json!({
+            "POST repos/team/project/issues": {"status": 201, "body": {"number": 40}},
+            "PUT repos/team/project/issues/40/labels": {"body": []},
+            // Forgejo reads the unlabeled issue before labeling it.
+            "GET repos/team/project/issues/40": match forge {
+                Forge::GitHub => json!([{"body": created}]),
+                Forge::Forgejo => json!([
+                    {"body": {"number": 40, "title": "Flaky", "state": "open", "labels": []}},
+                    {"body": created},
+                ]),
+            },
+            "issue view 40": {"body": {"number": 40, "state": "OPEN", "title": "Flaky",
+                "body": "", "comments": []}},
+        }));
+        let link = if forge == Forge::GitHub {
+            &["--link"][..]
+        } else {
+            &[]
+        };
+        let open = [
+            "issue",
+            "open",
+            "--workspace",
+            "topic",
+            "--title",
+            "Flaky",
+            "--label",
+            "bug",
+        ];
+        let opened = fixture.ok(&[&open[..], link].concat());
+        let url = format!("{}/issues/40", fixture.web);
+        assert_eq!(opened["url"], url);
+        assert_eq!(opened["labels"], json!(["bug"]));
+        assert_eq!(opened["created"], true);
+        assert_eq!(opened["linked"], forge == Forge::GitHub);
+        let sent: Vec<_> = fixture
+            .requests()
+            .into_iter()
+            .filter(|request| !request[0].as_str().unwrap().starts_with("GET"))
+            .filter(|request| !request[0].as_str().unwrap().starts_with("issue view"))
+            .map(|request| (request[0].clone(), request[1].clone()))
+            .collect();
+        match forge {
+            Forge::GitHub => {
+                assert_eq!(
+                    sent,
+                    [(
+                        json!("POST repos/team/project/issues"),
+                        json!({"title": "Flaky", "body": "", "labels": ["bug"]})
+                    )]
+                );
+                let links = &fixture.ok(&["inspect", "topic"])["workspace"]["links"];
+                assert_eq!(links["issue"], url);
+                assert_eq!(links["issue_title"], "Flaky");
+            }
+            Forge::Forgejo => assert_eq!(
+                sent,
+                [
+                    (
+                        json!("POST repos/team/project/issues"),
+                        json!({"title": "Flaky", "body": ""})
+                    ),
+                    (
+                        json!("PUT repos/team/project/issues/40/labels"),
+                        json!({"labels": ["bug"]})
+                    ),
+                ]
+            ),
+        }
+    }
+}

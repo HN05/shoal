@@ -83,6 +83,7 @@ pub async fn authorize(
         | Method::SimAcquire { workspace, .. }
         | Method::SimRelease { workspace, .. }
         | Method::InspectWorkspace { workspace }
+        | Method::OpenIssue { workspace, .. }
         | Method::ItemAction {
             workspace,
             action: Action::Edit(_) | Action::Comment { .. } | Action::Close | Action::Reopen,
