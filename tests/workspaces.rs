@@ -81,30 +81,38 @@ impl Fixture {
     }
 
     fn request(&self, method: Value) -> Value {
+        self.request_with_id(1, method)
+    }
+
+    fn request_with_id(&self, id: u64, method: Value) -> Value {
+        let protocol = self.protocol();
+        self.raw_request(protocol, id, method)
+    }
+
+    fn protocol(&self) -> u64 {
+        self.raw_request(0, 1, serde_json::json!("status"))["protocol"]
+            .as_u64()
+            .unwrap()
+    }
+
+    fn raw_request(&self, protocol: u64, id: u64, method: Value) -> Value {
         use std::{
             io::{BufRead, BufReader},
             os::unix::net::UnixStream,
         };
-        let request = |protocol: u64, method: Value| {
-            let mut stream =
-                UnixStream::connect(self.root.path().join("state/daemon.sock")).unwrap();
-            stream
-                .set_read_timeout(Some(Duration::from_secs(60)))
-                .unwrap();
-            writeln!(
-                stream,
-                "{}",
-                serde_json::json!({"protocol":protocol,"id":1,"method":method})
-            )
+        let mut stream = UnixStream::connect(self.root.path().join("state/daemon.sock")).unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(60)))
             .unwrap();
-            let mut response = String::new();
-            BufReader::new(stream).read_line(&mut response).unwrap();
-            serde_json::from_str::<Value>(&response).unwrap()
-        };
-        let protocol = request(0, serde_json::json!("status"))["protocol"]
-            .as_u64()
-            .unwrap();
-        request(protocol, method)
+        writeln!(
+            stream,
+            "{}",
+            serde_json::json!({"protocol": protocol, "id": id, "method": method})
+        )
+        .unwrap();
+        let mut response = String::new();
+        BufReader::new(stream).read_line(&mut response).unwrap();
+        serde_json::from_str::<Value>(&response).unwrap()
     }
 
     fn rename(&self, workspace: &str, branch: &str) -> Value {
@@ -5208,28 +5216,12 @@ fn clean_simulator_can_replace_an_empty_incompatible_device_to_preserve_apps() {
 #[test]
 #[cfg(target_os = "macos")]
 fn clean_simulator_daemon_requires_reason_and_records_erase_failures() {
-    use std::{
-        io::{BufRead, BufReader},
-        os::unix::net::UnixStream,
-    };
     let config = SIM_CONFIG.replace("max_devices = 2", "max_devices = 1");
     let fixture = Fixture::with_tools(Some(&config), true);
     let workspace = fixture.add("worker");
-    let call = |value: Value| {
-        let mut stream =
-            UnixStream::connect(fixture.root.path().join("state/daemon.sock")).unwrap();
-        stream
-            .set_read_timeout(Some(Duration::from_secs(60)))
-            .unwrap();
-        writeln!(stream, "{value}").unwrap();
-        let mut line = String::new();
-        BufReader::new(stream).read_line(&mut line).unwrap();
-        serde_json::from_str::<Value>(&line).unwrap()
-    };
-    let protocol =
-        call(serde_json::json!({"protocol":0,"id":1,"method":"status"}))["protocol"].clone();
-    let response = call(
-        serde_json::json!({"protocol":protocol,"id":2,"method":{"sim_acquire":{"workspace":workspace["id"],"request":{"request_id":uuid::Uuid::new_v4().to_string(),"clean":true,"name":"default","profile":null,"device":null,"runtime":null,"reason":null}}}}),
+    let response = fixture.request_with_id(
+        2,
+        serde_json::json!({"sim_acquire":{"workspace":workspace["id"],"request":{"request_id":uuid::Uuid::new_v4().to_string(),"clean":true,"name":"default","profile":null,"device":null,"runtime":null,"reason":null}}}),
     );
     assert_eq!(response["type"], "error");
     assert!(
@@ -6970,10 +6962,6 @@ fn cd_always_picks_even_inside_a_workspace_and_cancel_does_not_navigate() {
 
 #[test]
 fn doctor_daemon_reports_untracked_worktrees_without_adopting_them() {
-    use std::{
-        io::{BufRead, BufReader},
-        os::unix::net::UnixStream,
-    };
     let fixture = Fixture::new();
     let owned = fixture.add("owned");
     let owned_path = Path::new(owned["path"].as_str().unwrap());
@@ -6986,17 +6974,7 @@ fn doctor_daemon_reports_untracked_worktrees_without_adopting_them() {
         );
     }
     fs::write(orphan.join("dirty"), "keep me").unwrap();
-    let call = |request: Value| {
-        let mut socket =
-            UnixStream::connect(fixture.root.path().join("state/daemon.sock")).unwrap();
-        writeln!(socket, "{request}").unwrap();
-        let mut line = String::new();
-        BufReader::new(socket).read_line(&mut line).unwrap();
-        serde_json::from_str::<Value>(&line).unwrap()
-    };
-    let protocol =
-        call(serde_json::json!({"protocol":0,"id":1,"method":"status"}))["protocol"].clone();
-    let response = call(serde_json::json!({"protocol":protocol,"id":2,"method":"diagnose"}));
+    let response = fixture.request_with_id(2, serde_json::json!("diagnose"));
     assert_eq!(response["type"], "diagnostics");
     let findings: Vec<_> = response["data"]
         .as_array()
@@ -13777,10 +13755,6 @@ while test ! -f "$HOME/hook-continue"; do sleep 0.05; done
 
 #[test]
 fn workspace_hook_resolution_preserves_layers_and_directories() {
-    use std::{
-        io::{BufRead, BufReader},
-        os::unix::net::UnixStream,
-    };
     let mut fixture = Fixture::with_config(Some(""));
     let workspace = fixture.add("hooks");
     let worktree = Path::new(workspace["path"].as_str().unwrap());
@@ -13793,22 +13767,11 @@ fn workspace_hook_resolution_preserves_layers_and_directories() {
     )
     .unwrap();
     fixture.restart();
-    let call = |request: Value| {
-        let mut socket =
-            UnixStream::connect(fixture.root.path().join("state/daemon.sock")).unwrap();
-        socket
-            .set_read_timeout(Some(Duration::from_secs(60)))
-            .unwrap();
-        writeln!(socket, "{request}").unwrap();
-        let mut line = String::new();
-        BufReader::new(socket).read_line(&mut line).unwrap();
-        serde_json::from_str::<Value>(&line).unwrap()
-    };
-    let protocol =
-        call(serde_json::json!({"protocol":0,"id":1,"method":"status"}))["protocol"].clone();
     let resolve = |kind: &str| {
-        call(serde_json::json!({"protocol":protocol,"id":2,
-            "method":{"workspace_hook":{"workspace":workspace["id"],"kind":kind}}}))
+        fixture.request_with_id(
+            2,
+            serde_json::json!({"workspace_hook":{"workspace":workspace["id"],"kind":kind}}),
+        )
     };
     let saved = fixture.root.path().join("saved.toml");
     let save = |text: &str| {
@@ -15192,35 +15155,11 @@ fn daemon_git_predicate_failures_preserve_branches_and_workspaces() {
 #[test]
 #[ignore = "manual release-mode measurement"]
 fn benchmark_daemon_reads() {
-    use std::{
-        io::{BufRead, BufReader},
-        os::unix::net::UnixStream,
-    };
-
-    fn request(socket: &Path, protocol: u64, method: Value) -> Value {
-        let mut stream = UnixStream::connect(socket).unwrap();
-        stream
-            .set_read_timeout(Some(Duration::from_secs(60)))
-            .unwrap();
-        writeln!(
-            stream,
-            "{}",
-            serde_json::json!({"protocol": protocol, "id": 1, "method": method})
-        )
-        .unwrap();
-        let mut line = String::new();
-        BufReader::new(stream).read_line(&mut line).unwrap();
-        serde_json::from_str(&line).unwrap()
-    }
-
     let fixture = Fixture::new();
     for name in ["bench0", "bench1", "bench2", "bench3"] {
         fixture.add(name);
     }
-    let socket = fixture.root.path().join("state/daemon.sock");
-    let protocol = request(&socket, 0, serde_json::json!("status"))["protocol"]
-        .as_u64()
-        .unwrap();
+    let protocol = fixture.protocol();
     println!("method,clients,requests_per_s,p50_us,p95_us,p99_us");
     for method in ["inspect_workspace", "workspace_status"] {
         for clients in [1, 16] {
@@ -15228,12 +15167,16 @@ fn benchmark_daemon_reads() {
             let mut latencies = thread::scope(|scope| {
                 let mut tasks = Vec::new();
                 for client in 0..clients {
-                    let socket = &socket;
+                    let fixture = &fixture;
                     tasks.push(scope.spawn(move || {
                         let mut samples = Vec::new();
                         for _ in 0..100 {
                             let start = Instant::now();
-                            let response = request(socket, protocol, serde_json::json!({method: {"workspace": format!("bench{}", client % 4)}}));
+                            let response = fixture.raw_request(
+                                protocol,
+                                1,
+                                serde_json::json!({method: {"workspace": format!("bench{}", client % 4)}}),
+                            );
                             assert_eq!(response["type"], if method == "workspace_status" { "workspace_status" } else { "inspection" }, "{response}");
                             if method == "workspace_status" {
                                 assert!(response["data"]["diff_error"].is_null(), "{response}");
