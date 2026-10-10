@@ -1476,6 +1476,43 @@ pub(super) async fn exec(
     execution::run_command(&ctx.paths, workspace, command).await
 }
 
+/// The configured command `shoal edit` runs instead of `$EDITOR`.
+const EDIT: &str = "edit";
+
+pub(super) async fn edit(
+    ctx: &Context,
+    workspace: Option<String>,
+    args: Vec<OsString>,
+) -> Result<i32> {
+    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    let settings = client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.clone())).await?;
+    if settings.commands.contains_key(EDIT) {
+        return crate::config::named_commands::run(ctx, EDIT, Some(workspace), args).await;
+    }
+    let mut command = editor(std::env::var_os("EDITOR"))?;
+    command.push(
+        client::inspect(&ctx.paths, workspace.clone())
+            .await?
+            .workspace
+            .path
+            .into(),
+    );
+    command.extend(args);
+    execution::run_command(&ctx.paths, workspace, command).await
+}
+
+/// `$EDITOR` as an argument array: split on whitespace, as in `code --wait`,
+/// unless it is not UTF-8.
+fn editor(value: Option<OsString>) -> Result<Vec<OsString>> {
+    let value = value
+        .filter(|value| !value.to_string_lossy().trim().is_empty())
+        .context("set $EDITOR or configure [commands] edit to open a workspace")?;
+    Ok(match value.to_str() {
+        Some(value) => value.split_whitespace().map(OsString::from).collect(),
+        None => vec![value],
+    })
+}
+
 pub(super) async fn undone(ctx: &Context, workspace: Option<String>) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let withdrawn: Option<Completion> =
@@ -1581,4 +1618,21 @@ pub(super) async fn watch_items(
     )
     .await?;
     Ok(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::editor;
+    use std::ffi::OsString;
+
+    #[test]
+    fn editor_splits_on_whitespace_and_requires_a_value() {
+        assert_eq!(
+            editor(Some(" code  --wait ".into())).unwrap(),
+            [OsString::from("code"), OsString::from("--wait")]
+        );
+        for missing in [None, Some(OsString::new()), Some(" ".into())] {
+            assert!(editor(missing).is_err());
+        }
+    }
 }

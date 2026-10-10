@@ -297,6 +297,7 @@ shoal cd                                 # Fuzzy picker, even inside a workspace
 shoal cd fix-login                       # Enter through the shell function
 shoal cd -                               # Previous directory
 shoal exec fix-login -- cargo test
+shoal edit fix-login                     # Open in $EDITOR or the edit command
 shoal claude fix-login -- --help
 shoal codex                              # Current workspace or picker; default mode
 shoal codex fix-login --cli -- --help
@@ -407,6 +408,10 @@ user config if needed and preserving other settings.
 Claude uses `~/.claude.json` (or `$CLAUDE_CONFIG_DIR/.claude.json`); Codex CLI
 and app use `~/.codex/config.toml` (or `$CODEX_HOME/config.toml`). A trust update
 failure warns and still launches the agent.
+
+`shoal edit [workspace] -- <args>` runs the `edit` command, such as
+`edit = ["zed", "{path}"]`. Without one it runs `$EDITOR`, split on whitespace,
+followed by the workspace path and the forwarded arguments.
 
 For local review with [tuicr](https://github.com/agavra/tuicr), install it on PATH
 and configure:

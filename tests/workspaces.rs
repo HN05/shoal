@@ -12672,6 +12672,47 @@ fn configured_commands_preserve_arguments_scope_and_exit_status() {
 }
 
 #[test]
+fn edit_runs_the_editor_or_the_configured_edit_command() {
+    let fixture = Fixture::new();
+    let workspace = fixture.add("editing");
+    let path = workspace["path"].as_str().unwrap();
+    let edit = |editor: Option<&str>| {
+        let mut command = fixture.command();
+        command.env_remove("EDITOR");
+        if let Some(editor) = editor {
+            command.env("EDITOR", editor);
+        }
+        command
+            .args(["edit", "editing", "--", "--flag"])
+            .output()
+            .unwrap()
+    };
+    let output = edit(Some("printf %s|"));
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        format!("{path}|--flag|")
+    );
+    let output = edit(None);
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("set $EDITOR or configure [commands] edit")
+    );
+
+    fs::write(
+        Path::new(path).join(".shoal.toml"),
+        "[commands]\nedit = ['printf', '%s|', '{branch}']\n",
+    )
+    .unwrap();
+    assert_eq!(edit(Some("false")).stdout, b"editing|--flag|");
+}
+
+#[test]
 fn run_lists_command_layers_and_executes_names_that_collide_with_built_ins() {
     let fixture = Fixture::with_config(Some(
         "[commands]\nglobal = ['printf', '%s', 'global command']\nshadowed = ['global']\nls = ['printf', '%s', 'configured ls']\nclaude = ['global-claude']\n",

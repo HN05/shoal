@@ -403,7 +403,10 @@ commands pick from the workspaces whose configuration defines them. Unknown
 names report a command error with suggestions for similar built-ins and never
 open a picker. Workspace fields expand once within individual
 arguments; a standalone `{args}` places the caller's literal arguments.
-`{diff_base}` lazily uses `diff`'s daemon lookup. Built-in `review` chooses
+`{diff_base}` lazily uses `diff`'s daemon lookup. Built-in `edit` runs the
+`edit` command, otherwise `$EDITOR` with the workspace path, through the same
+wrapper, so the editor gets scope and port variables and counts as activity.
+Built-in `review` chooses
 between the `review` command and an agent prompted to report, not change, the
 work. An agent reviewing a forge item posts its findings there as one comment
 unless `[review] post` or `--no-post` keeps them local; workspace reviews stay

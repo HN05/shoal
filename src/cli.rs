@@ -265,6 +265,15 @@ pub enum Command {
     ///
     /// Omit the workspace to open the picker, even inside a workspace.
     Cd { workspace: Option<String> },
+    /// Open a workspace in an editor.
+    ///
+    /// Runs the configured `edit` command, otherwise `$EDITOR` with the workspace path.
+    Edit {
+        workspace: Option<String>,
+        /// Arguments forwarded to the editor.
+        #[arg(last = true)]
+        args: Vec<OsString>,
+    },
     /// Show changes since the branch's fork point.
     Diff { workspace: Option<String> },
     /// Check whether the branch merges cleanly into another branch.
