@@ -1118,6 +1118,34 @@ Release remains available while the workspace record exists. Scoped callers mana
 and `ls --json` show holds on the workspace record. `rm` lists holders before
 confirmation and includes them in its JSON result; `--yes` skips confirmation.
 
+### Issue and PR actions
+
+```sh
+shoal pr edit --title "Fix login" --add-label bug --draft
+shoal pr comment --body-file notes.md
+shoal pr close 12                   # reopen works the same way
+shoal pr merge --method rebase --delete-branch
+shoal issue edit --add-label bug    # comment, close and reopen work too
+```
+
+`shoal pr` and `shoal issue` change an item of the workspace's repository: the
+number or URL given, otherwise the linked issue or the only linked PR. `edit`
+takes `--title`, `--body` or `--body-file`, and repeated `--add-label` and
+`--remove-label`; PRs also take `--base`, repeated `--add-reviewer` and
+`--remove-reviewer`, and `--draft` or `--no-draft`. Edits apply in that order,
+and a failed request stops the rest with the forge's message. Labels are
+replaced as a set by name; Forgejo's draft state is the title's `WIP: ` prefix.
+`merge` takes `--method merge|rebase|squash`; `--delete-branch` deletes the
+PR's branch on the forge when it is in the repository, never a local branch.
+
+The daemon sends each change through the forge's REST API as the workspace's
+[agent account](#agent-accounts), except `merge`, which uses your login and is
+refused to processes inside a workspace execution. Each change records an
+`item_changed` [workspace event](#workspace-events). `--json` returns the item
+as the forge then reports it: `kind`, `number`, `url`, `title`, `state` (`open`,
+`closed` or `merged`), `labels`, and for a PR, `pr` with `head`, `base` and
+`draft`.
+
 ### Linked items and cleanup
 
 `shoal link <issue-or-pr-url>` associates an item with the workspace;
@@ -1209,8 +1237,9 @@ workspace; `--workspace` selects another one for unscoped callers.
 `post_ready_cmd` runs in the daemon after marks are recorded, under the same
 rules, precedence and limits as `post_done_cmd`, with `SHOAL_REVIEW_MARKS` holding
 the JSON array of marks just recorded. Failure records `hook_failed` and keeps
-the marks; every `shoal ready` runs it again. Forge actions belong in this hook or
-an event consumer: Shoal itself does not change the issue or PR.
+the marks; every `shoal ready` runs it again. A mark does not change the issue or
+PR; forge changes belong in this hook, an event consumer, or an explicit
+[issue or PR action](#issue-and-pr-actions).
 
 ### Agent state
 

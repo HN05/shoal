@@ -227,9 +227,8 @@ removing it moves its stacked workspaces down to its own base and journals the
 change. When every watched PR of the base merges and covers its HEAD, the PR sweep does the same
 before cleanup can remove it, retargets stacked PRs still targeting its branch,
 and queues a watch update; agents rebase their own branches, since Shoal never
-moves workspace branches. Retargeting is Shoal's only forge write, through the
-forge's REST API: `gh api`, which owns GitHub's login, or curl with the token fj
-saved for a Forgejo host. Adoption
+moves workspace branches. Retargeting goes through the same REST transport as
+issue and PR actions. Adoption
 takes a path; the CLI infers its repository from the owning checkout, then a unique
 `origin` remote match, then a picker, with `--repo` as the override. Explicit
 adoption accepts an unlocked linked worktree root on a local branch of the registered repository with no ownership
@@ -512,6 +511,19 @@ launches register a hook that runs the same command after each tool call and
 prompt, the only point where a working agent accepts new context; Shoal does not
 pre-trust it where the agent requires review. Identical unread messages collapse,
 and scoped processes may read their own workspace's messages but not send any.
+
+Shoal owns forge writes for its workspaces so that every client, from an agent
+in a terminal to an app built on Shoal, gets one item model, one account rule
+and one policy. Issue and PR actions are typed (edit, comment, close, reopen,
+merge) and planned per forge as REST requests: `gh api`, which owns GitHub's
+login, or curl with the token fj saved for a Forgejo host, since fj has no API
+passthrough. Forge differences stay in planning, such as Forgejo keeping draft
+state in the title, so callers see the same item either way. Actions run in the
+daemon, where scope applies: they act as the workspace's agent account, and
+merging stays the user's decision, so scoped callers cannot merge. Each action
+returns the item as the forge reports it afterwards and records an
+`item_changed` event for integrations. Browsing across repositories and review
+tooling stay with clients.
 
 Ready-for-review marks are the agent's status signal for integrations, separate
 from messages and completion: they never notify, complete, or change cleanup. A

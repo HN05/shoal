@@ -353,3 +353,75 @@ fn changes_use_the_agent_account_and_merges_the_users() {
     );
     assert!(fixture.requests().is_empty());
 }
+
+#[test]
+fn pr_and_issue_commands_act_on_linked_or_named_items() {
+    let fixture = Fixture::new(Forge::GitHub, "");
+    let endpoint = "repos/team/project/pulls/8";
+    let issue = json!({"number": 3, "title": "Bug", "state": "open", "labels": []});
+    fixture.respond(json!({
+        "pr view 8": {"body": {"number": 8, "state": "OPEN", "headRefName": "topic",
+            "commits": []}},
+        format!("GET {endpoint}"): {"body": pull(8, "open", "Fix", &[])},
+        format!("PATCH {endpoint}"): {"body": {}},
+        "PUT repos/team/project/issues/8/labels": {"body": []},
+        "POST graphql": {"body": {"data": {}}},
+        "GET repos/team/project/issues/3": {"body": issue},
+        "POST repos/team/project/issues/3/comments": {"body": {}},
+    }));
+    fixture.ok(&["link", "pr", "8", "--workspace", "topic"]);
+    fixture.requests();
+
+    let nothing = fixture.run(&["pr", "edit", "--workspace", "topic"]);
+    assert!(String::from_utf8_lossy(&nothing.stderr).contains("nothing to change"));
+    let edited = fixture.ok(&[
+        "pr",
+        "edit",
+        "--workspace",
+        "topic",
+        "--title=-New",
+        "--add-label",
+        "ready",
+        "--draft",
+    ]);
+    assert_eq!(edited["url"], "https://github.com/team/project/pull/8");
+    let keys: Vec<_> = fixture
+        .requests()
+        .into_iter()
+        .map(|request| (request[0].clone(), request[1].clone()))
+        .collect();
+    assert_eq!(
+        keys[1],
+        (json!(format!("PATCH {endpoint}")), json!({"title": "-New"}))
+    );
+    assert_eq!(keys[2].1, json!({"labels": ["ready"]}));
+    assert_eq!(keys[3].0, "POST graphql");
+    assert_eq!(keys.len(), 5);
+
+    let note = fixture.root.path().join("note.md");
+    fs::write(&note, "Seen twice\n").unwrap();
+    let commented = fixture.ok(&[
+        "issue",
+        "comment",
+        "3",
+        "--workspace",
+        "topic",
+        "--body-file",
+        note.to_str().unwrap(),
+    ]);
+    assert_eq!(commented["url"], "https://github.com/team/project/issues/3");
+    assert_eq!(
+        fixture.requests()[1],
+        json!(["POST repos/team/project/issues/3/comments", {"body": "Seen twice\n"}, null])
+    );
+
+    // Merging is the user's: a workspace process is refused before any request.
+    let shoal = env!("CARGO_BIN_EXE_shoal");
+    let merge = ["pr", "merge", "--method", "rebase"];
+    let scoped = fixture.run(&[&["exec", "topic", "--", shoal][..], &merge].concat());
+    assert!(
+        String::from_utf8_lossy(&scoped.stderr).contains("merging is the user's decision"),
+        "{scoped:?}"
+    );
+    assert!(fixture.requests().is_empty());
+}

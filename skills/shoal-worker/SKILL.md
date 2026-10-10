@@ -18,6 +18,13 @@ PRs do not end the assignment unless `[done] automatic` is enabled (see below). 
 assignment is finished: every watched PR merged, or no PR needed. Never end a
 session without it.
 
+Change your PR or issue through Shoal, which acts as your agent account and
+records the change: `shoal --json pr edit` (`--title`, `--body-file`,
+`--add-label`, `--add-reviewer`, `--draft`/`--no-draft`), `pr comment
+--body-file`, `pr close`, and the same `issue` commands. They default to the
+linked item; pass a number or URL for another item in the repository. Merging is
+the user's: `shoal pr merge` refuses workspace processes.
+
 Register each PR with `shoal link pr <number-or-url>`. Watches accumulate per
 workspace; after `done`, cleanup waits until all have merged and the merged set
 contains current HEAD. `shoal unlink pr <number-or-url>` unlinks one PR;

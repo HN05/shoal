@@ -9,6 +9,7 @@ mod configuration;
 mod events;
 mod holds;
 pub(super) mod issues;
+mod items;
 mod leases;
 mod links;
 mod menu;
@@ -282,6 +283,8 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             )
             .await
         }
+        Command::Pr { command } => items::pr(&ctx, command).await,
+        Command::Issue { command } => items::issue(&ctx, command).await,
         Command::Link { items } => links::link(&ctx, items).await,
         Command::Unlink { items } => links::unlink(&ctx, items).await,
         Command::View { items, no_comments } => view::view(&ctx, items, no_comments).await,

@@ -324,6 +324,16 @@ pub enum Command {
         /// Registered repository; defaults to the current checkout or workspace.
         repository: Option<String>,
     },
+    /// Change, comment on, close, reopen or merge a PR of the workspace's repository.
+    Pr {
+        #[command(subcommand)]
+        command: PrCommand,
+    },
+    /// Change, comment on, close or reopen an issue of the workspace's repository.
+    Issue {
+        #[command(subcommand)]
+        command: IssueCommand,
+    },
     /// Merge this workspace into the default branch, then optionally push it.
     Land {
         workspace: Option<String>,
@@ -535,6 +545,125 @@ pub enum Command {
         #[command(subcommand)]
         command: DaemonCommand,
     },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum PrCommand {
+    /// Change a PR's title, description, base, labels, reviewers or draft state.
+    Edit {
+        #[command(flatten)]
+        item: ItemSelector,
+        #[command(flatten)]
+        edit: EditArgs,
+        /// New base branch.
+        #[arg(long)]
+        base: Option<String>,
+        /// Request a review; repeat for more.
+        #[arg(long = "add-reviewer", value_name = "LOGIN")]
+        add_reviewers: Vec<String>,
+        /// Withdraw a review request; repeat for more.
+        #[arg(long = "remove-reviewer", value_name = "LOGIN")]
+        remove_reviewers: Vec<String>,
+        /// Mark the PR as a draft.
+        #[arg(long, conflicts_with = "no_draft")]
+        draft: bool,
+        /// Mark the PR ready for review.
+        #[arg(long)]
+        no_draft: bool,
+    },
+    /// Comment on a PR.
+    Comment {
+        #[command(flatten)]
+        item: ItemSelector,
+        #[command(flatten)]
+        body: BodyArgs,
+    },
+    /// Close a PR without merging it.
+    Close {
+        #[command(flatten)]
+        item: ItemSelector,
+    },
+    /// Reopen a closed PR.
+    Reopen {
+        #[command(flatten)]
+        item: ItemSelector,
+    },
+    /// Merge a PR with your own login; workspace processes cannot merge.
+    Merge {
+        #[command(flatten)]
+        item: ItemSelector,
+        /// How to merge.
+        #[arg(long, value_enum)]
+        method: crate::forge::action::MergeMethod,
+        /// Delete the PR's branch on the forge after merging.
+        #[arg(long)]
+        delete_branch: bool,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum IssueCommand {
+    /// Change an issue's title, description or labels.
+    Edit {
+        #[command(flatten)]
+        item: ItemSelector,
+        #[command(flatten)]
+        edit: EditArgs,
+    },
+    /// Comment on an issue.
+    Comment {
+        #[command(flatten)]
+        item: ItemSelector,
+        #[command(flatten)]
+        body: BodyArgs,
+    },
+    /// Close an issue.
+    Close {
+        #[command(flatten)]
+        item: ItemSelector,
+    },
+    /// Reopen a closed issue.
+    Reopen {
+        #[command(flatten)]
+        item: ItemSelector,
+    },
+}
+
+/// An issue or PR of the workspace's repository.
+#[derive(Debug, Args)]
+pub struct ItemSelector {
+    /// Number or URL; defaults to the linked one.
+    pub item: Option<String>,
+    /// Workspace to use; defaults to the current workspace or picker.
+    #[arg(long)]
+    pub workspace: Option<String>,
+}
+
+/// Title, description and label changes either kind of item takes.
+#[derive(Debug, Args)]
+pub struct EditArgs {
+    /// New title.
+    #[arg(long)]
+    pub title: Option<String>,
+    #[command(flatten)]
+    pub body: BodyArgs,
+    /// Add a label; repeat for more.
+    #[arg(long = "add-label", value_name = "LABEL")]
+    pub add_labels: Vec<String>,
+    /// Remove a label; repeat for more.
+    #[arg(long = "remove-label", value_name = "LABEL")]
+    pub remove_labels: Vec<String>,
+}
+
+/// A description or comment, given inline or read from a file.
+#[derive(Debug, Args)]
+pub struct BodyArgs {
+    /// Text of the description or comment.
+    #[arg(long)]
+    pub body: Option<String>,
+    /// Read the text from a file.
+    #[arg(long, value_name = "PATH", conflicts_with = "body")]
+    pub body_file: Option<PathBuf>,
 }
 
 #[derive(Debug, Args)]
