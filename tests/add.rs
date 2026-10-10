@@ -154,10 +154,6 @@ impl FakeDaemon {
         ] {
             assert!(
                 support::isolated(root.path(), "git")
-                    .current_dir(root.path())
-                    .env("HOME", root.path())
-                    .env("GIT_CONFIG_GLOBAL", "/dev/null")
-                    .env("GIT_CONFIG_NOSYSTEM", "1")
                     .args(args)
                     .output()
                     .unwrap()
@@ -236,12 +232,7 @@ impl FakeDaemon {
 
     fn command(&self) -> Command {
         let mut command = support::cli(self.root.path());
-        command
-            .args(["--state-dir", self.root.path().to_str().unwrap()])
-            .current_dir(self.root.path())
-            .env("HOME", self.root.path())
-            .env("GIT_CONFIG_GLOBAL", "/dev/null")
-            .env("GIT_CONFIG_NOSYSTEM", "1");
+        command.args(["--state-dir", self.root.path().to_str().unwrap()]);
         command
     }
 
