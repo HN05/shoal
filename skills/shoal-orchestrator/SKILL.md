@@ -45,7 +45,7 @@ shoal --json ls
 shoal ls --ready        # PRs, issues and workspaces agents marked ready for review
 shoal --json status fix-login
 shoal --json notifications
-shoal --json events --follow --since <id>
+shoal --json internal events --follow --since <id>
 ```
 
 Notifications report agent exits, messages agents sent with `shoal notify`,

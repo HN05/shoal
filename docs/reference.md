@@ -312,7 +312,9 @@ shoal rm fix-login                       # Remove; choose what to keep if work d
 ```
 
 Bare `shoal` opens an fzf list of workspaces (`shoal --help`, or bare `shoal`
-without a terminal, prints commands grouped by task and a starting workflow).
+without a terminal, prints commands grouped by task and a starting workflow;
+commands that only Shoal, its agent hooks and integrations run live under the
+hidden `shoal internal`).
 Its rows, like `shoal ls` and workspace pickers, are aligned and marked ● ready,
 ◌ in progress or ✗ failed. Each names the workspace, its repository when the
 rows span several, its status and the linked issue's title. The status is the
@@ -1196,7 +1198,7 @@ an event consumer: Shoal itself does not change the issue or PR.
 ### Agent state
 
 ```sh
-shoal agent-state working   # Also waiting (for the user mid-turn) or idle (turn finished)
+shoal internal agent-state working   # Also waiting (for the user mid-turn) or idle (turn finished)
 ```
 
 Agent hooks report the agent's turn state with this command, and integrations
@@ -1246,8 +1248,8 @@ The former `[auto_cleanup]` and `[pr_cleanup]` tables are still read where
 ### Workspace events
 
 ```sh
-shoal events --follow --json              # stream lifecycle changes
-shoal events --follow --json --since 123   # replay after an event ID
+shoal internal events --follow --json             # stream lifecycle changes
+shoal internal events --follow --json --since 123  # replay after an event ID
 ```
 
 The daemon retains the newest 1,000 events independently of notifications;
@@ -1467,7 +1469,7 @@ yourself that such processes stopped, use `--repair --acknowledge-stopped`; visi
 ### Scoped workspace commands
 
 PR watches, merge acknowledgements, `notify`, `messages`, `ready`, `unready`
-and `agent-state` are own-workspace scope exceptions.
+and `internal agent-state` are own-workspace scope exceptions.
 Processes carrying a Shoal scope token are confined to their own worktree:
 `status`, inspect, execute, `merge`, `diff`, `setup`, and resources. They may read
 effective configuration for their own workspace, but cannot change configuration.

@@ -963,7 +963,7 @@ fn event_cli_preserves_adjacent_frames_and_finishes_an_empty_listing() {
             stream.write_all(frames.as_bytes()).unwrap();
         });
         let output = command(root.path())
-            .args(["events", "--json", "--since", "0"])
+            .args(["internal", "events", "--json", "--since", "0"])
             .output()
             .unwrap();
         daemon.join().unwrap();

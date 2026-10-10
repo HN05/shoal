@@ -342,7 +342,6 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
                 messages::show(&ctx, workspace).await
             }
         }
-        Command::AgentState { state, workspace } => agent_state::run(&ctx, workspace, state).await,
         Command::Done {
             workspace,
             keep,
@@ -361,7 +360,6 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             workspaces::environment(&ctx, workspace, revoke).await
         }
         Command::Inspect { workspace } => workspaces::inspect(&ctx, workspace).await,
-        Command::Events { follow, since } => events::run(&ctx, follow, since).await,
         Command::Notifications { all, follow, limit } => {
             notifications::run(&ctx, all, follow, limit).await
         }
@@ -466,9 +464,13 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
     }
 }
 
-/// Workers Shoal starts for itself.
+/// Commands Shoal, its agent hooks and integrations run.
 async fn internal(ctx: Context, command: InternalCommand) -> Result<i32> {
     match command {
+        InternalCommand::Events { follow, since } => events::run(&ctx, follow, since).await,
+        InternalCommand::AgentState { state, workspace } => {
+            agent_state::run(&ctx, workspace, state).await
+        }
         InternalCommand::Herdr {
             close_when_done,
             plan,

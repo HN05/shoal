@@ -1,4 +1,4 @@
-//! `shoal agent-state`: the turn state an agent's hooks report for its workspace.
+//! `shoal internal agent-state`: the turn state an agent's hooks report for its workspace.
 use anyhow::Result;
 
 use crate::{

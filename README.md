@@ -126,7 +126,6 @@ shoal inspect fix-login       # Detailed workspace and execution records
 shoal notifications           # Conflicts, finished agents, and removals you missed
 shoal notify "PR #12 is ready to merge"  # Notify the user from a workspace
 shoal message "Stop the dev server" --workspace fix-login  # Message the workspace's agents
-shoal events --follow --json  # Stream workspace lifecycle events
 shoal stop fix-login          # Stop agents and commands; save them for shoal resume
 shoal stop --all              # Stop every workspace, for example before a reboot
 shoal resume --all            # Restore stopped agents; report stopped commands

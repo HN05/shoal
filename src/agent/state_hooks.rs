@@ -1,4 +1,4 @@
-//! Claude Code hook groups that report its turn state with `shoal
+//! Claude Code hook groups that report its turn state with `shoal internal
 //! agent-state`. A finished tool call, failed or not, means a permission
 //! prompt or question was answered. No hook follows an interrupted turn, so
 //! Claude Code's notice that its prompt has waited for input reports the turn
@@ -42,7 +42,7 @@ pub(super) fn claude(shoal: &str) -> Vec<(&'static str, Value)> {
 /// Shell text reporting `state` that never fails, so a stopped daemon cannot
 /// block or interrupt the agent's turn.
 fn report(shoal: &str, state: AgentState) -> String {
-    format!("{shoal} agent-state {state} >/dev/null 2>&1 || true")
+    format!("{shoal} internal agent-state {state} >/dev/null 2>&1 || true")
 }
 
 #[cfg(test)]
@@ -79,7 +79,7 @@ mod tests {
             (
                 event,
                 matcher.map(str::to_owned),
-                format!("agent-state {state}"),
+                format!("internal agent-state {state}"),
             )
         };
         assert_eq!(

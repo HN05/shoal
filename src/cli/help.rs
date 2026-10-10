@@ -39,7 +39,7 @@ const GROUPS: &[(&str, &[&str])] = &[
     ),
     (
         "Diagnostics and activity",
-        &["inspect", "notifications", "events", "doctor"],
+        &["inspect", "notifications", "doctor"],
     ),
     (
         "Configuration and installation",

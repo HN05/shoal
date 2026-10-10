@@ -216,14 +216,6 @@ pub enum Command {
         #[arg(long, conflicts_with = "workspace")]
         hook: bool,
     },
-    /// Report the agent's turn state; Shoal's agent hooks call it.
-    #[command(hide = true)]
-    AgentState {
-        state: crate::state::AgentState,
-        /// Workspace to use; defaults to the current workspace or picker.
-        #[arg(long)]
-        workspace: Option<String>,
-    },
     /// Mark the assignment finished; by default stop tracked commands and clean up safely.
     Done {
         workspace: Option<String>,
@@ -333,7 +325,8 @@ pub enum Command {
         #[arg(long, overrides_with = "push")]
         no_push: bool,
     },
-    /// Commands Shoal itself runs, not part of the interface for people.
+    /// Commands Shoal, its agent hooks and integrations run, not part of the
+    /// interface for people.
     #[command(name = internal::GROUP, hide = true)]
     Internal {
         #[command(subcommand)]
@@ -417,15 +410,6 @@ pub enum Command {
     },
     /// Show detailed workspace and execution records.
     Inspect { workspace: Option<String> },
-    /// Stream durable workspace lifecycle events without consuming notifications.
-    Events {
-        /// Keep the stream open as the daemon records new events.
-        #[arg(long)]
-        follow: bool,
-        /// Replay events after this event ID.
-        #[arg(long, value_parser = clap::value_parser!(i64).range(0..))]
-        since: Option<i64>,
-    },
     /// Show resource conflicts, finished agents, and automatic cleanup.
     Notifications {
         /// Include notifications already shown.
@@ -769,12 +753,30 @@ pub enum PortCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum InternalCommand {
+    /// Stream durable workspace lifecycle events without consuming notifications.
+    Events {
+        /// Keep the stream open as the daemon records new events.
+        #[arg(long)]
+        follow: bool,
+        /// Replay events after this event ID.
+        #[arg(long, value_parser = clap::value_parser!(i64).range(0..))]
+        since: Option<i64>,
+    },
+    /// Report the agent's turn state; Shoal's agent hooks call it.
+    AgentState {
+        state: crate::state::AgentState,
+        /// Workspace to use; defaults to the current workspace or picker.
+        #[arg(long)]
+        workspace: Option<String>,
+    },
+    /// Finish a planned landing inside its tracked execution.
     #[command(name = internal::LAND)]
     Land {
         #[arg(long)]
         push: bool,
         plan: String,
     },
+    /// Add the planned workspace inside its Herdr tab.
     #[command(name = internal::HERDR)]
     Herdr {
         #[arg(long)]
@@ -782,6 +784,7 @@ pub enum InternalCommand {
         #[arg(env = crate::env::HERDR_PLAN, hide_env_values = true)]
         plan: String,
     },
+    /// Close a Herdr tab once its workspace completes or is removed.
     #[command(name = internal::HERDR_WATCH)]
     HerdrWatch { workspace: String, tab: String },
     /// Detached execution wrapper; reports the launch on stdout, then keeps tracking it.

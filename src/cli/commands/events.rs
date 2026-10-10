@@ -1,4 +1,4 @@
-//! `shoal events`: the integration stream that never consumes user notifications.
+//! `shoal internal events`: the integration stream that never consumes user notifications.
 use crate::{
     cli::{client, context::Context},
     daemon::events::EventItem,

@@ -10631,7 +10631,7 @@ fn pr_watch_checks_github_state_and_commit_and_survives_restart() {
     fixture.ok(&["unlink", "pr", "--workspace", "watch"]);
     let events = fixture
         .command()
-        .args(["--json", "events"])
+        .args(["--json", "internal", "events"])
         .output()
         .unwrap();
     assert!(events.status.success());
@@ -14120,14 +14120,14 @@ fn agents_report_their_turn_state_until_their_execution_ends() {
     let output = scoped_command(
         &fixture,
         "reporter",
-        &["agent-state", "waiting", "--workspace", "other"],
+        &["internal", "agent-state", "waiting", "--workspace", "other"],
     );
     assert!(!output.status.success(), "{output:?}");
     // The execution reports, then lists itself while its state is current.
     let output = fixture
         .command()
         .args(["exec", "reporter", "--", "sh", "-c"])
-        .arg(r#""$0" agent-state waiting >/dev/null && "$0" ls && "$0" status"#)
+        .arg(r#""$0" internal agent-state waiting >/dev/null && "$0" ls && "$0" status"#)
         .arg(env!("CARGO_BIN_EXE_shoal"))
         .output()
         .unwrap();
@@ -14150,7 +14150,7 @@ fn agents_report_their_turn_state_until_their_execution_ends() {
     );
     let events = fixture
         .command()
-        .args(["--json", "events"])
+        .args(["--json", "internal", "events"])
         .output()
         .unwrap();
     assert!(events.status.success());
@@ -15842,7 +15842,7 @@ fn merged_base_prs_retarget_and_restack_the_workspaces_stacked_on_them() {
         );
         let events = fixture
             .command()
-            .args(["--json", "events"])
+            .args(["--json", "internal", "events"])
             .output()
             .unwrap();
         let restacked = String::from_utf8(events.stdout)
