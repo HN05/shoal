@@ -2518,6 +2518,7 @@ fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
     assert_eq!(linked_prs(), serde_json::json!([url]));
     let added: Value = serde_json::from_slice(&added.stdout).unwrap();
     assert_eq!(added["branch"], "stack/top");
+    assert_eq!(added["links"]["prs"], serde_json::json!([url]));
     let branch = fixture.ok(&[
         "add",
         "https://forge.example/team/project/src/branch/stack%2Ftop",

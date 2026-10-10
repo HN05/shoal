@@ -344,18 +344,15 @@ async fn execute_add_with_target(
         )
         .await?;
     }
-    let Some(workspace) = finish_add_workspace(ctx, opened).await? else {
+    let Some(workspace) = finish_add_workspace(ctx, opened, pr).await? else {
         return Ok(1);
     };
-    if let Some(url) = pr {
-        link_pull(ctx, &workspace, url).await?;
-    }
     agent.launch(ctx, workspace, issue, args).await
 }
 
-/// Link the PR a workspace was opened on. The workspace already exists, so a
-/// refused link only warns.
-async fn link_pull(ctx: &Context, workspace: &Workspace, url: String) -> Result<()> {
+/// Link the PR a workspace was opened on and return the workspace with that
+/// link. The workspace already exists, so a refused link only warns.
+async fn link_pull(ctx: &Context, workspace: Workspace, url: String) -> Result<Workspace> {
     let linked = request::<()>(
         &ctx.paths,
         Method::SetPr {
@@ -366,8 +363,9 @@ async fn link_pull(ctx: &Context, workspace: &Workspace, url: String) -> Result<
     .await;
     if let Err(error) = linked {
         eprintln!("warning: cannot link PR {url}: {error:#}");
+        return Ok(workspace);
     }
-    Ok(())
+    Ok(client::inspect(&ctx.paths, workspace.id).await?.workspace)
 }
 
 struct AddTarget {
@@ -718,7 +716,13 @@ async fn pick_add_branch(ctx: &Context, target: &AddTarget) -> Result<String> {
     ui::pick(ctx, "Branch> ", entries)
 }
 
-async fn finish_add_workspace(ctx: &Context, opened: OpenedWorkspace) -> Result<Option<Workspace>> {
+/// Set up an opened workspace and link its PR, which needs a ready workspace,
+/// before reporting it.
+async fn finish_add_workspace(
+    ctx: &Context,
+    opened: OpenedWorkspace,
+    pr: Option<String>,
+) -> Result<Option<Workspace>> {
     let OpenedWorkspace {
         mut workspace,
         reused,
@@ -728,6 +732,9 @@ async fn finish_add_workspace(ctx: &Context, opened: OpenedWorkspace) -> Result<
             return Ok(None);
         };
         workspace = ready;
+    }
+    if let Some(url) = pr {
+        workspace = link_pull(ctx, workspace, url).await?;
     }
     ctx.emit(
         &format!(
