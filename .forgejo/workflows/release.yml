@@ -191,13 +191,13 @@ jobs:
           # Archives are reproducible for a tag (fixed mtime, owner and order, no
           # gzip timestamp), so a rerun attaches the same bytes it would have.
           epoch=$(git log -1 --format=%ct)
-          while read -r target platform _selectors; do
-            ../cross-build.sh "$target"
+          while read -r target platform _selectors <&3; do
+            ../cross-build.sh "$target" 3<&-
             tar --sort=name --mtime="@$epoch" --owner=0 --group=0 --numeric-owner \
               -C "$CARGO_TARGET_DIR/$target/release" -cf - shoal \
               -C "$PWD" skills \
               | gzip -n -9 > "dist/shoal-$RELEASE_TAG-$platform.tar.gz"
-          done < ../release-targets.txt
+          done 3< ../release-targets.txt
           (cd dist && sha256sum shoal-*.tar.gz > SHA256SUMS && cat SHA256SUMS)
       - name: Attach to the Forgejo release
         env:

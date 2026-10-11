@@ -3,6 +3,7 @@
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 import unittest
@@ -16,6 +17,30 @@ def release_targets():
 
 
 class CrossBuildTests(unittest.TestCase):
+    def test_workflow_build_stdin_cannot_consume_target_rows(self):
+        with tempfile.TemporaryDirectory() as root:
+            root = Path(root)
+            source = root / "source"
+            (source / "dist").mkdir(parents=True)
+            script_dir = source / ".forgejo/scripts"
+            script_dir.mkdir(parents=True)
+            for directory in (root, script_dir):
+                (directory / "release-targets.txt").write_bytes((SCRIPTS / "release-targets.txt").read_bytes())
+                helper = directory / "cross-build.sh"
+                helper.write_text('#!/bin/sh\nread -r ignored || true\nprintf "%s\\n" "$1"\n')
+                helper.chmod(0o755)
+            for workflow in ("ci.yml", "release.yml"):
+                with self.subTest(workflow=workflow):
+                    text = (SCRIPTS.parent / "workflows" / workflow).read_text()
+                    loop = re.search(r"          while read.*?\n          done[^\n]*", text, re.S)[0]
+                    result = subprocess.run(
+                        ["bash", "-eu", "-c", 'tar() { :; }; gzip() { cat; };\n' + loop],
+                        cwd=source, input="build input\n", capture_output=True, text=True, check=True,
+                        env={**os.environ, "CARGO_TARGET_DIR": str(root / "target"),
+                             "RELEASE_TAG": "v0.2.0", "epoch": "0"},
+                    )
+                    self.assertEqual(result.stdout.splitlines(), [row[0] for row in release_targets()])
+
     def test_target_validation_follows_the_table_beside_the_helper(self):
         with tempfile.TemporaryDirectory() as root:
             root = Path(root)

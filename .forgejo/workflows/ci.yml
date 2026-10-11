@@ -147,6 +147,6 @@ jobs:
           set -euo pipefail
           . .forgejo/scripts/lock-target-dir.sh
           cargo clean -p shoal
-          while read -r target _platform _selectors; do
-            .forgejo/scripts/cross-build.sh "$target"
-          done < .forgejo/scripts/release-targets.txt
+          while read -r target _platform _selectors <&3; do
+            .forgejo/scripts/cross-build.sh "$target" 3<&-
+          done 3< .forgejo/scripts/release-targets.txt
