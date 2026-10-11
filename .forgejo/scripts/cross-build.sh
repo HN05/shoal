@@ -2,15 +2,25 @@
 # Run from the source checkout, after acquiring a /ci-target slot.
 set -euo pipefail
 
+script_dir=$(cd "$(dirname "$0")" && pwd)
+targets_file="$script_dir/release-targets.txt"
+# Columns: Rust target, archive platform, Homebrew OS and architecture selectors.
+
 target=${1:?expected a Rust release target}
-case "$target" in
-  x86_64-unknown-linux-musl|aarch64-unknown-linux-musl) ;;
-  x86_64-apple-darwin|aarch64-apple-darwin) ;;
-  *) echo "Unknown release target: $target" >&2; exit 1 ;;
-esac
+platform=''
+while read -r known_target known_platform _selectors; do
+  if [ "$known_target" = "$target" ]; then
+    platform=$known_platform
+    break
+  fi
+done < "$targets_file"
+if [ -z "$platform" ]; then
+  echo "Unknown release target: $target" >&2
+  exit 1
+fi
 
 export CI_ZIG_BINARY=$(command -v zig)
-export CARGO_ZIGBUILD_ZIG_PATH="$(cd "$(dirname "$0")" && pwd)/zig-wrapper.py"
+export CARGO_ZIGBUILD_ZIG_PATH="$script_dir/zig-wrapper.py"
 
 case "$target:$(uname -s)" in
   *-apple-darwin:Linux)

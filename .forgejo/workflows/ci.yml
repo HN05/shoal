@@ -147,6 +147,6 @@ jobs:
           set -euo pipefail
           . .forgejo/scripts/lock-target-dir.sh
           cargo clean -p shoal
-          for target in x86_64-unknown-linux-musl aarch64-unknown-linux-musl x86_64-apple-darwin aarch64-apple-darwin; do
+          while read -r target _platform _selectors; do
             .forgejo/scripts/cross-build.sh "$target"
-          done
+          done < .forgejo/scripts/release-targets.txt

@@ -146,7 +146,8 @@ open no issues; audit results are advisory and do not gate merges.
 
 Distribution is a Homebrew formula in the shared HN05 tap: releases install
 checksummed prebuilt Linux and macOS binaries on x86_64 and arm64; `--HEAD`
-builds `main` from source.
+builds `main` from source. A shared release-target table drives cross-builds,
+archive names and Homebrew platform selectors.
 Named configuration templates in `configs/` are embedded at build time, so
 installation needs no source checkout or network access.
 Shoal owns the generated formula and source-install script; Rust is required

@@ -102,6 +102,11 @@ jobs:
           curl -fsS "${FORGEJO_SERVER%/}/$REPOSITORY/raw/commit/$WORKFLOW_SHA/.forgejo/scripts/checkout-release.sh" -o checkout-release.sh
           curl -fsS "${FORGEJO_SERVER%/}/$REPOSITORY/raw/commit/$WORKFLOW_SHA/scripts/release_metadata.py" -o release_metadata.py
           sh checkout-release.sh
+          # Tap helpers and targets follow the build helpers' workflow commit.
+          for helper in update-homebrew.py release_metadata.py shoal.rb.template; do
+            curl -fsS "${FORGEJO_SERVER%/}/$REPOSITORY/raw/commit/$WORKFLOW_SHA/scripts/$helper" -o "source/scripts/$helper"
+          done
+          curl -fsS "${FORGEJO_SERVER%/}/$REPOSITORY/raw/commit/$WORKFLOW_SHA/.forgejo/scripts/release-targets.txt" -o source/.forgejo/scripts/release-targets.txt
       - name: Update shared tap
         env:
           RELEASE_TAG: ${{ needs.publish.outputs.tag }}
@@ -173,7 +178,7 @@ jobs:
           curl -fsS "${FORGEJO_SERVER%/}/$REPOSITORY/raw/commit/$WORKFLOW_SHA/scripts/release_metadata.py" -o release_metadata.py
           sh checkout-release.sh
           # Build helpers follow the workflow commit when resuming an older tag.
-          for helper in cross-build.sh zig-wrapper.py; do
+          for helper in cross-build.sh release-targets.txt zig-wrapper.py; do
             curl -fsS "${FORGEJO_SERVER%/}/$REPOSITORY/raw/commit/$WORKFLOW_SHA/.forgejo/scripts/$helper" -o "$helper"
             chmod +x "$helper"
           done
@@ -186,20 +191,13 @@ jobs:
           # Archives are reproducible for a tag (fixed mtime, owner and order, no
           # gzip timestamp), so a rerun attaches the same bytes it would have.
           epoch=$(git log -1 --format=%ct)
-          for target in x86_64-unknown-linux-musl aarch64-unknown-linux-musl x86_64-apple-darwin aarch64-apple-darwin; do
-            case "$target" in
-              x86_64-unknown-linux-musl) platform=linux-x86_64 ;;
-              aarch64-unknown-linux-musl) platform=linux-arm64 ;;
-              x86_64-apple-darwin) platform=macos-x86_64 ;;
-              aarch64-apple-darwin) platform=macos-arm64 ;;
-              *) echo "Unknown release target: $target" >&2; exit 1 ;;
-            esac
+          while read -r target platform _selectors; do
             ../cross-build.sh "$target"
             tar --sort=name --mtime="@$epoch" --owner=0 --group=0 --numeric-owner \
               -C "$CARGO_TARGET_DIR/$target/release" -cf - shoal \
               -C "$PWD" skills \
               | gzip -n -9 > "dist/shoal-$RELEASE_TAG-$platform.tar.gz"
-          done
+          done < ../release-targets.txt
           (cd dist && sha256sum shoal-*.tar.gz > SHA256SUMS && cat SHA256SUMS)
       - name: Attach to the Forgejo release
         env:

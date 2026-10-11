@@ -12,17 +12,27 @@ from release_metadata import (commit_id, tag_version, verified_tag_commit,
                               version_parts as release_version)
 
 
-PLATFORMS = ("macos-arm64", "macos-x86_64", "linux-arm64", "linux-x86_64")
+TARGETS_FILE = Path(__file__).parents[1] / ".forgejo/scripts/release-targets.txt"
 
 
-def release_checksums(manifest, version):
+def release_targets():
+    return [tuple(line.split()) for line in TARGETS_FILE.read_text().splitlines()]
+
+
+def release_platforms():
+    return tuple(platform for _, platform, _, _ in release_targets())
+
+
+def release_checksums(manifest, version, platforms=None):
     checksums = {}
     for line in manifest.splitlines():
         match = re.fullmatch(r"([0-9a-f]{64}) [ *](\S+)", line)
         if not match or match[2] in checksums:
             raise ValueError("invalid or duplicate release checksum")
         checksums[match[2]] = match[1]
-    expected = {f"shoal-v{version}-{platform}.tar.gz" for platform in PLATFORMS}
+    if platforms is None:
+        platforms = release_platforms()
+    expected = {f"shoal-v{version}-{platform}.tar.gz" for platform in platforms}
     if checksums.keys() != expected:
         raise ValueError("expected checksums for every release platform")
     return checksums
@@ -53,11 +63,14 @@ def update_formula(text, version, revision, manifest,
     repository = source_url.removesuffix(".git")
     download = f"{repository}/releases/download/v{version}"
     checksums = release_checksums(manifest, version)
+    platforms_by_os = {}
+    for _, platform, platform_os, arch in release_targets():
+        platforms_by_os.setdefault(platform_os, []).append((platform, arch))
     blocks = []
-    for platform_os in ("macos", "linux"):
+    for platform_os, platforms in platforms_by_os.items():
         blocks.append(f"  on_{platform_os} do")
-        for arch, platform_arch in (("arm", "arm64"), ("intel", "x86_64")):
-            name = f"shoal-v{version}-{platform_os}-{platform_arch}.tar.gz"
+        for platform, arch in platforms:
+            name = f"shoal-v{version}-{platform}.tar.gz"
             blocks.extend([f"    on_{arch} do", f'      url "{download}/{name}"',
                            f'      sha256 "{checksums[name]}"', "    end"])
         blocks.append("  end")
@@ -67,7 +80,17 @@ def update_formula(text, version, revision, manifest,
         assets = re.findall(r'^      url "([^"\n]+)"\n      sha256 "([0-9a-f]{64})"$', text, re.M)
         old_manifest = "\n".join(f"{checksum}  {url.rsplit('/', 1)[-1]}"
                                  for url, checksum in assets)
-        old_checksums = release_checksums(old_manifest, versions[0])
+        # Older formulas may predate a change to the supported platform set.
+        old_platforms = []
+        for url, _ in assets:
+            match = re.fullmatch(rf"shoal-v{re.escape(versions[0])}-([a-z0-9_-]+)\.tar\.gz",
+                                 url.rsplit('/', 1)[-1])
+            if not match:
+                raise ValueError("unexpected release asset names")
+            old_platforms.append(match[1])
+        if not old_platforms:
+            raise ValueError("expected release asset URLs")
+        old_checksums = release_checksums(old_manifest, versions[0], old_platforms)
         expected_urls = {f'{repository}/releases/download/v{versions[0]}/{name}'
                          for name in old_checksums}
         if {url for url, _ in assets} != expected_urls:

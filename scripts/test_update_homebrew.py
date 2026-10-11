@@ -1,6 +1,8 @@
 import unittest
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
+import tempfile
+from unittest.mock import patch
 
 spec = spec_from_file_location("updater", Path(__file__).with_name("update-homebrew.py"))
 updater = module_from_spec(spec)
@@ -18,7 +20,7 @@ end
     @staticmethod
     def manifest(version, checksum="c" * 64):
         return "\n".join(f"{checksum}  shoal-v{version}-{platform}.tar.gz"
-                         for platform in updater.PLATFORMS)
+                         for platform in updater.release_platforms())
 
     def update(self, text, version, revision, source_url="https://github.com/HN05/shoal.git"):
         return updater.update_formula(text, version, revision, self.manifest(version), source_url)
@@ -26,9 +28,9 @@ end
     def test_migrates_source_formula_to_binaries_and_is_idempotent(self):
         result = self.update(self.formula, "0.2.0", "a" * 40)
         self.assertIn("# Release commit: " + "a" * 40, result)
-        for platform in updater.PLATFORMS:
+        for platform in updater.release_platforms():
             self.assertIn(f'https://github.com/HN05/shoal/releases/download/v0.2.0/shoal-v0.2.0-{platform}.tar.gz', result)
-        self.assertEqual(result.count('sha256 "' + "c" * 64 + '"'), 4)
+        self.assertEqual(result.count('sha256 "' + "c" * 64 + '"'), len(updater.release_platforms()))
         self.assertIn('  version "0.2.0"', result)
         self.assertIn('head do\n    url "https://github.com/HN05/shoal.git", branch: "main"\n    depends_on "rust" => :build\n  end', result)
         self.assertEqual(result.count('depends_on "rust"'), 1)
@@ -95,13 +97,32 @@ end
 
     def test_checksums_follow_asset_names_not_manifest_order(self):
         assets = {f"shoal-v0.2.0-{platform}.tar.gz": f"{index:064x}"
-                  for index, platform in enumerate(updater.PLATFORMS)}
+                  for index, platform in enumerate(updater.release_platforms())}
         manifest = "\n".join(f"{checksum}  {name}"
                              for name, checksum in reversed(list(assets.items())))
         result = updater.update_formula(self.formula, "0.2.0", "a" * 40, manifest)
         for name, checksum in assets.items():
             self.assertIn(f'/{name}"\n      sha256 "{checksum}"', result)
         self.assertEqual(updater.update_formula(result, "0.2.0", "a" * 40, manifest), result)
+
+    def test_formula_selectors_and_required_checksums_follow_the_table(self):
+        previous = self.update(self.formula, "0.1.0", "b" * 40)
+        with tempfile.TemporaryDirectory() as root:
+            table = Path(root) / "targets.txt"
+            table.write_text("custom-target custom-platform linux arm\n")
+            with patch.object(updater, "TARGETS_FILE", table):
+                manifest = "c" * 64 + "  shoal-v0.2.0-custom-platform.tar.gz"
+                result = updater.update_formula(self.formula, "0.2.0", "a" * 40, manifest)
+                self.assertIn('  on_linux do\n    on_arm do\n', result)
+                self.assertIn('/shoal-v0.2.0-custom-platform.tar.gz"', result)
+                self.assertEqual(result.count('      url "'), 1)
+                self.assertNotIn("on_macos", result)
+                self.assertEqual(updater.update_formula(result, "0.2.0", "a" * 40, manifest), result)
+                self.assertEqual(updater.update_formula(previous, "0.2.0", "a" * 40, manifest), result)
+                with self.assertRaisesRegex(ValueError, "pinned release checksums"):
+                    self.update(previous, "0.1.0", "b" * 40)
+                with self.assertRaisesRegex(ValueError, "every release platform"):
+                    updater.release_checksums(manifest.replace("custom-platform", "old-platform"), "0.2.0")
 
 
 if __name__ == "__main__":

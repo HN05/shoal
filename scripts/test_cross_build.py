@@ -11,7 +11,37 @@ import unittest
 SCRIPTS = Path(__file__).resolve().parents[1] / ".forgejo" / "scripts"
 
 
+def release_targets():
+    return [line.split() for line in (SCRIPTS / "release-targets.txt").read_text().splitlines()]
+
+
 class CrossBuildTests(unittest.TestCase):
+    def test_target_validation_follows_the_table_beside_the_helper(self):
+        with tempfile.TemporaryDirectory() as root:
+            root = Path(root)
+            script = root / "cross-build.sh"
+            script.write_bytes((SCRIPTS / "cross-build.sh").read_bytes())
+            table = root / "release-targets.txt"
+            table.write_text("custom-target custom-platform linux arm\n")
+            for tool, body in (("zig", "exit 0"), ("uname", "echo Linux"),
+                               ("cargo", 'printf "%s\\n" "$*"')):
+                executable = root / tool
+                executable.write_text(f"#!/bin/sh\n{body}\n")
+                executable.chmod(0o755)
+            env = {**os.environ, "PATH": f"{root}{os.pathsep}{os.environ['PATH']}"}
+            result = subprocess.run(["bash", str(script), "custom-target"], env=env,
+                                    capture_output=True, text=True, check=True)
+            self.assertEqual(result.stdout.splitlines(), [
+                "clean -p shoal --release --target custom-target",
+                "zigbuild --locked --release --target custom-target",
+            ])
+            table.write_text("replacement-target replacement-platform linux arm\n")
+            result = subprocess.run(["bash", str(script), "custom-target"], env=env,
+                                    capture_output=True, text=True, check=False)
+            self.assertEqual(result.returncode, 1)
+            self.assertEqual(result.stderr, "Unknown release target: custom-target\n")
+            self.assertEqual(result.stdout, "")
+
     def test_zig_wrapper_preserves_arguments_output_and_exit_status(self):
         with tempfile.TemporaryDirectory() as root:
             zig = Path(root) / "zig"
@@ -66,8 +96,7 @@ class CrossBuildTests(unittest.TestCase):
             cargo.chmod(0o755)
             env = {key: value for key, value in os.environ.items() if key != "SDKROOT"}
             env.update(PATH=f"{bin_dir}{os.pathsep}{env['PATH']}", CARGO_TARGET_DIR=str(root / "target"))
-            for target in ("x86_64-unknown-linux-musl", "aarch64-unknown-linux-musl",
-                           "x86_64-apple-darwin", "aarch64-apple-darwin"):
+            for target, _platform, _os, _arch in release_targets():
                 with self.subTest(target=target):
                     result = subprocess.run(
                         [str(SCRIPTS / "cross-build.sh"), target], env=env,

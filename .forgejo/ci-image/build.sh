@@ -19,7 +19,7 @@ RUST=${1:-$DEFAULT_RUST}
 PUSH=${2:-}
 IMAGE=$REGISTRY:$RUST
 
-podman build --network host --build-arg "RUST=$RUST" -t "$IMAGE" .
+podman build --network host --build-arg "RUST=$RUST" -t "$IMAGE" -f Containerfile ../..
 
 if [ "$PUSH" = "--push" ]; then
   podman push "$IMAGE"
