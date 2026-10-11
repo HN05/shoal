@@ -6,12 +6,11 @@ mod support;
 
 use serde_json::{Value, json};
 use std::{
-    io::{BufRead, BufReader, Write},
-    os::unix::net::{UnixListener, UnixStream},
+    io::Write,
+    os::unix::net::UnixStream,
     path::PathBuf,
     process::{Command, Stdio},
     thread,
-    time::Duration,
 };
 
 #[test]
@@ -161,23 +160,16 @@ impl FakeDaemon {
                     .success()
             );
         }
-        let socket = root.path().join("daemon.sock");
-        let listener = UnixListener::bind(&socket).unwrap();
+        let listener = support::fake_daemon::bind_fake_daemon(root.path());
+        let socket = root.path().join("state/daemon.sock");
         let repo_path = root.path().to_owned();
         let server = thread::spawn(move || {
             let mut methods = Vec::new();
             loop {
-                let (mut stream, _) = listener.accept().unwrap();
-                stream
-                    .set_read_timeout(Some(Duration::from_secs(60)))
-                    .unwrap();
-                let mut line = String::new();
-                if BufReader::new(&stream).read_line(&mut line).unwrap() == 0
-                    || line.trim().is_empty()
-                {
+                let (stream, _) = listener.accept().unwrap();
+                let Some(request) = support::fake_daemon::read_request(&stream) else {
                     break;
-                }
-                let request: Value = serde_json::from_str(&line).unwrap();
+                };
                 let mut method = request["method"]
                     .as_str()
                     .unwrap_or_else(|| {
@@ -189,7 +181,7 @@ impl FakeDaemon {
                             .unwrap()
                     })
                     .to_owned();
-                let mut reply = match method.as_str() {
+                let reply = match method.as_str() {
                     "list_repositories" => json!({"type": "repositories", "data": [{
                         "id": "test", "path": repo_path,
                         "source": "https://forge.example/team/repo", "last_used": 0
@@ -217,9 +209,7 @@ impl FakeDaemon {
                     }
                 };
                 methods.push(method);
-                reply["protocol"] = request["protocol"].clone();
-                reply["id"] = request["id"].clone();
-                writeln!(stream, "{reply}").unwrap();
+                support::fake_daemon::write_reply(&stream, &request, reply);
             }
             methods
         });
@@ -231,9 +221,7 @@ impl FakeDaemon {
     }
 
     fn command(&self) -> Command {
-        let mut command = support::cli(self.root.path());
-        command.args(["--state-dir", self.root.path().to_str().unwrap()]);
-        command
+        support::cli(self.root.path())
     }
 
     fn methods(self) -> Vec<String> {

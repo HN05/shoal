@@ -14,10 +14,7 @@ mod support;
 use std::{
     fs,
     io::{BufRead, BufReader, Write},
-    os::unix::{
-        fs::PermissionsExt,
-        net::{UnixListener, UnixStream},
-    },
+    os::unix::{fs::PermissionsExt, net::UnixStream},
     path::Path,
     process::{Output, Stdio},
     sync::{
@@ -357,8 +354,7 @@ impl IncompatibleDaemon {
     }
 
     fn with_version(root: &Path, malformed: bool, version_mismatch: bool) -> Self {
-        fs::create_dir_all(root.join("state")).unwrap();
-        let listener = UnixListener::bind(root.join("state/daemon.sock")).unwrap();
+        let listener = support::fake_daemon::bind_fake_daemon(root);
         listener.set_nonblocking(true).unwrap();
         let stop = Arc::new(AtomicBool::new(false));
         let done = stop.clone();
@@ -372,23 +368,18 @@ impl IncompatibleDaemon {
                     }
                     Err(error) => panic!("{error}"),
                 };
-                stream.set_nonblocking(false).unwrap();
-                stream
-                    .set_read_timeout(Some(Duration::from_secs(3)))
-                    .unwrap();
-                let mut line = String::new();
-                BufReader::new(&stream).read_line(&mut line).unwrap();
-                let request: Value = serde_json::from_str(&line).unwrap();
+                let request = support::fake_daemon::read_request(&stream).unwrap();
                 if malformed {
                     writeln!(stream, "not json").unwrap();
                 } else if version_mismatch {
                     let response = json!({
-                        "protocol": request["protocol"], "id": request["id"], "type": "status",
+                        "type": "status",
                         "data": {"pid": 123, "version": "0.0.0", "uptime_secs": 1,
                                  "managed": false, "unread_notifications": 0}
                     });
-                    writeln!(stream, "{response}").unwrap();
+                    support::fake_daemon::write_reply(&stream, &request, response);
                 } else {
+                    // This deliberately invalid envelope bypasses normal framing.
                     let response = json!({
                         "protocol": request["protocol"].as_u64().unwrap() + 1,
                         "id": request["id"],
@@ -812,8 +803,7 @@ fn doctor_reports_incompatible_unresponsive_and_wrong_version_daemons() {
     assert_eq!(report["checks"][1]["status"], "skipped");
 
     let root = tempfile::tempdir_in("/tmp").unwrap();
-    fs::create_dir(root.path().join("state")).unwrap();
-    let _listener = UnixListener::bind(root.path().join("state/daemon.sock")).unwrap();
+    let _listener = support::fake_daemon::bind_fake_daemon(root.path());
     let report = doctor_report(root.path());
     assert!(
         report["checks"][0]["message"]
@@ -883,12 +873,11 @@ fn cli_typed_response_errors_preserve_output_and_exit_contracts() {
         ),
     ] {
         let root = tempfile::tempdir_in("/tmp").unwrap();
-        fs::create_dir(root.path().join("state")).unwrap();
-        let listener = UnixListener::bind(root.path().join("state/daemon.sock")).unwrap();
+        let listener = support::fake_daemon::bind_fake_daemon(root.path());
         listener.set_nonblocking(true).unwrap();
         let daemon = thread::spawn(move || {
             let deadline = Instant::now() + Duration::from_secs(60);
-            let mut stream = loop {
+            let stream = loop {
                 match listener.accept() {
                     Ok((stream, _)) => break stream,
                     Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
@@ -898,19 +887,7 @@ fn cli_typed_response_errors_preserve_output_and_exit_contracts() {
                     Err(error) => panic!("{error}"),
                 }
             };
-            stream.set_nonblocking(false).unwrap();
-            stream
-                .set_read_timeout(Some(Duration::from_secs(3)))
-                .unwrap();
-            let mut line = String::new();
-            BufReader::new(&stream).read_line(&mut line).unwrap();
-            let request: Value = serde_json::from_str(&line).unwrap();
-            let mut body = body;
-            body["protocol"] = request["protocol"].clone();
-            body["id"] = request["id"].clone();
-            let mut bytes = serde_json::to_vec(&body).unwrap();
-            bytes.push(b'\n');
-            stream.write_all(&bytes).unwrap();
+            support::fake_daemon::answer(stream, |_| body);
         });
         let output = command(root.path()).args(&args).output().unwrap();
         daemon.join().unwrap();
@@ -932,26 +909,15 @@ fn cli_typed_response_errors_preserve_output_and_exit_contracts() {
 fn event_cli_preserves_adjacent_frames_and_finishes_an_empty_listing() {
     for count in [0, 205] {
         let root = tempfile::tempdir_in("/tmp").unwrap();
-        fs::create_dir(root.path().join("state")).unwrap();
-        let listener = UnixListener::bind(root.path().join("state/daemon.sock")).unwrap();
+        let listener = support::fake_daemon::bind_fake_daemon(root.path());
         let daemon = thread::spawn(move || {
             let (mut stream, _) = listener.accept().unwrap();
-            stream
-                .set_read_timeout(Some(Duration::from_secs(60)))
-                .unwrap();
-            let mut line = String::new();
-            BufReader::new(&stream).read_line(&mut line).unwrap();
-            let request: Value = serde_json::from_str(&line).unwrap();
+            let request = support::fake_daemon::read_request(&stream).unwrap();
             assert_eq!(
                 request["method"]["watch_workspace_events"],
                 json!({"since": 0, "follow": false})
             );
-            let response = |body: Value| {
-                let mut body = body;
-                body["protocol"] = request["protocol"].clone();
-                body["id"] = request["id"].clone();
-                format!("{}\n", serde_json::to_string(&body).unwrap())
-            };
+            let response = |body| support::fake_daemon::frame(&request, body);
             let mut frames = response(json!({"type": "ok"}));
             for id in 1..=count {
                 frames.push_str(&response(json!({"type": "event_item", "data": {

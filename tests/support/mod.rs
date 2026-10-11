@@ -1,5 +1,7 @@
 //! Process defaults for integration tests. Apply intentional overrides with
 //! `Command::env` / `current_dir` after constructing a command.
+pub mod fake_daemon;
+
 use std::{ffi::OsStr, path::Path, process::Command};
 
 /// Keep commands and their descendants in a temporary home, state and cwd.

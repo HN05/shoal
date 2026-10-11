@@ -3,7 +3,6 @@ mod support;
 use serde_json::{Value, json};
 use std::{sync::Arc, time::Duration};
 use tokio::{
-    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     net::{UnixListener, UnixStream},
     sync::Notify,
     task::JoinSet,
@@ -18,22 +17,14 @@ fn workspace(index: usize) -> Value {
 }
 
 async fn read(stream: &mut UnixStream) -> Value {
-    let mut line = String::new();
-    BufReader::new(stream).read_line(&mut line).await.unwrap();
-    let request: Value = serde_json::from_str(&line).unwrap();
+    let request = support::fake_daemon::read_request_async(stream).await;
     assert_eq!(request["scope"], "test-scope");
     request
 }
 
 async fn reply(stream: &mut UnixStream, request: &Value, kind: &str, data: Value) {
-    let response = json!({
-        "protocol": request["protocol"], "id": request["id"],
-        "type": kind, "data": data
-    });
-    stream
-        .write_all(format!("{response}\n").as_bytes())
-        .await
-        .unwrap();
+    support::fake_daemon::write_reply_async(stream, request, json!({"type": kind, "data": data}))
+        .await;
 }
 
 async fn overview_responses(listener: UnixListener, noun: &str, count: usize) {
@@ -95,8 +86,9 @@ async fn all_workspace_overviews_preserve_json_text_scope_and_exit_status() {
         for count in [1, 8, 32] {
             for json in [true, false] {
                 let root = tempfile::tempdir_in("/tmp").unwrap();
-                std::fs::create_dir(root.path().join("state")).unwrap();
-                let listener = UnixListener::bind(root.path().join("state/daemon.sock")).unwrap();
+                let listener = support::fake_daemon::bind_fake_daemon(root.path());
+                listener.set_nonblocking(true).unwrap();
+                let listener = UnixListener::from_std(listener).unwrap();
                 let mut command = support::cli(root.path());
                 command.env("SHOAL_SCOPE_TOKEN", "test-scope");
                 if json {

@@ -4,8 +4,7 @@ mod pty;
 mod support;
 
 use std::{
-    io::{BufRead, BufReader, Read, Write},
-    os::unix::net::UnixListener,
+    io::Read,
     process::{Output, Stdio},
     sync::mpsc,
     thread,
@@ -25,25 +24,18 @@ fn run_with_reply(
 ) -> (Output, String) {
     let root = tempfile::tempdir_in("/tmp").unwrap();
     let (progress, drawn) = mpsc::channel();
-    let server = reply.map(|(wait_for_progress, mut reply)| {
-        std::fs::create_dir(root.path().join("state")).unwrap();
-        let listener = UnixListener::bind(root.path().join("state/daemon.sock")).unwrap();
+    let server = reply.map(|(wait_for_progress, reply)| {
+        let listener = support::fake_daemon::bind_fake_daemon(root.path());
         thread::spawn(move || {
-            let (mut stream, _) = listener.accept().unwrap();
-            stream
-                .set_read_timeout(Some(Duration::from_secs(60)))
-                .unwrap();
-            let mut line = String::new();
-            BufReader::new(&stream).read_line(&mut line).unwrap();
-            let request: serde_json::Value = serde_json::from_str(&line).unwrap();
-            reply["protocol"] = request["protocol"].clone();
-            reply["id"] = request["id"].clone();
-            if wait_for_progress {
-                drawn
-                    .recv_timeout(Duration::from_secs(60))
-                    .expect("progress was not drawn");
-            }
-            writeln!(stream, "{reply}").unwrap();
+            let (stream, _) = listener.accept().unwrap();
+            support::fake_daemon::answer(stream, |_| {
+                if wait_for_progress {
+                    drawn
+                        .recv_timeout(Duration::from_secs(60))
+                        .expect("progress was not drawn");
+                }
+                reply
+            });
         })
     });
     let mut command = support::cli(root.path());
