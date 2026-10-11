@@ -3165,9 +3165,10 @@ fn execution_preserves_pipes_exit_code_environment_and_current_workspace() {
 #[test]
 fn configured_environment_renders_for_tracked_commands() {
     let fixture = Fixture::with_config(Some(
-        "[env]\nSESSION = '{workspace}'\nPROFILE = '{workspace_path}/.profile'\nREPO = '{repo}'\nBRANCH = '{branch}'\nLITERAL = '{workspace}'\n",
+        "[env]\nSESSION = '{workspace}'\nPROFILE = '{workspace_path}/.profile'\nREPO = '{repo}'\nBRANCH = '{branch}'\nLITERAL = '{workspace}'\nAPI_PORT = 'wrong'\nURL = 'http://localhost:{port.api}'\n",
     ));
     fixture.add("env-values");
+    let port = fixture.ok(&["port", "acquire", "api", "env-values", "--env", "API_PORT"]);
     let output = fixture
         .command()
         .args([
@@ -3191,6 +3192,30 @@ fn configured_environment_renders_for_tracked_commands() {
     assert_eq!(lines[2], "repo with ' quotes & $literal");
     assert_eq!(lines[3], "env-values");
     assert_eq!(lines[4], "env-values");
+    let output = fixture
+        .command()
+        .args([
+            "exec",
+            "env-values",
+            "--",
+            "sh",
+            "-c",
+            "printf '%s|%s' \"$API_PORT\" \"$URL\"",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        format!("{}|http://localhost:{}", port["port"], port["port"])
+    );
+    let exported = fixture.ok(&["env", "env-values"]);
+    assert_eq!(exported["API_PORT"], port["port"].to_string());
+    assert_eq!(exported["SESSION"], "env-values");
+    assert_eq!(
+        exported["URL"],
+        format!("http://localhost:{}", port["port"])
+    );
     fixture.ok(&["rm", "env-values"]);
 }
 
@@ -13888,7 +13913,7 @@ fn workspace_hook_resolution_preserves_layers_and_directories() {
 #[test]
 fn global_post_setup_and_pre_remove_hooks_run_without_setup() {
     let fixture = Fixture::with_config(Some(
-        "post_setup_cmd = 'hook.sh'\npre_remove_cmd = 'hook.sh'\n",
+        "post_setup_cmd = 'hook.sh'\npre_remove_cmd = 'hook.sh'\n[env]\nSESSION = '{workspace}'\nPROFILE = '{workspace_path}/profile'\n",
     ));
     fs::write(
         fixture.repo.join("hook.sh"),
@@ -13897,6 +13922,8 @@ set -eu
 test -z "${SHOAL_SCOPE_TOKEN:-}"
 test -z "${SHOAL_EXECUTION_ID:-}"
 test -f tracked
+test "$SESSION" = "$SHOAL_WORKSPACE"
+test "$PROFILE" = "$SHOAL_WORKSPACE_PATH/profile"
 printf '%s\n' "$SHOAL_HOOK" >> "$HOME/hooks"
 "#,
     )
@@ -13994,7 +14021,9 @@ test ! -f "$HOME/fail-before" || { echo 'prepare failed' >&2; exit 7; }
 
 #[test]
 fn post_remove_hook_uses_checkout_and_reports_failure_after_removal() {
-    let fixture = Fixture::with_config(Some("post_remove_cmd = '/usr/bin/false'\n"));
+    let fixture = Fixture::with_config(Some(
+        "post_remove_cmd = '/usr/bin/false'\n[env]\nPROFILE = '{workspace_path}/global-profile'\n",
+    ));
     fs::write(
         fixture.repo.join("after removal.sh"),
         r#"#!/bin/sh
@@ -14003,6 +14032,11 @@ test "$SHOAL_HOOK" = post_remove
 test -z "${SHOAL_SCOPE_TOKEN:-}"
 test -z "${SHOAL_EXECUTION_ID:-}"
 test ! -e "$SHOAL_WORKSPACE_PATH"
+if [ "$SHOAL_WORKSPACE" = hooked ]; then
+  test "$PROFILE" = "$SHOAL_WORKSPACE_PATH/saved-profile"
+else
+  test "$PROFILE" = "$SHOAL_WORKSPACE_PATH/global-profile"
+fi
 printf '%s\n%s\n%s\n' "$PWD" "$SHOAL_WORKSPACE" "$SHOAL_WORKSPACE_PATH" >> "$HOME/removed"
 test ! -f "$HOME/fail-after" || { echo 'external cleanup failed' >&2; exit 8; }
 "#,
@@ -14033,7 +14067,11 @@ test ! -f "$HOME/fail-after" || { echo 'external cleanup failed' >&2; exit 8; }
             .success()
     );
     assert!(!fixture.root.path().join("removed").exists());
-    fs::write(&config, "post_remove_cmd = 'after removal.sh'\n").unwrap();
+    fs::write(
+        &config,
+        "post_remove_cmd = 'after removal.sh'\n[env]\nPROFILE = '{workspace_path}/saved-profile'\n",
+    )
+    .unwrap();
     fs::write(fixture.root.path().join("fail-after"), "").unwrap();
     let result = fixture.ok(&["rm", "hooked", "--yes", "--delete-branch"]);
     assert_eq!(result["removed"], true);

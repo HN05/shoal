@@ -735,6 +735,7 @@ fn report_launch(launch: &DetachedLaunch) -> Result<()> {
 fn configure_environment(process: &mut Command, paths: &Paths, plan: &ExecutionPlan) {
     env::apply_workspace_identity(process, &plan.workspace, paths);
     process
+        .envs(&plan.environment)
         .envs(env::workspace_environment(
             &plan.workspace,
             paths,
@@ -742,7 +743,6 @@ fn configure_environment(process: &mut Command, paths: &Paths, plan: &ExecutionP
             &plan.scope_token,
         ))
         .env(env::EXECUTION_ID, &plan.id);
-    process.envs(&plan.environment);
 }
 
 /// Report the exit code, resending it to a reattached daemon when the

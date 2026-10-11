@@ -1571,7 +1571,11 @@ and this exported environment. Values resolve from saved repository config, the
 worktree file, global config, then the default, and substitute `{workspace}`,
 `{workspace_path}` (also `{path}`), `{repo}`, `{branch}`, and reserved `{port.NAME}`
 fields once. Unknown fields remain literal, inserted values are not expanded, and
-`SHOAL_*` names are reserved for Shoal.
+`SHOAL_*` names are reserved for Shoal. Names must be ASCII identifiers; values
+must be strings without NUL. An empty string sets an empty value; inherited
+variables and shell expressions are not expanded. Reserved port exports take
+precedence over `[env]`. Desktop handoffs may reuse an existing process and do
+not receive these variables.
 Only unscoped callers can export or revoke tokens, and export requires a ready,
 verified worktree. Add the returned variables to the processes your app starts.
 Each exported token survives daemon restarts until `shoal env [workspace] --revoke

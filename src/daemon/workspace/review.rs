@@ -73,16 +73,19 @@ impl Manager {
             .record_marks(&workspace.id, selection, explicit, head)
             .await?;
         if let Some(command) = command {
-            let configured_env = self.configured_workspace_environment(&workspace).await?;
-            if let Err(error) = hooks::run_detached(
-                Hook::PostReady(&marks),
-                &workspace,
-                &command,
-                &self.paths,
-                &configured_env,
-            )
-            .await
-            {
+            let result = async {
+                let configured_env = self.configured_workspace_environment(&workspace).await?;
+                hooks::run_detached(
+                    Hook::PostReady(&marks),
+                    &workspace,
+                    &command,
+                    &self.paths,
+                    &configured_env,
+                )
+                .await
+            }
+            .await;
+            if let Err(error) = result {
                 self.notify(
                     Some(&workspace.name),
                     NotificationKind::HookFailed,

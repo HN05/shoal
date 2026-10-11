@@ -42,6 +42,11 @@ instead of the PR delivery guidance below.
   entries. Doctor environment and untracked-worktree
   checks diagnose only, including when repair is requested; dependency checks use
   the shared executable catalog.
+- `[env]` layers per variable from saved repository config, worktree, global,
+  then default. Tracked executions, hooks and workspace exports substitute known
+  workspace and reserved-port fields once without shell or recursive expansion;
+  `SHOAL_*` names stay reserved and port exports win collisions. Desktop handoffs
+  may reuse existing processes and do not receive configured variables.
 - Untracked hooks use global defaults below repository config.
   Pre-setup hooks run untracked in the daemon after ownership and execution
   checks, with a timeout; failure gates readiness even without a setup command.

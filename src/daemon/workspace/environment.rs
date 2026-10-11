@@ -53,12 +53,14 @@ impl Manager {
                 let tx = db.transaction()?;
                 store::require_ready(&tx, &workspace_id)?;
                 let ports = store::ports(&tx, Some(&workspace_id))?;
-                let mut values = env::workspace_environment(&workspace, &paths, &ports, &token);
-                values.extend(env::render_configured_environment(
+                let mut values = env::render_configured_environment(
                     &configured,
                     &workspace,
                     &repository_name,
                     &ports,
+                );
+                values.extend(env::workspace_environment(
+                    &workspace, &paths, &ports, &token,
                 ));
                 let values = values
                     .into_iter()

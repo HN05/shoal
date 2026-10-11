@@ -101,10 +101,7 @@ pub fn render_configured_environment(
     ];
     let mut port_values = Vec::new();
     for port in ports {
-        let value = port.port.to_string();
-        port_values.push((format!("{{port.{}}}", port.name), value.clone()));
-        port_values.push((format!("{{port_{}}}", port.name), value.clone()));
-        port_values.push((format!("{{{}}}", port.name), value));
+        port_values.push((format!("{{port.{}}}", port.name), port.port.to_string()));
     }
     fields.extend(
         port_values
@@ -187,6 +184,7 @@ pub fn workspace_environment(
     token: &str,
 ) -> BTreeMap<String, OsString> {
     let mut values = workspace_identity(workspace, paths);
+    values.insert(WORKSPACE_PATH.into(), workspace.path.as_os_str().to_owned());
     values.insert(SCOPE_TOKEN.into(), token.into());
     values.insert(
         RESERVED_PORT_ENV.into(),
