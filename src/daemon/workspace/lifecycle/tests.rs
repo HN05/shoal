@@ -182,6 +182,8 @@ async fn keep_branch_refuses_detached_head_with_unpushed_commits() {
 #[tokio::test]
 async fn keep_branch_removes_detached_head_without_unpushed_commits() {
     let (_root, manager, workspace) = fixture().await;
+    let repo = manager.repository(&workspace.repository_id).await.unwrap();
+    let head = git(&workspace.path, &["rev-parse", "HEAD"]);
     git(&workspace.path, &["switch", "--detach"]);
 
     manager
@@ -194,6 +196,10 @@ async fn keep_branch_removes_detached_head_without_unpushed_commits() {
         .unwrap();
     assert!(!workspace.path.exists());
     assert!(manager.workspace(&workspace.id).await.is_err());
+    assert_eq!(
+        git(&repo.path, &["rev-parse", "--verify", "refs/heads/policy"]),
+        head
+    );
 }
 
 #[tokio::test]
