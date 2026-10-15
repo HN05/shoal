@@ -140,8 +140,8 @@ instead of the PR delivery guidance below.
 - `[secrets]` values are fetched in the CLI by user commands run without
   input, at agent launch or, for tool-scoped secrets, by the tool's launcher on
   each run; the daemon, state and logs never hold them, hooks drop them and
-  their launchers, ordinary executions never receive them, and worktree files
-  cannot set them.
+  their launchers, executions other than agent launches fetch none of their
+  own, and worktree files cannot set them.
 - Daemon ref updates disable Git credential and SSH askpass prompts without
   overriding the user's SSH transport; interactive Git retains normal prompting.
   Ancestry and exact-ref failures stop branch selection, refresh, and removal;

@@ -692,7 +692,7 @@ each listed program first on a private PATH, and each run of the program
 through it fetches the value and runs the next program of that name on PATH
 with the value set, or fails with the command's error. Like the agent account
 wrappers, launchers are cooperative: an absolute program path or a reset PATH
-bypasses them. Ordinary executions do not receive secrets, and hooks started
+bypasses them. Other executions fetch no secrets of their own, and hooks started
 beneath an agent drop the inherited values and launchers.
 
 ### Prompt templates
