@@ -42,7 +42,7 @@ pub struct Workspace {
     pub error: Option<String>,
     pub base_commit: Option<String>,
     pub base_ref: Option<String>,
-    /// Git's per-worktree admin directory and its device:inode identity, used
+    /// Git's per-worktree admin directory and its filesystem identity, used
     /// to verify the worktree was not moved or replaced.
     pub git_dir: Option<PathBuf>,
     pub git_dir_id: Option<String>,
