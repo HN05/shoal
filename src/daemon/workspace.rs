@@ -572,10 +572,7 @@ impl Manager {
         workspace: &Workspace,
         base: &str,
     ) -> Result<String> {
-        let commit = git::resolve_commit(&repo.path, base, git::run).await?;
-        let reference = git::run(&repo.path, &["rev-parse", "--symbolic-full-name", base]).await?;
-        let reference = reference.trim_end_matches('\n');
-        let reference = reference.starts_with("refs/").then(|| reference.to_owned());
+        let (commit, reference) = recorded_base(repo, base).await?;
         let (id, recorded_commit) = (workspace.id.clone(), commit.clone());
         self.store
             .run(move |db| {
@@ -738,6 +735,22 @@ fn derive_workspace_name(branch: &str) -> String {
     } else {
         name.chars().take(crate::validate::MAX_NAME_LEN).collect()
     }
+}
+
+/// The commit and full ref name `shoal diff` records for a workspace base;
+/// a base that names no ref, such as a commit, records no ref.
+async fn recorded_base(
+    repo: &crate::model::Repository,
+    base: &str,
+) -> Result<(String, Option<String>)> {
+    let commit = git::resolve_commit(&repo.path, base, git::run_isolated).await?;
+    let reference =
+        git::run_isolated(&repo.path, &["rev-parse", "--symbolic-full-name", base]).await?;
+    let reference = reference.trim_end_matches('\n');
+    Ok((
+        commit,
+        reference.starts_with("refs/").then(|| reference.to_owned()),
+    ))
 }
 
 /// Existing worktrees use a live local default ref, or their opening commit.
