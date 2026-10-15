@@ -139,16 +139,14 @@ fn managed_update_preserves_pid_ownership_and_queued_requests() {
     let gate = root.path().join("replacement-started");
     let replacement = root.path().join("replacement");
     symlink(env!("CARGO_BIN_EXE_shoal"), &launcher).unwrap();
-    fs::write(
+    support::install_test_script(
         &replacement,
         r#"#!/bin/sh
 printf ready > "$SHOAL_TEST_UPDATE_GATE"
 IFS= read -r resume
 exec "$SHOAL_TEST_REAL_BINARY" "$@"
 "#,
-    )
-    .unwrap();
-    fs::set_permissions(&replacement, fs::Permissions::from_mode(0o755)).unwrap();
+    );
     let log = tempfile::tempfile().unwrap();
     let mut launch = support::isolated(root.path(), &launcher);
     launch
@@ -472,8 +470,7 @@ esac
 "#;
         for name in ["launchctl", "systemctl"] {
             let path = bin.join(name);
-            fs::write(&path, script).unwrap();
-            fs::set_permissions(path, fs::Permissions::from_mode(0o700)).unwrap();
+            support::install_test_script_with_mode(&path, script, 0o700);
         }
         let pid = root.path().join("pid");
         Self { root, bin, pid }

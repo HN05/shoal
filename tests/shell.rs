@@ -1,6 +1,6 @@
 mod support;
 
-use std::{fs, os::unix::fs::PermissionsExt};
+use std::fs;
 
 #[test]
 fn shell_recovers_after_cleanup_without_losing_command_status() {
@@ -12,9 +12,8 @@ fn shell_recovers_after_cleanup_without_losing_command_status() {
         .unwrap();
     assert!(output.status.success());
     fs::write(&integration, output.stdout).unwrap();
-    fs::create_dir(root.path().join("bin")).unwrap();
     let stub = root.path().join("bin/shoal");
-    fs::write(
+    support::install_test_script(
         &stub,
         r#"#!/bin/sh
 case "$1" in
@@ -26,9 +25,7 @@ case "$1" in
   *) exec "$TEST_SHOAL" "$@" ;;
 esac
 "#,
-    )
-    .unwrap();
-    fs::set_permissions(&stub, fs::Permissions::from_mode(0o755)).unwrap();
+    );
 
     for shell in ["bash", "zsh"] {
         let output = support::isolated(root.path(), shell)

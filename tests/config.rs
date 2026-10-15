@@ -3,7 +3,7 @@ mod support;
 #[path = "support/pty.rs"]
 mod pty;
 
-use std::{fs, os::unix::fs::PermissionsExt, path::Path, process::Command};
+use std::{fs, path::Path, process::Command};
 
 fn command(home: &Path) -> Command {
     let mut command = support::cli(home);
@@ -195,13 +195,10 @@ fn install_picks_an_omitted_packaged_config() {
         .unwrap();
     assert!(String::from_utf8_lossy(&missing.stderr).contains("missing argument"));
     let fzf = home.path().join("bin/fzf");
-    fs::create_dir_all(fzf.parent().unwrap()).unwrap();
-    fs::write(
+    support::install_test_script(
         &fzf,
         "#!/bin/sh\ncat > \"$HOME/rows\"\nhead -n 1 \"$HOME/rows\"\n",
-    )
-    .unwrap();
-    fs::set_permissions(&fzf, fs::Permissions::from_mode(0o755)).unwrap();
+    );
     let (_master, slave) = pty::open();
     let output = command(home.path())
         .args(["config", "install"])

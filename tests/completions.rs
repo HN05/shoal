@@ -1,15 +1,13 @@
 mod support;
 
-use std::{fs, os::unix::fs::PermissionsExt, path::Path, process::Command};
+use std::{fs, path::Path, process::Command};
 
 /// Agents complete only when their executables are installed.
 fn install_programs(home: &Path, programs: &[&str]) {
     let bin = home.join("bin");
-    fs::create_dir_all(&bin).unwrap();
     for program in programs {
         let path = bin.join(program);
-        fs::write(&path, "#!/bin/sh\n").unwrap();
-        fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
+        support::install_test_script(&path, "#!/bin/sh\n");
     }
 }
 
