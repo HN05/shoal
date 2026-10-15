@@ -124,6 +124,7 @@ fn selection_preserves_relative_load_name_ties_and_shared_readers() -> Result<()
         name: "next".into(),
         resource: None,
         reason: None,
+        queue: false,
     };
     let usage = active.iter().collect::<PoolUsage<'_>>();
     assert_eq!(

@@ -44,6 +44,7 @@ pub(super) async fn run(
                 resource,
                 name,
                 reason,
+                queue: wait > 0,
             };
             acquire(ctx, workspace, request, wait).await
         }

@@ -52,6 +52,7 @@ pub(super) async fn run(
                 device,
                 runtime,
                 reason,
+                queue: wait > 0,
             };
             acquire(ctx, workspace, request, wait).await
         }

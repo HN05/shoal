@@ -17,6 +17,7 @@ mod overload;
 #[cfg(test)]
 mod overload_tests;
 pub mod ports;
+pub(crate) mod queue;
 pub mod recovery;
 pub mod resources;
 pub mod scope;

@@ -676,6 +676,16 @@ Release hooks also run in the shared removal path while the worktree exists;
 all permits remain owned until removal succeeds. User scripts own integrations
 with the underlying resources.
 
+Busy resource and simulator requests may queue. The daemon keeps queued lease names
+in arrival order per pool, and one queue for simulators; while any remain, only the
+earliest may claim new capacity, so every other request is busy even when capacity
+is free. Strict order lets a request for a busy member or a writer hold back requests
+that could proceed, so no request starves. Renewals and approval requests ignore the
+queue; grants, approval outcomes and errors give up the place. Queued commands poll,
+and a place lasts while a request is in progress or polled within 30 seconds. The
+queue lives in memory, so a daemon restart loses the order; commands still polling
+join again.
+
 Configured resources may require human approval for scoped acquisition. The daemon
 persists a request with a caller-supplied reason and the effective allocation settings;
 only an unscoped caller decides it. Pending requests consume no capacity. Approval

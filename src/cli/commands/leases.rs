@@ -64,6 +64,7 @@ pub(super) async fn acquire(
                 device,
                 runtime,
                 reason: lease.reason,
+                queue: lease.wait > 0,
             };
             simulators::acquire(ctx, workspace, request, lease.wait).await
         }
@@ -111,6 +112,7 @@ fn resource_request(
         name: lease.name.clone(),
         resource: member,
         reason: lease.reason.clone(),
+        queue: lease.wait > 0,
     }
 }
 

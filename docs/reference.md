@@ -1678,7 +1678,7 @@ shoal release resource devices --name tests
 Each lease takes one slot from the pool and the chosen member; an explicit member
 never changes silently. Repeating a pool and lease name (default `default`) returns
 the existing permit. `--json` returns the lease or `acquired: false` with exit 2;
-`--wait` polls for up to 3600 seconds without fairness. Global names cannot be
+`--wait` polls for up to 3600 seconds, in arrival order. Global names cannot be
 redefined by a repository; repository pools are keyed by repository, so equal names
 elsewhere are independent. Global changes apply on reload, repository config is read
 per request, and conflicting definitions block new claims until they agree or leases

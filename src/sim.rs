@@ -15,7 +15,7 @@ use audit::{CleanAction, CleanRequest, CleanRequestStatus, EvictedDevice};
 use simctl::Inventory;
 
 use crate::{
-    daemon::{access, allocation::Allocation, workspace::Manager},
+    daemon::{access, allocation::Allocation, queue, workspace::Manager},
     model::Workspace,
     state::{WorkspaceState, states},
     time::unix_seconds,
@@ -105,6 +105,9 @@ pub struct SimRequest {
     pub device: Option<String>,
     pub runtime: Option<String>,
     pub reason: Option<String>,
+    /// Take a place in the simulator queue while simulators are busy.
+    #[serde(default)]
+    pub queue: bool,
 }
 
 states!(SimulatorState {
@@ -287,6 +290,14 @@ impl Manager {
         request: SimRequest,
         execution_id: Option<String>,
     ) -> Result<Allocation<Box<Simulator>>> {
+        // Join before the gate: waiting behind another boot keeps the place.
+        let workspace_id = self.workspace(selector).await?.id;
+        let mut place = self.queues.enter(
+            access::Target::Simulator,
+            &workspace_id,
+            &request.name,
+            request.queue,
+        );
         let _guard = self.simulator_gate.lock().await;
         let workspace = self.workspace(selector).await?;
         let scoped = execution_id.is_some();
@@ -300,8 +311,9 @@ impl Manager {
         };
         let workspace_name = workspace.name.clone();
         let result = self
-            .allocate_simulator(workspace, request, &mut audit, scoped)
+            .allocate_simulator(workspace, request, &mut audit, scoped, place.ahead())
             .await;
+        place.settle(&result);
         if let Ok(outcome) = &result {
             self.notify_allocation(&workspace_name, outcome, "simulator: ")
                 .await;
@@ -342,12 +354,14 @@ impl Manager {
 
     /// All simctl transitions are serialized by the caller. Never hold a SQLite
     /// transaction across a boot; other requests must remain responsive.
+    /// Earlier queued requests keep new devices busy, not existing leases.
     async fn allocate_simulator(
         &self,
         workspace: Workspace,
         request: SimRequest,
         audit: &mut Option<CleanRequest>,
         scoped: bool,
+        ahead: usize,
     ) -> Result<Allocation<Box<Simulator>>> {
         validate::name("simulator lease", &request.name)?;
         validate::reason("simulator", request.reason.as_deref())?;
@@ -416,6 +430,9 @@ impl Manager {
             if let Some(pending) = pending {
                 return Ok(Allocation::Approval(Box::new(pending)));
             }
+        }
+        if let Some(queued) = queue::behind(ahead, "simulators") {
+            return Ok(queued);
         }
         // Cache live counts without booting stopped devices just to inspect them.
         if request.clean && records.len() >= limits.max_devices {

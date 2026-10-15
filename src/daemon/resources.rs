@@ -17,6 +17,7 @@ use crate::{
     daemon::{
         access::{self, AccessRequest, ResourceSpecification, Specification, Target},
         allocation::Allocation,
+        queue,
         scope::Caller,
         store,
         workspace::{GuardMode, Manager},
@@ -27,7 +28,7 @@ use crate::{
 
 /// Where a pool's leases are shared: across every repository or within one.
 /// Spelled `global` or `repo/<repository id>` in the database and JSON.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Scope {
     Global,
     Repo(String),
@@ -216,6 +217,9 @@ pub struct ResourceRequest {
     pub name: String,
     pub resource: Option<String>,
     pub reason: Option<String>,
+    /// Take a place in the pool's arrival-order queue while it is busy.
+    #[serde(default)]
+    pub queue: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -607,20 +611,27 @@ impl Manager {
         }
         let workspace_name = workspace.name.clone();
         let scoped = caller.is_some();
+        let target = Target::Resource {
+            scope: scope.clone(),
+            pool: request.pool.clone(),
+        };
+        let mut place = self
+            .queues
+            .enter(target, &workspace.id, &request.name, request.queue);
+        let ahead = place.ahead();
         let acquisition = self
             .store
             .run(move |db| {
-                acquire_lease(
-                    db,
-                    workspace.id,
-                    scope,
-                    definition,
-                    request,
-                    related,
+                let claimant = Claimant {
+                    workspace_id: workspace.id,
                     scoped,
-                )
+                    ahead,
+                };
+                acquire_lease(db, claimant, scope, definition, request, related)
             })
-            .await?;
+            .await;
+        place.settle(&acquisition);
+        let acquisition = acquisition?;
         if let Allocation::Granted(lease) = &acquisition
             && let Some(command) = hook
         {
@@ -756,17 +767,31 @@ impl Manager {
     }
 }
 
+/// The workspace asking for a lease and its standing.
+struct Claimant {
+    workspace_id: String,
+    /// Scoped callers need configured approvals.
+    scoped: bool,
+    /// Queued requests that arrived earlier.
+    ahead: usize,
+}
+
 /// Claim or renew atomically. Approval and grant outcomes commit; busy outcomes
-/// leave the pool definition and access records unchanged.
+/// leave the pool definition and access records unchanged. Earlier queued
+/// requests keep new claims busy but never block renewal or approval.
 fn acquire_lease(
     db: &mut Connection,
-    workspace_id: String,
+    claimant: Claimant,
     scope: Scope,
     definition: Definition,
     mut request: ResourceRequest,
     mut related: repositories::Related,
-    scoped: bool,
 ) -> Result<Allocation<ResourceLease>> {
+    let Claimant {
+        workspace_id,
+        scoped,
+        ahead,
+    } = claimant;
     let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
     store::require_ready(&tx, &workspace_id)?;
     if let Some(existing) = named_lease(&tx, &workspace_id, &request.pool, &request.name)? {
@@ -854,6 +879,9 @@ fn acquire_lease(
             tx.commit()?;
             return Ok(Allocation::Approval(Box::new(approval)));
         }
+    }
+    if let Some(queued) = queue::behind(ahead, &format!("pool {}", request.pool)) {
+        return Ok(queued);
     }
     if !settings.can_acquire(mode, usage.member(resource), pool_available) {
         return busy();
@@ -1093,6 +1121,7 @@ mod tests {
                 name: "three".into(),
                 resource: None,
                 reason: Some("renewed".into()),
+                queue: false,
             };
             // A new global definition cannot hide a repository-scoped name.
             let error = renew_lease(
@@ -1179,5 +1208,74 @@ mod tests {
         let restored: ResourceConfig = serde_json::from_value(json)?;
         assert_eq!(restored, merged.resources["server"]);
         Ok(())
+    }
+
+    #[tokio::test]
+    async fn queued_requests_take_freed_capacity_in_arrival_order() {
+        use crate::test_support::{manager, repository};
+        let (temp, manager) = manager().await;
+        let config = crate::config::Config::path(&manager.paths);
+        std::fs::create_dir_all(config.parent().unwrap()).unwrap();
+        std::fs::write(config, "[resources.lock]\n").unwrap();
+        manager.reload_config().await.unwrap();
+        let repository_dir = repository(temp.path(), "repo");
+        let repo = manager
+            .register_repository(repository_dir.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        let workspace = manager
+            .create_workspace(&repo.id, "worker".into(), None, None, None)
+            .await
+            .unwrap()
+            .id;
+        let acquire = async |name: &str, queue: bool| {
+            let request = ResourceRequest {
+                mode: None,
+                kind: None,
+                pool: "lock".into(),
+                name: name.into(),
+                resource: None,
+                reason: None,
+                queue,
+            };
+            match manager.acquire_resource(&workspace, request, None).await {
+                Ok(Allocation::Granted(lease)) => Ok(lease.name),
+                Ok(Allocation::Busy(message)) => Err(message),
+                Ok(Allocation::Approval(_)) => panic!("no approval configured"),
+                Err(error) => panic!("{error:#}"),
+            }
+        };
+        assert_eq!(acquire("held", false).await.unwrap(), "held");
+        assert!(
+            acquire("first", true)
+                .await
+                .unwrap_err()
+                .starts_with("no compatible")
+        );
+        assert_eq!(
+            acquire("second", true).await.unwrap_err(),
+            "1 earlier request is queued for pool lock"
+        );
+        manager
+            .release_resource(&workspace, "lock".into(), "held".into())
+            .await
+            .unwrap();
+        assert_eq!(
+            acquire("late", false).await.unwrap_err(),
+            "2 earlier requests are queued for pool lock",
+            "free capacity goes to the queue"
+        );
+        assert_eq!(
+            acquire("second", true).await.unwrap_err(),
+            "1 earlier request is queued for pool lock"
+        );
+        assert_eq!(acquire("first", true).await.unwrap(), "first");
+        assert_eq!(acquire("first", false).await.unwrap(), "first", "renewal");
+        assert!(
+            acquire("second", true)
+                .await
+                .unwrap_err()
+                .starts_with("no compatible")
+        );
     }
 }

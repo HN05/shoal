@@ -741,6 +741,7 @@ mod tests {
                         name: "lock".into(),
                         resource: None,
                         reason: None,
+                        queue: false,
                     },
                     None,
                 )
@@ -961,6 +962,7 @@ mod tests {
                 name: "default".into(),
                 resource: None,
                 reason: None,
+                queue: false,
             };
         fs::write(workspace.path.join("work"), "landed later\n").unwrap();
         commit(&workspace.path, "work");

@@ -335,6 +335,7 @@ mod tests {
             device: None,
             runtime: None,
             reason: None,
+            queue: false,
         }
     }
 

@@ -106,6 +106,9 @@ instead of the PR delivery guidance below.
   malformed ownership must not disappear from filtered results.
   Omitted runtimes select the latest installed, available compatible iOS version;
   explicit runtimes stay pinned and existing leases keep their runtime.
+- Queued requests claim new capacity in arrival order per pool, and for
+  simulators; while any remain, every other new claim is busy. Renewals and
+  approval requests ignore the queue, and a request in progress keeps its place.
 - Allocation is atomic and persisted before the external mutation (simctl,
   Worktrunk). Leases survive restart and failed removal and are released only
   with successful removal. Active permits block automatic cleanup. Caller-named workspace holds persist

@@ -78,6 +78,8 @@ pub struct Manager {
     pub(crate) paths: Paths,
     /// Serializes every simctl transition.
     pub(crate) simulator_gate: Mutex<()>,
+    /// Arrival order of queued resource and simulator requests.
+    pub(crate) queues: super::queue::Queues,
     /// Serializes repository registration, removal, and local config changes.
     registry_gate: Mutex<()>,
     /// Per-repository gate for ref updates and worktree creation/removal.
@@ -127,6 +129,7 @@ impl Manager {
             background_operations: Arc::new(RwLock::new(())),
             paths,
             simulator_gate: Mutex::new(()),
+            queues: Default::default(),
             registry_gate: Mutex::new(()),
             git_gates: Mutex::new(HashMap::new()),
             resource_gates: Mutex::new(HashMap::new()),
