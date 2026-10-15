@@ -6,12 +6,13 @@ use std::collections::BTreeMap;
 use anyhow::{Context, Result, bail, ensure};
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use super::{
     ForgeRepo,
     account::Account,
-    api::Request,
+    action::{Edit, MergeMethod},
+    api::{HttpMethod, Request},
     item::{Current, Item, ItemState, PrSummary, text},
     link::ItemKind,
     pr::state::Verdict,
@@ -238,6 +239,87 @@ impl ForgeRepo {
         }));
         Ok(Some(reviews))
     }
+
+    /// One update of the changed fields. Bitbucket has no labels, keeps
+    /// draft state as a flag, and replaces reviewers by Atlassian account ID.
+    pub(super) fn bitbucket_edit(&self, current: &Current, edit: &Edit) -> Result<Vec<Request>> {
+        ensure!(
+            edit.add_labels.is_empty() && edit.remove_labels.is_empty(),
+            "Bitbucket has no labels"
+        );
+        let item = &current.item;
+        // A pull request update needs its title even when it keeps it.
+        let mut fields = json!({ "title": edit.title.as_deref().unwrap_or(&item.title) });
+        if let Some(body) = &edit.body {
+            match item.kind {
+                ItemKind::Issue => fields["content"] = json!({ "raw": body }),
+                ItemKind::Pr => fields["description"] = body.clone().into(),
+            }
+        }
+        if let Some(base) = &edit.base {
+            fields["destination"] = json!({ "branch": { "name": base } });
+        }
+        if let Some(draft) = edit.draft {
+            fields["draft"] = draft.into();
+        }
+        if !edit.add_reviewers.is_empty() || !edit.remove_reviewers.is_empty() {
+            let mut reviewers: Vec<&String> = current
+                .reviewers
+                .iter()
+                .filter(|id| !edit.remove_reviewers.contains(id))
+                .collect();
+            for id in &edit.add_reviewers {
+                if !reviewers.contains(&id) {
+                    reviewers.push(id);
+                }
+            }
+            fields["reviewers"] = reviewers
+                .into_iter()
+                .map(|id| json!({ "account_id": id }))
+                .collect();
+        }
+        Ok(vec![Request::new(
+            HttpMethod::Put,
+            self.item_endpoint(item.kind, item.number),
+            Some(fields),
+        )])
+    }
+
+    /// Decline a pull request, or resolve or reopen an issue. Bitbucket
+    /// cannot reopen a declined pull request.
+    pub(super) fn bitbucket_state(&self, item: &Item, state: ItemState) -> Result<Request> {
+        let endpoint = self.item_endpoint(item.kind, item.number);
+        Ok(match (item.kind, state) {
+            (ItemKind::Pr, ItemState::Open) => {
+                bail!("Bitbucket cannot reopen a declined pull request")
+            }
+            (ItemKind::Pr, _) => {
+                Request::new(HttpMethod::Post, format!("{endpoint}/decline"), None)
+            }
+            (ItemKind::Issue, ItemState::Open) => {
+                Request::new(HttpMethod::Put, endpoint, Some(json!({ "state": "open" })))
+            }
+            (ItemKind::Issue, _) => Request::new(
+                HttpMethod::Put,
+                endpoint,
+                Some(json!({ "state": "resolved" })),
+            ),
+        })
+    }
+}
+
+/// Bitbucket's strategy for each merge method; rebasing fast-forwards.
+pub(super) fn merge(endpoint: String, method: MergeMethod, delete_branch: bool) -> Request {
+    let strategy = match method {
+        MergeMethod::Merge => "merge_commit",
+        MergeMethod::Squash => "squash",
+        MergeMethod::Rebase => "rebase_fast_forward",
+    };
+    Request::new(
+        HttpMethod::Post,
+        endpoint,
+        Some(json!({ "merge_strategy": strategy, "close_source_branch": delete_branch })),
+    )
 }
 
 /// The newest status of each build, by its key.
@@ -512,6 +594,69 @@ mod tests {
                 ("Bug", "a.rs", Some(3), Some(true)),
                 ("Fixed", "a.rs", Some(3), Some(true))
             ]
+        );
+    }
+
+    #[test]
+    fn changes_keep_the_title_and_cannot_reopen_pull_requests() {
+        let mut current = bitbucket()
+            .current(
+                ItemKind::Pr,
+                7,
+                &json!({"id": 7, "title": "Fix", "state": "OPEN",
+                    "reviewers": [{"account_id": "a"}, {"account_id": "b"}],
+                    "source": {"branch": {"name": "topic"}}, "destination": {"branch": {"name": "main"}}}),
+            )
+            .unwrap();
+        let edit = Edit {
+            body: Some("Why".into()),
+            base: Some("next".into()),
+            draft: Some(true),
+            add_reviewers: vec!["c".into()],
+            remove_reviewers: vec!["a".into()],
+            ..Edit::default()
+        };
+        let requests = bitbucket().bitbucket_edit(&current, &edit).unwrap();
+        assert_eq!(
+            requests,
+            [Request::new(
+                HttpMethod::Put,
+                "repositories/workspace/repo/pullrequests/7".into(),
+                Some(json!({"title": "Fix", "description": "Why", "draft": true,
+                    "destination": {"branch": {"name": "next"}},
+                    "reviewers": [{"account_id": "b"}, {"account_id": "c"}]})),
+            )]
+        );
+        let labels = Edit {
+            add_labels: vec!["bug".into()],
+            ..Edit::default()
+        };
+        assert!(bitbucket().bitbucket_edit(&current, &labels).is_err());
+        assert_eq!(
+            bitbucket()
+                .bitbucket_state(&current.item, ItemState::Closed)
+                .unwrap()
+                .endpoint,
+            "repositories/workspace/repo/pullrequests/7/decline"
+        );
+        current.item.state = ItemState::Closed;
+        assert!(
+            bitbucket()
+                .bitbucket_state(&current.item, ItemState::Open)
+                .is_err()
+        );
+        current.item.kind = ItemKind::Issue;
+        current.item.pr = None;
+        assert_eq!(
+            bitbucket()
+                .bitbucket_state(&current.item, ItemState::Open)
+                .unwrap()
+                .body,
+            Some(json!({"state": "open"}))
+        );
+        assert_eq!(
+            merge("merge".into(), MergeMethod::Rebase, true).body,
+            Some(json!({"merge_strategy": "rebase_fast_forward", "close_source_branch": true}))
         );
     }
 

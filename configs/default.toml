@@ -68,6 +68,13 @@ codex = ["codex", "{args}", "--sandbox", "danger-full-access", "--ask-for-approv
 # gh = "~/bin/gh-agent"
 # git_profile = "agent"
 
+# Bitbucket Cloud credentials: a command that prints an access token, or an
+# Atlassian API token with its account email. Without them only public
+# repositories are readable. See docs/reference.md#forges.
+# [bitbucket]
+# token_command = ["security", "find-generic-password", "-s", "bitbucket", "-w"]
+# email = "you@example.com"
+
 # Additional AI tools: command runs one as `shoal droid`, and
 # shoal skill install adds <skill>/SKILL.md beneath skill_dir.
 # [ai.droid]

@@ -283,8 +283,8 @@ once; options after `--` go to the agent. Codex uses CLI mode for issue prompts.
 PR links open their head branch against the refreshed remote base, reusing an
 owned workspace when present, and link the PR once the workspace is ready; a
 refused link only warns. Fork PRs cannot be opened. Branch URLs use
-GitHub's `/tree/<branch>`, GitLab's `/-/tree/<branch>` or Forgejo's
-`/src/branch/<branch>` route and open the
+GitHub's `/tree/<branch>`, GitLab's `/-/tree/<branch>`, Bitbucket's
+`/branch/<branch>` or Forgejo's `/src/branch/<branch>` route and open the
 origin branch, preserving slashes and decoding URL escapes. Setup, hooks and
 existing-branch ownership checks apply. These forms launch an agent with `--agent`.
 `add <repository> --issue <number-or-url>` remains available with an optional
@@ -1235,12 +1235,24 @@ confirmation and includes them in its JSON result; `--yes` skips confirmation.
 ### Forges
 
 Shoal reads and changes the issues and PRs of the forge serving a repository's
-`origin`. `github.com` is GitHub; `gitlab.com`, a host with a `gitlab` name
-label and a host `glab` has a login for are GitLab; any other host is Forgejo or
-Gitea, which share an API. Lookups use your login: `gh` on GitHub, `glab` on
-GitLab, and on Forgejo or Gitea the token `fj` saved for the host, else `tea`'s
-login through `tea api`, else none, which reads only public repositories. Shoal
-stores no forge credentials.
+`origin`. `github.com` is GitHub and `bitbucket.org` is Bitbucket Cloud;
+`gitlab.com`, a host with a `gitlab` name label and a host `glab` has a login for
+are GitLab; any other host is Forgejo or Gitea, which share an API. Lookups use
+your login: `gh` on GitHub, `glab` on GitLab, on Forgejo or Gitea the token `fj`
+saved for the host, else `tea`'s login through `tea api`, and on Bitbucket the
+token `[bitbucket]` configures. Without a login, only public repositories are
+readable. Shoal stores no forge credentials.
+
+Bitbucket has no official CLI, so the global `[bitbucket]` table names a
+`token_command`, an argument array whose output is the token; Shoal runs it for
+each lookup or change and keeps nothing. The token is an access token, or an
+Atlassian API token when `email` names its account:
+
+```toml
+[bitbucket]
+token_command = ["security", "find-generic-password", "-s", "bitbucket", "-w"]
+email = "you@example.com"
+```
 
 GitLab projects may sit in subgroups, its merge requests are PRs, and its item
 URLs use `/-/issues/` and `/-/merge_requests/`. Reviewers are usernames, and
@@ -1248,6 +1260,13 @@ URLs use `/-/issues/` and `/-/merge_requests/`. Reviewers are usernames, and
 `--method rebase` is refused. CI checks are the latest status of each job and
 external check on the head commit, and reviews are reviewers' states and
 approvals; approval rules and merge trains are not modeled.
+
+Bitbucket repositories live under a workspace and its PR URLs use
+`/pull-requests/`. Its PRs have no labels and it reports no merge conflicts.
+Reviewers are Atlassian account IDs, declining a PR closes it and cannot be
+undone, and `--method rebase` rebases and fast-forwards. CI checks are the
+builds reported on the PR, and reviews are participants' approvals and change
+requests. Agents' changes use your Bitbucket credentials.
 
 ### Issue and PR actions
 

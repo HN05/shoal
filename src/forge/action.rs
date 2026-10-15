@@ -8,6 +8,7 @@ use super::{
     ForgeKind, ForgeRepo,
     account::Account,
     api::{HttpMethod, Request},
+    bitbucket,
     gitlab::gitlab_merge,
     item::{Current, Item, ItemState, draft_prefix},
     link::ItemKind,
@@ -128,27 +129,20 @@ impl ForgeRepo {
     /// The requests that carry out `action` on `current`, in order.
     pub(crate) fn plan(&self, current: &Current, action: &Action) -> Result<Vec<Request>> {
         let item = &current.item;
-        ensure!(
-            self.kind != ForgeKind::Bitbucket,
-            "changing Bitbucket items is not supported yet"
-        );
         Ok(match action {
             Action::Edit(edit) => match self.kind {
                 ForgeKind::GitHub | ForgeKind::Forgejo => self.plan_edit(current, edit)?,
-                ForgeKind::GitLab | ForgeKind::Bitbucket => self.gitlab_edit(current, edit)?,
+                ForgeKind::GitLab => self.gitlab_edit(current, edit)?,
+                ForgeKind::Bitbucket => self.bitbucket_edit(current, edit)?,
             },
-            Action::Comment { body } => vec![Request::new(
-                HttpMethod::Post,
-                self.comments_endpoint(item.kind, item.number),
-                Some(json!({ "body": body })),
-            )],
+            Action::Comment { body } => vec![self.comment_request(item, body)],
             Action::Close => {
                 ensure!(
                     item.state == ItemState::Open,
                     "#{} is not open",
                     item.number
                 );
-                vec![self.state_request(item, ItemState::Closed)]
+                vec![self.state_request(item, ItemState::Closed)?]
             }
             Action::Reopen => {
                 ensure!(
@@ -156,7 +150,7 @@ impl ForgeRepo {
                     "#{} is not closed, or was merged",
                     item.number
                 );
-                vec![self.state_request(item, ItemState::Open)]
+                vec![self.state_request(item, ItemState::Open)?]
             }
             Action::Merge {
                 method,
@@ -172,34 +166,40 @@ impl ForgeRepo {
         })
     }
 
-    /// Where comments on the item are posted.
-    fn comments_endpoint(&self, kind: ItemKind, number: u64) -> String {
-        match self.kind {
-            ForgeKind::GitHub | ForgeKind::Forgejo => {
-                self.repo_endpoint(&format!("issues/{number}/comments"))
-            }
-            ForgeKind::GitLab | ForgeKind::Bitbucket => {
-                format!("{}/notes", self.item_endpoint(kind, number))
-            }
-        }
+    /// Post `body` as a comment on the item.
+    fn comment_request(&self, item: &Item, body: &str) -> Request {
+        let item_endpoint = self.item_endpoint(item.kind, item.number);
+        let (endpoint, body) = match self.kind {
+            ForgeKind::GitHub | ForgeKind::Forgejo => (
+                self.repo_endpoint(&format!("issues/{}/comments", item.number)),
+                json!({ "body": body }),
+            ),
+            ForgeKind::GitLab => (format!("{item_endpoint}/notes"), json!({ "body": body })),
+            ForgeKind::Bitbucket => (
+                format!("{item_endpoint}/comments"),
+                json!({ "content": { "raw": body } }),
+            ),
+        };
+        Request::new(HttpMethod::Post, endpoint, Some(body))
     }
 
     /// Close or reopen the item.
-    fn state_request(&self, item: &Item, state: ItemState) -> Request {
+    fn state_request(&self, item: &Item, state: ItemState) -> Result<Request> {
         let endpoint = self.item_endpoint(item.kind, item.number);
         let open = state == ItemState::Open;
-        match self.kind {
+        Ok(match self.kind {
             ForgeKind::GitHub | ForgeKind::Forgejo => Request::new(
                 HttpMethod::Patch,
                 endpoint,
                 Some(json!({ "state": if open { "open" } else { "closed" } })),
             ),
-            ForgeKind::GitLab | ForgeKind::Bitbucket => Request::new(
+            ForgeKind::GitLab => Request::new(
                 HttpMethod::Put,
                 endpoint,
                 Some(json!({ "state_event": if open { "reopen" } else { "close" } })),
             ),
-        }
+            ForgeKind::Bitbucket => self.bitbucket_state(item, state)?,
+        })
     }
 
     fn plan_merge(
@@ -243,9 +243,8 @@ impl ForgeRepo {
                     "delete_branch_after_merge": delete_branch,
                 })),
             )],
-            ForgeKind::GitLab | ForgeKind::Bitbucket => {
-                vec![gitlab_merge(merge, method, delete_branch)?]
-            }
+            ForgeKind::GitLab => vec![gitlab_merge(merge, method, delete_branch)?],
+            ForgeKind::Bitbucket => vec![bitbucket::merge(merge, method, delete_branch)],
         })
     }
 

@@ -590,13 +590,16 @@ in a terminal to an app built on Shoal, gets one item model, one account rule
 and one policy. Issue and PR actions are typed (edit, comment, close, reopen,
 merge) and planned per forge as REST requests: `gh api` and `glab api`, which
 own GitHub's and GitLab's logins, or curl with the token fj saved for a Forgejo
-host, since fj has no API passthrough. Gitea shares Forgejo's API; a host fj has no login for uses tea's
+host, since fj has no API passthrough, or the configured Bitbucket token. Gitea shares Forgejo's API; a host fj has no login for uses tea's
 login through `tea api`, which owns that token, and otherwise reads anonymously.
 The forge is selected from the remote's host and the user's local logins, without
 probing the host or requiring configuration: well-known hosts by name, a host glab
 has a login for or whose name has a `gitlab` label as GitLab, and any other as
 Forgejo or Gitea. GitLab-only concepts such as approval rules and merge trains
-stay unmodeled; approvals count as approving reviews. Forge differences stay in planning, such as Forgejo keeping draft
+stay unmodeled; approvals count as approving reviews. Bitbucket Cloud has no CLI
+to own a login, so a user-configured command supplies its token per lookup, as
+`[secrets]` commands do, and Shoal still stores no token; agents act with the
+user's Bitbucket credentials until a separate agent token is configurable. Forge differences stay in planning, such as Forgejo keeping draft
 state in the title, so callers see the same item either way. Actions run in the
 daemon, where scope applies: they act as the workspace's agent account, and
 merging stays the user's decision, so scoped callers cannot merge. Each action
