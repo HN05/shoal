@@ -3758,8 +3758,10 @@ fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
             "touch command-started; while :; do sleep 1; done",
         ]),
     ];
-    let ids = wait_for("executions to start", || {
+    let mut last_inspection = Value::Null;
+    let ids = try_wait_for(|| {
         let inspection = fixture.ok(&["inspect", "stopped"]);
+        last_inspection = inspection.clone();
         let ids = inspection["executions"]
             .as_array()
             .unwrap()
@@ -3768,7 +3770,8 @@ fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
             .filter(|id| path.join(format!("started-{id}")).exists())
             .collect::<Vec<_>>();
         (ids.len() == 2 && path.join("command-started").exists()).then_some(ids)
-    });
+    })
+    .unwrap_or_else(|| panic!("executions did not start: {last_inspection}"));
     let output = fixture
         .command()
         .current_dir(path)
@@ -7635,7 +7638,8 @@ fn deleted_worktrees_are_forgotten_with_their_resources_but_moved_ones_are_kept(
     );
     // The startup sweep forgets deleted worktrees without touching moved ones.
     fixture.restart();
-    wait_until("deleted worktrees to be forgotten", || {
+    let mut last_names = Vec::new();
+    try_wait_for(|| {
         let names: Vec<String> = fixture
             .ok(&["ls"])
             .as_array()
@@ -7643,8 +7647,10 @@ fn deleted_worktrees_are_forgotten_with_their_resources_but_moved_ones_are_kept(
             .iter()
             .map(|w| w["name"].as_str().unwrap().to_owned())
             .collect();
-        names == ["moved"]
-    });
+        last_names = names.clone();
+        (names == ["moved"]).then_some(())
+    })
+    .unwrap_or_else(|| panic!("deleted worktrees remain: {last_names:?}"));
     assert_eq!(
         fixture.ok(&["inspect", "moved"])["workspace"]["state"],
         "failed"
