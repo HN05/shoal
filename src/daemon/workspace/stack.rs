@@ -125,8 +125,7 @@ pub(super) async fn base_branch(repo: &Path, base: &str) -> Result<Option<String
     if let Some((_, branch)) = git::remote_branch(repo, base).await? {
         return Ok(Some(branch));
     }
-    let Ok(reference) = git::run_isolated(repo, &["rev-parse", "--symbolic-full-name", base]).await
-    else {
+    let Ok(reference) = git::symbolic_revision(repo, base, git::run_isolated).await else {
         return Ok(None);
     };
     Ok(git::strip_local(reference.trim_end()).map(str::to_owned))

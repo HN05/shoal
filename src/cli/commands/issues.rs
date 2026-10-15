@@ -20,7 +20,7 @@ pub(super) async fn current_repository(
     hint: &str,
 ) -> Result<String> {
     let cwd = std::env::current_dir()?;
-    if let Ok(root) = git::run(&cwd, &["rev-parse", "--show-toplevel"]).await {
+    if let Ok(root) = git::worktree_root(&cwd).await {
         let root = std::fs::canonicalize(root.trim_end())?;
         if let Some(repo) = repos.iter().find(|repo| repo.path == root) {
             return Ok(repo.id.clone());

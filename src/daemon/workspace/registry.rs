@@ -81,7 +81,7 @@ impl Manager {
             .clone()
             .unwrap_or_else(|| repository::directory_name(&source));
         let (path, workspaces_dir) = if PathBuf::from(&source).exists() {
-            let toplevel = git::run(Path::new(&source), &["rev-parse", "--show-toplevel"]).await?;
+            let toplevel = git::worktree_root(Path::new(&source)).await?;
             let path = fs::canonicalize(toplevel.trim())?;
             let root = prepare_root(&root, &state, checkouts.chain([path.as_path()]))?;
             // A checkout already placed as `<root>/<x>/<checkout>` keeps that

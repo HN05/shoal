@@ -83,7 +83,7 @@ impl Manager {
     async fn linked_git_dir(&self, workspace: &Workspace) -> Result<PathBuf> {
         let repo = self.repository(&workspace.repository_id).await?;
         // Verify this is still the checkout Shoal created before any deletion.
-        let root = git::run(&workspace.path, &["rev-parse", "--show-toplevel"]).await?;
+        let root = git::worktree_root(&workspace.path).await?;
         ensure!(
             fs::canonicalize(root.trim())? == fs::canonicalize(&workspace.path)?,
             "workspace path no longer points to its worktree root"
@@ -94,7 +94,7 @@ impl Manager {
             expected == actual,
             "workspace now belongs to a different repository"
         );
-        let actual_git_dir = git_dir(&workspace.path).await?;
+        let actual_git_dir = git::git_dir(&workspace.path).await?;
         ensure!(
             actual_git_dir != actual,
             "workspace was replaced by a main repository checkout"
@@ -105,7 +105,7 @@ impl Manager {
     /// Mark the worktree's admin directory as this workspace's and record its
     /// location and filesystem identity, returning whether anything changed.
     pub(crate) async fn record_worktree_identity(&self, workspace: &Workspace) -> Result<bool> {
-        let git_dir = git_dir(&workspace.path).await?;
+        let git_dir = git::git_dir(&workspace.path).await?;
         let marked = marked_owner(&git_dir)?.as_deref() == Some(workspace.id.as_str());
         if !marked {
             mark_owner(&git_dir, &workspace.id)?;
@@ -170,9 +170,4 @@ impl Manager {
         }
         Ok(Some(path.to_owned()))
     }
-}
-
-pub(super) async fn git_dir(path: &Path) -> Result<PathBuf> {
-    let dir = git::run(path, &["rev-parse", "--path-format=absolute", "--git-dir"]).await?;
-    Ok(fs::canonicalize(dir.trim())?)
 }

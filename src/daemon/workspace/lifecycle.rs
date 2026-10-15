@@ -6,6 +6,7 @@ use crate::{
         events::{self, EventCause, EventKind},
     },
     git::{
+        self,
         default_branch::DefaultBranchLookup,
         worktrunk::{self, BranchRemoval, FileRemoval},
     },
@@ -263,7 +264,7 @@ impl Manager {
         if !check.safe() {
             return Ok(None);
         }
-        let head = crate::git::run(&check.workspace.path, &["rev-parse", "HEAD"]).await?;
+        let head = git::revision(&check.workspace.path, "HEAD", git::run).await?;
         let activity = self.activity(id).await;
         Ok(Some((
             check.workspace.path,
@@ -454,7 +455,7 @@ impl Manager {
         // Validate explicit choices before hooks, then derive the actual
         // adapter options again from the final inspection.
         worktrunk_removal_options(&repo.path, &check, removal.choice()).await?;
-        let head_before_hooks = crate::git::run(&workspace.path, &["rev-parse", "HEAD"]).await?;
+        let head_before_hooks = crate::git::revision(&workspace.path, "HEAD", git::run).await?;
         // The hook sees the worktree intact; a failing hook retains it.
         if let Some(command) = self.workspace_hook(workspace, HookKind::PreRemove).await? {
             let configured_env = self.configured_workspace_environment(workspace).await?;
@@ -544,7 +545,7 @@ impl Manager {
                 },
                 Stage::AfterHooks { head },
             ) => ensure!(
-                crate::git::run(&workspace.path, &["rev-parse", "HEAD"]).await? == head,
+                crate::git::revision(&workspace.path, "HEAD", git::run).await? == head,
                 "HEAD changed {}; choose whether to keep or delete the branch",
                 stage.change()
             ),

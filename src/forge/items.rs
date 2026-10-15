@@ -182,7 +182,7 @@ async fn new_pull(
                 .item
                 .title
         }
-        (None, None, None) => crate::git::run(&workspace.path, &["log", "-1", "--format=%s"])
+        (None, None, None) => crate::git::latest_subject(&workspace.path)
             .await?
             .trim()
             .to_owned(),

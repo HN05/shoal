@@ -541,13 +541,10 @@ impl Manager {
 
 pub(crate) async fn current_head(workspace: &Workspace) -> Result<String> {
     ensure!(
-        git::run(&workspace.path, &["branch", "--show-current"])
-            .await?
-            .trim_end()
-            == workspace.branch,
+        git::current_branch(&workspace.path).await?.trim_end() == workspace.branch,
         "workspace is not on its recorded branch"
     );
-    Ok(git::run(&workspace.path, &["rev-parse", "HEAD"])
+    Ok(git::revision(&workspace.path, "HEAD", git::run)
         .await?
         .trim()
         .to_owned())

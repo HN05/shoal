@@ -292,7 +292,7 @@ fn verify_directory(path: &Path, expected: Option<&str>, allow_missing: bool) ->
 /// The checkout must be a plain repository whose only linked worktrees are
 /// the given Shoal workspaces.
 async fn check_checkout(repo: &Repository, workspaces: &[Workspace]) -> Result<()> {
-    let root = git::run(&repo.path, &["rev-parse", "--show-toplevel"]).await?;
+    let root = git::worktree_root(&repo.path).await?;
     ensure!(
         fs::canonicalize(root.trim())? == repo.path,
         "repository path no longer points to its checkout root"

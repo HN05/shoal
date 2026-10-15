@@ -767,8 +767,7 @@ async fn recorded_base(
     base: &str,
 ) -> Result<(String, Option<String>)> {
     let commit = git::resolve_commit(&repo.path, base, git::run_isolated).await?;
-    let reference =
-        git::run_isolated(&repo.path, &["rev-parse", "--symbolic-full-name", base]).await?;
+    let reference = git::symbolic_revision(&repo.path, base, git::run_isolated).await?;
     let reference = reference.trim_end_matches('\n');
     Ok((
         commit,
@@ -786,13 +785,12 @@ async fn existing_base(repo: &crate::model::Repository, branch: &str) -> Result<
             return Ok(default);
         }
     }
-    Ok(git::run_isolated(
-        &repo.path,
-        &["rev-parse", "--verify", &git::local_ref(branch)],
+    Ok(
+        git::verify_revision(&repo.path, &git::local_ref(branch), git::run_isolated)
+            .await?
+            .trim()
+            .to_owned(),
     )
-    .await?
-    .trim()
-    .to_owned())
 }
 
 /// Fill in what a workspace record reads from its related tables.

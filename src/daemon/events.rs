@@ -221,11 +221,7 @@ impl Manager {
         workspace: &crate::model::Workspace,
     ) -> Result<()> {
         self.verify_worktree(workspace).await?;
-        let head = crate::git::run(
-            &workspace.path,
-            &["rev-parse", "--symbolic-full-name", "HEAD"],
-        )
-        .await?;
+        let head = crate::git::symbolic_revision(&workspace.path, "HEAD", crate::git::run).await?;
         let branch = crate::git::strip_local(head.trim_end()).map(str::to_owned);
         let id = workspace.id.clone();
         self.store.run(move |db| {

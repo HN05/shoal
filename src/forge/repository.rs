@@ -126,15 +126,12 @@ pub async fn remote_url_from_source(source: &str) -> Result<Option<String>> {
 
 /// Read origin from a known checkout without interpreting its path as a URL.
 pub async fn remote_url_from_path(path: &Path) -> Result<Option<String>> {
-    let remotes = git::run(path, &["remote"]).await?;
+    let remotes = git::remotes(path, git::run).await?;
     if !remotes.lines().any(|remote| remote == "origin") {
         return Ok(None);
     }
     Ok(Some(
-        git::run(path, &["remote", "get-url", "origin"])
-            .await?
-            .trim()
-            .to_owned(),
+        git::remote_url(path, "origin").await?.trim().to_owned(),
     ))
 }
 
