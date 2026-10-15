@@ -14,7 +14,10 @@ mod support;
 use std::{
     fs,
     io::{BufRead, BufReader, Write},
-    os::unix::{fs::PermissionsExt, net::UnixStream},
+    os::unix::{
+        fs::PermissionsExt,
+        net::{UnixListener, UnixStream},
+    },
     path::Path,
     process::{Output, Stdio},
     sync::{
@@ -22,10 +25,13 @@ use std::{
         atomic::{AtomicBool, Ordering},
     },
     thread,
-    time::{Duration, Instant},
+    time::Duration,
 };
 
-use support::cli as command;
+use support::{
+    cli as command,
+    wait::{wait_for, wait_until},
+};
 
 use serde_json::{Value, json};
 use tempfile::TempDir;
@@ -155,25 +161,18 @@ exec "$SHOAL_TEST_REAL_BINARY" "$@"
     let mut daemon = DaemonGuard {
         child: launch.spawn().unwrap(),
     };
-    // Only a hang guard: readiness and the shim's file are explicit signals.
-    let deadline = Instant::now() + Duration::from_secs(60);
-    loop {
+    wait_until("daemon startup", || {
         assert!(
             daemon.child.try_wait().unwrap().is_none(),
             "daemon exited during startup"
         );
-        if command(root.path())
+        command(root.path())
             .args(["daemon", "status"])
             .output()
             .unwrap()
             .status
             .success()
-        {
-            break;
-        }
-        assert!(Instant::now() < deadline, "daemon startup hung");
-        thread::sleep(Duration::from_millis(20));
-    }
+    });
     let socket = root.path().join("state/daemon.sock");
     let before = fs::metadata(&socket).unwrap();
     let mut probe = UnixStream::connect(&socket).unwrap();
@@ -184,14 +183,13 @@ exec "$SHOAL_TEST_REAL_BINARY" "$@"
     let next = root.path().join("shoal-next");
     symlink(&replacement, &next).unwrap();
     fs::rename(next, &launcher).unwrap();
-    while !gate.exists() {
+    wait_until("replacement to start", || {
         assert!(
             daemon.child.try_wait().unwrap().is_none(),
             "daemon exited before handoff"
         );
-        assert!(Instant::now() < deadline, "replacement did not start");
-        thread::sleep(Duration::from_millis(20));
-    }
+        gate.exists()
+    });
     // The shim pauses between the two executables. The old daemon's socket and
     // lock must still be live, although neither daemon can serve requests yet.
     let other = command(root.path())
@@ -354,7 +352,8 @@ impl IncompatibleDaemon {
     }
 
     fn with_version(root: &Path, malformed: bool, version_mismatch: bool) -> Self {
-        let listener = support::fake_daemon::bind_fake_daemon(root);
+        fs::create_dir_all(root.join("state")).unwrap();
+        let listener = UnixListener::bind(root.join("state/daemon.sock")).unwrap();
         listener.set_nonblocking(true).unwrap();
         let stop = Arc::new(AtomicBool::new(false));
         let done = stop.clone();
@@ -368,18 +367,23 @@ impl IncompatibleDaemon {
                     }
                     Err(error) => panic!("{error}"),
                 };
-                let request = support::fake_daemon::read_request(&stream).unwrap();
+                stream.set_nonblocking(false).unwrap();
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(3)))
+                    .unwrap();
+                let mut line = String::new();
+                BufReader::new(&stream).read_line(&mut line).unwrap();
+                let request: Value = serde_json::from_str(&line).unwrap();
                 if malformed {
                     writeln!(stream, "not json").unwrap();
                 } else if version_mismatch {
                     let response = json!({
-                        "type": "status",
+                        "protocol": request["protocol"], "id": request["id"], "type": "status",
                         "data": {"pid": 123, "version": "0.0.0", "uptime_secs": 1,
                                  "managed": false, "unread_notifications": 0}
                     });
-                    support::fake_daemon::write_reply(&stream, &request, response);
+                    writeln!(stream, "{response}").unwrap();
                 } else {
-                    // This deliberately invalid envelope bypasses normal framing.
                     let response = json!({
                         "protocol": request["protocol"].as_u64().unwrap() + 1,
                         "id": request["id"],
@@ -670,15 +674,13 @@ fn install_is_repeatable_and_service_controls_work_with_an_isolated_manager() {
         .stderr(Stdio::null())
         .spawn()
         .unwrap();
-    let deadline = Instant::now() + Duration::from_secs(60);
-    while !marker.exists() {
+    wait_until("execution to start", || {
         assert!(
             execution.try_wait().unwrap().is_none(),
             "execution exited before install"
         );
-        assert!(Instant::now() < deadline, "execution did not start");
-        thread::sleep(Duration::from_millis(20));
-    }
+        marker.exists()
+    });
     let replacement = bin.join("updated-shoal");
     std::os::unix::fs::symlink(env!("CARGO_BIN_EXE_shoal"), &replacement).unwrap();
     run(&["install", "--executable", replacement.to_str().unwrap()]);
@@ -695,15 +697,8 @@ fn install_is_repeatable_and_service_controls_work_with_an_isolated_manager() {
     assert_eq!(inspection["executions"][0]["state"], "running");
     assert!(execution.try_wait().unwrap().is_none());
     fs::write(&finish, "").unwrap();
-    let deadline = Instant::now() + Duration::from_secs(60);
-    loop {
-        if let Some(status) = execution.try_wait().unwrap() {
-            assert!(status.success());
-            break;
-        }
-        assert!(Instant::now() < deadline, "execution did not finish");
-        thread::sleep(Duration::from_millis(20));
-    }
+    let status = wait_for("execution to finish", || execution.try_wait().unwrap());
+    assert!(status.success());
 
     // Replace only the wire response. Stopping the real managed daemon removes
     // its socket, allowing install to register and start the current binary.
@@ -803,7 +798,8 @@ fn doctor_reports_incompatible_unresponsive_and_wrong_version_daemons() {
     assert_eq!(report["checks"][1]["status"], "skipped");
 
     let root = tempfile::tempdir_in("/tmp").unwrap();
-    let _listener = support::fake_daemon::bind_fake_daemon(root.path());
+    fs::create_dir(root.path().join("state")).unwrap();
+    let _listener = UnixListener::bind(root.path().join("state/daemon.sock")).unwrap();
     let report = doctor_report(root.path());
     assert!(
         report["checks"][0]["message"]
@@ -873,21 +869,28 @@ fn cli_typed_response_errors_preserve_output_and_exit_contracts() {
         ),
     ] {
         let root = tempfile::tempdir_in("/tmp").unwrap();
-        let listener = support::fake_daemon::bind_fake_daemon(root.path());
+        fs::create_dir(root.path().join("state")).unwrap();
+        let listener = UnixListener::bind(root.path().join("state/daemon.sock")).unwrap();
         listener.set_nonblocking(true).unwrap();
         let daemon = thread::spawn(move || {
-            let deadline = Instant::now() + Duration::from_secs(60);
-            let stream = loop {
-                match listener.accept() {
-                    Ok((stream, _)) => break stream,
-                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
-                        assert!(Instant::now() < deadline, "client did not connect");
-                        thread::sleep(Duration::from_millis(10));
-                    }
-                    Err(error) => panic!("{error}"),
-                }
-            };
-            support::fake_daemon::answer(stream, |_| body);
+            let mut stream = wait_for("client connection", || match listener.accept() {
+                Ok((stream, _)) => Some(stream),
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => None,
+                Err(error) => panic!("{error}"),
+            });
+            stream.set_nonblocking(false).unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(3)))
+                .unwrap();
+            let mut line = String::new();
+            BufReader::new(&stream).read_line(&mut line).unwrap();
+            let request: Value = serde_json::from_str(&line).unwrap();
+            let mut body = body;
+            body["protocol"] = request["protocol"].clone();
+            body["id"] = request["id"].clone();
+            let mut bytes = serde_json::to_vec(&body).unwrap();
+            bytes.push(b'\n');
+            stream.write_all(&bytes).unwrap();
         });
         let output = command(root.path()).args(&args).output().unwrap();
         daemon.join().unwrap();
@@ -909,15 +912,26 @@ fn cli_typed_response_errors_preserve_output_and_exit_contracts() {
 fn event_cli_preserves_adjacent_frames_and_finishes_an_empty_listing() {
     for count in [0, 205] {
         let root = tempfile::tempdir_in("/tmp").unwrap();
-        let listener = support::fake_daemon::bind_fake_daemon(root.path());
+        fs::create_dir(root.path().join("state")).unwrap();
+        let listener = UnixListener::bind(root.path().join("state/daemon.sock")).unwrap();
         let daemon = thread::spawn(move || {
             let (mut stream, _) = listener.accept().unwrap();
-            let request = support::fake_daemon::read_request(&stream).unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(60)))
+                .unwrap();
+            let mut line = String::new();
+            BufReader::new(&stream).read_line(&mut line).unwrap();
+            let request: Value = serde_json::from_str(&line).unwrap();
             assert_eq!(
                 request["method"]["watch_workspace_events"],
                 json!({"since": 0, "follow": false})
             );
-            let response = |body| support::fake_daemon::frame(&request, body);
+            let response = |body: Value| {
+                let mut body = body;
+                body["protocol"] = request["protocol"].clone();
+                body["id"] = request["id"].clone();
+                format!("{}\n", serde_json::to_string(&body).unwrap())
+            };
             let mut frames = response(json!({"type": "ok"}));
             for id in 1..=count {
                 frames.push_str(&response(json!({"type": "event_item", "data": {

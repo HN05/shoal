@@ -8,7 +8,7 @@ use std::{
     process::{Output, Stdio},
     sync::mpsc,
     thread,
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 // Run short, offline commands with either output stream attached to a terminal.
@@ -58,23 +58,20 @@ fn run_with_reply(
     });
     let mut child = command.spawn().unwrap();
     let mut transcript = String::new();
-    let deadline = Instant::now() + Duration::from_secs(60);
-    loop {
+    if support::wait::try_wait_for(|| {
         if let Some(master) = &mut master {
             drain(master, &mut transcript);
             if transcript.contains("s)") {
                 let _ = progress.send(());
             }
         }
-        if child.try_wait().unwrap().is_some() {
-            break;
-        }
-        if Instant::now() >= deadline {
-            let _ = child.kill();
-            let _ = child.wait();
-            panic!("output command stalled: {transcript:?}");
-        }
-        thread::sleep(Duration::from_millis(10));
+        child.try_wait().unwrap()
+    })
+    .is_none()
+    {
+        let _ = child.kill();
+        let _ = child.wait();
+        panic!("output command stalled: {transcript:?}");
     }
     let output = child.wait_with_output().unwrap();
     if let Some(server) = server {

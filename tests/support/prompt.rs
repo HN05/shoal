@@ -2,8 +2,6 @@ use std::{
     io::{Read, Write},
     os::unix::process::CommandExt,
     process::{Command, Output, Stdio},
-    thread,
-    time::{Duration, Instant},
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -53,22 +51,18 @@ pub fn answer(command: &mut Command, answer: &str, options: AnswerOptions) -> (O
         .spawn()
         .unwrap();
     master.write_all(answer.as_bytes()).unwrap();
-    let deadline = Instant::now() + Duration::from_secs(60);
     let mut transcript = Vec::new();
-    let status = loop {
+    let status = crate::support::wait::try_wait_for(|| {
         let _ = master.read_to_end(&mut transcript);
-        if let Some(status) = child.try_wait().unwrap() {
-            break status;
+        child.try_wait().unwrap()
+    })
+    .unwrap_or_else(|| {
+        if options.kill_on_timeout {
+            let _ = child.kill();
+            let _ = child.wait();
         }
-        if Instant::now() >= deadline {
-            if options.kill_on_timeout {
-                let _ = child.kill();
-                let _ = child.wait();
-            }
-            panic!("hung: {transcript:?}");
-        }
-        thread::sleep(Duration::from_millis(10));
-    };
+        panic!("hung: {transcript:?}");
+    });
     // Keep the slave open while draining: macOS can discard unread data on close.
     let _ = master.read_to_end(&mut transcript);
     drop(slave);

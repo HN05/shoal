@@ -19,8 +19,7 @@ use std::{
     os::unix::{fs::PermissionsExt, net::UnixStream},
     path::{Path, PathBuf},
     process::{Child, Command, Output},
-    thread,
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 const FORGE: &str = include_str!("fixtures/forge.py");
@@ -113,11 +112,7 @@ impl Fixture {
             .unwrap();
         self.server = Some(child);
         // A hang guard only: the server writes its port once it listens.
-        let deadline = Instant::now() + Duration::from_secs(60);
-        while !port_file.exists() {
-            assert!(Instant::now() < deadline, "forge server did not start");
-            thread::sleep(Duration::from_millis(20));
-        }
+        support::wait::wait_until("forge server to start", || port_file.exists());
         format!("127.0.0.1:{}", fs::read_to_string(port_file).unwrap())
     }
 
