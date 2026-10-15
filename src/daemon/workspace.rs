@@ -43,6 +43,7 @@ use crate::{
 };
 use anyhow::{Context, Result, bail, ensure};
 use branches::UpstreamPolicy;
+use ownership::owns_git_dir;
 use rusqlite::{OptionalExtension, TransactionBehavior, params};
 use std::{
     collections::{HashMap, HashSet},
@@ -448,6 +449,12 @@ impl Manager {
 
     /// Record a new workspace, stacked on the workspace that owns `base_branch`.
     async fn insert_workspace(&self, record: Workspace, base_branch: Option<String>) -> Result<()> {
+        let marker = record
+            .git_dir
+            .as_ref()
+            .map(|git_dir| identity::marked_owner(git_dir))
+            .transpose()?
+            .flatten();
         self.store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
@@ -467,8 +474,16 @@ impl Manager {
                         !record.path.starts_with(path) && !path.starts_with(&record.path),
                         "workspace path overlaps a recorded workspace: {}", path.display()
                     );
-                    ensure!(record.git_dir.is_none() || (record.git_dir != workspace.git_dir
-                        && record.git_dir_id != workspace.git_dir_id),
+                    let owns = match record.git_dir.as_ref() {
+                        Some(git_dir) => owns_git_dir(
+                            &workspace,
+                            git_dir,
+                            record.git_dir_id.as_deref(),
+                            marker.as_deref(),
+                        )?,
+                        None => false,
+                    };
+                    ensure!(!owns,
                         "Git worktree is already owned by {}; restore its recorded path", workspace.name);
                 }
                 let base_workspace = match &base_branch {

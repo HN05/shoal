@@ -1,7 +1,10 @@
 //! Verify the recorded Git worktree before execution, recovery, or removal.
 use super::{
     Manager,
-    identity::{clear_owner, directory_identity, mark_owner, marked_owner, verify_owner},
+    identity::{
+        clear_owner, directory_identity, has_directory_identity, mark_owner, marked_owner,
+        verify_owner,
+    },
     paths::canonical_parent_with_missing,
 };
 use crate::{git, model::Workspace, state::WorkspaceState};
@@ -11,6 +14,39 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
+
+/// Whether a recorded workspace owns a Git administrative directory.
+///
+/// A marker is authoritative for workspaces created with marker support. The
+/// recorded path and filesystem identity cover records from before markers,
+/// and are both compared so path aliases and identity upgrades use the same
+/// collision rule everywhere a worktree is claimed.
+pub(super) fn owns_git_dir(
+    workspace: &Workspace,
+    git_dir: &Path,
+    identity: Option<&str>,
+    marker: Option<&str>,
+) -> Result<bool> {
+    let canonical_git_dir = fs::canonicalize(git_dir).ok();
+    let same_path = workspace.git_dir.as_ref().is_some_and(|recorded| {
+        match (canonical_git_dir.as_ref(), fs::canonicalize(recorded).ok()) {
+            (Some(canonical_git_dir), Some(canonical_recorded)) => {
+                canonical_recorded == *canonical_git_dir
+            }
+            _ => recorded == git_dir,
+        }
+    });
+    if marker == Some(workspace.id.as_str()) || same_path {
+        return Ok(true);
+    }
+    let same_identity = match (identity, workspace.git_dir_id.as_deref()) {
+        (Some(identity), Some(recorded)) => {
+            identity == recorded || has_directory_identity(git_dir, recorded)?
+        }
+        _ => false,
+    };
+    Ok(same_identity)
+}
 
 impl Manager {
     /// Validate and reactivate an owned workspace being reopened by branch or path.
@@ -81,14 +117,9 @@ impl Manager {
         workspace_id: &str,
     ) -> Result<()> {
         let marked = marked_owner(git_dir)?;
+        let identity = directory_identity(git_dir)?;
         for other in self.list_workspaces().await? {
-            let owns = marked.as_deref() == Some(other.id.as_str())
-                || other
-                    .git_dir
-                    .as_ref()
-                    .and_then(|dir| fs::canonicalize(dir).ok())
-                    .as_deref()
-                    == Some(git_dir);
+            let owns = owns_git_dir(&other, git_dir, Some(&identity), marked.as_deref())?;
             ensure!(
                 other.id == workspace_id || !owns,
                 "Git worktree is already owned by {}; restore its recorded path",
@@ -192,5 +223,77 @@ impl Manager {
             _ => verify_owner(directory, &workspace.id, workspace.git_dir_id.as_deref())?,
         }
         Ok(Some(path.to_owned()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::state::WorkspaceState;
+
+    fn workspace() -> Workspace {
+        Workspace::new_record(
+            "repository".into(),
+            "workspace".into(),
+            PathBuf::from("/workspace"),
+            "branch".into(),
+            WorkspaceState::Ready,
+        )
+    }
+
+    #[test]
+    fn ownership_uses_the_same_marker_path_and_identity_evidence() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let git_dir = temp.path().join("admin");
+        fs::create_dir(&git_dir)?;
+        let different = temp.path().join("different");
+        fs::create_dir(&different)?;
+        let mut other = workspace();
+        other.git_dir = Some(temp.path().join("admin/../admin"));
+        other.git_dir_id = Some("old-identity".into());
+
+        assert!(owns_git_dir(&other, &git_dir, Some("new-identity"), None)?);
+        assert!(owns_git_dir(
+            &other,
+            &different,
+            Some("old-identity"),
+            None
+        )?);
+        assert!(owns_git_dir(
+            &other,
+            Path::new("/missing"),
+            None,
+            Some(&other.id)
+        )?);
+        assert!(!owns_git_dir(
+            &other,
+            &different,
+            Some("new-identity"),
+            None
+        )?);
+        Ok(())
+    }
+
+    #[test]
+    fn legacy_identity_matches_the_current_birth_identity() -> Result<()> {
+        use std::os::unix::fs::MetadataExt;
+
+        let temp = tempfile::tempdir()?;
+        let git_dir = temp.path().join("admin");
+        let other_dir = temp.path().join("other");
+        fs::create_dir(&git_dir)?;
+        fs::create_dir(&other_dir)?;
+        let metadata = fs::metadata(&git_dir)?;
+        let mut other = workspace();
+        other.git_dir = Some(other_dir);
+        other.git_dir_id = Some(format!("{}:{}", metadata.dev(), metadata.ino()));
+
+        assert!(owns_git_dir(
+            &other,
+            &git_dir,
+            Some(&directory_identity(&git_dir)?),
+            None
+        )?);
+        Ok(())
     }
 }
