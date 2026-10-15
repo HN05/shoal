@@ -13326,6 +13326,7 @@ fn adopt_copy_copies_dirty_and_untracked_work_to_the_default_directory() {
     );
     fs::write(source.join("tracked"), "changed\n").unwrap();
     fs::write(source.join("untracked"), "new\n").unwrap();
+    fs::remove_file(source.join(".gitignore")).unwrap();
     let output = fixture.ok(&["adopt", source.to_str().unwrap(), "--repo", repo, "--copy"]);
     assert_eq!(output["branch"], "copy/topic-2");
     let destination = PathBuf::from(output["path"].as_str().unwrap());
@@ -13338,11 +13339,76 @@ fn adopt_copy_copies_dirty_and_untracked_work_to_the_default_directory() {
         fs::read_to_string(destination.join("untracked")).unwrap(),
         "new\n"
     );
+    assert!(!destination.join(".gitignore").exists());
     assert_eq!(
         fs::read_to_string(source.join("tracked")).unwrap(),
         "changed\n"
     );
+    assert!(!source.join(".gitignore").exists());
     assert!(source.exists());
+}
+
+#[test]
+fn adopt_copy_rolls_back_when_adoption_name_is_taken() {
+    let fixture = Fixture::new();
+    let source = fixture.root.path().join("external worktree");
+    let occupied = fixture.root.path().join("occupied worktree");
+    let repo = fixture.repo.to_str().unwrap();
+    let occupied_workspace = fixture.ok(&[
+        "add",
+        repo,
+        "copy-topic-2",
+        "--path",
+        occupied.to_str().unwrap(),
+    ]);
+    git(
+        &fixture.repo,
+        &[
+            "worktree",
+            "add",
+            "-b",
+            "copy/topic",
+            source.to_str().unwrap(),
+        ],
+    );
+    fs::write(source.join("tracked"), "changed in source\n").unwrap();
+    fs::write(source.join("untracked"), "preserve source\n").unwrap();
+    let worktrees = git(&fixture.repo, &["worktree", "list", "--porcelain"]);
+    let repositories = fixture.ok(&["repo", "list"]);
+    let destination =
+        Path::new(repositories[0]["workspaces_dir"].as_str().unwrap()).join("copy-topic-2");
+
+    let output = fixture.run(&["adopt", source.to_str().unwrap(), "--repo", repo, "--copy"]);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("workspace name already exists"));
+    assert!(source.exists());
+    assert_eq!(
+        fs::read_to_string(source.join("tracked")).unwrap(),
+        "changed in source\n"
+    );
+    assert_eq!(
+        fs::read_to_string(source.join("untracked")).unwrap(),
+        "preserve source\n"
+    );
+
+    assert!(!destination.exists());
+    assert!(
+        git(&fixture.repo, &["branch", "--list", "copy/topic-2"])
+            .trim()
+            .is_empty()
+    );
+    assert_eq!(
+        git(&fixture.repo, &["worktree", "list", "--porcelain"]),
+        worktrees
+    );
+    assert_eq!(
+        fs::read_to_string(occupied.join("tracked")).unwrap(),
+        "committed\n"
+    );
+    let workspaces = fixture.ok(&["ls"]);
+    assert_eq!(workspaces.as_array().unwrap().len(), 1);
+    assert_eq!(workspaces[0]["id"], occupied_workspace["id"]);
+    assert_eq!(workspaces[0]["path"], occupied_workspace["path"]);
 }
 
 #[test]
