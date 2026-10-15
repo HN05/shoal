@@ -32,7 +32,7 @@ use crate::{
         Completion, ConflictCheck, DiffBase, OpenedWorkspace, Repository, Workspace,
         WorkspaceStatus, WorkspaceTarget,
     },
-    protocol::{ConfigTarget, Method},
+    protocol::{Body, ConfigTarget, Method},
     removal::{BranchChoice, RemovalCheck, RemovalResult},
     shell,
     state::WorkspaceState,
@@ -1755,15 +1755,7 @@ pub(super) async fn watch_items(
     selection: crate::forge::link::Selection,
     timeout: u64,
 ) -> Result<i32> {
-    let (_stream, body) = client::open(
-        &ctx.paths,
-        Method::WatchItems {
-            workspace: workspace.clone(),
-            selection,
-            timeout_secs: timeout,
-        },
-    )
-    .await?;
+    let body = wait_for_items(ctx, &workspace, selection, timeout).await?;
     let updates = crate::forge::pr::wait::Updates::try_from(body)?;
     ctx.show(&updates, |updates| {
         for message in &updates.messages {
@@ -1799,6 +1791,45 @@ pub(super) async fn watch_items(
     Ok(0)
 }
 
+/// A daemon update closes the wait, and the replacement inherits the socket,
+/// so wait again there for the rest of the timeout. Waiting acknowledges
+/// nothing, and undelivered updates stay pending for the next wait.
+async fn wait_for_items(
+    ctx: &Context,
+    workspace: &str,
+    selection: Selection,
+    timeout: u64,
+) -> Result<Body> {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(timeout);
+    let mut timeout_secs = timeout;
+    loop {
+        let method = Method::WatchItems {
+            workspace: workspace.to_owned(),
+            selection: selection.clone(),
+            timeout_secs,
+        };
+        match client::open(&ctx.paths, method).await {
+            Ok((_stream, body)) => return Ok(body),
+            Err(error) if client::stream_closed(&error) => {
+                tokio::time::sleep(crate::protocol::timing::DAEMON_POLL_INTERVAL).await;
+                // The daemon waits whole seconds, so less than one left ends here.
+                timeout_secs = deadline
+                    .saturating_duration_since(std::time::Instant::now())
+                    .as_secs();
+                if timeout_secs == 0 {
+                    return Ok(Body::PrUpdates(crate::forge::pr::wait::Updates {
+                        updates: Vec::new(),
+                        messages: Vec::new(),
+                        timed_out: true,
+                        superseded: false,
+                    }));
+                }
+            }
+            Err(error) => return Err(error),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::editor;
@@ -1816,5 +1847,96 @@ mod tests {
         for missing in [None, Some(OsString::new()), Some(" ".into())] {
             assert!(editor([missing.clone(), missing]).is_err());
         }
+    }
+
+    #[tokio::test]
+    async fn item_wait_continues_on_the_replacement_daemon() {
+        use crate::{
+            cli::context::Context,
+            forge::pr::wait::Updates,
+            paths::Paths,
+            protocol::{self, Body, Method, Request, Response},
+        };
+        let root = tempfile::tempdir_in("/tmp").unwrap();
+        let paths = Paths::for_test(root.path());
+        paths.prepare().unwrap();
+        let listener = tokio::net::UnixListener::bind(&paths.socket).unwrap();
+        let server = tokio::spawn(async move {
+            // The updating daemon drops the wait without a reply.
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let request: Request = protocol::read(&mut stream).await.unwrap();
+            assert!(matches!(
+                request.method,
+                Method::WatchItems {
+                    timeout_secs: 600,
+                    ..
+                }
+            ));
+            drop(stream);
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let request: Request = protocol::read(&mut stream).await.unwrap();
+            let Method::WatchItems {
+                workspace,
+                timeout_secs,
+                ..
+            } = request.method
+            else {
+                panic!("expected an item wait");
+            };
+            assert_eq!(workspace, "work");
+            assert!((1..=600).contains(&timeout_secs));
+            let updates = Updates {
+                updates: Vec::new(),
+                messages: Vec::new(),
+                timed_out: true,
+                superseded: false,
+            };
+            protocol::write(
+                &mut stream,
+                &Response::new(request.id, Body::PrUpdates(updates)),
+            )
+            .await
+            .unwrap();
+        });
+        let ctx = Context::new(paths, true);
+        let body = tokio::time::timeout(
+            std::time::Duration::from_secs(60),
+            super::wait_for_items(&ctx, "work", Default::default(), 600),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert!(Updates::try_from(body).unwrap().timed_out);
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn item_wait_closed_with_under_a_second_left_times_out() {
+        use crate::{
+            cli::context::Context,
+            forge::pr::wait::Updates,
+            paths::Paths,
+            protocol::{self, Request},
+        };
+        let root = tempfile::tempdir_in("/tmp").unwrap();
+        let paths = Paths::for_test(root.path());
+        paths.prepare().unwrap();
+        let listener = tokio::net::UnixListener::bind(&paths.socket).unwrap();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let _: Request = protocol::read(&mut stream).await.unwrap();
+            drop(stream);
+            listener
+        });
+        let ctx = Context::new(paths, true);
+        let body = tokio::time::timeout(
+            std::time::Duration::from_secs(60),
+            super::wait_for_items(&ctx, "work", Default::default(), 1),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert!(Updates::try_from(body).unwrap().timed_out);
+        server.await.unwrap();
     }
 }

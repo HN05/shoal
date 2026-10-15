@@ -336,10 +336,13 @@ async fn serve(
             )
             .await;
         }
+        // A cancelled wait leaves its updates pending, so an update need not
+        // wait for it; clients wait again on the replacement.
         Method::PrWait {
             workspace,
             timeout_secs,
         } => {
+            drop(operation_guard);
             return wait_pr_updates(stream, request.id, server.manager, workspace, timeout_secs)
                 .await;
         }
@@ -348,6 +351,7 @@ async fn serve(
             selection,
             timeout_secs,
         } => {
+            drop(operation_guard);
             return watch_item_updates(
                 stream,
                 request.id,
