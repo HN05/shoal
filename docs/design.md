@@ -402,8 +402,10 @@ it, so normal precedence serves both. The setting defaults to `dynamic`, which
 uses host CPU parallelism and the existing memory-pressure and disk-space
 providers when admission runs; warning pressure halves capacity and critical
 readings stop new dynamic admissions. A positive number fixes a limit and
-`none` disables it for that layer. The provider boundary leaves room for
-per-agent resource profiles and repository-specific measurements. The queue stores
+`none` disables it for that layer. Sustained CPU utilization, per-agent resource
+profiles and routing automatic recovery through admission remain proposals;
+the provider boundary and existing slot accounting support those extensions.
+The queue stores
 the CLI's launch plan opaquely and creates nothing until a slot frees, so a
 waiting entry costs no worktree and branches from the default branch current
 when it starts. A

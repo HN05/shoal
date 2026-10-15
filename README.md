@@ -99,8 +99,9 @@ New workspaces branch from the repository's default branch unless `--base REF`
 is supplied to `add`. With shell integration, `shoal add` enters the
 workspace.
 
-Agent admission defaults to a dynamic limit based on the host's available CPU
-parallelism. Set `max_agents` globally or for one repository to a fixed limit
+Agent admission defaults to a dynamic limit based on CPU parallelism and
+enabled memory and disk pressure signals. Set `max_agents` globally or for one
+repository to a fixed limit
 (`shoal config set max_agents 3`, `--repo my-project`), `dynamic`, or `none` to
 disable queuing for that layer. `shoal add` queues agents past the effective
 limit and starts them as slots free; `--now` starts one anyway, and `shoal rm

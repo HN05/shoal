@@ -618,8 +618,9 @@ shoal rm issue-612-add-a-queue-cmd            # Removes a waiting entry
 ```
 
 `max_agents` limits the agents that run at once. It defaults to `dynamic`, which
-uses host CPU parallelism and samples the existing memory-pressure and disk
-space monitors at each admission. Warning pressure halves available capacity;
+uses host CPU parallelism and samples enabled memory-pressure and disk
+space sources at each admission, covering daemon state and every workspace path.
+The configured overload warning thresholds halve capacity when warnings are enabled;
 critical memory or disk below the overload stop threshold admits no new agent.
 Unavailable readings admit no additional dynamic work. Set a positive number
 for a fixed limit or `none` for unlimited admission. The global value counts

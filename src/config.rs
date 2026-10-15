@@ -21,8 +21,8 @@ pub use resolve::Effective;
 /// How many tracked agents may run concurrently.
 ///
 /// Numeric values retain the original fixed limit. `dynamic` derives a limit
-/// from the host's available parallelism, while `none` disables admission
-/// limits for the selected layer.
+/// from host parallelism and enabled pressure signals, while `none` disables
+/// admission limits for the selected layer.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum AgentLimit {
     #[default]
