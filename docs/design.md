@@ -247,9 +247,10 @@ adoption accepts an unlocked linked worktree root on a local branch of the regis
 conflict, preserving dirty files and Git settings and recording it ready without
 setup or hooks. It takes normal cleanup ownership. Reopening verifies its record;
 adoption cannot repair a moved or replaced managed worktree. Never adopt a main checkout.
-`adopt --copy` creates a fresh worktree under the repository's Shoal directory,
-copies the source worktree's files while leaving the source in place, and adopts
-the copy on an available branch derived from the source branch.
+`adopt --copy` records a preparing workspace before creating a fresh worktree
+under the repository's Shoal directory, copies the source worktree's files while
+leaving the source in place, and adopts the copy on an available branch derived
+from the source branch; failures retain a failed record for normal removal.
 
 `shoal rename` changes a ready workspace's checked-out branch and derived name
 in one durable operation; its path, identity, resources, and associations stay

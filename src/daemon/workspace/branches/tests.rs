@@ -1294,6 +1294,32 @@ impl Manager {
 }
 
 #[tokio::test]
+async fn copy_adoption_records_ownership_and_finishes_ready() {
+    let f = Fixture::new().await;
+    let source = f.add("source").await;
+    fs::write(source.path.join("copied"), "copied files\n").unwrap();
+    let copied = f
+        .manager
+        .copy_workspace(&f.repo_id, &source.path)
+        .await
+        .unwrap();
+
+    assert_eq!(copied.branch, "source-2");
+    assert_eq!(copied.state, crate::state::WorkspaceState::Ready);
+    assert_eq!(
+        fs::read_to_string(copied.path.join("copied")).unwrap(),
+        "copied files\n"
+    );
+    assert!(copied.git_dir.is_some() && copied.git_dir_id.is_some());
+    assert_eq!(
+        git(&f.repo, &["worktree", "list", "--porcelain"])
+            .matches("worktree ")
+            .count(),
+        3
+    );
+}
+
+#[tokio::test]
 async fn adoption_replaces_markers_of_forgotten_workspaces_only() {
     let f = Fixture::new().await;
     let marked = |branch: &str, owner: &str| {
