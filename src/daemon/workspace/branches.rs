@@ -181,51 +181,8 @@ impl Manager {
         base: Option<String>,
     ) -> Result<OpenedWorkspace> {
         let (repo, _guard) = self.lock_repository(repository).await?;
-        let local = git::strip_local(selector).unwrap_or(selector);
-        let local_ref = git::local_ref(local);
-        let branch = if git::strip_remote(selector).is_none()
-            && git::ref_exists(&repo.path, &local_ref, git::isolated_command).await?
-        {
-            Branch {
-                name: local.into(),
-                remote: None,
-            }
-        } else {
-            let matches: Vec<_> = self
-                .branches(&repo.id)
-                .await?
-                .into_iter()
-                .filter(|branch| {
-                    branch.selector() == selector
-                        || branch.remote.as_ref().is_some_and(|remote| {
-                            format!("{remote}/{}", branch.name) == selector
-                                || branch.name == selector
-                        })
-                })
-                .collect();
-            ensure!(
-                matches.len() == 1,
-                "branch {selector} is missing or ambiguous; select a specific local or remote branch"
-            );
-            matches.into_iter().next().unwrap()
-        };
+        let branch = self.select_existing_branch(&repo, selector).await?;
         let name = &branch.name;
-        ensure!(
-            !worktrunk::is_reserved_branch_name(name),
-            "branch name is reserved by Worktrunk: {name}"
-        );
-        git::check_branch_name(Some(&repo.path), name).await?;
-        if let Some(remote) = &branch.remote {
-            let local_exists =
-                git::ref_exists(&repo.path, &git::local_ref(name), git::isolated_command).await?;
-            if local_exists {
-                let upstream = git::existing_branch::upstream_ref(&repo.path, name).await?;
-                ensure!(
-                    upstream.trim() == git::remote_ref(remote, name),
-                    "local branch {name} already exists and does not track {remote}/{name}; select the local branch explicitly"
-                );
-            }
-        }
         if let Some(workspace) = self
             .list_workspaces()
             .await?
@@ -270,6 +227,62 @@ impl Manager {
             workspace,
             reused: false,
         })
+    }
+
+    /// Resolve and validate the local or remote branch selected by the caller.
+    async fn select_existing_branch(&self, repo: &Repository, selector: &str) -> Result<Branch> {
+        let local = git::strip_local(selector).unwrap_or(selector);
+        let local_ref = git::local_ref(local);
+        let branch = if git::strip_remote(selector).is_none()
+            && git::ref_exists(&repo.path, &local_ref, git::isolated_command).await?
+        {
+            Branch {
+                name: local.into(),
+                remote: None,
+            }
+        } else {
+            let matches: Vec<_> = self
+                .branches(&repo.id)
+                .await?
+                .into_iter()
+                .filter(|branch| {
+                    branch.selector() == selector
+                        || branch.remote.as_ref().is_some_and(|remote| {
+                            format!("{remote}/{}", branch.name) == selector
+                                || branch.name == selector
+                        })
+                })
+                .collect();
+            ensure!(
+                matches.len() == 1,
+                "branch {selector} is missing or ambiguous; select a specific local or remote branch"
+            );
+            matches.into_iter().next().unwrap()
+        };
+        self.validate_existing_branch(repo, &branch).await?;
+        Ok(branch)
+    }
+
+    /// Check that a selected branch is usable and tracks its requested remote.
+    async fn validate_existing_branch(&self, repo: &Repository, branch: &Branch) -> Result<()> {
+        let name = &branch.name;
+        ensure!(
+            !worktrunk::is_reserved_branch_name(name),
+            "branch name is reserved by Worktrunk: {name}"
+        );
+        git::check_branch_name(Some(&repo.path), name).await?;
+        if let Some(remote) = &branch.remote {
+            let local_exists =
+                git::ref_exists(&repo.path, &git::local_ref(name), git::isolated_command).await?;
+            if local_exists {
+                let upstream = git::existing_branch::upstream_ref(&repo.path, name).await?;
+                ensure!(
+                    upstream.trim() == git::remote_ref(remote, name),
+                    "local branch {name} already exists and does not track {remote}/{name}; select the local branch explicitly"
+                );
+            }
+        }
+        Ok(())
     }
 
     pub(super) async fn materialize_branch(
