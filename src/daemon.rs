@@ -923,6 +923,12 @@ async fn watch_item_updates(
         Ok(updates) => Body::PrUpdates(updates),
         Err(error) => Body::error(ErrorCode::OperationFailed, format!("{error:#}")),
     };
+    // A restarting daemon could cut the reply off. Closing the connection
+    // unanswered sends the client to wait again on the replacement, where
+    // the updates remain pending.
+    let Ok(_operation) = manager.background_operations.clone().try_read_owned() else {
+        return Ok(());
+    };
     protocol::write(&mut stream, &Response::new(request_id, body)).await
 }
 
@@ -960,6 +966,53 @@ mod tests {
         for caller_pid in [1, 123, u32::MAX] {
             assert_eq!(removal_inspection(caller_pid), InspectionPolicy::GitOnly);
         }
+    }
+
+    #[tokio::test]
+    async fn item_waits_close_unanswered_while_an_update_restarts_the_daemon() {
+        use tokio::io::AsyncReadExt;
+        let (root, manager) = crate::test_support::manager().await;
+        let path = crate::test_support::repository(root.path(), "repo");
+        let repo = manager
+            .register_repository(path.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        let workspace = manager
+            .create_workspace(&repo.id, "wait".into(), None, None, None)
+            .await
+            .unwrap();
+        manager
+            .send_agent_message(&workspace.id, "Rebase onto main".into())
+            .await
+            .unwrap();
+        let wait = |manager: Arc<Manager>| {
+            let (client, stream) = UnixStream::pair().unwrap();
+            let served = tokio::spawn(wait_pr_updates(
+                stream,
+                5,
+                manager,
+                workspace.id.clone(),
+                Some(60),
+            ));
+            (client, served)
+        };
+        let update = manager.background_operations.clone().write_owned().await;
+        let (mut client, served) = wait(manager.clone());
+        served.await.unwrap().unwrap();
+        let mut sent = Vec::new();
+        client.read_to_end(&mut sent).await.unwrap();
+        assert!(sent.is_empty(), "{}", String::from_utf8_lossy(&sent));
+        drop(update);
+        // The message stays pending for the wait on the replacement daemon.
+        let (client, served) = wait(manager);
+        served.await.unwrap().unwrap();
+        let response: Response = protocol::read(&mut tokio::io::BufReader::new(client))
+            .await
+            .unwrap();
+        let Body::PrUpdates(updates) = response.body else {
+            panic!("expected item updates");
+        };
+        assert_eq!(updates.messages[0].message, "Rebase onto main");
     }
 
     #[tokio::test]
