@@ -774,18 +774,18 @@ pub async fn read_buffered<T: DeserializeOwned>(
         .take(MAX_FRAME as u64 + 1)
         .read_until(b'\n', &mut bytes)
         .await?;
-    if bytes.is_empty() {
+    ensure!(
+        bytes.len() <= MAX_FRAME,
+        "protocol frame exceeds {MAX_FRAME} bytes"
+    );
+    // The peer closed the connection, possibly partway through a frame.
+    if bytes.last() != Some(&b'\n') {
         return Err(std::io::Error::new(
             std::io::ErrorKind::UnexpectedEof,
             "incomplete protocol frame",
         )
         .into());
     }
-    ensure!(
-        bytes.len() <= MAX_FRAME,
-        "protocol frame exceeds {MAX_FRAME} bytes"
-    );
-    ensure!(bytes.last() == Some(&b'\n'), "incomplete protocol frame");
     serde_json::from_slice(&bytes).context("invalid protocol message")
 }
 
@@ -818,6 +818,20 @@ mod tests {
             assert!(
                 matches!(event, ExecutionEvent::Finished { exit_code } if exit_code == expected)
             );
+        }
+    }
+
+    #[tokio::test]
+    async fn a_frame_cut_off_by_a_closed_connection_reads_as_end_of_stream() {
+        for sent in [&b""[..], b"{\"type\":\"fin"] {
+            let (mut writer, reader) = tokio::io::duplex(1024);
+            writer.write_all(sent).await.unwrap();
+            drop(writer);
+            let error = read::<ExecutionEvent>(&mut BufReader::new(reader))
+                .await
+                .unwrap_err();
+            let error = error.downcast_ref::<std::io::Error>().unwrap();
+            assert_eq!(error.kind(), std::io::ErrorKind::UnexpectedEof);
         }
     }
 
