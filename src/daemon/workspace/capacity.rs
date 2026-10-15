@@ -25,7 +25,7 @@ pub(crate) enum MemoryState {
 
 /// Probe the same memory and disk sources used by overload protection. A
 /// failed probe is retained as `Unavailable`; it never authorizes more work.
-pub(crate) fn sample(state_path: &Path, settings: &Overload) -> HostSample {
+pub(crate) fn sample(paths: &[&Path], settings: &Overload) -> HostSample {
     let memory = if !settings.memory.enabled {
         MemoryState::Healthy
     } else {
@@ -49,12 +49,17 @@ pub(crate) fn sample(state_path: &Path, settings: &Overload) -> HostSample {
             .max(1),
         cpu_ticks: load::cpu_ticks().ok(),
         memory,
-        disk_free: settings
-            .disk
-            .enabled
-            .then(|| fsutil::available_bytes(state_path).ok())
-            .flatten()
-            .or_else(|| (!settings.disk.enabled).then_some(u64::MAX)),
+        disk_free: if settings.disk.enabled {
+            paths
+                .iter()
+                .try_fold(None::<u64>, |minimum, path| {
+                    let free = fsutil::available_bytes(path).ok()?;
+                    Some(Some(minimum.map_or(free, |current| current.min(free))))
+                })
+                .flatten()
+        } else {
+            Some(u64::MAX)
+        },
     }
 }
 
@@ -73,9 +78,9 @@ pub(crate) fn limit(sample: HostSample, settings: &Overload) -> u32 {
     }
     let mut limit = sample.parallelism;
     if sample.memory == MemoryState::Warning
-        || sample
-            .disk_free
-            .is_some_and(|free| free < settings.disk.cleanup_free_bytes())
+        || sample.disk_free.is_some_and(|free| {
+            settings.warning.enabled && free < settings.warning.disk_free_bytes()
+        })
     {
         limit = limit.div_ceil(2).max(1);
     }
@@ -86,7 +91,7 @@ pub(crate) fn limit(sample: HostSample, settings: &Overload) -> u32 {
 mod tests {
     use super::*;
 
-    fn settings() -> Overload {
+    fn default_settings() -> Overload {
         Overload::default()
     }
 
@@ -101,8 +106,8 @@ mod tests {
 
     #[test]
     fn pressure_reduces_capacity_without_changing_slot_accounting() {
-        let settings = settings();
-        let ample = settings.disk.cleanup_free_bytes() + 1;
+        let settings = default_settings();
+        let ample = settings.warning.disk_free_bytes() + 1;
         assert_eq!(
             limit(sample(MemoryState::Healthy, Some(ample)), &settings),
             8
@@ -120,20 +125,25 @@ mod tests {
             limit(
                 sample(
                     MemoryState::Healthy,
-                    Some(settings.disk.cleanup_free_bytes() - 1)
+                    Some(settings.warning.disk_free_bytes() - 1)
                 ),
                 &settings
             ),
             4
         );
+        let warning_free = settings.warning.disk_free_bytes();
+        let stop_free = settings.disk.stop_free_bytes();
+        let mut warnings_disabled = default_settings();
+        warnings_disabled.warning.enabled = false;
         assert_eq!(
             limit(
-                sample(
-                    MemoryState::Healthy,
-                    Some(settings.disk.stop_free_bytes() - 1)
-                ),
-                &settings
+                sample(MemoryState::Healthy, Some(warning_free - 1),),
+                &warnings_disabled,
             ),
+            8
+        );
+        assert_eq!(
+            limit(sample(MemoryState::Healthy, Some(stop_free - 1)), &settings),
             0
         );
     }
