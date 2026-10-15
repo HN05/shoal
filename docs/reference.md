@@ -779,7 +779,8 @@ setup/hooks or refresh; other checkouts block creation, including checked-out `m
 Full `refs/heads/...` and `refs/remotes/...` selectors disambiguate names.
 The workspace name replaces non-ASCII-alphanumeric/`-_` characters with `-`, drops
 leading `-_`, truncates to 64 characters, and falls back to `workspace`. Globally
-colliding names fail. Commands use this name or ID. Directories default to the repo root;
+colliding names fail. Commands use this name or ID. Directories default to the repository's
+Shoal workspace directory;
 `add --path <dir>` selects an exact new directory for this workspace only (relative
 to the current directory; `~/` allowed). Existing paths and overlaps with Shoal
 state, checkouts, workspaces, or another repository's reserved directory are refused.
