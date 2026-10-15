@@ -167,17 +167,7 @@ impl Manager {
     pub(crate) async fn ensure_no_pending_rename(&self, id: &str) -> Result<()> {
         let id = id.to_owned();
         self.store
-            .run(move |db| {
-                ensure!(
-                    !store::exists(
-                        db,
-                        "SELECT 1 FROM workspace_renames WHERE workspace_id=?1",
-                        [&id]
-                    )?,
-                    "workspace has an unfinished rename; run shoal doctor --repair first"
-                );
-                Ok(())
-            })
+            .run(move |db| store::ensure_no_pending_rename(db, &id))
             .await
     }
 

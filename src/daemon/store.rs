@@ -378,6 +378,20 @@ pub fn exists(db: &Connection, sql: &str, params: impl Params) -> Result<bool> {
     Ok(db.query_row(&format!("SELECT EXISTS({sql})"), params, |row| row.get(0))?)
 }
 
+/// Fail while a workspace has an unfinished rename; lifecycle operations
+/// must wait for repair.
+pub fn ensure_no_pending_rename(db: &Connection, workspace_id: &str) -> Result<()> {
+    ensure!(
+        !exists(
+            db,
+            "SELECT 1 FROM workspace_renames WHERE workspace_id=?1",
+            [workspace_id]
+        )?,
+        "workspace has an unfinished rename; run shoal doctor --repair first"
+    );
+    Ok(())
+}
+
 const REPOSITORY_WORKSPACES_QUERY: &str = "SELECT 1 FROM workspaces WHERE repository_id=?1";
 
 pub fn repository_has_workspaces(db: &Connection, repository_id: &str) -> Result<bool> {

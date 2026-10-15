@@ -668,10 +668,7 @@ impl Manager {
                 // Removal checks pending intent after reserving the lifecycle,
                 // so a confirmed-deleted worktree can release its ownership.
                 if state != WorkspaceState::Reconciling && !allow_pending_rename {
-                    ensure!(
-                        !store::exists(db, "SELECT 1 FROM workspace_renames WHERE workspace_id=?1", [&id])?,
-                        "workspace has an unfinished rename; run shoal doctor --repair first"
-                    );
+                    store::ensure_no_pending_rename(db, &id)?;
                 }
                 let changed = db.execute(
                     "UPDATE workspaces SET state=?2 WHERE id=?1 AND state IN (?3,?4)",
