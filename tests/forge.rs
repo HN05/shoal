@@ -16,7 +16,7 @@ use serde_json::{Value, json};
 use std::{
     fs,
     io::{BufRead, BufReader, Write},
-    os::unix::{fs::PermissionsExt, net::UnixStream},
+    os::unix::net::UnixStream,
     path::{Path, PathBuf},
     process::{Child, Command, Output},
     time::Duration,
@@ -57,8 +57,7 @@ impl Fixture {
         fs::create_dir_all(root.path().join("forge")).unwrap();
         fs::write(root.path().join("forge/responses.json"), "{}").unwrap();
         let script = root.path().join("forge.py");
-        fs::write(&script, FORGE).unwrap();
-        fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
+        support::install_test_script(&script, FORGE);
         let repo = init_repo(root.path(), "repo", &[("tracked", "committed\n")]);
         git(&repo, &["update-ref", "refs/remotes/origin/main", "HEAD"]);
         let daemon = DaemonGuard::start(root.path(), &mut support::cli(root.path()));
@@ -287,8 +286,7 @@ fn changes_use_the_agent_account_and_merges_the_users() {
             ),
             ("agent-fj", "exit 1"),
         ] {
-            fs::write(root.join(name), format!("#!/bin/sh\n{body}\n")).unwrap();
-            fs::set_permissions(root.join(name), fs::Permissions::from_mode(0o755)).unwrap();
+            support::install_test_script(root.join(name), format!("#!/bin/sh\n{body}\n"));
         }
         let (agent, user) = match forge {
             Forge::GitHub => (json!("agent"), Value::Null),
@@ -331,12 +329,7 @@ fn changes_use_the_agent_account_and_merges_the_users() {
 
     // An fj wrapper whose home Shoal does not know cannot stand in for the agent.
     let fixture = Fixture::new(Forge::Forgejo, "[agent_auth]\nfj = '~/agent-fj'\n");
-    fs::write(fixture.root.path().join("agent-fj"), "#!/bin/sh\n").unwrap();
-    fs::set_permissions(
-        fixture.root.path().join("agent-fj"),
-        fs::Permissions::from_mode(0o755),
-    )
-    .unwrap();
+    support::install_test_script(fixture.root.path().join("agent-fj"), "#!/bin/sh\n");
     let refused = fixture.request(json!({"item_action": {"workspace": "topic", "kind": "pr",
         "item": "8", "action": {"action": "close"}}}));
     assert!(
