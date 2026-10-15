@@ -1035,7 +1035,8 @@ following a daemon restart. Use a pre-remove hook when failure must retain owner
 
 ### Remove a workspace
 
-Removal retains the default branch unless `--delete-branch`; other clean branches
+Removal retains the default branch unless `--delete-branch`, and every branch while
+the default branch is unknown (no cached remote HEAD); other clean branches
 matching default/upstream or merged into the default are deleted. Otherwise fzf
 offers Cancel (default), Keep branch, or Delete branch, then lists uncommitted
 changes and untracked files with Git status codes before `Are you sure? [y/N]`.

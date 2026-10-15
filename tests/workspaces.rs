@@ -2012,6 +2012,19 @@ fn branch_removal_compares_contents_to_main_or_upstream_and_honors_explicit_choi
     );
     git(path, &["update-ref", "refs/remotes/origin/pushed", "HEAD"]);
     git(path, &["branch", "--set-upstream-to=origin/pushed"]);
+    // Automatic removal keeps branches while the default branch is unknown.
+    git(
+        &fixture.repo,
+        &["update-ref", "refs/remotes/origin/main", "main"],
+    );
+    git(
+        &fixture.repo,
+        &[
+            "symbolic-ref",
+            "refs/remotes/origin/HEAD",
+            "refs/remotes/origin/main",
+        ],
+    );
     assert_eq!(fixture.ok(&["rm", "pushed"])["branch_deleted"], true);
 
     // The fake remote above models pushed history, not a fetchable upstream.

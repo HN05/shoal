@@ -582,10 +582,12 @@ async fn worktrunk_removal_options(
     let default_branch = crate::git::default_branch::resolve(checkout, DefaultBranchLookup::Cached)
         .await
         .ok();
+    // An unresolved default branch could be any branch, so keep it.
     let branch = match choice {
         BranchChoice::Auto
             if check.can_delete_branch()
-                && check.branch.as_deref() != default_branch.as_deref() =>
+                && default_branch
+                    .is_some_and(|default| check.branch.as_deref() != Some(&default)) =>
         {
             BranchRemoval::Delete
         }

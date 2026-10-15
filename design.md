@@ -750,7 +750,8 @@ executions, run removal hooks, remove owned simulators, remove the worktree,
 and release leases with the record. Failures retain what is needed to retry.
 Manual removal deletes a redundant branch (tree equal to the local default or its
 upstream, or merged into the default) and otherwise requires an explicit keep or
-delete choice. The default branch is retained unless deletion is explicit.
+delete choice. The default branch, and every branch while the default branch cannot
+be resolved, is retained unless deletion is explicit.
 Automatic cleanup removes only clean, idle worktrees whose commits are all on a
 remote or the default branch, with no executions, directory users, leases, or
 permits, rechecked immediately before deletion, without fetching. `shoal cleanup`

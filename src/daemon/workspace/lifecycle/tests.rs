@@ -352,3 +352,45 @@ async fn stale_birth_identity_never_authorizes_signaling_a_live_group() {
         child.wait().await.unwrap();
     }
 }
+
+#[tokio::test]
+async fn automatic_removal_keeps_branch_when_default_branch_is_unknown() {
+    let (root, manager) = manager().await;
+    let path = repository(root.path(), "repo");
+    let origin = root.path().join("origin.git");
+    git(
+        &path,
+        &[
+            "clone",
+            "--bare",
+            path.to_str().unwrap(),
+            origin.to_str().unwrap(),
+        ],
+    );
+    git(
+        &path,
+        &["remote", "add", "origin", origin.to_str().unwrap()],
+    );
+    git(&path, &["fetch", "origin"]);
+    git(&path, &["branch", "--set-upstream-to=origin/main", "main"]);
+    // Pushing to a new remote leaves origin/HEAD unset.
+    git(&path, &["remote", "set-head", "origin", "-d"]);
+    git(&path, &["switch", "-c", "other"]);
+    let worktree = root.path().join("main-worktree");
+    git(
+        &path,
+        &["worktree", "add", worktree.to_str().unwrap(), "main"],
+    );
+    let repo = manager
+        .register_repository(path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager.adopt_workspace(&repo.id, &worktree).await.unwrap();
+    let removed = manager
+        .remove_workspace(&workspace.id, BranchChoice::Auto, InspectionPolicy::GitOnly)
+        .await
+        .unwrap();
+    assert!(removed.removed);
+    assert!(!worktree.exists());
+    assert!(!git(&path, &["rev-parse", "--verify", "refs/heads/main"]).is_empty());
+}
