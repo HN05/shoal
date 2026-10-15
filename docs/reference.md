@@ -38,7 +38,8 @@ shoal install
 Upgrade with `brew update && brew upgrade hn05/tap/shoal` (`--fetch-HEAD` for
 `main`). Managed daemons notice the replacement and restart once daemon operations are
 idle and no setup or landing runs. Followed event and notification streams and
-item waits reconnect across the handoff; use `shoal daemon restart` to apply an
+item waits reconnect across the handoff, except those from the previous release
+when its protocol differs; use `shoal daemon restart` to apply an
 upgrade immediately. Tracked agents and commands keep running while the daemon
 is away and reattach to the next one; see [Daemon restarts](#daemon-restarts). The channels share one installation,
 daemon, and skill path; to switch, run `shoal daemon stop`, uninstall, install

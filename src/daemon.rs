@@ -122,7 +122,7 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
     let mut terminate = signal(SignalKind::terminate())?;
     let mut interrupt = signal(SignalKind::interrupt())?;
     let (shutdown, mut shutdown_rx) = watch::channel(false);
-    let mut update = auto_update::Update::new(managed);
+    let update = auto_update::Update::new(managed);
     let mut update_tick = tokio::time::interval(Duration::from_secs(1));
     let server = Server {
         manager: manager.clone(),
@@ -163,11 +163,8 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
                 if update.as_ref().is_some_and(auto_update::Update::pending)
                     && let Some(guard) = auto_update::quiesce(&manager)
                 {
-                    match update.as_mut().expect("update monitor enabled").supports_followers(clients.len()).await {
-                        Ok(true) => { quiescence = Some(guard); break Ok(()); }
-                        Ok(false) => {},
-                        Err(error) => log!("daemon update check: {error:#}"),
-                    }
+                    quiescence = Some(guard);
+                    break Ok(());
                 }
             },
             Some(_) = clients.join_next(), if !clients.is_empty() => {},

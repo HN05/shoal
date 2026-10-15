@@ -54,6 +54,7 @@ pub struct WorkspaceScope {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    /// Daemons from earlier releases read the protocol before they update.
     #[command(name = "__build-info", hide = true)]
     BuildInfo,
     /// List or run configured commands.
