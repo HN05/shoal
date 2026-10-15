@@ -291,7 +291,11 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         Command::Issue { command } => items::issue(&ctx, command).await,
         Command::Link { items } => links::link(&ctx, items).await,
         Command::Unlink { items } => links::unlink(&ctx, items).await,
-        Command::View { items, no_comments } => view::view(&ctx, items, no_comments).await,
+        Command::View {
+            items,
+            no_comments,
+            check,
+        } => view::view(&ctx, items, no_comments, check).await,
         Command::Watch { items, timeout } => links::watch(&ctx, items, timeout).await,
         Command::Ready { items } => links::ready(&ctx, items).await,
         Command::Unready { items } => links::unready(&ctx, items).await,

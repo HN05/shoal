@@ -155,6 +155,9 @@ pub enum Command {
         /// Leave out comments and reviews.
         #[arg(long)]
         no_comments: bool,
+        /// Print the tail of a failed Forgejo Actions check's log.
+        #[arg(long, value_name = "NAME")]
+        check: Option<String>,
     },
     /// Mark linked items, or the workspace when none are linked, ready for review at HEAD.
     Ready {

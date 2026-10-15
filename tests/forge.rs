@@ -707,22 +707,7 @@ fn scoped_check_logs_resolve_web_indices_and_use_the_agent_account() {
         "agent/.local/share/forgejo-cli/keys.json"
     };
     fixture.write_keys(&fixture.root.path().join(keys), host, "agenttoken");
-    let target = "/team/project/actions/runs/2765/jobs/1";
-    let mut responses = json!({
-        "GET repos/team/project/pulls/8": {"body": {"head": {"sha": "head"}}},
-        "GET repos/team/project/commits/head/statuses?limit=50&page=1": {"body": [
-            {"context": "rust", "status": "failure", "target_url": target},
-            {"context": "rust", "status": "success", "target_url": "/old"}
-        ]},
-        "GET repos/team/project/actions/runs?run_number=2765": {"body": {"workflow_runs": [
-            {"id": 9331, "index_in_repo": 2765, "commit_sha": "head"}
-        ]}},
-        "GET repos/team/project/actions/runs/9331/jobs": {"body": [
-            {"id": 18344, "run_id": 9331, "status": "success"},
-            {"id": 18345, "run_id": 9331, "status": "failure", "task_id": 9850}
-        ]},
-        "GET repos/team/project/actions/jobs/18345/logs": {"body": "⭐ Run Main Test\nassertion failed\n⚙️ [runner]: exitcode '1': failure\n"}
-    });
+    let mut responses = failed_check_responses();
     fixture.respond(responses.clone());
     let exported = fixture.ok(&["env", "topic"]);
     let scope = exported["SHOAL_SCOPE_TOKEN"].as_str().unwrap();
@@ -803,4 +788,51 @@ fn scoped_check_logs_resolve_web_indices_and_use_the_agent_account() {
             .contains("HTTP 404"),
         "{result}"
     );
+}
+
+fn failed_check_responses() -> Value {
+    let target = "/team/project/actions/runs/2765/jobs/1";
+    json!({
+        "GET repos/team/project/pulls/8": {"body": {"head": {"sha": "head"}}},
+        "GET repos/team/project/commits/head/statuses?limit=50&page=1": {"body": [
+            {"context": "rust", "status": "failure", "target_url": target},
+            {"context": "rust", "status": "success", "target_url": "/old"}
+        ]},
+        "GET repos/team/project/actions/runs?run_number=2765": {"body": {"workflow_runs": [
+            {"id": 9331, "index_in_repo": 2765, "commit_sha": "head"}
+        ]}},
+        "GET repos/team/project/actions/runs/9331/jobs": {"body": [
+            {"id": 18344, "run_id": 9331, "status": "success"},
+            {"id": 18345, "run_id": 9331, "status": "failure", "task_id": 9850}
+        ]},
+        "GET repos/team/project/actions/jobs/18345/logs": {"body": "⭐ Run Main Test\nassertion failed\n⚙️ [runner]: exitcode '1': failure\n"}
+    })
+}
+
+#[test]
+fn view_prints_check_logs_and_reports_lookup_errors() {
+    for available in [true, false] {
+        let fixture = Fixture::new(Forge::Forgejo, "");
+        let mut responses = failed_check_responses();
+        if !available {
+            responses["GET repos/team/project/actions/jobs/18345/logs"] =
+                json!({"status": 404, "body": {"message": "logs unavailable"}});
+        }
+        fixture.respond(responses);
+        if available {
+            let log = fixture.ok(&["view", "pr", "8", "--workspace", "topic", "--check", "rust"]);
+            assert_eq!(log["failed_step"], "Main Test");
+            let human =
+                fixture.run(&["view", "pr", "8", "--workspace", "topic", "--check", "rust"]);
+            assert!(human.status.success());
+            let human = String::from_utf8(human.stdout).unwrap();
+            assert!(human.contains("Failed step: Main Test\n"), "{human}");
+            assert!(human.contains("assertion failed\n"), "{human}");
+        } else {
+            let result =
+                fixture.run(&["view", "pr", "8", "--workspace", "topic", "--check", "rust"]);
+            assert!(!result.status.success());
+            assert!(String::from_utf8_lossy(&result.stderr).contains("HTTP 404"));
+        }
+    }
 }

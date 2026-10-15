@@ -9,6 +9,7 @@ use crate::{
         ui,
     },
     forge::{
+        checks::CheckLog,
         link::{ItemKind, Selection},
         view::{Details, ItemView, PrDetails, Review, Selected},
     },
@@ -16,10 +17,32 @@ use crate::{
 };
 
 /// Exits 1 when an item could not be read; its error is in the output.
-pub(super) async fn view(ctx: &Context, items: ItemArgs, no_comments: bool) -> Result<i32> {
+pub(super) async fn view(
+    ctx: &Context,
+    items: ItemArgs,
+    no_comments: bool,
+    check: Option<String>,
+) -> Result<i32> {
     let selection = Selection::parse(items.kind_or_url, items.item)?;
     let workspace =
         ui::select_workspace(ctx, items.workspace, ui::Fallback::CurrentDirectory).await?;
+    if let Some(check) = check {
+        let log: CheckLog = ctx
+            .progress(
+                "Reading check log",
+                client::request(
+                    &ctx.paths,
+                    Method::CheckLog {
+                        workspace,
+                        selection,
+                        check,
+                    },
+                ),
+            )
+            .await?;
+        ctx.show(&log, render_log)?;
+        return Ok(0);
+    }
     let selected: Selected = client::request(
         &ctx.paths,
         Method::SelectItems {
@@ -41,6 +64,20 @@ pub(super) async fn view(ctx: &Context, items: ItemArgs, no_comments: bool) -> R
         }
     })?;
     Ok(i32::from(views.iter().any(|view| view.details.is_none())))
+}
+
+fn render_log(log: &CheckLog) {
+    println!("{}: {}", log.url, log.name);
+    if let Some(step) = &log.failed_step {
+        println!("Failed step: {step}");
+    }
+    if log.truncated {
+        println!("[showing the last 8 KiB]");
+    }
+    print!("{}", log.text);
+    if !log.text.ends_with('\n') {
+        println!();
+    }
 }
 
 fn render(view: &ItemView, palette: Palette) {

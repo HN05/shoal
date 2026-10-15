@@ -157,6 +157,7 @@ shoal link pr 43              # Link another; all must merge before cleanup afte
 shoal watch                   # Wake on all linked item comments, checks, or closure
 shoal view                    # Linked items with state, checks, comments, and reviews
 shoal view pr 44 --no-comments  # One PR, linked or not, without its discussion
+shoal view pr 44 --check rust   # Show the tail of a failed CI check log
 shoal ready                   # Mark linked items ready for review at HEAD
 shoal unlink pr 43            # Cancel one linked PR
 shoal unlink pr               # Cancel linked PRs
