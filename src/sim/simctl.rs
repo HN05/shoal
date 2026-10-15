@@ -116,7 +116,7 @@ impl Inventory {
     }
 }
 
-pub async fn run(args: &[&str]) -> Result<String> {
+async fn run(args: &[&str]) -> Result<String> {
     ensure!(cfg!(target_os = "macos"), "Xcode simulators require macOS");
     let mut command = Command::new(Tool::Xcrun.program());
     command.arg("simctl").args(args);
@@ -126,6 +126,26 @@ pub async fn run(args: &[&str]) -> Result<String> {
         .await
         .with_context(|| format!("simctl {}", args.join(" ")))?;
     Ok(output.trim().to_owned())
+}
+
+pub async fn create(name: &str, device: &str, runtime: &str) -> Result<String> {
+    run(&["create", name, device, runtime]).await
+}
+
+pub async fn shutdown(udid: &str) -> Result<()> {
+    run(&["shutdown", udid]).await.map(|_| ())
+}
+
+pub async fn delete(udid: &str) -> Result<()> {
+    run(&["delete", udid]).await.map(|_| ())
+}
+
+pub async fn erase(udid: &str) -> Result<()> {
+    run(&["erase", udid]).await.map(|_| ())
+}
+
+pub async fn wait_for_boot(udid: &str) -> Result<()> {
+    run(&["bootstatus", udid, "-b"]).await.map(|_| ())
 }
 
 pub async fn inventory() -> Result<Inventory> {

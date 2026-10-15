@@ -248,7 +248,7 @@ impl Manager {
         let inventory = simctl::inventory().await?;
         if let Some(device) = sim.device(&inventory) {
             if !device.state.is_shutdown() {
-                simctl::run(&["shutdown", &device.udid]).await?;
+                simctl::shutdown(&device.udid).await?;
             }
             let after = simctl::inventory().await?;
             ensure!(
@@ -268,7 +268,7 @@ impl Manager {
         self.shutdown_sim(sim).await?;
         if let Some(udid) = &sim.udid {
             if inventory.device(udid).is_some() {
-                simctl::run(&["delete", udid]).await?;
+                simctl::delete(udid).await?;
             }
             ensure!(
                 simctl::inventory().await?.device(udid).is_none(),
@@ -560,8 +560,7 @@ impl Manager {
         audit: &mut Option<CleanRequest>,
     ) -> Result<()> {
         if sim.udid.is_none() {
-            let udid =
-                simctl::run(&["create", &device_name(sim), &sim.device, &sim.runtime]).await?;
+            let udid = simctl::create(&device_name(sim), &sim.device, &sim.runtime).await?;
             Uuid::parse_str(&udid)?;
             sim.udid = Some(udid);
             self.save_sim(sim).await?;
@@ -573,14 +572,14 @@ impl Manager {
         let udid = sim.udid.clone().unwrap();
         if needs_reset {
             self.shutdown_sim(sim).await?;
-            simctl::run(&["erase", &udid]).await?;
+            simctl::erase(&udid).await?;
             sim.installed_apps = Some(0);
             if let Some(audit) = audit.as_mut() {
                 audit.erase_completed = true;
                 self.save_clean_request(audit).await?;
             }
         }
-        simctl::run(&["bootstatus", &udid, "-b"]).await?;
+        simctl::wait_for_boot(&udid).await?;
         ensure!(
             simctl::inventory()
                 .await?
