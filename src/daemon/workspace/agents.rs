@@ -675,7 +675,11 @@ mod tests {
             assert_eq!(
                 serde_json::from_slice::<serde_json::Value>(&std::fs::read(&record).unwrap())
                     .unwrap(),
-                serde_json::json!({"agent":"codex", "stop_reason":"critical memory pressure"})
+                serde_json::json!({
+                    "agent": "codex",
+                    "stop_reason": "critical memory pressure",
+                    "stage": "stopping",
+                })
             );
             std::fs::remove_file(&record).unwrap();
             let events = manager.notifications(false, 1).await.unwrap();

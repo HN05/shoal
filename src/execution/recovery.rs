@@ -1,5 +1,8 @@
 //! Restore commands omit the original task and remain available after wrapper exit.
-use std::{ffi::OsString, path::PathBuf};
+use std::{
+    ffi::OsString,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{Context as _, Result};
 use serde::{Deserialize, Serialize};
@@ -11,6 +14,7 @@ use crate::{
     model::Workspace,
     paths::Paths,
     protocol::ConfigTarget,
+    state::states,
 };
 
 #[derive(Debug)]
@@ -22,11 +26,26 @@ pub(crate) struct Recovery {
     pub handoff_delivered: bool,
 }
 
+states!(
+    /// How far a stop has progressed, so reconciliation after a daemon
+    /// interruption knows which wrapper transition was still expected.
+    Stage {
+        /// The daemon decided to stop the agent and expects its wrapper to stop it.
+        Stopping => "stopping",
+        /// The wrapper stopped the agent, then pauses for an automatic restore
+        /// or exits.
+        Stopped => "stopped",
+    }
+);
+
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct Record {
     pub agent: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stop_reason: Option<String>,
+    /// Records saved before stages existed prove no more than a stop request.
+    #[serde(default = "stopping")]
+    pub stage: Stage,
     /// The Herdr pane the agent ran in, where `shoal resume --all` restores it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub herdr_pane: Option<String>,
@@ -124,17 +143,33 @@ impl Recovery {
         reason: Option<&str>,
         herdr_pane: Option<String>,
     ) -> Result<PathBuf> {
-        let record = Record::new(&self.agent, reason, herdr_pane);
+        let record = Record::new(&self.agent, reason, Stage::Stopped, herdr_pane);
         write_record(paths, workspace_id, id, record)
     }
 }
 
+fn stopping() -> Stage {
+    Stage::Stopping
+}
+
 impl Record {
-    fn new(agent: &str, reason: Option<&str>, herdr_pane: Option<String>) -> Self {
+    fn new(agent: &str, reason: Option<&str>, stage: Stage, herdr_pane: Option<String>) -> Self {
         Self {
             agent: agent.replace(' ', "-"),
             stop_reason: reason.map(str::to_owned),
+            stage,
             herdr_pane,
+        }
+    }
+
+    /// Read a saved record, `None` once it is consumed.
+    pub(crate) fn load(path: &Path) -> Result<Option<Self>> {
+        match std::fs::read(path) {
+            Ok(bytes) => serde_json::from_slice(&bytes)
+                .map(Some)
+                .with_context(|| format!("read {}", path.display())),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(error) => Err(error.into()),
         }
     }
 }
@@ -148,7 +183,8 @@ pub(crate) fn save_record(
     agent: &str,
     reason: Option<&str>,
 ) -> Result<PathBuf> {
-    write_record(paths, workspace_id, id, Record::new(agent, reason, None))
+    let record = Record::new(agent, reason, Stage::Stopping, None);
+    write_record(paths, workspace_id, id, record)
 }
 
 fn write_record(
@@ -161,13 +197,14 @@ fn write_record(
     std::fs::create_dir_all(&directory)?;
     let path = record_path(paths, workspace_id, id);
     // A later save without a field, such as shutdown racing an overload stop
-    // or the daemon's handoff after the wrapper's, keeps the value saved first.
-    if let Some(saved) = std::fs::read(&path)
-        .ok()
-        .and_then(|saved| serde_json::from_slice::<Record>(&saved).ok())
-    {
+    // or the daemon's handoff after the wrapper's, keeps the value saved first,
+    // and never moves the stage back.
+    if let Ok(Some(saved)) = Record::load(&path) {
         record.stop_reason = record.stop_reason.or(saved.stop_reason);
         record.herdr_pane = record.herdr_pane.or(saved.herdr_pane);
+        if saved.stage == Stage::Stopped {
+            record.stage = Stage::Stopped;
+        }
     }
     crate::fsutil::replace_atomically(
         &path,
@@ -380,6 +417,7 @@ mod tests {
         use std::os::unix::fs::PermissionsExt;
         let old: Record = serde_json::from_str(r#"{"agent":"codex"}"#).unwrap();
         assert!(old.stop_reason.is_none());
+        assert_eq!(old.stage, Stage::Stopping);
         let root = tempfile::tempdir().unwrap();
         let paths = Paths::for_test(root.path());
         let path = save_record(
@@ -400,6 +438,7 @@ mod tests {
             record.stop_reason.as_deref(),
             Some("critical memory pressure")
         );
+        assert_eq!(record.stage, Stage::Stopping);
         assert!(pending(&paths, "workspace").unwrap());
         let recovery = Recovery {
             agent: "codex".into(),
@@ -417,6 +456,8 @@ mod tests {
             Some("critical memory pressure")
         );
         assert_eq!(record.herdr_pane.as_deref(), Some("w1:p2"));
+        // The daemon's late handoff cannot undo the wrapper's stop.
+        assert_eq!(record.stage, Stage::Stopped);
     }
 
     #[test]
