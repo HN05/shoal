@@ -23,8 +23,9 @@ pub(crate) enum MemoryState {
     Unavailable,
 }
 
-/// Probe the same memory and disk sources used by overload protection. A
-/// failed probe is retained as `Unavailable`; it never authorizes more work.
+/// Probe the same memory and disk sources used by overload protection. The
+/// first path is daemon state; later paths are workspaces awaiting cleanup.
+/// A failed probe never authorizes more work; deleted workspaces are skipped.
 pub(crate) fn sample(paths: &[&Path], settings: &Overload) -> HostSample {
     HostSample {
         parallelism: std::thread::available_parallelism()
@@ -66,9 +67,15 @@ fn sample_disk(
     }
     paths
         .iter()
-        .try_fold(None::<u64>, |minimum, path| {
-            let free = available(path).ok()?;
-            Some(Some(minimum.map_or(free, |current| current.min(free))))
+        .enumerate()
+        .try_fold(None::<u64>, |minimum, (index, path)| {
+            match available(path) {
+                Ok(free) => Some(Some(minimum.map_or(free, |current| current.min(free)))),
+                Err(error) if index > 0 && error.kind() == std::io::ErrorKind::NotFound => {
+                    Some(minimum)
+                }
+                Err(_) => None,
+            }
         })
         .flatten()
 }
@@ -136,6 +143,20 @@ mod tests {
         assert_eq!(
             sample_disk(&paths, false, |_| panic!("disabled disk probe")),
             Some(u64::MAX),
+        );
+        assert_eq!(
+            sample_disk(&paths, true, |path| {
+                if path == state {
+                    Ok(100)
+                } else {
+                    Err(std::io::ErrorKind::NotFound.into())
+                }
+            }),
+            Some(100),
+        );
+        assert_eq!(
+            sample_disk(&paths, true, |_| Err(std::io::ErrorKind::NotFound.into())),
+            None,
         );
     }
 
