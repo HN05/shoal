@@ -16,7 +16,10 @@ mod ports;
 
 mod support;
 
-use support::cli;
+use support::{
+    cli,
+    wait::{try_wait_for, wait_for, wait_until},
+};
 
 use serde_json::Value;
 use std::{
@@ -1237,11 +1240,7 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
         ])
         .spawn()
         .unwrap();
-    let deadline = Instant::now() + Duration::from_secs(60);
-    while !started.exists() {
-        assert!(Instant::now() < deadline, "execution did not start");
-        thread::sleep(Duration::from_millis(20));
-    }
+    wait_until("execution to start", || started.exists());
 
     let output = fixture
         .command()
@@ -3064,22 +3063,19 @@ finally:
             .stderr(Stdio::piped())
             .spawn()
             .unwrap();
-        let deadline = Instant::now() + Duration::from_secs(60);
         let mut transcript = String::new();
-        loop {
+        if try_wait_for(|| {
             // Drain while the driver runs: closing a PTY can wait for unread
             // output on macOS, including when the driver has been killed.
             let _ = master.read_to_string(&mut transcript);
-            if child.try_wait().unwrap().is_some() {
-                break;
-            }
-            if Instant::now() >= deadline {
-                let _ = child.kill();
-                let _ = master.read_to_string(&mut transcript);
-                let _ = child.wait();
-                panic!("terminal driver hung: {mode} {term:?}: {transcript:?}");
-            }
-            thread::sleep(Duration::from_millis(10));
+            child.try_wait().unwrap()
+        })
+        .is_none()
+        {
+            let _ = child.kill();
+            let _ = master.read_to_string(&mut transcript);
+            let _ = child.wait();
+            panic!("terminal driver hung: {mode} {term:?}: {transcript:?}");
         }
         let output = child.wait_with_output().unwrap();
         assert!(
@@ -3643,15 +3639,12 @@ fn stop_and_manual_removal_terminate_connected_executions() {
             .stderr(Stdio::piped())
             .spawn()
             .unwrap();
-        let deadline = Instant::now() + Duration::from_secs(60);
-        while fixture.ok(&["inspect", "running"])["executions"]
-            .as_array()
-            .unwrap()
-            .is_empty()
-        {
-            assert!(Instant::now() < deadline);
-            thread::sleep(Duration::from_millis(10));
-        }
+        wait_until("execution registration", || {
+            !fixture.ok(&["inspect", "running"])["executions"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        });
         let output = fixture
             .command()
             .current_dir(workspace["path"].as_str().unwrap())
@@ -3684,16 +3677,13 @@ fn stop_all_stops_running_workspaces_and_marks_them_stopped() {
         );
     }
     fixture.add("unused");
-    let deadline = Instant::now() + Duration::from_secs(60);
     for name in ["first", "second"] {
-        while fixture.ok(&["inspect", name])["executions"]
-            .as_array()
-            .unwrap()
-            .is_empty()
-        {
-            assert!(Instant::now() < deadline);
-            thread::sleep(Duration::from_millis(10));
-        }
+        wait_until("execution registration", || {
+            !fixture.ok(&["inspect", name])["executions"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        });
     }
     let stopped = fixture.ok(&["stop", "--all"]);
     let mut names = stopped["stopped"]
@@ -3768,8 +3758,7 @@ fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
             "touch command-started; while :; do sleep 1; done",
         ]),
     ];
-    let deadline = Instant::now() + Duration::from_secs(60);
-    let ids = loop {
+    let ids = wait_for("executions to start", || {
         let inspection = fixture.ok(&["inspect", "stopped"]);
         let ids = inspection["executions"]
             .as_array()
@@ -3778,15 +3767,8 @@ fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
             .map(|execution| execution["id"].as_str().unwrap().to_owned())
             .filter(|id| path.join(format!("started-{id}")).exists())
             .collect::<Vec<_>>();
-        if ids.len() == 2 && path.join("command-started").exists() {
-            break ids;
-        }
-        assert!(
-            Instant::now() < deadline,
-            "executions did not start: {inspection}"
-        );
-        thread::sleep(Duration::from_millis(10));
-    };
+        (ids.len() == 2 && path.join("command-started").exists()).then_some(ids)
+    });
     let output = fixture
         .command()
         .current_dir(path)
@@ -5046,16 +5028,11 @@ fn simulators_allocate_concurrently_and_idle_expiry_keeps_active_leases() {
     let second: Value = serde_json::from_slice(&second.stdout).unwrap();
     assert_ne!(first["udid"], second["udid"]);
     fixture.ok(&["sim", "release", "default", "first"]);
-    let deadline = Instant::now() + Duration::from_secs(60);
-    loop {
+    let sims = wait_for("idle simulator deletion", || {
         let sims = fixture.ok(&["sim", "--all"]);
-        if sims["simulators"].as_array().unwrap().len() == 1 {
-            assert_eq!(sims["simulators"][0]["udid"], second["udid"]);
-            break;
-        }
-        assert!(Instant::now() < deadline, "idle simulator was not deleted");
-        thread::sleep(Duration::from_millis(100));
-    }
+        (sims["simulators"].as_array().unwrap().len() == 1).then_some(sims)
+    });
+    assert_eq!(sims["simulators"][0]["udid"], second["udid"]);
     fixture.ok(&["rm", "first"]);
     fixture.ok(&["rm", "second"]);
 }
@@ -5236,15 +5213,10 @@ fn clean_simulator_wait_retries_share_one_audit_entry() {
         .stdout(Stdio::piped())
         .spawn()
         .unwrap();
-    let deadline = Instant::now() + Duration::from_secs(60);
-    loop {
+    wait_until("busy simulator history entry", || {
         let entries = fixture.ok(&["sim", "history", "--all"]);
-        if entries.as_array().unwrap().len() == 1 && entries[0]["status"] == "busy" {
-            break;
-        }
-        assert!(Instant::now() < deadline);
-        thread::sleep(Duration::from_millis(20));
-    }
+        entries.as_array().unwrap().len() == 1 && entries[0]["status"] == "busy"
+    });
     fixture.ok(&["sim", "release", "default", "first"]);
     let output = waiting.wait_with_output().unwrap();
     assert!(output.status.success());
@@ -7663,8 +7635,7 @@ fn deleted_worktrees_are_forgotten_with_their_resources_but_moved_ones_are_kept(
     );
     // The startup sweep forgets deleted worktrees without touching moved ones.
     fixture.restart();
-    let deadline = Instant::now() + Duration::from_secs(60);
-    loop {
+    wait_until("deleted worktrees to be forgotten", || {
         let names: Vec<String> = fixture
             .ok(&["ls"])
             .as_array()
@@ -7672,15 +7643,8 @@ fn deleted_worktrees_are_forgotten_with_their_resources_but_moved_ones_are_kept(
             .iter()
             .map(|w| w["name"].as_str().unwrap().to_owned())
             .collect();
-        if names == ["moved"] {
-            break;
-        }
-        assert!(
-            Instant::now() < deadline,
-            "deleted worktrees remain: {names:?}"
-        );
-        thread::sleep(Duration::from_millis(20));
-    }
+        names == ["moved"]
+    });
     assert_eq!(
         fixture.ok(&["inspect", "moved"])["workspace"]["state"],
         "failed"
@@ -7746,17 +7710,15 @@ fn deleted_worktrees_are_forgotten_with_their_resources_but_moved_ones_are_kept(
 }
 
 fn wait_registered_execution(fixture: &Fixture, workspace: &str) -> Value {
-    let deadline = Instant::now() + Duration::from_secs(60);
-    loop {
+    wait_for("registered execution with a child", || {
         let inspection = fixture.ok(&["inspect", workspace]);
-        if let Some(execution) = inspection["executions"].as_array().unwrap().first()
-            && !execution["child"].is_null()
-        {
-            return execution.clone();
-        }
-        assert!(Instant::now() < deadline, "execution not registered");
-        thread::sleep(Duration::from_millis(20));
-    }
+        inspection["executions"]
+            .as_array()
+            .unwrap()
+            .first()
+            .filter(|execution| !execution["child"].is_null())
+            .cloned()
+    })
 }
 
 #[test]
@@ -7773,11 +7735,9 @@ fn doctor_stops_identity_verified_orphans_after_wrapper_death() {
     let execution = wait_registered_execution(&fixture, "orphan");
     wrapper.kill().unwrap();
     wrapper.wait().unwrap();
-    let deadline = Instant::now() + Duration::from_secs(60);
-    while fixture.ok(&["inspect", "orphan"])["executions"][0]["state"] != "unknown" {
-        assert!(Instant::now() < deadline);
-        thread::sleep(Duration::from_millis(20));
-    }
+    wait_until("orphan execution to become unknown", || {
+        fixture.ok(&["inspect", "orphan"])["executions"][0]["state"] == "unknown"
+    });
     let report = recovery_report(&fixture, &["doctor", "orphan", "--repair"]);
     assert!(
         report[0]["executions"][0]["processes"]
@@ -7910,11 +7870,9 @@ fn manual_removal_stops_recorded_orphans_before_releasing_resources() {
     let execution = wait_registered_execution(&fixture, "orphan");
     wrapper.kill().unwrap();
     wrapper.wait().unwrap();
-    let deadline = Instant::now() + Duration::from_secs(60);
-    while fixture.ok(&["inspect", "orphan"])["executions"][0]["state"] != "unknown" {
-        assert!(Instant::now() < deadline);
-        thread::sleep(Duration::from_millis(20));
-    }
+    wait_until("orphan execution to become unknown", || {
+        fixture.ok(&["inspect", "orphan"])["executions"][0]["state"] == "unknown"
+    });
     fixture.ok(&["rm", "orphan"]);
     assert_eq!(
         fixture.ok(&["resource", "list", "--all"]),
@@ -7998,17 +7956,12 @@ time.sleep(30)
         .spawn()
         .unwrap();
     wait_registered_execution(&fixture, "orphan");
-    let deadline = Instant::now() + Duration::from_secs(60);
-    while !root.join("ready").exists() {
-        assert!(Instant::now() < deadline);
-        thread::sleep(Duration::from_millis(10));
-    }
+    wait_until("orphan ready signal", || root.join("ready").exists());
     wrapper.kill().unwrap();
     wrapper.wait().unwrap();
-    while fixture.ok(&["inspect", "orphan"])["executions"][0]["state"] != "unknown" {
-        assert!(Instant::now() < deadline);
-        thread::sleep(Duration::from_millis(10));
-    }
+    wait_until("orphan execution to become unknown", || {
+        fixture.ok(&["inspect", "orphan"])["executions"][0]["state"] == "unknown"
+    });
     let mut stopping = fixture
         .command()
         .args(["stop", "orphan"])
@@ -8016,10 +7969,7 @@ time.sleep(30)
         .stderr(Stdio::null())
         .spawn()
         .unwrap();
-    while !root.join("stopping").exists() {
-        assert!(Instant::now() < deadline);
-        thread::sleep(Duration::from_millis(10));
-    }
+    wait_until("orphan stopping signal", || root.join("stopping").exists());
     let marker = root.join("other-ran");
     let output = fixture.run(&["exec", "other", "--", "touch", marker.to_str().unwrap()]);
     assert!(output.status.success());
@@ -8209,15 +8159,12 @@ fn repository_removal_deletes_local_checkout_workspaces_and_leases_and_stops_com
         .stderr(Stdio::null())
         .spawn()
         .unwrap();
-    let deadline = Instant::now() + Duration::from_secs(60);
-    while fixture.ok(&["inspect", "first"])["executions"]
-        .as_array()
-        .unwrap()
-        .is_empty()
-    {
-        assert!(Instant::now() < deadline);
-        thread::sleep(Duration::from_millis(20));
-    }
+    wait_until("execution registration", || {
+        !fixture.ok(&["inspect", "first"])["executions"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    });
     let result = fixture.ok(&["repo", "rm", "doomed", "-y"]);
     assert_eq!(result["removed"], true);
     assert_eq!(result["repository_id"], repo["id"]);
@@ -8456,17 +8403,16 @@ fn repository_removal_keeps_the_confirmed_target_when_a_name_is_reassigned() {
         .stdout(Stdio::piped())
         .spawn()
         .unwrap();
-    let deadline = Instant::now() + Duration::from_secs(60);
     let mut transcript = String::new();
-    loop {
+    try_wait_for(|| {
         let _ = master.read_to_string(&mut transcript);
         if transcript.contains("Are you sure? [y/N]") {
-            break;
+            return Some(());
         }
         assert!(child.try_wait().unwrap().is_none(), "{transcript}");
-        assert!(Instant::now() < deadline, "hung confirmation: {transcript}");
-        thread::sleep(Duration::from_millis(10));
-    }
+        None
+    })
+    .unwrap_or_else(|| panic!("hung confirmation: {transcript}"));
     fixture.ok(&[
         "repo",
         "rename",
@@ -8480,14 +8426,11 @@ fn repository_removal_keeps_the_confirmed_target_when_a_name_is_reassigned() {
         "project",
     ]);
     master.write_all(b"y\n").unwrap();
-    loop {
+    try_wait_for(|| {
         let _ = master.read_to_string(&mut transcript);
-        if child.try_wait().unwrap().is_some() {
-            break;
-        }
-        assert!(Instant::now() < deadline, "hung removal: {transcript}");
-        thread::sleep(Duration::from_millis(10));
-    }
+        child.try_wait().unwrap()
+    })
+    .unwrap_or_else(|| panic!("hung removal: {transcript}"));
     let output = child.wait_with_output().unwrap();
     assert!(output.status.success(), "{transcript}");
     assert!(!fixture.repo.exists());
@@ -9062,12 +9005,13 @@ fn setup_interruption_preserves_work_and_blocks_concurrent_execution() {
     let path = fixture
         .shoal_dir()
         .join("repo-with---quotes----literal/interrupted");
-    let deadline = Instant::now() + Duration::from_secs(60);
-    while !path.join("setup-started").exists() {
-        assert!(Instant::now() < deadline, "setup did not start");
+    wait_until("setup to start", || {
+        if path.join("setup-started").exists() {
+            return true;
+        }
         assert!(add.try_wait().unwrap().is_none());
-        thread::sleep(Duration::from_millis(20));
-    }
+        false
+    });
     assert_eq!(
         fixture.ok(&["inspect", "interrupted"])["workspace"]["state"],
         "preparing"
@@ -9086,15 +9030,8 @@ fn setup_interruption_preserves_work_and_blocks_concurrent_execution() {
     );
     // Signal the wrapper so it can stop its recorded process group and report failure.
     assert_eq!(unsafe { libc::kill(add.id() as i32, libc::SIGTERM) }, 0);
-    let deadline = Instant::now() + Duration::from_secs(60);
-    loop {
-        if let Some(status) = add.try_wait().unwrap() {
-            assert!(!status.success());
-            break;
-        }
-        assert!(Instant::now() < deadline, "setup did not stop");
-        thread::sleep(Duration::from_millis(20));
-    }
+    let status = wait_for("setup to stop", || add.try_wait().unwrap());
+    assert!(!status.success());
     let inspection = fixture.ok(&["inspect", "interrupted"]);
     assert_eq!(inspection["workspace"]["state"], "failed");
     assert_eq!(inspection["executions"], serde_json::json!([]));
@@ -10374,39 +10311,33 @@ esac
 }
 
 fn wait_removed(fixture: &Fixture, name: &str) {
-    let deadline = Instant::now() + Duration::from_secs(60);
-    while fixture
-        .ok(&["ls"])
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|w| w["name"] == name)
-    {
-        assert!(
-            Instant::now() < deadline,
+    try_wait_for(|| {
+        (!fixture
+            .ok(&["ls"])
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|w| w["name"] == name))
+        .then_some(())
+    })
+    .unwrap_or_else(|| {
+        panic!(
             "PR cleanup did not remove workspace: {}",
             fixture.ok(&["inspect", name])
-        );
-        thread::sleep(Duration::from_millis(30));
-    }
+        )
+    });
 }
 
 fn wait_pr_error(fixture: &Fixture, name: &str, message: &str) {
-    let deadline = Instant::now() + Duration::from_secs(60);
-    loop {
-        let inspection = fixture.ok(&["inspect", name]);
-        if inspection["pr_cleanup"]["error"]
+    let mut inspection = Value::Null;
+    try_wait_for(|| {
+        inspection = fixture.ok(&["inspect", name]);
+        inspection["pr_cleanup"]["error"]
             .as_str()
             .is_some_and(|s| s.contains(message))
-        {
-            return;
-        }
-        assert!(
-            Instant::now() < deadline,
-            "expected {message}: {inspection}"
-        );
-        thread::sleep(Duration::from_millis(30));
-    }
+            .then_some(())
+    })
+    .unwrap_or_else(|| panic!("expected {message}: {inspection}"));
 }
 
 #[test]
@@ -11648,15 +11579,16 @@ fn land_interruptions_stop_merge_drivers_and_restore_the_default_checkout() {
             .stderr(fs::File::create(&stderr_path).unwrap())
             .spawn()
             .unwrap();
-        let deadline = Instant::now() + Duration::from_secs(60);
-        while !fixture.repo.join(".git/land-driver.pid").exists() {
+        wait_until("merge driver to start", || {
+            if fixture.repo.join(".git/land-driver.pid").exists() {
+                return true;
+            }
             assert!(
                 land.try_wait().unwrap().is_none(),
                 "land exited before merge driver"
             );
-            assert!(Instant::now() < deadline, "merge driver did not start");
-            thread::sleep(Duration::from_millis(20));
-        }
+            false
+        });
         let pid: i32 = fs::read_to_string(fixture.repo.join(".git/land-driver.pid"))
             .unwrap()
             .trim()
@@ -11673,31 +11605,16 @@ fn land_interruptions_stop_merge_drivers_and_restore_the_default_checkout() {
         } else {
             fixture.ok(&["stop", "worker"]);
         }
-        let deadline = Instant::now() + Duration::from_secs(60);
-        loop {
-            if let Some(status) = land.try_wait().unwrap() {
-                assert!(!status.success());
-                break;
-            }
-            assert!(Instant::now() < deadline, "landing wrapper did not stop");
-            thread::sleep(Duration::from_millis(20));
-        }
-        let deadline = Instant::now() + Duration::from_secs(60);
-        loop {
+        let status = wait_for("landing wrapper to stop", || land.try_wait().unwrap());
+        assert!(!status.success());
+        wait_until("merge driver to stop", || {
             let output = Command::new("ps")
                 .args(["-p", &pid.to_string(), "-o", "stat="])
                 .output()
                 .unwrap();
             let status = String::from_utf8_lossy(&output.stdout);
-            if status.trim().is_empty() || status.trim().starts_with('Z') {
-                break;
-            }
-            assert!(
-                Instant::now() < deadline,
-                "merge driver survived landing stop"
-            );
-            thread::sleep(Duration::from_millis(20));
-        }
+            status.trim().is_empty() || status.trim().starts_with('Z')
+        });
         assert_eq!(git(&fixture.repo, &["rev-parse", "HEAD"]), before);
         assert_eq!(
             git(&fixture.repo, &["status", "--porcelain"]),
@@ -11773,14 +11690,6 @@ fn wait_for_busy(fixture: &Fixture, workspace: &str) {
             .iter()
             .any(|event| event["kind"] == "resource_busy" && event["workspace"] == workspace)
     });
-}
-
-fn wait_until(what: &str, mut done: impl FnMut() -> bool) {
-    let deadline = Instant::now() + Duration::from_secs(60);
-    while !done() {
-        assert!(Instant::now() < deadline, "timed out waiting for {what}");
-        thread::sleep(Duration::from_millis(20));
-    }
 }
 
 #[test]
@@ -15021,23 +14930,15 @@ fn simulator_approvals_precede_mutations_and_cannot_be_bypassed_by_device_args()
         .stderr(Stdio::piped())
         .spawn()
         .unwrap();
-    let deadline = Instant::now() + Duration::from_secs(60);
-    let id = loop {
+    let id = wait_for("pending acquisition approval", || {
         let requests = fixture.ok(&["access"]);
-        if let Some(request) = requests
+        requests
             .as_array()
             .unwrap()
             .iter()
             .find(|r| r["status"] == "pending")
-        {
-            break request["id"].as_str().unwrap().to_owned();
-        }
-        assert!(
-            Instant::now() < deadline,
-            "waiting acquisition did not request approval"
-        );
-        thread::sleep(Duration::from_millis(20));
-    };
+            .map(|request| request["id"].as_str().unwrap().to_owned())
+    });
     fixture.ok(&["access", "approve", &id]);
     let output = child.wait_with_output().unwrap();
     assert!(
