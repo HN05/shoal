@@ -342,6 +342,11 @@ impl Manager {
                                 &tx, &id, kind, &url, &update,
                             )?;
                         }
+                    } else {
+                        snapshot.schedule_failure_reports(
+                            &Snapshot::default(),
+                            crate::time::unix_seconds(),
+                        );
                     }
                     tx.execute(
                         "INSERT INTO workspace_item_activity(workspace_id,url,record)
@@ -883,6 +888,44 @@ mod tests {
         assert_eq!(activity.kind, ItemKind::Pr);
         assert_eq!(activity.url, "pr");
         assert_eq!(activity.update.kind, UpdateKind::Comment);
+    }
+
+    #[tokio::test]
+    async fn background_activity_does_not_repeat_an_unchanged_baseline_failure() {
+        let (root, manager) = manager().await;
+        let repo_path = repository(root.path(), "repo");
+        let repo = manager
+            .register_repository(repo_path.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        let workspace = manager
+            .create_workspace(&repo.id, "failed-activity".into(), None, None, None)
+            .await
+            .unwrap();
+        register_watch(&manager, &workspace.id, "pr").await;
+        let failed: Snapshot = serde_json::from_value(serde_json::json!({
+            "comments": {},
+            "checks": {},
+            "conflict": null,
+            "state": "open",
+            "errors": {"forge": "temporarily unavailable"}
+        }))
+        .unwrap();
+
+        manager
+            .record_background_activity(&workspace.id, vec![("pr".into(), failed.clone())])
+            .await
+            .unwrap();
+        manager
+            .record_background_activity(&workspace.id, vec![("pr".into(), failed)])
+            .await
+            .unwrap();
+        assert!(manager
+            .workspace_events(None, 100)
+            .await
+            .unwrap()
+            .iter()
+            .all(|item| !matches!(item, crate::daemon::events::EventItem::Event(event) if event.details.kind == crate::daemon::events::EventKind::ItemActivity)));
     }
 
     #[tokio::test]
