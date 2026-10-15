@@ -17,6 +17,7 @@ mod paths;
 mod process;
 mod protocol;
 mod removal;
+mod secrets;
 mod service;
 mod shell;
 mod sim;

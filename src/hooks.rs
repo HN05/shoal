@@ -138,6 +138,9 @@ fn command(
 ) -> Result<Command> {
     let mut command = Command::new(executable);
     env::apply_workspace_identity(&mut command, workspace, paths);
+    for name in env::inherited_secret_exports() {
+        command.env_remove(name);
+    }
     command
         .current_dir(hook.kind().directory().path(
             &workspace.path,
@@ -157,6 +160,7 @@ fn command(
         .env_remove(env::SCOPE_TOKEN)
         .env_remove(env::EXECUTION_ID)
         .env_remove(env::RESERVED_PORT_ENV)
+        .env_remove(env::SECRET_ENV)
         .envs(configured_env)
         .process_group(0)
         .kill_on_drop(true);

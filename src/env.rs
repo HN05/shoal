@@ -30,6 +30,9 @@ pub const WORKSPACE_NAME: &str = "SHOAL_WORKSPACE";
 pub const RESERVED_PORT_ENV: &str = "SHOAL_RESERVED_PORT_ENV";
 /// Prefix of the default environment variable for a named port reservation.
 pub const PORT_PREFIX: &str = "SHOAL_PORT_";
+/// Colon-separated names of the secret variables an agent launch exported,
+/// which hooks started beneath it drop.
+pub const SECRET_ENV: &str = "SHOAL_SECRET_ENV";
 /// Which hook is running, using the configuration key without `_cmd`.
 pub const HOOK: &str = "SHOAL_HOOK";
 /// Recorded worktree path, including after removal.
@@ -66,21 +69,27 @@ pub const CODEX_HOME: &str = "CODEX_HOME";
 /// Validate names configured in `[env]` before they reach a process.
 pub fn validate_configured_environment(values: &BTreeMap<String, String>) -> Result<()> {
     for (name, value) in values {
-        ensure!(
-            name.bytes()
-                .next()
-                .is_some_and(|byte| byte.is_ascii_alphabetic() || byte == b'_')
-                && name
-                    .bytes()
-                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_'),
-            "invalid [env] variable name: {name}"
-        );
-        ensure!(
-            !name.starts_with(PREFIX),
-            "[env] variable conflicts with Shoal's execution environment: {name}"
-        );
+        validate_configured_name("[env]", name)?;
         ensure!(!value.contains('\0'), "[env] value for {name} contains NUL");
     }
+    Ok(())
+}
+
+/// A variable name `table` may set: portable, and outside Shoal's own names.
+pub fn validate_configured_name(table: &str, name: &str) -> Result<()> {
+    ensure!(
+        name.bytes()
+            .next()
+            .is_some_and(|byte| byte.is_ascii_alphabetic() || byte == b'_')
+            && name
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_'),
+        "invalid {table} variable name: {name}"
+    );
+    ensure!(
+        !name.starts_with(PREFIX),
+        "{table} variable conflicts with Shoal's execution environment: {name}"
+    );
     Ok(())
 }
 
@@ -164,6 +173,16 @@ pub fn inherited_port_exports() -> Vec<OsString> {
     exports.sort();
     exports.dedup();
     exports
+}
+
+/// Secret variables inherited from an enclosing agent launch.
+pub fn inherited_secret_exports() -> Vec<String> {
+    std::env::var(SECRET_ENV)
+        .unwrap_or_default()
+        .split(':')
+        .filter(|name| !name.is_empty() && !PROTECTED.contains(name) && !name.starts_with(PREFIX))
+        .map(String::from)
+        .collect()
 }
 
 /// Shared identity values for hooks, tracked executions and external processes.

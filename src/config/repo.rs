@@ -75,6 +75,9 @@ pub struct RepoConfig {
     pub pre_remove_cmd: Option<String>,
     pub ports: PortDefaults,
     pub env: BTreeMap<String, String>,
+    /// Machine-specific, so the global config or saved repository config sets
+    /// it, never the worktree file.
+    pub secrets: crate::secrets::Secrets,
     pub resources: BTreeMap<String, crate::daemon::resources::ResourceConfig>,
     pub resource_pools: BTreeMap<String, crate::daemon::resources::PoolConfig>,
     pub simulators: SimulatorPreferences,
@@ -126,7 +129,13 @@ pub fn load(workspace_dir: &Path) -> Result<RepoConfig> {
         Some(path) => {
             let text =
                 fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
-            parse(&text).with_context(|| format!("parse {}", path.display()))?
+            let config = parse(&text).with_context(|| format!("parse {}", path.display()))?;
+            ensure!(
+                config.secrets.is_empty(),
+                "{}: [secrets] belongs in the global or saved repository config",
+                path.display()
+            );
+            config
         }
         None => RepoConfig::default(),
     };
@@ -169,6 +178,7 @@ pub fn parse(text: &str) -> Result<RepoConfig> {
     }
     crate::daemon::resources::definitions(&config.resources, &config.resource_pools)?;
     crate::env::validate_configured_environment(&config.env)?;
+    crate::secrets::validate(&config.secrets)?;
     Ok(config)
 }
 

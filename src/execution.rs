@@ -312,7 +312,15 @@ async fn run_tracked(
             crate::protocol::ConfigTarget::Workspace(workspace.clone()),
         )
         .await?;
-        Some(settings.agent_auth.prepare(paths, &config.git)?)
+        let secrets = if agent.is_some() {
+            crate::secrets::Launch::prepare(&settings.secrets).await?
+        } else {
+            Default::default()
+        };
+        Some(AgentLaunch {
+            account: settings.agent_auth.prepare(paths, &config.git)?,
+            secrets,
+        })
     } else {
         None
     };
@@ -556,6 +564,20 @@ impl Halt {
     }
 }
 
+/// What an agent's or publishing child receives beyond the workspace
+/// environment: the agent account and, for agents, the configured secrets.
+struct AgentLaunch {
+    account: crate::agent_auth::Launch,
+    secrets: crate::secrets::Launch,
+}
+
+impl AgentLaunch {
+    fn apply(&self, command: &mut Command) {
+        self.account.apply(command);
+        self.secrets.apply(command);
+    }
+}
+
 /// Launch the command, register its process group, and wait for it to exit or
 /// for a stop request.
 async fn supervise(
@@ -564,7 +586,7 @@ async fn supervise(
     plan: &ExecutionPlan,
     command: &[OsString],
     mode: &Mode,
-    auth: Option<&crate::agent_auth::Launch>,
+    auth: Option<&AgentLaunch>,
     recovery_record: Option<&Path>,
 ) -> Result<Outcome> {
     let mut terminate = signal(SignalKind::terminate())?;
@@ -672,7 +694,7 @@ fn spawn(
     plan: &ExecutionPlan,
     command: &[OsString],
     mode: &Mode,
-    auth: Option<&crate::agent_auth::Launch>,
+    auth: Option<&AgentLaunch>,
 ) -> Result<Child> {
     let mut process = Command::new(&command[0]);
     process

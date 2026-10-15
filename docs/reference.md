@@ -663,6 +663,28 @@ exec /opt/homebrew/bin/gh "$@"
 Keep tokens outside repository and Shoal TOML. This example selects credentials
 for GitHub.com; configure the corresponding token for each enterprise host you use.
 
+### Agent secrets
+
+`[secrets]` gives tracked agents values that commands fetch from your secret
+store. Each entry is named after the variable that carries the value, and its
+`command` is an argument array whose standard output is the value:
+
+```toml
+[secrets.OPENAI_API_KEY]
+command = ["security", "find-generic-password", "-s", "shoal-agent-openai", "-w"]
+```
+
+Set it in the global config or the saved repository config; a worktree file
+that sets it is rejected, because secret sources belong to the machine. An
+entry replaces the same-named entry below it whole. Shoal stores the commands,
+never the values.
+
+Agent launches run each command without input, before the agent starts, and
+add the values to the agent's environment; nested commands inherit them. One
+trailing line break is dropped. A command that fails, prints nothing or
+prints NUL stops the launch. Ordinary executions do not receive secrets, and
+hooks started beneath an agent drop the ones it inherited.
+
 ### Prompt templates
 
 `issue_template` and `agent_template` in the saved repository TOML win over

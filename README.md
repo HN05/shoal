@@ -282,6 +282,9 @@ AGENT_BROWSER_SESSION = "{workspace}"
 AGENT_BROWSER_PROFILE = "{workspace_path}/.agent-browser"
 ```
 
+Use `[secrets]` in global or saved repository config to give agents values
+fetched from your secret store; see [agent secrets](docs/reference.md#agent-secrets).
+
 ## Cleanup
 
 `shoal rm` removes a workspace and its resources, prompting when needed about

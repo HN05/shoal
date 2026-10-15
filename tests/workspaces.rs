@@ -12888,6 +12888,72 @@ fn agent_auth_wrappers_are_inherited_without_changing_ordinary_executions() {
 }
 
 #[test]
+fn secrets_reach_agents_but_not_ordinary_executions_or_hooks() {
+    let fixture = Fixture::with_config(Some(
+        "[secrets.AGENT_TOKEN]\ncommand = ['printf', '%s\\n', 'global secret']\n",
+    ));
+    let workspace = fixture.add("secrets");
+    let worktree = Path::new(workspace["path"].as_str().unwrap());
+    install_test_script(
+        worktree.join("post-setup.sh"),
+        "#!/bin/sh\nprintf '%s|%s' \"${AGENT_TOKEN-unset}\" \"${SHOAL_SECRET_ENV-unset}\" > hook-env\n",
+    );
+    install_test_script(worktree.join("setup.sh"), "#!/bin/sh\n");
+    fs::write(
+        worktree.join(".shoal.toml"),
+        "setup_cmd = 'setup.sh'\npost_setup_cmd = 'post-setup.sh'\n[commands]\nclaude = ['sh', '-c', 'printf \"%s|%s\\n\" \"$AGENT_TOKEN\" \"$SHOAL_SECRET_ENV\"']\n",
+    )
+    .unwrap();
+    let output = fixture.run(&["claude", "secrets"]);
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(output.stdout, b"global secret|AGENT_TOKEN\n");
+    let output = fixture.run(&["exec", "secrets", "--", "printenv", "AGENT_TOKEN"]);
+    assert!(!output.status.success(), "{output:?}");
+
+    // A hook started beneath an agent drops the secrets it inherited.
+    let output = fixture
+        .command()
+        .env("AGENT_TOKEN", "inherited")
+        .env("SHOAL_SECRET_ENV", "AGENT_TOKEN")
+        .args(["setup", "secrets"])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(
+        fs::read_to_string(worktree.join("hook-env")).unwrap(),
+        "unset|unset"
+    );
+
+    // The saved repository config can replace a secret; a failing command
+    // stops the launch.
+    let saved = fixture.root.path().join("saved.toml");
+    fs::write(&saved, "[secrets.AGENT_TOKEN]\ncommand = ['false']\n").unwrap();
+    fixture.ok(&[
+        "repo",
+        "config",
+        fixture.repo.to_str().unwrap(),
+        "--file",
+        saved.to_str().unwrap(),
+    ]);
+    let output = fixture.run(&["claude", "secrets"]);
+    assert!(!output.status.success());
+    assert!(output.stdout.is_empty());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("secrets.AGENT_TOKEN"), "{stderr}");
+
+    // Secret sources describe this machine, so a tracked file cannot name one.
+    fs::write(
+        worktree.join(".shoal.toml"),
+        "[secrets.OTHER]\ncommand = ['true']\n",
+    )
+    .unwrap();
+    let output = fixture.run(&["config", "show", "secrets"]);
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("[secrets] belongs in"), "{stderr}");
+}
+
+#[test]
 fn agent_git_profile_applies_only_to_agent_processes() {
     let fixture = Fixture::with_config(Some(
         "[git.profiles.agent]\nuser.name = 'Agent Name'\nuser.email = 'agent@example.invalid'\n",
