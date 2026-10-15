@@ -88,17 +88,8 @@ impl Account {
             !self.fj_home_missing,
             "set agent_auth.fj_home to the HOME the agent's fj wrapper uses, so Shoal can use the agent's Forgejo login"
         );
-        if let Some(path) = &self.fj_keys {
-            return fj_token(path, host)
-                .map(ForgejoLogin::Token)
-                .context("the agent's fj login");
-        }
-        if self.tea {
-            return tea::login(self, host)
-                .await
-                .context("the agent's tea logins")?
-                .map(ForgejoLogin::Tea)
-                .with_context(|| format!("the agent's tea has no login for {host}"));
+        if self.fj_keys.is_some() || self.tea {
+            return self.agent_forgejo_login(host).await;
         }
         if let Ok(token) = fj_token(&fj_keys_path()?, host) {
             return Ok(ForgejoLogin::Token(token));
@@ -110,11 +101,87 @@ impl Account {
         })
     }
 
+    /// The agent's fj token for `host`, else its tea login for the host. The
+    /// user's logins never stand in for the agent's.
+    async fn agent_forgejo_login(&self, host: &str) -> Result<ForgejoLogin> {
+        let fj = self
+            .fj_keys
+            .as_ref()
+            .map(|path| fj_token(path, host).context("the agent's fj login"));
+        if let Some(Ok(token)) = fj {
+            return Ok(ForgejoLogin::Token(token));
+        }
+        if self.tea
+            && let Some(login) = tea::login(self, host)
+                .await
+                .context("the agent's tea logins")?
+        {
+            return Ok(ForgejoLogin::Tea(login));
+        }
+        match fj {
+            Some(Err(error)) => Err(error),
+            _ => anyhow::bail!("the agent's tea has no login for {host}"),
+        }
+    }
+
     /// The curl config line that signs a Bitbucket request in, if any.
     pub(super) async fn bitbucket_authorization(&self) -> Result<Option<Vec<u8>>> {
         self.bitbucket_authorization
             .get_or_try_init(|| self.bitbucket.authorization())
             .await
             .cloned()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+
+    /// An agent with `fj_home`, whose fj has a login for `fj.example` only,
+    /// and a `tea` wrapper with a login for `tea.example` only.
+    fn agent(root: &std::path::Path) -> Account {
+        let paths = Paths::for_test(root);
+        paths.prepare().unwrap();
+        let home = root.join("fj-home");
+        let keys = fj_keys_at(&home, None);
+        std::fs::create_dir_all(keys.parent().unwrap()).unwrap();
+        std::fs::write(
+            &keys,
+            r#"{"hosts":{"fj.example":{"type":"Application","token":"fj-token"}}}"#,
+        )
+        .unwrap();
+        let tea = root.join("tea-agent");
+        std::fs::write(
+            &tea,
+            "#!/bin/sh\necho '[{\"name\":\"agent\",\"url\":\"https://tea.example\"}]'\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&tea, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let config = agent_auth::Config {
+            fj_home: Some(home),
+            tea: Some(tea),
+            ..Default::default()
+        };
+        Account::agent(&config, &paths, &Default::default(), &Default::default()).unwrap()
+    }
+
+    #[tokio::test]
+    async fn agents_fall_back_from_fj_to_tea_per_host() {
+        let root = tempfile::tempdir().unwrap();
+        let account = agent(root.path());
+        assert!(matches!(
+            account.forgejo_login("fj.example").await.unwrap(),
+            ForgejoLogin::Token(token) if token == "fj-token"
+        ));
+        assert!(matches!(
+            account.forgejo_login("tea.example").await.unwrap(),
+            ForgejoLogin::Tea(login) if login.name == "agent"
+        ));
+        let error = account.forgejo_login("other.example").await.err().unwrap();
+        assert!(
+            format!("{error:#}").contains("the agent's fj login"),
+            "{error:#}"
+        );
     }
 }

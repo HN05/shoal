@@ -671,8 +671,8 @@ GitHub they run `gh api` through the `gh` wrapper, and on GitLab `glab api`
 through the `glab` wrapper. On Forgejo and Gitea they use
 the token the agent's `fj` saved under `fj_home`, read for each request and passed
 to curl on stdin; with an `fj` wrapper but no `fj_home` they fail rather than use
-your login. Without either, a `tea` wrapper sends them through `tea api` with its
-login for the host. Options left unset use your own logins, as the agent would.
+your login. For a host the agent's fj has no login for, a `tea` wrapper sends
+them through `tea api` with its login for the host. Options left unset use your own logins, as the agent would.
 
 The agent Git profile reaches tracked agents through Git's `GIT_CONFIG_COUNT`
 variables, after any inherited entries, so it overrides every Git config file for
