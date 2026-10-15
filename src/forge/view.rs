@@ -167,7 +167,10 @@ impl ForgeRepo {
                     .forgejo_details(account, kind, number)
                     .await
                     .context(self.kind.login_hint()),
-                ForgeKind::GitLab => anyhow::bail!("viewing GitLab items is not supported yet"),
+                ForgeKind::GitLab => self
+                    .gitlab_details(account, kind, number)
+                    .await
+                    .context(self.kind.login_hint()),
             }
         };
         let status = async {
@@ -188,7 +191,10 @@ impl ForgeRepo {
                     .forgejo_discussion(account, kind, number, &mut details)
                     .await
                     .context(self.kind.login_hint()),
-                ForgeKind::GitLab => Ok(None),
+                ForgeKind::GitLab => self
+                    .gitlab_discussion(account, kind, number, &mut details)
+                    .await
+                    .context(self.kind.login_hint()),
             };
             match discussion {
                 Ok(Some(reviews)) => details.reviews = Some(reviews),
@@ -311,15 +317,23 @@ impl PrDetails {
         errors.extend(status.errors);
     }
 
-    fn new(head: &Value, base: &Value, draft: bool) -> Result<Self> {
-        Ok(Self {
-            head: head.as_str().context("PR has no head branch")?.into(),
-            base: base.as_str().context("PR has no base branch")?.into(),
+    pub(super) fn new(head: String, base: String, draft: bool) -> Self {
+        Self {
+            head,
+            base,
             draft,
             merge_conflicts: None,
             checks: Vec::new(),
             review: None,
-        })
+        }
+    }
+
+    fn read(head: &Value, base: &Value, draft: bool) -> Result<Self> {
+        Ok(Self::new(
+            head.as_str().context("PR has no head branch")?.into(),
+            base.as_str().context("PR has no base branch")?.into(),
+            draft,
+        ))
     }
 }
 
@@ -328,7 +342,7 @@ fn github_details(text: &str, kind: ItemKind, number: u64) -> Result<Details> {
     ensure!(item["number"] == number, "gh returned a different item");
     let pr = match kind {
         ItemKind::Issue => None,
-        ItemKind::Pr => Some(PrDetails::new(
+        ItemKind::Pr => Some(PrDetails::read(
             &item["headRefName"],
             &item["baseRefName"],
             item["isDraft"].as_bool().unwrap_or_default(),
@@ -402,7 +416,7 @@ fn forgejo_details(item: &Value, kind: ItemKind, number: u64) -> Result<Details>
             );
             None
         }
-        ItemKind::Pr => Some(PrDetails::new(
+        ItemKind::Pr => Some(PrDetails::read(
             &item["head"]["ref"],
             &item["base"]["ref"],
             item["draft"].as_bool().unwrap_or_default(),

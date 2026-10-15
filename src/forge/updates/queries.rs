@@ -64,7 +64,10 @@ impl ForgeRepo {
             state: issue.item.state.as_str().into(),
             ..Default::default()
         };
-        snapshot.record_comments("discussion", self.rest_discussion(account, number).await);
+        snapshot.record_comments(
+            "discussion",
+            self.rest_discussion(account, ItemKind::Issue, number).await,
+        );
         Ok(snapshot)
     }
 
@@ -141,7 +144,10 @@ impl ForgeRepo {
             state: pull.item.state.as_str().into(),
             ..Default::default()
         };
-        snapshot.record_comments("discussion", self.rest_discussion(account, number).await);
+        snapshot.record_comments(
+            "discussion",
+            self.rest_discussion(account, ItemKind::Pr, number).await,
+        );
         snapshot.record_comments("reviews", self.rest_review_activity(account, number).await);
         if pull.item.state == ItemState::Open {
             snapshot.record_checks(&pull, self.rest_checks(account, &pull).await);

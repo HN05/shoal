@@ -78,9 +78,10 @@ impl ForgeRepo {
         pull: &Current,
     ) -> Result<Vec<RestCheck>> {
         let head = pull.head_sha.as_deref().context("PR has no head commit")?;
-        let endpoint = self.repo_endpoint(&format!("commits/{head}/status?limit=50"));
-        let combined = self.send(account, &Request::get(endpoint)).await?;
-        forgejo_checks(&combined)
+        match self.kind {
+            ForgeKind::GitHub | ForgeKind::Forgejo => self.forgejo_checks(account, head).await,
+            ForgeKind::GitLab => self.gitlab_checks(account, head).await,
+        }
     }
 
     /// Each submitted review's reviewer and verdict.
@@ -89,16 +90,37 @@ impl ForgeRepo {
         account: &Account,
         number: u64,
     ) -> Result<Vec<(String, Verdict)>> {
-        let endpoint = self.repo_endpoint(&format!("pulls/{number}/reviews"));
-        forgejo_reviews(&self.pages(account, &endpoint).await?)
+        match self.kind {
+            ForgeKind::GitHub | ForgeKind::Forgejo => {
+                let endpoint = self.repo_endpoint(&format!("pulls/{number}/reviews"));
+                forgejo_reviews(&self.pages(account, &endpoint).await?)
+            }
+            ForgeKind::GitLab => self.gitlab_verdicts(account, number).await,
+        }
     }
 
     /// What changes when a comment is added, edited or deleted.
-    pub(super) async fn rest_discussion(&self, account: &Account, number: u64) -> Result<String> {
-        let endpoint = self.repo_endpoint(&format!("issues/{number}/comments"));
-        let comments = self.send(account, &Request::get(endpoint)).await?;
-        let comments = comments.as_array().context("comments are not a list")?;
-        Ok(fingerprint(comments, &["id", "body", "updated_at"]))
+    pub(super) async fn rest_discussion(
+        &self,
+        account: &Account,
+        kind: ItemKind,
+        number: u64,
+    ) -> Result<String> {
+        match self.kind {
+            ForgeKind::GitHub | ForgeKind::Forgejo => {
+                let endpoint = self.repo_endpoint(&format!("issues/{number}/comments"));
+                let comments = self.send(account, &Request::get(endpoint)).await?;
+                let comments = comments.as_array().context("comments are not a list")?;
+                Ok(fingerprint(comments, &["id", "body", "updated_at"]))
+            }
+            ForgeKind::GitLab => {
+                let notes = self.gitlab_notes(account, kind, number).await?;
+                Ok(fingerprint(
+                    &notes,
+                    &["id", "body", "updated_at", "resolved"],
+                ))
+            }
+        }
     }
 
     /// What changes when a review is submitted, edited, dismissed or answered.
@@ -107,20 +129,37 @@ impl ForgeRepo {
         account: &Account,
         number: u64,
     ) -> Result<String> {
-        let endpoint = self.repo_endpoint(&format!("pulls/{number}/reviews"));
-        let reviews = self.pages(account, &endpoint).await?;
-        Ok(fingerprint(
-            &reviews,
-            &[
-                "id",
-                "body",
-                "state",
-                "comments_count",
-                "stale",
-                "dismissed",
-                "updated_at",
-            ],
-        ))
+        match self.kind {
+            ForgeKind::GitHub | ForgeKind::Forgejo => {
+                let endpoint = self.repo_endpoint(&format!("pulls/{number}/reviews"));
+                let reviews = self.pages(account, &endpoint).await?;
+                Ok(fingerprint(
+                    &reviews,
+                    &[
+                        "id",
+                        "body",
+                        "state",
+                        "comments_count",
+                        "stale",
+                        "dismissed",
+                        "updated_at",
+                    ],
+                ))
+            }
+            // Inline comments are notes, which the discussion covers.
+            ForgeKind::GitLab => Ok(self
+                .gitlab_verdicts(account, number)
+                .await?
+                .iter()
+                .map(|(reviewer, verdict)| format!("{reviewer}:{verdict:?}\n"))
+                .collect()),
+        }
+    }
+
+    async fn forgejo_checks(&self, account: &Account, head: &str) -> Result<Vec<RestCheck>> {
+        let endpoint = self.repo_endpoint(&format!("commits/{head}/status?limit=50"));
+        let combined = self.send(account, &Request::get(endpoint)).await?;
+        forgejo_statuses(&combined)
     }
 
     fn branches(&self, pull: Current) -> Result<(String, String, String)> {
@@ -152,7 +191,7 @@ fn commit_shas(commits: &[Value], field: &str) -> Result<Vec<String>> {
 
 /// The fields of each item that matter for activity; empty for no items, so
 /// an item without comments reads the same as before it had any.
-fn fingerprint(items: &[Value], fields: &[&str]) -> String {
+pub(super) fn fingerprint(items: &[Value], fields: &[&str]) -> String {
     if items.is_empty() {
         return String::new();
     }
@@ -169,7 +208,7 @@ fn fingerprint(items: &[Value], fields: &[&str]) -> String {
 }
 
 /// Forgejo's combined status; a commit without statuses has `"statuses": null`.
-fn forgejo_checks(combined: &Value) -> Result<Vec<RestCheck>> {
+fn forgejo_statuses(combined: &Value) -> Result<Vec<RestCheck>> {
     let statuses = match &combined["statuses"] {
         Value::Null => &[][..],
         statuses => statuses.as_array().context("invalid Forgejo CI statuses")?,
@@ -278,13 +317,13 @@ mod tests {
     }
 
     #[test]
-    fn forgejo_checks_need_every_status_and_known_states() {
+    fn forgejo_statuses_need_every_status_and_known_states() {
         let combined = json!({"total_count": 2, "statuses": [
             {"context": "ci / rust", "status": "success"},
             {"context": "review", "status": "pending"}
         ]});
         assert_eq!(
-            forgejo_checks(&combined).unwrap(),
+            forgejo_statuses(&combined).unwrap(),
             [
                 RestCheck {
                     name: "ci / rust".into(),
@@ -297,14 +336,14 @@ mod tests {
             ]
         );
         assert!(
-            forgejo_checks(&json!({"total_count": 0, "statuses": null}))
+            forgejo_statuses(&json!({"total_count": 0, "statuses": null}))
                 .unwrap()
                 .is_empty()
         );
         let partial = json!({"total_count": 3, "statuses": combined["statuses"]});
-        assert!(forgejo_checks(&partial).is_err());
+        assert!(forgejo_statuses(&partial).is_err());
         let unknown = json!({"total_count": 1, "statuses": [{"context": "x", "status": "later"}]});
-        assert!(forgejo_checks(&unknown).is_err());
+        assert!(forgejo_statuses(&unknown).is_err());
     }
 
     #[test]

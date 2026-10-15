@@ -1,12 +1,19 @@
 //! GitLab's REST shapes: issues and merge requests numbered by `iid`,
 //! projects addressed by their encoded path, and states of its own.
+use std::collections::BTreeMap;
+
 use anyhow::{Context, Result, bail};
 use serde_json::Value;
 
 use super::{
     ForgeRepo,
+    account::Account,
+    api::Request,
     item::{Current, Item, ItemState, PrSummary, text},
     link::ItemKind,
+    pr::state::Verdict,
+    rest::RestCheck,
+    view::{Comment, Details, PrDetails, Review, ReviewComment},
 };
 
 /// Merge statuses during which GitLab has not yet decided mergeability.
@@ -65,6 +72,220 @@ impl ForgeRepo {
             conflict,
         })
     }
+}
+
+impl ForgeRepo {
+    /// The latest status of each CI job and external check on `head`.
+    pub(super) async fn gitlab_checks(
+        &self,
+        account: &Account,
+        head: &str,
+    ) -> Result<Vec<RestCheck>> {
+        let endpoint = self.repo_endpoint(&format!("repository/commits/{head}/statuses"));
+        statuses(&self.pages(account, &endpoint).await?)
+    }
+
+    /// Reviewers' states, with every approval as an approving review.
+    pub(super) async fn gitlab_verdicts(
+        &self,
+        account: &Account,
+        number: u64,
+    ) -> Result<Vec<(String, Verdict)>> {
+        let merge_request = self.item_endpoint(ItemKind::Pr, number);
+        let reviewers = Request::get(format!("{merge_request}/reviewers"));
+        let approvals = Request::get(format!("{merge_request}/approvals"));
+        let (reviewers, approvals) = tokio::try_join!(
+            self.send(account, &reviewers),
+            self.send(account, &approvals)
+        )?;
+        verdicts(&reviewers, &approvals)
+    }
+
+    /// The item's notes that people wrote, without GitLab's system notes.
+    pub(super) async fn gitlab_notes(
+        &self,
+        account: &Account,
+        kind: ItemKind,
+        number: u64,
+    ) -> Result<Vec<Value>> {
+        let endpoint = format!("{}/notes", self.item_endpoint(kind, number));
+        let mut notes = self.pages(account, &endpoint).await?;
+        notes.retain(|note| note["system"] != true);
+        Ok(notes)
+    }
+
+    pub(super) async fn gitlab_details(
+        &self,
+        account: &Account,
+        kind: ItemKind,
+        number: u64,
+    ) -> Result<Details> {
+        let value = self
+            .send(account, &Request::get(self.item_endpoint(kind, number)))
+            .await?;
+        let current = self.current(kind, number, &value)?;
+        let pr = match current.item.pr {
+            Some(pr) => Some(PrDetails::new(pr.head, pr.base, pr.draft)),
+            None => None,
+        };
+        Ok(Details {
+            number,
+            title: current.item.title,
+            state: current.item.state.as_str().into(),
+            author: username(&value["author"]),
+            created_at: text(&value["created_at"]).unwrap_or_default(),
+            labels: current.item.labels,
+            body: current.body,
+            pr,
+            comments: None,
+            reviews: None,
+        })
+    }
+
+    /// Fills the item's comments and returns a merge request's reviews: one
+    /// per diff thread, and one per approval or change request.
+    pub(super) async fn gitlab_discussion(
+        &self,
+        account: &Account,
+        kind: ItemKind,
+        number: u64,
+        details: &mut Details,
+    ) -> Result<Option<Vec<Review>>> {
+        let endpoint = format!("{}/discussions", self.item_endpoint(kind, number));
+        let (comments, mut reviews) = discussions(&self.pages(account, &endpoint).await?);
+        details.comments = Some(comments);
+        if kind == ItemKind::Issue {
+            return Ok(None);
+        }
+        let verdicts = self.gitlab_verdicts(account, number).await?;
+        reviews.extend(verdicts.into_iter().filter_map(|(author, verdict)| {
+            let state = match verdict {
+                Verdict::Approved => "approved",
+                Verdict::ChangesRequested => "changes_requested",
+                Verdict::Commented => return None,
+            };
+            Some(Review {
+                author,
+                state: state.into(),
+                submitted_at: String::new(),
+                body: String::new(),
+                comments: Vec::new(),
+            })
+        }));
+        Ok(Some(reviews))
+    }
+}
+
+/// The newest status of each name; retried jobs keep their earlier ones.
+fn statuses(statuses: &[Value]) -> Result<Vec<RestCheck>> {
+    let mut latest = BTreeMap::new();
+    for status in statuses {
+        let name = status["name"]
+            .as_str()
+            .context("GitLab status has no name")?;
+        let id = status["id"].as_u64().context("GitLab status has no ID")?;
+        let state = match status["status"].as_str() {
+            Some(
+                "created"
+                | "waiting_for_resource"
+                | "preparing"
+                | "pending"
+                | "running"
+                | "scheduled"
+                | "canceling"
+                | "waiting_for_callback",
+            ) => "Pending",
+            Some("success") => "Success",
+            Some("failed") if status["allow_failure"] == true => "Warning",
+            Some("failed") => "Failure",
+            Some("canceled") => "Cancelled",
+            // A manual job waits for someone to start it, which CI cannot.
+            Some("skipped" | "manual") => "Skipped",
+            state => bail!("unknown GitLab CI state {state:?}"),
+        };
+        if latest.get(name).is_none_or(|(newest, _)| *newest < id) {
+            latest.insert(name.to_owned(), (id, state));
+        }
+    }
+    Ok(latest
+        .into_iter()
+        .map(|(name, (_, state))| RestCheck { name, state })
+        .collect())
+}
+
+/// Reviewers' latest states, then approvals, which outrank them.
+fn verdicts(reviewers: &Value, approvals: &Value) -> Result<Vec<(String, Verdict)>> {
+    let mut verdicts = Vec::new();
+    for reviewer in reviewers.as_array().context("reviewers are not a list")? {
+        let verdict = match reviewer["state"].as_str() {
+            Some("approved") => Verdict::Approved,
+            Some("requested_changes") => Verdict::ChangesRequested,
+            Some("reviewed") => Verdict::Commented,
+            Some("unreviewed" | "unapproved" | "review_started") => continue,
+            state => bail!("unknown GitLab reviewer state {state:?}"),
+        };
+        verdicts.push((username(&reviewer["user"]), verdict));
+    }
+    for approval in approvals["approved_by"]
+        .as_array()
+        .context("approvals have no approvers")?
+    {
+        verdicts.push((username(&approval["user"]), Verdict::Approved));
+    }
+    Ok(verdicts)
+}
+
+/// Comments, and a review for each thread on the diff.
+fn discussions(discussions: &[Value]) -> (Vec<Comment>, Vec<Review>) {
+    let mut comments = Vec::new();
+    let mut reviews = Vec::new();
+    for discussion in discussions {
+        let notes: Vec<&Value> = discussion["notes"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|note| note["system"] != true)
+            .collect();
+        let Some(first) = notes.first() else { continue };
+        if first["type"] == "DiffNote" {
+            reviews.push(Review {
+                author: username(&first["author"]),
+                state: "commented".into(),
+                submitted_at: text(&first["created_at"]).unwrap_or_default(),
+                body: String::new(),
+                comments: notes.iter().map(|note| review_comment(note)).collect(),
+            });
+        } else {
+            comments.extend(notes.iter().map(|note| Comment {
+                author: username(&note["author"]),
+                created_at: text(&note["created_at"]).unwrap_or_default(),
+                body: text(&note["body"]).unwrap_or_default(),
+            }));
+        }
+    }
+    (comments, reviews)
+}
+
+/// A diff note on the new side, or the old side of a removed line.
+fn review_comment(note: &Value) -> ReviewComment {
+    let position = &note["position"];
+    ReviewComment {
+        author: username(&note["author"]),
+        created_at: text(&note["created_at"]).unwrap_or_default(),
+        path: text(&position["new_path"])
+            .or_else(|| text(&position["old_path"]))
+            .unwrap_or_default(),
+        line: position["new_line"]
+            .as_u64()
+            .or(position["old_line"].as_u64()),
+        body: text(&note["body"]).unwrap_or_default(),
+        resolved: note["resolved"].as_bool(),
+    }
+}
+
+/// A deleted account has no user.
+fn username(user: &Value) -> String {
+    user["username"].as_str().unwrap_or("ghost").to_owned()
 }
 
 /// Label names, listed as strings unless details were requested.
@@ -129,6 +350,93 @@ mod tests {
         let current = gitlab().current(ItemKind::Pr, 7, &merged).unwrap();
         assert_eq!(current.item.state, ItemState::Merged);
         assert!(gitlab().current(ItemKind::Pr, 8, &merged).is_err());
+    }
+
+    #[test]
+    fn statuses_keep_the_newest_of_each_name_in_shared_states() {
+        let listed = json!([
+            {"id": 1, "name": "rust", "status": "failed"},
+            {"id": 3, "name": "rust", "status": "running"},
+            {"id": 2, "name": "lint", "status": "failed", "allow_failure": true},
+            {"id": 4, "name": "deploy", "status": "manual"},
+            {"id": 5, "name": "external", "status": "canceled"}
+        ]);
+        let checks = statuses(listed.as_array().unwrap()).unwrap();
+        assert_eq!(
+            checks
+                .iter()
+                .map(|check| (check.name.as_str(), check.state))
+                .collect::<Vec<_>>(),
+            [
+                ("deploy", "Skipped"),
+                ("external", "Cancelled"),
+                ("lint", "Warning"),
+                ("rust", "Pending")
+            ]
+        );
+        assert!(statuses(&[json!({"id": 1, "name": "x", "status": "later"})]).is_err());
+    }
+
+    #[test]
+    fn approvals_and_reviewer_states_become_verdicts() {
+        let reviewers = json!([
+            {"user": {"username": "ann"}, "state": "requested_changes"},
+            {"user": {"username": "bob"}, "state": "reviewed"},
+            {"user": {"username": "cat"}, "state": "unreviewed"}
+        ]);
+        let approvals = json!({"approved_by": [{"user": {"username": "dan"}}]});
+        assert_eq!(
+            verdicts(&reviewers, &approvals).unwrap(),
+            [
+                ("ann".to_owned(), Verdict::ChangesRequested),
+                ("bob".to_owned(), Verdict::Commented),
+                ("dan".to_owned(), Verdict::Approved)
+            ]
+        );
+        assert!(verdicts(&json!([{"state": "later"}]), &approvals).is_err());
+        assert!(verdicts(&json!([]), &json!({})).is_err());
+    }
+
+    #[test]
+    fn diff_threads_become_reviews_and_other_notes_comments() {
+        let listed = json!([
+            {"notes": [{"system": true, "body": "added 1 commit"}]},
+            {"notes": [{"author": {"username": "ann"}, "body": "Looks fine", "created_at": "t1"}]},
+            {"notes": [
+                {"type": "DiffNote", "author": {"username": "bob"}, "body": "Bug", "created_at": "t2",
+                    "resolved": false, "position": {"new_path": "a.rs", "new_line": 3}},
+                {"type": "DiffNote", "author": null, "body": "Fixed", "created_at": "t3",
+                    "resolved": true, "position": {"old_path": "b.rs", "new_line": null, "old_line": 9}}
+            ]}
+        ]);
+        let (comments, reviews) = discussions(listed.as_array().unwrap());
+        assert_eq!(comments.len(), 1);
+        assert_eq!(
+            (comments[0].author.as_str(), comments[0].body.as_str()),
+            ("ann", "Looks fine")
+        );
+        assert_eq!(reviews.len(), 1);
+        assert_eq!(
+            (reviews[0].author.as_str(), reviews[0].state.as_str()),
+            ("bob", "commented")
+        );
+        let threads = &reviews[0].comments;
+        assert_eq!(
+            (
+                threads[0].path.as_str(),
+                threads[0].line,
+                threads[0].resolved
+            ),
+            ("a.rs", Some(3), Some(false))
+        );
+        assert_eq!(
+            (
+                threads[1].author.as_str(),
+                threads[1].path.as_str(),
+                threads[1].line
+            ),
+            ("ghost", "b.rs", Some(9))
+        );
     }
 
     #[test]
