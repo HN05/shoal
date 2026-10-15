@@ -836,6 +836,13 @@ precedence over paths. A name still resolves when
 an unrelated path has the same spelling in the caller's directory; if that path
 is another registered checkout, the selector is ambiguous and lists both matches.
 
+`repo setup [repository] [--agent NAME] [-- ARGS]` starts an agent that writes
+the repository's `.shoal.toml`: setup, named ports, commands and resource pools,
+checked with `config show` and `setup` and then committed. It runs in the
+repository's `shoal-setup` workspace, opening one on that branch when none
+exists. The agent is `--agent`, else `default_agent`, else one chosen from the
+agent picker; arguments after `--` go to the agent.
+
 ### Git profiles
 
 Define named Git settings in the global config, then reload the daemon:

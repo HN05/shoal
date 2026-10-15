@@ -898,6 +898,17 @@ pub enum RepoCommand {
         /// New name; omit to enter one.
         name: Option<String>,
     },
+    /// Have an agent write the repository's Shoal config in a shoal-setup workspace.
+    Setup {
+        /// Registered repository; omit to choose one.
+        repository: Option<String>,
+        /// Agent to start; defaults to default_agent, otherwise a picker.
+        #[arg(long, value_parser = AgentParser)]
+        agent: Option<Agent>,
+        /// Arguments forwarded to the agent.
+        #[arg(last = true)]
+        args: Vec<OsString>,
+    },
     /// Delete a repository checkout and all its Shoal workspaces and resources.
     ///
     /// Uncommitted and unpushed work is permanently lost.
@@ -1387,6 +1398,24 @@ mod tests {
                 })
             ));
         }
+    }
+
+    #[test]
+    fn repository_setup_names_its_agent_and_forwards_arguments() {
+        let cli = Cli::try_parse_from([
+            "shoal", "repo", "setup", "project", "--agent", "codex", "--", "--model", "fast",
+        ])
+        .unwrap();
+        assert!(matches!(
+            cli.command,
+            Some(Command::Repo {
+                command: Some(RepoCommand::Setup {
+                    repository: Some(repository),
+                    agent: Some(Agent::Codex),
+                    args,
+                })
+            }) if repository == "project" && args == ["--model", "fast"]
+        ));
     }
 
     #[test]

@@ -18,6 +18,7 @@ mod notifications;
 mod ports;
 mod recovery;
 mod repo_menu;
+mod repo_setup;
 mod repositories;
 mod resources;
 pub(crate) mod resume;

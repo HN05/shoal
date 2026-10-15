@@ -98,6 +98,11 @@ pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
                 &repo,
             )?;
         }
+        RepoCommand::Setup {
+            repository,
+            agent,
+            args,
+        } => return super::repo_setup::start(ctx, repository, agent, args).await,
         RepoCommand::Rm {
             repository,
             confirmation,
@@ -145,7 +150,10 @@ pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
 }
 
 /// The named repository, else one chosen from the registered repositories.
-async fn chosen(ctx: &Context, repository: Option<String>) -> Result<repository::Selector> {
+pub(super) async fn chosen(
+    ctx: &Context,
+    repository: Option<String>,
+) -> Result<repository::Selector> {
     match repository {
         Some(repository) => ui::repository_selector(repository),
         None => {

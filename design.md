@@ -444,7 +444,10 @@ local. A PR target, named by URL or `--pr`, resolves a same-repository PR with t
 reviews its head branch against the PR base, reusing the owning workspace after
 fast-forwarding it to the pushed head; local commits ahead stay, divergence is refused.
 An issue target asks an agent to refine the issue before implementation, in the
-workspace `add --issue` would continue, opening it when missing. Review tools own review storage, exports, and forge authentication, with
+workspace `add --issue` would continue, opening it when missing. `repo setup`
+likewise prompts an agent, in a workspace on the `shoal-setup` branch, to write the
+tracked repository config, so it arrives as a reviewable commit that every clone
+shares rather than as saved local config. Review tools own review storage, exports, and forge authentication, with
 explicit feedback handoff to agents.
 
 AI tools are providers: built-in ones plus global `[ai.<name>]` entries. A

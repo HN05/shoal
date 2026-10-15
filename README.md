@@ -60,6 +60,7 @@ repository's workspaces (and its clone, for URLs) live under `~/shoal/<name>/`:
 
 ```sh
 shoal repo add /path/to/project --name my-project
+shoal repo setup my-project   # Have an agent write and commit its .shoal.toml
 shoal add my-project fix-login
 shoal codex fix-login --cli
 ```
