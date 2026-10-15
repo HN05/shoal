@@ -4185,8 +4185,17 @@ test "${PWD##*/}" = acknowledged
 shoal done --keep
 rm untracked
 shoal done
-test "$PWD" = "$shoal_repo_dir"
 until ! shoal inspect acknowledged >/dev/null 2>&1; do sleep 0.1; done
+_shoal_recover_directory
+test "$PWD" = "$shoal_repo_dir"
+shoal add "$REPO" held
+shoal hold acquire held --name review
+shoal done --cleanup
+test "${PWD##*/}" = held
+shoal hold release held --name review
+until ! shoal inspect held >/dev/null 2>&1; do sleep 0.1; done
+_shoal_recover_directory
+test "$PWD" = "$shoal_repo_dir"
 shoal add "$REPO" completed
 shoal done --keep
 test "${PWD##*/}" = completed
@@ -4196,8 +4205,9 @@ test "${PWD##*/}" = completed
 shoal done --keep
 rm untracked
 shoal done --cleanup
-test "$PWD" = "$shoal_repo_dir"
 until ! shoal inspect completed >/dev/null 2>&1; do sleep 0.1; done
+_shoal_recover_directory
+test "$PWD" = "$shoal_repo_dir"
 printf 'navigation-ok\n'
 "#;
     for shell in ["bash", "zsh"] {

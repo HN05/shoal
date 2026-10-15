@@ -1193,8 +1193,8 @@ requires a new `done` signal before completion cleanup can proceed.
 
 Keeping persists across restarts and suppresses idle and PR cleanup until a new
 `done --cleanup` request or explicit removal. It leaves tracked commands running.
-With cleanup requested, shell integration leaves a clean, preserved workspace for
-`<root_dir>/<repo>`; keeping or visibly unsafe work leaves the current directory.
+When cleanup removes the worktree, shell integration returns to the repository's
+`<root_dir>/<repo>` directory; keeping or retained work leaves the current directory.
 
 ### Workspace holds
 
