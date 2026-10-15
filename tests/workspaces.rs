@@ -17,9 +17,7 @@ mod ports;
 mod support;
 
 use support::{
-    cli,
-    install_test_script,
-    install_test_script_with_mode,
+    cli, install_test_script, install_test_script_with_mode,
     wait::{try_wait_for, wait_for, wait_until},
 };
 

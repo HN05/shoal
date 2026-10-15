@@ -7,7 +7,6 @@ pub mod wait;
 
 use std::{ffi::OsStr, fs, io::Write, os::unix::fs::PermissionsExt, path::Path, process::Command};
 
-
 /// Install an executable fixture, including any parent directories it needs.
 #[allow(dead_code)] // Integration test binaries use different subsets of support.
 pub fn install_test_script(path: impl AsRef<Path>, script: impl AsRef<[u8]>) {
