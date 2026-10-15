@@ -254,6 +254,16 @@ impl Manager {
             .await
     }
 
+    /// Whether the workspace has any recorded execution, in any state.
+    pub(super) async fn workspace_has_executions(&self, id: &str) -> Result<bool> {
+        let id = id.to_owned();
+        self.store
+            .run(move |db| {
+                store::exists(db, "SELECT 1 FROM executions WHERE workspace_id=?1", [id])
+            })
+            .await
+    }
+
     /// Look a workspace up by ID or name.
     pub async fn workspace(&self, selector: &str) -> Result<Workspace> {
         let selector = selector.to_owned();

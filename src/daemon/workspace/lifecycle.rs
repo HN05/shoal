@@ -197,7 +197,9 @@ impl Manager {
     /// A fingerprint of everything automatic cleanup must see unchanged before
     /// removing the workspace, or `None` when it is not a cleanup candidate.
     pub async fn cleanup_snapshot(&self, id: &str) -> Result<Option<u64>> {
-        if crate::execution::recovery::pending(&self.paths, id)? {
+        if crate::execution::recovery::pending(&self.paths, id)?
+            || self.workspace_has_executions(id).await?
+        {
             return Ok(None);
         }
         if self.completion(id).await?.is_some()
@@ -217,10 +219,13 @@ impl Manager {
         {
             return Ok(None);
         }
-        let check = self
-            .check_removal(id, InspectionPolicy::IncludeDirectoryProcesses)
-            .await?;
+        // Git state rules out most workspaces, so lsof only scans for safe ones.
+        let mut check = self.check_removal(id, InspectionPolicy::GitOnly).await?;
         if !check.safe() || !check.workspace.path.is_dir() {
+            return Ok(None);
+        }
+        check.load_directory_processes().await?;
+        if !check.safe() {
             return Ok(None);
         }
         let head = crate::git::run(&check.workspace.path, &["rev-parse", "HEAD"]).await?;

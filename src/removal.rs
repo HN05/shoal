@@ -144,6 +144,11 @@ impl RemovalCheck {
         Ok(())
     }
 
+    pub async fn load_directory_processes(&mut self) -> Result<()> {
+        self.processes = process::in_directory(&self.workspace.path).await?;
+        Ok(())
+    }
+
     pub fn warnings(&self) -> Vec<String> {
         let mut warnings = Vec::new();
         if self.dirty {
@@ -260,7 +265,7 @@ pub async fn inspect(
         .await
         .is_ok_and(|other| other == tree);
     if policy == InspectionPolicy::IncludeDirectoryProcesses {
-        check.processes = process::in_directory(path).await?;
+        check.load_directory_processes().await?;
     }
     Ok(check)
 }
