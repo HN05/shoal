@@ -15,7 +15,7 @@ direct resource access; filesystem restrictions are future work.
 
 Caller-specific integration stays outside the daemon core: Superlogical owns terminals;
 Macraft owns VM/container provisioning. Shoal does not provision tools, manage
-browsers, schedule agent tasks, or store conversations. Agent shortcuts
+browsers, schedule agent tasks beyond the `max_agents` queue, or store conversations. Agent shortcuts
 (`claude`, `codex`, `happy`, `t3`) are thin launchers around the generic `exec`
 path; CLI launcher argument arrays are configurable defaults; session and desktop
 adapters retain their tool-specific setup. Opt-in forge authentication wrappers
@@ -383,6 +383,25 @@ up through `zmx list`. Launches without a terminal, inside a zmx session, or in
 a Herdr pane with the integration enabled run in place, since Herdr reads agent
 state from the pane's process. zmx reports no exit status, so a session launch
 exits 0; the daemon still records the agent's exit.
+
+`max_agents` admission belongs to the daemon, so concurrent additions and its
+dispatcher share one count. Slots derive from state the daemon already tracks:
+connected agents, executions awaiting reattachment, resume records and starting
+queue entries, excluding completed workspaces. Agents therefore count however
+they started, and no separate counter can leak a slot. The global value limits
+the machine and a repository's effective value limits that repository; a
+repository without its own value inherits the global one, which already bounds
+it, so normal precedence serves both. The queue stores the CLI's launch plan
+opaquely and creates nothing until a slot frees, so a waiting entry costs no
+worktree and branches from the default branch current when it starts. A
+starting entry keeps its slot through setup while the launching CLI holds a
+connection open, with a short grace period for Herdr handoffs and daemon
+restarts, until its agent registers; a dead launch cannot hold a slot, and setup
+time stays unbounded. The daemon starts admitted entries through a detached CLI
+worker carrying the queuing terminal's Herdr variables, since terminal launch
+logic stays in the CLI: a background Herdr tab when queued from Herdr, otherwise
+a detached zmx session whose shell is given the worker, because zmx gives
+commands it runs itself no terminal input.
 
 Single-workspace actions select an explicit target, otherwise the caller's scoped
 workspace or the workspace containing the current directory, then an interactive

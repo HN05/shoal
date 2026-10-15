@@ -2,6 +2,7 @@
 //! Unix socket, and runs background cleanup.
 pub mod access;
 pub mod agent_messages;
+pub(crate) mod agent_queue;
 pub mod allocation;
 mod auto_update;
 pub mod cleanup;
@@ -142,6 +143,10 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
     background.spawn(supervise("disk monitor", {
         let manager = manager.clone();
         move || disk::run(manager.clone())
+    }));
+    background.spawn(supervise("agent queue", {
+        let manager = manager.clone();
+        move || agent_queue::run(manager.clone())
     }));
     background.spawn(supervise("simulator cleanup", {
         let manager = manager.clone();
@@ -310,6 +315,10 @@ async fn serve(
         Method::WatchNotifications => {
             return watch_notifications(stream, request.id, server.manager, operation_guard).await;
         }
+        Method::QueueHold { entry } => {
+            return agent_queue::hold(stream, request.id, server.manager, entry, operation_guard)
+                .await;
+        }
         Method::WatchWorkspaceEvents { since, follow } => {
             return watch_workspace_events(
                 stream,
@@ -375,6 +384,7 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         | Method::Execute { .. }
         | Method::Reattach(_)
         | Method::WatchNotifications
+        | Method::QueueHold { .. }
         | Method::WatchWorkspaceEvents { .. }
         | Method::PrWait { .. }
         | Method::WatchItems { .. } => {
@@ -467,6 +477,22 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
                 manager.annotate_review(workspace).await;
             }
             Body::Workspaces(workspaces)
+        }
+        Method::QueueAdd { request } => Body::QueueAdmission(manager.queue_add(request).await?),
+        Method::ListQueue => Body::QueueEntries(if caller.is_some() {
+            Vec::new()
+        } else {
+            manager.queue_entries().await?
+        }),
+        Method::QueuedPlan { entry } => Body::QueuedPlan(manager.queued_plan(&entry).await?),
+        Method::QueueRemove { entry } => Body::QueueEntry(manager.queue_remove(&entry).await?),
+        Method::QueueAttach { entry, workspace } => {
+            manager.queue_attach(&entry, &workspace).await?;
+            Body::Ok
+        }
+        Method::QueueFail { entry, error } => {
+            manager.fail_queue_entry(&entry, &error).await?;
+            Body::Ok
         }
         Method::HoldAcquire {
             workspace,

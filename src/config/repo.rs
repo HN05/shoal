@@ -59,6 +59,8 @@ pub struct RepoConfig {
     pub git_profile: Option<String>,
     /// Agent an issue workspace starts when `--agent` is omitted.
     pub default_agent: Option<Agent>,
+    /// Agents of this repository running at once; `shoal add` queues past it.
+    pub max_agents: Option<std::num::NonZeroU32>,
     pub codex: Codex,
     pub herdr: Herdr,
     pub setup_cmd: Option<String>,

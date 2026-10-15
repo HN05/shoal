@@ -346,6 +346,21 @@ pub fn pending(paths: &Paths, workspace_id: &str) -> Result<bool> {
     Ok(false)
 }
 
+/// Whether a stopped agent waits for `shoal resume` in the workspace.
+pub fn has_agent_record(paths: &Paths, workspace_id: &str) -> Result<bool> {
+    let entries = match std::fs::read_dir(paths.workspace_state(workspace_id)) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => return Err(error.into()),
+    };
+    for entry in entries {
+        if entry?.file_name().to_string_lossy().ends_with(AGENT_SUFFIX) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 pub(crate) fn consume(path: &std::path::Path) -> Result<()> {
     match std::fs::remove_file(path) {
         Ok(()) => Ok(()),

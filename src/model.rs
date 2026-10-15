@@ -7,7 +7,7 @@ use crate::{
     daemon::resources::ResourceLease,
     process::identity::Identity,
     sim::Simulator,
-    state::{AgentState, ExecutionState, WorkspaceState},
+    state::{AgentState, ExecutionState, QueueState, WorkspaceState},
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -365,4 +365,53 @@ pub struct LandPlan {
     pub checkout: Option<PathBuf>,
     pub merge_temporaries: Vec<PathBuf>,
     pub default_refresh: PulledBranch,
+}
+
+/// An agent launch waiting for, or starting in, a `max_agents` slot.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct QueueEntry {
+    pub id: String,
+    pub repository_id: String,
+    /// The workspace name derived from the planned branch.
+    pub name: String,
+    pub agent: String,
+    pub issue_title: Option<String>,
+    pub state: QueueState,
+    /// The 1-based place among waiting entries; `None` once starting.
+    pub position: Option<usize>,
+    pub created_at: i64,
+    /// The workspace a starting entry opened.
+    pub workspace_id: Option<String>,
+}
+
+/// An agent launch `shoal add` asks the daemon to admit or queue. The plan
+/// is the CLI's own and stays opaque to the daemon.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QueueRequest {
+    pub repository: crate::forge::repository::Selector,
+    pub name: String,
+    pub agent: String,
+    pub issue_title: Option<String>,
+    pub plan: String,
+    /// Terminal multiplexer variables the start needs to reach the same window.
+    pub env: std::collections::BTreeMap<String, String>,
+    /// Start at once regardless of the limits; the agent still takes a slot.
+    pub now: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QueueAdmission {
+    /// Whether the caller starts the agent now.
+    pub start: bool,
+    /// `None` when no limit applies, so nothing tracks the launch.
+    pub entry: Option<QueueEntry>,
+    /// Entries waiting, including this one when it waits.
+    pub waiting: usize,
+}
+
+/// What a queued start runs: the plan the entry was queued with.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QueuedPlan {
+    pub entry: QueueEntry,
+    pub plan: String,
 }

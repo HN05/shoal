@@ -188,22 +188,25 @@ impl Manager {
         running: Duration,
     ) {
         let connections = self.connections.lock().await;
-        if let Some(stop) = connections.get(id) {
-            self.agents.lock().await.insert(
-                id.into(),
-                Agent {
-                    name: name.into(),
-                    workspace: workspace.into(),
-                    workspace_id: workspace_id.into(),
-                    started: Instant::now()
-                        .checked_sub(running)
-                        .unwrap_or_else(Instant::now),
-                    recover,
-                    stop: stop.clone(),
-                    overload: None,
-                },
-            );
-        }
+        let Some(stop) = connections.get(id) else {
+            return;
+        };
+        self.agents.lock().await.insert(
+            id.into(),
+            Agent {
+                name: name.into(),
+                workspace: workspace.into(),
+                workspace_id: workspace_id.into(),
+                started: Instant::now()
+                    .checked_sub(running)
+                    .unwrap_or_else(Instant::now),
+                recover,
+                stop: stop.clone(),
+                overload: None,
+            },
+        );
+        drop(connections);
+        self.consume_queue_entries(workspace_id).await;
     }
 
     pub(crate) async fn pause_agent_execution(
@@ -323,6 +326,16 @@ impl Manager {
             break;
         }
         Ok(())
+    }
+
+    /// Workspaces with a tracked agent, including one awaiting overload recovery.
+    pub(super) async fn agent_workspaces(&self) -> std::collections::HashSet<String> {
+        self.agents
+            .lock()
+            .await
+            .values()
+            .map(|agent| agent.workspace_id.clone())
+            .collect()
     }
 
     /// Workspaces with a connected agent that is not being stopped.

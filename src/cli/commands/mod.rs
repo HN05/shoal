@@ -2,6 +2,7 @@
 //! daemon modules own lifecycle and allocation policy.
 mod access;
 mod acquisition;
+mod agent_queue;
 mod agent_state;
 mod base;
 mod cleanup;
@@ -499,6 +500,8 @@ async fn internal(ctx: Context, command: InternalCommand) -> Result<i32> {
             tool,
             args,
         } => crate::secrets::run_tool(&launchers, &tool, args).await,
+        InternalCommand::QueueStart { entry } => agent_queue::start(&ctx, entry).await,
+        InternalCommand::QueueRun { entry } => agent_queue::run(&ctx, entry).await,
         InternalCommand::Session {
             workspace,
             agent,

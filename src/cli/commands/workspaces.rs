@@ -274,6 +274,8 @@ pub(super) async fn add(
         issue: issue.as_ref().map(|issue| issue.url.clone()),
         agent,
         args,
+        queue_entry: None,
+        detached: false,
     };
     if crate::cli::herdr::handoff(ctx, &mut plan, issue.as_ref(), here).await? {
         return Ok(0);
@@ -293,6 +295,12 @@ pub(in crate::cli) struct AddPlan {
     issue: Option<String>,
     agent: ResolvedAddAgent,
     args: Vec<OsString>,
+    /// The agent queue entry whose slot this launch uses.
+    #[serde(default)]
+    pub queue_entry: Option<String>,
+    /// Runs in a detached session, where no shell follows the workspace.
+    #[serde(skip)]
+    pub detached: bool,
 }
 
 impl AddPlan {
@@ -316,6 +324,39 @@ impl AddPlan {
     }
 }
 
+/// Start an admitted queue entry's plan where `shoal add` would have: in a
+/// background Herdr tab of the terminal that queued it, otherwise in a
+/// detached zmx session that `shoal attach` reaches.
+pub(in crate::cli) async fn start_queued(
+    ctx: &Context,
+    mut plan: AddPlan,
+    name: &str,
+) -> Result<()> {
+    let entry = plan
+        .queue_entry
+        .clone()
+        .context("a queued start needs its queue entry")?;
+    if crate::cli::herdr::in_herdr() {
+        let issue = match &plan.issue {
+            Some(url) => {
+                let repos = client::repositories(&ctx.paths).await?;
+                let repo = crate::forge::repository::select(&repos, &plan.repository).await?;
+                Some(super::issues::load(repo, url).await?)
+            }
+            None => None,
+        };
+        if crate::cli::herdr::start_queued(ctx, &mut plan, issue.as_ref()).await? {
+            return Ok(());
+        }
+    }
+    zmx::start_detached(
+        ctx,
+        name,
+        crate::cli::internal::Worker::QueueRun { entry: &entry },
+    )
+    .await
+}
+
 pub(in crate::cli) async fn execute_add(ctx: &Context, plan: AddPlan) -> Result<i32> {
     let target = AddTarget {
         selector: plan.repository.clone(),
@@ -334,6 +375,23 @@ async fn execute_add_with_target(
     target: AddTarget,
     issue: Option<super::issues::Issue>,
 ) -> Result<i32> {
+    let Some(entry) = plan.queue_entry.clone() else {
+        return add_planned(ctx, plan, target, issue).await;
+    };
+    let _hold = super::agent_queue::Hold::start(&ctx.paths, &entry);
+    let result = add_planned(ctx, plan, target, issue).await;
+    if let Err(error) = &result {
+        super::agent_queue::fail(ctx, &entry, error).await;
+    }
+    result
+}
+
+async fn add_planned(
+    ctx: &Context,
+    plan: AddPlan,
+    target: AddTarget,
+    issue: Option<super::issues::Issue>,
+) -> Result<i32> {
     let AddPlan {
         repository: _,
         creation,
@@ -342,9 +400,14 @@ async fn execute_add_with_target(
         issue: _,
         agent,
         args,
+        queue_entry,
+        detached,
     } = plan;
     let pr = creation.pr.clone();
     let opened = open_add_workspace(ctx, &target, creation).await?;
+    if let Some(entry) = &queue_entry {
+        super::agent_queue::attach(ctx, entry, &opened.workspace, agent.agent.as_ref()).await?;
+    }
     if let Some(tab) = &ctx.herdr_tab {
         tab.watch_workspace(ctx, &opened.workspace.id)?;
         let label = match tab_name {
@@ -367,7 +430,8 @@ async fn execute_add_with_target(
         )
         .await?;
     }
-    let Some(workspace) = finish_add_workspace(ctx, opened, pr).await? else {
+    let navigate = ctx.herdr_tab.is_none() && !detached;
+    let Some(workspace) = finish_add_workspace(ctx, opened, pr, navigate).await? else {
         return Ok(1);
     };
     agent.launch(ctx, workspace, issue, args).await
@@ -744,11 +808,12 @@ async fn pick_add_branch(ctx: &Context, target: &AddTarget) -> Result<String> {
 }
 
 /// Set up an opened workspace and link its PR, which needs a ready workspace,
-/// before reporting it.
+/// before reporting it and, when `navigate`, entering it.
 async fn finish_add_workspace(
     ctx: &Context,
     opened: OpenedWorkspace,
     pr: Option<String>,
+    navigate: bool,
 ) -> Result<Option<Workspace>> {
     let OpenedWorkspace {
         mut workspace,
@@ -773,7 +838,7 @@ async fn finish_add_workspace(
         ),
         &workspace,
     )?;
-    if ctx.herdr_tab.is_none() {
+    if navigate {
         shell::navigate(&workspace.path, ctx.json)?;
     }
     if !reused {

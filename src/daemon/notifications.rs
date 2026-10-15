@@ -36,6 +36,10 @@ states!(NotificationKind {
     HookFailed => "hook_failed",
     /// A workspace process asked for the user's attention.
     AgentMessage => "agent_message",
+    /// The daemon started an agent from the queue.
+    QueueStarted => "queue_started",
+    /// A queued agent could not start.
+    QueueFailed => "queue_failed",
 });
 
 impl NotificationKind {
@@ -50,6 +54,8 @@ impl NotificationKind {
                 | Self::AgentResumed
                 | Self::WorkspaceRemoved
                 | Self::HookFailed
+                | Self::QueueStarted
+                | Self::QueueFailed
         )
     }
 }

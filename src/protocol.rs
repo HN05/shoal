@@ -26,7 +26,7 @@ use crate::{
     sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
 };
 
-pub const VERSION: u32 = 79;
+pub const VERSION: u32 = 80;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -179,6 +179,33 @@ pub enum Method {
         branch: String,
     },
     ListWorkspaces,
+    // The agent queue under `max_agents`.
+    QueueAdd {
+        request: crate::model::QueueRequest,
+    },
+    ListQueue,
+    /// The plan a queued start runs.
+    QueuedPlan {
+        entry: String,
+    },
+    /// Remove a waiting entry, named by ID or workspace name.
+    QueueRemove {
+        entry: String,
+    },
+    /// Keep a starting entry's slot while the connection stays open.
+    QueueHold {
+        entry: String,
+    },
+    /// Record the workspace a starting entry opened.
+    QueueAttach {
+        entry: String,
+        workspace: String,
+    },
+    /// End a starting entry that could not start its agent.
+    QueueFail {
+        entry: String,
+        error: String,
+    },
     HoldAcquire {
         workspace: String,
         name: String,
@@ -537,6 +564,10 @@ response_bodies! {
     RepositoryRemoved(RepositoryRemoval),
     Workspace(Workspace),
     Hold(crate::model::WorkspaceHold),
+    QueueAdmission(crate::model::QueueAdmission),
+    QueueEntries(Vec<crate::model::QueueEntry>),
+    QueueEntry(crate::model::QueueEntry),
+    QueuedPlan(crate::model::QueuedPlan),
     Holds(Vec<crate::model::WorkspaceHold>),
     Workspaces(Vec<Workspace>),
     Branches(Vec<crate::git::existing_branch::Branch>),

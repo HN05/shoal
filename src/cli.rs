@@ -1006,6 +1006,12 @@ pub enum InternalCommand {
         #[arg(last = true)]
         args: Vec<OsString>,
     },
+    /// Start an admitted agent queue entry; the daemon runs it.
+    #[command(name = internal::QUEUE_START)]
+    QueueStart { entry: String },
+    /// Add an admitted agent queue entry's workspace in this terminal.
+    #[command(name = internal::QUEUE_RUN)]
+    QueueRun { entry: String },
     /// Tracked agent inside a zmx session; consumes recovery records once started.
     #[command(name = internal::SESSION)]
     Session {

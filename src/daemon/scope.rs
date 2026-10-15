@@ -55,6 +55,7 @@ pub async fn authorize(
         }
         Method::Status
         | Method::ListWorkspaces
+        | Method::ListQueue
         | Method::FindWorkspaces { .. }
         | Method::ListRepositories
         | Method::SimCatalog => None,

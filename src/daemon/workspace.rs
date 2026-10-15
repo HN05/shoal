@@ -1,5 +1,6 @@
 //! Shared daemon state, workspace lookup, and worktree creation.
 mod adoption;
+pub(crate) mod agent_queue;
 pub(crate) mod agent_state;
 mod agents;
 mod branches;
@@ -116,6 +117,12 @@ pub struct Manager {
     pub(crate) notifications_changed: watch::Sender<i64>,
     /// Counts queued agent messages; wakes watches waiting for them.
     pub(crate) agent_messages_changed: watch::Sender<u64>,
+    /// Serializes agent queue admission, so two passes cannot fill one slot.
+    agent_queue_gate: Mutex<()>,
+    /// Open holds per starting queue entry.
+    agent_queue_holds: std::sync::Mutex<HashMap<String, usize>>,
+    /// Wakes the queue dispatcher when a slot may have freed.
+    pub(crate) agent_queue_wake: tokio::sync::Notify,
 }
 
 impl Manager {
@@ -151,6 +158,9 @@ impl Manager {
             activity: Mutex::new(HashMap::new()),
             notifications_changed: watch::channel(0).0,
             agent_messages_changed: watch::channel(0).0,
+            agent_queue_gate: Mutex::new(()),
+            agent_queue_holds: Default::default(),
+            agent_queue_wake: tokio::sync::Notify::new(),
         }))
     }
 
@@ -712,7 +722,7 @@ impl Manager {
 }
 
 /// Keep directory/selector names portable without restricting Git branch syntax.
-fn derive_workspace_name(branch: &str) -> String {
+pub(crate) fn derive_workspace_name(branch: &str) -> String {
     let name: String = branch
         .chars()
         .map(|c| {

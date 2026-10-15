@@ -96,6 +96,57 @@ pub(in crate::cli) async fn run(
     finish(workspace, &name, status).await
 }
 
+/// Run `worker` in a new detached session named after `name`, as if typed at
+/// its shell: zmx gives commands it runs itself no terminal input. The worker
+/// replaces the shell, so the session ends with it as `run`'s sessions do.
+pub(in crate::cli) async fn start_detached(
+    ctx: &Context,
+    name: &str,
+    worker: Worker<'_>,
+) -> Result<()> {
+    ensure_program("queued agent", Tool::Zmx.program())?;
+    let taken = list().await?.into_iter().map(|session| session.0).collect();
+    let name = free_name(name, &taken);
+    let argv = internal_command(&ctx.paths, false, worker)?;
+    let words = argv
+        .iter()
+        .map(|arg| arg.to_str().context("Shoal command path is not UTF-8"))
+        .collect::<Result<Vec<_>>>()?;
+    let mut create = Command::new(Tool::Zmx.program());
+    create
+        .args(["run", &name, "-d", "true"])
+        .stdin(std::process::Stdio::null());
+    Run::new(create)
+        .checked()
+        .await
+        .context("create a zmx session")?;
+    let mut send = Command::new(Tool::Zmx.program());
+    send.args(["send", &name])
+        .arg(format!("exec {}\r", crate::shell::quote(&words)));
+    Run::new(send)
+        .checked()
+        .await
+        .context("start the queued agent in its zmx session")?;
+    Ok(())
+}
+
+/// Label the zmx session this process runs in, when it runs in one, so
+/// `shoal attach` finds the workspace's agent there.
+pub(in crate::cli) async fn label_current(workspace_id: &str, agent: &str) -> Result<()> {
+    let Some(session) = std::env::var_os(SESSION_VAR) else {
+        return Ok(());
+    };
+    let mut set = Command::new(Tool::Zmx.program());
+    set.arg("set")
+        .arg(session)
+        .args(labels(workspace_id, agent).split(' '));
+    Run::new(set)
+        .checked()
+        .await
+        .context("label the zmx session")?;
+    Ok(())
+}
+
 /// Attach this terminal to `session`, reporting a detach as `run` does.
 pub(in crate::cli) async fn attach(workspace: &Workspace, session: &str) -> Result<i32> {
     ensure_program("attach", Tool::Zmx.program())?;

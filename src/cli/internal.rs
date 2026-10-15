@@ -15,6 +15,8 @@ pub const LAND: &str = "land";
 pub const DETACHED: &str = "detached";
 pub const SESSION: &str = "session";
 pub const SECRET_TOOL: &str = "secret-tool";
+pub const QUEUE_START: &str = "queue-start";
+pub const QUEUE_RUN: &str = "queue-run";
 
 pub enum Worker<'a> {
     HerdrWatch {
@@ -44,6 +46,14 @@ pub enum Worker<'a> {
         agent: &'a str,
         records: &'a [PathBuf],
         command: &'a [OsString],
+    },
+    /// Start an admitted queue entry where its launching terminal would.
+    QueueStart {
+        entry: &'a str,
+    },
+    /// Add an admitted queue entry's workspace in the current terminal.
+    QueueRun {
+        entry: &'a str,
     },
 }
 
@@ -108,6 +118,8 @@ pub fn internal_command(paths: &Paths, json: bool, worker: Worker<'_>) -> Result
             args.push("--".into());
             args.extend_from_slice(command);
         }
+        Worker::QueueStart { entry } => args.extend([QUEUE_START.into(), entry.into()]),
+        Worker::QueueRun { entry } => args.extend([QUEUE_RUN.into(), entry.into()]),
     }
     Ok(args)
 }
@@ -261,5 +273,21 @@ mod tests {
             assert_eq!(parsed_records, records);
             assert_eq!(parsed_command, command);
         }
+    }
+
+    #[test]
+    fn queue_workers_round_trip_their_entry() {
+        let InternalCommand::QueueStart { entry } =
+            parse(Worker::QueueStart { entry: "entry-id" }, false)
+        else {
+            panic!("expected queue start worker");
+        };
+        assert_eq!(entry, "entry-id");
+        let InternalCommand::QueueRun { entry } =
+            parse(Worker::QueueRun { entry: "entry-id" }, false)
+        else {
+            panic!("expected queue run worker");
+        };
+        assert_eq!(entry, "entry-id");
     }
 }

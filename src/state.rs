@@ -159,6 +159,12 @@ states!(ExecutionState {
     Running => "running",
     Unknown => "unknown",
 });
+states!(QueueState {
+    /// Waiting for an agent slot.
+    Queued => "queued",
+    /// Admitted to a slot; its agent has not registered yet.
+    Starting => "starting",
+});
 states!(AgentState: ValueEnum {
     /// The agent is working on a turn.
     Working => "working",

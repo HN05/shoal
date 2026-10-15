@@ -73,8 +73,18 @@ pub(super) async fn handoff(
 }
 
 /// Whether this process runs in Herdr, so new tabs can open beside it.
-fn in_herdr() -> bool {
+pub(in crate::cli) fn in_herdr() -> bool {
     std::env::var("HERDR_ENV").as_deref() == Ok("1")
+}
+
+/// Open an admitted queue entry's tab in the background, where the terminal
+/// that queued it would have opened it, unless Herdr tabs are turned off.
+pub(in crate::cli) async fn start_queued(
+    ctx: &Context,
+    plan: &mut AddPlan,
+    issue: Option<&Issue>,
+) -> Result<bool> {
+    open_tab(ctx, plan, issue, Some(false)).await
 }
 
 /// Run `plan` in a new tab when the repository's settings allow; `focus`

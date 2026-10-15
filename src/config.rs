@@ -43,6 +43,8 @@ pub struct Config {
     pub repositories_dir: Option<PathBuf>,
     /// Agent an issue workspace starts when `--agent` is omitted.
     pub default_agent: Option<crate::agent::Agent>,
+    /// Agents running at once on this machine; `shoal add` queues past it.
+    pub max_agents: Option<std::num::NonZeroU32>,
     pub codex: repo::Codex,
     pub herdr: repo::Herdr,
     pub overload: overload::Overload,
@@ -388,6 +390,7 @@ impl Config {
             agent_auth: self.agent_auth.clone(),
             git_profile: self.git_profile.clone(),
             default_agent: self.default_agent.clone(),
+            max_agents: self.max_agents,
             codex: self.codex,
             herdr: self.herdr.clone(),
             pre_setup_cmd: self.pre_setup_cmd.clone(),

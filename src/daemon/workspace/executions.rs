@@ -604,7 +604,9 @@ impl Manager {
 
     /// Drop what the daemon kept in memory for a removed connection.
     async fn forget_connection(&self, id: &str) {
-        self.agents.lock().await.remove(id);
+        if self.agents.lock().await.remove(id).is_some() {
+            self.agent_queue_wake.notify_one();
+        }
         self.stop_requests.lock().await.remove(id);
         self.scopes
             .lock()

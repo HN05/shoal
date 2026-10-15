@@ -27,6 +27,7 @@ pub struct Effective {
     pub agent_auth: crate::agent_auth::Config,
     pub git_profile: Option<String>,
     pub default_agent: Option<crate::agent::Agent>,
+    pub max_agents: Option<std::num::NonZeroU32>,
     pub codex: Codex,
     pub herdr: config::Herdr,
     pub setup_cmd: Option<String>,
@@ -165,6 +166,7 @@ impl Effective {
             agent_auth: merged.agent_auth,
             git_profile: merged.git_profile,
             default_agent: merged.default_agent,
+            max_agents: merged.max_agents,
             herdr: config::Herdr {
                 enabled: built_in(merged.herdr.enabled, "herdr.enabled")?,
                 tab_name: merged.herdr.tab_name,
@@ -526,6 +528,7 @@ fn build_fields() -> Vec<Box<dyn Field + Send + Sync>> {
         scalar!(agent_auth.git_profile),
         scalar!(git_profile),
         scalar!(default_agent),
+        scalar!(max_agents),
         scalar!(codex.default_mode),
         scalar!(herdr.enabled),
         scalar!(herdr.new_tab),
@@ -572,7 +575,7 @@ mod tests {
     /// fails the destructuring below until the fixture states it too.
     const FULL: &str = "\
 issue_template = 'issue'\nagent_template = 'agent'\ngit_profile = 'work'\n\
-default_agent = 'claude'\nsetup_cmd = 'setup'\npre_setup_cmd = 'pre-setup'\n\
+default_agent = 'claude'\nmax_agents = 2\nsetup_cmd = 'setup'\npre_setup_cmd = 'pre-setup'\n\
 post_remove_cmd = 'post-remove'\npost_done_cmd = 'post-done'\npost_ready_cmd = 'post-ready'\npost_agent_exit_cmd = 'agent-exit'\npost_resource_acquire_cmd = 'acquire'\n\
 pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd = 'detach'\n\
 [env]\nSESSION = '{workspace}'\n[secrets.TOKEN]\ncommand = ['token']\n[commands]\nreview = ['review']\n[agent_resume]\nreview = ['review', '--resume']\n[agent_auth]\nfj = '/fj'\nfj_home = '/fj-home'\ngh = '/gh'\ngit_profile = 'agent'\n[codex]\ndefault_mode = 'app'\n[herdr]\nenabled = false\ntab_name = '{branch}'\nnew_tab = false\nfocus = false\nclose_when_done = false\n\
@@ -774,6 +777,7 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
             agent_auth,
             git_profile,
             default_agent,
+            max_agents,
             codex,
             herdr,
             setup_cmd,
@@ -818,6 +822,7 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
             agent_auth.git_profile.is_some(),
             git_profile.is_some(),
             default_agent.is_some(),
+            max_agents.is_some(),
             codex.default_mode.is_some(),
             herdr.enabled.is_some(),
             herdr.tab_name.is_some(),
