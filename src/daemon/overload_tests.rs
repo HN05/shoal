@@ -295,6 +295,38 @@ fn launch_child(
     })
 }
 
+fn isolated_operation(
+    manager: &Manager,
+    workspace: &crate::model::Workspace,
+    test: &str,
+) -> tokio::process::Command {
+    let mut command = crate::test_support::isolated_test(&manager.paths.home, test);
+    command
+        .env("SHOAL_TEST_ROOT", &manager.paths.home)
+        .env("SHOAL_TEST_WORKSPACE", &workspace.id);
+    command
+}
+
+fn resume_isolated(
+    manager: &Manager,
+    workspace: &crate::model::Workspace,
+    discard: bool,
+) -> tokio::task::JoinHandle<Result<i32>> {
+    let mut command =
+        isolated_operation(manager, workspace, "daemon::overload_tests::resume_child");
+    command.env("SHOAL_TEST_DISCARD", discard.to_string());
+    tokio::spawn(async move {
+        let status = command.status().await?;
+        Ok(crate::execution::exit_code(status))
+    })
+}
+
+async fn stop_isolated(manager: &Manager, workspace: &crate::model::Workspace) -> Result<i32> {
+    let mut command = isolated_operation(manager, workspace, "daemon::overload_tests::stop_child");
+    let status = command.status().await?;
+    Ok(crate::execution::exit_code(status))
+}
+
 #[tokio::test]
 #[ignore = "isolated tracked wrapper launched by overload tests"]
 async fn tracked_agent_child() {
@@ -343,6 +375,40 @@ async fn tracked_command_child() {
 }
 
 #[tokio::test]
+#[ignore = "isolated stop operation launched by overload tests"]
+async fn stop_child() {
+    if std::env::var_os("SHOAL_TEST_HELPER").is_none() {
+        return;
+    }
+    let root = std::env::var_os("SHOAL_TEST_ROOT").unwrap();
+    let paths = crate::paths::Paths::for_test(root);
+    let id = std::env::var("SHOAL_TEST_WORKSPACE").unwrap();
+    crate::cli::client::request::<()>(&paths, Method::StopWorkspace { workspace: id })
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+#[ignore = "isolated resume operation launched by overload tests"]
+async fn resume_child() {
+    if std::env::var_os("SHOAL_TEST_HELPER").is_none() {
+        return;
+    }
+    let root = std::env::var_os("SHOAL_TEST_ROOT").unwrap();
+    let paths = crate::paths::Paths::for_test(root);
+    let id = std::env::var("SHOAL_TEST_WORKSPACE").unwrap();
+    let discard = std::env::var("SHOAL_TEST_DISCARD").unwrap() == "true";
+    let ctx = crate::cli::context::Context::new(paths, true);
+    match crate::cli::commands::resume::run(&ctx, Some(id), None, discard).await {
+        Ok(code) => std::process::exit(code),
+        Err(error) => {
+            eprintln!("{error:#}");
+            std::process::exit(1);
+        }
+    }
+}
+
+#[tokio::test]
 async fn stop_saves_agents_and_commands_preserving_work_and_leases() {
     let (_root, manager, workspace, serving) = fixture().await;
     manager
@@ -364,15 +430,10 @@ async fn stop_saves_agents_and_commands_preserving_work_and_leases() {
     );
     wait_started(&manager, &workspace).await;
     wait_launched(&manager, &workspace, "command-started", 2).await;
-    let ctx = crate::cli::context::Context::new(manager.paths.clone(), true);
-    crate::cli::client::request::<()>(
-        &manager.paths,
-        Method::StopWorkspace {
-            workspace: workspace.id.clone(),
-        },
-    )
-    .await
-    .unwrap();
+    assert_eq!(
+        bounded(stop_isolated(&manager, &workspace)).await.unwrap(),
+        0
+    );
     bounded(agent).await.unwrap().unwrap();
     bounded(command).await.unwrap().unwrap();
     let retained = manager.inspect_workspace(&workspace.id).await.unwrap();
@@ -406,14 +467,10 @@ async fn stop_saves_agents_and_commands_preserving_work_and_leases() {
     )
     .unwrap();
     assert_eq!(
-        bounded(crate::cli::commands::resume::run(
-            &ctx,
-            Some(workspace.id.clone()),
-            None,
-            false
-        ))
-        .await
-        .unwrap(),
+        bounded(resume_isolated(&manager, &workspace, false))
+            .await
+            .unwrap()
+            .unwrap(),
         0
     );
     let handoff = fs::read_to_string(workspace.path.join("restored")).unwrap();
@@ -436,12 +493,10 @@ async fn resume_without_an_agent_reports_stopped_commands_once() {
         .unwrap();
     bounded(command).await.unwrap().unwrap();
     assert!(crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
-    let ctx = crate::cli::context::Context::new(manager.paths.clone(), true);
-    let resume =
-        || crate::cli::commands::resume::run(&ctx, Some(workspace.id.clone()), None, false);
-    assert_eq!(bounded(resume()).await.unwrap(), 0);
+    let resume = || resume_isolated(&manager, &workspace, false);
+    assert_eq!(bounded(resume()).await.unwrap().unwrap(), 0);
     assert!(!crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
-    assert!(bounded(resume()).await.is_err());
+    assert_ne!(bounded(resume()).await.unwrap().unwrap(), 0);
     serving.abort();
 }
 
@@ -616,15 +671,12 @@ async fn discard_clears_pending_recovery_without_launching_an_agent() {
             .await
     );
     wait_paused(&manager, &workspace).await;
-    assert!(
-        crate::cli::commands::resume::run(
-            &crate::cli::context::Context::new(manager.paths.clone(), true),
-            Some(workspace.id.clone()),
-            None,
-            true,
-        )
-        .await
-        .is_err()
+    assert_ne!(
+        bounded(resume_isolated(&manager, &workspace, true))
+            .await
+            .unwrap()
+            .unwrap(),
+        0
     );
     bounded(manager.stop_workspace(&workspace.id, StopRequest::manual()))
         .await
@@ -637,14 +689,10 @@ async fn discard_clears_pending_recovery_without_launching_an_agent() {
     )
     .unwrap();
     assert_eq!(
-        crate::cli::commands::resume::run(
-            &crate::cli::context::Context::new(manager.paths.clone(), true),
-            Some(workspace.id.clone()),
-            None,
-            true,
-        )
-        .await
-        .unwrap(),
+        bounded(resume_isolated(&manager, &workspace, true))
+            .await
+            .unwrap()
+            .unwrap(),
         0
     );
     assert!(!crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
@@ -824,16 +872,11 @@ async fn manual_resume_consumes_the_record_on_start_even_if_other_commands_run_o
         .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
         .await
         .unwrap();
-    let ctx = crate::cli::context::Context::new(manager.paths.clone(), true);
     assert_eq!(
-        bounded(crate::cli::commands::resume::run(
-            &ctx,
-            Some(workspace.id.clone()),
-            None,
-            false
-        ))
-        .await
-        .unwrap(),
+        bounded(resume_isolated(&manager, &workspace, false))
+            .await
+            .unwrap()
+            .unwrap(),
         7
     );
     assert_eq!(
