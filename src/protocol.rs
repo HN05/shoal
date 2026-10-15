@@ -378,6 +378,9 @@ pub enum Method {
         /// and returns with [`Method::Reattach`].
         #[serde(default)]
         reattach: bool,
+        /// The agent queue entry whose slot this agent takes over.
+        #[serde(default)]
+        queue_entry: Option<String>,
     },
     /// Long-lived: an execution connection resumed after a daemon restart.
     Reattach(Reattach),
@@ -987,6 +990,7 @@ mod tests {
                 agent: Some("test-agent".into()),
                 recover: false,
                 reattach: true,
+                queue_entry: None,
             };
             let encoded = serde_json::to_value(method).unwrap();
             assert_eq!(encoded["execute"]["kind"], spelling);

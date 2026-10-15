@@ -188,25 +188,22 @@ impl Manager {
         running: Duration,
     ) {
         let connections = self.connections.lock().await;
-        let Some(stop) = connections.get(id) else {
-            return;
-        };
-        self.agents.lock().await.insert(
-            id.into(),
-            Agent {
-                name: name.into(),
-                workspace: workspace.into(),
-                workspace_id: workspace_id.into(),
-                started: Instant::now()
-                    .checked_sub(running)
-                    .unwrap_or_else(Instant::now),
-                recover,
-                stop: stop.clone(),
-                overload: None,
-            },
-        );
-        drop(connections);
-        self.consume_queue_entries(workspace_id).await;
+        if let Some(stop) = connections.get(id) {
+            self.agents.lock().await.insert(
+                id.into(),
+                Agent {
+                    name: name.into(),
+                    workspace: workspace.into(),
+                    workspace_id: workspace_id.into(),
+                    started: Instant::now()
+                        .checked_sub(running)
+                        .unwrap_or_else(Instant::now),
+                    recover,
+                    stop: stop.clone(),
+                    overload: None,
+                },
+            );
+        }
     }
 
     pub(crate) async fn pause_agent_execution(

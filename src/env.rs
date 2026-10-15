@@ -18,6 +18,9 @@ pub const STATE_DIR: &str = "SHOAL_STATE_DIR";
 pub(crate) const DAEMON_HANDOFF: &str = "SHOAL_DAEMON_HANDOFF";
 /// Resolved launch plan a new Herdr tab hands its worker; removed at startup.
 pub const HERDR_PLAN: &str = "SHOAL_HERDR_PLAN";
+/// The agent queue entry whose slot a launched agent takes over when it
+/// registers; passed to launch workers and removed at startup.
+pub const QUEUE_ENTRY: &str = "SHOAL_QUEUE_ENTRY";
 /// Cooperative workspace scope for tracked or externally launched processes.
 pub const SCOPE_TOKEN: &str = "SHOAL_SCOPE_TOKEN";
 /// Execution marker used to discover owned processes during recovery.
@@ -274,6 +277,34 @@ pub fn same_directory(a: &std::path::Path, b: &std::path::Path) -> bool {
         (Ok(a), Ok(b)) => a == b,
         _ => a == b,
     }
+}
+
+static LAUNCH_QUEUE_ENTRY: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+/// Keep the queue entry a launching process passed down, and drop it from the
+/// environment so the agent's own children do not inherit it.
+///
+/// # Safety
+/// Call before any other thread exists.
+pub(crate) unsafe fn take_queue_entry() {
+    if let Some(entry) = std::env::var(QUEUE_ENTRY)
+        .ok()
+        .filter(|entry| !entry.is_empty())
+    {
+        let _ = LAUNCH_QUEUE_ENTRY.set(entry);
+    }
+    // SAFETY: the caller guarantees no other thread reads the environment.
+    unsafe { std::env::remove_var(QUEUE_ENTRY) };
+}
+
+/// Record the queue entry whose slot the agent this process launches takes.
+pub(crate) fn launch_queue_entry(entry: &str) {
+    let _ = LAUNCH_QUEUE_ENTRY.set(entry.to_owned());
+}
+
+/// The queue entry an agent launched from this process takes over.
+pub(crate) fn queue_entry() -> Option<&'static str> {
+    LAUNCH_QUEUE_ENTRY.get().map(String::as_str)
 }
 
 #[cfg(test)]

@@ -294,6 +294,7 @@ async fn serve(
             agent,
             recover,
             reattach,
+            queue_entry,
         } => {
             return execution_connection::execute(
                 stream,
@@ -306,6 +307,7 @@ async fn serve(
                     agent,
                     recover,
                     reattach,
+                    queue_entry,
                     parent_execution: caller
                         .and_then(|caller| caller.execution_id().map(str::to_owned)),
                 },

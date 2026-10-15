@@ -244,6 +244,9 @@ pub async fn launch_detached(
         wrapper.env_remove(name);
     }
     wrapper.envs(env.iter().map(|(name, value)| (*name, value)));
+    if let Some(entry) = crate::env::queue_entry() {
+        wrapper.env(env::QUEUE_ENTRY, entry);
+    }
     // SAFETY: setsid only detaches the child from this terminal session and
     // runs before exec in the forked child, without allocating.
     unsafe {
@@ -337,6 +340,11 @@ async fn run_tracked(
         workspace,
         wrapper: wrapper.clone(),
         kind,
+        queue_entry: agent
+            .is_some()
+            .then(crate::env::queue_entry)
+            .flatten()
+            .map(str::to_owned),
         agent: agent.clone(),
         recover,
         reattach: mode.reattaches(),

@@ -970,6 +970,7 @@ async fn execution_scope_preserves_role_authorization_and_expires() {
                     agent: None,
                     recover: false,
                     reattach: false,
+                    queue_entry: None,
                     wrapper: wrapper.clone(),
                 };
                 let allowed = target.id == workspace.id
@@ -1170,6 +1171,7 @@ async fn land_refuses_dirty_checkouts_other_branches_and_scoped_callers() {
         agent: None,
         recover: false,
         reattach: false,
+        queue_entry: None,
         workspace: workspace.id.clone(),
         wrapper: crate::process::identity::capture(std::process::id())
             .unwrap()

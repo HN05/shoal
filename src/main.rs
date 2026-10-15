@@ -56,6 +56,8 @@ fn main() {
     // SAFETY: no other threads exist before the runtime starts. The Herdr plan is
     // parsed above and must not reach the worker's children.
     unsafe { std::env::remove_var(env::HERDR_PLAN) };
+    // SAFETY: as above; the queue entry goes to this process's own launch only.
+    unsafe { env::take_queue_entry() };
     run_cli(cli);
 }
 

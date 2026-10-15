@@ -538,15 +538,17 @@ impl Manager {
         Ok(())
     }
 
-    /// A registered agent takes over the slot its starting entry kept.
-    pub(crate) async fn consume_queue_entries(&self, workspace_id: &str) {
-        let workspace_id = workspace_id.to_owned();
+    /// The agent a queued launch started takes over the slot its entry kept.
+    /// Only that launch's agent names the entry, so another agent registering
+    /// in the same workspace leaves it starting.
+    pub(crate) async fn consume_queue_entry(&self, id: &str, workspace_id: &str) {
+        let (id, workspace_id) = (id.to_owned(), workspace_id.to_owned());
         let consumed = self
             .store
             .run(move |db| {
                 Ok(db.execute(
-                    "DELETE FROM agent_queue WHERE workspace_id=?1 AND state=?2",
-                    params![workspace_id, QueueState::Starting],
+                    "DELETE FROM agent_queue WHERE id=?1 AND workspace_id=?2 AND state=?3",
+                    params![id, workspace_id, QueueState::Starting],
                 )?)
             })
             .await;

@@ -92,6 +92,9 @@ pub(in crate::cli) async fn run(
         .arg(&name)
         .args(&worker)
         .env_remove(env::SHELL_DIRECTIVE);
+    if let Some(entry) = env::queue_entry() {
+        zmx.env(env::QUEUE_ENTRY, entry);
+    }
     let status = zmx.status().await.context("run zmx")?;
     finish(workspace, &name, status).await
 }

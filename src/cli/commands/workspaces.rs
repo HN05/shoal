@@ -504,6 +504,9 @@ async fn add_planned(
         }
         return Ok(1);
     };
+    if let Some(entry) = &queue_entry {
+        crate::env::launch_queue_entry(entry);
+    }
     agent.launch(ctx, workspace, issue, args).await
 }
 

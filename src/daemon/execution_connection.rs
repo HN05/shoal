@@ -28,6 +28,8 @@ pub(super) struct ExecutionContext {
     pub agent: Option<String>,
     pub recover: bool,
     pub reattach: bool,
+    /// The starting queue entry whose slot this agent takes over.
+    pub queue_entry: Option<String>,
     pub parent_execution: Option<String>,
 }
 
@@ -66,6 +68,7 @@ pub(super) async fn execute(
         agent,
         recover,
         reattach,
+        queue_entry,
         parent_execution,
     } = context;
     let StartedExecution {
@@ -95,6 +98,9 @@ pub(super) async fn execute(
                 std::time::Duration::ZERO,
             )
             .await;
+        if let Some(entry) = &queue_entry {
+            manager.consume_queue_entry(entry, &plan.workspace.id).await;
+        }
     }
     let execution = Connected {
         id: plan.id.clone(),
@@ -455,6 +461,7 @@ mod tests {
                 agent: None,
                 recover: false,
                 reattach: false,
+                queue_entry: None,
                 parent_execution: None,
             },
         ));
