@@ -1,4 +1,5 @@
-//! Branch allocation and default-branch refreshes against workspace records.
+//! Branch allocation, existing-branch workspaces and default-branch refreshes
+//! against workspace records. Adoption is explicit.
 use std::path::Path;
 
 use anyhow::{Context, Result, ensure};
@@ -8,15 +9,17 @@ use crate::{
     git::{
         self,
         default_branch::DefaultBranchLookup,
+        existing_branch::{Branch, ensure_not_checked_out},
         fetch,
         repo::{allocate_branch, clean_branch, upstream},
-        run_isolated as git_run,
+        run_isolated as git_run, worktrunk,
     },
-    model::{PulledBranch, Repository, SyncedRepository},
+    model::{OpenedWorkspace, PulledBranch, Repository, SyncedRepository},
+    state::WorkspaceState,
 };
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) enum UpstreamPolicy {
+pub(super) enum UpstreamPolicy {
     Required,
     /// A repository without remotes may use the local branch unchanged.
     AllowLocalOnly,
@@ -102,7 +105,7 @@ impl Manager {
 
     /// Fast-forward a local branch from its upstream. The caller holds the
     /// repository's Git gate through any subsequent creation.
-    pub(crate) async fn refresh_branch(
+    pub(super) async fn refresh_branch(
         &self,
         repo: &Repository,
         branch: &str,
@@ -195,6 +198,199 @@ impl Manager {
             commit,
             skipped: None,
         })
+    }
+
+    /// Query advertised remote heads, including branches never fetched locally.
+    pub async fn branches(
+        &self,
+        repository: impl Into<crate::forge::repository::Selector>,
+    ) -> Result<Vec<Branch>> {
+        let repo = self.repository(repository).await?;
+        self.ensure_repository_available(&repo.id).await?;
+        let mut branches: Vec<_> = git::run_isolated(
+            &repo.path,
+            &[
+                "for-each-ref",
+                "--format=%(refname:strip=2)",
+                git::LOCAL_REFS,
+            ],
+        )
+        .await?
+        .lines()
+        .map(|name| Branch {
+            name: name.into(),
+            remote: None,
+        })
+        .collect();
+        for remote in git::run_isolated(&repo.path, &["remote"]).await?.lines() {
+            let heads = git::run_isolated(&repo.path, &["ls-remote", "--heads", "--", remote])
+                .await.with_context(|| format!("could not list branches from {remote}; use --existing <local-branch> to work offline"))?;
+            branches.extend(heads.lines().filter_map(|line| {
+                let (_, reference) = line.split_once('\t')?;
+                Some(Branch {
+                    name: git::strip_local(reference)?.into(),
+                    remote: Some(remote.into()),
+                })
+            }));
+        }
+        Ok(branches)
+    }
+
+    pub async fn open_branch(
+        &self,
+        repository: impl Into<crate::forge::repository::Selector>,
+        selector: &str,
+        git_profile: Option<&str>,
+        path: Option<std::path::PathBuf>,
+        base: Option<String>,
+    ) -> Result<OpenedWorkspace> {
+        let (repo, _guard) = self.lock_repository(repository).await?;
+        let local = git::strip_local(selector).unwrap_or(selector);
+        let local_ref = git::local_ref(local);
+        let branch = if git::strip_remote(selector).is_none()
+            && git::ref_exists(&repo.path, &local_ref, git::isolated_command).await?
+        {
+            Branch {
+                name: local.into(),
+                remote: None,
+            }
+        } else {
+            let matches: Vec<_> = self
+                .branches(&repo.id)
+                .await?
+                .into_iter()
+                .filter(|branch| {
+                    branch.selector() == selector
+                        || branch.remote.as_ref().is_some_and(|remote| {
+                            format!("{remote}/{}", branch.name) == selector
+                                || branch.name == selector
+                        })
+                })
+                .collect();
+            ensure!(
+                matches.len() == 1,
+                "branch {selector} is missing or ambiguous; select a specific local or remote branch"
+            );
+            matches.into_iter().next().unwrap()
+        };
+        let name = &branch.name;
+        ensure!(
+            !worktrunk::is_reserved_branch_name(name),
+            "branch name is reserved by Worktrunk: {name}"
+        );
+        git::check_branch_name(Some(&repo.path), name).await?;
+        if let Some(remote) = &branch.remote {
+            let local_exists =
+                git::ref_exists(&repo.path, &git::local_ref(name), git::isolated_command).await?;
+            if local_exists {
+                let upstream = git::run_isolated(
+                    &repo.path,
+                    &[
+                        "for-each-ref",
+                        "--format=%(upstream)",
+                        &git::local_ref(name),
+                    ],
+                )
+                .await?;
+                ensure!(
+                    upstream.trim() == git::remote_ref(remote, name),
+                    "local branch {name} already exists and does not track {remote}/{name}; select the local branch explicitly"
+                );
+            }
+        }
+        if let Some(workspace) = self
+            .list_workspaces()
+            .await?
+            .into_iter()
+            .find(|w| w.repository_id == repo.id && w.branch == *name)
+        {
+            ensure!(
+                workspace.state == WorkspaceState::Ready,
+                "workspace {} is {}; inspect or set it up before reopening",
+                workspace.name,
+                workspace.state
+            );
+            ensure!(
+                git_profile.is_none(),
+                "--git-profile applies only to new worktrees; workspace {} already exists",
+                workspace.name
+            );
+            ensure!(
+                base.is_none(),
+                "--base applies only to new worktrees; workspace {} already exists",
+                workspace.name
+            );
+            if let Some(path) = &path {
+                ensure!(
+                    std::fs::canonicalize(path).is_ok_and(|p| p == workspace.path),
+                    "workspace already exists at {}; --path cannot relocate it",
+                    workspace.path.display()
+                );
+            }
+            self.verify_worktree(&workspace).await?;
+            let actual = git::head_branch(&workspace.path, false, git::run_isolated).await?;
+            ensure!(
+                actual.as_deref() == Some(name),
+                "workspace {} is no longer on its recorded branch",
+                workspace.name
+            );
+            return Ok(OpenedWorkspace {
+                workspace,
+                reused: true,
+            });
+        }
+        ensure_not_checked_out(&repo.path, name).await?;
+        let workspace = self
+            .create_branch_workspace(
+                &repo,
+                name.clone(),
+                name.clone(),
+                super::WorkspaceSource::Existing(branch, base),
+                git_profile,
+                path,
+            )
+            .await?;
+        Ok(OpenedWorkspace {
+            workspace,
+            reused: false,
+        })
+    }
+
+    pub(super) async fn materialize_branch(
+        &self,
+        repo: &Repository,
+        branch: &Branch,
+    ) -> Result<()> {
+        if let Some(remote) = &branch.remote {
+            let tracking = git::remote_ref(remote, &branch.name);
+            git::run_isolated(
+                &repo.path,
+                &[
+                    &["-c", "fetch.prune=false"][..],
+                    git::FETCH_SAFE_ARGS,
+                    &[
+                        "--refmap=",
+                        "--",
+                        remote,
+                        &format!("+{}:{tracking}", git::local_ref(&branch.name)),
+                    ],
+                ]
+                .concat(),
+            )
+            .await?;
+            let local = git::local_ref(&branch.name);
+            if git::ref_exists(&repo.path, &local, git::isolated_command).await? {
+                self.refresh_branch(repo, &branch.name, UpstreamPolicy::Required)
+                    .await?;
+            } else {
+                git::run_isolated(
+                    &repo.path,
+                    &["branch", "--track", "--", &branch.name, &tracking],
+                )
+                .await?;
+            }
+        }
+        Ok(())
     }
 }
 

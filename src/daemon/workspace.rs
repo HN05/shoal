@@ -24,7 +24,6 @@ mod stack;
 mod status;
 
 pub(crate) use agents::Protection;
-pub(crate) use branches::UpstreamPolicy;
 pub use executions::{ExecutionKind, StopRequest};
 pub(crate) use executions::{ReattachedExecution, StartedExecution};
 pub(crate) use stack::record_base_changed;
@@ -41,11 +40,12 @@ use crate::{
     state::WorkspaceState,
 };
 use anyhow::{Context, Result, bail, ensure};
+use branches::UpstreamPolicy;
 use rusqlite::{OptionalExtension, TransactionBehavior, params};
 use std::{collections::HashMap, fs, sync::Arc};
 use tokio::sync::{Mutex, OwnedMutexGuard, RwLock, watch};
 
-pub(crate) enum WorkspaceSource {
+enum WorkspaceSource {
     New(Option<String>),
     /// An existing branch, with an optional base ref overriding the default branch.
     Existing(crate::git::existing_branch::Branch, Option<String>),
@@ -348,7 +348,7 @@ impl Manager {
     }
 
     // The caller holds the per-repository Git gate through materialization.
-    pub(crate) async fn create_branch_workspace(
+    async fn create_branch_workspace(
         &self,
         repo: &crate::model::Repository,
         name: String,

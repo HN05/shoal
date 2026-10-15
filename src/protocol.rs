@@ -540,7 +540,7 @@ response_bodies! {
     Holds(Vec<crate::model::WorkspaceHold>),
     Workspaces(Vec<Workspace>),
     Branches(Vec<crate::git::existing_branch::Branch>),
-    OpenedWorkspace(crate::git::existing_branch::OpenedWorkspace),
+    OpenedWorkspace(crate::model::OpenedWorkspace),
     Inspection(Inspection),
     Item(crate::forge::item::Item),
     Opened(crate::forge::item::Opened),

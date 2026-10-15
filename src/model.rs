@@ -320,6 +320,13 @@ impl PulledBranch {
     }
 }
 
+/// A workspace on an existing branch, and whether it was already open.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct OpenedWorkspace {
+    pub workspace: Workspace,
+    pub reused: bool,
+}
+
 /// A repository's remote fetched and its local default branch fast-forwarded.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SyncedRepository {

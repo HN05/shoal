@@ -26,14 +26,11 @@ use crate::{
         pr::{RegistrationKind, state::PrStatus},
         repository,
     },
-    git::{
-        self,
-        existing_branch::{Branch, OpenedWorkspace},
-    },
+    git::{self, existing_branch::Branch},
     hooks::{self, Hook, HookKind},
     model::{
-        Completion, ConflictCheck, DiffBase, Repository, Workspace, WorkspaceStatus,
-        WorkspaceTarget,
+        Completion, ConflictCheck, DiffBase, OpenedWorkspace, Repository, Workspace,
+        WorkspaceStatus, WorkspaceTarget,
     },
     protocol::{ConfigTarget, Method},
     removal::{BranchChoice, RemovalCheck, RemovalResult},
