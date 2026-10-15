@@ -109,14 +109,10 @@ pub async fn create(
     // Worktrunk renders this setting as a template. Emit the entire path as
     // one string expression so template syntax in a literal directory stays inert.
     let template = serde_json::to_string(&format!("{{{{ {literal} }}}}"))?;
-    let mut command = Command::new(Tool::Worktrunk.program());
+    let mut command = command(repository_dir, worktrunk_config);
     command
-        .arg("--config")
-        .arg(worktrunk_config)
         .arg("--config-set")
         .arg(format!("worktree-path = {template}"))
-        .arg("-C")
-        .arg(repository_dir)
         .arg("switch");
     if let Some(base) = base {
         command.args(["--create", "--base", base]);
