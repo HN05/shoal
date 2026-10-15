@@ -379,7 +379,9 @@ own terminal state on attach, so terminal protocols such as images keep working;
 multiplexers that re-render output through their own emulator, like tmux, were
 rejected for breaking them. zmx is a required dependency. The tracked wrapper
 runs inside the session's pty, so tracking, scope, stop and recovery are
-unchanged and the daemon still never touches terminal I/O. Sessions are named
+unchanged and the daemon still never touches terminal I/O. When zmx returns
+control to the caller, the CLI resets emulator input modes on the caller's
+terminal. Sessions are named
 after their workspace and labelled with its ID, which `attach` and `status` look
 up through `zmx list`. Launches without a terminal, inside a zmx session, or in
 a Herdr pane with the integration enabled run in place, since Herdr reads agent

@@ -16339,6 +16339,12 @@ elif args[:1] == ['attach']:
         args = args[2:]
     if len(args) > 1:
         os.environ['ZMX_SESSION'] = args[0]
+        if os.environ.get('ZMX_TEST_LEAK_INPUT_MODE'):
+            import subprocess
+            status = subprocess.run(args[1:]).returncode
+            with open('/dev/tty', 'wb', buffering=0) as terminal:
+                terminal.write(b'\x1b[?1000h')
+            sys.exit(status)
         os.execvp(args[1], args[1:])
 else:
     sys.exit(1)
@@ -17425,6 +17431,26 @@ fn terminal_agents_run_tracked_in_a_labelled_zmx_session_unless_nested_or_detach
         runs(),
         "persist tracked\npersist-2 tracked\nouter tracked\nnone tracked\n"
     );
+}
+
+#[test]
+fn zmx_agent_exit_resets_input_modes_for_the_calling_shell() {
+    let fixture = Fixture::new();
+    fixture.add("persist");
+    install_test_script(
+        fixture.root.path().join("bin/claude"),
+        "#!/bin/sh\nexit 0\n",
+    );
+    let mut command = fixture.command();
+    command
+        .env("TERM", "xterm-256color")
+        .env("ZMX_TEST_LEAK_INPUT_MODE", "1")
+        .args(["claude", "persist"]);
+    let (output, transcript) = fixture.terminal_command(&mut command, "", true);
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    let enabled = transcript.rfind("\x1b[?1000h").unwrap();
+    let disabled = transcript.rfind("\x1b[?1000l").unwrap();
+    assert!(disabled > enabled, "zmx leaked mouse reporting mode");
 }
 
 #[test]

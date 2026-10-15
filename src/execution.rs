@@ -982,20 +982,33 @@ impl Terminal {
         let Some(output) = &mut self.output else {
             return;
         };
-        // termios cannot undo emulator modes left by an interrupted TUI.
-        // Disable mouse tracking/encodings, focus and paste reports, and restore
-        // ordinary cursor/keypad and keyboard input. Avoid a full terminal reset,
-        // which would clear the user's scrollback and other terminal settings.
-        let _ = output.write_all(
-            concat!(
-                "\x1b[?1000l\x1b[?1002l\x1b[?1003l",
-                "\x1b[?1005l\x1b[?1006l\x1b[?1015l\x1b[?1016l",
-                "\x1b[?1004l\x1b[?1007l\x1b[?2004l",
-                "\x1b[?1l\x1b>\x1b[>4;0m\x1b[=0u",
-            )
-            .as_bytes(),
-        );
+        reset_input_modes_on(output);
     }
+}
+
+/// Reset emulator input modes after a terminal owner returns control to the shell.
+pub(crate) fn reset_input_modes() {
+    let Some(term) = Terminal::input_mode_output() else {
+        return;
+    };
+    let mut output = term;
+    reset_input_modes_on(&mut output);
+}
+
+fn reset_input_modes_on(output: &mut std::fs::File) {
+    // termios cannot undo emulator modes left by an interrupted TUI.
+    // Disable mouse tracking/encodings, focus and paste reports, and restore
+    // ordinary cursor/keypad and keyboard input. Avoid a full terminal reset,
+    // which would clear the user's scrollback and other terminal settings.
+    let _ = output.write_all(
+        concat!(
+            "\x1b[?1000l\x1b[?1002l\x1b[?1003l",
+            "\x1b[?1005l\x1b[?1006l\x1b[?1015l\x1b[?1016l",
+            "\x1b[?1004l\x1b[?1007l\x1b[?2004l",
+            "\x1b[?1l\x1b>\x1b[>4;0m\x1b[=0u",
+        )
+        .as_bytes(),
+    );
 }
 
 #[cfg(test)]

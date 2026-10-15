@@ -162,6 +162,7 @@ pub(in crate::cli) async fn attach(workspace: &Workspace, session: &str) -> Resu
 }
 
 async fn finish(workspace: &Workspace, name: &str, status: ExitStatus) -> Result<i32> {
+    crate::execution::reset_input_modes();
     if !status.success() {
         bail!("zmx exited with {status}");
     }

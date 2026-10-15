@@ -481,7 +481,8 @@ session, so the agent keeps running when you detach with Ctrl-\ or close the
 terminal. zmx passes the agent's output to your terminal unchanged, so images and
 other terminal protocols keep working, and restores the screen when you attach
 again. The tracked wrapper runs inside the session, so stop, resume, scope and
-cleanup treat the agent as before. zmx reports no exit status: these launches
+cleanup treat the agent as before. When the session returns control, Shoal resets
+emulator input modes on the caller's terminal. zmx reports no exit status: these launches
 exit 0 once the agent exits or you detach. A launch without a terminal, inside a
 zmx session (`ZMX_SESSION` is set), or in a Herdr pane with `herdr.enabled` runs
 in place. On a terminal outside zmx, a missing zmx refuses the agent as a missing
