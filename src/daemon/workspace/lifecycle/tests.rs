@@ -156,7 +156,10 @@ async fn directory_activity_distinguishes_inspection_from_removal_checks() {
         ),
         (
             Removal::Automatic {
-                snapshot: 0,
+                snapshot: Snapshot {
+                    signals: 0,
+                    tree: 0,
+                },
                 cause: EventCause::Idle,
             },
             true,
@@ -209,7 +212,10 @@ async fn unknown_execution_blocks_stop_and_unattended_removal_even_when_missing(
                 inspection: InspectionPolicy::GitOnly,
             },
             Removal::Automatic {
-                snapshot: 0,
+                snapshot: Snapshot {
+                    signals: 0,
+                    tree: 0,
+                },
                 cause: EventCause::Idle,
             },
             Removal::Merged { head: "" },

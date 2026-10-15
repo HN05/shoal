@@ -193,9 +193,18 @@ impl Manager {
     }
 }
 
+/// What automatic cleanup must see unchanged before removing a workspace.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Snapshot {
+    /// HEAD and recorded activity, cheap enough to compare on every pass.
+    pub signals: u64,
+    /// The metadata of every file in the worktree, which takes a full walk.
+    pub tree: u64,
+}
+
 /// When a workspace was last seen unchanged in a removable state.
 struct Idle {
-    snapshot: u64,
+    snapshot: Snapshot,
     since: Instant,
 }
 
@@ -205,26 +214,47 @@ pub struct Timers {
 }
 
 impl Timers {
-    /// Record the latest snapshot; returns true once it has stayed the same
-    /// for `delay`.
-    pub fn observe(&mut self, id: &str, snapshot: u64, now: Instant, delay: Duration) -> bool {
-        let entry = self.idle.entry(id.into()).or_insert(Idle {
-            snapshot,
-            since: now,
-        });
-        if entry.snapshot != snapshot {
-            *entry = Idle {
+    /// Whether the timer has run for `delay` with unchanged `signals`; a
+    /// change, or no timer, needs a full snapshot to start from.
+    fn expired(&self, id: &str, signals: u64, now: Instant, delay: Duration) -> Expiry {
+        match self.idle.get(id) {
+            Some(idle) if idle.snapshot.signals != signals => Expiry::Restart,
+            Some(idle) if now.duration_since(idle.since) < delay => Expiry::Running,
+            Some(idle) => Expiry::Expired(idle.snapshot),
+            None => Expiry::Restart,
+        }
+    }
+
+    fn start(&mut self, id: &str, snapshot: Snapshot, now: Instant) {
+        self.idle.insert(
+            id.into(),
+            Idle {
                 snapshot,
                 since: now,
-            };
-        }
-        now.duration_since(entry.since) >= delay
+            },
+        );
     }
+}
+
+enum Expiry {
+    Running,
+    Restart,
+    Expired(Snapshot),
+}
+
+/// HEAD and the activity counter of a cleanup candidate.
+pub fn signals(head: &str, activity: u64) -> u64 {
+    let mut hash = DefaultHasher::new();
+    head.hash(&mut hash);
+    activity.hash(&mut hash);
+    hash.finish()
 }
 
 /// Metadata only, including ignored files; never follow symlinks out of the tree.
 /// Git administrative storage is shared and inspected separately through HEAD.
-pub fn fingerprint(root: &Path, head: &str, activity: u64) -> Result<u64> {
+/// Modification times only move forward, so two equal fingerprints mean no file
+/// changed between them.
+pub fn fingerprint(root: &Path) -> Result<u64> {
     fn visit(path: &Path, hash: &mut DefaultHasher) -> Result<()> {
         let metadata = fs::symlink_metadata(path)?;
         path.hash(hash);
@@ -245,8 +275,6 @@ pub fn fingerprint(root: &Path, head: &str, activity: u64) -> Result<u64> {
         Ok(())
     }
     let mut hash = DefaultHasher::new();
-    head.hash(&mut hash);
-    activity.hash(&mut hash);
     visit(root, &mut hash)?;
     Ok(hash.finish())
 }
@@ -316,11 +344,24 @@ async fn sweep_workspace(
         remove_deleted(manager, workspace).await;
         return Ok(());
     }
-    let Some((delay, snapshot)) = observe(manager, workspace).await else {
+    let Some((delay, signals)) = observe(manager, workspace).await else {
         timers.idle.remove(&workspace.id);
         return Ok(());
     };
-    if !timers.observe(&workspace.id, snapshot, Instant::now(), delay) {
+    // Each pass compares only the signals; the tree is walked when the timer
+    // starts and again when it expires.
+    let now = Instant::now();
+    let started = match timers.expired(&workspace.id, signals, now, delay) {
+        Expiry::Running => return Ok(()),
+        Expiry::Restart => None,
+        Expiry::Expired(snapshot) => Some(snapshot),
+    };
+    let Some(snapshot) = candidate(manager, workspace).await else {
+        timers.idle.remove(&workspace.id);
+        return Ok(());
+    };
+    if started != Some(snapshot) {
+        timers.start(&workspace.id, snapshot, now);
         return Ok(());
     }
     timers.idle.remove(&workspace.id);
@@ -349,22 +390,45 @@ async fn sweep_workspace(
     recorded
 }
 
-/// The idle delay and snapshot of a ready, removable workspace; `None` when
-/// it is not, its idle cleanup is disabled, or its config cannot be read.
-pub(super) async fn observe(manager: &Manager, workspace: &Workspace) -> Option<(Duration, u64)> {
+/// The idle delay of a ready workspace, or `None` when idle cleanup is
+/// disabled for it.
+async fn idle_delay(manager: &Manager, workspace: &Workspace) -> Result<Option<Duration>> {
     if workspace.state != WorkspaceState::Ready {
-        return None;
+        return Ok(None);
     }
+    let settings = manager.workspace_settings(workspace).await?;
+    Ok(settings.cleanup.auto.delay())
+}
+
+/// The idle delay and cleanup signals of a ready, removable workspace;
+/// `None` when it is not, its idle cleanup is disabled, or its config cannot
+/// be read.
+async fn observe(manager: &Manager, workspace: &Workspace) -> Option<(Duration, u64)> {
     let observed = async {
-        let settings = manager.workspace_settings(workspace).await?;
-        let Some(delay) = settings.cleanup.auto.delay() else {
+        let Some(delay) = idle_delay(manager, workspace).await? else {
             return Ok(None);
         };
-        let snapshot = manager.cleanup_snapshot(&workspace.id).await?;
-        Ok(snapshot.map(|snapshot| (delay, snapshot)))
+        let signals = manager.cleanup_signals(&workspace.id).await?;
+        Ok(signals.map(|signals| (delay, signals)))
     }
     .await;
-    observed.unwrap_or_else(|error: anyhow::Error| {
+    skip_failed(workspace, observed)
+}
+
+/// The full snapshot of a workspace [`observe`] accepts.
+pub(super) async fn candidate(manager: &Manager, workspace: &Workspace) -> Option<Snapshot> {
+    let observed = async {
+        if idle_delay(manager, workspace).await?.is_none() {
+            return Ok(None);
+        }
+        manager.cleanup_snapshot(&workspace.id).await
+    }
+    .await;
+    skip_failed(workspace, observed)
+}
+
+fn skip_failed<T>(workspace: &Workspace, observed: Result<Option<T>>) -> Option<T> {
+    observed.unwrap_or_else(|error| {
         log!("auto cleanup skipped {}: {error:#}", workspace.name);
         None
     })
@@ -494,15 +558,31 @@ mod tests {
     use super::*;
 
     #[test]
-    fn activity_restarts_timer_and_unsafe_state_cancels_it() {
+    fn changed_signals_restart_timer_and_expiry_returns_its_snapshot() {
         let mut timers = Timers::default();
         let now = Instant::now();
         let delay = Duration::from_secs(600);
-        assert!(!timers.observe("w", 1, now, delay));
-        assert!(!timers.observe("w", 2, now + delay, delay));
-        timers.idle.remove("w");
-        assert!(!timers.observe("w", 2, now + delay * 3, delay));
-        assert!(timers.observe("w", 2, now + delay * 4, delay));
+        let snapshot = Snapshot {
+            signals: 1,
+            tree: 7,
+        };
+        assert!(matches!(
+            timers.expired("w", 1, now, delay),
+            Expiry::Restart
+        ));
+        timers.start("w", snapshot, now);
+        assert!(matches!(
+            timers.expired("w", 1, now + delay / 2, delay),
+            Expiry::Running
+        ));
+        assert!(matches!(
+            timers.expired("w", 2, now + delay, delay),
+            Expiry::Restart
+        ));
+        assert!(matches!(
+            timers.expired("w", 1, now + delay, delay),
+            Expiry::Expired(expired) if expired == snapshot
+        ));
     }
 
     #[test]
@@ -1114,5 +1194,43 @@ mod tests {
         assert!(!workspace.path.exists());
         assert!(git(&checkout, &["branch", "--list", "held"]).is_empty());
         assert!(!manager.has_holds(&workspace.id).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn ignored_changes_during_idle_delay_restart_timer_at_expiry() {
+        use crate::test_support::{commit, manager, repository};
+        let (temp, manager) = manager().await;
+        let checkout = repository(temp.path(), "repo");
+        fs::write(checkout.join(".gitignore"), "ignored/\n").unwrap();
+        commit(&checkout, ".gitignore");
+        let repo = manager
+            .register_repository(checkout.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        let workspace = manager
+            .create_workspace(&repo.id, "idle".into(), None, None, None)
+            .await
+            .unwrap();
+        let mut timers = Timers::default();
+        let expire = |timers: &mut Timers| {
+            timers.idle.get_mut(&workspace.id).unwrap().since -= Duration::from_secs(600);
+        };
+        sweep(&manager, &mut timers).await.unwrap();
+        let started = timers.idle[&workspace.id].snapshot;
+        fs::create_dir(workspace.path.join("ignored")).unwrap();
+        fs::write(workspace.path.join("ignored/build-output"), "build").unwrap();
+        // Passes before expiry compare only HEAD and activity.
+        sweep(&manager, &mut timers).await.unwrap();
+        assert_eq!(timers.idle[&workspace.id].snapshot, started);
+        expire(&mut timers);
+        sweep(&manager, &mut timers).await.unwrap();
+        assert!(
+            workspace.path.exists(),
+            "the ignored change restarts the timer"
+        );
+        assert_ne!(timers.idle[&workspace.id].snapshot, started);
+        expire(&mut timers);
+        sweep(&manager, &mut timers).await.unwrap();
+        assert!(!workspace.path.exists());
     }
 }

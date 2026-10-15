@@ -199,7 +199,7 @@ async fn free_space(
         {
             continue;
         }
-        let Some((_, snapshot)) = super::cleanup::observe(manager, workspace).await else {
+        let Some(snapshot) = super::cleanup::candidate(manager, workspace).await else {
             continue;
         };
         let (kind, message) = match manager.remove_for_disk_space(&workspace.id, snapshot).await {

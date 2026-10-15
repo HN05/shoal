@@ -284,7 +284,10 @@ and automatic removal, after checks pass and commands stop, bounded in time;
 failure retains the workspace. Ownership and removal policy are rechecked after
 all removal hooks, with branch deletion derived from the final inspection.
 Idle cleanup requires unchanged
-HEAD and activity; manual removal without a branch choice retains changed HEAD.
+HEAD, activity and file metadata; sweeps compare HEAD and activity, and walk the
+tree only when the timer starts, when it expires and after removal hooks, since
+modification times only move forward. Manual removal without a branch choice
+retains changed HEAD.
 Post-remove runs after ownership is released,
 from the repository checkout with its copy of the executable, retaining the old
 workspace path in the environment. Its command is selected before removal.

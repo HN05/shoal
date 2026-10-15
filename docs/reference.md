@@ -1306,7 +1306,8 @@ Idle, clean, fully pushed worktrees are removed after 10 minutes by default, or
 sooner when [disk space](#overload-protection) runs low.
 Deleted directories are forgotten even when disabled, releasing resources and
 retaining branches; moved worktrees or recorded commands need manual recovery.
-File changes (including ignored files), HEAD and commands reset the timer.
+HEAD and commands reset the timer; file changes, including ignored files, restart
+it when it expires.
 Running/unknown commands, directory users (including shells), dirty/unpushed work,
 simulator leases, permits, holds and failed checks block cleanup. Pushed means reachable
 from locally known remote branches or the local default branch; no fetch.

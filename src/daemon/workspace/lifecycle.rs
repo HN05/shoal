@@ -1,7 +1,10 @@
 //! One removal path for explicit removal and automatic cleanup.
 use super::{Manager, executions::StopPolicy};
 use crate::{
-    daemon::events::{self, EventCause, EventKind},
+    daemon::{
+        cleanup::Snapshot,
+        events::{self, EventCause, EventKind},
+    },
     git::{
         default_branch::DefaultBranchLookup,
         worktrunk::{self, BranchRemoval, FileRemoval},
@@ -34,7 +37,10 @@ enum Removal<'a> {
         inspection: InspectionPolicy,
     },
     /// Idle or disk-space cleanup; only safe, unchanged workspaces may go.
-    Automatic { snapshot: u64, cause: EventCause },
+    Automatic {
+        snapshot: Snapshot,
+        cause: EventCause,
+    },
     /// The directory was deleted outside Shoal; forget the workspace and
     /// release what it owned, retaining its branch.
     Deleted,
@@ -194,9 +200,27 @@ impl Manager {
             .await
     }
 
-    /// A fingerprint of everything automatic cleanup must see unchanged before
-    /// removing the workspace, or `None` when it is not a cleanup candidate.
-    pub async fn cleanup_snapshot(&self, id: &str) -> Result<Option<u64>> {
+    /// HEAD and activity of a cleanup candidate, cheap enough to compare on
+    /// every sweep, or `None` when it is not a candidate.
+    pub async fn cleanup_signals(&self, id: &str) -> Result<Option<u64>> {
+        Ok(self
+            .cleanup_candidate(id)
+            .await?
+            .map(|(_, signals)| signals))
+    }
+
+    /// Everything automatic cleanup must see unchanged before removing the
+    /// workspace, or `None` when it is not a cleanup candidate.
+    pub async fn cleanup_snapshot(&self, id: &str) -> Result<Option<Snapshot>> {
+        let Some((path, signals)) = self.cleanup_candidate(id).await? else {
+            return Ok(None);
+        };
+        let tree = tokio::task::spawn_blocking(move || crate::daemon::cleanup::fingerprint(&path))
+            .await??;
+        Ok(Some(Snapshot { signals, tree }))
+    }
+
+    async fn cleanup_candidate(&self, id: &str) -> Result<Option<(PathBuf, u64)>> {
         if crate::execution::recovery::pending(&self.paths, id)?
             || self.workspace_has_executions(id).await?
         {
@@ -230,34 +254,36 @@ impl Manager {
         }
         let head = crate::git::run(&check.workspace.path, &["rev-parse", "HEAD"]).await?;
         let activity = self.activity(id).await;
-        let path = check.workspace.path;
-        Ok(Some(
-            tokio::task::spawn_blocking(move || {
-                crate::daemon::cleanup::fingerprint(&path, &head, activity)
-            })
-            .await??,
-        ))
+        Ok(Some((
+            check.workspace.path,
+            crate::daemon::cleanup::signals(&head, activity),
+        )))
     }
 
-    pub async fn remove_idle(&self, selector: &str, snapshot: u64) -> Result<()> {
+    pub async fn remove_idle(&self, selector: &str, snapshot: Snapshot) -> Result<()> {
         self.remove_unused(selector, snapshot, EventCause::Idle)
             .await
     }
 
     /// Remove an idle cleanup candidate without waiting for its idle delay.
-    pub async fn remove_for_disk_space(&self, selector: &str, snapshot: u64) -> Result<()> {
+    pub async fn remove_for_disk_space(&self, selector: &str, snapshot: Snapshot) -> Result<()> {
         self.remove_unused(selector, snapshot, EventCause::DiskSpace)
             .await
     }
 
     /// Remove an idle cleanup candidate on the user's request, without
     /// waiting for its idle delay.
-    pub async fn remove_on_request(&self, selector: &str, snapshot: u64) -> Result<()> {
+    pub async fn remove_on_request(&self, selector: &str, snapshot: Snapshot) -> Result<()> {
         self.remove_unused(selector, snapshot, EventCause::Manual)
             .await
     }
 
-    async fn remove_unused(&self, selector: &str, snapshot: u64, cause: EventCause) -> Result<()> {
+    async fn remove_unused(
+        &self,
+        selector: &str,
+        snapshot: Snapshot,
+        cause: EventCause,
+    ) -> Result<()> {
         let _guard = self.pr_gate.lock().await;
         self.remove(selector, Removal::Automatic { snapshot, cause })
             .await
@@ -428,9 +454,11 @@ impl Manager {
             &super::StopRequest::removal(),
         )
         .await?;
+        // The tree is compared after the hooks: modification times only move
+        // forward, so that also covers changes made before them.
         if let Removal::Automatic { snapshot, .. } = removal {
             ensure!(
-                self.cleanup_snapshot(&workspace.id).await? == Some(snapshot),
+                self.cleanup_signals(&workspace.id).await? == Some(snapshot.signals),
                 "workspace changed before automatic removal"
             );
         }
