@@ -568,12 +568,7 @@ impl Manager {
         } else if !existing
             && let Some((remote, branch)) = git::remote_branch(&repo.path, base).await?
         {
-            let tracking = git::remote_ref(&remote, &branch);
-            let refspec = format!("+{}:{tracking}", git::local_ref(&branch));
-            git::run_isolated(
-                &repo.path,
-                &[git::FETCH_SAFE_ARGS, &["--", &remote, &refspec]].concat(),
-            )
+            let tracking = git::fetch::configured_branch(&repo.path, &remote, &branch)
             .await
             .with_context(|| {
                 format!("could not fetch {remote}/{branch} before creating workspace; pass a commit to start from the local state")

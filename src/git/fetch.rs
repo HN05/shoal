@@ -41,6 +41,60 @@ pub async fn fetch_commit(
     resolve_commit(repo, destination, run).await
 }
 
+/// Refresh the configured tracking refs of a remote.
+pub async fn remote(repo: &Path, remote: &str) -> Result<String> {
+    super::run_isolated(repo, &[FETCH_SAFE_ARGS, &["--", remote]].concat()).await
+}
+
+/// Refresh a branch using the remote's configured tracking-ref mapping.
+pub async fn configured_branch(repo: &Path, remote: &str, branch: &str) -> Result<String> {
+    let tracking = super::remote_ref(remote, branch);
+    let refspec = format!("+{}:{tracking}", super::local_ref(branch));
+    super::run_isolated(repo, &[FETCH_SAFE_ARGS, &["--", remote, &refspec]].concat()).await?;
+    Ok(tracking)
+}
+
+/// Fetch a branch for a new worktree, preserving unrelated tracking refs.
+pub async fn materialize_branch(repo: &Path, remote: &str, branch: &str) -> Result<String> {
+    let tracking = super::remote_ref(remote, branch);
+    super::run_isolated(
+        repo,
+        &[
+            &["-c", "fetch.prune=false"][..],
+            FETCH_SAFE_ARGS,
+            &[
+                "--refmap=",
+                "--",
+                remote,
+                &format!("+{}:{tracking}", super::local_ref(branch)),
+            ],
+        ]
+        .concat(),
+    )
+    .await?;
+    Ok(tracking)
+}
+
+/// Fetch only a review's branch, retaining the caller's normal Git policy.
+pub async fn review_branch(repo: &Path, branch: &str) -> Result<String> {
+    let tracking = super::remote_ref("origin", branch);
+    super::run(
+        repo,
+        &[
+            FETCH_SAFE_ARGS,
+            &[
+                "--refmap=",
+                "--",
+                "origin",
+                &format!("+{}:{tracking}", super::local_ref(branch)),
+            ],
+        ]
+        .concat(),
+    )
+    .await?;
+    Ok(tracking)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

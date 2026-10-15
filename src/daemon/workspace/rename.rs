@@ -45,11 +45,7 @@ impl Manager {
         );
         self.reserve_workspace_rename(&workspace, branch, caller_execution)
             .await?;
-        let result = git::run_isolated(
-            &workspace.path,
-            &["branch", "-m", "--", &workspace.branch, branch],
-        )
-        .await;
+        let result = git::existing_branch::rename(&workspace.path, &workspace.branch, branch).await;
         // Git may have completed even if capturing its output failed. Inspect
         // the owned worktree instead of blindly rolling back a ref mutation.
         if let Err(error) = self.finish_workspace_rename(&workspace, false).await {

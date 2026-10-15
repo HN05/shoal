@@ -29,27 +29,7 @@ impl Manager {
     /// The requested branch name, or the nearest free `-2`, `-3`, ... variant.
     /// Called while holding the repository's Git gate, through worktree creation.
     pub(super) async fn available_branch(&self, repo: &Repository, name: &str) -> Result<String> {
-        let refs = git::run(
-            &repo.path,
-            &[
-                "for-each-ref",
-                "--format=%(refname)",
-                git::LOCAL_REFS,
-                git::REMOTE_REFS,
-            ],
-        )
-        .await?;
-        let mut taken: Vec<String> = refs
-            .lines()
-            .filter_map(|reference| {
-                git::strip_local(reference).or_else(|| {
-                    git::strip_remote(reference)?
-                        .split_once('/')
-                        .map(|(_, branch)| branch)
-                })
-            })
-            .map(str::to_owned)
-            .collect();
+        let mut taken = git::existing_branch::names_in_use(&repo.path).await?;
         // Failed/preparing workspaces still own their recorded branch name.
         taken.extend(
             self.list_workspaces()
@@ -75,12 +55,9 @@ impl Manager {
             .await?
             .map(|(remote, _)| remote);
         if let Some(remote) = &remote {
-            git_run(
-                &repo.path,
-                &[git::FETCH_SAFE_ARGS, &["--", remote]].concat(),
-            )
-            .await
-            .with_context(|| format!("could not fetch {remote}"))?;
+            fetch::remote(&repo.path, remote)
+                .await
+                .with_context(|| format!("could not fetch {remote}"))?;
         }
         let default_branch = self
             .refresh_branch(&repo, &default, UpstreamPolicy::AllowLocalOnly)
@@ -112,7 +89,7 @@ impl Manager {
         policy: UpstreamPolicy,
     ) -> Result<PulledBranch> {
         let local_ref = git::local_ref(branch);
-        let previous_commit = git_run(&repo.path, &["rev-parse", "--verify", &local_ref])
+        let previous_commit = git::verify_revision(&repo.path, &local_ref, git_run)
             .await
             .with_context(|| format!("repository has no local {branch} branch"))?
             .trim()
@@ -120,7 +97,7 @@ impl Manager {
         let upstream = upstream(repo, &local_ref).await?;
         if matches!(policy, UpstreamPolicy::AllowLocalOnly)
             && upstream.is_none()
-            && git_run(&repo.path, &["remote"]).await?.trim().is_empty()
+            && git::remotes(&repo.path, git_run).await?.trim().is_empty()
         {
             return Ok(PulledBranch::unchanged(
                 repo,
@@ -154,10 +131,7 @@ impl Manager {
                 fetch::fetch_commit(&repo.path, remote, reference, fetched, git_run).await?;
             let commit = commit.as_str();
             ensure!(
-                git_run(&repo.path, &["rev-parse", &local_ref])
-                    .await?
-                    .trim()
-                    == previous_commit,
+                git::revision(&repo.path, &local_ref, git_run).await?.trim() == previous_commit,
                 "{branch} changed during fetch; retry"
             );
             // Like pull --ff-only, an already-ahead default branch stays untouched.
@@ -172,18 +146,7 @@ impl Manager {
             );
             if let Some(checkout) = &checkout {
                 clean_branch(checkout, branch).await?;
-                git::run_without_submodules(
-                    checkout,
-                    &[
-                        "merge",
-                        "--ff-only",
-                        "--no-edit",
-                        "--no-stat",
-                        "--no-overwrite-ignore",
-                        commit,
-                    ],
-                )
-                .await?;
+                git::existing_branch::fast_forward(checkout, commit).await?;
             } else {
                 git::fast_forward_local(&repo.path, commit, &local_ref).await?;
             }
@@ -207,33 +170,7 @@ impl Manager {
     ) -> Result<Vec<Branch>> {
         let repo = self.repository(repository).await?;
         self.ensure_repository_available(&repo.id).await?;
-        let mut branches: Vec<_> = git::run_isolated(
-            &repo.path,
-            &[
-                "for-each-ref",
-                "--format=%(refname:strip=2)",
-                git::LOCAL_REFS,
-            ],
-        )
-        .await?
-        .lines()
-        .map(|name| Branch {
-            name: name.into(),
-            remote: None,
-        })
-        .collect();
-        for remote in git::run_isolated(&repo.path, &["remote"]).await?.lines() {
-            let heads = git::run_isolated(&repo.path, &["ls-remote", "--heads", "--", remote])
-                .await.with_context(|| format!("could not list branches from {remote}; use --existing <local-branch> to work offline"))?;
-            branches.extend(heads.lines().filter_map(|line| {
-                let (_, reference) = line.split_once('\t')?;
-                Some(Branch {
-                    name: git::strip_local(reference)?.into(),
-                    remote: Some(remote.into()),
-                })
-            }));
-        }
-        Ok(branches)
+        git::existing_branch::list(&repo.path).await
     }
 
     pub async fn open_branch(
@@ -283,15 +220,7 @@ impl Manager {
             let local_exists =
                 git::ref_exists(&repo.path, &git::local_ref(name), git::isolated_command).await?;
             if local_exists {
-                let upstream = git::run_isolated(
-                    &repo.path,
-                    &[
-                        "for-each-ref",
-                        "--format=%(upstream)",
-                        &git::local_ref(name),
-                    ],
-                )
-                .await?;
+                let upstream = git::existing_branch::upstream_ref(&repo.path, name).await?;
                 ensure!(
                     upstream.trim() == git::remote_ref(remote, name),
                     "local branch {name} already exists and does not track {remote}/{name}; select the local branch explicitly"
@@ -362,32 +291,13 @@ impl Manager {
         branch: &Branch,
     ) -> Result<()> {
         if let Some(remote) = &branch.remote {
-            let tracking = git::remote_ref(remote, &branch.name);
-            git::run_isolated(
-                &repo.path,
-                &[
-                    &["-c", "fetch.prune=false"][..],
-                    git::FETCH_SAFE_ARGS,
-                    &[
-                        "--refmap=",
-                        "--",
-                        remote,
-                        &format!("+{}:{tracking}", git::local_ref(&branch.name)),
-                    ],
-                ]
-                .concat(),
-            )
-            .await?;
+            let tracking = fetch::materialize_branch(&repo.path, remote, &branch.name).await?;
             let local = git::local_ref(&branch.name);
             if git::ref_exists(&repo.path, &local, git::isolated_command).await? {
                 self.refresh_branch(repo, &branch.name, UpstreamPolicy::Required)
                     .await?;
             } else {
-                git::run_isolated(
-                    &repo.path,
-                    &["branch", "--track", "--", &branch.name, &tracking],
-                )
-                .await?;
+                git::existing_branch::track(&repo.path, &branch.name, &tracking).await?;
             }
         }
         Ok(())

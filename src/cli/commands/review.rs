@@ -343,24 +343,14 @@ async fn update_to_head(repo: &Path, workspace: &Workspace, head: &str) -> Resul
         "workspace {} has diverged from {tracking}; update it before reviewing",
         workspace.name
     );
-    git::run_without_submodules(
-        path,
-        &[
-            "merge",
-            "--ff-only",
-            "--no-edit",
-            "--no-stat",
-            "--no-overwrite-ignore",
-            &tracking,
-        ],
-    )
-    .await
-    .with_context(|| {
-        format!(
-            "could not fast-forward workspace {} to {tracking}",
-            workspace.name
-        )
-    })?;
+    git::existing_branch::fast_forward(path, &tracking)
+        .await
+        .with_context(|| {
+            format!(
+                "could not fast-forward workspace {} to {tracking}",
+                workspace.name
+            )
+        })?;
     eprintln!("Updated workspace {} to {tracking}", workspace.name);
     Ok(())
 }
@@ -370,23 +360,9 @@ pub(super) async fn fetch_pull_branch(path: &Path, role: &str, branch: &str) -> 
     git::check_branch_name(None, branch)
         .await
         .with_context(|| format!("PR {role} {branch:?} is not a branch name"))?;
-    let tracking = git::remote_ref("origin", branch);
-    git::run(
-        path,
-        &[
-            git::FETCH_SAFE_ARGS,
-            &[
-                "--refmap=",
-                "--",
-                "origin",
-                &format!("+{}:{tracking}", git::local_ref(branch)),
-            ],
-        ]
-        .concat(),
-    )
-    .await
-    .with_context(|| format!("could not fetch the PR {role} {branch}"))?;
-    Ok(tracking)
+    git::fetch::review_branch(path, branch)
+        .await
+        .with_context(|| format!("could not fetch the PR {role} {branch}"))
 }
 
 async fn run(
