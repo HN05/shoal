@@ -977,8 +977,10 @@ shoal repo rm my-project -y
 ```
 
 Permanently deletes the checkout (including in-place local repositories with
-uncommitted or unpushed work), all its workspaces and branches, their ports,
-simulators, and leases, and the saved config, stopping managed commands first.
+uncommitted or unpushed work), all its workspaces, their ports, simulators, and
+leases, and the saved config, stopping managed commands first. A workspace branch
+is deleted when its worktree can be inspected; it is retained when its recorded
+worktree directory is already missing because its contents cannot be inspected.
 Interactive calls identify the resolved repository, source, and checkout path before asking
 `Are you sure? [y/N]`; `-y`/`--yes` skips the prompt and is required for scripts
 and `--json`. `repo remove` is an alias.
