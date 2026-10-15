@@ -11,6 +11,7 @@ use super::{
     ForgeKind, ForgeRepo, Query,
     account::Account,
     api::Request,
+    gh,
     link::ItemKind,
     pr::state::{CheckResult, PrStatus, ReviewState},
 };
@@ -231,7 +232,7 @@ impl ForgeRepo {
             "--json",
             &fields,
         ];
-        let output = self.kind.query(account, &args, Query::View).await?;
+        let output = gh(account, &args, Query::View).await?;
         github_details(&output, kind, number)
     }
 
@@ -256,7 +257,7 @@ impl ForgeRepo {
                     "--paginate",
                     "--slurp",
                 ];
-                let output = self.kind.query(account, &args, Query::View).await?;
+                let output = gh(account, &args, Query::View).await?;
                 let pages: Vec<Vec<Value>> = serde_json::from_str(&output)
                     .with_context(|| format!("invalid gh {resource} response"))?;
                 Ok::<_, anyhow::Error>(pages.into_iter().flatten().collect::<Vec<_>>())

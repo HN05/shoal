@@ -2,6 +2,7 @@ use super::{Check, Snapshot};
 use crate::forge::{
     ForgeKind, ForgeRepo, Query,
     account::Account,
+    gh,
     item::{Current, ItemState},
     link::ItemKind,
     pr::state::{CheckResult, PrState, PrStatus, Verdict, github_reviews, summarize},
@@ -32,7 +33,7 @@ impl ForgeRepo {
             "--json",
             "number,state,comments",
         ];
-        let output = self.kind.query(account, &args, Query::Issue).await?;
+        let output = gh(account, &args, Query::Issue).await?;
         let issue: serde_json::Value = serde_json::from_str(&output)?;
         ensure!(issue["number"] == number, "gh returned a different issue");
         let mut snapshot = Snapshot {
@@ -104,7 +105,7 @@ impl ForgeRepo {
             "--json",
             "number,headRefName,headRefOid,state,comments,reviews,statusCheckRollup,mergeable",
         ];
-        let output = self.kind.query(account, &args, Query::Pull("")).await?;
+        let output = gh(account, &args, Query::Pull("")).await?;
         let mut snapshot = github_snapshot(&output, number, branch)?;
         let endpoint = format!("repos/{}/pulls/{number}/comments", self.path);
         let args = [
@@ -115,7 +116,7 @@ impl ForgeRepo {
             "--paginate",
             "--slurp",
         ];
-        let output = self.kind.query(account, &args, Query::Pull("")).await?;
+        let output = gh(account, &args, Query::Pull("")).await?;
         let pages: Vec<Vec<serde_json::Value>> =
             serde_json::from_str(&output).context("invalid gh review comments response")?;
         for comment in pages.into_iter().flatten() {
@@ -190,7 +191,7 @@ impl ForgeRepo {
             "--json",
             "number,headRefOid,state,comments,reviews,statusCheckRollup,mergeable",
         ];
-        let output = self.kind.query(account, &args, Query::Pull("")).await?;
+        let output = gh(account, &args, Query::Pull("")).await?;
         github_status(&output, number, url)
     }
 

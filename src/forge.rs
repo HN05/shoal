@@ -172,21 +172,20 @@ async fn github_merged_commits(
     branch: &str,
 ) -> Result<Option<Vec<String>>> {
     let number = number.to_string();
-    let output = ForgeKind::GitHub
-        .query(
-            account,
-            &[
-                "pr",
-                "view",
-                &number,
-                "--repo",
-                &format!("{}/{}", repo.host, repo.path),
-                "--json",
-                "number,state,headRefName,commits",
-            ],
-            Query::Pull(MERGED_HINT),
-        )
-        .await?;
+    let output = gh(
+        account,
+        &[
+            "pr",
+            "view",
+            &number,
+            "--repo",
+            &format!("{}/{}", repo.host, repo.path),
+            "--json",
+            "number,state,headRefName,commits",
+        ],
+        Query::Pull(MERGED_HINT),
+    )
+    .await?;
     #[derive(serde::Deserialize)]
     struct Commit {
         oid: String,
@@ -250,9 +249,7 @@ async fn github_issue_details(
         "--json",
         "number,title,body,state",
     ];
-    let text = ForgeKind::GitHub
-        .query(account, &args, Query::Issue)
-        .await?;
+    let text = gh(account, &args, Query::Issue).await?;
     issue::require_open(issue::github_state(&text, number)?)?;
     #[derive(serde::Deserialize)]
     struct GitHubIssue {
@@ -341,9 +338,7 @@ async fn github_pull_details(
         base_ref_name: String,
         is_cross_repository: bool,
     }
-    let output = ForgeKind::GitHub
-        .query(account, &args, Query::Pull(""))
-        .await?;
+    let output = gh(account, &args, Query::Pull("")).await?;
     let pull: Pull = serde_json::from_str(&output).context("invalid gh PR response")?;
     ensure!(pull.number == number, "gh returned a different PR");
     ensure!(
@@ -364,27 +359,21 @@ enum Query {
     View,
 }
 
-impl ForgeKind {
-    async fn query(
-        self,
-        account: &account::Account,
-        args: &[&str],
-        query: Query,
-    ) -> Result<String> {
-        let tool = self.tool();
-        let mut command = tokio::process::Command::new(tool);
-        command.args(args).env("NO_COLOR", "1");
-        account.apply(&mut command);
-        let seconds = match query {
-            Query::Issue | Query::List | Query::View => 30,
-            Query::Pull(_) => 20,
-        };
-        let output = crate::subprocess::Run::new(command)
-            .timeout(std::time::Duration::from_secs(seconds))
-            .capture()
-            .await;
-        query.response(tool, output)
-    }
+/// Run `gh` as `account`, the CLI that reads GitHub's items.
+async fn gh(account: &account::Account, args: &[&str], query: Query) -> Result<String> {
+    let tool = crate::tools::Tool::GitHub.program();
+    let mut command = tokio::process::Command::new(tool);
+    command.args(args).env("NO_COLOR", "1");
+    account.apply(&mut command);
+    let seconds = match query {
+        Query::Issue | Query::List | Query::View => 30,
+        Query::Pull(_) => 20,
+    };
+    let output = crate::subprocess::Run::new(command)
+        .timeout(std::time::Duration::from_secs(seconds))
+        .capture()
+        .await;
+    query.response(tool, output)
 }
 
 impl Query {
@@ -503,32 +492,14 @@ mod tests {
 
     #[test]
     fn backend_is_selected_from_the_normalized_remote_host() {
-        for (remote, kind, tool) in [
-            ("git@GitHub.COM:team/repo.git", ForgeKind::GitHub, "gh"),
-            (
-                "ssh://git@github.com:2222/team/repo",
-                ForgeKind::GitHub,
-                "gh",
-            ),
-            (
-                "https://forge.example/team/repo.git",
-                ForgeKind::Forgejo,
-                "fj",
-            ),
-            (
-                "http://forge.example:3000/team/repo",
-                ForgeKind::Forgejo,
-                "fj",
-            ),
-            (
-                "git@gitlab.com:group/sub/project.git",
-                ForgeKind::GitLab,
-                "glab",
-            ),
+        for (remote, kind) in [
+            ("git@GitHub.COM:team/repo.git", ForgeKind::GitHub),
+            ("ssh://git@github.com:2222/team/repo", ForgeKind::GitHub),
+            ("https://forge.example/team/repo.git", ForgeKind::Forgejo),
+            ("http://forge.example:3000/team/repo", ForgeKind::Forgejo),
+            ("git@gitlab.com:group/sub/project.git", ForgeKind::GitLab),
         ] {
-            let repo = ForgeRepo::parse(remote).unwrap();
-            assert_eq!(repo.kind, kind);
-            assert_eq!(repo.kind.tool(), tool);
+            assert_eq!(ForgeRepo::parse(remote).unwrap().kind, kind);
         }
     }
 

@@ -1,7 +1,7 @@
 //! Open issues and PRs, for choosing one interactively.
 use anyhow::{Context, Result};
 
-use super::{ForgeKind, ForgeRepo, Query, account::Account, link::ItemKind};
+use super::{ForgeKind, ForgeRepo, Query, account::Account, gh, link::ItemKind};
 
 /// An open issue or PR.
 #[derive(Debug, PartialEq, serde::Deserialize)]
@@ -43,7 +43,7 @@ impl ForgeKind {
                     "--json",
                     "number,title",
                 ];
-                let text = self.query(account, &args, Query::List).await?;
+                let text = gh(account, &args, Query::List).await?;
                 serde_json::from_str(&text)
                     .with_context(|| format!("invalid gh {noun} list response"))
             }

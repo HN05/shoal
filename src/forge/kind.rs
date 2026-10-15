@@ -1,7 +1,6 @@
 //! Which forge serves a repository, and the details of its API and web URLs
 //! that differ between forges.
 use super::{glab, locator::ItemRoute};
-use crate::tools::Tool;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum ForgeKind {
@@ -22,15 +21,6 @@ impl ForgeKind {
                 Self::GitLab
             }
             _ => Self::Forgejo,
-        }
-    }
-
-    /// The CLI whose login reads this forge's items.
-    pub fn tool(self) -> &'static str {
-        match self {
-            Self::GitHub => Tool::GitHub.program(),
-            Self::Forgejo => Tool::Forgejo.program(),
-            Self::GitLab => Tool::GitLab.program(),
         }
     }
 

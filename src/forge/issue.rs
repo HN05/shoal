@@ -4,7 +4,7 @@ use rusqlite::OptionalExtension;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    ForgeKind, ForgeRepo, Query, account::Account, item::ItemState, link::ItemKind, repository,
+    ForgeKind, ForgeRepo, Query, account::Account, gh, item::ItemState, link::ItemKind, repository,
 };
 use crate::{
     daemon::{
@@ -262,7 +262,7 @@ impl ForgeRepo {
                     "--json",
                     "number,state",
                 ];
-                let output = self.kind.query(account, &args, Query::Issue).await?;
+                let output = gh(account, &args, Query::Issue).await?;
                 github_state(&output, number)
             }
             ForgeKind::Forgejo | ForgeKind::GitLab => Ok(self
