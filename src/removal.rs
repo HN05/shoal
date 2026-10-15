@@ -95,17 +95,7 @@ impl Serialize for RemovalResult {
 
 impl RemovalCheck {
     pub async fn load_changed_files(&mut self) -> Result<()> {
-        let status = git::run(
-            &self.workspace.path,
-            &[
-                "-c",
-                "core.quotePath=true",
-                "status",
-                "--porcelain=v1",
-                "--untracked-files=all",
-            ],
-        )
-        .await?;
+        let status = git::status::changed_files(&self.workspace.path).await?;
         (self.changed_files, self.changed_files_omitted) = changed_files_preview(&status);
         Ok(())
     }
@@ -198,13 +188,11 @@ pub async fn inspect(
         return Ok(check);
     }
     let path = &check.workspace.path;
-    check.dirty = !git::run(path, &["status", "--porcelain", "--untracked-files=normal"])
-        .await?
-        .is_empty();
-    let branch = git::run(path, &["branch", "--show-current"]).await?;
+    check.dirty = !git::status::porcelain(path).await?.is_empty();
+    let branch = git::current_branch(path).await?;
     let branch = branch.trim_end_matches('\n');
     check.branch = (!branch.is_empty()).then(|| branch.to_owned());
-    let tree = git::run(path, &["rev-parse", "HEAD^{tree}"]).await?;
+    let tree = git::revision(path, "HEAD^{tree}", git::run).await?;
     // The default branch may be absent locally (workspaces created from another ref).
     let default_ref = match default_branch {
         Some(name) => {
@@ -215,19 +203,15 @@ pub async fn inspect(
         }
         None => None,
     };
-    let mut retained = vec!["rev-list", "--count", "HEAD", "--not", "--remotes"];
     if let Some(default_ref) = &default_ref {
-        retained.push(default_ref);
-        check.matches_default_branch = git::run(
-            path,
-            &["rev-parse", "--verify", &format!("{default_ref}^{{tree}}")],
-        )
-        .await
-        .is_ok_and(|other| other == tree)
-            || git::is_ancestor(path, "HEAD", default_ref, git::command).await?;
+        check.matches_default_branch =
+            git::verify_revision(path, &format!("{default_ref}^{{tree}}"), git::run)
+                .await
+                .is_ok_and(|other| other == tree)
+                || git::is_ancestor(path, "HEAD", default_ref, git::command).await?;
     }
-    check.unpushed_commits = git::run(path, &retained).await?.trim().parse()?;
-    check.matches_upstream = git::run(path, &["rev-parse", "--verify", "@{upstream}^{tree}"])
+    check.unpushed_commits = git::status::unretained_commits(path, default_ref.as_deref()).await?;
+    check.matches_upstream = git::verify_revision(path, "@{upstream}^{tree}", git::run)
         .await
         .is_ok_and(|other| other == tree);
     if policy == InspectionPolicy::IncludeDirectoryProcesses {

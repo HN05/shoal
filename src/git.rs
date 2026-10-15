@@ -1,6 +1,7 @@
 //! Git invocations shared by workspace creation, removal, branch refreshes, and landing.
 pub(crate) mod conflicts;
 pub mod default_branch;
+pub mod diff;
 pub mod existing_branch;
 pub mod fetch;
 mod predicates;
@@ -11,6 +12,7 @@ pub use queries::{
     verify_revision, worktree_root,
 };
 pub mod repo;
+pub mod status;
 pub mod worktrunk;
 
 use crate::tools::Tool;

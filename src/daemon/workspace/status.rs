@@ -20,11 +20,7 @@ impl Manager {
         let diff = async {
             self.verify_worktree(&inspection.workspace).await?;
             let base = self.diff_base(&inspection.workspace.id).await?;
-            let numstat = git::run(
-                &inspection.workspace.path,
-                &["diff", "--numstat", &base.commit, "--"],
-            )
-            .await?;
+            let numstat = git::diff::numstat(&inspection.workspace.path, &base.commit).await?;
             parse_numstat(&numstat)
         }
         .await;

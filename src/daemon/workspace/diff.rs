@@ -14,14 +14,10 @@ impl Manager {
             workspace.base_commit.is_none().then_some("refs/heads/main")
         });
         let commit = if let Some(reference) = reference {
-            match git::run(
-                &workspace.path,
-                &["merge-base", "--fork-point", reference, "HEAD"],
-            )
-            .await
+            match git::diff::fork_point(&workspace.path, reference).await
             {
                 Ok(commit) => commit,
-                Err(_) => git::run(&workspace.path, &["merge-base", reference, "HEAD"])
+                Err(_) => git::diff::merge_base(&workspace.path, reference)
                     .await
                     .context("cannot determine the fork point; the base branch may have been deleted or have unrelated history")?,
             }
@@ -30,7 +26,7 @@ impl Manager {
                 .base_commit
                 .as_deref()
                 .context("workspace base is unknown")?;
-            git::run(&workspace.path, &["merge-base", base, "HEAD"]).await?
+            git::diff::merge_base(&workspace.path, base).await?
         };
         let commit = commit.trim().to_owned();
         ensure!(
