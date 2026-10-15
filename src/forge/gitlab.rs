@@ -2,13 +2,14 @@
 //! projects addressed by their encoded path, and states of its own.
 use std::collections::BTreeMap;
 
-use anyhow::{Context, Result, bail};
-use serde_json::Value;
+use anyhow::{Context, Result, bail, ensure};
+use serde_json::{Value, json};
 
 use super::{
     ForgeRepo,
     account::Account,
-    api::Request,
+    action::{Edit, MergeMethod},
+    api::{HttpMethod, Request, encode},
     item::{Current, Item, ItemState, PrSummary, text},
     link::ItemKind,
     pr::state::Verdict,
@@ -18,6 +19,9 @@ use super::{
 
 /// Merge statuses during which GitLab has not yet decided mergeability.
 const UNDECIDED: [&str; 4] = ["unchecked", "checking", "preparing", "approvals_syncing"];
+
+/// Title prefixes that make a merge request a draft, including the former `WIP:`.
+const DRAFT_PREFIXES: [&str; 5] = ["Draft:", "[Draft]", "(Draft)", "Draft -", "WIP:"];
 
 impl ForgeRepo {
     /// An issue or merge request as GitLab reports it.
@@ -55,6 +59,12 @@ impl ForgeRepo {
             _ => None,
         };
         let same_project = value["source_project_id"] == value["target_project_id"];
+        let reviewers: Vec<(String, u64)> = value["reviewers"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|user| Some((text(&user["username"])?, user["id"].as_u64()?)))
+            .collect();
         Ok(Current {
             item: Item {
                 kind,
@@ -70,11 +80,85 @@ impl ForgeRepo {
             body: text(&value["description"]).unwrap_or_default(),
             head_sha: text(&value["sha"]),
             conflict,
+            reviewers: reviewers.iter().map(|(name, _)| name.clone()).collect(),
+            user_ids: reviewers.into_iter().collect(),
         })
     }
 }
 
 impl ForgeRepo {
+    /// Look up the IDs of the users `names` that `current` has none for.
+    pub(super) async fn gitlab_user_ids(
+        &self,
+        account: &Account,
+        names: &[String],
+        current: &mut Current,
+    ) -> Result<()> {
+        for name in names {
+            if current.user_ids.contains_key(name) {
+                continue;
+            }
+            let request = Request::get(format!("users?username={}", encode(name, false)));
+            let users = self.send(account, &request).await?;
+            let id = users
+                .as_array()
+                .into_iter()
+                .flatten()
+                .find(|user| {
+                    user["username"]
+                        .as_str()
+                        .is_some_and(|username| username.eq_ignore_ascii_case(name))
+                })
+                .and_then(|user| user["id"].as_u64())
+                .with_context(|| format!("GitLab has no user {name}"))?;
+            current.user_ids.insert(name.clone(), id);
+        }
+        Ok(())
+    }
+
+    /// One update with every changed field; GitLab adds and removes labels by
+    /// name, keeps draft state in the title and replaces reviewers by ID.
+    pub(super) fn gitlab_edit(&self, current: &Current, edit: &Edit) -> Result<Vec<Request>> {
+        let item = &current.item;
+        let mut fields = serde_json::Map::new();
+        let mut title = edit.title.clone();
+        if let Some(pr) = &item.pr {
+            let draft = edit.draft.unwrap_or(pr.draft);
+            if title.is_some() || draft != pr.draft {
+                let current = title.as_deref().unwrap_or(&item.title);
+                title = Some(draft_title(current, draft));
+            }
+        }
+        if let Some(title) = title {
+            fields.insert("title".into(), title.into());
+        }
+        if let Some(body) = &edit.body {
+            fields.insert("description".into(), body.clone().into());
+        }
+        if let Some(base) = &edit.base {
+            fields.insert("target_branch".into(), base.clone().into());
+        }
+        for (field, labels) in [
+            ("add_labels", &edit.add_labels),
+            ("remove_labels", &edit.remove_labels),
+        ] {
+            if !labels.is_empty() {
+                fields.insert(field.into(), labels.join(",").into());
+            }
+        }
+        if !edit.add_reviewers.is_empty() || !edit.remove_reviewers.is_empty() {
+            fields.insert("reviewer_ids".into(), reviewer_ids(current, edit)?.into());
+        }
+        if fields.is_empty() {
+            return Ok(Vec::new());
+        }
+        Ok(vec![Request::new(
+            HttpMethod::Put,
+            self.item_endpoint(item.kind, item.number),
+            Some(fields.into()),
+        )])
+    }
+
     /// The latest status of each CI job and external check on `head`.
     pub(super) async fn gitlab_checks(
         &self,
@@ -174,6 +258,68 @@ impl ForgeRepo {
         }));
         Ok(Some(reviews))
     }
+}
+
+/// GitLab merges with the project's merge method, optionally squashing.
+pub(super) fn gitlab_merge(
+    endpoint: String,
+    method: MergeMethod,
+    delete_branch: bool,
+) -> Result<Request> {
+    ensure!(
+        method != MergeMethod::Rebase,
+        "GitLab merges with the project's merge method; use merge or squash"
+    );
+    Ok(Request::new(
+        HttpMethod::Put,
+        endpoint,
+        Some(json!({
+            "squash": method == MergeMethod::Squash,
+            "should_remove_source_branch": delete_branch,
+        })),
+    ))
+}
+
+/// The title with GitLab's draft prefix added or removed.
+pub(super) fn draft_title(title: &str, draft: bool) -> String {
+    let bare = DRAFT_PREFIXES
+        .iter()
+        .find_map(|prefix| {
+            title
+                .get(..prefix.len())
+                .filter(|start| start.eq_ignore_ascii_case(prefix))
+                .map(|_| title[prefix.len()..].trim_start())
+        })
+        .unwrap_or(title);
+    if draft {
+        format!("Draft: {bare}")
+    } else {
+        bare.to_owned()
+    }
+}
+
+/// The reviewers after the edit, by user ID.
+fn reviewer_ids(current: &Current, edit: &Edit) -> Result<Vec<u64>> {
+    let mut names: Vec<&String> = current
+        .reviewers
+        .iter()
+        .filter(|name| !edit.remove_reviewers.contains(name))
+        .collect();
+    for name in &edit.add_reviewers {
+        if !names.contains(&name) {
+            names.push(name);
+        }
+    }
+    names
+        .into_iter()
+        .map(|name| {
+            current
+                .user_ids
+                .get(name)
+                .copied()
+                .with_context(|| format!("GitLab user {name} was not looked up"))
+        })
+        .collect()
 }
 
 /// The newest status of each name; retried jobs keep their earlier ones.

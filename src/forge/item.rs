@@ -59,6 +59,11 @@ pub(crate) struct Current {
     /// Whether an open PR conflicts with its base; unknown while the forge
     /// computes it. Forgejo reports none for drafts.
     pub conflict: Option<bool>,
+    /// The usernames of a GitLab merge request's reviewers.
+    pub reviewers: Vec<String>,
+    /// GitLab user IDs by username, which its reviewer changes take: the
+    /// reviewers', and those of the users an edit adds.
+    pub user_ids: std::collections::BTreeMap<String, u64>,
 }
 
 impl ForgeRepo {
@@ -148,6 +153,8 @@ impl ForgeRepo {
             body: text(&value["body"]).unwrap_or_default(),
             head_sha: text(&value["head"]["sha"]),
             conflict,
+            reviewers: Vec::new(),
+            user_ids: Default::default(),
         })
     }
 }

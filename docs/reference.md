@@ -267,8 +267,8 @@ confirmed-deleted worktrees can still be removed through normal cleanup.
 `shoal add <link>` recognizes issue, PR and branch URLs. Links select the single
 registered repository with the same origin; `--repo` selects one explicitly and
 must match the link. An unregistered remote offers interactive registration,
-otherwise lookup fails with the `shoal repo add` command to run. Shoal uses your
-existing `gh`, `fj` or `tea` login and stores no forge credentials.
+otherwise lookup fails with the `shoal repo add` command to run. Lookups use your
+[forge login](#forges).
 
 Issue links and `shoal add <number>` require an open issue and derive
 `issue-<number>-<title-slug>`. Numbers use `--repo`, the current registered checkout
@@ -283,7 +283,8 @@ once; options after `--` go to the agent. Codex uses CLI mode for issue prompts.
 PR links open their head branch against the refreshed remote base, reusing an
 owned workspace when present, and link the PR once the workspace is ready; a
 refused link only warns. Fork PRs cannot be opened. Branch URLs use
-GitHub's `/tree/<branch>` or Forgejo's `/src/branch/<branch>` route and open the
+GitHub's `/tree/<branch>`, GitLab's `/-/tree/<branch>` or Forgejo's
+`/src/branch/<branch>` route and open the
 origin branch, preserving slashes and decoding URL escapes. Setup, hooks and
 existing-branch ownership checks apply. These forms launch an agent with `--agent`.
 `add <repository> --issue <number-or-url>` remains available with an optional
@@ -1231,6 +1232,23 @@ Release remains available while the workspace record exists. Scoped callers mana
 and `ls --json` show holds on the workspace record. `rm` lists holders before
 confirmation and includes them in its JSON result; `--yes` skips confirmation.
 
+### Forges
+
+Shoal reads and changes the issues and PRs of the forge serving a repository's
+`origin`. `github.com` is GitHub; `gitlab.com`, a host with a `gitlab` name
+label and a host `glab` has a login for are GitLab; any other host is Forgejo or
+Gitea, which share an API. Lookups use your login: `gh` on GitHub, `glab` on
+GitLab, and on Forgejo or Gitea the token `fj` saved for the host, else `tea`'s
+login through `tea api`, else none, which reads only public repositories. Shoal
+stores no forge credentials.
+
+GitLab projects may sit in subgroups, its merge requests are PRs, and its item
+URLs use `/-/issues/` and `/-/merge_requests/`. Reviewers are usernames, and
+`merge` uses the project's merge method, squashed with `--method squash`, so
+`--method rebase` is refused. CI checks are the latest status of each job and
+external check on the head commit, and reviews are reviewers' states and
+approvals; approval rules and merge trains are not modeled.
+
 ### Issue and PR actions
 
 ```sh
@@ -1261,7 +1279,8 @@ takes `--title`, `--body` or `--body-file`, and repeated `--add-label` and
 `--remove-label`; PRs also take `--base`, repeated `--add-reviewer` and
 `--remove-reviewer`, and `--draft` or `--no-draft`. Edits apply in that order,
 and a failed request stops the rest with the forge's message. Labels are
-replaced as a set by name; Forgejo's draft state is the title's `WIP: ` prefix.
+replaced as a set by name; Forgejo's draft state is the title's `WIP: ` prefix,
+and GitLab's its `Draft: ` prefix.
 `merge` takes `--method merge|rebase|squash`; `--delete-branch` deletes the
 PR's branch on the forge when it is in the repository, never a local branch.
 `issue open` takes `--title`, `--body` or `--body-file`, and repeated `--label`;

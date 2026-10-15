@@ -9,6 +9,7 @@ use super::{
     account::Account,
     action::{Action, Edit, draft_title},
     api::{HttpMethod, Request, encode},
+    gitlab,
     item::Item,
     link::ItemKind,
 };
@@ -63,25 +64,38 @@ impl ForgeRepo {
                     .cloned()
                     .context("the PR list is not a list")?
             }
-            ForgeKind::GitLab => {
-                anyhow::bail!("opening GitLab merge requests is not supported yet")
-            }
             // Forgejo cannot filter its list by head branch.
             ForgeKind::Forgejo => {
                 self.pages(account, &self.repo_endpoint("pulls?state=open"))
                     .await?
             }
+            ForgeKind::GitLab => {
+                let branch = encode(branch, false);
+                let endpoint = format!("merge_requests?state=opened&source_branch={branch}");
+                self.pages(account, &self.repo_endpoint(&endpoint)).await?
+            }
         };
         pulls
             .iter()
-            .find(|pull| {
+            .find(|pull| self.has_head(pull, branch))
+            .map(|pull| self.created_number(pull))
+            .transpose()
+    }
+
+    /// Whether the listed PR's head is `branch` in this repository.
+    fn has_head(&self, pull: &Value, branch: &str) -> bool {
+        match self.kind {
+            ForgeKind::GitHub | ForgeKind::Forgejo => {
                 pull["head"]["ref"] == branch
                     && pull["head"]["repo"]["full_name"]
                         .as_str()
                         .is_some_and(|name| name.eq_ignore_ascii_case(&self.path))
-            })
-            .map(created_number)
-            .transpose()
+            }
+            ForgeKind::GitLab => {
+                pull["source_branch"] == branch
+                    && pull["source_project_id"] == pull["target_project_id"]
+            }
+        }
     }
 
     /// Open the PR and return it as the forge reports it.
@@ -90,7 +104,7 @@ impl ForgeRepo {
             .send(account, &self.create_pull_request(pull))
             .await
             .context("could not open the PR")?;
-        let number = created_number(&created)?;
+        let number = self.created_number(&created)?;
         if pull.labels.is_empty() && pull.reviewers.is_empty() {
             return Ok(self.read(account, ItemKind::Pr, number).await?.item);
         }
@@ -107,20 +121,28 @@ impl ForgeRepo {
     }
 
     fn create_pull_request(&self, pull: &NewPull) -> Request {
-        let mut body = json!({
-            "title": pull.title,
-            "body": pull.body,
-            "head": pull.head,
-            "base": pull.base,
-        });
-        match self.kind {
-            ForgeKind::GitHub => body["draft"] = pull.draft.into(),
-            ForgeKind::Forgejo if pull.draft => {
-                body["title"] = draft_title(&pull.title, true).into()
-            }
-            ForgeKind::Forgejo | ForgeKind::GitLab => {}
-        }
-        Request::new(HttpMethod::Post, self.repo_endpoint("pulls"), Some(body))
+        let title = match self.kind {
+            ForgeKind::Forgejo if pull.draft => draft_title(&pull.title, true),
+            ForgeKind::GitLab if pull.draft => gitlab::draft_title(&pull.title, true),
+            _ => pull.title.clone(),
+        };
+        let (resource, body) = match self.kind {
+            ForgeKind::GitHub => (
+                "pulls",
+                json!({"title": title, "body": pull.body, "head": pull.head, "base": pull.base,
+                    "draft": pull.draft}),
+            ),
+            ForgeKind::Forgejo => (
+                "pulls",
+                json!({"title": title, "body": pull.body, "head": pull.head, "base": pull.base}),
+            ),
+            ForgeKind::GitLab => (
+                "merge_requests",
+                json!({"title": title, "description": pull.body,
+                    "source_branch": pull.head, "target_branch": pull.base}),
+            ),
+        };
+        Request::new(HttpMethod::Post, self.repo_endpoint(resource), Some(body))
     }
 
     /// Open the issue and return it as the forge reports it.
@@ -129,7 +151,7 @@ impl ForgeRepo {
             .send(account, &self.issue_request(issue))
             .await
             .context("could not open the issue")?;
-        let number = created_number(&created)?;
+        let number = self.created_number(&created)?;
         // Forgejo takes only label IDs on creation; the label set takes names.
         if self.kind == ForgeKind::Forgejo && !issue.labels.is_empty() {
             let labels = Action::Edit(Edit {
@@ -145,19 +167,23 @@ impl ForgeRepo {
     }
 
     fn issue_request(&self, issue: &NewIssue) -> Request {
-        let mut body = json!({ "title": issue.title, "body": issue.body });
-        if self.kind == ForgeKind::GitHub {
-            body["labels"] = json!(issue.labels);
-        }
+        let body = match self.kind {
+            ForgeKind::GitHub => {
+                json!({ "title": issue.title, "body": issue.body, "labels": issue.labels })
+            }
+            ForgeKind::Forgejo => json!({ "title": issue.title, "body": issue.body }),
+            ForgeKind::GitLab => json!({ "title": issue.title, "description": issue.body,
+                "labels": issue.labels.join(",") }),
+        };
         Request::new(HttpMethod::Post, self.repo_endpoint("issues"), Some(body))
     }
-}
 
-/// The number of the item a creation response describes.
-pub(crate) fn created_number(created: &Value) -> Result<u64> {
-    created["number"]
-        .as_u64()
-        .context("the forge did not report the new item's number")
+    /// The number of the item a creation or list response describes.
+    fn created_number(&self, created: &Value) -> Result<u64> {
+        created[self.kind.number_field()]
+            .as_u64()
+            .context("the forge did not report the new item's number")
+    }
 }
 
 #[cfg(test)]
@@ -185,7 +211,48 @@ mod tests {
             forgejo.issue_request(&issue).body,
             Some(json!({"title": "Flaky", "body": "Seen twice"}))
         );
-        assert!(created_number(&json!({"id": 1})).is_err());
+        assert!(github.created_number(&json!({"id": 1})).is_err());
+    }
+
+    #[test]
+    fn gitlab_opens_merge_requests_with_draft_titles_and_labeled_issues() {
+        let gitlab = ForgeRepo::parse("git@gitlab.com:group/sub/repo.git").unwrap();
+        let pull = NewPull {
+            title: "Fix".into(),
+            body: "Closes #3".into(),
+            head: "topic".into(),
+            base: "main".into(),
+            draft: true,
+            ..NewPull::default()
+        };
+        assert_eq!(
+            gitlab.create_pull_request(&pull),
+            Request::new(
+                HttpMethod::Post,
+                "projects/group%2Fsub%2Frepo/merge_requests".into(),
+                Some(json!({"title": "Draft: Fix", "description": "Closes #3",
+                    "source_branch": "topic", "target_branch": "main"})),
+            )
+        );
+        let issue = NewIssue {
+            title: "Flaky".into(),
+            body: "Seen twice".into(),
+            labels: vec!["bug".into(), "ci".into()],
+        };
+        assert_eq!(
+            gitlab.issue_request(&issue).body,
+            Some(json!({"title": "Flaky", "description": "Seen twice", "labels": "bug,ci"}))
+        );
+        assert_eq!(
+            gitlab.created_number(&json!({"iid": 4, "id": 90})).unwrap(),
+            4
+        );
+        let listed =
+            json!({"source_branch": "topic", "source_project_id": 1, "target_project_id": 1});
+        assert!(gitlab.has_head(&listed, "topic"));
+        let fork =
+            json!({"source_branch": "topic", "source_project_id": 2, "target_project_id": 1});
+        assert!(!gitlab.has_head(&fork, "topic"));
     }
 
     #[test]

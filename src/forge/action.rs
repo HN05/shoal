@@ -2,12 +2,13 @@
 //! and applied in order, stopping at the first failure.
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::json;
 
 use super::{
     ForgeKind, ForgeRepo,
     account::Account,
     api::{HttpMethod, Request},
+    gitlab::gitlab_merge,
     item::{Current, Item, ItemState, draft_prefix},
     link::ItemKind,
 };
@@ -101,7 +102,11 @@ impl ForgeRepo {
         action: &Action,
     ) -> Result<Item> {
         action.validate(kind)?;
-        let current = self.read(account, kind, number).await?;
+        let mut current = self.read(account, kind, number).await?;
+        if let (Action::Edit(edit), ForgeKind::GitLab) = (action, self.kind) {
+            self.gitlab_user_ids(account, &edit.add_reviewers, &mut current)
+                .await?;
+        }
         for request in self.plan(&current, action)? {
             self.send(account, &request).await?;
         }
@@ -123,20 +128,14 @@ impl ForgeRepo {
     /// The requests that carry out `action` on `current`, in order.
     pub(crate) fn plan(&self, current: &Current, action: &Action) -> Result<Vec<Request>> {
         let item = &current.item;
-        let endpoint = |path: &str| self.repo_endpoint(&format!("issues/{}/{path}", item.number));
-        let pulls = |path: &str| self.repo_endpoint(&format!("pulls/{}/{path}", item.number));
-        let patch = |body: Value| {
-            Request::new(
-                HttpMethod::Patch,
-                self.item_endpoint(item.kind, item.number),
-                Some(body),
-            )
-        };
         Ok(match action {
-            Action::Edit(edit) => self.plan_edit(current, edit)?,
+            Action::Edit(edit) => match self.kind {
+                ForgeKind::GitHub | ForgeKind::Forgejo => self.plan_edit(current, edit)?,
+                ForgeKind::GitLab => self.gitlab_edit(current, edit)?,
+            },
             Action::Comment { body } => vec![Request::new(
                 HttpMethod::Post,
-                endpoint("comments"),
+                self.comments_endpoint(item.kind, item.number),
                 Some(json!({ "body": body })),
             )],
             Action::Close => {
@@ -145,7 +144,7 @@ impl ForgeRepo {
                     "#{} is not open",
                     item.number
                 );
-                vec![patch(json!({ "state": "closed" }))]
+                vec![self.state_request(item, ItemState::Closed)]
             }
             Action::Reopen => {
                 ensure!(
@@ -153,7 +152,7 @@ impl ForgeRepo {
                     "#{} is not closed, or was merged",
                     item.number
                 );
-                vec![patch(json!({ "state": "open" }))]
+                vec![self.state_request(item, ItemState::Open)]
             }
             Action::Merge {
                 method,
@@ -164,46 +163,81 @@ impl ForgeRepo {
                     "#{} is not open",
                     item.number
                 );
-                let pr = item.pr.as_ref().context("only PRs merge")?;
-                match self.kind {
-                    ForgeKind::GitHub => {
-                        // GitHub can answer success without merging.
-                        let mut requests = vec![
-                            Request::new(
-                                HttpMethod::Put,
-                                pulls("merge"),
-                                Some(json!({ "merge_method": method.as_str() })),
-                            )
-                            .confirming("merged"),
-                        ];
-                        // A fork's branch is not this repository's to delete.
-                        if *delete_branch
-                            && current.head_repository.as_deref() == Some(self.path.as_str())
-                        {
-                            requests.push(Request::new(
-                                HttpMethod::Delete,
-                                self.repo_endpoint(&format!(
-                                    "git/refs/heads/{}",
-                                    super::api::encode(&pr.head, true)
-                                )),
-                                None,
-                            ));
-                        }
-                        requests
-                    }
-                    ForgeKind::Forgejo => vec![Request::new(
-                        HttpMethod::Post,
-                        pulls("merge"),
-                        Some(json!({
-                            "Do": method.as_str(),
-                            "delete_branch_after_merge": delete_branch,
-                        })),
-                    )],
-                    ForgeKind::GitLab => {
-                        anyhow::bail!("merging GitLab merge requests is not supported yet")
-                    }
-                }
+                self.plan_merge(current, *method, *delete_branch)?
             }
+        })
+    }
+
+    /// Where comments on the item are posted.
+    fn comments_endpoint(&self, kind: ItemKind, number: u64) -> String {
+        match self.kind {
+            ForgeKind::GitHub | ForgeKind::Forgejo => {
+                self.repo_endpoint(&format!("issues/{number}/comments"))
+            }
+            ForgeKind::GitLab => format!("{}/notes", self.item_endpoint(kind, number)),
+        }
+    }
+
+    /// Close or reopen the item.
+    fn state_request(&self, item: &Item, state: ItemState) -> Request {
+        let endpoint = self.item_endpoint(item.kind, item.number);
+        let open = state == ItemState::Open;
+        match self.kind {
+            ForgeKind::GitHub | ForgeKind::Forgejo => Request::new(
+                HttpMethod::Patch,
+                endpoint,
+                Some(json!({ "state": if open { "open" } else { "closed" } })),
+            ),
+            ForgeKind::GitLab => Request::new(
+                HttpMethod::Put,
+                endpoint,
+                Some(json!({ "state_event": if open { "reopen" } else { "close" } })),
+            ),
+        }
+    }
+
+    fn plan_merge(
+        &self,
+        current: &Current,
+        method: MergeMethod,
+        delete_branch: bool,
+    ) -> Result<Vec<Request>> {
+        let item = &current.item;
+        let pr = item.pr.as_ref().context("only PRs merge")?;
+        let merge = format!("{}/merge", self.item_endpoint(ItemKind::Pr, item.number));
+        Ok(match self.kind {
+            ForgeKind::GitHub => {
+                // GitHub can answer success without merging.
+                let mut requests = vec![
+                    Request::new(
+                        HttpMethod::Put,
+                        merge,
+                        Some(json!({ "merge_method": method.as_str() })),
+                    )
+                    .confirming("merged"),
+                ];
+                // A fork's branch is not this repository's to delete.
+                if delete_branch && current.head_repository.as_deref() == Some(self.path.as_str()) {
+                    requests.push(Request::new(
+                        HttpMethod::Delete,
+                        self.repo_endpoint(&format!(
+                            "git/refs/heads/{}",
+                            super::api::encode(&pr.head, true)
+                        )),
+                        None,
+                    ));
+                }
+                requests
+            }
+            ForgeKind::Forgejo => vec![Request::new(
+                HttpMethod::Post,
+                merge,
+                Some(json!({
+                    "Do": method.as_str(),
+                    "delete_branch_after_merge": delete_branch,
+                })),
+            )],
+            ForgeKind::GitLab => vec![gitlab_merge(merge, method, delete_branch)?],
         })
     }
 
@@ -314,6 +348,7 @@ pub(crate) fn draft_title(title: &str, draft: bool) -> String {
 mod tests {
     use super::*;
     use crate::forge::item::PrSummary;
+    use serde_json::Value;
 
     fn pr(forge: &ForgeRepo, draft: bool, labels: &[&str]) -> Current {
         Current {
@@ -339,6 +374,8 @@ mod tests {
             body: String::new(),
             head_sha: None,
             conflict: None,
+            reviewers: Vec::new(),
+            user_ids: Default::default(),
         }
     }
 
@@ -517,6 +554,75 @@ mod tests {
                 json!({"Do": "squash", "delete_branch_after_merge": true})
             )]
         );
+    }
+
+    #[test]
+    fn gitlab_changes_merge_requests_in_one_update_by_user_id() {
+        let gitlab = ForgeRepo::parse("git@gitlab.com:group/sub/repo.git").unwrap();
+        let mut current = pr(&gitlab, false, &["bug"]);
+        current.reviewers = vec!["kim".into(), "lee".into()];
+        current.user_ids = [("kim".into(), 1), ("lee".into(), 2), ("sam".into(), 3)].into();
+        let edit = Action::Edit(Edit {
+            title: Some("New".into()),
+            body: Some("Why".into()),
+            base: Some("next".into()),
+            add_labels: vec!["a".into(), "b".into()],
+            remove_labels: vec!["bug".into()],
+            add_reviewers: vec!["sam".into()],
+            remove_reviewers: vec!["kim".into()],
+            draft: Some(true),
+        });
+        assert_eq!(
+            requests(&gitlab, &current, edit),
+            [(
+                "PUT".into(),
+                "projects/group%2Fsub%2Frepo/merge_requests/7".into(),
+                json!({"title": "Draft: New", "description": "Why", "target_branch": "next",
+                    "add_labels": "a,b", "remove_labels": "bug", "reviewer_ids": [2, 3]})
+            )]
+        );
+        let unknown = Action::Edit(Edit {
+            add_reviewers: vec!["ann".into()],
+            ..Edit::default()
+        });
+        assert!(gitlab.plan(&current, &unknown).is_err());
+        let ready = Action::Edit(Edit {
+            draft: Some(false),
+            ..Edit::default()
+        });
+        let mut draft = pr(&gitlab, true, &[]);
+        draft.item.title = "[Draft] Fix".into();
+        assert_eq!(
+            requests(&gitlab, &draft, ready)[0].2,
+            json!({"title": "Fix"})
+        );
+
+        let open = pr(&gitlab, false, &[]);
+        assert_eq!(
+            requests(&gitlab, &open, Action::Comment { body: "hi".into() }),
+            [(
+                "POST".into(),
+                "projects/group%2Fsub%2Frepo/merge_requests/7/notes".into(),
+                json!({"body": "hi"})
+            )]
+        );
+        assert_eq!(
+            requests(&gitlab, &open, Action::Close)[0].2,
+            json!({"state_event": "close"})
+        );
+        let merge = |method| Action::Merge {
+            method,
+            delete_branch: true,
+        };
+        assert_eq!(
+            requests(&gitlab, &open, merge(MergeMethod::Squash)),
+            [(
+                "PUT".into(),
+                "projects/group%2Fsub%2Frepo/merge_requests/7/merge".into(),
+                json!({"squash": true, "should_remove_source_branch": true})
+            )]
+        );
+        assert!(gitlab.plan(&open, &merge(MergeMethod::Rebase)).is_err());
     }
 
     #[test]

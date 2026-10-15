@@ -278,6 +278,8 @@ mod tests {
             body: String::new(),
             head_sha: None,
             conflict: None,
+            reviewers: Vec::new(),
+            user_ids: Default::default(),
         }
     }
 
