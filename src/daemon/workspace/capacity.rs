@@ -26,7 +26,19 @@ pub(crate) enum MemoryState {
 /// Probe the same memory and disk sources used by overload protection. A
 /// failed probe is retained as `Unavailable`; it never authorizes more work.
 pub(crate) fn sample(paths: &[&Path], settings: &Overload) -> HostSample {
-    let memory = if !settings.memory.enabled {
+    HostSample {
+        parallelism: std::thread::available_parallelism()
+            .map(|value| value.get().min(u32::MAX as usize) as u32)
+            .unwrap_or(1)
+            .max(1),
+        cpu_ticks: load::cpu_ticks().ok(),
+        memory: sample_memory(settings),
+        disk_free: sample_disk(paths, settings.disk.enabled, fsutil::available_bytes),
+    }
+}
+
+fn sample_memory(settings: &Overload) -> MemoryState {
+    if !settings.memory.enabled {
         MemoryState::Healthy
     } else {
         match load::critical_memory(settings.memory.used_percent) {
@@ -41,26 +53,24 @@ pub(crate) fn sample(paths: &[&Path], settings: &Overload) -> HostSample {
             Ok(false) => MemoryState::Healthy,
             Err(_) => MemoryState::Unavailable,
         }
-    };
-    HostSample {
-        parallelism: std::thread::available_parallelism()
-            .map(|value| value.get().min(u32::MAX as usize) as u32)
-            .unwrap_or(1)
-            .max(1),
-        cpu_ticks: load::cpu_ticks().ok(),
-        memory,
-        disk_free: if settings.disk.enabled {
-            paths
-                .iter()
-                .try_fold(None::<u64>, |minimum, path| {
-                    let free = fsutil::available_bytes(path).ok()?;
-                    Some(Some(minimum.map_or(free, |current| current.min(free))))
-                })
-                .flatten()
-        } else {
-            Some(u64::MAX)
-        },
     }
+}
+
+fn sample_disk(
+    paths: &[&Path],
+    enabled: bool,
+    available: impl Fn(&Path) -> std::io::Result<u64>,
+) -> Option<u64> {
+    if !enabled {
+        return Some(u64::MAX);
+    }
+    paths
+        .iter()
+        .try_fold(None::<u64>, |minimum, path| {
+            let free = available(path).ok()?;
+            Some(Some(minimum.map_or(free, |current| current.min(free))))
+        })
+        .flatten()
 }
 
 /// Convert a sample into an admission limit. Pressure reserves capacity for
@@ -102,6 +112,31 @@ mod tests {
             memory,
             disk_free,
         }
+    }
+
+    #[test]
+    fn disk_pressure_includes_workspaces_and_requires_complete_readings() {
+        let state = Path::new("/state");
+        let workspace = Path::new("/external/workspace");
+        let paths = [state, workspace];
+        assert_eq!(
+            sample_disk(&paths, true, |path| Ok(if path == state { 100 } else { 1 })),
+            Some(1),
+        );
+        assert_eq!(
+            sample_disk(&paths, true, |path| {
+                if path == state {
+                    Ok(100)
+                } else {
+                    Err(std::io::ErrorKind::PermissionDenied.into())
+                }
+            }),
+            None,
+        );
+        assert_eq!(
+            sample_disk(&paths, false, |_| panic!("disabled disk probe")),
+            Some(u64::MAX),
+        );
     }
 
     #[test]
