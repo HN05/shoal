@@ -76,60 +76,22 @@ impl Manager {
         }
         let root = self.config().root_dir(&self.paths)?;
         let state = fs::canonicalize(&self.paths.state)?;
-        let checkouts = repositories.iter().map(|repo| repo.path.as_path());
         let directory_name = name
             .clone()
             .unwrap_or_else(|| repository::directory_name(&source));
-        let (path, workspaces_dir) = if PathBuf::from(&source).exists() {
-            let toplevel = git::worktree_root(Path::new(&source)).await?;
-            let path = fs::canonicalize(toplevel.trim())?;
-            let root = prepare_root(&root, &state, checkouts.chain([path.as_path()]))?;
-            // A checkout already placed as `<root>/<x>/<checkout>` keeps that
-            // directory, unless `<x>` is itself a checkout or another repository's.
-            let placed = path
-                .parent()
-                .filter(|parent| parent.parent() == Some(root.as_path()))
-                .filter(|parent| !parent.join(".git").exists())
-                .filter(|parent| {
-                    !repositories.iter().any(|repo| {
-                        repo.path == *parent || repo.workspaces_dir.as_deref() == Some(parent)
-                    })
-                })
-                .map(Path::to_path_buf);
-            let workspaces_dir = match placed {
-                Some(directory) => directory,
-                None => reserve_directory(&root, &directory_name, &repositories)?,
-            };
-            (path, workspaces_dir)
+        let (path, workspaces_dir) = if Path::new(&source).exists() {
+            local_checkout_location(&source, &root, &state, &directory_name, &repositories).await?
         } else {
-            ensure!(
-                name.as_ref().is_none_or(|name| !repositories
-                    .iter()
-                    .any(|repo| repo.name.as_ref() == Some(name))),
-                "repository name is already in use"
-            );
-            ensure!(
-                source.contains("://") || source.contains('@'),
-                "repository path does not exist: {source}"
-            );
-            let root = prepare_root(&root, &state, checkouts)?;
-            let workspaces_dir = reserve_directory(&root, &directory_name, &repositories)?;
-            let destination = match clone_path {
-                Some(path) => create_clone_directory(path),
-                None => create_clone_directory(workspaces_dir.join(CHECKOUT_DIR)),
-            };
-            let cloned = match destination {
-                Ok(destination) => clone(&source, &destination).await,
-                Err(error) => Err(error),
-            };
-            match cloned {
-                Ok(path) => (path, workspaces_dir),
-                Err(error) => {
-                    // The reservation belongs exclusively to this attempt.
-                    let _ = fs::remove_dir(&workspaces_dir);
-                    return Err(error);
-                }
-            }
+            clone_into_reserved_directory(
+                &source,
+                clone_path,
+                &root,
+                &state,
+                &directory_name,
+                name.as_deref(),
+                &repositories,
+            )
+            .await?
         };
         let repo = self
             .insert_repository(path, source, Some(workspaces_dir))
@@ -271,6 +233,91 @@ async fn find_existing<'a>(
         return Ok(Some(repo));
     }
     repository::find_by_identity(repositories, source).await
+}
+
+/// Locate a local checkout and retain its existing repository directory when
+/// it is already placed under the configured root.
+async fn local_checkout_location(
+    source: &str,
+    root: &Path,
+    state: &Path,
+    directory_name: &str,
+    repositories: &[Repository],
+) -> Result<(PathBuf, PathBuf)> {
+    let toplevel = git::worktree_root(Path::new(source)).await?;
+    let path = fs::canonicalize(toplevel.trim())?;
+    let root = prepare_root(
+        root,
+        state,
+        repositories
+            .iter()
+            .map(|repo| repo.path.as_path())
+            .chain([path.as_path()]),
+    )?;
+    // A checkout already placed as `<root>/<x>/<checkout>` keeps that
+    // directory, unless `<x>` is itself a checkout or another repository's.
+    let placed = path
+        .parent()
+        .filter(|parent| parent.parent() == Some(root.as_path()))
+        .filter(|parent| !parent.join(".git").exists())
+        .filter(|parent| {
+            !repositories
+                .iter()
+                .any(|repo| repo.path == *parent || repo.workspaces_dir.as_deref() == Some(parent))
+        })
+        .map(Path::to_path_buf);
+    let workspaces_dir = match placed {
+        Some(directory) => directory,
+        None => reserve_directory(&root, directory_name, repositories)?,
+    };
+    Ok((path, workspaces_dir))
+}
+
+/// Reserve a repository directory, clone into it, and release the reservation
+/// when any part of the clone attempt fails.
+async fn clone_into_reserved_directory(
+    source: &str,
+    clone_path: Option<PathBuf>,
+    root: &Path,
+    state: &Path,
+    directory_name: &str,
+    requested_name: Option<&str>,
+    repositories: &[Repository],
+) -> Result<(PathBuf, PathBuf)> {
+    ensure!(
+        requested_name.is_none_or(|name| {
+            repositories
+                .iter()
+                .all(|repo| repo.name.as_deref() != Some(name))
+        }),
+        "repository name is already in use"
+    );
+    ensure!(
+        source.contains("://") || source.contains('@'),
+        "repository path does not exist: {source}"
+    );
+    let root = prepare_root(
+        root,
+        state,
+        repositories.iter().map(|repo| repo.path.as_path()),
+    )?;
+    let workspaces_dir = reserve_directory(&root, directory_name, repositories)?;
+    let destination = match clone_path {
+        Some(path) => create_clone_directory(path),
+        None => create_clone_directory(workspaces_dir.join(CHECKOUT_DIR)),
+    };
+    let cloned = match destination {
+        Ok(destination) => clone(source, &destination).await,
+        Err(error) => Err(error),
+    };
+    match cloned {
+        Ok(path) => Ok((path, workspaces_dir)),
+        Err(error) => {
+            // The reservation belongs exclusively to this attempt.
+            let _ = fs::remove_dir(&workspaces_dir);
+            Err(error)
+        }
+    }
 }
 
 async fn clone(source: &str, destination: &Path) -> Result<PathBuf> {
