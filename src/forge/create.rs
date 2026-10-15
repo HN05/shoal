@@ -53,6 +53,10 @@ impl ForgeRepo {
         account: &Account,
         branch: &str,
     ) -> Result<Option<u64>> {
+        anyhow::ensure!(
+            self.kind != ForgeKind::Bitbucket,
+            "opening Bitbucket pull requests is not supported yet"
+        );
         let pulls = match self.kind {
             ForgeKind::GitHub => {
                 let owner = self.path.split('/').next().unwrap_or_default();
@@ -69,7 +73,7 @@ impl ForgeRepo {
                 self.pages(account, &self.repo_endpoint("pulls?state=open"))
                     .await?
             }
-            ForgeKind::GitLab => {
+            ForgeKind::GitLab | ForgeKind::Bitbucket => {
                 let branch = encode(branch, false);
                 let endpoint = format!("merge_requests?state=opened&source_branch={branch}");
                 self.pages(account, &self.repo_endpoint(&endpoint)).await?
@@ -91,7 +95,7 @@ impl ForgeRepo {
                         .as_str()
                         .is_some_and(|name| name.eq_ignore_ascii_case(&self.path))
             }
-            ForgeKind::GitLab => {
+            ForgeKind::GitLab | ForgeKind::Bitbucket => {
                 pull["source_branch"] == branch
                     && pull["source_project_id"] == pull["target_project_id"]
             }
@@ -136,7 +140,7 @@ impl ForgeRepo {
                 "pulls",
                 json!({"title": title, "body": pull.body, "head": pull.head, "base": pull.base}),
             ),
-            ForgeKind::GitLab => (
+            ForgeKind::GitLab | ForgeKind::Bitbucket => (
                 "merge_requests",
                 json!({"title": title, "description": pull.body,
                     "source_branch": pull.head, "target_branch": pull.base}),
@@ -147,6 +151,10 @@ impl ForgeRepo {
 
     /// Open the issue and return it as the forge reports it.
     pub(crate) async fn create_issue(&self, account: &Account, issue: &NewIssue) -> Result<Item> {
+        anyhow::ensure!(
+            self.kind != ForgeKind::Bitbucket,
+            "opening Bitbucket issues is not supported yet"
+        );
         let created = self
             .send(account, &self.issue_request(issue))
             .await
@@ -172,8 +180,10 @@ impl ForgeRepo {
                 json!({ "title": issue.title, "body": issue.body, "labels": issue.labels })
             }
             ForgeKind::Forgejo => json!({ "title": issue.title, "body": issue.body }),
-            ForgeKind::GitLab => json!({ "title": issue.title, "description": issue.body,
-                "labels": issue.labels.join(",") }),
+            ForgeKind::GitLab | ForgeKind::Bitbucket => {
+                json!({ "title": issue.title, "description": issue.body,
+                "labels": issue.labels.join(",") })
+            }
         };
         Request::new(HttpMethod::Post, self.repo_endpoint("issues"), Some(body))
     }

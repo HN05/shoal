@@ -10,7 +10,6 @@ use crate::{
     },
     forge::{
         ForgeRepo,
-        account::Account,
         checks::CheckLog,
         link::{ItemKind, Selection},
         view::{Details, ItemView, PrDetails, Review, Selected},
@@ -55,7 +54,7 @@ pub(super) async fn view(
     .await?;
     let views = ctx
         .progress("Reading items", async {
-            let mut views = selected.view(&Account::user(), !no_comments).await?;
+            let mut views = selected.view(&ctx.forge_account()?, !no_comments).await?;
             read_failed_logs(ctx, &workspace, &mut views).await;
             Ok::<_, anyhow::Error>(views)
         })

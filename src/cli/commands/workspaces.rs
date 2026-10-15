@@ -21,7 +21,6 @@ use crate::{
     env, execution,
     forge::{
         IssueInput,
-        account::Account,
         link::Selection,
         pr::{RegistrationKind, state::PrStatus},
         repository,
@@ -261,7 +260,10 @@ pub(super) async fn add(
     };
     // Look the issue up before any other picker or handoff, so its failures end here.
     let issue = match issue.or(picked) {
-        Some(input) => Some(super::issues::load(target.repository(ctx).await?, &input).await?),
+        Some(input) => Some(
+            super::issues::load(&ctx.forge_account()?, target.repository(ctx).await?, &input)
+                .await?,
+        ),
         None => None,
     };
     let creation = select_add_creation(ctx, &target, creation, issue.as_ref()).await?;
@@ -389,7 +391,7 @@ pub(in crate::cli) async fn start_queued(
             Some(url) => {
                 let repos = client::repositories(&ctx.paths).await?;
                 let repo = crate::forge::repository::select(&repos, &plan.repository).await?;
-                Some(super::issues::load(repo, url).await?)
+                Some(super::issues::load(&ctx.forge_account()?, repo, url).await?)
             }
             None => None,
         };
@@ -411,9 +413,11 @@ pub(in crate::cli) async fn execute_add(ctx: &Context, plan: AddPlan) -> Result<
         repositories: tokio::sync::OnceCell::new(),
     };
     let issue = match &plan.issue {
-        Some(url) => async { super::issues::load(target.repository(ctx).await?, url).await }
-            .await
-            .map(Some),
+        Some(url) => async {
+            super::issues::load(&ctx.forge_account()?, target.repository(ctx).await?, url).await
+        }
+        .await
+        .map(Some),
         None => Ok(None),
     };
     // A queued start reports a failed lookup as it reports any other failure.
@@ -705,16 +709,17 @@ async fn pick_add_source(
             let repo = target.repository(ctx).await?;
             let issues = super::issues::origin_forge(repo)
                 .await?
-                .open_issues(&Account::user())
+                .open_issues(&ctx.forge_account()?)
                 .await?;
             return ui::pick_item(ctx, "Issue> ", "issues", issues).map(Some);
         }
         Source::Pull => {
             let repo = target.repository(ctx).await?;
             let forge = super::issues::origin_forge(repo).await?;
-            let pulls = forge.open_pulls(&Account::user()).await?;
+            let account = ctx.forge_account()?;
+            let pulls = forge.open_pulls(&account).await?;
             let number = ui::pick_item(ctx, "Pull request> ", "pull requests", pulls)?;
-            let pull = forge.pull_request(&Account::user(), &number).await?;
+            let pull = forge.pull_request(&account, &number).await?;
             super::links::pull_creation(ctx, repo, pull, creation).await?;
         }
     }

@@ -21,6 +21,8 @@ use crate::tools::Tool;
 pub(super) const TIMEOUT: Duration = Duration::from_secs(30);
 /// Forgejo's default maximum page size.
 const PAGE_SIZE: usize = 50;
+/// Bitbucket Cloud's API, which is not served from its web host.
+const BITBUCKET_API: &str = "https://api.bitbucket.org/2.0";
 const MAX_LOG_BYTES: usize = 8 * 1024 * 1024;
 /// Bounds a JSON response read through a CLI, which curl's own limit cannot.
 const MAX_RESPONSE_BYTES: usize = 64 * 1024 * 1024;
@@ -114,7 +116,7 @@ impl ForgeRepo {
             .output()
             .await
             .context("fetch Forgejo job log (maximum 8 MiB)")?;
-        Ok(forgejo_response_body(&output)?.to_owned())
+        Ok(curl_body(&output)?.to_owned())
     }
 
     /// The API endpoint for `path` under this repository.
@@ -122,6 +124,7 @@ impl ForgeRepo {
         match self.kind {
             ForgeKind::GitHub | ForgeKind::Forgejo => format!("repos/{}/{path}", self.path),
             ForgeKind::GitLab => format!("projects/{}/{path}", encode(&self.path, false)),
+            ForgeKind::Bitbucket => format!("repositories/{}/{path}", self.path),
         }
     }
 
@@ -132,6 +135,7 @@ impl ForgeRepo {
                 ForgeKind::GitHub => self.github_send(account, request).await,
                 ForgeKind::Forgejo => self.forgejo_send(account, request).await,
                 ForgeKind::GitLab => self.passthrough(Tool::GitLab, account, request).await,
+                ForgeKind::Bitbucket => self.bitbucket_send(account, request).await,
             }?;
             if let Some(field) = request.confirm {
                 ensure!(
@@ -200,17 +204,42 @@ impl ForgeRepo {
             ForgejoLogin::Tea(login) => {
                 json_body(&tea::send(account, &login, request, MAX_RESPONSE_BYTES).await?)
             }
-            ForgejoLogin::Token(token) => self.curl_send(Some(token), request).await,
-            ForgejoLogin::Anonymous => self.curl_send(None, request).await,
+            ForgejoLogin::Token(token) => {
+                self.curl_send(
+                    &self.forgejo_url(request),
+                    Some(authorization(token)),
+                    request,
+                )
+                .await
+            }
+            ForgejoLogin::Anonymous => {
+                self.curl_send(&self.forgejo_url(request), None, request)
+                    .await
+            }
         }
     }
 
-    /// Send with curl, passing `token` on stdin so no command line shows it.
-    async fn curl_send(&self, token: Option<String>, request: &Request) -> Result<Value> {
-        let url = format!(
+    fn forgejo_url(&self, request: &Request) -> String {
+        format!(
             "{}://{}/api/v1/{}",
             self.web_scheme, self.host, request.endpoint
-        );
+        )
+    }
+
+    async fn bitbucket_send(&self, account: &Account, request: &Request) -> Result<Value> {
+        let url = format!("{BITBUCKET_API}/{}", request.endpoint);
+        let authorization = account.bitbucket_authorization().await?;
+        self.curl_send(&url, authorization, request).await
+    }
+
+    /// Send with curl, passing the authorization header on stdin so no
+    /// command line shows it.
+    async fn curl_send(
+        &self,
+        url: &str,
+        authorization: Option<Vec<u8>>,
+        request: &Request,
+    ) -> Result<Value> {
         let mut curl = Command::new(Tool::Curl.program());
         // -q first: a user .curlrc must not trace the token header.
         curl.args([
@@ -229,14 +258,14 @@ impl ForgeRepo {
             curl.args(["-H", "Content-Type: application/json", "--data-binary"])
                 .arg(body.to_string());
         }
-        curl.args(["-K", "-", &url]);
+        curl.args(["-K", "-", url]);
         let output = crate::subprocess::Run::new(curl)
-            .input(token.map(authorization).unwrap_or_default())
+            .input(authorization.unwrap_or_default())
             .timeout(TIMEOUT)
             .output()
             .await
-            .context("curl is required for Forgejo API requests")?;
-        forgejo_response(&output)
+            .context("curl is required for Forgejo, Gitea and Bitbucket API requests")?;
+        curl_response(&output)
     }
 
     /// Every item of a paginated list endpoint, read as `account`.
@@ -245,6 +274,7 @@ impl ForgeRepo {
         let (size, page_size) = match self.kind {
             ForgeKind::Forgejo => ("limit", PAGE_SIZE),
             ForgeKind::GitHub | ForgeKind::GitLab => ("per_page", 100),
+            ForgeKind::Bitbucket => ("pagelen", PAGE_SIZE),
         };
         let mut items = Vec::new();
         for page in 1.. {
@@ -252,15 +282,29 @@ impl ForgeRepo {
                 "{endpoint}{separator}{size}={page_size}&page={page}"
             ));
             let response = self.send(account, &request).await?;
-            let batch = response
-                .as_array()
+            let (batch, more) = self
+                .page(&response, page_size)
                 .with_context(|| format!("{endpoint} is not a list"))?;
             items.extend(batch.iter().cloned());
-            if batch.len() < page_size {
+            if !more {
                 break;
             }
         }
         Ok(items)
+    }
+
+    /// A page's items, and whether another page follows: Bitbucket links the
+    /// next page, and other forges return a full page until the last.
+    fn page<'a>(&self, response: &'a Value, size: usize) -> Option<(&'a [Value], bool)> {
+        match self.kind {
+            ForgeKind::Bitbucket => {
+                Some((response["values"].as_array()?, !response["next"].is_null()))
+            }
+            ForgeKind::GitHub | ForgeKind::Forgejo | ForgeKind::GitLab => {
+                let batch = response.as_array()?;
+                Some((batch, batch.len() >= size))
+            }
+        }
     }
 }
 
@@ -320,7 +364,10 @@ fn error_message(text: &str) -> Option<String> {
             .collect();
         return Some(fields.join("; "));
     }
-    let message = body["message"].as_str().or(body["error"].as_str())?;
+    let message = body["message"]
+        .as_str()
+        .or(body["error"].as_str())
+        .or(body["error"]["message"].as_str())?;
     let details: Vec<_> = body["errors"]
         .as_array()
         .into_iter()
@@ -335,16 +382,16 @@ fn error_message(text: &str) -> Option<String> {
 }
 
 /// curl's output ends with the status code `-w` appends on its own line.
-fn forgejo_response(text: &str) -> Result<Value> {
-    json_body(forgejo_response_body(text)?)
+fn curl_response(text: &str) -> Result<Value> {
+    json_body(curl_body(text)?)
 }
 
-fn forgejo_response_body(text: &str) -> Result<&str> {
+fn curl_body(text: &str) -> Result<&str> {
     let (body, status) = text.rsplit_once('\n').unwrap_or(("", text));
     let status: u16 = status
         .trim()
         .parse()
-        .context("Forgejo response has no HTTP status")?;
+        .context("response has no HTTP status")?;
     http_body(status, body)
 }
 
@@ -407,15 +454,15 @@ mod tests {
     #[test]
     fn forgejo_responses_report_status_and_messages() {
         assert_eq!(
-            forgejo_response("{\"number\":7}\n201").unwrap(),
+            curl_response("{\"number\":7}\n201").unwrap(),
             serde_json::json!({"number": 7})
         );
-        assert_eq!(forgejo_response("\n204").unwrap(), Value::Null);
-        let error = forgejo_response("{\"message\":\"user does not exist\"}\n404").unwrap_err();
+        assert_eq!(curl_response("\n204").unwrap(), Value::Null);
+        let error = curl_response("{\"message\":\"user does not exist\"}\n404").unwrap_err();
         assert_eq!(format!("{error:#}"), "HTTP 404: user does not exist");
-        let error = forgejo_response("<html>busy</html>\n502").unwrap_err();
+        let error = curl_response("<html>busy</html>\n502").unwrap_err();
         assert_eq!(format!("{error:#}"), "HTTP 502: <html>busy</html>");
-        assert!(forgejo_response("{}").is_err());
+        assert!(curl_response("{}").is_err());
     }
 
     #[test]
@@ -430,6 +477,24 @@ mod tests {
             None
         );
         assert_eq!(graphql_errors(&serde_json::json!([])), None);
+    }
+
+    #[test]
+    fn pages_end_at_a_short_page_or_without_a_next_link() {
+        let forgejo = ForgeRepo::parse("https://forge.example/team/repo").unwrap();
+        let full = serde_json::json!([1, 2]);
+        assert!(forgejo.page(&full, 2).unwrap().1);
+        assert!(!forgejo.page(&full, 3).unwrap().1);
+        let bitbucket = ForgeRepo::parse("https://bitbucket.org/workspace/repo").unwrap();
+        let linked =
+            serde_json::json!({"values": [1], "next": "https://api.bitbucket.org/2.0/x?page=2"});
+        assert_eq!(
+            bitbucket.page(&linked, 50).unwrap(),
+            (&[1.into()][..], true)
+        );
+        let last = serde_json::json!({"values": [1]});
+        assert!(!bitbucket.page(&last, 1).unwrap().1);
+        assert!(bitbucket.page(&full, 2).is_none());
     }
 
     #[test]
@@ -454,6 +519,11 @@ mod tests {
         assert_eq!(
             error_message(r#"{"error":"insufficient_scope"}"#).unwrap(),
             "insufficient_scope"
+        );
+        assert_eq!(
+            error_message(r#"{"type":"error","error":{"message":"Repository not found"}}"#)
+                .unwrap(),
+            "Repository not found"
         );
     }
 

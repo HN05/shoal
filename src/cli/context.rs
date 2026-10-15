@@ -26,6 +26,13 @@ impl Context {
         crate::cli::progress::run(self.json, message, work).await
     }
 
+    /// Your own forge logins, with the Bitbucket credentials the global
+    /// config names.
+    pub fn forge_account(&self) -> Result<crate::forge::account::Account> {
+        let config = crate::config::Config::load(&self.paths)?;
+        Ok(crate::forge::account::Account::user(&config.bitbucket))
+    }
+
     pub fn new(paths: Paths, json: bool) -> Self {
         Self {
             paths,

@@ -265,7 +265,7 @@ impl ForgeRepo {
                 let output = gh(account, &args, Query::Issue).await?;
                 github_state(&output, number)
             }
-            ForgeKind::Forgejo | ForgeKind::GitLab => Ok(self
+            ForgeKind::Forgejo | ForgeKind::GitLab | ForgeKind::Bitbucket => Ok(self
                 .read(account, ItemKind::Issue, number)
                 .await
                 .context(self.kind.login_hint())?

@@ -14,7 +14,7 @@ impl ForgeRepo {
     pub(crate) async fn issue_activity(&self, account: &Account, number: u64) -> Result<Snapshot> {
         match self.kind {
             ForgeKind::GitHub => self.github_issue_activity(account, number).await,
-            ForgeKind::Forgejo | ForgeKind::GitLab => self
+            ForgeKind::Forgejo | ForgeKind::GitLab | ForgeKind::Bitbucket => self
                 .rest_issue_activity(account, number)
                 .await
                 .context(self.kind.login_hint()),
@@ -80,7 +80,7 @@ impl ForgeRepo {
     ) -> Result<Snapshot> {
         match self.kind {
             ForgeKind::GitHub => self.github_activity(account, number, branch).await,
-            ForgeKind::Forgejo | ForgeKind::GitLab => self
+            ForgeKind::Forgejo | ForgeKind::GitLab | ForgeKind::Bitbucket => self
                 .rest_activity(account, number, branch)
                 .await
                 .context(self.kind.login_hint()),
@@ -164,7 +164,7 @@ impl ForgeRepo {
             let (number, _) = self.pull(url)?;
             match self.kind {
                 ForgeKind::GitHub => self.github_pr_status(account, number, url).await,
-                ForgeKind::Forgejo | ForgeKind::GitLab => self
+                ForgeKind::Forgejo | ForgeKind::GitLab | ForgeKind::Bitbucket => self
                     .rest_pr_status(account, number, url)
                     .await
                     .context(self.kind.login_hint()),

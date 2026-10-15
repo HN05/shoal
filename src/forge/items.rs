@@ -59,14 +59,19 @@ impl Manager {
 impl Manager {
     /// The user's own logins, which reads and the user's decisions use.
     pub(crate) fn user_account(&self) -> Account {
-        Account::user()
+        Account::user(&self.config().bitbucket)
     }
 
     pub(super) async fn agent_account(&self, workspace: &Workspace) -> Result<Account> {
         // One snapshot, so a reload cannot pair a profile with another map.
         let config = self.config();
         let settings = self.workspace_settings_from(&config, workspace).await?;
-        Account::agent(&settings.agent_auth, &self.paths, &config.git)
+        Account::agent(
+            &settings.agent_auth,
+            &self.paths,
+            &config.git,
+            &config.bitbucket,
+        )
     }
 }
 

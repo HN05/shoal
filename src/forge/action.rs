@@ -128,10 +128,14 @@ impl ForgeRepo {
     /// The requests that carry out `action` on `current`, in order.
     pub(crate) fn plan(&self, current: &Current, action: &Action) -> Result<Vec<Request>> {
         let item = &current.item;
+        ensure!(
+            self.kind != ForgeKind::Bitbucket,
+            "changing Bitbucket items is not supported yet"
+        );
         Ok(match action {
             Action::Edit(edit) => match self.kind {
                 ForgeKind::GitHub | ForgeKind::Forgejo => self.plan_edit(current, edit)?,
-                ForgeKind::GitLab => self.gitlab_edit(current, edit)?,
+                ForgeKind::GitLab | ForgeKind::Bitbucket => self.gitlab_edit(current, edit)?,
             },
             Action::Comment { body } => vec![Request::new(
                 HttpMethod::Post,
@@ -174,7 +178,9 @@ impl ForgeRepo {
             ForgeKind::GitHub | ForgeKind::Forgejo => {
                 self.repo_endpoint(&format!("issues/{number}/comments"))
             }
-            ForgeKind::GitLab => format!("{}/notes", self.item_endpoint(kind, number)),
+            ForgeKind::GitLab | ForgeKind::Bitbucket => {
+                format!("{}/notes", self.item_endpoint(kind, number))
+            }
         }
     }
 
@@ -188,7 +194,7 @@ impl ForgeRepo {
                 endpoint,
                 Some(json!({ "state": if open { "open" } else { "closed" } })),
             ),
-            ForgeKind::GitLab => Request::new(
+            ForgeKind::GitLab | ForgeKind::Bitbucket => Request::new(
                 HttpMethod::Put,
                 endpoint,
                 Some(json!({ "state_event": if open { "reopen" } else { "close" } })),
@@ -237,7 +243,9 @@ impl ForgeRepo {
                     "delete_branch_after_merge": delete_branch,
                 })),
             )],
-            ForgeKind::GitLab => vec![gitlab_merge(merge, method, delete_branch)?],
+            ForgeKind::GitLab | ForgeKind::Bitbucket => {
+                vec![gitlab_merge(merge, method, delete_branch)?]
+            }
         })
     }
 

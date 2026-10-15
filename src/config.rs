@@ -80,6 +80,7 @@ pub struct Config {
     pub issue_template: Option<String>,
     pub agent_template: Option<String>,
     pub agent_auth: crate::agent_auth::Config,
+    pub bitbucket: crate::forge::bitbucket::Credentials,
     pub git: crate::git_profile::Git,
     pub git_profile: Option<String>,
     pub pre_setup_cmd: Option<String>,
@@ -492,6 +493,7 @@ impl Config {
         config.simulators.validate()?;
         config.git.validate()?;
         config.agent_auth.validate()?;
+        config.bitbucket.validate()?;
         for &kind in crate::hooks::HookKind::ALL {
             if kind.allows_global() {
                 kind.validate(kind.global_command(&config))?;

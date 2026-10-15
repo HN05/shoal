@@ -73,6 +73,7 @@ impl ForgeRepo {
             (ItemKind::Issue, _) => "issues",
             (ItemKind::Pr, ForgeKind::GitHub | ForgeKind::Forgejo) => "pulls",
             (ItemKind::Pr, ForgeKind::GitLab) => "merge_requests",
+            (ItemKind::Pr, ForgeKind::Bitbucket) => "pullrequests",
         };
         self.repo_endpoint(&format!("{resource}/{number}"))
     }
@@ -86,6 +87,7 @@ impl ForgeRepo {
         match self.kind {
             ForgeKind::GitHub | ForgeKind::Forgejo => self.github_current(kind, number, value),
             ForgeKind::GitLab => self.gitlab_current(kind, number, value),
+            ForgeKind::Bitbucket => self.bitbucket_current(kind, number, value),
         }
     }
 

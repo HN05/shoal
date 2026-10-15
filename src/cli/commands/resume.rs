@@ -342,7 +342,7 @@ async fn launch_label(ctx: &Context, workspace: &Workspace) -> String {
             .find(|repo| repo.id == workspace.repository_id)
             .context("repository is no longer registered")?;
         let issue = match &workspace.links.issue {
-            Some(url) => Some(super::issues::load(repo, url).await?),
+            Some(url) => Some(super::issues::load(&ctx.forge_account()?, repo, url).await?),
             None => None,
         };
         anyhow::Ok(herdr::tab_label(

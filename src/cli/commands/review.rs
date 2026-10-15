@@ -13,7 +13,6 @@ use crate::{
     },
     forge::{
         ForgeRepo, IssueInput, PullRequest,
-        account::Account,
         link::{ItemKind, Link, LinkTarget},
     },
     git,
@@ -189,7 +188,7 @@ async fn pull_request(
         .await?
         .context("PR review needs an origin remote")?;
     let pull = ForgeRepo::parse(&remote)?
-        .pull_request(&Account::user(), input)
+        .pull_request(&ctx.forge_account()?, input)
         .await?;
     let owner = client::workspaces(&ctx.paths)
         .await?
@@ -259,7 +258,7 @@ async fn issue(
         !matches!(reviewer, Reviewer::Manual),
         "an issue review needs an agent; drop --manual"
     );
-    let issue = super::issues::load(repo, input).await?;
+    let issue = super::issues::load(&ctx.forge_account()?, repo, input).await?;
     let workspace = match issue_workspace(ctx, repo, &issue).await? {
         Some(workspace) => workspace,
         None => {

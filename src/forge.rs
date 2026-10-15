@@ -3,6 +3,7 @@
 pub(crate) mod account;
 pub mod action;
 mod api;
+pub(crate) mod bitbucket;
 pub mod checks;
 pub mod create;
 mod gitlab;
@@ -156,7 +157,7 @@ impl ForgeRepo {
     ) -> Result<Option<Vec<String>>> {
         match self.kind {
             ForgeKind::GitHub => github_merged_commits(self, account, number, branch).await,
-            ForgeKind::Forgejo | ForgeKind::GitLab => self
+            ForgeKind::Forgejo | ForgeKind::GitLab | ForgeKind::Bitbucket => self
                 .rest_merged_commits(account, number, branch)
                 .await
                 .context(self.kind.login_hint())
@@ -219,7 +220,7 @@ impl ForgeKind {
     ) -> Result<(String, String)> {
         let (title, details) = match self {
             Self::GitHub => github_issue_details(repo, account, number).await?,
-            Self::Forgejo | Self::GitLab => {
+            Self::Forgejo | Self::GitLab | Self::Bitbucket => {
                 let issue = repo
                     .read(account, link::ItemKind::Issue, number)
                     .await
@@ -277,7 +278,12 @@ impl ForgeRepo {
     pub fn from_pull_url(url: &str) -> Result<Self> {
         ItemRoute::discover(
             url,
-            &[ItemRoute::Pull, ItemRoute::Pulls, ItemRoute::MergeRequest],
+            &[
+                ItemRoute::Pull,
+                ItemRoute::Pulls,
+                ItemRoute::MergeRequest,
+                ItemRoute::PullRequests,
+            ],
         )
     }
 
@@ -312,7 +318,7 @@ impl ForgeKind {
     ) -> Result<(String, String, String)> {
         match self {
             Self::GitHub => github_pull_details(repo, account, number).await,
-            Self::Forgejo | Self::GitLab => repo
+            Self::Forgejo | Self::GitLab | Self::Bitbucket => repo
                 .rest_pull_details(account, number)
                 .await
                 .context(self.login_hint()),
@@ -498,9 +504,28 @@ mod tests {
             ("https://forge.example/team/repo.git", ForgeKind::Forgejo),
             ("http://forge.example:3000/team/repo", ForgeKind::Forgejo),
             ("git@gitlab.com:group/sub/project.git", ForgeKind::GitLab),
+            ("git@bitbucket.org:workspace/repo.git", ForgeKind::Bitbucket),
         ] {
             assert_eq!(ForgeRepo::parse(remote).unwrap().kind, kind);
         }
+    }
+
+    #[test]
+    fn bitbucket_items_use_pull_request_routes() {
+        let repo = ForgeRepo::parse("git@bitbucket.org:workspace/repo.git").unwrap();
+        let base = "https://bitbucket.org/workspace/repo";
+        assert_eq!(repo.issue("4").unwrap(), (4, format!("{base}/issues/4")));
+        let url = format!("{base}/pull-requests/5");
+        assert_eq!(repo.pull("5").unwrap(), (5, url.clone()));
+        assert_eq!(
+            ForgeRepo::from_pull_url(&format!("{url}/diff")).unwrap(),
+            repo
+        );
+        assert!(repo.pull(&format!("{base}/pulls/5")).is_err());
+        assert_eq!(
+            repo.repo_endpoint("pullrequests/5"),
+            "repositories/workspace/repo/pullrequests/5"
+        );
     }
 
     #[test]

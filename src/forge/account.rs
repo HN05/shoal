@@ -4,8 +4,11 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result, ensure};
 
+use tokio::sync::OnceCell;
+
 use super::{
     api::{fj_keys_at, fj_keys_path, fj_token},
+    bitbucket::Credentials,
     tea::{self, TeaLogin},
 };
 use crate::{agent_auth, git_profile, paths::Paths};
@@ -22,6 +25,9 @@ pub(crate) struct Account {
     /// The agent has a `tea` wrapper, whose login stands for the agent on
     /// Forgejo and Gitea hosts.
     tea: bool,
+    bitbucket: Credentials,
+    /// The Bitbucket authorization, fetched once for this account's requests.
+    bitbucket_authorization: OnceCell<Option<Vec<u8>>>,
 }
 
 /// How a Forgejo or Gitea request authenticates.
@@ -35,9 +41,13 @@ pub(super) enum ForgejoLogin {
 }
 
 impl Account {
-    /// `gh` as Shoal finds it and the token fj saved in its default location.
-    pub fn user() -> Self {
-        Self::default()
+    /// The CLIs as Shoal finds them, the token fj saved in its default
+    /// location, and the configured Bitbucket credentials.
+    pub fn user(bitbucket: &Credentials) -> Self {
+        Self {
+            bitbucket: bitbucket.clone(),
+            ..Self::default()
+        }
     }
 
     /// The workspace's agent account; options it leaves unset use the user's
@@ -46,6 +56,7 @@ impl Account {
         config: &agent_auth::Config,
         paths: &Paths,
         git: &git_profile::Git,
+        bitbucket: &Credentials,
     ) -> Result<Self> {
         let launch = config.prepare(paths, git)?;
         let fj_keys = config
@@ -57,6 +68,8 @@ impl Account {
             fj_home_missing: config.fj.is_some() && fj_keys.is_none(),
             fj_keys,
             tea: config.tea.is_some(),
+            bitbucket: bitbucket.clone(),
+            bitbucket_authorization: OnceCell::new(),
         })
     }
 
@@ -95,5 +108,13 @@ impl Account {
             Ok(Some(login)) => ForgejoLogin::Tea(login),
             Ok(None) | Err(_) => ForgejoLogin::Anonymous,
         })
+    }
+
+    /// The curl config line that signs a Bitbucket request in, if any.
+    pub(super) async fn bitbucket_authorization(&self) -> Result<Option<Vec<u8>>> {
+        self.bitbucket_authorization
+            .get_or_try_init(|| self.bitbucket.authorization())
+            .await
+            .cloned()
     }
 }

@@ -122,7 +122,7 @@ impl Link {
                 target: LinkTarget::Pr,
             });
         }
-        let (repository, branch) = ["/src/branch/", "/-/tree/", "/tree/"]
+        let (repository, branch) = ["/src/branch/", "/-/tree/", "/tree/", "/branch/"]
             .iter()
             .find_map(|marker| url.split_once(marker))
             .context("expected an issue, PR or branch URL")?;
@@ -173,6 +173,10 @@ mod tests {
             ),
             (
                 "https://gitlab.com/group/sub/project/-/tree/feature/api",
+                "feature/api",
+            ),
+            (
+                "https://bitbucket.org/workspace/repo/branch/feature/api",
                 "feature/api",
             ),
         ] {

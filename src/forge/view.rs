@@ -172,6 +172,10 @@ impl ForgeRepo {
                     .gitlab_details(account, kind, number)
                     .await
                     .context(self.kind.login_hint()),
+                ForgeKind::Bitbucket => self
+                    .bitbucket_details(account, kind, number)
+                    .await
+                    .context(self.kind.login_hint()),
             }
         };
         let status = async {
@@ -194,6 +198,10 @@ impl ForgeRepo {
                     .context(self.kind.login_hint()),
                 ForgeKind::GitLab => self
                     .gitlab_discussion(account, kind, number, &mut details)
+                    .await
+                    .context(self.kind.login_hint()),
+                ForgeKind::Bitbucket => self
+                    .bitbucket_discussion(account, kind, number, &mut details)
                     .await
                     .context(self.kind.login_hint()),
             };

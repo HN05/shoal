@@ -9,7 +9,6 @@ use crate::{
     cli::{ItemArgs, client, context::Context, ui},
     forge::{
         ForgeRepo, IssueInput, PullRequest,
-        account::Account,
         link::{ItemKind, Link, LinkTarget, Selection},
     },
     git,
@@ -73,7 +72,11 @@ pub(super) async fn link(ctx: &Context, items: ItemArgs) -> Result<i32> {
 async fn issue_title(ctx: &Context, workspace: &str, input: &str) -> Option<String> {
     let title = async {
         let repo = workspace_repository(ctx, workspace).await?;
-        anyhow::Ok(super::issues::load(&repo, input).await?.title)
+        anyhow::Ok(
+            super::issues::load(&ctx.forge_account()?, &repo, input)
+                .await?
+                .title,
+        )
     };
     match title.await {
         Ok(title) => Some(title),
@@ -117,11 +120,11 @@ async fn pick_open_item(
     let forge = super::issues::origin_forge(&repo).await?;
     let number = match kind {
         ItemKind::Issue => {
-            let issues = forge.open_issues(&Account::user()).await?;
+            let issues = forge.open_issues(&ctx.forge_account()?).await?;
             ui::pick_item(ctx, "Issue> ", "issues", issues)?
         }
         ItemKind::Pr => {
-            let pulls = forge.open_pulls(&Account::user()).await?;
+            let pulls = forge.open_pulls(&ctx.forge_account()?).await?;
             ui::pick_item(ctx, "Pull request> ", "pull requests", pulls)?
         }
     };
@@ -331,7 +334,9 @@ pub(super) async fn add(
     );
     match target.unwrap() {
         LinkTarget::Pr => {
-            let pull = forge.pull_request(&Account::user(), positional).await?;
+            let pull = forge
+                .pull_request(&ctx.forge_account()?, positional)
+                .await?;
             pull_creation(ctx, repo, pull, &mut creation).await?;
         }
         LinkTarget::Branch(branch) => {

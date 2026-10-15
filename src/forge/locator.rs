@@ -4,8 +4,8 @@ use anyhow::{Context, Result, ensure};
 use super::{ForgeRepo, IssueInput};
 
 const ISSUE_URL: &str = "expected an issue URL ending in /issues/<number>";
-const PULL_URL: &str =
-    "expected a PR URL ending in /pull/<number>, /pulls/<number> or /-/merge_requests/<number>";
+const PULL_URL: &str = "expected a PR URL ending in /pull/<number>, /pulls/<number>, \
+    /-/merge_requests/<number> or /pull-requests/<number>";
 
 #[derive(Clone, Copy)]
 pub(super) enum ItemRoute {
@@ -15,6 +15,7 @@ pub(super) enum ItemRoute {
     Pull,
     Pulls,
     MergeRequest,
+    PullRequests,
 }
 
 pub(super) struct ItemUrl<'a> {
@@ -31,13 +32,14 @@ impl ItemRoute {
             Self::Pull => "/pull/",
             Self::Pulls => "/pulls/",
             Self::MergeRequest => "/-/merge_requests/",
+            Self::PullRequests => "/pull-requests/",
         }
     }
 
     fn diagnostic(self, issue: &'static str, pull: &'static str) -> &'static str {
         match self {
             Self::Issue | Self::GitLabIssue => issue,
-            Self::Pull | Self::Pulls | Self::MergeRequest => pull,
+            Self::Pull | Self::Pulls | Self::MergeRequest | Self::PullRequests => pull,
         }
     }
 

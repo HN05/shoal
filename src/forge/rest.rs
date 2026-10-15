@@ -59,10 +59,17 @@ impl ForgeRepo {
         kind: ItemKind,
     ) -> Result<Vec<list::Item>> {
         let endpoint = match (self.kind, kind) {
+            (ForgeKind::GitHub | ForgeKind::Forgejo, ItemKind::Issue) => {
+                "issues?state=open&type=issues"
+            }
+            (ForgeKind::GitHub | ForgeKind::Forgejo, ItemKind::Pr) => "pulls?state=open",
             (ForgeKind::GitLab, ItemKind::Issue) => "issues?state=opened",
             (ForgeKind::GitLab, ItemKind::Pr) => "merge_requests?state=opened",
-            (_, ItemKind::Issue) => "issues?state=open&type=issues",
-            (_, ItemKind::Pr) => "pulls?state=open",
+            // state="new" OR state="open" OR state="on hold"
+            (ForgeKind::Bitbucket, ItemKind::Issue) => {
+                "issues?q=state%3D%22new%22%20OR%20state%3D%22open%22%20OR%20state%3D%22on%20hold%22"
+            }
+            (ForgeKind::Bitbucket, ItemKind::Pr) => "pullrequests?state=OPEN",
         };
         let items = self.pages(account, &self.repo_endpoint(endpoint)).await?;
         items
@@ -81,6 +88,7 @@ impl ForgeRepo {
         match self.kind {
             ForgeKind::GitHub | ForgeKind::Forgejo => self.forgejo_checks(account, head).await,
             ForgeKind::GitLab => self.gitlab_checks(account, head).await,
+            ForgeKind::Bitbucket => self.bitbucket_checks(account, pull.item.number).await,
         }
     }
 
@@ -96,6 +104,7 @@ impl ForgeRepo {
                 forgejo_reviews(&self.pages(account, &endpoint).await?)
             }
             ForgeKind::GitLab => self.gitlab_verdicts(account, number).await,
+            ForgeKind::Bitbucket => self.bitbucket_verdicts(account, number).await,
         }
     }
 
@@ -118,6 +127,14 @@ impl ForgeRepo {
                 Ok(fingerprint(
                     &notes,
                     &["id", "body", "updated_at", "resolved"],
+                ))
+            }
+            ForgeKind::Bitbucket => {
+                let endpoint = format!("{}/comments", self.item_endpoint(kind, number));
+                let comments = self.pages(account, &endpoint).await?;
+                Ok(fingerprint(
+                    &comments,
+                    &["id", "content", "updated_on", "deleted", "resolution"],
                 ))
             }
         }
@@ -146,9 +163,9 @@ impl ForgeRepo {
                     ],
                 ))
             }
-            // Inline comments are notes, which the discussion covers.
-            ForgeKind::GitLab => Ok(self
-                .gitlab_verdicts(account, number)
+            // Inline comments are part of the discussion.
+            ForgeKind::GitLab | ForgeKind::Bitbucket => Ok(self
+                .rest_verdicts(account, number)
                 .await?
                 .iter()
                 .map(|(reviewer, verdict)| format!("{reviewer}:{verdict:?}\n"))
