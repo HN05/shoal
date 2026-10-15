@@ -125,6 +125,7 @@ fn item_activity_events_include_item_and_update_details() -> Result<()> {
         kind: crate::forge::updates::UpdateKind::Comment,
         message: "read the new review".into(),
         delivery: String::new(),
+        check: None,
     };
     crate::daemon::events::record_item_activity(
         &db,
