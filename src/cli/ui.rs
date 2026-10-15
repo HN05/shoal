@@ -150,6 +150,46 @@ fn setup_failure_with_io(
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum ModifiedSkillChoice {
+    Keep,
+    Replace,
+    Diff,
+}
+
+/// Ask what to do with an installed skill the user changed, as package
+/// managers do for modified configuration files.
+pub fn modified_skill_choice(name: &str, path: &Path) -> Result<ModifiedSkillChoice> {
+    modified_skill_with_io(
+        name,
+        path,
+        &mut io::stdin().lock(),
+        &mut io::stderr().lock(),
+    )
+}
+
+fn modified_skill_with_io(
+    name: &str,
+    path: &Path,
+    input: &mut impl io::BufRead,
+    output: &mut impl Write,
+) -> Result<ModifiedSkillChoice> {
+    loop {
+        write!(
+            output,
+            "Modified skill {name} at {}: [k]eep, [r]eplace, or show [d]iff [k]: ",
+            path.display()
+        )?;
+        output.flush()?;
+        match read_answer(input)?.as_deref() {
+            None | Some("" | "k" | "keep") => return Ok(ModifiedSkillChoice::Keep),
+            Some("r" | "replace") => return Ok(ModifiedSkillChoice::Replace),
+            Some("d" | "diff") => return Ok(ModifiedSkillChoice::Diff),
+            Some(_) => writeln!(output, "Please enter k, r, or d.")?,
+        }
+    }
+}
+
 pub fn input(ctx: &Context, prompt: &str) -> Result<String> {
     require_interactive(ctx)?;
     eprint!(
@@ -850,6 +890,31 @@ mod tests {
         assert_eq!(
             workspace_rows(&workspaces, &repositories, &HashSet::new(), plain),
             ["● fix-login  shoal  idle", "● y          app    idle"]
+        );
+    }
+
+    #[test]
+    fn modified_skill_choice_defaults_to_keep_and_repeats_unknown_answers() {
+        let path = Path::new("/skills/shoal-worker/SKILL.md");
+        for (answers, expected) in [
+            ("\n", ModifiedSkillChoice::Keep),
+            ("", ModifiedSkillChoice::Keep),
+            ("R\n", ModifiedSkillChoice::Replace),
+            ("maybe\ndiff\n", ModifiedSkillChoice::Diff),
+        ] {
+            let mut output = Vec::new();
+            let choice =
+                modified_skill_with_io("shoal-worker", path, &mut answers.as_bytes(), &mut output)
+                    .unwrap();
+            assert_eq!(choice, expected, "{answers:?}");
+        }
+        let mut output = Vec::new();
+        modified_skill_with_io("shoal-worker", path, &mut "x\nk\n".as_bytes(), &mut output)
+            .unwrap();
+        let prompt = "Modified skill shoal-worker at /skills/shoal-worker/SKILL.md: [k]eep, [r]eplace, or show [d]iff [k]: ";
+        assert_eq!(
+            String::from_utf8(output).unwrap(),
+            format!("{prompt}Please enter k, r, or d.\n{prompt}")
         );
     }
 

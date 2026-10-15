@@ -658,8 +658,9 @@ only those, and treats files from before the record as its own. Unscoped
 commands other than the daemon refresh directories that still hold a Shoal
 skill, so upgrades need no reinstall; the daemon may not share the user's tool
 environment. A changed or removed skill stays as the user left it until an
-explicit install, which restores removed skills and with `--force` replaces
-changed ones. Global `[ai.<name>]` settings name skill directories, with defaults for built-in providers. Skill directories describe
+explicit install, which restores removed skills, asks about changed ones in a
+terminal like a package manager's modified configuration files, and with
+`--force` replaces them. Global `[ai.<name>]` settings name skill directories, with defaults for built-in providers. Skill directories describe
 the machine and cannot be set per repository; provider launchers join named
 commands without tool-specific integrations. Packaged skills resolve the runtime
 `SHOAL_SKILLS_DIR`, build-time directory, then an adjacent `shoal-skills` symlink

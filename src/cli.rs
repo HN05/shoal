@@ -875,7 +875,7 @@ pub enum SkillCommand {
         /// Install for one AI tool, or all configured tools by default.
         #[arg(default_value = "all")]
         agent: String,
-        /// Replace skills changed or removed since Shoal installed them.
+        /// Replace skills changed since Shoal installed them without asking.
         #[arg(long)]
         force: bool,
     },
