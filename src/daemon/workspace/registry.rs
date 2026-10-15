@@ -1,14 +1,12 @@
 //! Repository registration and lookup; independent of worktree lifecycle.
 use super::{Manager, paths::canonical_with_missing_tail};
-use crate::tools::Tool;
-use crate::{daemon::store, forge::repository, git, model::Repository, subprocess, validate};
+use crate::{daemon::store, forge::repository, git, model::Repository, validate};
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::params;
 use std::{
     fs,
     path::{Path, PathBuf},
 };
-use tokio::process::Command;
 use uuid::Uuid;
 
 /// Directory name of a URL clone inside its repository directory. Derived
@@ -276,9 +274,7 @@ async fn find_existing<'a>(
 }
 
 async fn clone(source: &str, destination: &Path) -> Result<PathBuf> {
-    let mut command = Command::new(Tool::Git.program());
-    command.args(["clone", "--"]).arg(source).arg(destination);
-    if let Err(error) = subprocess::output(command).await {
+    if let Err(error) = git::clone(source, destination).await {
         // This directory belongs exclusively to this attempt.
         if destination.exists() {
             fs::remove_dir_all(destination).context("clean up failed repository clone")?;

@@ -9,7 +9,10 @@ pub mod repo;
 pub mod worktrunk;
 
 use crate::tools::Tool;
-use std::path::{Path, PathBuf};
+use std::{
+    ffi::OsString,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{Context, Result, ensure};
 use tokio::process::Command;
@@ -143,6 +146,39 @@ pub async fn run_isolated(repo: &Path, args: &[&str]) -> Result<String> {
     let mut command = isolated_command(repo);
     command.args(args);
     subprocess::output(command).await
+}
+
+/// Build the tracked command used by `shoal diff`, preserving the caller's
+/// Git configuration, pager, and external diff settings.
+pub fn diff_command(commit: &str) -> Vec<OsString> {
+    [Tool::Git.program(), "diff", commit, "--"]
+        .into_iter()
+        .map(OsString::from)
+        .collect()
+}
+
+/// Build the tracked command used when opening a pull request for a workspace.
+pub fn push_command(branch: &str) -> Vec<OsString> {
+    let branch = local_ref(branch);
+    [
+        Tool::Git.program(),
+        "push",
+        "--set-upstream",
+        "--",
+        "origin",
+        &format!("{branch}:{branch}"),
+    ]
+    .into_iter()
+    .map(OsString::from)
+    .collect()
+}
+
+/// Clone with the caller's normal Git configuration and hooks.
+pub async fn clone(source: &str, destination: &Path) -> Result<()> {
+    let mut command = Command::new(Tool::Git.program());
+    command.args(["clone", "--"]).arg(source).arg(destination);
+    subprocess::output(command).await?;
+    Ok(())
 }
 
 /// The local branch named by HEAD. Detached HEAD remains a Git error; a

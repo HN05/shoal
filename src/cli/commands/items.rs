@@ -1,7 +1,5 @@
 //! `shoal pr` and `shoal issue`: ask the daemon to open or change an item of
 //! the workspace's repository and report it as the forge now does.
-use std::ffi::OsString;
-
 use anyhow::{Context as _, Result, ensure};
 
 use crate::{
@@ -17,7 +15,6 @@ use crate::{
     git,
     model::Workspace,
     protocol::Method,
-    tools::Tool,
 };
 
 pub(super) async fn pr(ctx: &Context, command: PrCommand) -> Result<i32> {
@@ -167,19 +164,10 @@ async fn open_pr(ctx: &Context, workspace: Option<String>, options: PullOptions)
 /// Push as a tracked command under the agent account, with the user's Git
 /// configuration and hooks.
 async fn push(ctx: &Context, workspace: &Workspace) -> Result<()> {
-    let branch = git::local_ref(&workspace.branch);
-    let command = [
-        Tool::Git.program(),
-        "push",
-        "--set-upstream",
-        "--",
-        "origin",
-        &format!("{branch}:{branch}"),
-    ];
     let code = crate::execution::publish(
         &ctx.paths,
         workspace.id.clone(),
-        command.map(OsString::from).to_vec(),
+        git::push_command(&workspace.branch),
     )
     .await?;
     ensure!(

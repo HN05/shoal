@@ -1,5 +1,4 @@
 //! CLI workspace workflows; all state mutations go through the daemon.
-use crate::tools::Tool;
 use std::{
     ffi::OsString,
     path::{Path, PathBuf},
@@ -140,12 +139,7 @@ pub(super) async fn diff(ctx: &Context, workspace: Option<String>) -> Result<i32
     execution::run(
         &ctx.paths,
         base.workspace_id,
-        vec![
-            Tool::Git.program().into(),
-            "diff".into(),
-            base.commit.into(),
-            "--".into(),
-        ],
+        git::diff_command(&base.commit),
         None,
     )
     .await
