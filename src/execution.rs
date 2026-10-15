@@ -643,13 +643,34 @@ async fn supervise(
     auth: Option<&AgentLaunch>,
     recovery_record: Option<&Path>,
 ) -> Result<Outcome> {
-    let mut terminate = signal(SignalKind::terminate())?;
-    let mut interrupt = signal(SignalKind::interrupt())?;
-    let mut quit = signal(SignalKind::quit())?;
+    let (mut child, group, _terminal) =
+        register_child(link, paths, plan, command, mode, auth, recovery_record).await?;
+    let (status, recovery, stopped) = wait_for_child(link, &mut child, &group).await?;
+    // A command owns its process group; descendants do not outlive its lease.
+    drop(group);
+    let code = exit_code(status);
+    Ok(match (recovery, stopped) {
+        (Some(stop), _) => Outcome::Paused { code, stop },
+        (None, Some(reason)) => Outcome::Stopped { code, reason },
+        (None, None) => Outcome::Exited(code),
+    })
+}
+
+/// Spawn a child, register its process group with the daemon, and hand over
+/// the terminal only after registration is acknowledged.
+async fn register_child(
+    link: &mut Link,
+    paths: &Paths,
+    plan: &ExecutionPlan,
+    command: &[OsString],
+    mode: &Mode,
+    auth: Option<&AgentLaunch>,
+    recovery_record: Option<&Path>,
+) -> Result<(Child, ProcessGroup, Option<Terminal>)> {
     // Capture before spawning, and restore after child/process-group cleanup,
     // including failures before the terminal handoff.
     let mut terminal = Terminal::capture(true)?;
-    let mut child = spawn(paths, plan, command, mode, auth)?;
+    let child = spawn(paths, plan, command, mode, auth)?;
     let group = ProcessGroup(child.id().context("child PID unavailable")? as i32);
     let identity = process::identity::capture(group.pid())?;
     link.send(&ExecutionEvent::Started {
@@ -663,14 +684,7 @@ async fn supervise(
         "daemon did not acknowledge process registration"
     );
     link.arm(identity, group.pid());
-    if let Mode::Recovery { records } = mode {
-        for record in records {
-            recovery::consume(record)?;
-        }
-    }
-    if let Some(record) = recovery_record {
-        recovery::consume(record)?;
-    }
+    consume_recovery_records(mode, recovery_record)?;
     if let Mode::Detached { log } = mode {
         report_launch(&DetachedLaunch {
             execution_id: plan.id.clone(),
@@ -684,13 +698,35 @@ async fn supervise(
     // The child may have been stopped by SIGTTIN/SIGTTOU before it became the
     // foreground group.
     group.send(libc::SIGCONT);
-    let mut recovery = None;
-    let mut stopped = None;
+    Ok((child, group, terminal))
+}
+
+fn consume_recovery_records(mode: &Mode, recovery_record: Option<&Path>) -> Result<()> {
+    if let Mode::Recovery { records } = mode {
+        for record in records {
+            recovery::consume(record)?;
+        }
+    }
+    if let Some(record) = recovery_record {
+        recovery::consume(record)?;
+    }
+    Ok(())
+}
+
+/// Wait for the child, daemon controls, or a signal and classify the stop.
+async fn wait_for_child(
+    link: &mut Link,
+    child: &mut Child,
+    group: &ProcessGroup,
+) -> Result<(ExitStatus, Option<Halt>, Option<String>)> {
+    let mut terminate = signal(SignalKind::terminate())?;
+    let mut interrupt = signal(SignalKind::interrupt())?;
+    let mut quit = signal(SignalKind::quit())?;
     // While the daemon is away the link reattaches in the background and the
     // command keeps the terminal; nothing is written to it.
-    let status = loop {
+    loop {
         tokio::select! {
-            status = child.wait() => break status?,
+            status = child.wait() => return Ok((status?, None, None)),
             received = link.recv() => {
                 let control = match received {
                     Ok(Received::Detached | Received::Reattached) => continue,
@@ -700,47 +736,41 @@ async fn supervise(
                 if let Ok(Control::OverloadStop { reason, .. }) = &control {
                     eprintln!("shoal: stopping agent: {reason}; workspace and resource leases retained");
                 }
-                let status = stop(&mut child, &group, libc::SIGTERM).await?;
-                match control {
+                let status = stop(child, group, libc::SIGTERM).await?;
+                let (recovery, stopped) = match control {
                     Ok(Control::OverloadStop {
                         recover,
                         reason,
                         resumes_when,
-                    }) => {
-                        recovery = Some(Halt::Protection {
+                    }) => (
+                        Some(Halt::Protection {
                             recover,
                             reason,
                             resumes_when,
-                        });
-                    }
-                    Ok(Control::Pause { reason }) => recovery = Some(Halt::Pause { reason }),
+                        }),
+                        None,
+                    ),
+                    Ok(Control::Pause { reason }) => (Some(Halt::Pause { reason }), None),
                     // A refused reattachment saves the session as a stop does.
-                    Err(error) if error.is::<Refused>() => {
-                        recovery = Some(Halt::Pause {
+                    Err(error) if error.is::<Refused>() => (
+                        Some(Halt::Pause {
                             reason: Some(error.to_string()),
-                        });
-                    }
-                    Ok(Control::Stop { reason }) => stopped = reason,
+                        }),
+                        None,
+                    ),
+                    Ok(Control::Stop { reason }) => (None, reason),
                     Ok(_) => bail!("unexpected execution control"),
                     Err(error) => return Err(error.context(
                         "daemon disconnected; command stopped, execution requires reconciliation",
                     )),
-                }
-                break status;
+                };
+                return Ok((status, recovery, stopped));
             }
-            _ = terminate.recv() => break stop(&mut child, &group, libc::SIGTERM).await?,
-            _ = interrupt.recv() => break stop(&mut child, &group, libc::SIGINT).await?,
-            _ = quit.recv() => break stop(&mut child, &group, libc::SIGQUIT).await?,
+            _ = terminate.recv() => return Ok((stop(child, group, libc::SIGTERM).await?, None, None)),
+            _ = interrupt.recv() => return Ok((stop(child, group, libc::SIGINT).await?, None, None)),
+            _ = quit.recv() => return Ok((stop(child, group, libc::SIGQUIT).await?, None, None)),
         }
-    };
-    // A command owns its process group; descendants do not outlive its lease.
-    drop(group);
-    let code = exit_code(status);
-    Ok(match (recovery, stopped) {
-        (Some(stop), _) => Outcome::Paused { code, stop },
-        (None, Some(reason)) => Outcome::Stopped { code, reason },
-        (None, None) => Outcome::Exited(code),
-    })
+    }
 }
 
 fn spawn(
