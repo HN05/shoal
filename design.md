@@ -577,6 +577,8 @@ tooling stay with clients.
 `shoal pr open` pushes, then finds or opens the branch's PR and links it in one
 daemon request, so a PR Shoal opens is never left unlinked. A new PR is ready
 unless `--draft` is given, because opening a ready PR is what requests review.
+An explicitly supplied description is preserved verbatim; when no description
+is supplied, a linked issue is referenced with `Closes #<number>`.
 Its options are modeled rather than passed through to a CLI, so they mean the
 same on every forge.
 

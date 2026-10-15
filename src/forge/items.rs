@@ -209,20 +209,13 @@ async fn new_pull(
     })
 }
 
-/// A linked issue closes with the PR unless the description already says so.
+/// Use a supplied description verbatim; otherwise close the linked issue.
 fn description(body: Option<String>, issue: Option<u64>) -> String {
-    let body = body.unwrap_or_default();
     let Some(number) = issue else {
-        return body;
+        return body.unwrap_or_default();
     };
     let closing = format!("Closes #{number}");
-    if body.lines().any(|line| line.trim() == closing) {
-        body
-    } else if body.trim().is_empty() {
-        closing
-    } else {
-        format!("{}\n\n{closing}", body.trim_end())
-    }
+    body.unwrap_or(closing)
 }
 
 /// The forge of the workspace's `origin`.
@@ -253,21 +246,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn linked_issue_adds_one_closing_line() {
+    fn linked_issue_closes_only_without_a_description() {
         assert_eq!(description(None, None), "");
         assert_eq!(description(Some("Fix".into()), None), "Fix");
         assert_eq!(description(None, Some(7)), "Closes #7");
-        assert_eq!(
-            description(Some("Fix\n".into()), Some(7)),
-            "Fix\n\nCloses #7"
-        );
-        assert_eq!(
-            description(Some("Fix\n\nCloses #7\n".into()), Some(7)),
-            "Fix\n\nCloses #7\n"
-        );
-        assert_eq!(
-            description(Some("Closes #70".into()), Some(7)),
-            "Closes #70\n\nCloses #7"
-        );
+        assert_eq!(description(Some("Fix\n".into()), Some(7)), "Fix\n");
+        assert_eq!(description(Some("Refs #7".into()), Some(7)), "Refs #7");
+        assert_eq!(description(Some("".into()), Some(7)), "");
     }
 }

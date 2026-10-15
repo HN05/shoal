@@ -1231,8 +1231,8 @@ its upstream, as a tracked command with your Git configuration and hooks and
 its output on stderr. The daemon then links the open PR whose head is that
 branch in the repository, or opens one and links it. A new PR's title is
 `--title`, else the linked issue's title, else the last commit's subject; its
-description is `--body` or `--body-file`, followed by `Closes #<number>` for a
-linked issue unless a line already says so; its base is `--base`, else the base
+description is the supplied `--body` or `--body-file`, or `Closes #<number>`
+when no body is supplied for a linked issue; its base is `--base`, else the base
 workspace's branch, else the default branch. `--draft`, repeated `--label` and
 repeated `--reviewer` also apply only to a new PR. Its JSON adds `created`
 (false for a PR it found) and `linked`.
