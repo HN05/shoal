@@ -19,7 +19,7 @@ use std::{
 use tokio::{
     io::{AsyncBufReadExt, BufReader},
     process::{Child, Command},
-    signal::unix::{SignalKind, signal},
+    signal::unix::{Signal, SignalKind, signal},
     time::timeout,
 };
 
@@ -643,9 +643,10 @@ async fn supervise(
     auth: Option<&AgentLaunch>,
     recovery_record: Option<&Path>,
 ) -> Result<Outcome> {
+    let signals = ExecutionSignals::new()?;
     let (mut child, group, _terminal) =
         register_child(link, paths, plan, command, mode, auth, recovery_record).await?;
-    let (status, recovery, stopped) = wait_for_child(link, &mut child, &group).await?;
+    let (status, recovery, stopped) = wait_for_child(link, &mut child, &group, signals).await?;
     // A command owns its process group; descendants do not outlive its lease.
     drop(group);
     let code = exit_code(status);
@@ -667,11 +668,33 @@ async fn register_child(
     auth: Option<&AgentLaunch>,
     recovery_record: Option<&Path>,
 ) -> Result<(Child, ProcessGroup, Option<Terminal>)> {
+    let (child, group, mut terminal) = spawn_registered_child(paths, plan, command, mode, auth)?;
+    register_process(link, &group).await?;
+    consume_recovery_records(mode, recovery_record)?;
+    report_detached_launch(plan, mode, &group)?;
+    handoff_terminal(&mut terminal, &group)?;
+    // The child may have been stopped by SIGTTIN/SIGTTOU before it became the
+    // foreground group.
+    group.send(libc::SIGCONT);
+    Ok((child, group, terminal))
+}
+
+fn spawn_registered_child(
+    paths: &Paths,
+    plan: &ExecutionPlan,
+    command: &[OsString],
+    mode: &Mode,
+    auth: Option<&AgentLaunch>,
+) -> Result<(Child, ProcessGroup, Option<Terminal>)> {
     // Capture before spawning, and restore after child/process-group cleanup,
     // including failures before the terminal handoff.
-    let mut terminal = Terminal::capture(true)?;
+    let terminal = Terminal::capture(true)?;
     let child = spawn(paths, plan, command, mode, auth)?;
     let group = ProcessGroup(child.id().context("child PID unavailable")? as i32);
+    Ok((child, group, terminal))
+}
+
+async fn register_process(link: &mut Link, group: &ProcessGroup) -> Result<()> {
     let identity = process::identity::capture(group.pid())?;
     link.send(&ExecutionEvent::Started {
         child: identity.clone(),
@@ -684,7 +707,10 @@ async fn register_child(
         "daemon did not acknowledge process registration"
     );
     link.arm(identity, group.pid());
-    consume_recovery_records(mode, recovery_record)?;
+    Ok(())
+}
+
+fn report_detached_launch(plan: &ExecutionPlan, mode: &Mode, group: &ProcessGroup) -> Result<()> {
     if let Mode::Detached { log } = mode {
         report_launch(&DetachedLaunch {
             execution_id: plan.id.clone(),
@@ -692,13 +718,14 @@ async fn register_child(
             log: log.clone(),
         })?;
     }
-    if let Some(terminal) = &mut terminal {
+    Ok(())
+}
+
+fn handoff_terminal(terminal: &mut Option<Terminal>, group: &ProcessGroup) -> Result<()> {
+    if let Some(terminal) = terminal {
         terminal.give_to(group.0)?;
     }
-    // The child may have been stopped by SIGTTIN/SIGTTOU before it became the
-    // foreground group.
-    group.send(libc::SIGCONT);
-    Ok((child, group, terminal))
+    Ok(())
 }
 
 fn consume_recovery_records(mode: &Mode, recovery_record: Option<&Path>) -> Result<()> {
@@ -718,10 +745,8 @@ async fn wait_for_child(
     link: &mut Link,
     child: &mut Child,
     group: &ProcessGroup,
+    mut signals: ExecutionSignals,
 ) -> Result<(ExitStatus, Option<Halt>, Option<String>)> {
-    let mut terminate = signal(SignalKind::terminate())?;
-    let mut interrupt = signal(SignalKind::interrupt())?;
-    let mut quit = signal(SignalKind::quit())?;
     // While the daemon is away the link reattaches in the background and the
     // command keeps the terminal; nothing is written to it.
     loop {
@@ -766,10 +791,26 @@ async fn wait_for_child(
                 };
                 return Ok((status, recovery, stopped));
             }
-            _ = terminate.recv() => return Ok((stop(child, group, libc::SIGTERM).await?, None, None)),
-            _ = interrupt.recv() => return Ok((stop(child, group, libc::SIGINT).await?, None, None)),
-            _ = quit.recv() => return Ok((stop(child, group, libc::SIGQUIT).await?, None, None)),
+            _ = signals.terminate.recv() => return Ok((stop(child, group, libc::SIGTERM).await?, None, None)),
+            _ = signals.interrupt.recv() => return Ok((stop(child, group, libc::SIGINT).await?, None, None)),
+            _ = signals.quit.recv() => return Ok((stop(child, group, libc::SIGQUIT).await?, None, None)),
         }
+    }
+}
+
+struct ExecutionSignals {
+    terminate: Signal,
+    interrupt: Signal,
+    quit: Signal,
+}
+
+impl ExecutionSignals {
+    fn new() -> Result<Self> {
+        Ok(Self {
+            terminate: signal(SignalKind::terminate())?,
+            interrupt: signal(SignalKind::interrupt())?,
+            quit: signal(SignalKind::quit())?,
+        })
     }
 }
 
