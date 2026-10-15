@@ -137,9 +137,13 @@ instead of the PR delivery guidance below.
   workspaces before cleanup can remove it, retargets only their PRs still
   targeting its branch, and queues a watch update; it never rebases or pushes.
   Forge writes are retargeting and the daemon's typed issue and PR actions, sent
-  through the REST transport; scoped callers cannot merge. Forgejo API requests
-  use fj's saved token for the repository's own host, validated, passed to curl
-  on stdin, never logged, stored or sent elsewhere.
+  through the REST transport; scoped callers cannot merge. Forgejo and Gitea API
+  requests use fj's saved token for the repository's own host, validated, passed
+  to curl on stdin, never logged, stored or sent elsewhere, or else tea's login
+  through `tea api`; GitLab requests go through `glab api`. Bitbucket requests
+  send the token `[bitbucket] token_command` prints, validated, only to
+  api.bitbucket.org on curl's stdin, never stored or logged. The forge is chosen
+  from the host and local logins, never by probing the host.
   Views automatically include failed Actions logs, read by the daemon as the
   workspace's agent account, resolving web indices to API IDs and validating the PR head before returning
   a bounded tail; scoped callers cannot access another workspace's logs.
@@ -275,8 +279,8 @@ configured command for another agent, plus proven child
   Detached wrappers never write to the terminal while their command runs.
 - Agent forge wrappers are opt-in, resolve per tool through configuration layers,
   and change only the PATH of a tracked agent, inherited by descendants, and of
-  the `gh` requests Shoal makes for a workspace. Wrappers own authentication;
-  Shoal reads only fj's saved token, per request, never storing or logging it,
+  the `gh`, `glab` and `tea` requests Shoal makes for a workspace. Wrappers own
+  authentication; Shoal reads only fj's saved token, per request, never storing or logging it,
   and never switches the user's login. Forge changes for a workspace use the
   agent account except merging, which uses the user's. The agent Git profile
   reaches only a tracked agent's environment and the push of `shoal pr open`;
