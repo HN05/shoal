@@ -12,7 +12,11 @@ use crate::{
     state::WorkspaceState,
 };
 use anyhow::{Result, bail, ensure};
-use std::path::{Path, PathBuf};
+use std::{
+    collections::BTreeMap,
+    ffi::OsString,
+    path::{Path, PathBuf},
+};
 
 #[cfg(test)]
 mod tests;
@@ -147,6 +151,13 @@ enum Stage {
     Initial,
     AfterStop,
     AfterHooks,
+}
+
+/// A post-remove hook resolved while the workspace record still exists.
+struct PostRemoveHook {
+    command: PathBuf,
+    checkout: PathBuf,
+    env: BTreeMap<String, OsString>,
 }
 
 impl Manager {
@@ -323,19 +334,13 @@ impl Manager {
     async fn prepare_post_remove_hook(
         &self,
         workspace: &Workspace,
-    ) -> Result<
-        Option<(
-            PathBuf,
-            PathBuf,
-            std::collections::BTreeMap<String, std::ffi::OsString>,
-        )>,
-    > {
+    ) -> Result<Option<PostRemoveHook>> {
         match self.workspace_hook(workspace, HookKind::PostRemove).await? {
-            Some(command) => {
-                let checkout = self.repository(&workspace.repository_id).await?.path;
-                let configured_env = self.configured_workspace_environment(workspace).await?;
-                Ok(Some((command, checkout, configured_env)))
-            }
+            Some(command) => Ok(Some(PostRemoveHook {
+                command,
+                checkout: self.repository(&workspace.repository_id).await?.path,
+                env: self.configured_workspace_environment(workspace).await?,
+            })),
             None => Ok(None),
         }
     }
@@ -360,22 +365,18 @@ impl Manager {
         &self,
         workspace: &Workspace,
         mut outcome: RemovalResult,
-        post_remove: Option<(
-            PathBuf,
-            PathBuf,
-            std::collections::BTreeMap<String, std::ffi::OsString>,
-        )>,
+        post_remove: Option<PostRemoveHook>,
     ) -> RemovalResult {
         self.forget_workspace(&workspace.id).await;
         // Session logs are run data owned by the record just deleted.
         let _ = std::fs::remove_dir_all(self.paths.workspace_state(&workspace.id));
-        if let Some((command, checkout, configured_env)) = post_remove
+        if let Some(hook) = post_remove
             && let Err(error) = hooks::run_detached(
-                Hook::PostRemove(&checkout),
+                Hook::PostRemove(&hook.checkout),
                 workspace,
-                &command,
+                &hook.command,
                 &self.paths,
-                &configured_env,
+                &hook.env,
             )
             .await
         {
