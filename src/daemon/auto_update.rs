@@ -104,14 +104,13 @@ async fn installed_protocol(path: &Path) -> Result<u32> {
     Ok(info.protocol)
 }
 
-/// Admission is paused in the server while checking. Existing connections
-/// cover requests and connected wrappers; background readers cover hooks and
-/// mutations. Unknown executions also block restart until reconciliation.
-pub(super) async fn quiesce(manager: &Manager) -> Result<Option<RwLockWriteGuard<'_, ()>>> {
-    let Ok(guard) = manager.background_operations.try_write() else {
-        return Ok(None);
-    };
-    Ok((!manager.has_executions().await?).then_some(guard))
+/// Admission is paused in the server while checking. Background readers cover
+/// requests, hooks and mutations; execution connections hold one only while
+/// their execution changes or their wrapper cannot reattach. Connected
+/// executions that never reattach block restart.
+pub(super) fn quiesce(manager: &Manager) -> Option<RwLockWriteGuard<'_, ()>> {
+    let guard = manager.background_operations.try_write().ok()?;
+    (!manager.has_unattachable_connections()).then_some(guard)
 }
 
 #[cfg(test)]
@@ -140,42 +139,30 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn restart_waits_for_background_work_and_execution_records() {
+    async fn restart_waits_for_background_work_and_executions_that_cannot_reattach() {
         let (_root, manager) = crate::test_support::manager().await;
-        assert!(quiesce(&manager).await.unwrap().is_some());
+        assert!(quiesce(&manager).is_some());
         let operation = manager.background_operations.read().await;
-        assert!(quiesce(&manager).await.unwrap().is_none());
+        assert!(quiesce(&manager).is_none());
         drop(operation);
-        let quiet = quiesce(&manager).await.unwrap().unwrap();
+        let quiet = quiesce(&manager).unwrap();
         assert!(manager.background_operations.try_read().is_err());
         drop(quiet);
+        // A restart leaves disconnected records as they are, including
+        // commands from releases before reattachment.
         manager.store.run(|db| {
             db.execute_batch(
                 "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/test','/test',0);
                  INSERT INTO workspaces(id,repository_id,name,path,branch,state)
                     VALUES ('workspace','repo','work','/test/work','work','ready');
-                 INSERT INTO executions(id,workspace_id,state) VALUES ('execution','workspace','running');"
+                 INSERT INTO executions(id,workspace_id,state) VALUES ('legacy','workspace','running');
+                 INSERT INTO executions(id,workspace_id,state) VALUES ('unknown','workspace','unknown');"
             )?;
             Ok(())
         }).await.unwrap();
-        assert!(quiesce(&manager).await.unwrap().is_none());
-        manager
-            .store
-            .run(|db| {
-                db.execute("UPDATE executions SET state='unknown'", [])?;
-                Ok(())
-            })
-            .await
-            .unwrap();
-        assert!(quiesce(&manager).await.unwrap().is_none());
-        manager
-            .store
-            .run(|db| {
-                db.execute("DELETE FROM executions", [])?;
-                Ok(())
-            })
-            .await
-            .unwrap();
-        assert!(quiesce(&manager).await.unwrap().is_some());
+        assert!(quiesce(&manager).is_some());
+        // Connected setup and landing stop with the daemon.
+        manager.mark_unattachable("setup");
+        assert!(quiesce(&manager).is_none());
     }
 }

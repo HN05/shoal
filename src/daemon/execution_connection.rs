@@ -6,7 +6,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result, ensure};
 use tokio::{
     net::{UnixStream, unix::OwnedWriteHalf},
-    sync::{mpsc, watch},
+    sync::{OwnedRwLockReadGuard, mpsc, watch},
     task::JoinSet,
 };
 
@@ -60,6 +60,7 @@ pub(super) async fn execute(
     request_id: u64,
     manager: Arc<Manager>,
     context: ExecutionContext,
+    operation: OwnedRwLockReadGuard<()>,
 ) -> Result<()> {
     let ExecutionContext {
         workspace,
@@ -85,6 +86,9 @@ pub(super) async fn execute(
             return protocol::write(&mut stream, &Response::new(request_id, body)).await;
         }
     };
+    if !reattach {
+        manager.mark_unattachable(&plan.id);
+    }
     if kind == ExecutionKind::Command
         && let Some(agent) = &agent
     {
@@ -113,7 +117,7 @@ pub(super) async fn execute(
         stop,
     };
     let response = Response::new(request_id, Body::Execution(plan));
-    serve(stream, &manager, execution, response).await
+    serve(stream, &manager, execution, response, operation).await
 }
 
 /// Restore a wrapper's connection after a daemon restart, then serve it like
@@ -123,6 +127,7 @@ pub(super) async fn reattach(
     request_id: u64,
     manager: Arc<Manager>,
     request: Reattach,
+    operation: OwnedRwLockReadGuard<()>,
 ) -> Result<()> {
     let reattached = async {
         // Where the platform reports it, the peer must be the recorded wrapper.
@@ -156,23 +161,30 @@ pub(super) async fn reattach(
         &manager,
         execution,
         Response::new(request_id, Body::Ok),
+        operation,
     )
     .await
 }
 
 /// Relay controls and events after `response` until the wrapper reports
-/// completion or disconnects, then record the outcome.
+/// completion or disconnects, then record the outcome. A wrapper reattaches
+/// only while its child runs with the daemon's acknowledgement, so the
+/// registration's `operation` holds back a daemon update until then, as does
+/// an overload stop until the agent is restored. Otherwise a running
+/// execution does not; recording its changes takes the guard again.
 async fn serve(
     stream: UnixStream,
     manager: &Manager,
     mut execution: Connected,
     response: Response,
+    operation: OwnedRwLockReadGuard<()>,
 ) -> Result<()> {
     let (reader, mut writer) = stream.into_split();
     let (events, mut incoming) = mpsc::channel(4);
     let mut readers = JoinSet::new();
     readers.spawn(read_execution_events(reader, events));
     let mut handoff_claimed = false;
+    let mut unattachable = (!execution.started).then_some(operation);
     let result = async {
         protocol::write(&mut writer, &response).await?;
         relay(
@@ -181,6 +193,7 @@ async fn serve(
             &mut writer,
             &mut incoming,
             &mut handoff_claimed,
+            &mut unattachable,
         )
         .await
     }
@@ -194,7 +207,28 @@ async fn serve(
         Ok(Ended::Finished(exit_code)) => Ok(exit_code),
         Err(error) => Err(error),
     };
-    finish(manager, execution, writer, result, handoff_claimed).await
+    let operation = match unattachable {
+        Some(operation) => operation,
+        None => match manager.background_operations.clone().try_read_owned() {
+            Ok(operation) => operation,
+            // An update is restarting the daemon; the wrapper reports its
+            // exit to the replacement.
+            Err(_) if execution.reattach && result.is_ok() => {
+                manager.detach_execution(&execution.id).await;
+                return Ok(());
+            }
+            Err(_) => manager.background_operations.clone().read_owned().await,
+        },
+    };
+    finish(
+        manager,
+        execution,
+        writer,
+        result,
+        handoff_claimed,
+        operation,
+    )
+    .await
 }
 
 /// Exchange controls and events until the wrapper reports its exit code or
@@ -205,6 +239,7 @@ async fn relay(
     writer: &mut OwnedWriteHalf,
     incoming: &mut mpsc::Receiver<Result<ExecutionEvent>>,
     handoff_claimed: &mut bool,
+    unattachable: &mut Option<OwnedRwLockReadGuard<()>>,
 ) -> Result<Ended> {
     let Connected {
         id: execution_id,
@@ -235,6 +270,10 @@ async fn relay(
                             let control = if let Some(protection) = manager.agent_overload(execution_id).await {
                                 // Read the policy now, so a reload applies to running agents.
                                 recovering = recover && manager.config().overload.recovery.enabled;
+                                let hold = manager.take_update_hold(execution_id).await;
+                                if recovering && unattachable.is_none() {
+                                    *unattachable = hold;
+                                }
                                 Control::OverloadStop {
                                     recover: recovering,
                                     reason: protection.reason,
@@ -263,6 +302,10 @@ async fn relay(
         match event {
             ExecutionEvent::Started { child, group_id } => {
                 awaiting_started = false;
+                let _operation = match unattachable.take() {
+                    Some(operation) => operation,
+                    None => manager.background_operations.clone().read_owned().await,
+                };
                 manager
                     .record_execution_child(execution_id.clone(), child, group_id)
                     .await?;
@@ -275,6 +318,10 @@ async fn relay(
                     continue;
                 }
                 use execution_recovery::Action;
+                // A restart would stop the paused agent instead of restoring it.
+                if unattachable.is_none() {
+                    *unattachable = manager.background_operations.clone().try_read_owned().ok();
+                }
                 match execution_recovery::pause(
                     manager,
                     execution_id,
@@ -309,6 +356,7 @@ async fn finish(
     mut writer: OwnedWriteHalf,
     result: Result<i32>,
     handoff_claimed: bool,
+    _operation: OwnedRwLockReadGuard<()>,
 ) -> Result<()> {
     let Connected {
         id: execution_id,
@@ -444,6 +492,7 @@ mod tests {
                 recover: false,
                 running_ms: 0,
             },
+            manager.background_operations.clone().read_owned().await,
         ));
         let mut capable = BufReader::new(client);
         let response: Response = read(&mut capable).await;
@@ -464,9 +513,11 @@ mod tests {
                 queue_entry: None,
                 parent_execution: None,
             },
+            manager.background_operations.clone().read_owned().await,
         ));
         let mut legacy = BufReader::new(client);
         let response: Response = read(&mut legacy).await;
+        assert!(manager.has_unattachable_connections());
         let Body::Execution(plan) = response.body else {
             panic!("execution was not registered");
         };
@@ -500,6 +551,7 @@ mod tests {
         ));
         bounded(executing).await.unwrap().unwrap();
         bounded(shutdown).await.unwrap();
+        assert!(!manager.has_unattachable_connections());
         // The detached execution awaits reattachment; the stopped one is gone.
         let executions = manager
             .inspect_workspace(&workspace.id)
@@ -509,5 +561,72 @@ mod tests {
         assert_eq!(executions.len(), 1);
         assert_eq!(executions[0].id, detaching);
         assert_ne!(executions[0].id, plan.id);
+    }
+
+    #[tokio::test]
+    async fn running_executions_leave_daemon_operations_idle() {
+        let (root, manager) = manager().await;
+        let path = repository(root.path(), "repo");
+        let repo = manager
+            .register_repository(path.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        let workspace = manager
+            .create_workspace(&repo.id, "idle".into(), None, None, None)
+            .await
+            .unwrap();
+        let wrapper = crate::process::identity::capture(std::process::id())
+            .unwrap()
+            .unwrap();
+        let (client, server) = UnixStream::pair().unwrap();
+        let executing = tokio::spawn(execute(
+            server,
+            1,
+            manager.clone(),
+            ExecutionContext {
+                workspace: workspace.id.clone(),
+                wrapper: wrapper.clone(),
+                kind: ExecutionKind::Command,
+                agent: None,
+                recover: false,
+                reattach: true,
+                parent_execution: None,
+                queue_entry: None,
+            },
+            manager.background_operations.clone().read_owned().await,
+        ));
+        let mut wrapper_side = BufReader::new(client);
+        let response: Response = read(&mut wrapper_side).await;
+        assert!(matches!(response.body, Body::Execution(_)));
+        // Until its child is recorded, the wrapper cannot reattach.
+        assert!(manager.background_operations.try_write().is_err());
+        protocol::write(
+            wrapper_side.get_mut(),
+            &ExecutionEvent::Started {
+                child: None,
+                group_id: wrapper.pid,
+            },
+        )
+        .await
+        .unwrap();
+        assert!(matches!(read(&mut wrapper_side).await, Control::Started));
+        // An update can take every operation while the command still runs.
+        let update = bounded(manager.background_operations.write()).await;
+        // A command exiting meanwhile reports to the replacement daemon.
+        protocol::write(
+            wrapper_side.get_mut(),
+            &ExecutionEvent::Finished { exit_code: 0 },
+        )
+        .await
+        .unwrap();
+        bounded(executing).await.unwrap().unwrap();
+        drop(update);
+        let executions = manager
+            .inspect_workspace(&workspace.id)
+            .await
+            .unwrap()
+            .executions;
+        assert_eq!(executions.len(), 1);
+        assert!(!manager.execution_connected(&executions[0].id).await);
     }
 }

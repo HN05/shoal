@@ -1,7 +1,7 @@
 //! Connected agent metadata is deliberately transient: a daemon restart must
 //! not turn an unknown execution into an automatic signal target.
 use std::time::{Duration, Instant};
-use tokio::sync::watch;
+use tokio::sync::{OwnedRwLockReadGuard, watch};
 
 use super::{GuardMode, Manager};
 use crate::daemon::log;
@@ -16,6 +16,9 @@ pub(super) struct Agent {
     stop: watch::Sender<bool>,
     /// Set while an overload stop awaits automatic recovery.
     overload: Option<Protection>,
+    /// Holds back a daemon update from the stop until the execution's
+    /// connection takes over, since an update would cancel the restore.
+    update_hold: Option<OwnedRwLockReadGuard<()>>,
 }
 
 /// Why protection stopped an agent, and what its automatic restore waits for.
@@ -39,6 +42,7 @@ impl Protection {
 impl Agent {
     pub(super) fn cancel_recovery(&mut self) {
         self.overload = None;
+        self.update_hold = None;
     }
 
     /// Whether protection stopped the agent and it awaits automatic recovery.
@@ -201,6 +205,7 @@ impl Manager {
                     recover,
                     stop: stop.clone(),
                     overload: None,
+                    update_hold: None,
                 },
             );
         }
@@ -261,6 +266,7 @@ impl Manager {
         }
         stop.send(false)?;
         agent.overload = None;
+        agent.update_hold = None;
         agent.started = Instant::now();
         let (name, workspace) = (agent.name.clone(), agent.workspace.clone());
         drop(agents);
@@ -280,6 +286,15 @@ impl Manager {
             .await
             .get(id)
             .and_then(|agent| agent.overload.clone())
+    }
+
+    /// The guard a protection stop took for the execution's connection.
+    pub(crate) async fn take_update_hold(&self, id: &str) -> Option<OwnedRwLockReadGuard<()>> {
+        self.agents
+            .lock()
+            .await
+            .get_mut(id)
+            .and_then(|agent| agent.update_hold.take())
     }
 
     pub(crate) async fn agent_was_overloaded(&self, id: &str) -> bool {
@@ -410,6 +425,8 @@ impl Manager {
             log!("overload recovery handoff not saved: {error:#}");
         }
         agent.overload = Some(protection.clone());
+        // The monitor holds an operation, so no update can take the lock.
+        agent.update_hold = self.background_operations.clone().try_read_owned().ok();
         agent.stop.send(true).ok()?;
         Some(StoppedAgent {
             id: id.into(),

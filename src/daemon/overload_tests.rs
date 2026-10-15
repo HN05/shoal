@@ -455,12 +455,17 @@ async fn overload_restores_the_configured_session_and_keeps_waiting_execution_ow
     .unwrap();
     let launched = launch(&manager, &workspace);
     wait_started(&manager, &workspace).await;
+    let monitor = manager.background_operations.read().await;
     assert!(
         manager
             .stop_agent_for_overload("test memory pressure")
             .await
     );
+    drop(monitor);
+    // An update would cancel the restore, so the stop holds one back.
+    assert!(manager.background_operations.try_write().is_err());
     wait_paused(&manager, &workspace).await;
+    assert!(manager.background_operations.try_write().is_err());
     assert!(!launched.is_finished());
     assert!(!workspace.path.join("restored").exists());
     let epoch = manager
@@ -468,6 +473,7 @@ async fn overload_restores_the_configured_session_and_keeps_waiting_execution_ow
         .load(std::sync::atomic::Ordering::Relaxed);
     manager.recovery_ready.send_replace(Some(epoch));
     assert_eq!(bounded(launched).await.unwrap().unwrap(), 7);
+    drop(bounded(manager.background_operations.write()).await);
     assert!(!crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
     assert_eq!(
         fs::read_to_string(workspace.path.join("restored")).unwrap(),

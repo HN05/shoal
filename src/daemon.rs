@@ -160,16 +160,12 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
             _ = interrupt.recv() => break Ok(()),
             _ = shutdown_rx.changed() => break Ok(()),
             _ = update_tick.tick(), if update.is_some() => {
-                if update.as_ref().is_some_and(auto_update::Update::pending) {
-                    match auto_update::quiesce(&manager).await {
-                        Ok(Some(guard)) => {
-                            match update.as_mut().expect("update monitor enabled").supports_followers(clients.len()).await {
-                                Ok(true) => { quiescence = Some(guard); break Ok(()); }
-                                Ok(false) => {},
-                                Err(error) => log!("daemon update check: {error:#}"),
-                            }
-                        }
-                        Ok(None) => {},
+                if update.as_ref().is_some_and(auto_update::Update::pending)
+                    && let Some(guard) = auto_update::quiesce(&manager)
+                {
+                    match update.as_mut().expect("update monitor enabled").supports_followers(clients.len()).await {
+                        Ok(true) => { quiescence = Some(guard); break Ok(()); }
+                        Ok(false) => {},
                         Err(error) => log!("daemon update check: {error:#}"),
                     }
                 }
@@ -264,7 +260,14 @@ async fn serve(
     // Wrappers from any release reattach, and their launch scope does not
     // survive the restart; the record and token they present prove ownership.
     if let Method::Reattach(reattach) = request.method {
-        return execution_connection::reattach(stream, request.id, server.manager, reattach).await;
+        return execution_connection::reattach(
+            stream,
+            request.id,
+            server.manager,
+            reattach,
+            operation_guard,
+        )
+        .await;
     }
     if request.protocol != protocol::VERSION {
         let body = Body::error(
@@ -311,6 +314,7 @@ async fn serve(
                     parent_execution: caller
                         .and_then(|caller| caller.execution_id().map(str::to_owned)),
                 },
+                operation_guard,
             )
             .await;
         }

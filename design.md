@@ -138,7 +138,7 @@ Service setup manages one per-user launchd/systemd service; foreground mode cove
 environments without a service manager. The service captures the installing shell's
 `PATH`.
 Managed daemons watch their stable executable path and restart after a replacement
-once tracked executions finish and daemon operations are idle.
+once daemon operations are idle and no setup or landing runs; commands reattach.
 Retain the ownership lock and listening socket across exec so queued requests reach
 the replacement under the same service PID. Read-only streams reconnect after the
 handoff, preserving event cursors; foreground daemons keep explicit restart control.

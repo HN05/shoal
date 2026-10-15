@@ -329,7 +329,7 @@ brew update
 brew upgrade hn05/tap/shoal
 ```
 
-Managed daemons apply the upgrade once their clients and operations are idle. For
+Managed daemons apply the upgrade once their operations are idle. For
 a main-channel install, use `brew upgrade --fetch-HEAD hn05/tap/shoal`; run
 `shoal daemon restart` to apply an upgrade immediately; running agents and
 commands reattach to the new daemon. Wrappers from releases before reattachment

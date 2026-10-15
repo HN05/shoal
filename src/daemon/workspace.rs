@@ -43,7 +43,11 @@ use crate::{
 use anyhow::{Context, Result, bail, ensure};
 use branches::UpstreamPolicy;
 use rusqlite::{OptionalExtension, TransactionBehavior, params};
-use std::{collections::HashMap, fs, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    fs,
+    sync::Arc,
+};
 use tokio::sync::{Mutex, OwnedMutexGuard, RwLock, watch};
 
 enum WorkspaceSource {
@@ -96,6 +100,9 @@ pub struct Manager {
     scopes: Mutex<HashMap<String, Caller>>,
     /// Connected executions and the channel that asks their wrapper to stop.
     connections: Mutex<HashMap<String, watch::Sender<bool>>>,
+    /// Connected executions whose wrapper stops instead of reattaching when
+    /// the daemon shuts down.
+    unattachable: std::sync::Mutex<HashSet<String>>,
     agents: Mutex<HashMap<String, agents::Agent>>,
     /// Why the daemon asked connected executions to stop.
     stop_requests: Mutex<HashMap<String, executions::StopRequest>>,
@@ -147,6 +154,7 @@ impl Manager {
             resource_gates: Mutex::new(HashMap::new()),
             scopes: Mutex::new(HashMap::new()),
             connections: Mutex::new(HashMap::new()),
+            unattachable: Default::default(),
             agents: Mutex::new(HashMap::new()),
             stop_requests: Mutex::new(HashMap::new()),
             shutting_down: std::sync::atomic::AtomicBool::new(false),
@@ -265,11 +273,22 @@ impl Manager {
             .await
     }
 
-    /// Active and unknown executions retain work across a daemon restart.
-    pub(super) async fn has_executions(&self) -> Result<bool> {
-        self.store
-            .run(|db| store::exists(db, "SELECT 1 FROM executions LIMIT 1", []))
-            .await
+    /// Record that a restart would stop this connected execution.
+    pub(super) fn mark_unattachable(&self, id: &str) {
+        self.unattachable
+            .lock()
+            .expect("unattachable executions lock")
+            .insert(id.to_owned());
+    }
+
+    /// Whether a restart would stop a connected execution. Disconnected
+    /// records keep their state across it.
+    pub(super) fn has_unattachable_connections(&self) -> bool {
+        !self
+            .unattachable
+            .lock()
+            .expect("unattachable executions lock")
+            .is_empty()
     }
 
     /// Whether the workspace has any recorded execution, in any state.
