@@ -605,12 +605,6 @@ impl Manager {
         } else {
             GuardMode::Shared
         };
-        let _resources = self.resource_guard(&workspace.id, mode).await?;
-        if hook.is_some() {
-            self.verify_worktree(&workspace).await?;
-        }
-        let workspace_name = workspace.name.clone();
-        let scoped = caller.is_some();
         let target = Target::Resource {
             scope: scope.clone(),
             pool: request.pool.clone(),
@@ -618,6 +612,22 @@ impl Manager {
         let mut place = self
             .queues
             .enter(target, &workspace.id, &request.name, request.queue);
+        // A hook in this workspace holds the guard briefly; a queued request
+        // waits it out in place instead of failing.
+        let _resources = match self.resource_guard(&workspace.id, mode).await {
+            Ok(guard) => guard,
+            Err(error) if request.queue => {
+                let busy = Ok(Allocation::Busy(error.to_string()));
+                place.settle(&busy);
+                return busy;
+            }
+            Err(error) => return Err(error),
+        };
+        if hook.is_some() {
+            self.verify_worktree(&workspace).await?;
+        }
+        let workspace_name = workspace.name.clone();
+        let scoped = caller.is_some();
         let ahead = place.ahead();
         let acquisition = self
             .store
@@ -1245,7 +1255,26 @@ mod tests {
                 Err(error) => panic!("{error:#}"),
             }
         };
-        assert_eq!(acquire("held", false).await.unwrap(), "held");
+        let hook = manager
+            .resource_guard(&workspace, crate::daemon::workspace::GuardMode::Exclusive)
+            .await
+            .unwrap();
+        let in_progress =
+            "workspace resource operation is in progress; retry when its hook finishes";
+        assert_eq!(acquire("held", true).await.unwrap_err(), in_progress);
+        let request = ResourceRequest {
+            mode: None,
+            kind: None,
+            pool: "lock".into(),
+            name: "plain".into(),
+            resource: None,
+            reason: None,
+            queue: false,
+        };
+        let error = manager.acquire_resource(&workspace, request, None).await;
+        assert_eq!(error.err().unwrap().to_string(), in_progress);
+        drop(hook);
+        assert_eq!(acquire("held", true).await.unwrap(), "held");
         assert!(
             acquire("first", true)
                 .await
