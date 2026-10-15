@@ -16,11 +16,7 @@ use crate::{
     state::WorkspaceState,
 };
 use anyhow::{Result, bail, ensure};
-use std::{
-    collections::BTreeMap,
-    ffi::OsString,
-    path::{Path, PathBuf},
-};
+use std::{collections::BTreeMap, ffi::OsString, path::PathBuf};
 
 #[cfg(test)]
 mod tests;
@@ -455,7 +451,7 @@ impl Manager {
             .await?;
         // Validate explicit choices before hooks, then derive the actual
         // adapter options again from the final inspection.
-        worktrunk_removal_options(&repo.path, &check, removal.choice()).await?;
+        worktrunk_removal_options(&check, removal.choice())?;
         let head_before_hooks = crate::git::revision(&workspace.path, "HEAD", git::run).await?;
         // The hook sees the worktree intact; a failing hook retains it.
         if let Some(command) = self.workspace_hook(workspace, HookKind::PreRemove).await? {
@@ -485,8 +481,7 @@ impl Manager {
                 },
             )
             .await?;
-        let (files, branch) =
-            worktrunk_removal_options(&repo.path, &check, removal.choice()).await?;
+        let (files, branch) = worktrunk_removal_options(&check, removal.choice())?;
         // Live resources are removed before the directory; failed cleanup
         // retains their ownership records so removal can be retried.
         self.remove_simulators(&workspace.id).await?;
@@ -609,20 +604,18 @@ impl Manager {
     }
 }
 
-async fn worktrunk_removal_options(
-    checkout: &Path,
+fn worktrunk_removal_options(
     check: &RemovalCheck,
     choice: BranchChoice,
 ) -> Result<(FileRemoval, BranchRemoval)> {
-    let default_branch = crate::git::default_branch::resolve(checkout, DefaultBranchLookup::Cached)
-        .await
-        .ok();
     // An unresolved default branch could be any branch, so keep it.
     let branch = match choice {
         BranchChoice::Auto
             if check.can_delete_branch()
-                && default_branch
-                    .is_some_and(|default| check.branch.as_deref() != Some(&default)) =>
+                && check
+                    .default_branch
+                    .as_deref()
+                    .is_some_and(|default| check.branch.as_deref() != Some(default)) =>
         {
             BranchRemoval::Delete
         }

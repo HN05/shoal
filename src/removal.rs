@@ -26,6 +26,12 @@ pub struct RemovalCheck {
     /// HEAD's tree equals the local default branch's, or is already merged into it.
     pub matches_default_branch: bool,
     pub matches_upstream: bool,
+    /// The default branch used by this inspection, when it could be resolved.
+    ///
+    /// This is daemon state used to keep the removal decision consistent with
+    /// the inspection; it is not part of the CLI protocol response.
+    #[serde(skip)]
+    pub(crate) default_branch: Option<String>,
 }
 
 /// What happens to the workspace branch when its worktree is removed.
@@ -183,6 +189,7 @@ pub async fn inspect(
         branch: None,
         matches_default_branch: false,
         matches_upstream: false,
+        default_branch: default_branch.map(str::to_owned),
     };
     if !check.workspace.path.exists() {
         return Ok(check);

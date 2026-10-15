@@ -445,6 +445,34 @@ async fn stale_birth_identity_never_authorizes_signaling_a_live_group() {
 }
 
 #[tokio::test]
+async fn branch_removal_uses_the_inspected_default_branch() {
+    let (_root, manager, workspace) = fixture().await;
+    let repo = manager.repository(&workspace.repository_id).await.unwrap();
+    for (inspected_default, later_default, delete) in [
+        ("main", workspace.branch.as_str(), true),
+        (workspace.branch.as_str(), "main", false),
+    ] {
+        git(
+            &repo.path,
+            &["symbolic-ref", "HEAD", &git::local_ref(inspected_default)],
+        );
+        let check = manager
+            .check_removal(&workspace.id, InspectionPolicy::GitOnly)
+            .await
+            .unwrap();
+        assert_eq!(check.default_branch.as_deref(), Some(inspected_default));
+        assert!(check.can_delete_branch());
+        git(
+            &repo.path,
+            &["symbolic-ref", "HEAD", &git::local_ref(later_default)],
+        );
+
+        let (_, branch) = worktrunk_removal_options(&check, BranchChoice::Auto).unwrap();
+        assert_eq!(matches!(branch, BranchRemoval::Delete), delete);
+    }
+}
+
+#[tokio::test]
 async fn automatic_removal_keeps_branch_when_default_branch_is_unknown() {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
