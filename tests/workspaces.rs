@@ -18,6 +18,8 @@ mod support;
 
 use support::{
     cli,
+    install_test_script,
+    install_test_script_with_mode,
     wait::{try_wait_for, wait_for, wait_until},
 };
 
@@ -59,10 +61,8 @@ impl Fixture {
             fs::write(root.path().join(".config/shoal/config.toml"), config).unwrap();
         }
         if fake_sim {
-            fs::create_dir(root.path().join("bin")).unwrap();
             let script = root.path().join("bin/xcrun");
-            fs::write(&script, include_str!("fixtures/simctl.py")).unwrap();
-            fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
+            install_test_script(&script, include_str!("fixtures/simctl.py"));
         }
         let repo = init_repo(
             root.path(),
@@ -201,10 +201,11 @@ impl Fixture {
     /// the row whose ID is `choice`, then type `answer` into later prompts.
     fn pick(&self, args: &[&str], choice: &str, answer: &str) -> (Output, String) {
         let bin = self.root.path().join("bin");
-        fs::create_dir_all(&bin).unwrap();
         let fzf = bin.join("fzf");
-        fs::write(&fzf, "#!/bin/sh\ncat > \"$SHOAL_TEST_PICK_INPUT\"\nawk -F '\\t' -v id=\"$SHOAL_TEST_PICK_ID\" '$1 == id { print }' \"$SHOAL_TEST_PICK_INPUT\"\n").unwrap();
-        fs::set_permissions(&fzf, fs::Permissions::from_mode(0o755)).unwrap();
+        install_test_script(
+            &fzf,
+            "#!/bin/sh\ncat > \"$SHOAL_TEST_PICK_INPUT\"\nawk -F '\\t' -v id=\"$SHOAL_TEST_PICK_ID\" '$1 == id { print }' \"$SHOAL_TEST_PICK_INPUT\"\n",
+        );
         let rows = self.root.path().join("picker-rows");
         let _ = fs::remove_file(&rows);
         let (output, _) = self.interactive_command(
@@ -235,7 +236,7 @@ impl Fixture {
                     .unwrap_or_else(|| panic!("{program} is not on PATH"));
                 std::os::unix::fs::symlink(path, tools.join(program)).unwrap();
             }
-            install_test_script(&tools.join("zmx"), PASSTHROUGH_ZMX);
+            install_test_script(tools.join("zmx"), PASSTHROUGH_ZMX);
         }
         format!(
             "{}:{}:/usr/bin:/bin",
@@ -407,7 +408,7 @@ fn workspace_rename_issue_reopens_the_associated_workspace() {
     let fixture = Fixture::with_config(Some("[commands]\npi = ['sh', '-c', 'exit 0']\n"));
     fixture.add_github_origin();
     install_test_script(
-        &fixture.root.path().join("bin/gh"),
+        fixture.root.path().join("bin/gh"),
         "#!/bin/sh\necho '{\"state\":\"OPEN\",\"number\":34,\"title\":\"Fix API timeout\",\"body\":\"\"}'\n",
     );
     let repo = fixture.repo.to_str().unwrap();
@@ -1285,8 +1286,7 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
         &["remote", "add", "origin", "https://forge.example/team/repo"],
     );
     let bin = fixture.root.path().join("bin");
-    fs::create_dir(&bin).unwrap();
-    fs::write(
+    install_test_script(
         bin.join("fj"),
         r#"#!/bin/sh
 case "$*" in
@@ -1296,9 +1296,7 @@ case "$*" in
  *) exit 1;;
 esac
 "#,
-    )
-    .unwrap();
-    fs::set_permissions(bin.join("fj"), fs::Permissions::from_mode(0o755)).unwrap();
+    );
     let status = fixture.ok(&["status", "summary"]);
     assert_eq!(
         status["prs"][0]["url"],
@@ -2272,8 +2270,7 @@ fn diff_excludes_new_main_commits_before_and_after_rebase_and_uses_git_configura
         }
     }
     let external = fixture.root.path().join("external-diff");
-    fs::write(&external, "#!/bin/sh\nprintf 'configured-diff\\n'\n").unwrap();
-    fs::set_permissions(&external, fs::Permissions::from_mode(0o755)).unwrap();
+    install_test_script(&external, "#!/bin/sh\nprintf 'configured-diff\\n'\n");
     git(
         path,
         &["config", "diff.external", external.to_str().unwrap()],
@@ -2343,15 +2340,13 @@ fn forge_origin(fixture: &Fixture) -> PathBuf {
     let author = upstream_remote(fixture);
     let remote = fixture.root.path().join("origin.git");
     let ssh = fixture.root.path().join("ssh");
-    fs::write(
+    install_test_script(
         &ssh,
         format!(
             "#!/bin/sh\nfor last; do :; done\nexec sh -c \"$(printf '%s' \"$last\" | sed 's|/team/project.git|{}|')\"\n",
             remote.display()
         ),
-    )
-    .unwrap();
-    fs::set_permissions(&ssh, fs::Permissions::from_mode(0o755)).unwrap();
+    );
     git(
         &fixture.repo,
         &["config", "core.sshCommand", ssh.to_str().unwrap()],
@@ -2375,13 +2370,10 @@ fn review_refines_an_issue_in_the_workspace_add_continues() {
     ));
     forge_origin(&fixture);
     let bin = fixture.root.path().join("issue-bin");
-    fs::create_dir(&bin).unwrap();
-    fs::write(
+    install_test_script(
         bin.join("fj"),
         "#!/bin/sh\nprintf '\\342\\201\\250Clarify retries\\342\\201\\251 #\\342\\201\\25012\\342\\201\\251\\nBy user \\342\\200\\224 Open\\n\\n> Retry failed uploads.\\n\\n0 comments\\n'\n",
-    )
-    .unwrap();
-    fs::set_permissions(bin.join("fj"), fs::Permissions::from_mode(0o755)).unwrap();
+    );
     let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap());
     let review = |target: &[&str]| {
         fixture
@@ -2489,17 +2481,14 @@ fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
 
     // The daemon also queries the PR when linking it, through the fixture's bin.
     let bin = fixture.root.path().join("bin");
-    fs::create_dir_all(&bin).unwrap();
     let fj_args = fixture.root.path().join("fj-args");
-    fs::write(
+    install_test_script(
         bin.join("fj"),
         format!(
             "#!/bin/sh\nprintf '%s\\0' \"$@\" > {}\nprintf 'Top change #7\\nBy user — Open — +1 -0\\nFrom `stack/top` into `stack/base`\\n'\n",
             fj_args.display()
         ),
-    )
-    .unwrap();
-    fs::set_permissions(bin.join("fj"), fs::Permissions::from_mode(0o755)).unwrap();
+    );
     let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap());
     let review = |target: &[&str]| {
         fixture
@@ -2968,7 +2957,7 @@ fn execution_and_hooks_restore_terminal_settings_after_exit_and_stop() {
     let fixture = Fixture::new();
     let workspace = fixture.add("terminal");
     let agent = fixture.root.path().join("raw-agent.py");
-    fs::write(
+    install_test_script(
         &agent,
         r#"#!/usr/bin/env python3
 import os, pathlib, signal, sys, time, tty
@@ -2988,12 +2977,9 @@ if mode == 'killed':
 while True:
     time.sleep(0.01)
 "#,
-    )
-    .unwrap();
-    fs::set_permissions(&agent, fs::Permissions::from_mode(0o755)).unwrap();
+    );
     let setup = Path::new(workspace["path"].as_str().unwrap()).join("setup.sh");
-    fs::write(&setup, "#!/bin/sh\nexit 0\n").unwrap();
-    fs::set_permissions(&setup, fs::Permissions::from_mode(0o755)).unwrap();
+    install_test_script(&setup, "#!/bin/sh\nexit 0\n");
     fs::write(
         Path::new(workspace["path"].as_str().unwrap()).join(".shoal.toml"),
         format!(
@@ -3237,7 +3223,7 @@ fn add_starts_agents_only_after_creation_and_preserves_workspace_on_exit() {
     let directive = fixture.root.path().join("directive");
     for agent in ["codex", "claude"] {
         let stub = bin.join(agent);
-        fs::write(
+        install_test_script_with_mode(
             &stub,
             r#"#!/bin/sh
 "$SHOAL_TEST_BIN" --state-dir "$SHOAL_TEST_STATE" --json inspect "$SHOAL_TEST_NAME" > "$SHOAL_TEST_INSPECTION" || exit 99
@@ -3246,9 +3232,8 @@ test -z "$SHOAL_SHELL_DIRECTIVE" || exit 97
 printf '%s\n' "$PWD" "$SHOAL_WORKSPACE" "$@"
 exit 7
 "#,
-        )
-        .unwrap();
-        fs::set_permissions(&stub, fs::Permissions::from_mode(0o700)).unwrap();
+            0o700,
+        );
     }
     let config_dir = fixture.root.path().join(".config/shoal");
     fs::create_dir_all(&config_dir).unwrap();
@@ -3383,14 +3368,12 @@ fn codex_default_mode_is_read_at_launch_and_explicit_modes_override_it() {
     let workspace = fixture.add("default-mode");
     let path = workspace["path"].as_str().unwrap();
     let bin = fixture.root.path().join("codex-bin");
-    fs::create_dir(&bin).unwrap();
     let stub = bin.join("codex");
-    fs::write(
+    install_test_script_with_mode(
         &stub,
         "#!/bin/sh\nprintf '%s\\n' \"$SHOAL_WORKSPACE\" \"$@\"\nexit 7\n",
-    )
-    .unwrap();
-    fs::set_permissions(&stub, fs::Permissions::from_mode(0o700)).unwrap();
+        0o700,
+    );
 
     let config_dir = fixture.root.path().join(".config/shoal");
     fs::create_dir_all(&config_dir).unwrap();
@@ -3485,15 +3468,13 @@ fn agent_shortcuts_forward_arguments_without_starting_real_agents() {
     let fixture = Fixture::new();
     let workspace = fixture.add("shortcut");
     let bin = fixture.root.path().join("stub-bin");
-    fs::create_dir(&bin).unwrap();
     for agent in ["claude", "codex"] {
         let path = bin.join(agent);
-        fs::write(
+        install_test_script_with_mode(
             &path,
             "#!/bin/sh\nprintf '%s\\n' \"$SHOAL_WORKSPACE\" \"$@\"\n",
-        )
-        .unwrap();
-        fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
+            0o700,
+        );
         let mut command = fixture.command();
         command.arg(agent);
         if agent == "codex" {
@@ -3556,11 +3537,9 @@ fn agent_templates_resolve_per_launch_and_reach_native_instruction_options() {
     )
     .unwrap();
     let bin = fixture.root.path().join("template-bin");
-    fs::create_dir(&bin).unwrap();
     for agent in ["codex", "claude"] {
         let stub = bin.join(agent);
-        fs::write(&stub, "#!/bin/sh\nprintf '%s\\0' \"$@\"\n").unwrap();
-        fs::set_permissions(stub, fs::Permissions::from_mode(0o700)).unwrap();
+        install_test_script_with_mode(&stub, "#!/bin/sh\nprintf '%s\\0' \"$@\"\n", 0o700);
     }
     for (index, expected) in [
         "global instructions instructions".to_owned(),
@@ -3986,15 +3965,12 @@ fn workspace_targets_precede_directory_and_picker_fallback() {
     let nested = Path::new(own["path"].as_str().unwrap()).join("nested");
     fs::create_dir(&nested).unwrap();
     let bin = fixture.root.path().join("bin");
-    fs::create_dir(&bin).unwrap();
     let picked = fixture.root.path().join("picked");
     let fzf = bin.join("fzf");
-    fs::write(
+    install_test_script(
         &fzf,
         "#!/bin/sh\ntouch \"$HOME/picked\"\nawk -F '\\t' -v id=\"$PICK_ID\" '$1 == id {print}'\n",
-    )
-    .unwrap();
-    fs::set_permissions(fzf, fs::Permissions::from_mode(0o755)).unwrap();
+    );
 
     for action in ["inspect", "stop"] {
         for (cwd, explicit, json, expected, picker) in [
@@ -4064,8 +4040,7 @@ fn workspace_commands_select_from_a_deleted_current_directory() {
     let picked = fixture.root.path().join("picked");
     let fzf = bin.join("fzf");
     // Bash reports getcwd failures at startup if the picker inherits a deleted cwd.
-    fs::write(&fzf, "#!/bin/bash\npwd -P > \"$HOME/picked\"\ncat\n").unwrap();
-    fs::set_permissions(fzf, fs::Permissions::from_mode(0o755)).unwrap();
+    install_test_script(&fzf, "#!/bin/bash\npwd -P > \"$HOME/picked\"\ncat\n");
 
     for (args, interactive, expect_report) in [
         (vec!["doctor"], true, true),
@@ -4472,15 +4447,12 @@ fn configured_ports_are_lazy_and_conflicts_require_acceptance() {
 fn execution_scope_limits_management_and_expires() {
     let fixture = Fixture::new();
     let setup = fixture.repo.join("setup.sh");
-    fs::write(&setup, "#!/bin/sh\nprintf setup >> setup-runs\n").unwrap();
-    fs::set_permissions(&setup, fs::Permissions::from_mode(0o755)).unwrap();
+    install_test_script(&setup, "#!/bin/sh\nprintf setup >> setup-runs\n");
     let post_setup = fixture.repo.join("post-setup.sh");
-    fs::write(
+    install_test_script(
         &post_setup,
         "#!/bin/sh\ntest -z \"$SHOAL_SCOPE_TOKEN\" || exit 81\ntest -z \"$SHOAL_EXECUTION_ID\" || exit 82\ntest -z \"$SHOAL_RESERVED_PORT_ENV\" || exit 83\ntest -z \"$SHOAL_PORT_WEB\" || exit 84\nprintf hook >> hook-runs\nsleep 30 < /dev/null > /dev/null 2>&1 &\n",
-    )
-    .unwrap();
-    fs::set_permissions(&post_setup, fs::Permissions::from_mode(0o755)).unwrap();
+    );
     commit_resource_config(
         &fixture.repo,
         "setup_cmd = 'setup.sh'\npost_setup_cmd = 'post-setup.sh'\n",
@@ -4626,8 +4598,7 @@ fn execution_scope_limits_management_and_expires() {
 fn setup_commands_cannot_recursively_run_setup() {
     let fixture = Fixture::new();
     let setup = fixture.repo.join("setup.sh");
-    fs::write(&setup, "#!/bin/sh\nexit 0\n").unwrap();
-    fs::set_permissions(&setup, fs::Permissions::from_mode(0o755)).unwrap();
+    install_test_script(&setup, "#!/bin/sh\nexit 0\n");
     commit_resource_config(&fixture.repo, "setup_cmd = 'setup.sh'\n");
     let worker = fixture.add("worker");
     let setup = Path::new(worker["path"].as_str().unwrap()).join("setup.sh");
@@ -6830,7 +6801,7 @@ fn menu_bindings_preserve_enter_inspect_cancel_and_scope() {
     let picker = bin.join("fzf");
     for scoped in [false, true] {
         for key in ["", "ctrl-o", "ctrl-z", "cancel"] {
-            fs::write(
+            install_test_script(
                 &picker,
                 format!(
                     r#"#!/bin/sh
@@ -6841,9 +6812,7 @@ printf '%s\n' '{key}'
 head -n 1 "$HOME/picker-input"
 "#
                 ),
-            )
-            .unwrap();
-            fs::set_permissions(&picker, fs::Permissions::from_mode(0o755)).unwrap();
+            );
             let args = if scoped {
                 vec!["exec", "menu-worker", "--", env!("CARGO_BIN_EXE_shoal")]
             } else {
@@ -6978,10 +6947,11 @@ fn cd_always_picks_even_inside_a_workspace_and_cancel_does_not_navigate() {
         .unwrap();
     assert!(!failed.status.success());
     let bin = fixture.root.path().join("bin");
-    fs::create_dir_all(&bin).unwrap();
     let fzf = bin.join("fzf");
-    fs::write(&fzf, "#!/bin/sh\ncat > \"$SHOAL_TEST_PICK_INPUT\"\n[ \"$SHOAL_TEST_PICK_ID\" != cancel ] || exit 130\nawk -F '\\t' -v id=\"$SHOAL_TEST_PICK_ID\" '$1 == id { print }' \"$SHOAL_TEST_PICK_INPUT\"\n").unwrap();
-    fs::set_permissions(&fzf, fs::Permissions::from_mode(0o755)).unwrap();
+    install_test_script(
+        &fzf,
+        "#!/bin/sh\ncat > \"$SHOAL_TEST_PICK_INPUT\"\n[ \"$SHOAL_TEST_PICK_ID\" != cancel ] || exit 130\nawk -F '\\t' -v id=\"$SHOAL_TEST_PICK_ID\" '$1 == id { print }' \"$SHOAL_TEST_PICK_INPUT\"\n",
+    );
     let directive = fixture.root.path().join("cd-directive");
     let input = fixture.root.path().join("picker-input");
     for choice in [second["id"].as_str().unwrap(), "cancel"] {
@@ -8005,11 +7975,13 @@ fn desktop_shortcuts_open_workspaces_without_cli_flags_or_execution_records() {
     let workspace = fixture.add("desktop");
     let path = workspace["path"].as_str().unwrap();
     let bin = fixture.root.path().join("desktop-bin");
-    fs::create_dir(&bin).unwrap();
     for program in ["codex", "t3"] {
         let stub = bin.join(program);
-        fs::write(&stub, "#!/bin/sh\nprintf '%s\\n' \"$PWD\" \"$@\"\nexit 7\n").unwrap();
-        fs::set_permissions(&stub, fs::Permissions::from_mode(0o700)).unwrap();
+        install_test_script_with_mode(
+            &stub,
+            "#!/bin/sh\nprintf '%s\\n' \"$PWD\" \"$@\"\nexit 7\n",
+            0o700,
+        );
         for explicit in [true, false] {
             let mut command = fixture.command();
             command.arg(program);
@@ -8312,12 +8284,10 @@ fn removal_picker_keeps_or_deletes_the_selected_branch_and_can_cancel() {
         let workspace = fixture.add(name);
         let path = Path::new(workspace["path"].as_str().unwrap());
         fs::write(path.join("uncommitted"), "requires a branch choice").unwrap();
-        fs::write(
+        install_test_script(
             &picker,
             format!("#!/bin/sh\nawk -F '\\t' '$2 ~ /^{label} / {{ print }}'\n"),
-        )
-        .unwrap();
-        fs::set_permissions(&picker, fs::Permissions::from_mode(0o755)).unwrap();
+        );
         let (output, transcript) = fixture.interactive(&["rm", name], "y\n");
         assert_eq!(output.status.success(), label != "Cancel", "{transcript}");
         assert_eq!(path.exists(), label == "Cancel");
@@ -8704,7 +8674,7 @@ fn repository_removal_preserves_resources_on_failure_and_retries_after_restart()
 fn setup_cmd_resolves_worktree_paths_and_runs_before_agents() {
     let fixture = Fixture::new();
     let script = "setup 'literal' $name.sh";
-    fs::write(
+    install_test_script(
         fixture.repo.join(script),
         r#"#!/bin/sh
 printf 'setup output\n'
@@ -8712,18 +8682,13 @@ printf '%s' "$PWD" > setup-cwd
 printf '%s' "$SHOAL_WORKSPACE" > setup-workspace
 "$SHOAL_TEST_BIN" --json status > during-setup.json || exit 91
 "#,
-    )
-    .unwrap();
-    fs::set_permissions(fixture.repo.join(script), fs::Permissions::from_mode(0o755)).unwrap();
+    );
     commit_resource_config(&fixture.repo, &format!("setup_cmd = {script:?}\n"));
     let bin = fixture.root.path().join("bin");
-    fs::create_dir_all(&bin).unwrap();
-    fs::write(
+    install_test_script(
         bin.join("codex"),
         "#!/bin/sh\ntest -f setup-cwd || exit 92\nprintf agent > agent-started\n",
-    )
-    .unwrap();
-    fs::set_permissions(bin.join("codex"), fs::Permissions::from_mode(0o755)).unwrap();
+    );
     let output = fixture
         .command()
         .args([
@@ -8764,12 +8729,10 @@ fn setup_cmd_local_override_absolute_path_failure_and_retry() {
     let fixture = Fixture::new();
     commit_resource_config(&fixture.repo, "setup_cmd = 'must-not-run'\n");
     let script = fixture.root.path().join("system setup.sh");
-    fs::write(
+    install_test_script(
         &script,
         "#!/bin/sh\nprintf partial > setup-result\nexit 17\n",
-    )
-    .unwrap();
-    fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
+    );
     let input = fixture.root.path().join("local.toml");
     fs::write(
         &input,
@@ -8784,13 +8747,10 @@ fn setup_cmd_local_override_absolute_path_failure_and_retry() {
         input.to_str().unwrap(),
     ]);
     let bin = fixture.root.path().join("bin");
-    fs::create_dir_all(&bin).unwrap();
-    fs::write(
+    install_test_script(
         bin.join("claude"),
         "#!/bin/sh\nprintf agent > agent-started\n",
-    )
-    .unwrap();
-    fs::set_permissions(bin.join("claude"), fs::Permissions::from_mode(0o755)).unwrap();
+    );
     let output = fixture.run(&[
         "--json",
         "add",
@@ -8856,13 +8816,10 @@ fn setup_failure_prompt_ignores_or_deletes_only_new_workspace() {
     fixture.add("existing");
     commit_resource_config(&fixture.repo, "setup_cmd = 'missing-script'\n");
     let bin = fixture.root.path().join("bin");
-    fs::create_dir_all(&bin).unwrap();
-    fs::write(
+    install_test_script(
         bin.join("codex"),
         "#!/bin/sh\nprintf agent > agent-started\n",
-    )
-    .unwrap();
-    fs::set_permissions(bin.join("codex"), fs::Permissions::from_mode(0o755)).unwrap();
+    );
     let config = fixture.root.path().join(".config/shoal");
     fs::create_dir_all(&config).unwrap();
     fs::write(
@@ -8998,16 +8955,10 @@ Path('setup-result').write_text('complete')
 #[test]
 fn setup_interruption_preserves_work_and_blocks_concurrent_execution() {
     let mut fixture = Fixture::new();
-    fs::write(
+    install_test_script(
         fixture.repo.join("setup.sh"),
         "#!/bin/sh\nprintf partial > setup-started\nwhile :; do sleep 1; done\n",
-    )
-    .unwrap();
-    fs::set_permissions(
-        fixture.repo.join("setup.sh"),
-        fs::Permissions::from_mode(0o755),
-    )
-    .unwrap();
+    );
     commit_resource_config(&fixture.repo, "setup_cmd = 'setup.sh'\n");
     let mut add = fixture
         .command()
@@ -9095,8 +9046,7 @@ test ! -f fail-removal || { echo 'session still busy' >&2; exit 3; }
         ),
     ];
     for (name, body) in scripts {
-        fs::write(fixture.repo.join(name), body).unwrap();
-        fs::set_permissions(fixture.repo.join(name), fs::Permissions::from_mode(0o755)).unwrap();
+        install_test_script(fixture.repo.join(name), body);
     }
     commit_resource_config(
         &fixture.repo,
@@ -9126,13 +9076,10 @@ test ! -f fail-removal || { echo 'session still busy' >&2; exit 3; }
 
     // A failing hook keeps the ready workspace and does not start the agent.
     let bin = home.join("bin");
-    fs::create_dir_all(&bin).unwrap();
-    fs::write(
+    install_test_script(
         bin.join("codex"),
         "#!/bin/sh\nprintf agent > agent-started\n",
-    )
-    .unwrap();
-    fs::set_permissions(bin.join("codex"), fs::Permissions::from_mode(0o755)).unwrap();
+    );
     let output = fixture
         .command()
         .args([
@@ -9195,9 +9142,7 @@ fn claude_launch_trusts_workspace_and_repository_directories() {
     let directory = fs::canonicalize(repository["workspaces_dir"].as_str().unwrap()).unwrap();
     let keys = [path.as_path(), directory.as_path(), fixture.repo.as_path()];
     let bin = home.join("bin");
-    fs::create_dir_all(&bin).unwrap();
-    fs::write(bin.join("claude"), "#!/bin/sh\nexit 0\n").unwrap();
-    fs::set_permissions(bin.join("claude"), fs::Permissions::from_mode(0o755)).unwrap();
+    install_test_script(bin.join("claude"), "#!/bin/sh\nexit 0\n");
     let config = home.join(".claude.json");
 
     // First launch creates a trusted entry even before Claude has a config.
@@ -9274,14 +9219,11 @@ fn codex_launches_trust_workspace_and_repository_in_selected_config() {
     let directory = fs::canonicalize(repository["workspaces_dir"].as_str().unwrap()).unwrap();
     let keys = [path.as_path(), directory.as_path(), fixture.repo.as_path()];
     let bin = home.join("bin");
-    fs::create_dir_all(&bin).unwrap();
     // Inspect the config from the child so trust must precede the launch.
-    fs::write(
+    install_test_script(
         bin.join("codex"),
         "#!/bin/sh\ncat \"${CODEX_HOME:-$HOME/.codex}/config.toml\"\n",
-    )
-    .unwrap();
-    fs::set_permissions(bin.join("codex"), fs::Permissions::from_mode(0o755)).unwrap();
+    );
     let config = home.join(".codex/config.toml");
     for mode in [None, Some("--cli"), Some("--app")] {
         for overridden in [false, true] {
@@ -9341,20 +9283,21 @@ fn codex_launches_trust_workspace_and_repository_in_selected_config() {
 fn add_from_issue_uses_existing_forge_cli_and_passes_context_to_agents() {
     let fixture = Fixture::with_config(Some("[codex]\ndefault_mode = 'app'\n"));
     let bin = fixture.root.path().join("issue-bin");
-    fs::create_dir(&bin).unwrap();
     for tool in ["gh", "fj"] {
         let script = bin.join(tool);
-        fs::write(&script, "#!/bin/sh\nprintf '%s\\0' \"$@\" > \"$ISSUE_ARGS\"\npwd > \"$ISSUE_CWD\"\ncat \"$ISSUE_RESPONSE\"\n").unwrap();
-        fs::set_permissions(&script, fs::Permissions::from_mode(0o700)).unwrap();
+        install_test_script_with_mode(
+            &script,
+            "#!/bin/sh\nprintf '%s\\0' \"$@\" > \"$ISSUE_ARGS\"\npwd > \"$ISSUE_CWD\"\ncat \"$ISSUE_RESPONSE\"\n",
+            0o700,
+        );
     }
     for tool in ["codex", "claude"] {
         let script = bin.join(tool);
-        fs::write(
+        install_test_script_with_mode(
             &script,
             "#!/bin/sh\nprintf '%s\\0' \"$@\" > \"$AGENT_ARGS\"\n",
-        )
-        .unwrap();
-        fs::set_permissions(&script, fs::Permissions::from_mode(0o700)).unwrap();
+            0o700,
+        );
     }
     let response = fixture.root.path().join("issue-response");
     let issue_args = fixture.root.path().join("issue-args");
@@ -9500,8 +9443,7 @@ printf '%s' '{"state":"OPEN","number":44,"title":"Literal {body}","body":"$(fals
         ),
     ] {
         let path = bin.join(tool);
-        fs::write(&path, script).unwrap();
-        fs::set_permissions(path, fs::Permissions::from_mode(0o700)).unwrap();
+        install_test_script_with_mode(&path, script, 0o700);
     }
     fixture.add_github_origin();
     for (index, expected) in [
@@ -9595,22 +9537,19 @@ fn add_item_finds_the_repository_and_starts_the_default_agent() {
     fixture.ok(&["repo", "add", other.to_str().unwrap()]);
     fixture.add_github_origin();
     let bin = fixture.root.path().join("issue-bin");
-    fs::create_dir(&bin).unwrap();
     let gh = bin.join("gh");
-    fs::write(
+    install_test_script_with_mode(
         &gh,
         "#!/bin/sh\nprintf '%s\\0' \"$@\" > \"$ISSUE_ARGS\"\ncat \"$ISSUE_RESPONSE\"\n",
-    )
-    .unwrap();
-    fs::set_permissions(&gh, fs::Permissions::from_mode(0o700)).unwrap();
+        0o700,
+    );
     for tool in ["codex", "claude"] {
         let script = bin.join(tool);
-        fs::write(
+        install_test_script_with_mode(
             &script,
             "#!/bin/sh\nprintf '%s\\0' \"$(basename \"$0\")\" \"$@\" > \"$AGENT_ARGS\"\n",
-        )
-        .unwrap();
-        fs::set_permissions(&script, fs::Permissions::from_mode(0o700)).unwrap();
+            0o700,
+        );
     }
     let response = fixture.root.path().join("issue-response");
     let issue_args = fixture.root.path().join("issue-args");
@@ -9795,8 +9734,7 @@ awk -F '\t' -v choice="$choice" '$2 == choice {print}' "$HOME/picker-input"
         ),
     ] {
         let path = bin.join(tool);
-        fs::write(&path, script).unwrap();
-        fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
+        install_test_script(&path, script);
     }
     let agent_args = fixture.root.path().join("agent-args");
     for choice in ["cancel", "No agent", "codex", "none"] {
@@ -9866,8 +9804,7 @@ fn issue_number_picks_a_repository_before_lookup_interactively() {
         ),
     ] {
         let path = bin.join(tool);
-        fs::write(&path, script).unwrap();
-        fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
+        install_test_script(&path, script);
     }
     let (output, transcript) = fixture.interactive(&["add", "103", "--base", "HEAD"], "");
     assert!(!output.status.success(), "{output:?}\n{transcript}");
@@ -9901,8 +9838,7 @@ fn issue_lookup_errors_never_create_a_workspace() {
         .unwrap();
     std::os::unix::fs::symlink(git, bin.join("git")).unwrap();
     // Agents are checked before the issue lookup these cases exercise.
-    fs::write(bin.join("codex"), "#!/bin/sh\n").unwrap();
-    fs::set_permissions(bin.join("codex"), fs::Permissions::from_mode(0o700)).unwrap();
+    install_test_script_with_mode(bin.join("codex"), "#!/bin/sh\n", 0o700);
     let tool = bin.join("gh");
     for (input, script, diagnostic) in [
         ("4", None, "install it"),
@@ -9923,8 +9859,7 @@ fn issue_lookup_errors_never_create_a_workspace() {
         ),
     ] {
         if let Some(script) = script {
-            fs::write(&tool, script).unwrap();
-            fs::set_permissions(&tool, fs::Permissions::from_mode(0o700)).unwrap();
+            install_test_script_with_mode(&tool, script, 0o700);
         } else if tool.exists() {
             fs::remove_file(&tool).unwrap();
         }
@@ -9949,12 +9884,11 @@ fn issue_lookup_errors_never_create_a_workspace() {
         assert_eq!(fixture.ok(&["ls"]), serde_json::json!([]));
     }
     // A found issue still needs an agent before anything is created.
-    fs::write(
+    install_test_script_with_mode(
         &tool,
         "#!/bin/sh\necho '{\"state\":\"OPEN\",\"number\":4,\"title\":\"Four\",\"body\":\"\"}'\n",
-    )
-    .unwrap();
-    fs::set_permissions(&tool, fs::Permissions::from_mode(0o700)).unwrap();
+        0o700,
+    );
     for (args, diagnostic) in [
         (
             vec!["add", "--issue", "https://github.com/team/other/issues/4"],
@@ -10044,7 +9978,7 @@ fn issues_reopen_their_branch_and_report_conflicts_before_picking_an_agent() {
     let fixture = Fixture::with_config(Some("[commands]\npi = ['sh', '-c', 'exit 0']\n"));
     fixture.add_github_origin();
     install_test_script(
-        &fixture.root.path().join("bin/gh"),
+        fixture.root.path().join("bin/gh"),
         "#!/bin/sh\necho '{\"state\":\"OPEN\",\"number\":34,\"title\":\"Fix API timeout\",\"body\":\"\"}'\n",
     );
     let repo = fixture.repo.to_str().unwrap();
@@ -10092,8 +10026,7 @@ fn add_existing_branch_runs_setup_once_and_denies_scoped_creation() {
     let fixture = Fixture::new();
     for hook in ["setup", "post"] {
         let path = fixture.repo.join(hook);
-        fs::write(&path, format!("#!/bin/sh\necho {hook} >> runs\n")).unwrap();
-        fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
+        install_test_script(&path, format!("#!/bin/sh\necho {hook} >> runs\n"));
     }
     fs::write(
         fixture.repo.join(".shoal.toml"),
@@ -10181,10 +10114,11 @@ fn interactive_add_picks_existing_branch_and_reopens_workspace() {
     let fixture = Fixture::new();
     git(&fixture.repo, &["branch", "coworker/topic"]);
     let bin = fixture.root.path().join("bin");
-    fs::create_dir_all(&bin).unwrap();
     let picker = bin.join("fzf");
-    fs::write(&picker, "#!/bin/sh\nawk -F '\\t' '$2 == \"Use an existing branch\" || $1 == \"refs/heads/coworker/topic\" {print}'\n").unwrap();
-    fs::set_permissions(&picker, fs::Permissions::from_mode(0o755)).unwrap();
+    install_test_script(
+        &picker,
+        "#!/bin/sh\nawk -F '\\t' '$2 == \"Use an existing branch\" || $1 == \"refs/heads/coworker/topic\" {print}'\n",
+    );
     let directive = fixture.root.path().join("destination");
     for _ in 0..2 {
         let (_master, slave) = pty::open();
@@ -10219,7 +10153,7 @@ fn interactive_add_picks_an_open_issue_or_pull_request() {
     // An existing branch avoids refreshing the default branch from GitHub.
     git(&fixture.repo, &["branch", "issue-34-fix-api-timeout"]);
     install_test_script(
-        &fixture.root.path().join("bin/gh"),
+        fixture.root.path().join("bin/gh"),
         r#"#!/bin/sh
 case "$1 $2" in
  'issue list') echo '[{"number":34,"title":"Fix API timeout"},{"number":35,"title":"Other"}]';;
@@ -10235,9 +10169,7 @@ esac
     let add = |choice: &str, item: &str| {
         install_test_script(
             &picker,
-            &format!(
-                "#!/bin/sh\nawk -F '\\t' '$2 == \"{choice}\" || $2 ~ /^#{item} / {{print}}'\n"
-            ),
+            format!("#!/bin/sh\nawk -F '\\t' '$2 == \"{choice}\" || $2 ~ /^#{item} / {{print}}'\n"),
         );
         let (mut master, slave) = pty::open();
         let _drain = slave.try_clone().unwrap();
@@ -10272,10 +10204,7 @@ esac
     );
     assert_eq!(fixture.ok(&["ls"]).as_array().unwrap().len(), 2);
 
-    install_test_script(
-        &fixture.root.path().join("bin/gh"),
-        "#!/bin/sh\necho '[]'\n",
-    );
+    install_test_script(fixture.root.path().join("bin/gh"), "#!/bin/sh\necho '[]'\n");
     let (output, transcript) = add("Use a pull request", "7");
     assert!(!output.status.success());
     assert!(transcript.contains("no open pull requests"), "{transcript}");
@@ -10287,7 +10216,7 @@ fn link_picks_an_omitted_open_issue_or_pull_request() {
     fixture.add("topic");
     fixture.add_github_origin();
     install_test_script(
-        &fixture.root.path().join("bin/gh"),
+        fixture.root.path().join("bin/gh"),
         r#"#!/bin/sh
 case "$1 $2" in
  'issue list') echo '[{"number":34,"title":"Fix API timeout"}]';;
@@ -10307,9 +10236,7 @@ esac
     ] {
         install_test_script(
             &picker,
-            &format!(
-                "#!/bin/sh\nawk -F '\\t' '$2 == \"{kind}\" || $1 == \"{number}\" {{print}}'\n"
-            ),
+            format!("#!/bin/sh\nawk -F '\\t' '$2 == \"{kind}\" || $1 == \"{number}\" {{print}}'\n"),
         );
         let (output, transcript) = fixture.interactive_command(fixture.command().args(&args), "");
         assert!(output.status.success(), "{output:?} {transcript}");
@@ -10428,7 +10355,7 @@ fn pr_cleanup_can_be_disabled_independently() {
     // Linking does not depend on PR cleanup.
     fixture.add_github_origin();
     install_test_script(
-        &fixture.root.path().join("bin/gh"),
+        fixture.root.path().join("bin/gh"),
         "#!/bin/sh\necho '{\"number\":7,\"state\":\"OPEN\",\"headRefName\":\"keep\",\"commits\":[]}'\n",
     );
     fixture.ok(&["link", "pr", "7", "--workspace", "keep"]);
@@ -10589,9 +10516,7 @@ fn pr_watch_checks_github_state_and_commit_and_survives_restart() {
         ],
     );
     let bin = fixture.root.path().join("bin");
-    fs::create_dir(&bin).unwrap();
-    fs::write(bin.join("gh"), "#!/bin/sh\ncat \"$HOME/pr.json\"\n").unwrap();
-    fs::set_permissions(bin.join("gh"), fs::Permissions::from_mode(0o755)).unwrap();
+    install_test_script(bin.join("gh"), "#!/bin/sh\ncat \"$HOME/pr.json\"\n");
     let failed = fixture.run(&[
         "link",
         "pr",
@@ -10720,9 +10645,10 @@ fn pr_watch_checks_forgejo_merge_and_commits_with_fixture_cli() {
         ],
     );
     let bin = fixture.root.path().join("bin");
-    fs::create_dir(&bin).unwrap();
-    fs::write(bin.join("fj"), "#!/bin/sh\nfor arg; do last=$arg; done\nif [ \"$last\" = commits ]; then cat \"$HOME/commits\"; else printf 'Title #56\\nBy user — Merged — +1 -0\\nFrom `fj-watch` into `main`\\n'; fi\n").unwrap();
-    fs::set_permissions(bin.join("fj"), fs::Permissions::from_mode(0o755)).unwrap();
+    install_test_script(
+        bin.join("fj"),
+        "#!/bin/sh\nfor arg; do last=$arg; done\nif [ \"$last\" = commits ]; then cat \"$HOME/commits\"; else printf 'Title #56\\nBy user — Merged — +1 -0\\nFrom `fj-watch` into `main`\\n'; fi\n",
+    );
     let head = git(
         Path::new(workspace["path"].as_str().unwrap()),
         &["rev-parse", "HEAD"],
@@ -10746,9 +10672,10 @@ fn pr_wait_wakes_for_individual_ci_reviews_and_conflicts_with_own_scope() {
     fixture.add("other");
     fixture.add_github_origin();
     let bin = fixture.root.path().join("bin");
-    fs::create_dir(&bin).unwrap();
-    fs::write(bin.join("gh"), "#!/bin/sh\nif [ \"$1\" = api ]; then cat \"$HOME/inline.json\"; else cat \"$HOME/pr.json\"; fi\n").unwrap();
-    fs::set_permissions(bin.join("gh"), fs::Permissions::from_mode(0o755)).unwrap();
+    install_test_script(
+        bin.join("gh"),
+        "#!/bin/sh\nif [ \"$1\" = api ]; then cat \"$HOME/inline.json\"; else cat \"$HOME/pr.json\"; fi\n",
+    );
     let mut pull = serde_json::json!({"number":7,"state":"OPEN","headRefName":"watch","headRefOid":"head",
     "commits":[],"comments":[],"reviews":[],"mergeable":"MERGEABLE",
     "statusCheckRollup":[
@@ -10830,10 +10757,9 @@ fn a_newer_pr_wait_supersedes_the_older_one_without_taking_its_updates() {
     fixture.add("waits");
     fixture.add_github_origin();
     let bin = fixture.root.path().join("bin");
-    fs::create_dir(&bin).unwrap();
     // Lookups after linking block until released, so the first wait is still polling when
     // the second starts.
-    fs::write(
+    install_test_script(
         bin.join("gh"),
         r#"#!/bin/sh
 if [ -f "$HOME/block" ]; then
@@ -10842,9 +10768,7 @@ if [ -f "$HOME/block" ]; then
 fi
 if [ "$1" = api ]; then printf '[]'; else cat "$HOME/pr.json"; fi
 "#,
-    )
-    .unwrap();
-    fs::set_permissions(bin.join("gh"), fs::Permissions::from_mode(0o755)).unwrap();
+    );
     fs::write(fixture.root.path().join("pr.json"), serde_json::json!({"number":7,"state":"OPEN","headRefName":"waits","headRefOid":"head",
         "commits":[],"comments":[{"id":1,"body":"review"}],"reviews":[],"statusCheckRollup":[],"mergeable":"MERGEABLE"}).to_string()).unwrap();
     fixture.ok(&["link", "pr", "7", "--workspace", "waits"]);
@@ -10893,8 +10817,7 @@ fn unified_items_link_filter_and_watch_explicit_targets_without_completion() {
     fixture.add("other");
     fixture.add_github_origin();
     let bin = fixture.root.path().join("bin");
-    fs::create_dir(&bin).unwrap();
-    fs::write(
+    install_test_script(
         bin.join("gh"),
         r#"#!/bin/sh
 case "$1" in
@@ -10903,9 +10826,7 @@ case "$1" in
  *) cat "$HOME/pr.json";;
 esac
 "#,
-    )
-    .unwrap();
-    fs::set_permissions(bin.join("gh"), fs::Permissions::from_mode(0o755)).unwrap();
+    );
     let issue_file = fixture.root.path().join("issue.json");
     let write_issue = |number, body: &str| {
         fs::write(
@@ -11041,8 +10962,7 @@ fn watch_explicit_forgejo_fork_pr_without_linking_or_checkout() {
         ],
     );
     let bin = fixture.root.path().join("bin");
-    fs::create_dir(&bin).unwrap();
-    fs::write(
+    install_test_script(
         bin.join("fj"),
         r#"#!/bin/sh
 for arg; do last=$arg; done
@@ -11056,9 +10976,7 @@ case "$*" in
     esac;;
 esac
 "#,
-    )
-    .unwrap();
-    fs::set_permissions(bin.join("fj"), fs::Permissions::from_mode(0o755)).unwrap();
+    );
     let watched = fixture.ok(&["watch", "pr", "7", "--workspace", "items"]);
     let updates = watched["updates"].as_array().unwrap();
     assert_eq!(updates.len(), 2);
@@ -11094,16 +11012,13 @@ fn watch_forgejo_issue_reports_comments_closure_and_reopening() {
         ],
     );
     let bin = fixture.root.path().join("bin");
-    fs::create_dir(&bin).unwrap();
-    fs::write(
+    install_test_script(
         bin.join("fj"),
         r#"#!/bin/sh
 for arg; do last=$arg; done
 if [ "$last" = comments ]; then cat "$HOME/comments"; else cat "$HOME/issue"; fi
 "#,
-    )
-    .unwrap();
-    fs::set_permissions(bin.join("fj"), fs::Permissions::from_mode(0o755)).unwrap();
+    );
     let state = |state| {
         fs::write(
             fixture.root.path().join("issue"),
@@ -11144,8 +11059,7 @@ fn pr_wait_reads_forgejo_ci_from_the_api_when_fj_status_fails() {
         ],
     );
     let bin = fixture.root.path().join("bin");
-    fs::create_dir(&bin).unwrap();
-    fs::write(
+    install_test_script(
         bin.join("fj"),
         r#"#!/bin/sh
 case " $* " in
@@ -11155,10 +11069,9 @@ case " $* " in
  *) printf 'Title #7\nBy user — Open — +1 -0\nFrom `api` into `main`\n';;
 esac
 "#,
-    )
-    .unwrap();
+    );
     let curl_args = fixture.root.path().join("curl-args");
-    fs::write(
+    install_test_script(
         bin.join("curl"),
         format!(
             r#"#!/bin/sh
@@ -11173,11 +11086,7 @@ esac
 "#,
             curl_args.display()
         ),
-    )
-    .unwrap();
-    for tool in ["fj", "curl"] {
-        fs::set_permissions(bin.join(tool), fs::Permissions::from_mode(0o755)).unwrap();
-    }
+    );
     fixture.ok(&["link", "pr", "7", "--workspace", "api"]);
     let watched = fixture.ok(&["watch", "pr", "--workspace", "api"]);
     let updates = watched["updates"].as_array().unwrap();
@@ -11216,11 +11125,11 @@ fn pr_wait_reports_forgejo_reviews_when_status_lookup_fails() {
         ],
     );
     let bin = fixture.root.path().join("bin");
-    fs::create_dir(&bin).unwrap();
-    fs::write(bin.join("fj"), "#!/bin/sh\ncase \" $* \" in\n *' status '*) cat \"$HOME/status\";;\n *' review '*) cat \"$HOME/reviews\";;\n *' comments '*) cat \"$HOME/comments\";;\n *' commits '*) printf 'commit 1111111111111111111111111111111111111111\\n';;\n *) printf 'Title #7\\nBy user — Open — +1 -0\\nFrom `watch` into `main`\\n';;\nesac\n").unwrap();
-    fs::set_permissions(bin.join("fj"), fs::Permissions::from_mode(0o755)).unwrap();
-    fs::write(bin.join("curl"), "#!/bin/sh\nexit 22\n").unwrap();
-    fs::set_permissions(bin.join("curl"), fs::Permissions::from_mode(0o755)).unwrap();
+    install_test_script(
+        bin.join("fj"),
+        "#!/bin/sh\ncase \" $* \" in\n *' status '*) cat \"$HOME/status\";;\n *' review '*) cat \"$HOME/reviews\";;\n *' comments '*) cat \"$HOME/comments\";;\n *' commits '*) printf 'commit 1111111111111111111111111111111111111111\\n';;\n *) printf 'Title #7\\nBy user — Open — +1 -0\\nFrom `watch` into `main`\\n';;\nesac\n",
+    );
+    install_test_script(bin.join("curl"), "#!/bin/sh\nexit 22\n");
     fs::write(
         fixture.root.path().join("status"),
         "Open — Can be merged\n- Success — review/default\n- Pending — rust\n",
@@ -11265,12 +11174,10 @@ fn merged_rechecks_head_after_removal_hooks() {
             format!("{key} = 'hook.sh'\n[resources.signing]\n"),
         )
         .unwrap();
-        fs::write(fixture.repo.join("hook.sh"), "#!/bin/sh\ngit -c user.name=Test -c user.email=test@example.invalid commit --allow-empty -m 'hook work'\n").unwrap();
-        fs::set_permissions(
+        install_test_script(
             fixture.repo.join("hook.sh"),
-            fs::Permissions::from_mode(0o755),
-        )
-        .unwrap();
+            "#!/bin/sh\ngit -c user.name=Test -c user.email=test@example.invalid commit --allow-empty -m 'hook work'\n",
+        );
         git(&fixture.repo, &["add", "."]);
         git(
             &fixture.repo,
@@ -11303,20 +11210,14 @@ fn manual_auto_removal_rechecks_safety_after_hooks() {
             format!("{key} = 'hook.sh'\n[resources.signing]\n"),
         )
         .unwrap();
-        fs::write(
+        install_test_script(
             fixture.repo.join("hook.sh"),
             concat!(
                 "#!/bin/sh\n",
                 "git -c user.name=Test -c user.email=test@example.invalid ",
                 "commit --allow-empty -m 'hook work'\n",
             ),
-        )
-        .unwrap();
-        fs::set_permissions(
-            fixture.repo.join("hook.sh"),
-            fs::Permissions::from_mode(0o755),
-        )
-        .unwrap();
+        );
         git(&fixture.repo, &["add", "."]);
         git(
             &fixture.repo,
@@ -11405,13 +11306,10 @@ fn view_shows_linked_items_with_status_and_discussion() {
     fixture.add("view");
     fixture.add_github_origin();
     let bin = fixture.root.path().join("bin");
-    fs::create_dir(&bin).unwrap();
-    fs::write(
+    install_test_script(
         bin.join("gh"),
         "#!/bin/sh\ncase \"$1 $2\" in\n'issue view') [ \"$3\" = 3 ] && cat \"$HOME/issue.json\" || echo '{\"number\":3}';;\n'pr view') cat \"$HOME/pr.json\";;\n*) case \"$4\" in */reviews) cat \"$HOME/reviews.json\";; *) cat \"$HOME/inline.json\";; esac;;\nesac\n",
-    )
-    .unwrap();
-    fs::set_permissions(bin.join("gh"), fs::Permissions::from_mode(0o755)).unwrap();
+    );
     let root = fixture.root.path();
     // Longer than a protocol frame: lookups run in the CLI.
     let body = "Steps ".repeat(20_000);
@@ -11493,10 +11391,8 @@ fn stop_preserves_the_child_exit_status_when_group_inventory_fails() {
     let fixture = Fixture::new();
     fixture.add("worker");
     let bin = fixture.root.path().join("wrapper-bin");
-    fs::create_dir(&bin).unwrap();
     let ps = bin.join("ps");
-    fs::write(&ps, "#!/bin/sh\nexit 1\n").unwrap();
-    fs::set_permissions(&ps, fs::Permissions::from_mode(0o700)).unwrap();
+    install_test_script_with_mode(&ps, "#!/bin/sh\nexit 1\n", 0o700);
     let ready = fixture.root.path().join("ready");
     let wrapper = fixture
         .command()
@@ -11659,9 +11555,8 @@ fn land_interruptions_stop_merge_drivers_and_restore_the_default_checkout() {
 /// of output, and then waits to be stopped.
 fn install_fake_happy(fixture: &Fixture) -> PathBuf {
     let bin = fixture.root.path().join("bin");
-    fs::create_dir_all(&bin).unwrap();
     let script = bin.join("happy");
-    fs::write(
+    install_test_script_with_mode(
         &script,
         r#"#!/bin/sh
 {
@@ -11682,15 +11577,13 @@ if [ -n "$HAPPY_RECONNECT_SESSION_ID" ] && [ -n "$HAPPY_SERVER_URL" ]; then
 fi
 sleep 300
 "#,
-    )
-    .unwrap();
-    fs::set_permissions(&script, fs::Permissions::from_mode(0o700)).unwrap();
+        0o700,
+    );
     // Happy starts these itself; launches need them on PATH.
     for agent in ["claude", "codex"] {
         let path = bin.join(agent);
         if !path.exists() {
-            fs::write(&path, "#!/bin/sh\n").unwrap();
-            fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
+            install_test_script_with_mode(&path, "#!/bin/sh\n", 0o700);
         }
     }
     fixture.root.path().join("happy-record")
@@ -11872,15 +11765,14 @@ fn happy_issue_prompts_reach_claude_and_are_saved_for_codex() {
     let gh = fixture.root.path().join("bin/gh");
     let title = "Fix API timeout";
     let body = "Keep the connection alive.";
-    fs::write(
+    install_test_script_with_mode(
         &gh,
         format!(
             "#!/bin/sh\nprintf '%s' '{}'\n",
             serde_json::json!({"state":"OPEN", "number": 34, "title": title, "body": body})
         ),
-    )
-    .unwrap();
-    fs::set_permissions(&gh, fs::Permissions::from_mode(0o700)).unwrap();
+        0o700,
+    );
     fixture.add_github_origin();
     for agent in ["happy-claude", "happy-codex"] {
         let output = fixture
@@ -12223,8 +12115,7 @@ fn happy_codex_prompts_are_delivered_through_a_seeded_session() {
         requests
     );
     // An executable that cannot start fails only after seeding.
-    fs::write(&happy, "#!/nonexistent/interpreter\n").unwrap();
-    fs::set_permissions(&happy, fs::Permissions::from_mode(0o700)).unwrap();
+    install_test_script_with_mode(&happy, "#!/nonexistent/interpreter\n", 0o700);
     let output = launch_orphan();
     assert!(!output.status.success(), "{output:?}");
     let state = server.state();
@@ -12274,9 +12165,7 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
     ]);
     assert_ne!(moved["port"], taken);
     let bin = fixture.root.path().join("bin");
-    fs::create_dir(&bin).unwrap();
-    fs::write(bin.join("claude"), "#!/bin/sh\nexit 7\n").unwrap();
-    fs::set_permissions(bin.join("claude"), fs::Permissions::from_mode(0o755)).unwrap();
+    install_test_script(bin.join("claude"), "#!/bin/sh\nexit 7\n");
     let agent = fixture
         .command()
         .args(["claude", "waiter"])
@@ -12445,16 +12334,10 @@ fn git_profiles_layer_and_isolate_worktree_settings_before_setup() {
         git(personal_path, &["config", "user.email"]).trim(),
         "personal@example.invalid"
     );
-    fs::write(
+    install_test_script(
         fixture.repo.join("setup.sh"),
         "#!/bin/sh\ngit config user.email > setup-email\n",
-    )
-    .unwrap();
-    fs::set_permissions(
-        fixture.repo.join("setup.sh"),
-        fs::Permissions::from_mode(0o755),
-    )
-    .unwrap();
+    );
     commit_resource_config(
         &fixture.repo,
         "git_profile = 'work'\nsetup_cmd = 'setup.sh'\n",
@@ -12942,15 +12825,12 @@ fn agent_auth_wrappers_are_inherited_without_changing_ordinary_executions() {
     let workspace = fixture.add("agent-auth");
     let worktree = Path::new(workspace["path"].as_str().unwrap());
     let wrappers = fixture.root.path().join("wrappers with spaces");
-    fs::create_dir(&wrappers).unwrap();
     for tool in ["fj", "gh"] {
         let path = wrappers.join(tool);
-        fs::write(
+        install_test_script(
             &path,
             format!("#!/bin/sh\nprintf '%s\\n' 'agent {tool}' \"$@\"\n"),
-        )
-        .unwrap();
-        fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
+        );
     }
     let config = format!(
         "[commands]\nclaude = ['sh', '-c', 'fj \"two words\" \"$literal\"; gh auth status; printf \"%s\\n\" \"$HOME\"; \"$SHOAL_TEST_BINARY\" exec -- fj nested']\n[agent_auth]\nfj = {:?}\ngh = {:?}\n",
@@ -13076,12 +12956,10 @@ fn detached_agents_use_auth_wrappers_and_invalid_wrappers_prevent_launch() {
     let workspace = fixture.add("detached-auth");
     let worktree = Path::new(workspace["path"].as_str().unwrap());
     let wrapper = fixture.root.path().join("fj-agent");
-    fs::write(
+    install_test_script(
         &wrapper,
         "#!/bin/sh\nprintf '%s\\n' 'detached agent' \"$@\"\nexit 23\n",
-    )
-    .unwrap();
-    fs::set_permissions(&wrapper, fs::Permissions::from_mode(0o755)).unwrap();
+    );
     fs::write(
         worktree.join(".shoal.toml"),
         "[agent_auth]\nfj = '~/fj-agent'\n",
@@ -13429,8 +13307,7 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
         ),
     ] {
         let path = bin.join(name);
-        fs::write(&path, script).unwrap();
-        fs::set_permissions(path, fs::Permissions::from_mode(0o700)).unwrap();
+        install_test_script_with_mode(&path, script, 0o700);
     }
     fixture.add_github_origin();
     let saved = fixture.root.path().join("saved.toml");
@@ -13538,17 +13415,15 @@ fn configured_ai_tools_run_as_agents_from_their_own_command() {
          [ai.notes]\nskill_dir = '~/notes'\n",
     ));
     let bin = fixture.root.path().join("bin");
-    fs::create_dir_all(&bin).unwrap();
     for name in ["fake-droid", "repo-droid"] {
         let path = bin.join(name);
-        fs::write(
+        install_test_script_with_mode(
             &path,
             format!(
                 "#!/bin/sh\ntest -n \"$SHOAL_SCOPE_TOKEN\" || exit 99\nprintf '{name}\\0' > \"$HOME/agent-args\"\nprintf '%s\\0' \"$@\" >> \"$HOME/agent-args\"\nexit 7\n"
             ),
-        )
-        .unwrap();
-        fs::set_permissions(path, fs::Permissions::from_mode(0o700)).unwrap();
+            0o700,
+        );
     }
     let workspace = fixture.add("provider");
     let args = || fs::read_to_string(fixture.root.path().join("agent-args")).unwrap();
@@ -13620,7 +13495,7 @@ fn configured_ai_tools_run_as_agents_from_their_own_command() {
 #[test]
 fn resource_hooks_retain_leases_on_failure_and_run_during_removal() {
     let mut fixture = Fixture::new();
-    fs::write(
+    install_test_script(
         fixture.repo.join("permit.sh"),
         r#"#!/bin/sh
 set -eu
@@ -13630,13 +13505,7 @@ test "$PWD" = "$SHOAL_WORKSPACE_PATH"
 printf '%s\n' "$SHOAL_RESOURCE_LEASE" >> "$HOME/$SHOAL_HOOK"
 test ! -f "$SHOAL_HOOK-fails" || { echo 'resource busy' >&2; exit 3; }
 "#,
-    )
-    .unwrap();
-    fs::set_permissions(
-        fixture.repo.join("permit.sh"),
-        fs::Permissions::from_mode(0o755),
-    )
-    .unwrap();
+    );
     commit_resource_config(
         &fixture.repo,
         "post_resource_acquire_cmd = 'permit.sh'\npre_resource_release_cmd = 'permit.sh'\n[resources.signing]\n",
@@ -13707,20 +13576,14 @@ test ! -f "$SHOAL_HOOK-fails" || { echo 'resource busy' >&2; exit 3; }
 #[test]
 fn resource_hooks_exclude_concurrent_release_setup_and_removal() {
     let fixture = Fixture::new();
-    fs::write(
+    install_test_script(
         fixture.repo.join("permit.sh"),
         r#"#!/bin/sh
 set -eu
 touch "$HOME/hook-entered"
 while test ! -f "$HOME/hook-continue"; do sleep 0.05; done
 "#,
-    )
-    .unwrap();
-    fs::set_permissions(
-        fixture.repo.join("permit.sh"),
-        fs::Permissions::from_mode(0o755),
-    )
-    .unwrap();
+    );
     commit_resource_config(
         &fixture.repo,
         "post_resource_acquire_cmd = 'permit.sh'\nsetup_cmd = '/usr/bin/true'\n[resources.signing]\n",
@@ -13843,7 +13706,7 @@ fn global_post_setup_and_pre_remove_hooks_run_without_setup() {
     let fixture = Fixture::with_config(Some(
         "post_setup_cmd = 'hook.sh'\npre_remove_cmd = 'hook.sh'\n[env]\nSESSION = '{workspace}'\nPROFILE = '{workspace_path}/profile'\n",
     ));
-    fs::write(
+    install_test_script(
         fixture.repo.join("hook.sh"),
         r#"#!/bin/sh
 set -eu
@@ -13854,13 +13717,7 @@ test "$SESSION" = "$SHOAL_WORKSPACE"
 test "$PROFILE" = "$SHOAL_WORKSPACE_PATH/profile"
 printf '%s\n' "$SHOAL_HOOK" >> "$HOME/hooks"
 "#,
-    )
-    .unwrap();
-    fs::set_permissions(
-        fixture.repo.join("hook.sh"),
-        fs::Permissions::from_mode(0o755),
-    )
-    .unwrap();
+    );
     commit_resource_config(&fixture.repo, "");
     let workspace = fixture.add("global-hooks");
     assert_eq!(workspace["state"], "ready");
@@ -13877,7 +13734,7 @@ printf '%s\n' "$SHOAL_HOOK" >> "$HOME/hooks"
 #[test]
 fn pre_setup_hook_gates_readiness_and_supports_global_defaults() {
     let fixture = Fixture::with_config(Some("pre_setup_cmd = 'before.sh'\n"));
-    fs::write(
+    install_test_script(
         fixture.repo.join("before.sh"),
         r#"#!/bin/sh
 set -eu
@@ -13887,16 +13744,11 @@ test -z "${SHOAL_EXECUTION_ID:-}"
 echo before >> "$HOME/setup-order"
 test ! -f "$HOME/fail-before" || { echo 'prepare failed' >&2; exit 7; }
 "#,
-    )
-    .unwrap();
-    fs::write(
+    );
+    install_test_script(
         fixture.repo.join("setup.sh"),
         "#!/bin/sh\necho setup >> \"$HOME/setup-order\"\n",
-    )
-    .unwrap();
-    for name in ["before.sh", "setup.sh"] {
-        fs::set_permissions(fixture.repo.join(name), fs::Permissions::from_mode(0o755)).unwrap();
-    }
+    );
     commit_resource_config(&fixture.repo, "setup_cmd = 'setup.sh'\n");
     let home = fixture.root.path();
     fs::write(home.join("fail-before"), "").unwrap();
@@ -13952,7 +13804,7 @@ fn post_remove_hook_uses_checkout_and_reports_failure_after_removal() {
     let fixture = Fixture::with_config(Some(
         "post_remove_cmd = '/usr/bin/false'\n[env]\nPROFILE = '{workspace_path}/global-profile'\n",
     ));
-    fs::write(
+    install_test_script(
         fixture.repo.join("after removal.sh"),
         r#"#!/bin/sh
 set -eu
@@ -13968,13 +13820,7 @@ fi
 printf '%s\n%s\n%s\n' "$PWD" "$SHOAL_WORKSPACE" "$SHOAL_WORKSPACE_PATH" >> "$HOME/removed"
 test ! -f "$HOME/fail-after" || { echo 'external cleanup failed' >&2; exit 8; }
 "#,
-    )
-    .unwrap();
-    fs::set_permissions(
-        fixture.repo.join("after removal.sh"),
-        fs::Permissions::from_mode(0o755),
-    )
-    .unwrap();
+    );
     commit_resource_config(
         &fixture.repo,
         "post_remove_cmd = 'after removal.sh'\n[resources.signing]\n",
@@ -15088,7 +14934,7 @@ fn install_failing_git(fixture: &Fixture) {
     let real_bin = bin.join("real");
     fs::create_dir(&real_bin).unwrap();
     std::os::unix::fs::symlink(real_git, real_bin.join("git")).unwrap();
-    fs::write(
+    install_test_script(
         bin.join("git"),
         r#"#!/bin/sh
 if [ -f "$HOME/git-failure" ]; then
@@ -15102,9 +14948,7 @@ if [ -f "$HOME/git-failure" ]; then
 fi
 exec "$HOME/bin/real/git" "$@"
 "#,
-    )
-    .unwrap();
-    fs::set_permissions(bin.join("git"), fs::Permissions::from_mode(0o755)).unwrap();
+    );
 }
 
 #[test]
@@ -15227,8 +15071,10 @@ fn set_repository_toml(fixture: &Fixture, text: &str) {
 
 fn install_done_hook(fixture: &Fixture) -> PathBuf {
     let hook = fixture.root.path().join("done hook.sh");
-    fs::write(&hook, "#!/bin/sh\nprintf '%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\\n' \"$SHOAL_HOOK\" \"$SHOAL_WORKSPACE\" \"$SHOAL_WORKSPACE_ID\" \"$SHOAL_WORKSPACE_PATH\" \"$PWD\" \"$SHOAL_STATE_DIR\" \"$SHOAL_DONE_CHOICE\" \"${SHOAL_SCOPE_TOKEN-unset}\" \"${SHOAL_EXECUTION_ID-unset}\" \"${SHOAL_RESERVED_PORT_ENV-unset}\" >> \"$HOME/done-events\"\n").unwrap();
-    fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).unwrap();
+    install_test_script(
+        &hook,
+        "#!/bin/sh\nprintf '%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\\n' \"$SHOAL_HOOK\" \"$SHOAL_WORKSPACE\" \"$SHOAL_WORKSPACE_ID\" \"$SHOAL_WORKSPACE_PATH\" \"$PWD\" \"$SHOAL_STATE_DIR\" \"$SHOAL_DONE_CHOICE\" \"${SHOAL_SCOPE_TOKEN-unset}\" \"${SHOAL_EXECUTION_ID-unset}\" \"${SHOAL_RESERVED_PORT_ENV-unset}\" >> \"$HOME/done-events\"\n",
+    );
     hook
 }
 
@@ -15236,8 +15082,10 @@ fn install_done_hook(fixture: &Fixture) -> PathBuf {
 fn agent_exit_hook_exposes_custom_agent_results_without_completing_the_assignment() {
     let fixture = Fixture::with_config(Some("post_agent_exit_cmd = '/usr/bin/false'\n"));
     let hook = fixture.root.path().join("agent-exit.sh");
-    fs::write(&hook, "#!/bin/sh\nprintf '%s|%s|%s|%s|%s|%s|%s\\n' \"$SHOAL_HOOK\" \"$SHOAL_WORKSPACE\" \"$SHOAL_AGENT\" \"$SHOAL_AGENT_EXIT_CODE\" \"$SHOAL_AGENT_EXIT_COMPLETE\" \"${SHOAL_SCOPE_TOKEN-unset}\" \"${SHOAL_DONE_CHOICE-unset}\" >> \"$HOME/agent-exits\"\n").unwrap();
-    fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).unwrap();
+    install_test_script(
+        &hook,
+        "#!/bin/sh\nprintf '%s|%s|%s|%s|%s|%s|%s\\n' \"$SHOAL_HOOK\" \"$SHOAL_WORKSPACE\" \"$SHOAL_AGENT\" \"$SHOAL_AGENT_EXIT_CODE\" \"$SHOAL_AGENT_EXIT_COMPLETE\" \"${SHOAL_SCOPE_TOKEN-unset}\" \"${SHOAL_DONE_CHOICE-unset}\" >> \"$HOME/agent-exits\"\n",
+    );
     set_repository_toml(
         &fixture,
         &format!(
@@ -15306,15 +15154,13 @@ fn agent_exit_hook_exposes_custom_agent_results_without_completing_the_assignmen
 fn agent_exit_hook_can_signal_completion_without_a_post_done_hook() {
     let fixture = Fixture::new();
     let hook = fixture.root.path().join("finish-assignment");
-    fs::write(
+    install_test_script(
         &hook,
         format!(
             "#!/bin/sh\nexec '{}' --json done --keep \"$SHOAL_WORKSPACE\"\n",
             env!("CARGO_BIN_EXE_shoal")
         ),
-    )
-    .unwrap();
-    fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).unwrap();
+    );
     set_repository_toml(
         &fixture,
         &format!(
@@ -15347,8 +15193,10 @@ fn agent_exit_acknowledgement_does_not_wait_for_the_hook() {
             .unwrap()
             .success()
     );
-    fs::write(&hook, "#!/bin/sh\ntouch \"$HOME/exit-started\"\nread release < \"$HOME/release-exit\"\ntouch \"$HOME/exit-finished\"\n").unwrap();
-    fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).unwrap();
+    install_test_script(
+        &hook,
+        "#!/bin/sh\ntouch \"$HOME/exit-started\"\nread release < \"$HOME/release-exit\"\ntouch \"$HOME/exit-finished\"\n",
+    );
     set_repository_toml(
         &fixture,
         &format!(
@@ -15618,13 +15466,10 @@ fn multiple_prs_complete_once_only_after_every_merge_and_honor_done_policy() {
         let workspace = fixture.add("multi");
         fixture.add_github_origin();
         let bin = fixture.root.path().join("bin");
-        fs::create_dir(&bin).unwrap();
-        fs::write(
+        install_test_script(
             bin.join("gh"),
             "#!/bin/sh\ncat \"$HOME/pr-$3.json\"\necho \"$3\" >> \"$HOME/queries\"\n",
-        )
-        .unwrap();
-        fs::set_permissions(bin.join("gh"), fs::Permissions::from_mode(0o755)).unwrap();
+        );
         let head = git(
             Path::new(workspace["path"].as_str().unwrap()),
             &["rev-parse", "HEAD"],
@@ -15765,8 +15610,7 @@ fn merged_base_prs_retarget_and_restack_the_workspaces_stacked_on_them() {
             ),
         ];
         for (name, body) in scripts {
-            fs::write(bin.join(name), format!("#!/bin/sh\n{body}\n")).unwrap();
-            fs::set_permissions(bin.join(name), fs::Permissions::from_mode(0o755)).unwrap();
+            install_test_script(bin.join(name), format!("#!/bin/sh\n{body}\n"));
         }
         let keys = if cfg!(target_os = "macos") {
             root.join("Library/Application Support/forgejo-cli.forgejo-cli/keys.json")
@@ -15870,14 +15714,11 @@ fn failed_restacks_are_reported_even_when_pr_cleanup_is_disabled() {
     fixture.ok(&["add", &repo, "upper", "--base", "lower"]);
     fixture.add_github_origin();
     let root = fixture.root.path().to_owned();
-    fs::create_dir_all(root.join("bin")).unwrap();
     // Fail the lookups whose arguments contain the pattern in ~/fail.
-    fs::write(
+    install_test_script(
         root.join("bin/gh"),
         "#!/bin/sh\n[ -e \"$HOME/fail\" ] && case \"$*\" in *\"$(cat \"$HOME/fail\")\"*) exit 1;; esac\ncat \"$HOME/pr-$3\"\n",
-    )
-    .unwrap();
-    fs::set_permissions(root.join("bin/gh"), fs::Permissions::from_mode(0o755)).unwrap();
+    );
     let head = git(
         Path::new(lower["path"].as_str().unwrap()),
         &["rev-parse", "HEAD"],
@@ -15979,9 +15820,7 @@ fn issue_completion_fixture(tool: &str, cleanup: bool) -> Fixture {
         ],
     );
     let bin = fixture.root.path().join("bin");
-    fs::create_dir(&bin).unwrap();
-    fs::write(bin.join(tool), "#!/bin/sh\ncat \"$HOME/issue-response\"\n").unwrap();
-    fs::set_permissions(bin.join(tool), fs::Permissions::from_mode(0o755)).unwrap();
+    install_test_script(bin.join(tool), "#!/bin/sh\ncat \"$HOME/issue-response\"\n");
     write_issue_state(&fixture, tool, "Open");
     fixture.ok(&[
         "add",
@@ -16114,7 +15953,10 @@ fn closed_issue_keeps_pr_requirements_and_preserves_dirty_and_newer_work() {
         )
         .unwrap()
     };
-    fs::write(fixture.root.path().join("bin/gh"), "#!/bin/sh\nif [ \"$1\" = pr ]; then cat \"$HOME/pr-response\"; else cat \"$HOME/issue-response\"; fi\n").unwrap();
+    install_test_script(
+        fixture.root.path().join("bin/gh"),
+        "#!/bin/sh\nif [ \"$1\" = pr ]; then cat \"$HOME/pr-response\"; else cat \"$HOME/issue-response\"; fi\n",
+    );
     write_pr("OPEN");
     fixture.ok(&["link", "pr", "1", "--workspace", "issue-work"]);
     write_issue_state(&fixture, "gh", "Closed");
@@ -16198,13 +16040,13 @@ fn zmx_calls(fixture: &Fixture) -> Vec<Vec<String>> {
 /// limit to the fixture's `bin`.
 fn install_fake_agents(fixture: &Fixture, agents: &[&str]) {
     for agent in agents {
-        install_test_script(&fixture.root.path().join("bin").join(agent), "#!/bin/sh\n");
+        install_test_script(fixture.root.path().join("bin").join(agent), "#!/bin/sh\n");
     }
 }
 
 fn install_fake_herdr(fixture: &Fixture) {
     install_test_script(
-        &fixture.root.path().join("bin/herdr"),
+        fixture.root.path().join("bin/herdr"),
         r#"#!/usr/bin/env python3
 import json, os, shlex, sys
 from pathlib import Path
@@ -16440,16 +16282,13 @@ fn herdr_reports_issue_lookup_errors_before_the_agent_picker() {
     let fixture = Fixture::new();
     fixture.add_github_origin();
     install_fake_herdr(&fixture);
+    install_test_script(fixture.root.path().join("bin/codex"), "#!/bin/sh\nexit 0\n");
     install_test_script(
-        &fixture.root.path().join("bin/codex"),
-        "#!/bin/sh\nexit 0\n",
-    );
-    install_test_script(
-        &fixture.root.path().join("bin/gh"),
+        fixture.root.path().join("bin/gh"),
         "#!/bin/sh\necho lookup-failed >&2\nexit 1\n",
     );
     install_test_script(
-        &fixture.root.path().join("bin/fzf"),
+        fixture.root.path().join("bin/fzf"),
         "#!/bin/sh\necho \"$*\" >&2\nhead -n 1\n",
     );
     let (caller, transcript) = herdr_call(&fixture, &["add", "34"], "");
@@ -16468,7 +16307,7 @@ fn herdr_labels_name_issues_by_repository_and_number() {
     fixture.ok(&["repo", "rename", fixture.repo.to_str().unwrap(), "project"]);
     install_fake_herdr(&fixture);
     install_test_script(
-        &fixture.root.path().join("bin/gh"),
+        fixture.root.path().join("bin/gh"),
         "#!/bin/sh\necho '{\"state\":\"OPEN\",\"number\":34,\"title\":\"Fix API timeout\",\"body\":\"Details\"}'\n",
     );
     let url = "https://github.com/team/project/issues/34";
@@ -16569,7 +16408,7 @@ fn herdr_tab_name_templates_survive_handoff_and_use_the_allocated_branch() {
     .unwrap();
     install_fake_herdr(&fixture);
     install_test_script(
-        &fixture.root.path().join("bin/gh"),
+        fixture.root.path().join("bin/gh"),
         "#!/bin/sh\necho '{\"state\":\"OPEN\",\"number\":34,\"title\":\"Literal {branch} $(touch injected)\",\"body\":\"Details\"}'\n",
     );
     git(&fixture.repo, &["branch", "topic"]);
@@ -16642,8 +16481,8 @@ fn herdr_plans_carry_issue_urls_instead_of_bodies() {
     )
     .unwrap();
     install_test_script(
-        &fixture.root.path().join("bin/gh"),
-        &format!("#!/bin/sh\ncat '{}'\n", response.display()),
+        fixture.root.path().join("bin/gh"),
+        format!("#!/bin/sh\ncat '{}'\n", response.display()),
     );
     let repo = fixture.repo.to_str().unwrap();
     let args = [
@@ -16690,11 +16529,11 @@ fn herdr_focus_defaults_follow_the_agent_input_and_allow_overrides() {
     fixture.add_github_origin();
     install_fake_herdr(&fixture);
     install_test_script(
-        &fixture.root.path().join("bin/fzf"),
+        fixture.root.path().join("bin/fzf"),
         "#!/bin/sh\nawk -F '\t' '$2 == \"No agent\" {print}'\n",
     );
     install_test_script(
-        &fixture.root.path().join("bin/gh"),
+        fixture.root.path().join("bin/gh"),
         "#!/bin/sh\necho '{\"state\":\"OPEN\",\"number\":34,\"title\":\"Focus\",\"body\":\"\"}'\n",
     );
     let (caller, transcript) = herdr_call(
@@ -16736,12 +16575,6 @@ fn herdr_no_agent_opens_workspace_shell_and_honors_focus_setting() {
     assert_eq!(herdr_calls(&fixture).len(), 3);
     fixture.ok(&["rm", "herdr-shell", "--yes"]);
     wait_for_herdr_close(&fixture);
-}
-
-fn install_test_script(path: &Path, script: &str) {
-    fs::create_dir_all(path.parent().unwrap()).unwrap();
-    fs::write(path, script).unwrap();
-    fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
 }
 
 #[test]
@@ -16817,12 +16650,7 @@ fn herdr_retains_setup_failures_and_can_disable_completion_closure() {
         "setup_cmd = 'fail-setup'\n[herdr]\nclose_when_done = true\n",
     )
     .unwrap();
-    fs::write(fixture.repo.join("fail-setup"), "#!/bin/sh\nexit 17\n").unwrap();
-    fs::set_permissions(
-        fixture.repo.join("fail-setup"),
-        fs::Permissions::from_mode(0o755),
-    )
-    .unwrap();
+    install_test_script(fixture.repo.join("fail-setup"), "#!/bin/sh\nexit 17\n");
     git(&fixture.repo, &["add", ".shoal.toml", "fail-setup"]);
     git(
         &fixture.repo,
@@ -16837,7 +16665,7 @@ fn herdr_retains_setup_failures_and_can_disable_completion_closure() {
         ],
     );
     install_test_script(
-        &fixture.root.path().join("bin/fzf"),
+        fixture.root.path().join("bin/fzf"),
         "#!/bin/sh\ngrep 'Keep'\n",
     );
     let (caller, _) = herdr_call(
@@ -16892,7 +16720,7 @@ fn herdr_retains_detached_happy_exits_and_closes_on_done_after_restart() {
     install_fake_herdr(&fixture);
     install_fake_agents(&fixture, &["claude"]);
     install_test_script(
-        &fixture.root.path().join("bin/happy"),
+        fixture.root.path().join("bin/happy"),
         "#!/bin/sh\nprintf done > \"$HOME/happy-exited\"\nexit 7\n",
     );
     let (caller, _) = herdr_call(
@@ -16959,12 +16787,7 @@ fn scoped_undone_withdraws_completion_without_keeping_the_workspace() {
 #[test]
 fn exported_environment_delivers_ports_and_confines_external_processes() {
     let mut fixture = Fixture::new();
-    fs::write(fixture.repo.join("setup.sh"), "#!/bin/sh\nexit 0\n").unwrap();
-    fs::set_permissions(
-        fixture.repo.join("setup.sh"),
-        fs::Permissions::from_mode(0o755),
-    )
-    .unwrap();
+    install_test_script(fixture.repo.join("setup.sh"), "#!/bin/sh\nexit 0\n");
     git(&fixture.repo, &["add", "setup.sh"]);
     commit_resource_config(&fixture.repo, "setup_cmd = 'setup.sh'\n");
     let workspace = fixture.add("external");
@@ -17205,9 +17028,7 @@ fn holds_allow_watched_prs_to_record_completion_before_cleanup() {
     fixture.ok(&["hold", "acquire", "watched-held", "--name", "thread"]);
     fixture.add_github_origin();
     let bin = fixture.root.path().join("bin");
-    fs::create_dir(&bin).unwrap();
-    fs::write(bin.join("gh"), "#!/bin/sh\ncat \"$HOME/pr-response\"\n").unwrap();
-    fs::set_permissions(bin.join("gh"), fs::Permissions::from_mode(0o755)).unwrap();
+    install_test_script(bin.join("gh"), "#!/bin/sh\ncat \"$HOME/pr-response\"\n");
     let path = Path::new(workspace["path"].as_str().unwrap());
     let head = git(path, &["rev-parse", "HEAD"]);
     fs::write(fixture.root.path().join("pr-response"), serde_json::json!({"number":1,"state":"MERGED","headRefName":"watched-held","commits":[{"oid":head.trim()}]}).to_string()).unwrap();
@@ -17237,7 +17058,7 @@ fn terminal_agents_run_tracked_in_a_labelled_zmx_session_unless_nested_or_detach
     let id = workspace["id"].as_str().unwrap();
     let home = fixture.root.path();
     install_test_script(
-        &home.join("bin/claude"),
+        home.join("bin/claude"),
         "#!/bin/sh\nprintf '%s %s\\n' \"${ZMX_SESSION:-none}\" \"${SHOAL_EXECUTION_ID:+tracked}\" >> \"$HOME/agent-runs\"\n",
     );
     let runs = || fs::read_to_string(home.join("agent-runs")).unwrap_or_default();
@@ -17361,7 +17182,7 @@ fn status_lists_workspace_sessions_and_survives_a_failed_listing() {
     let workspace = fixture.add("persist");
     let other = fixture.add("other");
     let home = fixture.root.path();
-    install_test_script(&home.join("bin/zmx"), PASSTHROUGH_ZMX);
+    install_test_script(home.join("bin/zmx"), PASSTHROUGH_ZMX);
     fs::write(
         home.join("zmx-sessions"),
         format!(
@@ -17384,10 +17205,7 @@ fn status_lists_workspace_sessions_and_survives_a_failed_listing() {
         "{text}"
     );
 
-    install_test_script(
-        &home.join("bin/zmx"),
-        "#!/bin/sh\necho broken >&2\nexit 1\n",
-    );
+    install_test_script(home.join("bin/zmx"), "#!/bin/sh\necho broken >&2\nexit 1\n");
     let status = fixture.ok(&["status", "persist"]);
     assert_eq!(status["sessions"], serde_json::json!([]));
     assert!(
