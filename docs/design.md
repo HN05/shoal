@@ -29,7 +29,7 @@ the daemon and state never hold the values, hooks drop them, and tracked
 worktree files cannot name them. Forge changes Shoal
 makes for a workspace act as the agent too: through the `gh` wrapper, and on
 Forgejo with the token the agent's fj saved under the configured `fj_home`,
-because fj has no API passthrough. An agent Git profile
+because fj has no API passthrough, or else through the agent's `tea` wrapper. An agent Git profile
 selected the same way reaches tracked agents as Git's environment-level config,
 so the agent's commands use it in any repository while the worktree's config and
 other executions keep theirs. Desktop handoffs have no authentication override
@@ -590,7 +590,8 @@ in a terminal to an app built on Shoal, gets one item model, one account rule
 and one policy. Issue and PR actions are typed (edit, comment, close, reopen,
 merge) and planned per forge as REST requests: `gh api`, which owns GitHub's
 login, or curl with the token fj saved for a Forgejo host, since fj has no API
-passthrough. Forge differences stay in planning, such as Forgejo keeping draft
+passthrough. Gitea shares Forgejo's API; a host fj has no login for uses tea's
+login through `tea api`, which owns that token, and otherwise reads anonymously. Forge differences stay in planning, such as Forgejo keeping draft
 state in the title, so callers see the same item either way. Actions run in the
 daemon, where scope applies: they act as the workspace's agent account, and
 merging stays the user's decision, so scoped callers cannot merge. Each action

@@ -34,6 +34,7 @@ tools! {
     Xcrun => ("xcrun", None),
     GitHub => ("gh", None),
     Forgejo => ("fj", None),
+    Tea => ("tea", None),
     Curl => ("curl", None),
     Ps => ("ps", None),
     Plutil => ("/usr/bin/plutil", None),

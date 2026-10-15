@@ -16,6 +16,7 @@ mod remote_url;
 pub mod repository;
 mod rest;
 mod retarget;
+mod tea;
 pub mod updates;
 pub mod view;
 

@@ -268,7 +268,7 @@ confirmed-deleted worktrees can still be removed through normal cleanup.
 registered repository with the same origin; `--repo` selects one explicitly and
 must match the link. An unregistered remote offers interactive registration,
 otherwise lookup fails with the `shoal repo add` command to run. Shoal uses your
-existing `gh` or `fj` login and stores no forge credentials.
+existing `gh`, `fj` or `tea` login and stores no forge credentials.
 
 Issue links and `shoal add <number>` require an open issue and derive
 `issue-<number>-<title-slug>`. Numbers use `--repo`, the current registered checkout
@@ -650,8 +650,8 @@ to its workspace. Scoped callers see no entries.
 
 ### Agent accounts
 
-`[agent_auth]` selects user-owned executable wrappers for `fj` and `gh`, each
-an absolute or `~/` path, `fj_home`, the HOME the `fj` wrapper runs `fj` with,
+`[agent_auth]` selects user-owned executable wrappers for `fj`, `gh` and `tea`,
+each an absolute or `~/` path, `fj_home`, the HOME the `fj` wrapper runs `fj` with,
 and a `git_profile` naming one of the global [Git profiles](#git-profiles), all
 defaulting to unset. Values follow repository/global
 precedence and appear in `config show`. Tracked agent shortcuts prepend a private
@@ -666,10 +666,11 @@ inherited token variables. PATH selection is cooperative: an absolute tool path
 or a shell that resets PATH bypasses it.
 
 Issue and PR changes Shoal makes for a workspace use the agent account. On
-GitHub they run `gh api` through the `gh` wrapper. On Forgejo they use the token
-the agent's `fj` saved under `fj_home`, read for each request and passed to curl
-on stdin; with an `fj` wrapper but no `fj_home` they fail rather than use your
-login. Options left unset use your own logins, as the agent would.
+GitHub they run `gh api` through the `gh` wrapper. On Forgejo and Gitea they use
+the token the agent's `fj` saved under `fj_home`, read for each request and passed
+to curl on stdin; with an `fj` wrapper but no `fj_home` they fail rather than use
+your login. Without either, a `tea` wrapper sends them through `tea api` with its
+login for the host. Options left unset use your own logins, as the agent would.
 
 The agent Git profile reaches tracked agents through Git's `GIT_CONFIG_COUNT`
 variables, after any inherited entries, so it overrides every Git config file for
@@ -859,9 +860,10 @@ workspaces stacked on it to its own base workspace and retargets their linked
 PRs that still target its branch to the branch it merged into. Their next
 `watch` returns a `base_merged` update with the rebase command; the agent
 rebases and force-pushes its branch. The PR is retargeted through the forge's
-API with the user's login: `gh api` on GitHub, and on Forgejo curl with the token
-fj saved for that host, read for the request and passed on stdin. A missing
-login or failed request is reported in the update.
+API with the user's login: `gh api` on GitHub, and on Forgejo or Gitea curl with
+the token fj saved for that host, read for the request and passed on stdin, or
+`tea api` with tea's login for the host. A missing login or failed request is
+reported in the update.
 
 ### Repositories
 

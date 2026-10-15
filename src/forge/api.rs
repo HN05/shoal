@@ -1,6 +1,7 @@
 //! Forge REST requests sent as an [`Account`]: GitHub through `gh api`, which
-//! owns its login, and Forgejo through curl with the token fj saved for the
-//! host, read per request and passed on stdin, never placed on a command line.
+//! owns its login, and Forgejo or Gitea through curl with the token fj saved
+//! for the host, read per request and passed on stdin, never placed on a
+//! command line, or else through tea's login for the host.
 use std::{
     path::{Path, PathBuf},
     time::Duration,
@@ -10,13 +11,19 @@ use anyhow::{Context, Result, bail, ensure};
 use serde_json::Value;
 use tokio::process::Command;
 
-use super::{ForgeKind, ForgeRepo, account::Account};
+use super::{
+    ForgeKind, ForgeRepo,
+    account::{Account, ForgejoLogin},
+    tea,
+};
 use crate::tools::Tool;
 
-const TIMEOUT: Duration = Duration::from_secs(30);
+pub(super) const TIMEOUT: Duration = Duration::from_secs(30);
 /// Forgejo's default maximum page size.
 const PAGE_SIZE: usize = 50;
 const MAX_LOG_BYTES: usize = 8 * 1024 * 1024;
+/// Bounds a JSON response read through a CLI, which curl's own limit cannot.
+const MAX_RESPONSE_BYTES: usize = 64 * 1024 * 1024;
 /// Context for a failed read as the user, who may have no fj login.
 pub(super) const FORGEJO_LOGIN: &str =
     "Forgejo API request failed; private repositories need an fj login";
@@ -75,6 +82,16 @@ impl Request {
 impl ForgeRepo {
     /// Read plaintext logs without following redirects or exposing the login.
     pub(super) async fn forgejo_log(&self, account: &Account, endpoint: &str) -> Result<String> {
+        let token = match account.forgejo_login(&self.host).await? {
+            ForgejoLogin::Tea(login) => {
+                let request = Request::get(endpoint.to_owned());
+                return tea::send(account, &login, &request, MAX_LOG_BYTES)
+                    .await
+                    .context("fetch Forgejo job log (maximum 8 MiB)");
+            }
+            ForgejoLogin::Token(token) => Some(token),
+            ForgejoLogin::Anonymous => None,
+        };
         let url = format!("{}://{}/api/v1/{endpoint}", self.web_scheme, self.host);
         let mut curl = Command::new(Tool::Curl.program());
         curl.args([
@@ -92,7 +109,6 @@ impl ForgeRepo {
             "-",
             &url,
         ]);
-        let token = account.forgejo_token(&self.host)?;
         let output = crate::subprocess::Run::new(curl)
             .input(token.map(authorization).unwrap_or_default())
             .timeout(TIMEOUT)
@@ -172,6 +188,17 @@ impl ForgeRepo {
     }
 
     async fn forgejo_send(&self, account: &Account, request: &Request) -> Result<Value> {
+        match account.forgejo_login(&self.host).await? {
+            ForgejoLogin::Tea(login) => {
+                json_body(&tea::send(account, &login, request, MAX_RESPONSE_BYTES).await?)
+            }
+            ForgejoLogin::Token(token) => self.curl_send(Some(token), request).await,
+            ForgejoLogin::Anonymous => self.curl_send(None, request).await,
+        }
+    }
+
+    /// Send with curl, passing `token` on stdin so no command line shows it.
+    async fn curl_send(&self, token: Option<String>, request: &Request) -> Result<Value> {
         let url = format!(
             "{}://{}/api/v1/{}",
             self.web_scheme, self.host, request.endpoint
@@ -195,7 +222,6 @@ impl ForgeRepo {
                 .arg(body.to_string());
         }
         curl.args(["-K", "-", &url]);
-        let token = account.forgejo_token(&self.host)?;
         let output = crate::subprocess::Run::new(curl)
             .input(token.map(authorization).unwrap_or_default())
             .timeout(TIMEOUT)
@@ -297,6 +323,11 @@ fn forgejo_response_body(text: &str) -> Result<&str> {
         .trim()
         .parse()
         .context("Forgejo response has no HTTP status")?;
+    http_body(status, body)
+}
+
+/// The body of a successful response, or the error a failed one reports.
+pub(super) fn http_body(status: u16, body: &str) -> Result<&str> {
     if !(200..300).contains(&status) {
         let detail = error_message(body).unwrap_or_else(|| body.chars().take(500).collect());
         bail!("HTTP {status}: {}", detail.trim());
