@@ -373,7 +373,7 @@ async fn automatic_removal_keeps_branch_when_default_branch_is_unknown() {
     );
     git(&path, &["fetch", "origin"]);
     git(&path, &["branch", "--set-upstream-to=origin/main", "main"]);
-    // Pushing to a new remote leaves origin/HEAD unset.
+    // Model a remote without origin/HEAD, which fetch may have recorded.
     git(&path, &["remote", "set-head", "origin", "-d"]);
     git(&path, &["switch", "-c", "other"]);
     let worktree = root.path().join("main-worktree");
