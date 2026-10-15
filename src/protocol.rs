@@ -481,46 +481,16 @@ impl<T> Allocation<T> {
     }
 }
 
-// Error codes are open on receipt so newer daemons can still explain failures.
-// Keep the known vocabulary and its wire/display spellings in one place.
-macro_rules! error_codes {
-    ($($variant:ident => $wire:literal),+ $(,)?) => {
-        #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-        #[serde(from = "String")]
-        pub enum ErrorCode {
-            $(#[serde(rename = $wire)] $variant,)+
-            /// An unfamiliar daemon code, preserved verbatim for compatibility.
-            #[serde(untagged)]
-            Unknown(String),
-        }
-
-        impl From<String> for ErrorCode {
-            fn from(value: String) -> Self {
-                match value.as_str() {
-                    $($wire => Self::$variant,)+
-                    _ => Self::Unknown(value),
-                }
-            }
-        }
-
-        impl std::fmt::Display for ErrorCode {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                f.write_str(match self {
-                    $(Self::$variant => $wire,)+
-                    Self::Unknown(value) => value,
-                })
-            }
-        }
-    };
-}
-
-error_codes! {
-    InvalidRequest => "invalid_request",
-    ProtocolMismatch => "protocol_mismatch",
-    ScopeDenied => "scope_denied",
-    ManagedService => "managed_service",
-    OperationFailed => "operation_failed",
-    ExecutionFailed => "execution_failed",
+crate::state::open_enum! {
+    /// Open on receipt so newer daemons can still explain failures.
+    ErrorCode {
+        InvalidRequest => "invalid_request",
+        ProtocolMismatch => "protocol_mismatch",
+        ScopeDenied => "scope_denied",
+        ManagedService => "managed_service",
+        OperationFailed => "operation_failed",
+        ExecutionFailed => "execution_failed",
+    }
 }
 
 // Keep payload conversions and variant names tied to the wire enum.

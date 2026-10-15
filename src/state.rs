@@ -1,4 +1,4 @@
-//! Closed Shoal enums; persisted and wire spellings remain stable.
+//! Shoal enums whose persisted and wire spellings remain stable.
 
 /// A closed set of lowercase state names with matching serde, `Display`, and
 /// SQLite conversions. Unknown values are rejected everywhere.
@@ -64,6 +64,44 @@ macro_rules! states {
     };
 }
 pub(crate) use states;
+
+/// An open set of wire names with matching serde and `Display` spellings.
+/// Unfamiliar strings decode to `Unknown` and keep their spelling, so a peer's
+/// newer vocabulary round-trips without matching a known variant.
+macro_rules! open_enum {
+    ($(#[$enum_meta:meta])* $name:ident {
+        $($(#[$meta:meta])* $variant:ident => $wire:literal),+ $(,)?
+    }) => {
+        $(#[$enum_meta])*
+        #[derive(Debug, Clone, PartialEq, Eq, ::serde::Serialize, ::serde::Deserialize)]
+        #[serde(from = "String")]
+        pub enum $name {
+            $($(#[$meta])* #[serde(rename = $wire)] $variant,)+
+            /// An unfamiliar value, preserved verbatim.
+            #[serde(untagged)]
+            Unknown(String),
+        }
+
+        impl From<String> for $name {
+            fn from(value: String) -> Self {
+                match value.as_str() {
+                    $($wire => Self::$variant,)+
+                    _ => Self::Unknown(value),
+                }
+            }
+        }
+
+        impl std::fmt::Display for $name {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str(match self {
+                    $(Self::$variant => $wire,)+
+                    Self::Unknown(value) => value,
+                })
+            }
+        }
+    };
+}
+pub(crate) use open_enum;
 
 /// Serde and SQLite text conversions for a key type spelled by `Display` and
 /// parsed by `FromStr` with an `anyhow::Error`; the spelling is the stored key.

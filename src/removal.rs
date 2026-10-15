@@ -39,59 +39,25 @@ pub enum BranchChoice {
     DeleteBranch,
 }
 
-/// Worktrunk 0.78.0's `BranchFate::json_outcome` vocabulary, plus Shoal's
-/// synthetic outcome for an already-missing worktree registration.
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case", from = "String")]
-pub enum BranchOutcome {
-    Deleted,
-    NotAttempted,
-    Deferred,
-    RetainedUnmerged,
-    RetainedCheckedOut,
-    RetainedRaced,
-    RetainedFailed,
-    Retained,
-    /// Preserve future Worktrunk values without claiming confirmed deletion.
-    #[serde(untagged)]
-    Unknown(String),
-}
-
-impl From<String> for BranchOutcome {
-    fn from(value: String) -> Self {
-        match value.as_str() {
-            "deleted" => Self::Deleted,
-            "not_attempted" => Self::NotAttempted,
-            "deferred" => Self::Deferred,
-            "retained_unmerged" => Self::RetainedUnmerged,
-            "retained_checked_out" => Self::RetainedCheckedOut,
-            "retained_raced" => Self::RetainedRaced,
-            "retained_failed" => Self::RetainedFailed,
-            "retained" => Self::Retained,
-            _ => Self::Unknown(value),
-        }
+crate::state::open_enum! {
+    /// Worktrunk 0.78.0's `BranchFate::json_outcome` vocabulary, plus Shoal's
+    /// synthetic outcome for an already-missing worktree registration. Future
+    /// Worktrunk values decode as `Unknown` without claiming confirmed deletion.
+    BranchOutcome {
+        Deleted => "deleted",
+        NotAttempted => "not_attempted",
+        Deferred => "deferred",
+        RetainedUnmerged => "retained_unmerged",
+        RetainedCheckedOut => "retained_checked_out",
+        RetainedRaced => "retained_raced",
+        RetainedFailed => "retained_failed",
+        Retained => "retained",
     }
 }
 
 impl BranchOutcome {
     pub fn is_deleted(&self) -> bool {
         matches!(self, Self::Deleted)
-    }
-}
-
-impl std::fmt::Display for BranchOutcome {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(match self {
-            Self::Deleted => "deleted",
-            Self::NotAttempted => "not_attempted",
-            Self::Deferred => "deferred",
-            Self::RetainedUnmerged => "retained_unmerged",
-            Self::RetainedCheckedOut => "retained_checked_out",
-            Self::RetainedRaced => "retained_raced",
-            Self::RetainedFailed => "retained_failed",
-            Self::Retained => "retained",
-            Self::Unknown(value) => value,
-        })
     }
 }
 
