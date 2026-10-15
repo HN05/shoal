@@ -7,6 +7,7 @@ use std::{
     collections::{HashMap, hash_map::DefaultHasher},
     fs,
     hash::{Hash, Hasher},
+    os::unix::fs::MetadataExt,
     path::Path,
     sync::{Arc, PoisonError},
     time::Duration,
@@ -252,14 +253,15 @@ pub fn signals(head: &str, activity: u64) -> u64 {
 
 /// Metadata only, including ignored files; never follow symlinks out of the tree.
 /// Git administrative storage is shared and inspected separately through HEAD.
-/// Modification times only move forward, so two equal fingerprints mean no file
-/// changed between them.
+/// Change times only move forward and cannot be set, unlike modification
+/// times, so two equal fingerprints mean no file changed between them.
 pub fn fingerprint(root: &Path) -> Result<u64> {
     fn visit(path: &Path, hash: &mut DefaultHasher) -> Result<()> {
         let metadata = fs::symlink_metadata(path)?;
         path.hash(hash);
         metadata.len().hash(hash);
         metadata.modified()?.hash(hash);
+        (metadata.ctime(), metadata.ctime_nsec()).hash(hash);
         if metadata.is_dir() {
             let mut children = fs::read_dir(path)?
                 .map(|entry| entry.map(|e| e.path()))
@@ -583,6 +585,30 @@ mod tests {
             timers.expired("w", 1, now + delay, delay),
             Expiry::Expired(expired) if expired == snapshot
         ));
+    }
+
+    #[test]
+    fn fingerprint_sees_rewrites_that_restore_the_modification_time() {
+        let root = tempfile::tempdir().unwrap();
+        let file = root.path().join("build-output");
+        fs::write(&file, "before").unwrap();
+        let metadata = fs::metadata(&file).unwrap();
+        let modified = metadata.modified().unwrap();
+        let change_time = |metadata: fs::Metadata| (metadata.ctime(), metadata.ctime_nsec());
+        let changed = change_time(metadata);
+        let before = fingerprint(root.path()).unwrap();
+        // Filesystem timestamps are coarse; rewrite until the change time moves.
+        while change_time(fs::metadata(&file).unwrap()) == changed {
+            fs::write(&file, "after!").unwrap();
+            fs::File::options()
+                .write(true)
+                .open(&file)
+                .unwrap()
+                .set_modified(modified)
+                .unwrap();
+        }
+        assert_eq!(fs::metadata(&file).unwrap().modified().unwrap(), modified);
+        assert_ne!(fingerprint(root.path()).unwrap(), before);
     }
 
     #[test]

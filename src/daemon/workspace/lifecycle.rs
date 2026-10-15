@@ -454,7 +454,7 @@ impl Manager {
             &super::StopRequest::removal(),
         )
         .await?;
-        // The tree is compared after the hooks: modification times only move
+        // The tree is compared after the hooks: change times only move
         // forward, so that also covers changes made before them.
         if let Removal::Automatic { snapshot, .. } = removal {
             ensure!(
