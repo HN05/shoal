@@ -84,11 +84,6 @@ async fn launches_without_a_limit_start_untracked() {
     assert!(manager.queue_entries().await.unwrap().is_empty());
 }
 
-#[test]
-fn dynamic_capacity_is_a_positive_host_limit() {
-    assert!(dynamic_limit() > 0);
-}
-
 #[tokio::test]
 async fn a_full_machine_queues_until_a_start_ends() {
     let (temp, manager) = manager().await;

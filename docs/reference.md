@@ -618,14 +618,16 @@ shoal rm issue-612-add-a-queue-cmd            # Removes a waiting entry
 ```
 
 `max_agents` limits the agents that run at once. It defaults to `dynamic`, which
-uses the host's available CPU parallelism at each admission. Set a positive
-number for a fixed limit or `none` for unlimited admission. The global value
-counts every agent on the machine; a repository's value (saved config or
-`.shoal.toml` in its registered checkout) counts only that repository's agents,
-within the global limit. Each tracked agent uses a slot while it runs, awaits
-reattachment after a daemon restart, or waits for `shoal resume`, unless its
-workspace is done; `shoal done`, the agent's exit, `resume --discard` and
-removal free it.
+uses host CPU parallelism and samples the existing memory-pressure and disk
+space monitors at each admission. Warning pressure halves available capacity;
+critical memory or disk below the overload stop threshold admits no new agent.
+Unavailable readings admit no additional dynamic work. Set a positive number
+for a fixed limit or `none` for unlimited admission. The global value counts
+every agent on the machine; a repository's value (saved config or `.shoal.toml`
+in its registered checkout) counts only that repository's agents, within the
+global limit. Each tracked agent uses a slot while it runs, awaits reattachment
+after a daemon restart, or waits for `shoal resume`, unless its workspace is
+done; `shoal done`, the agent's exit, `resume --discard` and removal free it.
 
 `shoal add` with an agent asks the daemon for a slot after resolving the issue,
 branch and agent. When none is free it prints the entry's place and returns

@@ -95,7 +95,7 @@ mod tests {
 
 /// Cumulative CPU ticks across every core. I/O wait is idle; Linux guest ticks
 /// are already included in user/nice and must not be counted twice.
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub struct CpuTicks {
     pub(crate) busy: u64,
     pub(crate) total: u64,

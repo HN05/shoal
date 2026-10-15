@@ -399,8 +399,11 @@ they started, and no separate counter can leak a slot. The global value limits
 the machine and a repository's effective value limits that repository; a
 repository without its own value inherits the global one, which already bounds
 it, so normal precedence serves both. The setting defaults to `dynamic`, which
-samples the host's available CPU parallelism when admission runs; a positive
-number fixes a limit and `none` disables it for that layer. The queue stores
+uses host CPU parallelism and the existing memory-pressure and disk-space
+providers when admission runs; warning pressure halves capacity and critical
+readings stop new dynamic admissions. A positive number fixes a limit and
+`none` disables it for that layer. The provider boundary leaves room for
+per-agent resource profiles and repository-specific measurements. The queue stores
 the CLI's launch plan opaquely and creates nothing until a slot frees, so a
 waiting entry costs no worktree and branches from the default branch current
 when it starts. A

@@ -236,7 +236,11 @@ impl Manager {
     async fn agent_limits(&self, repositories: Vec<String>) -> Result<Limits> {
         let config = self.config();
         let mut limits = Limits {
-            global: resolve_limit(config.max_agents.or(Some(AgentLimit::Dynamic))),
+            global: resolve_limit(
+                config.max_agents.or(Some(AgentLimit::Dynamic)),
+                &self.paths.state,
+                &config.overload,
+            ),
             repositories: HashMap::new(),
         };
         for id in repositories {
@@ -246,7 +250,8 @@ impl Manager {
             let layers = self
                 .config_layers_for(ConfigTarget::Repository(id.clone().into()))
                 .await?;
-            let limit = resolve_limit(config.resolve(&layers)?.max_agents);
+            let resolved = config.resolve(&layers)?;
+            let limit = resolve_limit(resolved.max_agents, &self.paths.state, &config.overload);
             limits.repositories.insert(id, limit);
         }
         Ok(limits)
@@ -562,23 +567,19 @@ impl Manager {
 /// Resolve one configured limit at admission time. Dynamic limits are sampled
 /// for each admission so a daemon keeps following the host's available
 /// parallelism after configuration reloads or hardware changes.
-fn resolve_limit(limit: Option<AgentLimit>) -> Option<u32> {
+fn resolve_limit(
+    limit: Option<AgentLimit>,
+    state_path: &std::path::Path,
+    settings: &crate::config::overload::Overload,
+) -> Option<u32> {
     limit.and_then(|limit| match limit {
-        AgentLimit::Dynamic => Some(dynamic_limit()),
+        AgentLimit::Dynamic => Some(crate::daemon::workspace::capacity::limit(
+            crate::daemon::workspace::capacity::sample(state_path, settings),
+            settings,
+        )),
         AgentLimit::Fixed(value) => Some(value.get()),
         AgentLimit::Unlimited => None,
     })
-}
-
-/// A conservative host capacity for concurrent agents. Logical parallelism is
-/// the only portable resource signal available without adding a platform
-/// dependency; every repository uses the same host capacity unless it has a
-/// fixed or unlimited override.
-fn dynamic_limit() -> u32 {
-    std::thread::available_parallelism()
-        .map(|parallelism| parallelism.get().min(u32::MAX as usize) as u32)
-        .unwrap_or(1)
-        .max(1)
 }
 
 fn entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<QueueEntry> {
