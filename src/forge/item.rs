@@ -54,6 +54,11 @@ pub(crate) struct Current {
     /// `owner/repository` of a PR's head branch.
     pub head_repository: Option<String>,
     pub body: String,
+    /// The commit a PR's head branch points to.
+    pub head_sha: Option<String>,
+    /// Whether an open PR conflicts with its base; unknown while the forge
+    /// computes it. Drafts report none.
+    pub conflict: Option<bool>,
 }
 
 impl ForgeRepo {
@@ -108,6 +113,10 @@ impl ForgeRepo {
                 },
             }),
         };
+        let conflict = pr
+            .as_ref()
+            .zip(value["mergeable"].as_bool())
+            .map(|(pr, mergeable)| !pr.draft && !mergeable);
         Ok(Current {
             item: Item {
                 kind,
@@ -121,6 +130,8 @@ impl ForgeRepo {
             node_id: text(&value["node_id"]),
             head_repository: text(&value["head"]["repo"]["full_name"]),
             body: text(&value["body"]).unwrap_or_default(),
+            head_sha: text(&value["head"]["sha"]),
+            conflict,
         })
     }
 }

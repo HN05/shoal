@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{Registration, RegistrationKind};
 use crate::{
-    forge::{ForgeRepo, repository, strip_bidi_isolates},
+    forge::{ForgeRepo, repository},
     model::Workspace,
 };
 
@@ -127,38 +127,25 @@ pub(crate) fn summarize(reviews: impl IntoIterator<Item = (String, Verdict)>) ->
     }
 }
 
-/// Reviewers and verdicts from fj's minimal `pr review list`, which omits
-/// stale and dismissed reviews. Review bodies are quoted, so only headers
-/// start with a review type.
-pub(crate) fn fj_reviews(text: &str) -> Result<Vec<(String, Verdict)>> {
-    let text = strip_bidi_isolates(text).replace("STYLE()", "");
-    let text = text.trim();
-    if text == "No reviews." || text.starts_with("Only stale or dismissed reviews") {
-        return Ok(Vec::new());
-    }
-    let mut reviews = Vec::new();
-    let mut headers = 0;
-    for line in text.lines() {
-        let Some((kind, reviewer)) = line.trim_end().split_once(" by ") else {
+/// Reviewers and verdicts from Forgejo's reviews, leaving out stale and
+/// dismissed ones, which no longer describe the PR.
+pub(crate) fn forgejo_reviews(reviews: &[serde_json::Value]) -> Result<Vec<(String, Verdict)>> {
+    let mut verdicts = Vec::new();
+    for review in reviews {
+        let verdict = match review["state"].as_str() {
+            Some("APPROVED") => Verdict::Approved,
+            Some("REQUEST_CHANGES") => Verdict::ChangesRequested,
+            Some("COMMENT") => Verdict::Commented,
+            Some("PENDING" | "REQUEST_REVIEW") => continue,
+            _ => bail!("unknown Forgejo review state"),
+        };
+        if review["stale"] == true || review["dismissed"] == true {
             continue;
-        };
-        let verdict = match kind {
-            "Approved" => Some(Verdict::Approved),
-            "Changes requested" => Some(Verdict::ChangesRequested),
-            "Comment" => Some(Verdict::Commented),
-            "Pending Review" => None,
-            "Unknown" => bail!("unknown fj review type"),
-            _ => continue,
-        };
-        headers += 1;
-        if let Some(verdict) = verdict {
-            reviews.push((reviewer.to_owned(), verdict));
         }
+        let reviewer = review["user"]["login"].as_str().unwrap_or_default();
+        verdicts.push((reviewer.to_owned(), verdict));
     }
-    if headers == 0 {
-        bail!("unrecognized fj review list");
-    }
-    Ok(reviews)
+    Ok(verdicts)
 }
 
 /// Reviewers and verdicts from `gh pr view --json reviews`.
@@ -212,33 +199,23 @@ mod tests {
     }
 
     #[test]
-    fn fj_review_headers_are_read_from_minimal_output() {
-        let text = "\u{2068}\u{2068}\u{2069}Comment\u{2068}\u{2069}\u{2069} by \u{2068}\u{2069}\u{2068}forgejo-actions\u{2069}\n\
-            0 comments, made on October 9, 2026 at 12:26 AM\n\
-            > Approved by nobody\n\n\
-            STYLE()Changes requestedSTYLE() by reviewer\n\
-            1 comment, made on October 9, 2026 at 1:00 AM\n\
-            > Fix it\n";
+    fn forgejo_reviews_skip_pending_stale_and_dismissed_ones() {
+        let reviews = serde_json::json!([
+            {"user": {"login": "bot"}, "state": "COMMENT"},
+            {"user": {"login": "reviewer"}, "state": "REQUEST_CHANGES"},
+            {"user": {"login": "old"}, "state": "APPROVED", "stale": true},
+            {"user": {"login": "gone"}, "state": "APPROVED", "dismissed": true},
+            {"user": {"login": "me"}, "state": "PENDING"},
+            {"user": {"login": "asked"}, "state": "REQUEST_REVIEW"}
+        ]);
         assert_eq!(
-            fj_reviews(text).unwrap(),
+            forgejo_reviews(reviews.as_array().unwrap()).unwrap(),
             [
-                review("forgejo-actions", Verdict::Commented),
+                review("bot", Verdict::Commented),
                 review("reviewer", Verdict::ChangesRequested)
             ]
         );
-        assert!(fj_reviews("No reviews.\n").unwrap().is_empty());
-        assert!(
-            fj_reviews("Only stale or dismissed reviews, use --all to display them.")
-                .unwrap()
-                .is_empty()
-        );
-        assert!(
-            fj_reviews("Pending Review by me\n0 comments, made on today")
-                .unwrap()
-                .is_empty()
-        );
-        assert!(fj_reviews("Unknown by someone\n").is_err());
-        assert!(fj_reviews("changed output\n").is_err());
+        assert!(forgejo_reviews(&[serde_json::json!({"state": "LATER"})]).is_err());
     }
 
     #[test]

@@ -54,11 +54,6 @@ pub(crate) struct ForgeRepo {
     web_scheme: &'static str,
 }
 
-pub(crate) fn commit_revision(line: &str) -> Option<String> {
-    let hash = line.strip_prefix("commit ")?.split_whitespace().next()?;
-    (hash.len() == 40 && hash.bytes().all(|byte| byte.is_ascii_hexdigit())).then(|| hash.to_owned())
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ForgeKind {
     GitHub,
@@ -369,12 +364,6 @@ async fn github_pull_details(
         "PR #{number} comes from a fork; only branches in this repository can be opened"
     );
     Ok((pull.title, pull.head_ref_name, pull.base_ref_name))
-}
-
-fn strip_bidi_isolates(text: &str) -> String {
-    text.chars()
-        .filter(|c| !matches!(c, '\u{2066}'..='\u{2069}'))
-        .collect()
 }
 
 const MERGED_HINT: &str = "; use `shoal done` to finish without a PR watch";

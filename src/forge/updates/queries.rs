@@ -1,59 +1,72 @@
 use super::{Check, Snapshot};
 use crate::forge::{
-    ForgeKind, ForgeRepo, Query, commit_revision,
+    ForgeKind, ForgeRepo, Query,
+    account::Account,
+    api::FORGEJO_LOGIN,
+    item::{Current, ItemState},
     link::ItemKind,
-    pr::state::{CheckResult, PrState, PrStatus, Verdict, fj_reviews, github_reviews, summarize},
-    strip_bidi_isolates,
+    pr::state::{CheckResult, PrState, PrStatus, Verdict, github_reviews, summarize},
+    rest::RestCheck,
 };
-use anyhow::{Context, Result, anyhow, ensure};
+use anyhow::{Context, Result, ensure};
 use std::path::Path;
 
 impl ForgeRepo {
     pub(crate) async fn issue_activity(&self, path: &Path, number: u64) -> Result<Snapshot> {
+        match self.kind {
+            ForgeKind::GitHub => self.github_issue_activity(path, number).await,
+            ForgeKind::Forgejo => self
+                .rest_issue_activity(&Account::user(), number)
+                .await
+                .context(FORGEJO_LOGIN),
+        }
+    }
+
+    async fn github_issue_activity(&self, path: &Path, number: u64) -> Result<Snapshot> {
         let id = number.to_string();
         let repository = format!("{}/{}", self.host, self.path);
-        let mut snapshot = Snapshot::default();
-        match self.kind {
-            ForgeKind::GitHub => {
-                let args = [
-                    "issue",
-                    "view",
-                    &id,
-                    "--repo",
-                    &repository,
-                    "--json",
-                    "number,state,comments",
-                ];
-                let output = self.kind.query(path, &args, Query::Issue).await?;
-                let issue: serde_json::Value = serde_json::from_str(&output)?;
-                ensure!(issue["number"] == number, "gh returned a different issue");
-                snapshot.state = issue["state"]
-                    .as_str()
-                    .context("issue has no state")?
-                    .to_ascii_lowercase();
-                ensure!(
-                    matches!(snapshot.state.as_str(), "open" | "closed"),
-                    "unknown issue state"
-                );
-                for comment in issue["comments"]
-                    .as_array()
-                    .context("missing issue comments")?
-                {
-                    let id = comment.get("id").context("issue comment has no ID")?;
-                    snapshot
-                        .comments
-                        .insert(id.to_string(), comment_fingerprint(comment));
-                }
-            }
-            ForgeKind::Forgejo => {
-                let issue = self.forgejo_item(ItemKind::Issue, number).await?;
-                snapshot.state = issue.item.state.as_str().into();
-                snapshot.record_comments(
-                    "discussion",
-                    self.forgejo_discussion_fingerprint(number).await,
-                );
-            }
+        let args = [
+            "issue",
+            "view",
+            &id,
+            "--repo",
+            &repository,
+            "--json",
+            "number,state,comments",
+        ];
+        let output = self.kind.query(path, &args, Query::Issue).await?;
+        let issue: serde_json::Value = serde_json::from_str(&output)?;
+        ensure!(issue["number"] == number, "gh returned a different issue");
+        let mut snapshot = Snapshot {
+            state: issue["state"]
+                .as_str()
+                .context("issue has no state")?
+                .to_ascii_lowercase(),
+            ..Default::default()
+        };
+        ensure!(
+            matches!(snapshot.state.as_str(), "open" | "closed"),
+            "unknown issue state"
+        );
+        for comment in issue["comments"]
+            .as_array()
+            .context("missing issue comments")?
+        {
+            let id = comment.get("id").context("issue comment has no ID")?;
+            snapshot
+                .comments
+                .insert(id.to_string(), comment_fingerprint(comment));
         }
+        Ok(snapshot)
+    }
+
+    async fn rest_issue_activity(&self, account: &Account, number: u64) -> Result<Snapshot> {
+        let issue = self.read(account, ItemKind::Issue, number).await?;
+        let mut snapshot = Snapshot {
+            state: issue.item.state.as_str().into(),
+            ..Default::default()
+        };
+        snapshot.record_comments("discussion", self.rest_discussion(account, number).await);
         Ok(snapshot)
     }
 
@@ -65,7 +78,10 @@ impl ForgeRepo {
     ) -> Result<Snapshot> {
         match self.kind {
             ForgeKind::GitHub => self.github_activity(path, number, branch).await,
-            ForgeKind::Forgejo => self.forgejo_activity(path, number, branch).await,
+            ForgeKind::Forgejo => self
+                .rest_activity(&Account::user(), number, branch)
+                .await
+                .context(FORGEJO_LOGIN),
         }
     }
 
@@ -110,114 +126,29 @@ impl ForgeRepo {
         Ok(snapshot)
     }
 
-    async fn forgejo_activity(
+    async fn rest_activity(
         &self,
-        path: &Path,
+        account: &Account,
         number: u64,
         branch: Option<&str>,
     ) -> Result<Snapshot> {
-        let id = number.to_string();
-
-        let view = [
-            "--style", "minimal", "pr", "view", &id, "--host", &self.host,
-        ];
-        let output = self.kind.query(path, &view, Query::Pull("")).await?;
+        let pull = self.read(account, ItemKind::Pr, number).await?;
+        if let Some(branch) = branch {
+            ensure!(
+                pull.item.pr.as_ref().is_some_and(|pr| pr.head == branch),
+                "PR does not match the workspace branch"
+            );
+        }
         let mut snapshot = Snapshot {
-            state: forgejo_state(&output, &id, branch)?.as_str().into(),
+            state: pull.item.state.as_str().into(),
             ..Default::default()
         };
-        let revision = match self
-            .kind
-            .query(path, &args_for_commits(&id, &self.host), Query::Pull(""))
-            .await
-        {
-            Ok(output) => match forgejo_revision(&output) {
-                Ok(revision) => Some(revision),
-                Err(error) => {
-                    snapshot
-                        .errors
-                        .insert("revision".into(), format!("{error:#}"));
-                    None
-                }
-            },
-            Err(error) => {
-                snapshot
-                    .errors
-                    .insert("revision".into(), format!("{error:#}"));
-                None
-            }
-        };
-        let mut args = view.to_vec();
-        args.push("comments");
-        snapshot.record_comments(
-            "discussion",
-            self.kind.query(path, &args, Query::Pull("")).await,
-        );
-        let args = [
-            "--style",
-            "minimal",
-            "pr",
-            "review",
-            &id,
-            "--host",
-            &self.host,
-            "list",
-            "--comments",
-            "--all",
-        ];
-        snapshot.record_comments(
-            "reviews",
-            self.kind.query(path, &args, Query::Pull("")).await,
-        );
-        if snapshot.state == "open" {
-            match self.forgejo_checks(path, &id).await {
-                Ok(checks) => checks.record(&mut snapshot, revision.as_deref().unwrap_or_default()),
-                Err(error) => {
-                    snapshot
-                        .errors
-                        .insert("CI and merge conflicts".into(), format!("{error:#}"));
-                }
-            }
+        snapshot.record_comments("discussion", self.rest_discussion(account, number).await);
+        snapshot.record_comments("reviews", self.rest_review_activity(account, number).await);
+        if pull.item.state == ItemState::Open {
+            snapshot.record_checks(&pull, self.rest_checks(account, &pull).await);
         }
         Ok(snapshot)
-    }
-
-    /// What changes when a comment on the item is added, edited or deleted.
-    async fn forgejo_discussion_fingerprint(&self, number: u64) -> Result<String> {
-        let comments = self
-            .forgejo_api(&format!("issues/{number}/comments"))
-            .await?;
-        rest_fingerprint(&comments)
-    }
-
-    /// `fj pr status` 0.6 reads CI from the PR commit with the newest timestamp. When a
-    /// rebase gives every commit the same timestamp it picks the oldest, and fails when
-    /// that commit has no CI. Forgejo's API reads the head commit, so it is the fallback.
-    async fn forgejo_checks(&self, path: &Path, id: &str) -> Result<ForgejoChecks> {
-        let args = [
-            "--style", "minimal", "pr", "status", id, "--host", &self.host,
-        ];
-        let error = match self.kind.query(path, &args, Query::Pull("")).await {
-            Ok(output) => match fj_checks(&output) {
-                Ok(checks) => return Ok(checks),
-                Err(error) => error,
-            },
-            Err(error) => error,
-        };
-        self.forgejo_api_checks(id)
-            .await
-            .map_err(|fallback| anyhow!("{error:#}; the Forgejo API also failed: {fallback:#}"))
-    }
-
-    async fn forgejo_api_checks(&self, id: &str) -> Result<ForgejoChecks> {
-        let pull = self.forgejo_api(&format!("pulls/{id}")).await?;
-        let head = pull["head"]["sha"]
-            .as_str()
-            .context("Forgejo PR has no head commit")?;
-        let combined = self
-            .forgejo_api(&format!("commits/{head}/status?limit=50"))
-            .await?;
-        api_checks(&pull, &combined)
     }
 }
 
@@ -228,7 +159,10 @@ impl ForgeRepo {
             let (number, _) = self.pull(url)?;
             match self.kind {
                 ForgeKind::GitHub => self.github_pr_status(path, number, url).await,
-                ForgeKind::Forgejo => self.forgejo_pr_status(path, number, url).await,
+                ForgeKind::Forgejo => self
+                    .rest_pr_status(&Account::user(), number, url)
+                    .await
+                    .context(FORGEJO_LOGIN),
             }
         }
         .await;
@@ -251,35 +185,27 @@ impl ForgeRepo {
         github_status(&output, number, url)
     }
 
-    async fn forgejo_pr_status(&self, path: &Path, number: u64, url: &str) -> Result<PrStatus> {
-        let id = number.to_string();
-        let view = [
-            "--style", "minimal", "pr", "view", &id, "--host", &self.host,
-        ];
-        let output = self.kind.query(path, &view, Query::Pull("")).await?;
-        let mut status = PrStatus::new(url.into(), Some(forgejo_state(&output, &id, None)?));
-        if status.state == Some(PrState::Open) {
-            match self.forgejo_checks(path, &id).await {
-                Ok(checks) => {
-                    let mut snapshot = Snapshot::default();
-                    checks.record(&mut snapshot, "");
-                    status.merge_conflicts = snapshot.conflict;
-                    status.checks = check_results(snapshot);
-                }
-                Err(error) => status
+    async fn rest_pr_status(&self, account: &Account, number: u64, url: &str) -> Result<PrStatus> {
+        let pull = self.read(account, ItemKind::Pr, number).await?;
+        let state = match pull.item.state {
+            ItemState::Open => PrState::Open,
+            ItemState::Merged => PrState::Merged,
+            ItemState::Closed => PrState::Closed,
+        };
+        let mut status = PrStatus::new(url.into(), Some(state));
+        if state == PrState::Open {
+            let mut snapshot = Snapshot::default();
+            snapshot.record_checks(&pull, self.rest_checks(account, &pull).await);
+            status.errors.extend(
+                snapshot
                     .errors
-                    .push(format!("CI and merge conflicts lookup failed: {error:#}")),
-            }
+                    .iter()
+                    .map(|(source, error)| format!("{source} lookup failed: {error}")),
+            );
+            status.merge_conflicts = snapshot.conflict;
+            status.checks = check_results(snapshot);
         }
-        let args = [
-            "--style", "minimal", "pr", "review", &id, "--host", &self.host, "list",
-        ];
-        let reviews = async {
-            let output = self.kind.query(path, &args, Query::Pull("")).await?;
-            fj_reviews(&output)
-        }
-        .await;
-        record_reviews(&mut status, reviews);
+        record_reviews(&mut status, self.rest_verdicts(account, number).await);
         Ok(status)
     }
 }
@@ -317,48 +243,6 @@ fn record_reviews(status: &mut PrStatus, reviews: Result<Vec<(String, Verdict)>>
             .errors
             .push(format!("reviews lookup failed: {error:#}")),
     }
-}
-
-fn fj_merged(text: &str, number: &str, branch: Option<&str>) -> Result<bool> {
-    let text = strip_bidi_isolates(text);
-    let mut lines = text.lines();
-    ensure!(
-        lines
-            .next()
-            .is_some_and(|s| s.trim_end().ends_with(&format!(" #{number}"))),
-        "unrecognized fj PR header"
-    );
-    let state = lines
-        .next()
-        .and_then(|s| s.split(" — ").nth(1))
-        .context("unrecognized fj PR state")?;
-    ensure!(
-        matches!(state, "Open" | "Closed" | "Merged"),
-        "unrecognized fj PR state"
-    );
-    if let Some(branch) = branch {
-        ensure!(
-            lines.next().is_some_and(
-                |s| s.starts_with(&format!("From `{branch}` into `")) && s.ends_with('`')
-            ),
-            "PR does not match the workspace branch"
-        );
-    }
-    Ok(state == "Merged")
-}
-
-fn forgejo_state(text: &str, number: &str, branch: Option<&str>) -> Result<PrState> {
-    Ok(if fj_merged(text, number, branch)? {
-        PrState::Merged
-    } else if strip_bidi_isolates(text)
-        .lines()
-        .nth(1)
-        .is_some_and(|s| s.contains(" — Closed"))
-    {
-        PrState::Closed
-    } else {
-        PrState::Open
-    })
 }
 
 fn github_snapshot(text: &str, number: u64, branch: Option<&str>) -> Result<Snapshot> {
@@ -452,142 +336,53 @@ fn comment_fingerprint(item: &serde_json::Value) -> String {
     .to_string()
 }
 
-/// Each REST comment's ID, content and edit time.
-fn rest_fingerprint(items: &serde_json::Value) -> Result<String> {
-    let items = items.as_array().context("comments are not a list")?;
-    Ok(serde_json::Value::from(
-        items
-            .iter()
-            .map(|item| {
-                serde_json::json!({
-                    "id": item["id"],
-                    "body": item["body"],
-                    "state": item["state"],
-                    "updated_at": item["updated_at"],
-                })
-            })
-            .collect::<Vec<_>>(),
-    )
-    .to_string())
-}
-
-fn args_for_commits<'a>(id: &'a str, host: &'a str) -> [&'a str; 8] {
-    [
-        "--style", "minimal", "pr", "view", id, "--host", host, "commits",
-    ]
-}
-
-fn forgejo_revision(text: &str) -> Result<String> {
-    text.lines()
-        .find_map(commit_revision)
-        .context("Forgejo PR commits did not include a revision")
-}
-
-/// Mergeability and CI contexts of an open PR, in `fj pr status` terms.
-struct ForgejoChecks {
-    conflict: bool,
-    /// Each context with its capitalized state.
-    checks: Vec<(String, String)>,
-}
-
-impl ForgejoChecks {
-    fn record(self, snapshot: &mut Snapshot, revision: &str) {
-        snapshot.conflict = Some(self.conflict);
-        for (name, state) in self.checks {
-            snapshot.checks.insert(
-                name.clone(),
-                Check {
-                    name,
-                    complete: state != "Pending",
-                    state,
-                    revision: revision.into(),
-                },
-            );
+impl Snapshot {
+    /// An open PR's mergeability and the CI checks on its head commit. A
+    /// failed check lookup keeps the previous checks.
+    fn record_checks(&mut self, pull: &Current, checks: Result<Vec<RestCheck>>) {
+        self.conflict = pull.conflict;
+        match checks {
+            Ok(checks) => {
+                for check in checks {
+                    self.checks.insert(
+                        check.name.clone(),
+                        Check {
+                            complete: check.state != "Pending",
+                            state: check.state.into(),
+                            name: check.name,
+                            revision: pull.head_sha.clone().unwrap_or_default(),
+                        },
+                    );
+                }
+            }
+            Err(error) => {
+                self.errors.insert("CI".into(), format!("{error:#}"));
+            }
         }
     }
 }
-
-fn fj_checks(text: &str) -> Result<ForgejoChecks> {
-    let text = strip_bidi_isolates(text).replace("STYLE()", "");
-    let mut lines = text.lines();
-    let header = lines.next().context("missing fj PR status")?;
-    ensure!(
-        matches!(
-            header,
-            "Open — Can be merged" | "Open — Merge conflicts" | "Draft — Can't merge draft PR"
-        ),
-        "unrecognized fj PR status"
-    );
-    let mut checks = ForgejoChecks {
-        conflict: header == "Open — Merge conflicts",
-        checks: Vec::new(),
-    };
-    for line in lines.filter(|line| !line.trim().is_empty()) {
-        let (state, name) = line
-            .trim()
-            .trim_start_matches("- ")
-            .split_once(" — ")
-            .context("unrecognized fj CI check")?;
-        ensure!(
-            matches!(
-                state,
-                "Pending" | "Success" | "Failure" | "Warning" | "Skipped" | "Error"
-            ),
-            "unknown fj CI state"
-        );
-        checks.checks.push((name.into(), state.into()));
-    }
-    Ok(checks)
-}
-
-/// Mirrors `fj pr status`: a `WIP:` title marks a draft, which reports no conflicts.
-fn api_checks(pull: &serde_json::Value, combined: &serde_json::Value) -> Result<ForgejoChecks> {
-    let draft = pull["title"]
-        .as_str()
-        .context("Forgejo PR has no title")?
-        .starts_with("WIP:");
-    let mergeable = pull["mergeable"]
-        .as_bool()
-        .context("Forgejo PR has no mergeability")?;
-    // A commit without statuses has `"statuses": null`.
-    let statuses = match &combined["statuses"] {
-        serde_json::Value::Null => &[][..],
-        statuses => statuses.as_array().context("invalid Forgejo CI statuses")?,
-    };
-    ensure!(
-        combined["total_count"].as_u64() == Some(statuses.len() as u64),
-        "Forgejo returned a partial page of CI statuses"
-    );
-    let mut checks = ForgejoChecks {
-        conflict: !draft && !mergeable,
-        checks: Vec::new(),
-    };
-    for status in statuses {
-        let name = status["context"]
-            .as_str()
-            .context("Forgejo CI status has no context")?;
-        let state = match status["status"].as_str() {
-            Some("pending") => "Pending",
-            Some("success") => "Success",
-            Some("failure") => "Failure",
-            Some("warning") => "Warning",
-            Some("skipped") => "Skipped",
-            Some("error") => "Error",
-            _ => anyhow::bail!("unknown Forgejo CI state"),
-        };
-        checks.checks.push((name.into(), state.into()));
-    }
-    Ok(checks)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::forge::updates::UpdateKind;
     use serde_json::json;
 
-    fn forgejo_status(text: &str, snapshot: &mut Snapshot, revision: &str) -> Result<()> {
-        fj_checks(text).map(|checks| checks.record(snapshot, revision))
+    /// An open Forgejo PR at `head` with `conflict` and `checks` recorded.
+    fn rest_snapshot(head: &str, conflict: bool, checks: &[(&str, &'static str)]) -> Snapshot {
+        let forgejo = ForgeRepo::parse("https://forge.example/team/repo").unwrap();
+        let pull = json!({"number": 7, "title": "Fix", "state": "open", "mergeable": !conflict,
+            "head": {"ref": "topic", "sha": head}, "base": {"ref": "main"}});
+        let pull = forgejo.current(ItemKind::Pr, 7, &pull).unwrap();
+        let checks = checks
+            .iter()
+            .map(|(name, state)| RestCheck {
+                name: (*name).into(),
+                state,
+            })
+            .collect();
+        let mut snapshot = Snapshot::default();
+        snapshot.record_checks(&pull, Ok(checks));
+        snapshot
     }
 
     fn github(checks: serde_json::Value) -> serde_json::Value {
@@ -717,20 +512,16 @@ mod tests {
     }
 
     #[test]
-    fn forgejo_state_distinguishes_open_closed_and_merged() {
-        let output = "Title #56\nBy user — Open — +1 -0\nFrom `feature` into `main`\n";
-        assert_eq!(forgejo_state(output, "56", None).unwrap(), PrState::Open);
-        for (word, state) in [("Closed", PrState::Closed), ("Merged", PrState::Merged)] {
-            let output = output.replace("Open", word);
-            assert_eq!(forgejo_state(&output, "56", None).unwrap(), state);
-        }
-        assert!(forgejo_state(output, "57", None).is_err());
-    }
-
-    #[test]
-    fn forgejo_contexts_are_distinct_and_unknown_output_fails() {
-        let mut snapshot = Snapshot::default();
-        forgejo_status("\u{2068}Open — Merge conflicts\u{2069}\n- Success — review/default\n- Pending — rust\n- Skipped — deploy\n", &mut snapshot, "rev-1").unwrap();
+    fn rest_checks_are_distinct_and_wake_when_they_complete() {
+        let snapshot = rest_snapshot(
+            "rev-1",
+            true,
+            &[
+                ("review/default", "Success"),
+                ("rust", "Pending"),
+                ("deploy", "Skipped"),
+            ],
+        );
         let updates = Snapshot::default().changes(&snapshot, "pr");
         assert_eq!(
             updates.iter().map(|u| u.kind).collect::<Vec<_>>(),
@@ -740,103 +531,39 @@ mod tests {
                 UpdateKind::MergeConflict
             ]
         );
-        let mut next = snapshot.clone();
-        forgejo_status("Open — Merge conflicts\n- Success — review/default\n- Failure — rust\n- Skipped — deploy\n", &mut next, "rev-1").unwrap();
-        assert_eq!(snapshot.changes(&next, "pr")[0].message, "rust: Failure");
-        assert!(forgejo_status("unknown", &mut next, "rev-1").is_err());
-        assert!(
-            forgejo_status("Open — Can be merged\n- Unknown — rust", &mut next, "rev-1").is_err()
-        );
-    }
-
-    #[test]
-    fn forgejo_minimal_style_placeholders_preserve_check_names() {
-        let mut snapshot = Snapshot::default();
-        forgejo_status(
-            "\u{2068}STYLE()\u{2069}Open — Can be merged\n- \u{2068}Pending\u{2069} — rust\n- \u{2068}STYLE()\u{2069}Skipped\u{2068}STYLE()\u{2069} — review / STYLE()\n",
-            &mut snapshot,
+        let next = rest_snapshot(
             "rev-1",
-        )
-        .unwrap();
-        assert_eq!(snapshot.conflict, Some(false));
-        let updates = Snapshot::default().changes(&snapshot, "pr");
-        assert_eq!(updates.len(), 1);
-        assert_eq!(updates[0].kind, UpdateKind::CiCompleted);
-        assert_eq!(updates[0].message, "review /: Skipped");
-        assert!(
-            forgejo_status(
-                "STYLE()Open — Can be merged\n- STYLE()UnknownSTYLE() — rust",
-                &mut snapshot,
-                "rev-1",
-            )
-            .is_err()
+            true,
+            &[
+                ("review/default", "Success"),
+                ("rust", "Failure"),
+                ("deploy", "Skipped"),
+            ],
         );
+        let updates = snapshot.changes(&next, "pr");
+        assert_eq!(updates.len(), 1);
+        assert_eq!(updates[0].message, "rust: Failure");
+        assert_eq!(updates[0].check.as_ref().unwrap().result, "failure");
     }
 
     #[test]
-    fn forgejo_same_conclusion_on_a_new_revision_wakes_again() {
-        let status = "Open — Can be merged\n- Success — rust\n";
-        let mut first = Snapshot::default();
-        forgejo_status(status, &mut first, "revision-one").unwrap();
-        let mut second = Snapshot::default();
-        forgejo_status(status, &mut second, "revision-two").unwrap();
+    fn rest_same_conclusion_on_a_new_head_wakes_again() {
+        let first = rest_snapshot("revision-one", false, &[("rust", "Success")]);
+        let second = rest_snapshot("revision-two", false, &[("rust", "Success")]);
         let updates = first.changes(&second, "pr");
         assert_eq!(updates.len(), 1);
         assert_eq!(updates[0].kind, UpdateKind::CiCompleted);
     }
 
     #[test]
-    fn failed_revision_on_first_poll_defers_ci_until_revision_recovers() {
-        let previous = Snapshot::default();
-        let mut snapshot = Snapshot::default();
-        forgejo_status(
-            "Open — Merge conflicts\n- Success — rust\n",
-            &mut snapshot,
-            "",
-        )
-        .unwrap();
-        snapshot
-            .errors
-            .insert("revision".into(), "unavailable".into());
-        snapshot.comments.insert("reviews".into(), "finding".into());
-        snapshot.retain_failed_checks(&previous);
-        assert!(snapshot.checks.is_empty());
-        let updates = previous.changes(&snapshot, "pr");
-        assert_eq!(
-            updates.iter().map(|update| update.kind).collect::<Vec<_>>(),
-            [
-                UpdateKind::Comment,
-                UpdateKind::MergeConflict,
-                UpdateKind::LookupFailed
-            ]
-        );
-        let mut recovered = snapshot.clone();
-        recovered.errors.clear();
-        forgejo_status(
-            "Open — Merge conflicts\n- Success — rust\n",
-            &mut recovered,
-            "rev-1",
-        )
-        .unwrap();
-        let updates = snapshot.changes(&recovered, "pr");
-        assert_eq!(updates.len(), 1);
-        assert_eq!(updates[0].kind, UpdateKind::CiCompleted);
-    }
-
-    #[test]
-    fn failed_status_preserves_checks_and_conflicts_while_comments_wake() {
-        let mut before = Snapshot::default();
-        forgejo_status(
-            "Open — Merge conflicts\n- Success — review",
-            &mut before,
-            "rev-1",
-        )
-        .unwrap();
+    fn failed_ci_lookup_preserves_checks_while_comments_and_conflicts_wake() {
+        let before = rest_snapshot("rev-1", false, &[("review", "Success")]);
+        let forgejo = ForgeRepo::parse("https://forge.example/team/repo").unwrap();
+        let pull = json!({"number": 7, "title": "Fix", "state": "open", "mergeable": false,
+            "head": {"ref": "topic", "sha": "rev-1"}, "base": {"ref": "main"}});
+        let pull = forgejo.current(ItemKind::Pr, 7, &pull).unwrap();
         let mut failed = Snapshot::default();
-        failed.errors.insert(
-            "CI and merge conflicts".into(),
-            "no status available".into(),
-        );
+        failed.record_checks(&pull, Err(anyhow::anyhow!("no status available")));
         failed
             .comments
             .insert("discussion".into(), "new finding".into());
@@ -844,17 +571,18 @@ mod tests {
         let updates = before.changes(&failed, "pr");
         assert_eq!(
             updates.iter().map(|u| u.kind).collect::<Vec<_>>(),
-            [UpdateKind::Comment, UpdateKind::LookupFailed]
+            [
+                UpdateKind::Comment,
+                UpdateKind::MergeConflict,
+                UpdateKind::LookupFailed
+            ]
         );
+        assert_eq!(updates[2].message, "CI lookup failed: no status available");
         assert!(failed.changes(&failed, "pr").is_empty());
-        let mut recovered = failed.clone();
-        recovered.errors.clear();
-        forgejo_status(
-            "Open — Merge conflicts\n- Success — review",
-            &mut recovered,
-            "rev-1",
-        )
-        .unwrap();
+        let mut recovered = rest_snapshot("rev-1", true, &[("review", "Success")]);
+        recovered
+            .comments
+            .insert("discussion".into(), "new finding".into());
         assert!(failed.changes(&recovered, "pr").is_empty());
         let mut unknown = Snapshot::default();
         unknown.retain_failed_checks(&recovered);
@@ -862,34 +590,14 @@ mod tests {
     }
 
     #[test]
-    fn forgejo_api_checks_match_fj_status() {
-        let pull = json!({"title": "Topic", "mergeable": false, "head": {"sha": "abc"}});
-        let combined = json!({"total_count": 2, "statuses": [
-            {"context": "ci / rust", "status": "success"},
-            {"context": "review", "status": "pending"}
-        ]});
-        let mut api = Snapshot::default();
-        api_checks(&pull, &combined)
-            .unwrap()
-            .record(&mut api, "rev-1");
-        let mut fj = Snapshot::default();
-        forgejo_status(
-            "Open — Merge conflicts\n- Success — ci / rust\n- Pending — review\n",
-            &mut fj,
-            "rev-1",
-        )
-        .unwrap();
-        assert_eq!(api.conflict, Some(true));
-        assert!(fj.changes(&api, "pr").is_empty());
-        assert_eq!(api.checks, fj.checks);
-
-        let draft = json!({"title": "WIP: Topic", "mergeable": false});
-        let none = json!({"total_count": 0, "statuses": null});
-        let checks = api_checks(&draft, &none).unwrap();
-        assert!(!checks.conflict && checks.checks.is_empty());
-        let partial = json!({"total_count": 3, "statuses": combined["statuses"]});
-        assert!(api_checks(&pull, &partial).is_err());
-        let unknown = json!({"total_count": 1, "statuses": [{"context": "rust", "status": ""}]});
-        assert!(api_checks(&pull, &unknown).is_err());
+    fn forgejo_drafts_report_no_conflicts() {
+        let forgejo = ForgeRepo::parse("https://forge.example/team/repo").unwrap();
+        let pull = json!({"number": 7, "title": "WIP: Fix", "state": "open", "mergeable": false,
+            "head": {"ref": "topic", "sha": "rev-1"}, "base": {"ref": "main"}});
+        let pull = forgejo.current(ItemKind::Pr, 7, &pull).unwrap();
+        assert_eq!(pull.conflict, Some(false));
+        let mut snapshot = Snapshot::default();
+        snapshot.record_checks(&pull, Ok(Vec::new()));
+        assert!(Snapshot::default().changes(&snapshot, "pr").is_empty());
     }
 }

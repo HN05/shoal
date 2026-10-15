@@ -1325,11 +1325,10 @@ without taking updates; updates acknowledged while a newer watch runs stay pendi
 for it. Scoped callers can watch only in their own
 workspace. Activity polling continues when PR cleanup is disabled. Lookup failures report errors or `lookup_failed` updates; a source
 that keeps failing with the same error is reported again every 10 minutes. Forgejo
-comment and review changes are grouped; CI results follow `fj pr status` contexts.
+comment and review changes are grouped; CI results are the commit statuses of the
+PR's head commit, read with fj's login for the host when it has one.
 Failed Forgejo checks include the failing step when the runner records it and
 a command to read the log; a log lookup failure stays on that check's update.
-When `fj pr status` fails, CI results and merge conflicts come from Forgejo's
-API for the PR's head commit, using fj's login for the host when it has one.
 
 Once every linked PR has merged and at least one contains current HEAD, a
 workspace marked `done` is cleaned up. With automatic completion, Shoal records

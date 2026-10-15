@@ -851,9 +851,9 @@ or an explicit item that does not change associations. It reports comments or
 reviews, completed CI checks, new merge conflicts, closure, reopening or merging. An
 unfiltered watch without a linked PR runs the `conflicts` check on each poll as a
 cursor item named by the branch, so work without a PR still learns of conflicts; a
-linked PR leaves them to the forge, avoiding duplicate reports. Forgejo CI
-and mergeability fall back to the anonymous API, which reads the PR head without a
-login, when `fj pr status` fails. The watch shares a
+linked PR leaves them to the forge, avoiding duplicate reports. Forgejo reads
+come from its REST API rather than fj's output, which has no structured form,
+and work anonymously for public repositories. The watch shares a
 persistent cursor per workspace and item, reporting existing activity on the first
 wait and changes between waits thereafter; cancelling the watch discards that cursor.
 An omitted timeout keeps the watch unbounded; an explicit timeout remains a bounded

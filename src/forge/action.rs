@@ -334,6 +334,8 @@ mod tests {
             node_id: Some("PR_1".into()),
             head_repository: Some("team/repo".into()),
             body: String::new(),
+            head_sha: None,
+            conflict: None,
         }
     }
 

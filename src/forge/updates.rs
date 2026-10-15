@@ -1,10 +1,9 @@
-//! Read-only PR activity through the forge CLI's existing login.
+//! Read-only issue and PR activity through the user's existing forge login.
 use std::collections::BTreeMap;
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-use super::strip_bidi_isolates;
 use crate::model::ConflictCheck;
 
 mod queries;
@@ -169,11 +168,7 @@ impl Snapshot {
         if self.conflict.is_none() {
             self.conflict = previous.conflict;
         }
-        if self.errors.contains_key("CI and merge conflicts") {
-            self.checks = previous.checks.clone();
-            self.conflict = previous.conflict;
-        }
-        if self.errors.contains_key("revision") {
+        if self.errors.contains_key("CI") {
             self.checks = previous.checks.clone();
         }
         for source in ["discussion", "reviews"] {
@@ -209,15 +204,7 @@ impl Snapshot {
     fn record_comments(&mut self, source: &str, result: Result<String>) {
         match result {
             Ok(comments) => {
-                let comments = strip_bidi_isolates(&comments);
-                self.comments.insert(
-                    source.into(),
-                    if comments.trim() == "No reviews." {
-                        String::new()
-                    } else {
-                        comments
-                    },
-                );
+                self.comments.insert(source.into(), comments);
             }
             Err(error) => {
                 self.errors.insert(source.into(), format!("{error:#}"));
@@ -272,7 +259,7 @@ mod tests {
             let mut snapshot = Snapshot::default();
             snapshot
                 .errors
-                .insert("CI and merge conflicts".into(), error.into());
+                .insert("CI".into(), error.into());
             snapshot
         };
         let poll = |previous: &Snapshot, error: &str, now| {
