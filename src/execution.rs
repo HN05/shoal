@@ -348,6 +348,14 @@ pub async fn setup(paths: &Paths, workspace: String, json: bool) -> Result<i32> 
     run_tracked(paths, workspace, vec![], Mode::Setup { json }, None).await
 }
 
+struct TrackedLaunch {
+    link: Link,
+    plan: ExecutionPlan,
+    command: Vec<OsString>,
+    auth: Option<AgentLaunch>,
+    recovery: Option<recovery::Recovery>,
+}
+
 async fn run_tracked(
     paths: &Paths,
     workspace: String,
@@ -355,80 +363,13 @@ async fn run_tracked(
     mode: Mode,
     agent: Option<String>,
 ) -> Result<i32> {
-    let auth = if agent.is_some() || matches!(mode, Mode::Publish) {
-        let (config, settings) = client::configuration(
-            paths,
-            crate::protocol::ConfigTarget::Workspace(workspace.clone()),
-        )
-        .await?;
-        let secrets = if agent.is_some() {
-            crate::secrets::Launch::prepare(&settings.secrets, paths).await?
-        } else {
-            Default::default()
-        };
-        Some(AgentLaunch {
-            account: settings.agent_auth.prepare(paths, &config.git)?,
-            secrets,
-        })
-    } else {
-        None
-    };
-    let wrapper = process::identity::capture(std::process::id())?
-        .context("cannot identify execution wrapper")?;
-    let kind = mode.kind();
-    let recovery = if let Some(agent) = &agent {
-        Some(recovery::Recovery::for_launch(paths, &workspace, agent).await)
-    } else {
-        None
-    };
-    let recover = recovery.as_ref().is_some_and(|recovery| recovery.automatic);
-    let method = Method::Execute {
-        workspace,
-        wrapper: wrapper.clone(),
-        kind,
-        queue_entry: agent
-            .is_some()
-            .then(crate::env::queue_entry)
-            .flatten()
-            .map(str::to_owned),
-        agent: agent.clone(),
-        recover,
-        reattach: mode.reattaches(),
-    };
-    let (mut link, body) = timeout(kind.start_timeout(), Link::open(paths, method))
-        .await
-        .context("daemon did not start the execution in time")??;
-    let mut plan = ExecutionPlan::try_from(body)?;
-    if mode.reattaches() {
-        link.allow_reattach(
-            paths,
-            Reattach {
-                execution: plan.id.clone(),
-                wrapper,
-                child: None,
-                group_id: 0,
-                scope_token: plan.scope_token.clone(),
-                agent,
-                recover,
-                running_ms: 0,
-            },
-        );
-    }
-    let command = if let Some(land) = &plan.land {
-        internal_command(
-            paths,
-            matches!(mode, Mode::Land { json: true, .. }),
-            Worker::Land {
-                plan: &serde_json::to_string(land)?,
-                push: matches!(mode, Mode::Land { push: true, .. }),
-            },
-        )?
-    } else {
-        match &plan.setup_cmd {
-            Some(path) => vec![path.as_os_str().to_owned()],
-            None => command,
-        }
-    };
+    let TrackedLaunch {
+        mut link,
+        mut plan,
+        command,
+        auth,
+        recovery,
+    } = prepare_tracked_launch(paths, workspace, command, &mode, agent).await?;
     let mut next_command = command;
     let mut recovery_record = None;
     let mut result = loop {
@@ -554,6 +495,112 @@ async fn run_tracked(
         eprintln!("warning: unable to report execution completion: {error:#}");
     }
     result
+}
+
+async fn prepare_tracked_launch(
+    paths: &Paths,
+    workspace: String,
+    command: Vec<OsString>,
+    mode: &Mode,
+    agent: Option<String>,
+) -> Result<TrackedLaunch> {
+    let auth = prepare_agent_launch(paths, &workspace, mode, agent.is_some()).await?;
+    let wrapper = process::identity::capture(std::process::id())?
+        .context("cannot identify execution wrapper")?;
+    let kind = mode.kind();
+    let recovery = if let Some(agent) = &agent {
+        Some(recovery::Recovery::for_launch(paths, &workspace, agent).await)
+    } else {
+        None
+    };
+    let recover = recovery.as_ref().is_some_and(|recovery| recovery.automatic);
+    let method = Method::Execute {
+        workspace,
+        wrapper: wrapper.clone(),
+        kind,
+        queue_entry: agent
+            .is_some()
+            .then(crate::env::queue_entry)
+            .flatten()
+            .map(str::to_owned),
+        agent: agent.clone(),
+        recover,
+        reattach: mode.reattaches(),
+    };
+    let (mut link, body) = timeout(kind.start_timeout(), Link::open(paths, method))
+        .await
+        .context("daemon did not start the execution in time")??;
+    let plan = ExecutionPlan::try_from(body)?;
+    if mode.reattaches() {
+        link.allow_reattach(
+            paths,
+            Reattach {
+                execution: plan.id.clone(),
+                wrapper,
+                child: None,
+                group_id: 0,
+                scope_token: plan.scope_token.clone(),
+                agent,
+                recover,
+                running_ms: 0,
+            },
+        );
+    }
+    let command = execution_command(paths, &plan, command, mode)?;
+    Ok(TrackedLaunch {
+        link,
+        plan,
+        command,
+        auth,
+        recovery,
+    })
+}
+
+async fn prepare_agent_launch(
+    paths: &Paths,
+    workspace: &str,
+    mode: &Mode,
+    has_agent: bool,
+) -> Result<Option<AgentLaunch>> {
+    if !has_agent && !matches!(mode, Mode::Publish) {
+        return Ok(None);
+    }
+    let (config, settings) = client::configuration(
+        paths,
+        crate::protocol::ConfigTarget::Workspace(workspace.to_owned()),
+    )
+    .await?;
+    let secrets = if has_agent {
+        crate::secrets::Launch::prepare(&settings.secrets, paths).await?
+    } else {
+        Default::default()
+    };
+    Ok(Some(AgentLaunch {
+        account: settings.agent_auth.prepare(paths, &config.git)?,
+        secrets,
+    }))
+}
+
+fn execution_command(
+    paths: &Paths,
+    plan: &ExecutionPlan,
+    command: Vec<OsString>,
+    mode: &Mode,
+) -> Result<Vec<OsString>> {
+    if let Some(land) = &plan.land {
+        return internal_command(
+            paths,
+            matches!(mode, Mode::Land { json: true, .. }),
+            Worker::Land {
+                plan: &serde_json::to_string(land)?,
+                push: matches!(mode, Mode::Land { push: true, .. }),
+            },
+        );
+    }
+    Ok(match &plan.setup_cmd {
+        Some(path) => vec![path.as_os_str().to_owned()],
+        None => command,
+    })
 }
 
 enum Outcome {
