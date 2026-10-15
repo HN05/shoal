@@ -16,6 +16,7 @@ enum RepoMenuAction {
     Register,
     Rename,
     Config,
+    Setup,
     Delete,
 }
 
@@ -24,6 +25,7 @@ const BINDINGS: &[(&str, &str, RepoMenuAction)] = &[
     ("ctrl-a", "register", RepoMenuAction::Register),
     ("ctrl-r", "rename", RepoMenuAction::Rename),
     ("ctrl-o", "config", RepoMenuAction::Config),
+    ("ctrl-s", "set up", RepoMenuAction::Setup),
     ("ctrl-d", "delete", RepoMenuAction::Delete),
 ];
 
@@ -59,6 +61,11 @@ pub(super) async fn choose(ctx: &Context) -> Result<Command> {
             repository: Some(picked.id),
             file: None,
             clear: false,
+        }),
+        RepoMenuAction::Setup => repo(RepoCommand::Setup {
+            repository: Some(picked.id),
+            agent: None,
+            args: vec![],
         }),
         RepoMenuAction::Delete => repo(RepoCommand::Rm {
             repository: Some(picked.id),
@@ -103,6 +110,7 @@ mod tests {
         for action in [
             RepoMenuAction::Rename,
             RepoMenuAction::Config,
+            RepoMenuAction::Setup,
             RepoMenuAction::Delete,
         ] {
             assert!(resolve_action(action, REGISTER_ENTRY).is_err());
