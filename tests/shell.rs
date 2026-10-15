@@ -159,3 +159,54 @@ exit
     }
     assert!(!root.path().join("state").exists());
 }
+
+#[test]
+fn zsh_navigation_refreshes_the_line_editor_prompt() {
+    let root = tempfile::tempdir().unwrap();
+    let integration = root.path().join("init.sh");
+    let output = support::cli(root.path())
+        .args(["shell", "init"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    fs::write(&integration, output.stdout).unwrap();
+
+    let destination = root.path().join("workspace");
+    fs::create_dir(&destination).unwrap();
+    let stub = root.path().join("bin/shoal");
+    support::install_test_script(
+        &stub,
+        r#"#!/bin/sh
+if [ "$1" = completions ]; then
+  exec "$TEST_SHOAL" "$@"
+fi
+printf '%s\n' "$HOME/workspace" > "$SHOAL_SHELL_DIRECTIVE"
+"#,
+    );
+
+    let output = support::isolated(root.path(), "zsh")
+        .args(["-f", "-c"])
+        .arg(
+            r#"
+set -eu
+zle() {
+  if [ "$1" = reset-prompt ]; then
+    : > "$HOME/prompt-reset"
+  fi
+}
+. "$INTEGRATION"
+shoal cd
+test "$PWD" = "$HOME/workspace"
+test -f "$HOME/prompt-reset"
+"#,
+        )
+        .env("INTEGRATION", &integration)
+        .env("TEST_SHOAL", env!("CARGO_BIN_EXE_shoal"))
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}

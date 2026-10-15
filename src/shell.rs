@@ -68,6 +68,12 @@ pub const INIT: &str = r#"_shoal_recover_directory() {
   return "$shoal_status"
 }
 
+_shoal_refresh_prompt() {
+  if [ -n "${ZSH_VERSION-}" ]; then
+    zle reset-prompt 2>/dev/null || :
+  fi
+}
+
 shoal() {
   local shoal_cd_file shoal_destination shoal_exit=0
   shoal_cd_file="$(mktemp "${TMPDIR:-/tmp}/shoal-cd.XXXXXXXX")" || return 1
@@ -79,6 +85,7 @@ shoal() {
       shoal_destination="$(command shoal shell recover -- "$shoal_destination")" || return "$?"
     fi
     builtin cd -- "$shoal_destination" || return 1
+    _shoal_refresh_prompt
   fi
   _shoal_recover_directory || :
   return "$shoal_exit"

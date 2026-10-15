@@ -1582,6 +1582,8 @@ directory (`OLDPWD`, per shell), refusing a deleted destination. Scoped agents
 cannot navigate outside their worktree. Without the function, Shoal prints the
 destination and, in an interactive terminal, explains how to load the integration;
 `--json` returns the path without requesting navigation.
+The wrapper refreshes the Zsh line-editor prompt after navigation; Bash updates
+its prompt through `PROMPT_COMMAND`.
 
 ### Tab completion
 

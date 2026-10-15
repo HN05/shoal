@@ -412,7 +412,9 @@ workspace or the workspace containing the current directory, then an interactive
 picker; a deleted current directory provides no workspace context. Explicit misses
 fail without fallback; noninteractive and JSON calls
 without a current workspace require a target. Scope remains daemon-enforced.
-Bare `cd` always picks; all-workspace operations retain their scope.
+Bare `cd` always picks; all-workspace operations retain their scope. Shell
+navigation refreshes the Zsh line-editor prompt after changing directories,
+while Bash uses its prompt command hooks.
 An omitted required argument that names an existing record opens a picker on a
 terminal; noninteractive and JSON calls require it.
 An agent whose executables are not on PATH
