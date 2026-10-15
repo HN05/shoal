@@ -193,8 +193,10 @@ impl Manager {
         let branch = watches_branch(selection, &items).then(|| workspace.branch.clone());
         let mut keys = items.iter().map(|(url, _)| url.clone()).collect::<Vec<_>>();
         keys.extend(branch.clone());
-        let pending = self.pending_activity(id, &keys).await?;
+        let mut pending = self.pending_activity(id, &keys).await?;
         if !pending.is_empty() {
+            drop(guard);
+            self.summarize_failed_checks(id, &mut pending).await;
             return Ok(pending);
         }
         drop(guard);
@@ -207,7 +209,9 @@ impl Manager {
         match items {
             Ok(items) => {
                 observations.splice(0..0, items);
-                self.record_activity(id, observations, selection).await
+                let mut updates = self.record_activity(id, observations, selection).await?;
+                self.summarize_failed_checks(id, &mut updates).await;
+                Ok(updates)
             }
             // A failed item lookup must not hold back the branch's conflicts.
             Err(error) => {
@@ -597,6 +601,7 @@ mod tests {
                         kind: UpdateKind::CiCompleted,
                         message: "review passed".into(),
                         delivery: String::new(),
+                        check: None,
                     }]
                 },
             )
@@ -869,6 +874,7 @@ mod tests {
             kind: UpdateKind::BaseMerged,
             message: "base merged".into(),
             delivery: "queued".into(),
+            check: None,
         };
         let (id, update) = (workspace.id.clone(), queued.clone());
         manager

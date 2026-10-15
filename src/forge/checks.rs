@@ -25,6 +25,51 @@ pub struct CheckLog {
 }
 
 impl Manager {
+    /// Log failures stay on their CI update and never hide other activity.
+    pub(crate) async fn summarize_failed_checks(
+        &self,
+        workspace: &str,
+        updates: &mut [super::updates::Update],
+    ) {
+        for index in 0..updates.len() {
+            let update = &updates[index];
+            let Some(check) = &update.check else { continue };
+            if !matches!(check.result.as_str(), "failure" | "error")
+                || !ForgeRepo::from_pull_url(&update.url)
+                    .is_ok_and(|forge| forge.kind == ForgeKind::Forgejo)
+            {
+                continue;
+            }
+            let selection = Selection {
+                kind: Some(ItemKind::Pr),
+                input: Some(update.url.clone()),
+            };
+            let log = self.check_log(workspace, &selection, &check.name).await;
+            let summary = match log {
+                Ok(log) => log
+                    .failed_step
+                    .map(|step| format!("; failed step: {step}"))
+                    .unwrap_or_default(),
+                Err(error) => format!(
+                    "; log unavailable: {}",
+                    format!("{error:#}").chars().take(512).collect::<String>()
+                ),
+            };
+            let message = format!(
+                "{}{summary}; read the log with shoal view {} --check '{}'",
+                update.message,
+                update.url,
+                check.name.replace('\'', "'\\''")
+            );
+            let previous = std::mem::replace(&mut updates[index].message, message);
+            if serde_json::to_vec(updates).map_or(true, |bytes| {
+                bytes.len() >= crate::protocol::MAX_FRAME - 1024
+            }) {
+                updates[index].message = previous;
+            }
+        }
+    }
+
     pub async fn check_log(
         &self,
         selector: &str,

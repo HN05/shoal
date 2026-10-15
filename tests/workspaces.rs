@@ -11105,17 +11105,18 @@ esac
     assert_eq!(
         updates
             .iter()
-            .map(|update| (
-                update["kind"].as_str().unwrap(),
-                update["message"].as_str().unwrap()
-            ))
+            .map(|update| update["kind"].as_str().unwrap())
             .collect::<Vec<_>>(),
-        [
-            ("ci_completed", "rust: Failure"),
-            ("merge_conflict", "PR has merge conflicts")
-        ],
+        ["ci_completed", "merge_conflict"],
         "{watched}"
     );
+    assert!(
+        updates[0]["message"]
+            .as_str()
+            .unwrap()
+            .starts_with("rust: Failure; log unavailable:")
+    );
+    assert_eq!(updates[1]["message"], "PR has merge conflicts");
     assert!(
         fs::read_to_string(&curl_args)
             .unwrap()
@@ -11173,7 +11174,12 @@ fn pr_wait_reports_forgejo_reviews_when_status_lookup_fails() {
     .unwrap();
     let third = fixture.ok(&["watch", "pr", "--workspace", "watch"]);
     assert_eq!(third["updates"].as_array().unwrap().len(), 2);
-    assert_eq!(third["updates"][0]["message"], "rust: Failure");
+    assert!(
+        third["updates"][0]["message"]
+            .as_str()
+            .unwrap()
+            .starts_with("rust: Failure; log unavailable:")
+    );
     assert_eq!(third["updates"][1]["kind"], "merge_conflict");
 }
 

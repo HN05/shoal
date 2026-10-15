@@ -35,6 +35,8 @@ pub struct Update {
     pub message: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub delivery: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub check: Option<super::pr::state::CheckResult>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -90,12 +92,13 @@ impl Snapshot {
 
     pub(super) fn changes(&self, next: &Self, url: &str) -> Vec<Update> {
         let mut updates = Vec::new();
-        let mut emit = |kind, message| {
+        let mut emit = |kind, message, check| {
             updates.push(Update {
                 url: url.into(),
                 kind,
                 message,
                 delivery: String::new(),
+                check,
             })
         };
         if next
@@ -106,6 +109,7 @@ impl Snapshot {
             emit(
                 UpdateKind::Comment,
                 format!("Comments or reviews changed; read them with shoal view {url}"),
+                None,
             );
         }
         for (id, check) in &next.checks {
@@ -113,6 +117,10 @@ impl Snapshot {
                 emit(
                     UpdateKind::CiCompleted,
                     format!("{}: {}", check.name, check.state),
+                    Some(super::pr::state::CheckResult {
+                        name: check.name.clone(),
+                        result: check.state.to_ascii_lowercase(),
+                    }),
                 );
             }
         }
@@ -121,6 +129,7 @@ impl Snapshot {
             emit(
                 UpdateKind::MergeConflict,
                 message.unwrap_or("PR has merge conflicts").into(),
+                None,
             );
         }
         if next.state != self.state {
@@ -133,11 +142,12 @@ impl Snapshot {
                         "PR closed without merging"
                     }
                     .into(),
+                    None,
                 ),
                 "open" if self.state == "closed" => {
-                    emit(UpdateKind::Reopened, "Item reopened".into())
+                    emit(UpdateKind::Reopened, "Item reopened".into(), None)
                 }
-                "merged" => emit(UpdateKind::Merged, "PR merged".into()),
+                "merged" => emit(UpdateKind::Merged, "PR merged".into(), None),
                 _ => {}
             }
         }
@@ -148,6 +158,7 @@ impl Snapshot {
                 emit(
                     UpdateKind::LookupFailed,
                     format!("{source} lookup failed: {error}"),
+                    None,
                 );
             }
         }

@@ -836,3 +836,55 @@ fn view_prints_check_logs_and_reports_lookup_errors() {
         }
     }
 }
+
+#[test]
+fn watch_reports_failed_steps_or_log_lookup_errors_without_hiding_comments() {
+    for available in [true, false] {
+        let fixture = Fixture::new(Forge::Forgejo, "");
+        let mut responses = failed_check_responses();
+        if !available {
+            responses["GET repos/team/project/actions/jobs/18345/logs"] =
+                json!({"status": 404, "body": {"message": "logs unavailable"}});
+        }
+        fixture.respond(responses);
+        support::install_test_script(
+            fixture.root.path().join("bin/fj"),
+            r#"#!/bin/sh
+case " $* " in
+ *' status '*) printf 'Open — Can be merged\n- Failure — rust\n';;
+ *' review '*) printf 'No reviews.\n';;
+ *' comments '*) printf 'A review is ready\n';;
+ *' commits '*) printf 'commit 1111111111111111111111111111111111111111\n';;
+ *) printf 'Title #8\nBy user — Open — +1 -0\nFrom `topic` into `main`\n';;
+esac
+"#,
+        );
+        let result = fixture.ok(&[
+            "watch",
+            "pr",
+            "8",
+            "--workspace",
+            "topic",
+            "--timeout",
+            "60",
+        ]);
+        let updates = result["updates"].as_array().unwrap();
+        assert!(
+            updates.iter().any(|update| update["kind"] == "comment"),
+            "{result}"
+        );
+        let ci = updates
+            .iter()
+            .find(|update| update["kind"] == "ci_completed")
+            .unwrap();
+        let message = ci["message"].as_str().unwrap();
+        assert!(message.starts_with("rust: Failure; "), "{message}");
+        assert!(message.contains("--check 'rust'"), "{message}");
+        if available {
+            assert!(message.contains("failed step: Main Test"), "{message}");
+        } else {
+            assert!(message.contains("log unavailable: HTTP 404"), "{message}");
+        }
+        assert_eq!(ci["check"], json!({"name": "rust", "result": "failure"}));
+    }
+}
