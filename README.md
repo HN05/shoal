@@ -339,7 +339,7 @@ terminals.
 
 ## Development
 
-See [design.md](design.md) for decisions and the [command reference](docs/reference.md) for behavior.
+See [docs/design.md](docs/design.md) for decisions and the [command reference](docs/reference.md) for behavior.
 Create releases through **Actions → release** ([setup](docs/releases.md)).
 
 Requires Rust at least as new as `package.rust-version` in [Cargo.toml](Cargo.toml)

@@ -8,9 +8,9 @@ use crate::{agent::BuiltinAgent, config::Config, paths::Paths};
 pub use super::placeholders::render;
 
 pub const ISSUE_FILE: &str = "issue-template.md";
-pub const ISSUE_DEFAULT: &str = include_str!("../../issue-template.md");
+pub const ISSUE_DEFAULT: &str = include_str!("templates/issue.md");
 pub const AGENT_FILE: &str = "agent-template.md";
-pub const AGENT_DEFAULT: &str = include_str!("../../agent-template.md");
+pub const AGENT_DEFAULT: &str = include_str!("templates/agent.md");
 /// Earlier shipped agent defaults. An installed copy that still matches one was
 /// never edited, so `install` replaces it; add the old text here when changing it.
 const AGENT_RETIRED: &[&str] = &[

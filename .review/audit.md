@@ -7,7 +7,7 @@ focus.
 
 Inspect existing code within the requested scope. Read `AGENTS.md`, scoped
 rules and the correctness priorities in [review.md](review.md); consult
-`design.md` and `docs/reference.md` for the relevant contracts.
+`docs/design.md` and `docs/reference.md` for the relevant contracts.
 
 ## Read-only inspection
 
@@ -77,8 +77,8 @@ which it matters.
 ## Documentation
 
 Check the documentation that describes the selected area. Compare `README.md`,
-`docs/reference.md`, `design.md` and `AGENTS.md` with the implemented CLI,
+`docs/reference.md`, `docs/design.md` and `AGENTS.md` with the implemented CLI,
 configuration and daemon behavior. Report renamed or removed commands and
-options, changed defaults and examples that no longer work. Treat `design.md`
+options, changed defaults and examples that no longer work. Treat `docs/design.md`
 proposals that are not implemented yet as design, not as wrong documentation,
 unless the text presents them as current behavior.

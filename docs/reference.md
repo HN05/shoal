@@ -75,8 +75,8 @@ current `PATH` for the service, so install runtime dependencies and any hook
 tools first. It also creates `~/.config/shoal/config.toml` (or
 `$XDG_CONFIG_HOME/shoal/config.toml`) from
 [configs/default.toml](../configs/default.toml), which states every default,
-and installs the root [issue-template.md](../issue-template.md) and
-[agent-template.md](../agent-template.md) beside it,
+and installs the [bundled issue template](../src/config/templates/issue.md) and
+[bundled agent template](../src/config/templates/agent.md) beside it,
 never touching an existing file except an unedited agent template from an earlier
 release, which it updates; `--dry-run` writes nothing. Installation prints
 the shell initialization hint only when neither `.bashrc` nor `.zshrc` (under
@@ -736,7 +736,7 @@ beneath an agent drop the inherited values and launchers.
 ### Prompt templates
 
 `issue_template` and `agent_template` in the saved repository TOML win over
-the worktree's TOML values or root `issue-template.md` and `agent-template.md`.
+the worktree's TOML values or `issue-template.md` and `agent-template.md` in the repository root.
 The selected repository template is appended after the global TOML value or
 corresponding file beside `config.toml`, with a blank line between nonempty
 templates. Inline TOML wins over Markdown at each level. An empty repository

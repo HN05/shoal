@@ -1,6 +1,6 @@
 # Shoal
 
-Read `design.md` for product decisions and the implementation order. Update it
+Read `docs/design.md` for product decisions and the implementation order. Update it
 when behavior changes, distinguishing decisions from proposals.
 
 ## Implementation
@@ -123,7 +123,7 @@ when behavior changes, distinguishing decisions from proposals.
 ## Documentation
 
 Keep documentation short and current. Say each thing once, where a reader looks for
-it: usage in README.md, behavior in docs/reference.md, decisions in design.md,
+it: usage in README.md, behavior in docs/reference.md, decisions in docs/design.md,
 contributor rules here; a new document needs a subject none of those covers. Edit
 the sentence that describes the changed behavior instead of appending a paragraph,
 and cut text that restates code, tests, history, or another section. State a rule
@@ -178,7 +178,7 @@ It is never a required check.
 `.forgejo/workflows/review.yml` posts an advisory review-bot review when a PR
 opens and whenever `review/default`, `review/claude` or `review/codex` is
 added; `review/none` suppresses it. `.review/review.md` is its project brief;
-keep it current when a rule here or in `design.md` changes.
+keep it current when a rule here or in `docs/design.md` changes.
 Opening a ready PR already requests its review; never add reviewer request labels
 with its opening classification labels. Claude and Codex use independent queues,
 so one of each can run concurrently. Review and audit workflows follow review-bot's

@@ -2,7 +2,7 @@
 
 Rust CLI plus a local daemon that owns shared state for coding-agent
 workspaces, ports, simulator leases and permits. `AGENTS.md` holds the working
-rules and `design.md` the product decisions; `docs/reference.md` documents
+rules and `docs/design.md` the product decisions; `docs/reference.md` documents
 behavior. When a change touches lifecycle, ownership, resource leases or
 removal, check it against the rule those files state before judging it.
 Repository code audits use [audit.md](audit.md) for inspection instructions
@@ -361,7 +361,7 @@ configured command for another agent, plus proven child
   runner speed, and a wait must observe the awaited event itself, not a proxy
   that can hold first.
 - Documentation: usage lives in README.md, behavior in docs/reference.md,
-  decisions in design.md, contributor rules in AGENTS.md. Flag behavior
+  decisions in docs/design.md, contributor rules in AGENTS.md. Flag behavior
   changes without the matching sentence edit, text that restates code or
   history, and sentences that list or count what a rule covers instead of
   stating the rule; an overstated rule is narrowed, not annotated with its

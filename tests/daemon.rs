@@ -608,13 +608,13 @@ fn install_is_repeatable_and_service_controls_work_with_an_isolated_manager() {
     let template = config.with_file_name("issue-template.md");
     assert_eq!(
         fs::read_to_string(&template).unwrap(),
-        include_str!("../issue-template.md")
+        include_str!("../src/config/templates/issue.md")
     );
     fs::write(&template, "custom issue template").unwrap();
     let agent_template = config.with_file_name("agent-template.md");
     assert_eq!(
         fs::read_to_string(&agent_template).unwrap(),
-        include_str!("../agent-template.md")
+        include_str!("../src/config/templates/agent.md")
     );
     fs::write(&agent_template, "custom agent template").unwrap();
     fs::write(&config, "default_agent = 'claude'\n").unwrap();

@@ -1,7 +1,7 @@
 # Shoal design
 
-Decisions and proposals; usage: [README.md](README.md), behavior:
-[docs/reference.md](docs/reference.md), contributor rules: [AGENTS.md](AGENTS.md).
+Decisions and proposals; usage: [README.md](../README.md), behavior:
+[docs/reference.md](reference.md), contributor rules: [AGENTS.md](../AGENTS.md).
 
 ## Purpose and boundaries
 
@@ -663,7 +663,7 @@ issue template is configured. Empty repository values suppress only the addition
 Repository-root Markdown files and global files beside `config.toml` sit below
 inline TOML values at each level; provenance names the highest configured layer
 and reports the combined text.
-`install` adds missing templates from the bundled repository-root defaults and
+`install` adds missing templates from the bundled defaults and
 updates a regular file that still matches an earlier bundled default, since agent
 guidance must reach existing installs; edited or linked files stay untouched;
 rendering substitutes known fields once without evaluating their contents.
