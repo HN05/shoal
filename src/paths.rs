@@ -93,6 +93,13 @@ impl Paths {
             .tempdir_in(&self.state)
     }
 
+    /// Secret tool launchers, held for one tracked agent launch.
+    pub fn secret_tools_directory(&self) -> std::io::Result<tempfile::TempDir> {
+        tempfile::Builder::new()
+            .prefix("secret-tools-")
+            .tempdir_in(&self.state)
+    }
+
     /// Run data Shoal keeps for one workspace, such as detached session logs;
     /// deleted with the workspace record.
     pub fn workspace_state(&self, workspace_id: &str) -> PathBuf {

@@ -282,8 +282,9 @@ AGENT_BROWSER_SESSION = "{workspace}"
 AGENT_BROWSER_PROFILE = "{workspace_path}/.agent-browser"
 ```
 
-Use `[secrets]` in global or saved repository config to give agents values
-fetched from your secret store; see [agent secrets](docs/reference.md#agent-secrets).
+Use `[secrets]` in global or saved repository config to give agents, or only
+tools such as `agent-browser`, values fetched from your secret store; see
+[agent secrets](docs/reference.md#agent-secrets).
 
 ## Cleanup
 

@@ -12954,6 +12954,68 @@ fn secrets_reach_agents_but_not_ordinary_executions_or_hooks() {
 }
 
 #[test]
+fn tool_secrets_reach_only_their_tools() {
+    let fixture = Fixture::with_config(Some(
+        "[secrets.TOOL_TOKEN]\ncommand = ['printf', 'tool secret']\ntools = ['show-token']\n",
+    ));
+    let workspace = fixture.add("tool-secrets");
+    let worktree = Path::new(workspace["path"].as_str().unwrap());
+    let bin = fixture.root.path().join("bin");
+    install_test_script(
+        bin.join("show-token"),
+        "#!/bin/sh\nprintf '%s|%s|%s\\n' \"${TOOL_TOKEN-unset}\" \"$SHOAL_SECRET_ENV\" \"$*\"\n",
+    );
+    install_test_script(worktree.join("setup.sh"), "#!/bin/sh\n");
+    install_test_script(
+        worktree.join("post-setup.sh"),
+        "#!/bin/sh\nshow-token hook > hook-output\nprintf '%s' \"${SHOAL_SECRET_TOOLS-unset}\" >> hook-output\n",
+    );
+    fs::write(
+        worktree.join(".shoal.toml"),
+        "setup_cmd = 'setup.sh'\npost_setup_cmd = 'post-setup.sh'\n[commands]\nclaude = ['sh', '-c', 'printf \"%s\\n\" \"${TOOL_TOKEN-unset}\"; show-token \"two words\" -x']\n",
+    )
+    .unwrap();
+    let output = fixture.run(&["claude", "tool-secrets"]);
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        "unset\ntool secret|TOOL_TOKEN|two words -x\n"
+    );
+    let output = fixture.run(&["exec", "tool-secrets", "--", "show-token"]);
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(output.stdout, b"unset||\n");
+    assert!(
+        fs::read_dir(fixture.root.path().join("state"))
+            .unwrap()
+            .all(|entry| !entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .starts_with("secret-tools-"))
+    );
+
+    // A hook started beneath an agent runs the tool without its launcher.
+    let launchers = fixture.root.path().join("launchers");
+    install_test_script(launchers.join("show-token"), "#!/bin/sh\necho launcher\n");
+    let path = std::env::join_paths([launchers.clone(), bin].into_iter().chain(
+        std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()),
+    ))
+    .unwrap();
+    let output = fixture
+        .command()
+        .env("PATH", path)
+        .env("SHOAL_SECRET_TOOLS", &launchers)
+        .args(["setup", "tool-secrets"])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(
+        fs::read_to_string(worktree.join("hook-output")).unwrap(),
+        "unset||hook\nunset"
+    );
+}
+
+#[test]
 fn agent_git_profile_applies_only_to_agent_processes() {
     let fixture = Fixture::with_config(Some(
         "[git.profiles.agent]\nuser.name = 'Agent Name'\nuser.email = 'agent@example.invalid'\n",

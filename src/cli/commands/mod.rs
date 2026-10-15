@@ -493,6 +493,11 @@ async fn internal(ctx: Context, command: InternalCommand) -> Result<i32> {
         } => {
             crate::execution::run_detached_wrapper(&ctx.paths, workspace, log, command, agent).await
         }
+        InternalCommand::SecretTool {
+            launchers,
+            tool,
+            args,
+        } => crate::secrets::run_tool(&launchers, &tool, args).await,
         InternalCommand::Session {
             workspace,
             agent,

@@ -672,6 +672,10 @@ store. Each entry is named after the variable that carries the value, and its
 ```toml
 [secrets.OPENAI_API_KEY]
 command = ["security", "find-generic-password", "-s", "shoal-agent-openai", "-w"]
+
+[secrets.AGENT_BROWSER_ENCRYPTION_KEY]
+command = ["op", "read", "op://Agents/agent-browser/key"]
+tools = ["agent-browser"]
 ```
 
 Set it in the global config or the saved repository config; a worktree file
@@ -679,11 +683,17 @@ that sets it is rejected, because secret sources belong to the machine. An
 entry replaces the same-named entry below it whole. Shoal stores the commands,
 never the values.
 
-Agent launches run each command without input, before the agent starts, and
-add the values to the agent's environment; nested commands inherit them. One
-trailing line break is dropped. A command that fails, prints nothing or
-prints NUL stops the launch. Ordinary executions do not receive secrets, and
-hooks started beneath an agent drop the ones it inherited.
+Commands run without input, and one trailing line break is dropped. Without
+`tools`, agent launches run the command before the agent starts and add the
+value to the agent's environment, which nested commands inherit; a command
+that fails, prints nothing or prints NUL stops the launch. With `tools`, the
+agent's environment never holds the value: the launch puts a launcher for
+each listed program first on a private PATH, and each run of the program
+through it fetches the value and runs the next program of that name on PATH
+with the value set, or fails with the command's error. Like the agent account
+wrappers, launchers are cooperative: an absolute program path or a reset PATH
+bypasses them. Ordinary executions do not receive secrets, and hooks started
+beneath an agent drop the inherited values and launchers.
 
 ### Prompt templates
 

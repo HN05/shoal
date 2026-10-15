@@ -2,23 +2,38 @@
 //! the commands, never the values.
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, ffi::OsString, process::Stdio};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    ffi::{OsStr, OsString},
+    os::unix::fs::PermissionsExt,
+    path::Path,
+    process::Stdio,
+};
+
+use crate::{env, paths::Paths};
 
 #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Secret {
     /// Argument array whose standard output is the value.
     pub command: Vec<String>,
+    /// Programs that receive the value each time they run; empty gives it to
+    /// the agent's environment instead.
+    pub tools: Vec<String>,
 }
 
 /// Configured secrets keyed by the variable that carries each value.
 pub type Secrets = BTreeMap<String, Secret>;
 
+/// The tool-scoped secrets a launcher directory serves, beside its launchers.
+/// Tool names cannot start with a dot, so no launcher can take its name.
+const MANIFEST: &str = ".secrets.json";
+
 pub fn validate(secrets: &Secrets) -> Result<()> {
     for (name, secret) in secrets {
-        crate::env::validate_configured_name("[secrets]", name)?;
+        env::validate_configured_name("[secrets]", name)?;
         ensure!(
-            !crate::env::PROTECTED.contains(&name.as_str()),
+            !env::PROTECTED.contains(&name.as_str()),
             "[secrets] cannot set {name}"
         );
         ensure!(
@@ -32,51 +47,171 @@ pub fn validate(secrets: &Secrets) -> Result<()> {
             secret.command.iter().all(|word| !word.contains('\0')),
             "secrets.{name}.command contains NUL"
         );
+        for tool in &secret.tools {
+            ensure!(
+                !tool.is_empty() && !tool.starts_with('.') && !tool.contains(['/', '\0']),
+                "secrets.{name}.tools: {tool:?} is not a program name"
+            );
+        }
     }
     Ok(())
 }
 
-/// The secret variables an agent launch adds to its child's environment.
+/// The secret variables an agent launch adds to its child's environment, and
+/// the launchers that give tool-scoped secrets to their tools.
 #[derive(Debug, Default)]
 pub struct Launch {
     environment: Vec<(String, OsString)>,
+    launchers: Option<tempfile::TempDir>,
 }
 
 impl Launch {
-    /// Fetch every secret now, so a failing command stops the launch before
-    /// the agent starts.
-    pub async fn prepare(secrets: &Secrets) -> Result<Self> {
+    /// Fetch every environment secret now, so a failing command stops the
+    /// launch before the agent starts. Tool-scoped secrets are fetched each
+    /// time their tool runs.
+    pub async fn prepare(secrets: &Secrets, paths: &Paths) -> Result<Self> {
         validate(secrets)?;
+        let (scoped, unscoped): (Secrets, Secrets) = secrets
+            .clone()
+            .into_iter()
+            .partition(|(_, secret)| !secret.tools.is_empty());
         let mut environment = Vec::new();
-        for (name, secret) in secrets {
-            environment.push((name.clone(), fetch(name, secret).await?));
+        for (name, secret) in &unscoped {
+            environment.push((name.clone(), fetch(name, secret, None).await?));
         }
-        Ok(Self { environment })
+        let launchers = if scoped.is_empty() {
+            None
+        } else {
+            Some(write_launchers(&scoped, paths)?)
+        };
+        Ok(Self {
+            environment,
+            launchers,
+        })
     }
 
-    /// Hooks started beneath the agent drop the names recorded in
-    /// [`crate::env::SECRET_ENV`], including those of an enclosing launch.
+    /// Put the launchers first on the child's PATH, after any directory an
+    /// earlier step prepended. Hooks started beneath the agent drop the names
+    /// in [`env::SECRET_ENV`] and the directories in [`env::SECRET_TOOLS`],
+    /// including those of an enclosing launch.
     pub fn apply(&self, command: &mut tokio::process::Command) {
-        if self.environment.is_empty() {
-            return;
+        if !self.environment.is_empty() {
+            for (name, value) in &self.environment {
+                command.env(name, value);
+            }
+            command.env(
+                env::SECRET_ENV,
+                exported_names(self.environment.iter().map(|(name, _)| name)),
+            );
         }
-        let mut names = crate::env::inherited_secret_exports();
-        for (name, value) in &self.environment {
-            command.env(name, value);
-            names.push(name.clone());
+        if let Some(launchers) = &self.launchers {
+            let inherited = command
+                .as_std()
+                .get_envs()
+                .find(|(name, _)| *name == "PATH")
+                .and_then(|(_, value)| value.map(OsStr::to_owned))
+                .or_else(|| std::env::var_os("PATH"))
+                .unwrap_or_default();
+            let prepend = |list: &OsStr| {
+                std::env::join_paths(std::iter::once(launchers.path().to_owned()).chain(
+                    std::env::split_paths(list).filter(|entry| !entry.as_os_str().is_empty()),
+                ))
+            };
+            // Launcher directories are Shoal state paths, which never contain
+            // a colon.
+            if let (Ok(path), Ok(directories)) = (
+                prepend(&inherited),
+                prepend(&std::env::var_os(env::SECRET_TOOLS).unwrap_or_default()),
+            ) {
+                command
+                    .env("PATH", path)
+                    .env(env::SECRET_TOOLS, directories);
+            }
         }
-        names.sort();
-        names.dedup();
-        command.env(crate::env::SECRET_ENV, names.join(":"));
     }
 }
 
+/// One executable per tool that hands its arguments to
+/// `shoal internal secret-tool`, beside the manifest it reads.
+fn write_launchers(secrets: &Secrets, paths: &Paths) -> Result<tempfile::TempDir> {
+    let directory = paths.secret_tools_directory()?;
+    std::fs::write(
+        directory.path().join(MANIFEST),
+        serde_json::to_vec(secrets)?,
+    )?;
+    let shoal = crate::fsutil::invoked_executable()?;
+    let words = |path: &Path| {
+        path.to_str()
+            .map(str::to_owned)
+            .with_context(|| format!("{} is not UTF-8", path.display()))
+    };
+    let (shoal, launchers) = (words(&shoal)?, words(directory.path())?);
+    let tools: BTreeSet<_> = secrets.values().flat_map(|secret| &secret.tools).collect();
+    for tool in tools {
+        let invocation = crate::shell::quote(&[
+            shoal.as_str(),
+            crate::cli::internal::GROUP,
+            crate::cli::internal::SECRET_TOOL,
+            &launchers,
+            tool,
+            "--",
+        ]);
+        let path = directory.path().join(tool);
+        std::fs::write(&path, format!("#!/bin/sh\nexec {invocation} \"$@\"\n"))?;
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))?;
+    }
+    Ok(directory)
+}
+
+/// Run `tool` with the secrets configured for it in place of the launcher
+/// in `launchers`: the next `tool` on PATH, which may be an enclosing
+/// launch's launcher.
+pub async fn run_tool(launchers: &Path, tool: &str, args: Vec<OsString>) -> Result<i32> {
+    use std::os::unix::process::CommandExt;
+    let manifest = launchers.join(MANIFEST);
+    let secrets: Secrets = serde_json::from_slice(
+        &std::fs::read(&manifest).with_context(|| format!("read {}", manifest.display()))?,
+    )
+    .with_context(|| format!("parse {}", manifest.display()))?;
+    let inherited = std::env::var_os("PATH").unwrap_or_default();
+    let search = std::env::join_paths(
+        std::env::split_paths(&inherited).filter(|entry| !env::same_directory(entry, launchers)),
+    )?;
+    let program = crate::fsutil::find_executable(OsStr::new(tool), &search)
+        .with_context(|| format!("{tool} is not on PATH"))?;
+    let mut command = std::process::Command::new(&program);
+    command.args(args);
+    let mut names = Vec::new();
+    for (name, secret) in &secrets {
+        if secret.tools.iter().any(|candidate| candidate == tool) {
+            command.env(name, fetch(name, secret, Some(&search)).await?);
+            names.push(name);
+        }
+    }
+    command.env(env::SECRET_ENV, exported_names(names.into_iter()));
+    Err(command.exec()).with_context(|| format!("run {}", program.display()))
+}
+
+/// [`env::SECRET_ENV`] after adding `names` to the inherited ones.
+fn exported_names<'a>(names: impl Iterator<Item = &'a String>) -> String {
+    let mut all = env::inherited_secret_exports();
+    all.extend(names.cloned());
+    all.sort();
+    all.dedup();
+    all.join(":")
+}
+
 /// Run the secret's command without input, so it never consumes the
-/// launching terminal's; its diagnostics reach the caller's stderr. One
-/// trailing line break is the command's formatting, not the value's.
-async fn fetch(name: &str, secret: &Secret) -> Result<OsString> {
+/// launching terminal's or a tool's; its diagnostics reach the caller's
+/// stderr. `path` replaces PATH for it. One trailing line break is the
+/// command's formatting, not the value's.
+async fn fetch(name: &str, secret: &Secret, path: Option<&OsStr>) -> Result<OsString> {
     use std::os::unix::ffi::OsStringExt;
-    let output = tokio::process::Command::new(&secret.command[0])
+    let mut command = tokio::process::Command::new(&secret.command[0]);
+    if let Some(path) = path {
+        command.env("PATH", path);
+    }
+    let output = command
         .args(&secret.command[1..])
         .stdin(Stdio::null())
         .stderr(Stdio::inherit())
@@ -114,6 +249,7 @@ mod tests {
     fn secret(command: &[&str]) -> Secret {
         Secret {
             command: command.iter().map(|word| word.to_string()).collect(),
+            tools: Vec::new(),
         }
     }
 
@@ -130,22 +266,30 @@ mod tests {
             let secrets = Secrets::from([(name.into(), secret(command))]);
             assert!(validate(&secrets).is_err(), "{name} {command:?}");
         }
-        assert!(validate(&Secrets::from([("TOKEN".into(), secret(&["true"]))])).is_ok());
+        for tool in ["", ".secrets.json", "bin/tool", "a\0b"] {
+            let mut scoped = secret(&["true"]);
+            scoped.tools = vec![tool.into()];
+            let secrets = Secrets::from([("TOKEN".into(), scoped)]);
+            assert!(validate(&secrets).is_err(), "{tool:?}");
+        }
+        let mut scoped = secret(&["true"]);
+        scoped.tools = vec!["agent-browser".into()];
+        assert!(validate(&Secrets::from([("TOKEN".into(), scoped)])).is_ok());
     }
 
     #[tokio::test]
     async fn fetch_strips_one_line_break_and_rejects_failures() {
-        let value = fetch("TOKEN", &secret(&["printf", "a b\\n\\n"]))
+        let value = fetch("TOKEN", &secret(&["printf", "a b\\n\\n"]), None)
             .await
             .unwrap();
         assert_eq!(value, "a b\n");
-        let value = fetch("TOKEN", &secret(&["printf", "value\\r\\n"]))
+        let value = fetch("TOKEN", &secret(&["printf", "value\\r\\n"]), None)
             .await
             .unwrap();
         assert_eq!(value, "value");
         for command in [&["false"][..], &["printf", "\\n"], &["printf", "a\\0b"]] {
             assert!(
-                fetch("TOKEN", &secret(command)).await.is_err(),
+                fetch("TOKEN", &secret(command), None).await.is_err(),
                 "{command:?}"
             );
         }
@@ -158,6 +302,7 @@ mod tests {
                 ("B_TOKEN".into(), "b".into()),
                 ("A_TOKEN".into(), "a".into()),
             ],
+            launchers: None,
         };
         let mut command = tokio::process::Command::new("true");
         launch.apply(&mut command);

@@ -987,6 +987,14 @@ pub enum InternalCommand {
         #[arg(last = true, required = true)]
         command: Vec<OsString>,
     },
+    /// Run a tool with its configured secrets; an agent's secret launchers call it.
+    #[command(name = internal::SECRET_TOOL)]
+    SecretTool {
+        launchers: PathBuf,
+        tool: String,
+        #[arg(last = true)]
+        args: Vec<OsString>,
+    },
     /// Tracked agent inside a zmx session; consumes recovery records once started.
     #[command(name = internal::SESSION)]
     Session {

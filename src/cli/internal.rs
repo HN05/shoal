@@ -14,6 +14,7 @@ pub const HERDR_WATCH: &str = "herdr-watch";
 pub const LAND: &str = "land";
 pub const DETACHED: &str = "detached";
 pub const SESSION: &str = "session";
+pub const SECRET_TOOL: &str = "secret-tool";
 
 pub enum Worker<'a> {
     HerdrWatch {

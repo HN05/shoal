@@ -313,7 +313,7 @@ async fn run_tracked(
         )
         .await?;
         let secrets = if agent.is_some() {
-            crate::secrets::Launch::prepare(&settings.secrets).await?
+            crate::secrets::Launch::prepare(&settings.secrets, paths).await?
         } else {
             Default::default()
         };

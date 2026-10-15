@@ -33,6 +33,9 @@ pub const PORT_PREFIX: &str = "SHOAL_PORT_";
 /// Colon-separated names of the secret variables an agent launch exported,
 /// which hooks started beneath it drop.
 pub const SECRET_ENV: &str = "SHOAL_SECRET_ENV";
+/// Secret tool launcher directories an agent launch put on PATH, which hooks
+/// started beneath it remove.
+pub const SECRET_TOOLS: &str = "SHOAL_SECRET_TOOLS";
 /// Which hook is running, using the configuration key without `_cmd`.
 pub const HOOK: &str = "SHOAL_HOOK";
 /// Recorded worktree path, including after removal.
@@ -185,6 +188,21 @@ pub fn inherited_secret_exports() -> Vec<String> {
         .collect()
 }
 
+/// The inherited PATH without secret tool launchers, when an enclosing agent
+/// launch added any.
+pub fn path_without_secret_tools() -> Option<OsString> {
+    let directories: Vec<_> = std::env::split_paths(&std::env::var_os(SECRET_TOOLS)?)
+        .filter(|directory| !directory.as_os_str().is_empty())
+        .collect();
+    let path = std::env::var_os("PATH").unwrap_or_default();
+    std::env::join_paths(std::env::split_paths(&path).filter(|entry| {
+        !directories
+            .iter()
+            .any(|directory| same_directory(directory, entry))
+    }))
+    .ok()
+}
+
 /// Shared identity values for hooks, tracked executions and external processes.
 fn workspace_identity(workspace: &Workspace, paths: &Paths) -> BTreeMap<String, OsString> {
     BTreeMap::from([
@@ -251,7 +269,7 @@ pub fn inherits_scope(state: &std::path::Path) -> bool {
             .any(|dir| same_directory(dir, state))
 }
 
-fn same_directory(a: &std::path::Path, b: &std::path::Path) -> bool {
+pub fn same_directory(a: &std::path::Path, b: &std::path::Path) -> bool {
     match (std::fs::canonicalize(a), std::fs::canonicalize(b)) {
         (Ok(a), Ok(b)) => a == b,
         _ => a == b,

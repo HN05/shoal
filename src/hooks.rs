@@ -141,6 +141,9 @@ fn command(
     for name in env::inherited_secret_exports() {
         command.env_remove(name);
     }
+    if let Some(path) = env::path_without_secret_tools() {
+        command.env("PATH", path);
+    }
     command
         .current_dir(hook.kind().directory().path(
             &workspace.path,
@@ -161,6 +164,7 @@ fn command(
         .env_remove(env::EXECUTION_ID)
         .env_remove(env::RESERVED_PORT_ENV)
         .env_remove(env::SECRET_ENV)
+        .env_remove(env::SECRET_TOOLS)
         .envs(configured_env)
         .process_group(0)
         .kill_on_drop(true);
