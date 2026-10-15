@@ -334,7 +334,52 @@ async fn check_checkout(repo: &Repository, workspaces: &[Workspace]) -> Result<(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::daemon::workspace::WorkspaceSource;
+    use crate::test_support;
     use std::os::unix::fs::MetadataExt;
+
+    #[tokio::test]
+    async fn removal_waits_for_queued_workspace_creation() {
+        let (root, manager) = test_support::manager().await;
+        let checkout = test_support::repository(root.path(), "repo");
+        let repo = manager
+            .register_repository(checkout.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+
+        let gate = manager.lock_repository_git(&repo.id).await;
+        let creating_manager = manager.clone();
+        let creating_repo = repo.clone();
+        let mut creating = Box::pin(async move {
+            let _git = creating_manager
+                .lock_repository_git(&creating_repo.id)
+                .await;
+            creating_manager
+                .create_branch_workspace(
+                    &creating_repo,
+                    "racing".into(),
+                    "racing".into(),
+                    WorkspaceSource::New(None),
+                    None,
+                    None,
+                )
+                .await
+        });
+        test_support::assert_pending(&mut creating).await;
+
+        let mut removing = Box::pin(manager.remove_repository(&repo.id));
+        test_support::assert_pending(&mut removing).await;
+        drop(gate);
+
+        let workspace = creating.await.unwrap();
+        let removal = removing.await.unwrap();
+        assert_eq!(removal.workspaces_removed, 1);
+        assert!(!workspace.path.exists());
+        assert!(manager.repositories().await.unwrap().is_empty());
+        assert!(manager.list_workspaces().await.unwrap().is_empty());
+        assert!(!repo.path.exists());
+        assert!(!repo.workspaces_dir.unwrap().exists());
+    }
 
     #[test]
     fn recorded_identity_verifies_including_legacy_device_inode() -> Result<()> {

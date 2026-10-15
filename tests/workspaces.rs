@@ -8594,7 +8594,13 @@ fn repository_removal_serializes_with_workspace_creation() {
         .spawn()
         .unwrap();
     fixture.ok(&["repo", "rm", &id, "--yes"]);
-    let _ = add.wait_with_output().unwrap();
+    let add = add.wait_with_output().unwrap();
+    if !add.status.success() {
+        assert!(
+            String::from_utf8_lossy(&add.stderr).contains("repository"),
+            "unexpected add failure: {add:?}"
+        );
+    }
     assert!(fixture.ok(&["repo", "list"]).as_array().unwrap().is_empty());
     assert!(fixture.ok(&["ls"]).as_array().unwrap().is_empty());
     // The emptied repository directory goes with the registration.
