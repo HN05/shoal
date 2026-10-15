@@ -558,6 +558,11 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             workspace,
             selection,
         } => Body::SelectedItems(manager.select_items(&workspace, &selection).await?),
+        Method::CheckLog {
+            workspace,
+            selection,
+            check,
+        } => Body::CheckLog(manager.check_log(&workspace, &selection, &check).await?),
         Method::FindWorkspaces { target } => Body::Workspaces(
             manager
                 .find_workspaces(&target, caller.map(|c| c.workspace_id.as_str()))

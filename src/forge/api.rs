@@ -69,6 +69,35 @@ impl Request {
 }
 
 impl ForgeRepo {
+    /// Read plaintext logs without following redirects or exposing the login.
+    pub(super) async fn forgejo_log(&self, account: &Account, endpoint: &str) -> Result<String> {
+        let url = format!("{}://{}/api/v1/{endpoint}", self.web_scheme, self.host);
+        let mut curl = Command::new(Tool::Curl.program());
+        curl.args([
+            "-q",
+            "-sS",
+            "--max-time",
+            "30",
+            "--max-filesize",
+            "8388608",
+            "-H",
+            "Accept: text/plain",
+            "-w",
+            "\n%{http_code}",
+            "-K",
+            "-",
+            &url,
+        ]);
+        let token = account.forgejo_token(&self.host)?;
+        let output = crate::subprocess::Run::new(curl)
+            .input(token.map(authorization).unwrap_or_default())
+            .timeout(TIMEOUT)
+            .output()
+            .await
+            .context("fetch Forgejo job log (maximum 8 MiB)")?;
+        Ok(forgejo_response_body(&output)?.to_owned())
+    }
+
     /// The API endpoint for `path` under this repository.
     pub(crate) fn repo_endpoint(&self, path: &str) -> String {
         format!("repos/{}/{path}", self.path)
@@ -271,16 +300,20 @@ fn error_message(text: &str) -> Option<String> {
 
 /// curl's output ends with the status code `-w` appends on its own line.
 fn forgejo_response(text: &str) -> Result<Value> {
+    json_body(forgejo_response_body(text)?)
+}
+
+fn forgejo_response_body(text: &str) -> Result<&str> {
     let (body, status) = text.rsplit_once('\n').unwrap_or(("", text));
     let status: u16 = status
         .trim()
         .parse()
         .context("Forgejo response has no HTTP status")?;
-    if status >= 400 {
+    if !(200..300).contains(&status) {
         let detail = error_message(body).unwrap_or_else(|| body.chars().take(500).collect());
         bail!("HTTP {status}: {}", detail.trim());
     }
-    json_body(body)
+    Ok(body)
 }
 
 /// A curl config line, so the token never appears on a command line.

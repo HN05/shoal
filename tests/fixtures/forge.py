@@ -61,7 +61,7 @@ class Handler(BaseHTTPRequestHandler):
         status, answer = respond(
             f"{self.command} {path}", body, self.headers.get("Authorization")
         )
-        data = b"" if answer is None else json.dumps(answer).encode()
+        data = b"" if answer is None else (answer if isinstance(answer, str) else json.dumps(answer)).encode()
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(data)))

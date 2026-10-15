@@ -164,6 +164,10 @@ impl Fixture {
     }
 
     fn request(&self, method: Value) -> Value {
+        self.request_as(method, None)
+    }
+
+    fn request_as(&self, method: Value, scope: Option<&str>) -> Value {
         let send = |protocol: u64, method: Value| {
             let mut stream =
                 UnixStream::connect(self.root.path().join("state/daemon.sock")).unwrap();
@@ -173,7 +177,7 @@ impl Fixture {
             writeln!(
                 stream,
                 "{}",
-                json!({"protocol": protocol, "id": 1, "method": method})
+                json!({"protocol": protocol, "id": 1, "method": method, "scope": scope})
             )
             .unwrap();
             let mut response = String::new();
@@ -685,4 +689,118 @@ fn issue_open_with_link_refuses_before_creating_when_an_issue_is_linked() {
         "{output:?}"
     );
     assert!(fixture.requests().is_empty());
+}
+
+#[test]
+fn scoped_check_logs_resolve_web_indices_and_use_the_agent_account() {
+    let fixture = Fixture::new(Forge::Forgejo, "[agent_auth]\nfj_home = '~/agent'\n");
+    let host = fixture
+        .web
+        .strip_prefix("http://")
+        .unwrap()
+        .split('/')
+        .next()
+        .unwrap();
+    let keys = if cfg!(target_os = "macos") {
+        "agent/Library/Application Support/forgejo-cli.forgejo-cli/keys.json"
+    } else {
+        "agent/.local/share/forgejo-cli/keys.json"
+    };
+    fixture.write_keys(&fixture.root.path().join(keys), host, "agenttoken");
+    let target = "/team/project/actions/runs/2765/jobs/1";
+    let mut responses = json!({
+        "GET repos/team/project/pulls/8": {"body": {"head": {"sha": "head"}}},
+        "GET repos/team/project/commits/head/statuses?limit=50&page=1": {"body": [
+            {"context": "rust", "status": "failure", "target_url": target},
+            {"context": "rust", "status": "success", "target_url": "/old"}
+        ]},
+        "GET repos/team/project/actions/runs?run_number=2765": {"body": {"workflow_runs": [
+            {"id": 9331, "index_in_repo": 2765, "commit_sha": "head"}
+        ]}},
+        "GET repos/team/project/actions/runs/9331/jobs": {"body": [
+            {"id": 18344, "run_id": 9331, "status": "success"},
+            {"id": 18345, "run_id": 9331, "status": "failure", "task_id": 9850}
+        ]},
+        "GET repos/team/project/actions/jobs/18345/logs": {"body": "⭐ Run Main Test\nassertion failed\n⚙️ [runner]: exitcode '1': failure\n"}
+    });
+    fixture.respond(responses.clone());
+    let exported = fixture.ok(&["env", "topic"]);
+    let scope = exported["SHOAL_SCOPE_TOKEN"].as_str().unwrap();
+    let method = json!({"check_log": {"workspace": "topic", "selection": {"kind": "pr", "input": "8"}, "check": "rust"}});
+    let result = fixture.request_as(method.clone(), Some(scope));
+    assert_eq!(result["type"], "check_log", "{result}");
+    assert_eq!(result["data"]["failed_step"], "Main Test");
+    assert_eq!(result["data"]["truncated"], false);
+    assert!(
+        result["data"]["text"]
+            .as_str()
+            .unwrap()
+            .contains("assertion failed")
+    );
+    let requests = fixture.requests();
+    assert_eq!(requests.len(), 5);
+    assert!(
+        requests
+            .iter()
+            .all(|request| request[2] == "token agenttoken"),
+        "{requests:?}"
+    );
+    assert_eq!(
+        requests[4][0],
+        "GET repos/team/project/actions/jobs/18345/logs"
+    );
+
+    // Never show a stale failure after the same check succeeds on this head.
+    responses["GET repos/team/project/commits/head/statuses?limit=50&page=1"]["body"][0]["status"] =
+        json!("success");
+    fixture.respond(responses.clone());
+    let result = fixture.request_as(method.clone(), Some(scope));
+    assert!(
+        result["data"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("has not failed"),
+        "{result}"
+    );
+    assert_eq!(fixture.requests().len(), 2);
+
+    // Scoped protocol clients cannot select another workspace or repository.
+    fixture.ok(&[
+        "add",
+        fixture.repo.to_str().unwrap(),
+        "other",
+        "--base",
+        "HEAD",
+    ]);
+    let mut other = method.clone();
+    other["check_log"]["workspace"] = json!("other");
+    assert_eq!(
+        fixture.request_as(other, Some(scope))["data"]["code"],
+        "scope_denied"
+    );
+    let mut other = method.clone();
+    other["check_log"]["selection"]["input"] =
+        json!("https://elsewhere.example/team/project/pulls/8");
+    assert!(
+        fixture.request_as(other, Some(scope))["data"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("repository")
+    );
+    assert!(fixture.requests().is_empty());
+
+    // Missing API support is an explicit failure, not an empty successful log.
+    responses["GET repos/team/project/commits/head/statuses?limit=50&page=1"]["body"][0]["status"] =
+        json!("failure");
+    responses["GET repos/team/project/actions/jobs/18345/logs"] =
+        json!({"status": 404, "body": {"message": "logs unavailable"}});
+    fixture.respond(responses);
+    let result = fixture.request_as(method, Some(scope));
+    assert!(
+        result["data"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("HTTP 404"),
+        "{result}"
+    );
 }

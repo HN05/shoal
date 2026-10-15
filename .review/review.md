@@ -137,6 +137,9 @@ instead of the PR delivery guidance below.
   through the REST transport; scoped callers cannot merge. Forgejo API requests
   use fj's saved token for the repository's own host, validated, passed to curl
   on stdin, never logged, stored or sent elsewhere.
+  Failed Actions logs are read by the daemon as the workspace's agent account,
+  resolving web indices to API IDs and validating the PR head before returning
+  a bounded tail; scoped callers cannot access another workspace's logs.
 - `[secrets]` values are fetched in the CLI by user commands run without
   input, at agent launch or, for tool-scoped secrets, by the tool's launcher on
   each run; the daemon, state and logs never hold them, hooks drop them and

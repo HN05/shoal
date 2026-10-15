@@ -3,6 +3,7 @@
 mod account;
 pub mod action;
 mod api;
+pub mod checks;
 pub mod create;
 pub mod issue;
 pub mod item;

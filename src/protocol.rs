@@ -26,7 +26,7 @@ use crate::{
     sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
 };
 
-pub const VERSION: u32 = 80;
+pub const VERSION: u32 = 81;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -318,6 +318,11 @@ pub enum Method {
         workspace: String,
         selection: crate::forge::link::Selection,
     },
+    CheckLog {
+        workspace: String,
+        selection: crate::forge::link::Selection,
+        check: String,
+    },
     /// Workspaces that link an item or hold a resource.
     FindWorkspaces {
         target: crate::model::WorkspaceTarget,
@@ -584,6 +589,7 @@ response_bodies! {
     AgentStatus(crate::model::AgentStatus),
     WorkspaceStatus(WorkspaceStatus),
     SelectedItems(crate::forge::view::Selected),
+    CheckLog(crate::forge::checks::CheckLog),
     WorkspaceEnv(std::collections::BTreeMap<String, String>),
     Cleanup(crate::daemon::cleanup::ManualCleanup),
     Diagnostics(Vec<crate::daemon::doctor::Check>),
