@@ -202,14 +202,72 @@ pub async fn launch_detached(
     env: &[(&str, String)],
     agent: Option<&str>,
 ) -> Result<DetachedLaunch> {
-    ensure!(workspace.path.is_dir(), "workspace directory is missing");
+    let launch = DetachedCommand::prepare(paths, workspace, log, command, clear, env, agent)?;
+    launch.start().await
+}
+
+struct DetachedCommand {
+    log: PathBuf,
+    child: Child,
+}
+
+impl DetachedCommand {
+    fn prepare(
+        paths: &Paths,
+        workspace: &Workspace,
+        log: PathBuf,
+        command: Vec<OsString>,
+        clear: &[&str],
+        env: &[(&str, String)],
+        agent: Option<&str>,
+    ) -> Result<Self> {
+        ensure!(workspace.path.is_dir(), "workspace directory is missing");
+        let file = prepare_detached_log(&log, workspace, &command)?;
+        let command = internal_command(
+            paths,
+            false,
+            Worker::Detached {
+                workspace: &workspace.id,
+                log: &log,
+                agent,
+                command: &command,
+            },
+        )?;
+        let child = spawn_detached_wrapper(&command, file, clear, env)?;
+        Ok(Self { log, child })
+    }
+
+    async fn start(mut self) -> Result<DetachedLaunch> {
+        let stdout = self
+            .child
+            .stdout
+            .take()
+            .context("wrapper stdout unavailable")?;
+        let report = timeout(
+            timing::DETACHED_LAUNCH_TIMEOUT,
+            BufReader::new(stdout).lines().next_line(),
+        )
+        .await
+        .context("detached launch was not recorded in time")??;
+        match report {
+            Some(line) => serde_json::from_str(&line).context("unexpected detached launch report"),
+            None => Err(detached_launch_failure(&self.log, &mut self.child).await),
+        }
+    }
+}
+
+fn prepare_detached_log(
+    log: &Path,
+    workspace: &Workspace,
+    command: &[OsString],
+) -> Result<std::fs::File> {
     if let Some(parent) = log.parent() {
         std::fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
     }
     let mut file = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
-        .open(&log)
+        .open(log)
         .with_context(|| format!("open {}", log.display()))?;
     writeln!(
         file,
@@ -221,16 +279,15 @@ pub async fn launch_detached(
             .join(" "),
         workspace.path.display()
     )?;
-    let command = internal_command(
-        paths,
-        false,
-        Worker::Detached {
-            workspace: &workspace.id,
-            log: &log,
-            agent,
-            command: &command,
-        },
-    )?;
+    Ok(file)
+}
+
+fn spawn_detached_wrapper(
+    command: &[OsString],
+    file: std::fs::File,
+    clear: &[&str],
+    env: &[(&str, String)],
+) -> Result<Child> {
     let mut wrapper = Command::new(&command[0]);
     wrapper
         .args(&command[1..])
@@ -257,30 +314,19 @@ pub async fn launch_detached(
             Ok(())
         });
     }
-    let mut child = wrapper
-        .spawn()
-        .context("launch detached execution wrapper")?;
-    let stdout = child.stdout.take().context("wrapper stdout unavailable")?;
-    let report = timeout(
-        timing::DETACHED_LAUNCH_TIMEOUT,
-        BufReader::new(stdout).lines().next_line(),
+    wrapper.spawn().context("launch detached execution wrapper")
+}
+
+async fn detached_launch_failure(log: &Path, child: &mut Child) -> anyhow::Error {
+    let status = match timeout(timing::DETACHED_EXIT_TIMEOUT, child.wait()).await {
+        Ok(Ok(status)) => format!("wrapper exited with {status}"),
+        _ => "wrapper still running".into(),
+    };
+    anyhow::anyhow!(
+        "detached launch failed ({status}); see {}\n{}",
+        log.display(),
+        log_tail(log)
     )
-    .await
-    .context("detached launch was not recorded in time")??;
-    match report {
-        Some(line) => serde_json::from_str(&line).context("unexpected detached launch report"),
-        None => {
-            let status = match timeout(timing::DETACHED_EXIT_TIMEOUT, child.wait()).await {
-                Ok(Ok(status)) => format!("wrapper exited with {status}"),
-                _ => "wrapper still running".into(),
-            };
-            bail!(
-                "detached launch failed ({status}); see {}\n{}",
-                log.display(),
-                log_tail(&log)
-            )
-        }
-    }
 }
 
 /// The last lines of a log, for an error message.
