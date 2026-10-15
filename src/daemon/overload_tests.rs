@@ -1,7 +1,7 @@
 use super::notifications::NotificationKind;
 use super::*;
 use crate::test_support::{manager, repository};
-use std::{future::Future, os::unix::fs::PermissionsExt};
+use std::{fs::OpenOptions, future::Future, os::unix::fs::PermissionsExt};
 
 /// A hang guard, not a deadline for process scans on a shared CI host. Its
 /// panic names the caller, so a hang shows which exchange never finished.
@@ -22,6 +22,7 @@ static PROCESS_FIXTURE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new((
 struct FixtureRoot {
     _root: tempfile::TempDir,
     _process_guard: tokio::sync::MutexGuard<'static, ()>,
+    _process_file_guard: std::fs::File,
 }
 
 async fn fixture() -> (
@@ -31,6 +32,21 @@ async fn fixture() -> (
     tokio::task::JoinHandle<()>,
 ) {
     let process_guard = PROCESS_FIXTURE.lock().await;
+    let process_file = OpenOptions::new()
+        .create(true)
+        .read(true)
+        .write(true)
+        .open(std::env::temp_dir().join("shoal-overload-tests.lock"))
+        .unwrap();
+    let process_file_guard = tokio::task::spawn_blocking({
+        let process_file = process_file;
+        move || {
+            fs2::FileExt::lock_exclusive(&process_file).unwrap();
+            process_file
+        }
+    })
+    .await
+    .unwrap();
     let (root, manager) = manager().await;
     let repo = repository(root.path(), "repo");
     let repo = manager
@@ -78,6 +94,7 @@ async fn fixture() -> (
         FixtureRoot {
             _root: root,
             _process_guard: process_guard,
+            _process_file_guard: process_file_guard,
         },
         manager,
         workspace,
