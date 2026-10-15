@@ -505,19 +505,36 @@ async fn prepare_tracked_launch(
     agent: Option<String>,
 ) -> Result<TrackedLaunch> {
     let auth = prepare_agent_launch(paths, &workspace, mode, agent.is_some()).await?;
-    let wrapper = process::identity::capture(std::process::id())?
-        .context("cannot identify execution wrapper")?;
-    let kind = mode.kind();
     let recovery = if let Some(agent) = &agent {
         Some(recovery::Recovery::for_launch(paths, &workspace, agent).await)
     } else {
         None
     };
     let recover = recovery.as_ref().is_some_and(|recovery| recovery.automatic);
+    let (link, plan) = open_execution(paths, workspace, mode, agent, recover).await?;
+    let command = execution_command(paths, &plan, command, mode)?;
+    Ok(TrackedLaunch {
+        link,
+        plan,
+        command,
+        auth,
+        recovery,
+    })
+}
+
+async fn open_execution(
+    paths: &Paths,
+    workspace: String,
+    mode: &Mode,
+    agent: Option<String>,
+    recover: bool,
+) -> Result<(Link, ExecutionPlan)> {
+    let wrapper = process::identity::capture(std::process::id())?
+        .context("cannot identify execution wrapper")?;
     let method = Method::Execute {
         workspace,
         wrapper: wrapper.clone(),
-        kind,
+        kind: mode.kind(),
         queue_entry: agent
             .is_some()
             .then(crate::env::queue_entry)
@@ -527,6 +544,7 @@ async fn prepare_tracked_launch(
         recover,
         reattach: mode.reattaches(),
     };
+    let kind = mode.kind();
     let (mut link, body) = timeout(kind.start_timeout(), Link::open(paths, method))
         .await
         .context("daemon did not start the execution in time")??;
@@ -546,14 +564,7 @@ async fn prepare_tracked_launch(
             },
         );
     }
-    let command = execution_command(paths, &plan, command, mode)?;
-    Ok(TrackedLaunch {
-        link,
-        plan,
-        command,
-        auth,
-        recovery,
-    })
+    Ok((link, plan))
 }
 
 async fn prepare_agent_launch(
