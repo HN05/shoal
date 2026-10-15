@@ -2,6 +2,7 @@
 mod adoption;
 pub(crate) mod agent_state;
 mod agents;
+mod branches;
 mod conflicts;
 mod diff;
 mod done;
@@ -9,6 +10,7 @@ mod environment;
 mod executions;
 mod holds;
 pub(super) mod identity;
+mod land;
 mod lifecycle;
 mod location;
 mod ownership;
@@ -22,6 +24,7 @@ mod stack;
 mod status;
 
 pub(crate) use agents::Protection;
+pub(crate) use branches::UpstreamPolicy;
 pub use executions::{ExecutionKind, StopRequest};
 pub(crate) use executions::{ReattachedExecution, StartedExecution};
 pub(crate) use stack::record_base_changed;
@@ -32,7 +35,7 @@ use crate::{
         scope::Caller,
         store::{self, Store},
     },
-    git::{self, default_branch::DefaultBranchLookup, repo::UpstreamPolicy, worktrunk},
+    git::{self, default_branch::DefaultBranchLookup, worktrunk},
     model::{Inspection, Repository, Workspace},
     paths::Paths,
     state::WorkspaceState,

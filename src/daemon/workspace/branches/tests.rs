@@ -1287,7 +1287,7 @@ impl Manager {
     ) -> anyhow::Result<crate::model::LandedBranch> {
         let workspace = self.workspace(selector).await?;
         let _guard = self.lock_repository_git(&workspace.repository_id).await;
-        super::finish_land(self.prepare_land(selector).await?, push).await
+        crate::git::repo::finish_land(self.prepare_land(selector).await?, push).await
     }
 }
 

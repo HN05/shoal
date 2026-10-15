@@ -3,8 +3,8 @@ use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    daemon::workspace::Manager,
-    git::{self, repo::UpstreamPolicy, worktrunk},
+    daemon::workspace::{Manager, UpstreamPolicy},
+    git::{self, worktrunk},
     model::{Repository, Workspace},
     state::WorkspaceState,
 };
