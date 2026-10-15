@@ -739,28 +739,21 @@ fn derive_workspace_name(branch: &str) -> String {
 
 /// Existing worktrees use a live local default ref, or their opening commit.
 async fn existing_base(repo: &crate::model::Repository, branch: &str) -> Result<String> {
-    Ok(
-        match crate::git::default_branch::resolve(&repo.path, DefaultBranchLookup::Cached).await {
-            Ok(name)
-                if name != branch
-                    && git::run_isolated(
-                        &repo.path,
-                        &["show-ref", "--verify", "--", &git::local_ref(&name)],
-                    )
-                    .await
-                    .is_ok() =>
-            {
-                git::local_ref(&name)
-            }
-            _ => git::run_isolated(
-                &repo.path,
-                &["rev-parse", "--verify", &git::local_ref(branch)],
-            )
-            .await?
-            .trim()
-            .to_owned(),
-        },
+    if let Ok(name) =
+        crate::git::default_branch::resolve(&repo.path, DefaultBranchLookup::Cached).await
+    {
+        let default = git::local_ref(&name);
+        if name != branch && git::ref_exists(&repo.path, &default, git::isolated_command).await? {
+            return Ok(default);
+        }
+    }
+    Ok(git::run_isolated(
+        &repo.path,
+        &["rev-parse", "--verify", &git::local_ref(branch)],
     )
+    .await?
+    .trim()
+    .to_owned())
 }
 
 /// Fill in what a workspace record reads from its related tables.
@@ -804,6 +797,38 @@ mod tests {
         );
         // A snapshot taken before the reload keeps the settings it started with.
         assert_eq!(before.simulators.default, None);
+    }
+
+    #[tokio::test]
+    async fn existing_base_falls_back_only_when_the_default_ref_is_missing() {
+        let (root, manager) = crate::test_support::manager().await;
+        let path = crate::test_support::repository(root.path(), "repo");
+        // The cached remote HEAD names the default branch without reading it.
+        crate::test_support::git(&path, &["switch", "-c", "topic"]);
+        crate::test_support::git(&path, &["remote", "add", "origin", "/missing"]);
+        crate::test_support::git(
+            &path,
+            &[
+                "symbolic-ref",
+                "refs/remotes/origin/HEAD",
+                "refs/remotes/origin/main",
+            ],
+        );
+        let topic = crate::test_support::git(&path, &["rev-parse", "topic"]);
+        let repo = manager
+            .register_repository(path.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        assert_eq!(
+            existing_base(&repo, "topic").await.unwrap(),
+            "refs/heads/main"
+        );
+        let main = path.join(".git/refs/heads/main");
+        fs::write(&main, "garbage\n").unwrap();
+        assert!(existing_base(&repo, "topic").await.is_err());
+        fs::remove_file(&main).unwrap();
+        assert_eq!(existing_base(&repo, "topic").await.unwrap(), topic.trim());
+        manager.store.shutdown().await;
     }
 
     #[tokio::test]
