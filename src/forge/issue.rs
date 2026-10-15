@@ -135,6 +135,10 @@ impl Manager {
                         "DELETE FROM pr_activity WHERE workspace_id=?1 AND url=?2",
                         rusqlite::params![workspace.id, &url],
                     )?;
+                    tx.execute(
+                        "DELETE FROM workspace_item_activity WHERE workspace_id=?1 AND url=?2",
+                        rusqlite::params![workspace.id, &url],
+                    )?;
                     crate::daemon::workspace::review::forget(
                         &tx,
                         &workspace.id,

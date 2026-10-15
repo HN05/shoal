@@ -58,6 +58,7 @@ use crate::{
 
 const MAX_CLIENTS: usize = 128;
 const SIMULATOR_SWEEP_INTERVAL: Duration = Duration::from_secs(15);
+const ITEM_ACTIVITY_SWEEP_INTERVAL: Duration = Duration::from_secs(30);
 /// Keeps a background loop that panics at once from spinning.
 const RESTART_DELAY: Duration = Duration::from_secs(10);
 
@@ -152,6 +153,10 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
         let manager = manager.clone();
         move || expire_simulators(manager.clone())
     }));
+    background.spawn(supervise("item activity", {
+        let manager = manager.clone();
+        move || poll_item_activity(manager.clone())
+    }));
     let mut clients = JoinSet::new();
     let mut quiescence = None;
     let result = loop {
@@ -237,6 +242,17 @@ async fn expire_simulators(manager: Arc<Manager>) {
         let _operation = manager.background_operations.read().await;
         if let Err(error) = manager.expire_simulators().await {
             log!("simulator cleanup: {error:#}");
+        }
+    }
+}
+
+async fn poll_item_activity(manager: Arc<Manager>) {
+    let mut interval = tokio::time::interval(ITEM_ACTIVITY_SWEEP_INTERVAL);
+    loop {
+        interval.tick().await;
+        let _operation = manager.background_operations.read().await;
+        if let Err(error) = manager.poll_linked_item_activity().await {
+            log!("item activity: {error:#}");
         }
     }
 }

@@ -282,6 +282,7 @@ impl Manager {
             let tx = db.transaction()?;
             store::require_ready(&tx, &id)?;
             tx.execute("DELETE FROM pr_activity WHERE workspace_id=?1 AND url IN (SELECT value FROM json_each(?2))", rusqlite::params![id, serde_json::to_string(&removed)?])?;
+            tx.execute("DELETE FROM workspace_item_activity WHERE workspace_id=?1 AND url IN (SELECT value FROM json_each(?2))", rusqlite::params![id, serde_json::to_string(&removed)?])?;
             crate::daemon::workspace::review::forget(&tx, &id, &removed)?;
             if let Some(registration) = registration {
                 tx.execute("INSERT INTO pr_cleanup(workspace_id,record) VALUES (?1,?2) ON CONFLICT(workspace_id) DO UPDATE SET record=excluded.record", rusqlite::params![id, serde_json::to_string(&registration)?])?;

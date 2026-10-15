@@ -12,7 +12,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 38;
+const SCHEMA_VERSION: i64 = 39;
 
 #[cfg(test)]
 mod benchmark;
@@ -342,6 +342,16 @@ const MIGRATIONS: &[(i64, &str, Option<Precondition>)] = &[
     (36, include_str!("store/agent_messages.sql"), None),
     (37, include_str!("store/workspace_agent_state.sql"), None),
     (38, include_str!("store/agent_queue.sql"), None),
+    (
+        39,
+        "CREATE TABLE IF NOT EXISTS workspace_item_activity (
+            workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+            url TEXT NOT NULL,
+            record TEXT NOT NULL,
+            PRIMARY KEY(workspace_id,url)
+        );",
+        None,
+    ),
 ];
 
 fn migrate(db: &mut Connection) -> Result<()> {
@@ -734,6 +744,16 @@ mod tests {
         }
         if version >= 38 {
             db.execute_batch(include_str!("store/agent_queue.sql"))?;
+        }
+        if version >= 39 {
+            db.execute_batch(
+                "CREATE TABLE IF NOT EXISTS workspace_item_activity (
+                    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+                    url TEXT NOT NULL,
+                    record TEXT NOT NULL,
+                    PRIMARY KEY(workspace_id,url)
+                );",
+            )?;
         }
         db.pragma_update(None, "user_version", version)?;
         db.execute_batch(

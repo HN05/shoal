@@ -34,6 +34,8 @@ states!(EventKind {
     AgentState => "agent_state",
     /// Shoal changed an issue or PR for the workspace.
     ItemChanged => "item_changed",
+    /// An issue or PR changed on its forge.
+    ItemActivity => "item_activity",
 });
 
 states!(EventCause {
@@ -78,6 +80,9 @@ pub struct EventDetails {
     /// The issue or PR Shoal changed, and how.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub item: Option<Box<ItemEvent>>,
+    /// An issue or PR changed on its forge.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub item_activity: Option<Box<ItemActivityEvent>>,
 }
 
 /// Distinguish an absent field from an explicit null.
@@ -127,6 +132,19 @@ pub struct ItemEvent {
     pub url: String,
     /// The action's name, such as `edit` or `merge`.
     pub action: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ItemActivityEvent {
+    pub kind: crate::forge::link::ItemKind,
+    pub url: String,
+    pub update: ItemActivityUpdate,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ItemActivityUpdate {
+    pub kind: crate::forge::updates::UpdateKind,
+    pub message: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -210,6 +228,33 @@ pub(crate) fn record_item(
              'item',json_object('kind',?3,'url',?4,'action',?5))
          FROM workspaces WHERE id=?1",
         params![id, EventKind::ItemChanged, kind, url, action],
+    )?;
+    Ok(())
+}
+
+/// Record activity observed on an issue or PR by the background poller.
+pub(crate) fn record_item_activity(
+    db: &Connection,
+    id: &str,
+    kind: crate::forge::link::ItemKind,
+    url: &str,
+    update: &crate::forge::updates::Update,
+) -> Result<()> {
+    db.execute(
+        "INSERT INTO workspace_events(record)
+         SELECT json_object('kind',?2,'workspace_id',id,'repository_id',repository_id,
+             'name',name,'path',path,'branch',branch,'cause',NULL,'error',NULL,
+             'item_activity',json_object('kind',?3,'url',?4,
+                 'update',json_object('kind',?5,'message',?6)))
+         FROM workspaces WHERE id=?1",
+        params![
+            id,
+            EventKind::ItemActivity,
+            kind,
+            url,
+            update.kind,
+            update.message
+        ],
     )?;
     Ok(())
 }

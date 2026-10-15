@@ -540,6 +540,11 @@ changing recorded ownership. Issue and PR association changes append `linked` or
 `unlinked` events in the same transaction as the association mutation, carrying
 the item's kind and canonical URL so integrations can follow links without
 polling workspace inspection.
+Ready workspaces with linked issues or PRs are polled every 30 seconds; the
+daemon keeps a separate activity snapshot for each item and appends an
+`item_activity` event for each newly observed comment, completed check,
+conflict, closure, merge, reopen, or lookup failure. The first observation
+establishes the baseline, and watch acknowledgements do not affect this stream.
 
 Notifications stay in the terminal: the daemon records what a user would
 otherwise miss (busy resources and who holds them, port conflicts, exits of

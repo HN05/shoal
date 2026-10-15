@@ -260,6 +260,102 @@ impl Manager {
         Ok(observations)
     }
 
+    /// Poll linked items for integrations without sharing the watch cursor.
+    pub(crate) async fn poll_linked_item_activity(&self) -> Result<()> {
+        let mut failure = None;
+        for workspace in self.list_workspaces().await? {
+            if workspace.state != crate::state::WorkspaceState::Ready {
+                continue;
+            }
+            let id = workspace.id.clone();
+            let items = self
+                .store
+                .run(move |db| linked_items(db, &id, None))
+                .await?;
+            if items.is_empty() {
+                continue;
+            }
+            if let Err(error) = self.poll_workspace_item_activity(&workspace, items).await
+                && failure.is_none()
+            {
+                failure = Some(error.context(format!(
+                    "background item activity for workspace {}",
+                    workspace.name
+                )));
+            }
+        }
+        if let Some(error) = failure {
+            Err(error)
+        } else {
+            Ok(())
+        }
+    }
+
+    async fn poll_workspace_item_activity(
+        &self,
+        workspace: &Workspace,
+        items: Vec<(String, ItemKind)>,
+    ) -> Result<()> {
+        self.verify_worktree(workspace).await?;
+        let observations = self
+            .item_activity(workspace, items, &Selection::default())
+            .await?;
+        self.record_background_activity(&workspace.id, observations)
+            .await
+    }
+
+    async fn record_background_activity(
+        &self,
+        id: &str,
+        observations: Vec<(String, Snapshot)>,
+    ) -> Result<()> {
+        let id = id.to_owned();
+        self.store
+            .run(move |db| {
+                let tx = db.transaction()?;
+                store::require_ready(&tx, &id)?;
+                let linked = linked_items(&tx, &id, None)?;
+                for (url, kind, mut snapshot) in observations.into_iter().filter_map(
+                    |(url, snapshot)| {
+                        linked
+                            .iter()
+                            .find(|(linked_url, _)| linked_url == &url)
+                            .map(|(_, kind)| (url, *kind, snapshot))
+                    },
+                ) {
+                    let previous: Option<String> = tx
+                        .query_row(
+                            "SELECT record FROM workspace_item_activity WHERE workspace_id=?1 AND url=?2",
+                            params![id, url],
+                            |row| row.get(0),
+                        )
+                        .optional()?;
+                    if let Some(previous) = previous {
+                        let previous: Snapshot = serde_json::from_str(&previous)?;
+                        snapshot.retain_failed_checks(&previous);
+                        snapshot.schedule_failure_reports(
+                            &previous,
+                            crate::time::unix_seconds(),
+                        );
+                        for update in previous.changes(&snapshot, &url) {
+                            crate::daemon::events::record_item_activity(
+                                &tx, &id, kind, &url, &update,
+                            )?;
+                        }
+                    }
+                    tx.execute(
+                        "INSERT INTO workspace_item_activity(workspace_id,url,record)
+                         VALUES (?1,?2,?3)
+                         ON CONFLICT(workspace_id,url) DO UPDATE SET record=excluded.record",
+                        params![id, url, serde_json::to_string(&snapshot)?],
+                    )?;
+                }
+                tx.commit()?;
+                Ok(())
+            })
+            .await
+    }
+
     /// The canonical URL of an explicitly selected item, linked or not.
     pub(crate) async fn explicit_item(
         &self,
@@ -743,6 +839,50 @@ mod tests {
             })
             .await
             .unwrap();
+    }
+
+    #[tokio::test]
+    async fn background_activity_uses_its_own_baseline_and_publishes_events() {
+        let (root, manager) = manager().await;
+        let repo_path = repository(root.path(), "repo");
+        let repo = manager
+            .register_repository(repo_path.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        let workspace = manager
+            .create_workspace(&repo.id, "activity".into(), None, None, None)
+            .await
+            .unwrap();
+        register_watch(&manager, &workspace.id, "pr").await;
+
+        manager
+            .record_background_activity(&workspace.id, vec![("pr".into(), snapshot("first"))])
+            .await
+            .unwrap();
+        assert!(manager
+            .workspace_events(None, 100)
+            .await
+            .unwrap()
+            .iter()
+            .all(|item| !matches!(item, crate::daemon::events::EventItem::Event(event) if event.details.kind == crate::daemon::events::EventKind::ItemActivity)));
+
+        manager
+            .record_background_activity(&workspace.id, vec![("pr".into(), snapshot("second"))])
+            .await
+            .unwrap();
+        let events = manager.workspace_events(None, 100).await.unwrap();
+        let activity = events.iter().find_map(|item| match item {
+            crate::daemon::events::EventItem::Event(event)
+                if event.details.kind == crate::daemon::events::EventKind::ItemActivity =>
+            {
+                event.details.item_activity.as_deref()
+            }
+            _ => None,
+        });
+        let activity = activity.expect("background activity event");
+        assert_eq!(activity.kind, ItemKind::Pr);
+        assert_eq!(activity.url, "pr");
+        assert_eq!(activity.update.kind, UpdateKind::Comment);
     }
 
     #[tokio::test]

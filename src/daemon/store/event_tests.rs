@@ -108,6 +108,45 @@ fn link_events_include_item_kind_and_url() -> Result<()> {
 }
 
 #[test]
+fn item_activity_events_include_item_and_update_details() -> Result<()> {
+    let mut db = Connection::open_in_memory()?;
+    migrate(&mut db)?;
+    db.execute(
+        "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1)",
+        [],
+    )?;
+    db.execute(
+        "INSERT INTO workspaces(id,repository_id,name,path,branch,state,observed_branch)
+         VALUES ('w','repo','worker','/work','worker','ready','worker')",
+        [],
+    )?;
+    let update = crate::forge::updates::Update {
+        url: "https://forge.example/team/repo/pulls/7".into(),
+        kind: crate::forge::updates::UpdateKind::Comment,
+        message: "read the new review".into(),
+        delivery: String::new(),
+    };
+    crate::daemon::events::record_item_activity(
+        &db,
+        "w",
+        crate::forge::link::ItemKind::Pr,
+        &update.url,
+        &update,
+    )?;
+    let record: String = db.query_row(
+        "SELECT record FROM workspace_events WHERE json_extract(record,'$.kind')='item_activity'",
+        [],
+        |row| row.get(0),
+    )?;
+    let record: serde_json::Value = serde_json::from_str(&record)?;
+    assert_eq!(record["item_activity"]["kind"], "pr");
+    assert_eq!(record["item_activity"]["url"], update.url);
+    assert_eq!(record["item_activity"]["update"]["kind"], "comment");
+    assert_eq!(record["item_activity"]["update"]["message"], update.message);
+    Ok(())
+}
+
+#[test]
 fn retention_is_bounded_and_ids_are_never_reused() -> Result<()> {
     let mut db = Connection::open_in_memory()?;
     migrate(&mut db)?;
@@ -151,7 +190,7 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
         db.execute_batch(&format!("DROP TRIGGER {trigger};"))?;
     }
     db.execute_batch("DROP TABLE workspace_events; ALTER TABLE workspaces DROP COLUMN observed_branch; ALTER TABLE workspace_completion DROP COLUMN cause;")?;
-    // Migrations 31 to 38 add these columns and tables again when the
+    // Migrations 31 to 39 add these columns and tables again when the
     // emulated database upgrades.
     db.execute_batch("ALTER TABLE workspace_holds DROP COLUMN from_continuation;")?;
     db.execute_batch("ALTER TABLE executions DROP COLUMN scope_token;")?;
@@ -160,5 +199,6 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
     )?;
     db.execute_batch("ALTER TABLE workspace_issue DROP COLUMN title;")?;
     db.execute_batch("DROP TABLE agent_queue;")?;
+    db.execute_batch("DROP TABLE workspace_item_activity;")?;
     Ok(())
 }
