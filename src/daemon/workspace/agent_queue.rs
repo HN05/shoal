@@ -11,6 +11,7 @@ use rusqlite::{OptionalExtension, params};
 
 use super::Manager;
 use crate::{
+    config::AgentLimit,
     daemon::notifications::NotificationKind,
     model::{QueueAdmission, QueueEntry, QueueRequest, QueuedPlan},
     protocol::ConfigTarget,
@@ -235,7 +236,7 @@ impl Manager {
     async fn agent_limits(&self, repositories: Vec<String>) -> Result<Limits> {
         let config = self.config();
         let mut limits = Limits {
-            global: config.max_agents.map(u32::from),
+            global: resolve_limit(config.max_agents.or(Some(AgentLimit::Dynamic))),
             repositories: HashMap::new(),
         };
         for id in repositories {
@@ -245,7 +246,7 @@ impl Manager {
             let layers = self
                 .config_layers_for(ConfigTarget::Repository(id.clone().into()))
                 .await?;
-            let limit = config.resolve(&layers)?.max_agents.map(u32::from);
+            let limit = resolve_limit(config.resolve(&layers)?.max_agents);
             limits.repositories.insert(id, limit);
         }
         Ok(limits)
@@ -556,6 +557,28 @@ impl Manager {
             crate::daemon::log!("agent queue: {error:#}");
         }
     }
+}
+
+/// Resolve one configured limit at admission time. Dynamic limits are sampled
+/// for each admission so a daemon keeps following the host's available
+/// parallelism after configuration reloads or hardware changes.
+fn resolve_limit(limit: Option<AgentLimit>) -> Option<u32> {
+    limit.and_then(|limit| match limit {
+        AgentLimit::Dynamic => Some(dynamic_limit()),
+        AgentLimit::Fixed(value) => Some(value.get()),
+        AgentLimit::Unlimited => None,
+    })
+}
+
+/// A conservative host capacity for concurrent agents. Logical parallelism is
+/// the only portable resource signal available without adding a platform
+/// dependency; every repository uses the same host capacity unless it has a
+/// fixed or unlimited override.
+fn dynamic_limit() -> u32 {
+    std::thread::available_parallelism()
+        .map(|parallelism| parallelism.get().min(u32::MAX as usize) as u32)
+        .unwrap_or(1)
+        .max(1)
 }
 
 fn entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<QueueEntry> {

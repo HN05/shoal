@@ -18,6 +18,59 @@ use crate::paths::Paths;
 use repo::{ConfigLayers, RepoConfig};
 pub use resolve::Effective;
 
+/// How many tracked agents may run concurrently.
+///
+/// Numeric values retain the original fixed limit. `dynamic` derives a limit
+/// from the host's available parallelism, while `none` disables admission
+/// limits for the selected layer.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum AgentLimit {
+    #[default]
+    Dynamic,
+    Fixed(std::num::NonZeroU32),
+    Unlimited,
+}
+
+impl Serialize for AgentLimit {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            Self::Dynamic => serializer.serialize_str("dynamic"),
+            Self::Fixed(value) => serializer.serialize_u32(value.get()),
+            Self::Unlimited => serializer.serialize_str("none"),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for AgentLimit {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Raw {
+            Count(u32),
+            Name(String),
+        }
+
+        match Raw::deserialize(deserializer)? {
+            Raw::Count(value) => std::num::NonZeroU32::new(value)
+                .map(Self::Fixed)
+                .ok_or_else(|| serde::de::Error::custom("max_agents must be positive")),
+            Raw::Name(name) => match name.as_str() {
+                "dynamic" => Ok(Self::Dynamic),
+                "none" | "unlimited" => Ok(Self::Unlimited),
+                _ => Err(serde::de::Error::custom(
+                    "max_agents must be a positive number, 'dynamic', or 'none'",
+                )),
+            },
+        }
+    }
+}
+
 #[derive(Debug, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
@@ -43,8 +96,9 @@ pub struct Config {
     pub repositories_dir: Option<PathBuf>,
     /// Agent an issue workspace starts when `--agent` is omitted.
     pub default_agent: Option<crate::agent::Agent>,
-    /// Agents running at once on this machine; `shoal add` queues past it.
-    pub max_agents: Option<std::num::NonZeroU32>,
+    /// Agents running at once on this machine; defaults to host capacity and
+    /// `shoal add` queues past it. Use `none` for unlimited admission.
+    pub max_agents: Option<AgentLimit>,
     pub codex: repo::Codex,
     pub herdr: repo::Herdr,
     pub overload: overload::Overload,

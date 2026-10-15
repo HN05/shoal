@@ -78,9 +78,15 @@ fn started(id: &str) -> bool {
 async fn launches_without_a_limit_start_untracked() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
+    manager.publish_config(toml::from_str("max_agents = 'none'").unwrap());
     let admission = add(&manager, &repo, "first").await;
     assert!(admission.start && admission.entry.is_none());
     assert!(manager.queue_entries().await.unwrap().is_empty());
+}
+
+#[test]
+fn dynamic_capacity_is_a_positive_host_limit() {
+    assert!(dynamic_limit() > 0);
 }
 
 #[tokio::test]

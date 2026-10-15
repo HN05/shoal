@@ -607,21 +607,25 @@ and leaves it there for you to send from the app.
 ### Agent queue
 
 ```sh
-shoal config set max_agents 3                 # Agents running at once on this machine
+shoal config set max_agents dynamic           # Follow the host's CPU parallelism
+shoal config set max_agents 3                 # Fixed machine-wide limit
 shoal config set max_agents 2 --repo shoal    # And at most two of them in this repository
+shoal config set max_agents none --repo docs  # No repository limit
 shoal add <issue-url> --agent claude          # Starts now, or queues when no slot is free
 shoal add <issue-url> --agent claude --now    # Starts now regardless of the limits
 shoal ls --queue                              # Waiting and starting entries
 shoal rm issue-612-add-a-queue-cmd            # Removes a waiting entry
 ```
 
-`max_agents` limits the agents that run at once. The global value counts every
-agent on the machine; a repository's value (saved config or `.shoal.toml` in
-its registered checkout) counts only that repository's agents, within the
-global limit. Without either, nothing is queued. Each tracked agent uses a slot
-while it runs, awaits reattachment after a daemon restart, or waits for `shoal
-resume`, unless its workspace is done; `shoal done`, the agent's exit, `resume
---discard` and removal free it.
+`max_agents` limits the agents that run at once. It defaults to `dynamic`, which
+uses the host's available CPU parallelism at each admission. Set a positive
+number for a fixed limit or `none` for unlimited admission. The global value
+counts every agent on the machine; a repository's value (saved config or
+`.shoal.toml` in its registered checkout) counts only that repository's agents,
+within the global limit. Each tracked agent uses a slot while it runs, awaits
+reattachment after a daemon restart, or waits for `shoal resume`, unless its
+workspace is done; `shoal done`, the agent's exit, `resume --discard` and
+removal free it.
 
 `shoal add` with an agent asks the daemon for a slot after resolving the issue,
 branch and agent. When none is free it prints the entry's place and returns

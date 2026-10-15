@@ -27,7 +27,7 @@ pub struct Effective {
     pub agent_auth: crate::agent_auth::Config,
     pub git_profile: Option<String>,
     pub default_agent: Option<crate::agent::Agent>,
-    pub max_agents: Option<std::num::NonZeroU32>,
+    pub max_agents: Option<config::AgentLimit>,
     pub codex: Codex,
     pub herdr: config::Herdr,
     pub setup_cmd: Option<String>,
@@ -236,6 +236,7 @@ fn built_in() -> RepoConfig {
     let simulators = Simulators::default();
     let auto_cleanup = AutoCleanup::default();
     RepoConfig {
+        max_agents: Some(config::AgentLimit::Dynamic),
         issue_template: Some(config::templates::ISSUE_DEFAULT.into()),
         commands: named_commands::defaults(),
         herdr: config::repo::Herdr {

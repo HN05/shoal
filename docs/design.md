@@ -398,9 +398,12 @@ queue entries, excluding completed workspaces. Agents therefore count however
 they started, and no separate counter can leak a slot. The global value limits
 the machine and a repository's effective value limits that repository; a
 repository without its own value inherits the global one, which already bounds
-it, so normal precedence serves both. The queue stores the CLI's launch plan
-opaquely and creates nothing until a slot frees, so a waiting entry costs no
-worktree and branches from the default branch current when it starts. A
+it, so normal precedence serves both. The setting defaults to `dynamic`, which
+samples the host's available CPU parallelism when admission runs; a positive
+number fixes a limit and `none` disables it for that layer. The queue stores
+the CLI's launch plan opaquely and creates nothing until a slot frees, so a
+waiting entry costs no worktree and branches from the default branch current
+when it starts. A
 starting entry keeps its slot through setup while the launching CLI holds a
 connection open, with a short grace period for Herdr handoffs and daemon
 restarts, until its agent registers; a dead launch cannot hold a slot, and setup

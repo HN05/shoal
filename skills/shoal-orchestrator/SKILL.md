@@ -38,7 +38,7 @@ text reaches the agent as its first message (Codex through Happy's server, which
 needs this machine's Happy login). Check `prompt_delivered`; when false, the text
 is in `prompt_file` and the user must send it from the app.
 
-With `max_agents` configured, `add` may queue the agent instead: it then emits
+With `max_agents` configured (the default is dynamic host CPU parallelism), `add` may queue the agent instead: it then emits
 the queue entry (`state: queued`, `position`) and creates nothing yet. The
 daemon starts it when a slot frees; `shoal --json ls --queue` lists entries, and
 `--now` starts one regardless only when the user asks.

@@ -197,6 +197,31 @@ fn default_agent_accepts_agent_spellings_only() {
 }
 
 #[test]
+fn agent_limits_accept_dynamic_fixed_and_unlimited_values() {
+    for (text, expected) in [
+        ("max_agents = 'dynamic'", AgentLimit::Dynamic),
+        ("max_agents = 'none'", AgentLimit::Unlimited),
+        ("max_agents = 'unlimited'", AgentLimit::Unlimited),
+        (
+            "max_agents = 3",
+            AgentLimit::Fixed(std::num::NonZeroU32::new(3).unwrap()),
+        ),
+    ] {
+        let config: Config = toml::from_str(text).unwrap();
+        assert_eq!(config.max_agents, Some(expected));
+    }
+    assert!(toml::from_str::<Config>("max_agents = 0").is_err());
+    assert!(toml::from_str::<Config>("max_agents = 'automatic'").is_err());
+    assert_eq!(
+        Config::default()
+            .effective(&RepoConfig::default())
+            .unwrap()
+            .max_agents,
+        Some(AgentLimit::Dynamic)
+    );
+}
+
+#[test]
 fn cleanup_defaults_can_be_disabled_and_typos_are_rejected() {
     let config: Config = toml::from_str("").unwrap();
     assert_eq!(config.cleanup.auto.enabled, None);

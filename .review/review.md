@@ -236,8 +236,9 @@ instead of the PR delivery guidance below.
   placed workspace outside it, even when the user config is absent, preserving
   other settings; successful repository removal removes those trust entries while
   preserving other project settings.
-- `max_agents` admission is the daemon's: the global value limits the machine and
-  a repository's effective value that repository. Slots derive from tracked
+- `max_agents` admission is the daemon's: it defaults to host CPU parallelism,
+  accepts a positive fixed value or `none`, and the global value limits the
+  machine while a repository's effective value limits that repository. Slots derive from tracked
   agents, executions awaiting reattachment, resume records and starting queue
   entries, excluding done workspaces, never from a separate counter. A starting
   entry keeps its slot only while its launch holds it or within the grace
