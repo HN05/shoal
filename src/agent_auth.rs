@@ -13,6 +13,8 @@ pub struct Config {
     /// the agent's Forgejo API requests.
     pub fj_home: Option<PathBuf>,
     pub gh: Option<PathBuf>,
+    /// The agent's `glab`, which sends GitLab requests as the agent.
+    pub glab: Option<PathBuf>,
     /// The agent's `tea`, whose login stands for the agent on Gitea and on
     /// Forgejo hosts without `fj_home`.
     pub tea: Option<PathBuf>,
@@ -43,13 +45,14 @@ impl Config {
 
     /// Keep the private PATH directory alive for the tracked execution.
     fn wrappers(&self, paths: &crate::paths::Paths) -> Result<Option<Wrappers>> {
-        if self.fj.is_none() && self.gh.is_none() && self.tea.is_none() {
+        if self.fj.is_none() && self.gh.is_none() && self.glab.is_none() && self.tea.is_none() {
             return Ok(None);
         }
         let directory = paths.agent_auth_directory()?;
         for (name, path) in [
             (Tool::Forgejo.program(), &self.fj),
             (Tool::GitHub.program(), &self.gh),
+            (Tool::GitLab.program(), &self.glab),
             (Tool::Tea.program(), &self.tea),
         ] {
             let Some(path) = path else { continue };
@@ -78,6 +81,7 @@ impl Config {
             (Tool::Forgejo.program(), &self.fj),
             ("fj_home", &self.fj_home),
             (Tool::GitHub.program(), &self.gh),
+            (Tool::GitLab.program(), &self.glab),
             (Tool::Tea.program(), &self.tea),
         ] {
             if let Some(path) = path {

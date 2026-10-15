@@ -651,8 +651,8 @@ to its workspace. Scoped callers see no entries.
 
 ### Agent accounts
 
-`[agent_auth]` selects user-owned executable wrappers for `fj`, `gh` and `tea`,
-each an absolute or `~/` path, `fj_home`, the HOME the `fj` wrapper runs `fj` with,
+`[agent_auth]` selects user-owned executable wrappers for `fj`, `gh`, `glab` and
+`tea`, each an absolute or `~/` path, `fj_home`, the HOME the `fj` wrapper runs `fj` with,
 and a `git_profile` naming one of the global [Git profiles](#git-profiles), all
 defaulting to unset. Values follow repository/global
 precedence and appear in `config show`. Tracked agent shortcuts prepend a private
@@ -667,7 +667,8 @@ inherited token variables. PATH selection is cooperative: an absolute tool path
 or a shell that resets PATH bypasses it.
 
 Issue and PR changes Shoal makes for a workspace use the agent account. On
-GitHub they run `gh api` through the `gh` wrapper. On Forgejo and Gitea they use
+GitHub they run `gh api` through the `gh` wrapper, and on GitLab `glab api`
+through the `glab` wrapper. On Forgejo and Gitea they use
 the token the agent's `fj` saved under `fj_home`, read for each request and passed
 to curl on stdin; with an `fj` wrapper but no `fj_home` they fail rather than use
 your login. Without either, a `tea` wrapper sends them through `tea api` with its
