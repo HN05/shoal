@@ -95,40 +95,8 @@ impl Manager {
         }
         verify_directory(&repo.path, identity, true)?;
         delete_checkout(repo.path.clone()).await?;
-        // Only an empty repository directory goes; anything else in it is the user's.
-        if let Some(directory) = &repo.workspaces_dir {
-            match fs::remove_dir(directory) {
-                Ok(()) => {}
-                Err(error)
-                    if matches!(
-                        error.kind(),
-                        std::io::ErrorKind::NotFound | std::io::ErrorKind::DirectoryNotEmpty
-                    ) => {}
-                Err(error) => {
-                    return Err(error).with_context(|| format!("delete {}", directory.display()));
-                }
-            }
-        }
-        let id = repo.id.clone();
-        self.store
-            .run(move |db| {
-                let tx = db.transaction()?;
-                ensure!(
-                    !store::repository_has_workspaces(&tx, &id)?,
-                    "repository still has workspaces"
-                );
-                tx.execute(
-                    "DELETE FROM resource_pools WHERE scope=?1",
-                    [Scope::Repo(id.clone())],
-                )?;
-                ensure!(
-                    tx.execute("DELETE FROM repositories WHERE id=?1", [&id])? == 1,
-                    "repository registration disappeared during removal"
-                );
-                tx.commit()?;
-                Ok(())
-            })
-            .await?;
+        delete_empty_workspaces_dir(repo.workspaces_dir.clone()).await?;
+        self.unregister_repository(&repo.id).await?;
         Ok(RepositoryRemoval {
             removed: true,
             repository_id: repo.id,
@@ -284,6 +252,29 @@ impl Manager {
         }
         Ok(())
     }
+
+    async fn unregister_repository(&self, id: &str) -> Result<()> {
+        let id = id.to_owned();
+        self.store
+            .run(move |db| {
+                let tx = db.transaction()?;
+                ensure!(
+                    !store::repository_has_workspaces(&tx, &id)?,
+                    "repository still has workspaces"
+                );
+                tx.execute(
+                    "DELETE FROM resource_pools WHERE scope=?1",
+                    [Scope::Repo(id.clone())],
+                )?;
+                ensure!(
+                    tx.execute("DELETE FROM repositories WHERE id=?1", [&id])? == 1,
+                    "repository registration disappeared during removal"
+                );
+                tx.commit()?;
+                Ok(())
+            })
+            .await
+    }
 }
 
 async fn delete_checkout(path: std::path::PathBuf) -> Result<()> {
@@ -299,6 +290,28 @@ async fn delete_checkout(path: std::path::PathBuf) -> Result<()> {
             "repository directory still exists; retry shoal repo rm --yes"
         );
         Ok(())
+    })
+    .await?
+}
+
+async fn delete_empty_workspaces_dir(directory: Option<std::path::PathBuf>) -> Result<()> {
+    let Some(directory) = directory else {
+        return Ok(());
+    };
+    tokio::task::spawn_blocking(move || -> Result<()> {
+        // Only an empty repository directory goes; anything else in it is the user's.
+        match fs::remove_dir(&directory) {
+            Ok(()) => Ok(()),
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    std::io::ErrorKind::NotFound | std::io::ErrorKind::DirectoryNotEmpty
+                ) =>
+            {
+                Ok(())
+            }
+            Err(error) => Err(error).with_context(|| format!("delete {}", directory.display())),
+        }
     })
     .await?
 }
