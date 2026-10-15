@@ -5,6 +5,7 @@ use crate::{
     daemon::store,
     forge::{
         ForgeRepo, IssueInput,
+        account::Account,
         link::{self, ItemKind},
         pr::{self, wait::linked_items},
         repository,
@@ -28,9 +29,14 @@ impl Manager {
             Ok(diff) => (Some(diff), None),
             Err(error) => (None, Some(format!("{error:#}"))),
         };
+        let account = self.user_account();
         let (prs, issue_status) = tokio::join!(
-            pr::state::watched(&inspection.workspace, inspection.pr_cleanup.as_ref()),
-            issue_status(&inspection)
+            pr::state::watched(
+                &account,
+                &inspection.workspace,
+                inspection.pr_cleanup.as_ref()
+            ),
+            issue_status(&account, &inspection)
         );
         let unread_notifications = self.unread_notifications().await?;
         let workspace_id = inspection.workspace.id.clone();
@@ -54,7 +60,7 @@ impl Manager {
     }
 }
 
-async fn issue_status(inspection: &Inspection) -> Option<IssueStatus> {
+async fn issue_status(account: &Account, inspection: &Inspection) -> Option<IssueStatus> {
     let url = &inspection.issue.as_ref()?.url;
     let path = &inspection.workspace.path;
     let closed = async {
@@ -63,7 +69,7 @@ async fn issue_status(inspection: &Inspection) -> Option<IssueStatus> {
             .context("issue lookup needs an origin remote")?;
         let forge = ForgeRepo::parse(&remote)?;
         let (number, _) = forge.issue(url)?;
-        forge.issue_closed(path, number).await
+        forge.issue_closed(account, number).await
     }
     .await;
     Some(match closed {

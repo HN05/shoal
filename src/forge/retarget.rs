@@ -9,13 +9,13 @@ use super::{
 
 impl ForgeRepo {
     /// Retargeting follows the user's merge, so it uses the user's login.
-    pub(crate) async fn retarget(&self, number: u64, base: &str) -> Result<()> {
+    pub(crate) async fn retarget(&self, account: &Account, number: u64, base: &str) -> Result<()> {
         let request = Request::new(
             HttpMethod::Patch,
             self.repo_endpoint(&format!("pulls/{number}")),
             Some(serde_json::json!({ "base": base })),
         );
-        self.send(&Account::user(), &request)
+        self.send(account, &request)
             .await
             .with_context(|| format!("could not retarget PR #{number} to {base}"))?;
         Ok(())

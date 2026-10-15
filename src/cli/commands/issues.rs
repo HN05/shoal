@@ -3,7 +3,7 @@ use anyhow::{Context as _, Result, bail, ensure};
 
 use crate::{
     cli::{client, context::Context, ui},
-    forge::{ForgeRepo, repository},
+    forge::{ForgeRepo, account::Account, repository},
     git,
     model::Repository,
     validate::MAX_NAME_LEN,
@@ -179,7 +179,7 @@ pub(super) async fn origin_forge(repo: &Repository) -> Result<ForgeRepo> {
 pub(super) async fn load(repo: &Repository, input: &str) -> Result<Issue> {
     let forge = origin_forge(repo).await?;
     let (number, url) = forge.issue(input)?;
-    let (title, details) = forge.issue_details(&repo.path, number).await?;
+    let (title, details) = forge.issue_details(&Account::user(), number).await?;
     Ok(Issue {
         number,
         title,

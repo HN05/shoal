@@ -11,12 +11,12 @@ pub(crate) struct Item {
 }
 
 impl ForgeRepo {
-    pub async fn open_issues(&self, path: &std::path::Path) -> Result<Vec<Item>> {
-        self.kind.open_items(self, path, "issue").await
+    pub async fn open_issues(&self, account: &Account) -> Result<Vec<Item>> {
+        self.kind.open_items(self, account, "issue").await
     }
 
-    pub async fn open_pulls(&self, path: &std::path::Path) -> Result<Vec<Item>> {
-        self.kind.open_items(self, path, "pr").await
+    pub async fn open_pulls(&self, account: &Account) -> Result<Vec<Item>> {
+        self.kind.open_items(self, account, "pr").await
     }
 }
 
@@ -25,7 +25,7 @@ impl ForgeKind {
     async fn open_items(
         self,
         repo: &ForgeRepo,
-        path: &std::path::Path,
+        account: &Account,
         noun: &str,
     ) -> Result<Vec<Item>> {
         match self {
@@ -43,7 +43,7 @@ impl ForgeKind {
                     "--json",
                     "number,title",
                 ];
-                let text = self.query(path, &args, Query::List).await?;
+                let text = self.query(account, &args, Query::List).await?;
                 serde_json::from_str(&text)
                     .with_context(|| format!("invalid gh {noun} list response"))
             }
@@ -53,7 +53,7 @@ impl ForgeKind {
                 } else {
                     ItemKind::Issue
                 };
-                repo.rest_open_items(&Account::user(), kind)
+                repo.rest_open_items(account, kind)
                     .await
                     .context(super::api::FORGEJO_LOGIN)
             }

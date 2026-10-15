@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{Registration, RegistrationKind};
 use crate::{
-    forge::{ForgeRepo, repository},
+    forge::{ForgeRepo, account::Account, repository},
     model::Workspace,
 };
 
@@ -66,6 +66,7 @@ impl PrStatus {
 
 /// Look up each watched PR concurrently; a failure stays on its PR.
 pub(crate) async fn watched(
+    account: &Account,
     workspace: &Workspace,
     registration: Option<&Registration>,
 ) -> Vec<PrStatus> {
@@ -85,10 +86,8 @@ pub(crate) async fn watched(
     .await;
     match forge {
         Ok(forge) => {
-            futures_util::future::join_all(
-                urls.iter().map(|url| forge.pr_status(&workspace.path, url)),
-            )
-            .await
+            futures_util::future::join_all(urls.iter().map(|url| forge.pr_status(account, url)))
+                .await
         }
         Err(error) => urls
             .iter()

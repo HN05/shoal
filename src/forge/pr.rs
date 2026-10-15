@@ -240,7 +240,7 @@ impl Manager {
                 // Detect missing tools/login, wrong branches and invalid PRs now.
                 if check == WatchCheck::Lookup {
                     forge
-                        .merged_commits(&workspace.path, number, &workspace.branch)
+                        .merged_commits(&self.user_account(), number, &workspace.branch)
                         .await?;
                 }
                 let (mut urls, mut merged_head) = match self.pr_registration(&workspace.id).await? {
@@ -525,7 +525,7 @@ impl Manager {
         for url in urls {
             let (forge, number, _) = self.pr_forge(workspace, url).await?;
             let Some(commits) = forge
-                .merged_commits(&workspace.path, number, &workspace.branch)
+                .merged_commits(&self.user_account(), number, &workspace.branch)
                 .await?
             else {
                 return Ok(false);

@@ -55,7 +55,7 @@ impl Manager {
             )));
         }
         let (forge, _, _) = self.pr_forge(base, url).await?;
-        let target = forge.pull_request(&base.path, url).await?.base;
+        let target = forge.pull_request(&self.user_account(), url).await?.base;
         // Reload: this sweep may already have removed or moved some of them.
         for stacked in self.workspace(&base.id).await?.stacked_workspaces {
             self.restack(&stacked, base, &target, &head).await?;
@@ -65,7 +65,9 @@ impl Manager {
 
     async fn base_pr_commits(&self, base: &Workspace, url: &str) -> Result<Option<Vec<String>>> {
         let (forge, number, _) = self.pr_forge(base, url).await?;
-        forge.merged_commits(&base.path, number, &base.branch).await
+        forge
+            .merged_commits(&self.user_account(), number, &base.branch)
+            .await
     }
 
     async fn restack(
@@ -142,7 +144,7 @@ impl Manager {
     ) -> Result<Option<String>> {
         let lookup = async {
             let (forge, number, _) = self.pr_forge(workspace, url).await?;
-            let current = forge.pull_request(&workspace.path, url).await?.base;
+            let current = forge.pull_request(&self.user_account(), url).await?.base;
             Ok::<_, anyhow::Error>((current == base.branch).then_some((forge, number)))
         }
         .await;
@@ -158,10 +160,12 @@ impl Manager {
         // Lookups take time; recheck what authorizes the write right before it.
         self.verify_worktree(workspace).await?;
         self.ensure_base_unchanged(base, head).await?;
-        Ok(Some(match forge.retarget(number, target).await {
-            Ok(()) => format!("; Shoal retargeted this PR to {target}"),
-            Err(error) => format!("; retargeting this PR to {target} failed: {error:#}"),
-        }))
+        Ok(Some(
+            match forge.retarget(&self.user_account(), number, target).await {
+                Ok(()) => format!("; Shoal retargeted this PR to {target}"),
+                Err(error) => format!("; retargeting this PR to {target} failed: {error:#}"),
+            },
+        ))
     }
 
     /// The rebase cutoff in the update is the base HEAD read before restacking.

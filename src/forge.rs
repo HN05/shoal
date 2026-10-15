@@ -1,6 +1,6 @@
 //! Forge identity and issue/PR queries using the user's gh/fj login; the one
 //! write retargets stacked PRs, through the REST transport in `api`.
-mod account;
+pub(crate) mod account;
 pub mod action;
 mod api;
 pub mod checks;
@@ -144,10 +144,10 @@ impl ForgeRepo {
 
     pub async fn issue_details(
         &self,
-        path: &std::path::Path,
+        account: &account::Account,
         number: u64,
     ) -> Result<(String, String)> {
-        self.kind.issue_details(self, path, number).await
+        self.kind.issue_details(self, account, number).await
     }
 
     /// The repository an issue URL belongs to.
@@ -173,14 +173,14 @@ impl ForgeRepo {
     /// merged PR can authorize cleanup, including squash/rebase merges.
     pub async fn merged_commits(
         &self,
-        path: &std::path::Path,
+        account: &account::Account,
         number: u64,
         branch: &str,
     ) -> Result<Option<Vec<String>>> {
         match self.kind {
-            ForgeKind::GitHub => github_merged_commits(self, path, number, branch).await,
+            ForgeKind::GitHub => github_merged_commits(self, account, number, branch).await,
             ForgeKind::Forgejo => self
-                .rest_merged_commits(&account::Account::user(), number, branch)
+                .rest_merged_commits(account, number, branch)
                 .await
                 .context(api::FORGEJO_LOGIN)
                 .context(MERGED_HINT.trim_start_matches("; ").to_owned()),
@@ -190,14 +190,14 @@ impl ForgeRepo {
 
 async fn github_merged_commits(
     repo: &ForgeRepo,
-    path: &std::path::Path,
+    account: &account::Account,
     number: u64,
     branch: &str,
 ) -> Result<Option<Vec<String>>> {
     let number = number.to_string();
     let output = ForgeKind::GitHub
         .query(
-            path,
+            account,
             &[
                 "pr",
                 "view",
@@ -238,13 +238,16 @@ impl ForgeKind {
     async fn issue_details(
         self,
         repo: &ForgeRepo,
-        path: &std::path::Path,
+        account: &account::Account,
         number: u64,
     ) -> Result<(String, String)> {
         let (title, details) = match self {
-            Self::GitHub => github_issue_details(repo, path, number).await?,
+            Self::GitHub => github_issue_details(repo, account, number).await?,
             Self::Forgejo => {
-                let issue = repo.forgejo_item(link::ItemKind::Issue, number).await?;
+                let issue = repo
+                    .read(account, link::ItemKind::Issue, number)
+                    .await
+                    .context(api::FORGEJO_LOGIN)?;
                 issue::require_open(issue.item.state)?;
                 (issue.item.title, issue.body)
             }
@@ -256,7 +259,7 @@ impl ForgeKind {
 
 async fn github_issue_details(
     repo: &ForgeRepo,
-    path: &std::path::Path,
+    account: &account::Account,
     number: u64,
 ) -> Result<(String, String)> {
     let id = number.to_string();
@@ -270,7 +273,9 @@ async fn github_issue_details(
         "--json",
         "number,title,body,state",
     ];
-    let text = ForgeKind::GitHub.query(path, &args, Query::Issue).await?;
+    let text = ForgeKind::GitHub
+        .query(account, &args, Query::Issue)
+        .await?;
     issue::require_open(issue::github_state(&text, number)?)?;
     #[derive(serde::Deserialize)]
     struct GitHubIssue {
@@ -304,9 +309,13 @@ impl ForgeRepo {
     }
 
     /// Only PRs whose head branch lives in this repository can be checked out.
-    pub async fn pull_request(&self, path: &std::path::Path, input: &str) -> Result<PullRequest> {
+    pub async fn pull_request(
+        &self,
+        account: &account::Account,
+        input: &str,
+    ) -> Result<PullRequest> {
         let (number, url) = self.pull(input)?;
-        let (title, head, base) = self.kind.pull_details(self, path, number).await?;
+        let (title, head, base) = self.kind.pull_details(self, account, number).await?;
         ensure!(
             !head.is_empty() && !base.is_empty(),
             "PR #{number} has no head or base branch"
@@ -325,13 +334,13 @@ impl ForgeKind {
     async fn pull_details(
         self,
         repo: &ForgeRepo,
-        path: &std::path::Path,
+        account: &account::Account,
         number: u64,
     ) -> Result<(String, String, String)> {
         match self {
-            Self::GitHub => github_pull_details(repo, path, number).await,
+            Self::GitHub => github_pull_details(repo, account, number).await,
             Self::Forgejo => repo
-                .rest_pull_details(&account::Account::user(), number)
+                .rest_pull_details(account, number)
                 .await
                 .context(api::FORGEJO_LOGIN),
         }
@@ -340,7 +349,7 @@ impl ForgeKind {
 
 async fn github_pull_details(
     repo: &ForgeRepo,
-    path: &std::path::Path,
+    account: &account::Account,
     number: u64,
 ) -> Result<(String, String, String)> {
     let id = number.to_string();
@@ -356,7 +365,9 @@ async fn github_pull_details(
         base_ref_name: String,
         is_cross_repository: bool,
     }
-    let output = ForgeKind::GitHub.query(path, &args, Query::Pull("")).await?;
+    let output = ForgeKind::GitHub
+        .query(account, &args, Query::Pull(""))
+        .await?;
     let pull: Pull = serde_json::from_str(&output).context("invalid gh PR response")?;
     ensure!(pull.number == number, "gh returned a different PR");
     ensure!(
@@ -378,10 +389,16 @@ enum Query {
 }
 
 impl ForgeKind {
-    async fn query(self, path: &std::path::Path, args: &[&str], query: Query) -> Result<String> {
+    async fn query(
+        self,
+        account: &account::Account,
+        args: &[&str],
+        query: Query,
+    ) -> Result<String> {
         let tool = self.tool();
         let mut command = tokio::process::Command::new(tool);
-        command.current_dir(path).args(args).env("NO_COLOR", "1");
+        command.args(args).env("NO_COLOR", "1");
+        account.apply(&mut command);
         let seconds = match query {
             Query::Issue | Query::List | Query::View => 30,
             Query::Pull(_) => 20,

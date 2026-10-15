@@ -39,7 +39,10 @@ impl ForgeRepo {
             return Ok(None);
         }
         let commits = self
-            .forgejo_pages(account, &self.repo_endpoint(&format!("pulls/{number}/commits")))
+            .forgejo_pages(
+                account,
+                &self.repo_endpoint(&format!("pulls/{number}/commits")),
+            )
             .await?;
         commit_shas(&commits).map(Some)
     }
@@ -204,9 +207,7 @@ fn list_item(item: &Value) -> Result<list::Item> {
         .as_u64()
         .filter(|number| *number > 0)
         .context("listed item has no number")?;
-    let title = item["title"]
-        .as_str()
-        .context("listed item has no title")?;
+    let title = item["title"].as_str().context("listed item has no title")?;
     Ok(list::Item {
         number,
         title: title.to_owned(),
@@ -259,7 +260,11 @@ mod tests {
     fn merged_commits_need_full_ids_and_lists_need_numbers() {
         let sha = "a".repeat(40);
         assert_eq!(commit_shas(&[json!({"sha": sha})]).unwrap(), [sha]);
-        for commit in [json!({"sha": "abc"}), json!({}), json!({"sha": "g".repeat(40)})] {
+        for commit in [
+            json!({"sha": "abc"}),
+            json!({}),
+            json!({"sha": "g".repeat(40)}),
+        ] {
             assert!(commit_shas(&[commit]).is_err());
         }
         assert_eq!(

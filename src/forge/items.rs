@@ -40,7 +40,7 @@ impl Manager {
         };
         // Merging is the user's decision; every other change is the agent's.
         let account = match action {
-            Action::Merge { .. } => Account::user(),
+            Action::Merge { .. } => self.user_account(),
             _ => self.agent_account(&workspace).await?,
         };
         let item = forge
@@ -57,6 +57,11 @@ impl Manager {
 }
 
 impl Manager {
+    /// The user's own logins, which reads and the user's decisions use.
+    pub(crate) fn user_account(&self) -> Account {
+        Account::user()
+    }
+
     pub(super) async fn agent_account(&self, workspace: &Workspace) -> Result<Account> {
         // One snapshot, so a reload cannot pair a profile with another map.
         let config = self.config();

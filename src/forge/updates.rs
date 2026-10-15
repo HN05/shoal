@@ -257,9 +257,7 @@ mod tests {
     fn persisting_lookup_failures_are_reported_again_after_the_interval() {
         let failing = |error: &str| {
             let mut snapshot = Snapshot::default();
-            snapshot
-                .errors
-                .insert("CI".into(), error.into());
+            snapshot.errors.insert("CI".into(), error.into());
             snapshot
         };
         let poll = |previous: &Snapshot, error: &str, now| {

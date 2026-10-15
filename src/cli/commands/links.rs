@@ -9,6 +9,7 @@ use crate::{
     cli::{ItemArgs, client, context::Context, ui},
     forge::{
         ForgeRepo, IssueInput, PullRequest,
+        account::Account,
         link::{ItemKind, Link, LinkTarget, Selection},
     },
     git,
@@ -116,11 +117,11 @@ async fn pick_open_item(
     let forge = super::issues::origin_forge(&repo).await?;
     let number = match kind {
         ItemKind::Issue => {
-            let issues = forge.open_issues(&repo.path).await?;
+            let issues = forge.open_issues(&Account::user()).await?;
             ui::pick_item(ctx, "Issue> ", "issues", issues)?
         }
         ItemKind::Pr => {
-            let pulls = forge.open_pulls(&repo.path).await?;
+            let pulls = forge.open_pulls(&Account::user()).await?;
             ui::pick_item(ctx, "Pull request> ", "pull requests", pulls)?
         }
     };
@@ -330,7 +331,7 @@ pub(super) async fn add(
     );
     match target.unwrap() {
         LinkTarget::Pr => {
-            let pull = forge.pull_request(&repo.path, positional).await?;
+            let pull = forge.pull_request(&Account::user(), positional).await?;
             pull_creation(ctx, repo, pull, &mut creation).await?;
         }
         LinkTarget::Branch(branch) => {

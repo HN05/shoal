@@ -21,6 +21,7 @@ use crate::{
     env, execution,
     forge::{
         IssueInput,
+        account::Account,
         link::Selection,
         pr::{RegistrationKind, state::PrStatus},
         repository,
@@ -704,16 +705,16 @@ async fn pick_add_source(
             let repo = target.repository(ctx).await?;
             let issues = super::issues::origin_forge(repo)
                 .await?
-                .open_issues(&repo.path)
+                .open_issues(&Account::user())
                 .await?;
             return ui::pick_item(ctx, "Issue> ", "issues", issues).map(Some);
         }
         Source::Pull => {
             let repo = target.repository(ctx).await?;
             let forge = super::issues::origin_forge(repo).await?;
-            let pulls = forge.open_pulls(&repo.path).await?;
+            let pulls = forge.open_pulls(&Account::user()).await?;
             let number = ui::pick_item(ctx, "Pull request> ", "pull requests", pulls)?;
-            let pull = forge.pull_request(&repo.path, &number).await?;
+            let pull = forge.pull_request(&Account::user(), &number).await?;
             super::links::pull_creation(ctx, repo, pull, creation).await?;
         }
     }

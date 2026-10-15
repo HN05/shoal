@@ -9,20 +9,19 @@ use crate::forge::{
     rest::RestCheck,
 };
 use anyhow::{Context, Result, ensure};
-use std::path::Path;
 
 impl ForgeRepo {
-    pub(crate) async fn issue_activity(&self, path: &Path, number: u64) -> Result<Snapshot> {
+    pub(crate) async fn issue_activity(&self, account: &Account, number: u64) -> Result<Snapshot> {
         match self.kind {
-            ForgeKind::GitHub => self.github_issue_activity(path, number).await,
+            ForgeKind::GitHub => self.github_issue_activity(account, number).await,
             ForgeKind::Forgejo => self
-                .rest_issue_activity(&Account::user(), number)
+                .rest_issue_activity(account, number)
                 .await
                 .context(FORGEJO_LOGIN),
         }
     }
 
-    async fn github_issue_activity(&self, path: &Path, number: u64) -> Result<Snapshot> {
+    async fn github_issue_activity(&self, account: &Account, number: u64) -> Result<Snapshot> {
         let id = number.to_string();
         let repository = format!("{}/{}", self.host, self.path);
         let args = [
@@ -34,7 +33,7 @@ impl ForgeRepo {
             "--json",
             "number,state,comments",
         ];
-        let output = self.kind.query(path, &args, Query::Issue).await?;
+        let output = self.kind.query(account, &args, Query::Issue).await?;
         let issue: serde_json::Value = serde_json::from_str(&output)?;
         ensure!(issue["number"] == number, "gh returned a different issue");
         let mut snapshot = Snapshot {
@@ -72,14 +71,14 @@ impl ForgeRepo {
 
     pub(crate) async fn activity(
         &self,
-        path: &Path,
+        account: &Account,
         number: u64,
         branch: Option<&str>,
     ) -> Result<Snapshot> {
         match self.kind {
-            ForgeKind::GitHub => self.github_activity(path, number, branch).await,
+            ForgeKind::GitHub => self.github_activity(account, number, branch).await,
             ForgeKind::Forgejo => self
-                .rest_activity(&Account::user(), number, branch)
+                .rest_activity(account, number, branch)
                 .await
                 .context(FORGEJO_LOGIN),
         }
@@ -87,7 +86,7 @@ impl ForgeRepo {
 
     async fn github_activity(
         &self,
-        path: &Path,
+        account: &Account,
         number: u64,
         branch: Option<&str>,
     ) -> Result<Snapshot> {
@@ -103,7 +102,7 @@ impl ForgeRepo {
             "--json",
             "number,headRefName,headRefOid,state,comments,reviews,statusCheckRollup,mergeable",
         ];
-        let output = self.kind.query(path, &args, Query::Pull("")).await?;
+        let output = self.kind.query(account, &args, Query::Pull("")).await?;
         let mut snapshot = github_snapshot(&output, number, branch)?;
         let endpoint = format!("repos/{}/pulls/{number}/comments", self.path);
         let args = [
@@ -114,7 +113,7 @@ impl ForgeRepo {
             "--paginate",
             "--slurp",
         ];
-        let output = self.kind.query(path, &args, Query::Pull("")).await?;
+        let output = self.kind.query(account, &args, Query::Pull("")).await?;
         let pages: Vec<Vec<serde_json::Value>> =
             serde_json::from_str(&output).context("invalid gh review comments response")?;
         for comment in pages.into_iter().flatten() {
@@ -154,13 +153,13 @@ impl ForgeRepo {
 
 impl ForgeRepo {
     /// Each failed lookup is recorded on the result instead of failing it.
-    pub(crate) async fn pr_status(&self, path: &Path, url: &str) -> PrStatus {
+    pub(crate) async fn pr_status(&self, account: &Account, url: &str) -> PrStatus {
         let result = async {
             let (number, _) = self.pull(url)?;
             match self.kind {
-                ForgeKind::GitHub => self.github_pr_status(path, number, url).await,
+                ForgeKind::GitHub => self.github_pr_status(account, number, url).await,
                 ForgeKind::Forgejo => self
-                    .rest_pr_status(&Account::user(), number, url)
+                    .rest_pr_status(account, number, url)
                     .await
                     .context(FORGEJO_LOGIN),
             }
@@ -169,7 +168,12 @@ impl ForgeRepo {
         result.unwrap_or_else(|error| PrStatus::failed(url.into(), &error))
     }
 
-    async fn github_pr_status(&self, path: &Path, number: u64, url: &str) -> Result<PrStatus> {
+    async fn github_pr_status(
+        &self,
+        account: &Account,
+        number: u64,
+        url: &str,
+    ) -> Result<PrStatus> {
         let id = number.to_string();
         let repository = format!("{}/{}", self.host, self.path);
         let args = [
@@ -181,7 +185,7 @@ impl ForgeRepo {
             "--json",
             "number,headRefOid,state,comments,reviews,statusCheckRollup,mergeable",
         ];
-        let output = self.kind.query(path, &args, Query::Pull("")).await?;
+        let output = self.kind.query(account, &args, Query::Pull("")).await?;
         github_status(&output, number, url)
     }
 

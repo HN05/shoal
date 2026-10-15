@@ -3,7 +3,10 @@ use anyhow::{Context, Result, ensure};
 use rusqlite::OptionalExtension;
 use serde::{Deserialize, Serialize};
 
-use super::{ForgeKind, ForgeRepo, Query, item::ItemState, link::ItemKind, repository};
+use super::{
+    ForgeKind, ForgeRepo, Query, account::Account, api::FORGEJO_LOGIN, item::ItemState,
+    link::ItemKind, repository,
+};
 use crate::{
     daemon::{
         events::{self, EventKind},
@@ -214,7 +217,7 @@ impl Manager {
         self.verify_worktree(workspace).await?;
         let head = super::pr::current_head(workspace).await?;
         let (forge, number, _) = self.issue_forge(workspace, &issue.url).await?;
-        if forge.issue_closed(&workspace.path, number).await? {
+        if forge.issue_closed(&self.user_account(), number).await? {
             self.record_done(
                 workspace,
                 head,
@@ -241,12 +244,12 @@ impl Manager {
 }
 
 impl ForgeRepo {
-    pub async fn issue_closed(&self, path: &std::path::Path, number: u64) -> Result<bool> {
-        Ok(self.issue_state(path, number).await? == ItemState::Closed)
+    pub async fn issue_closed(&self, account: &Account, number: u64) -> Result<bool> {
+        Ok(self.issue_state(account, number).await? == ItemState::Closed)
     }
 
     /// An issue's state; a PR's number is refused.
-    pub(super) async fn issue_state(&self, path: &std::path::Path, number: u64) -> Result<ItemState> {
+    pub(super) async fn issue_state(&self, account: &Account, number: u64) -> Result<ItemState> {
         match self.kind {
             ForgeKind::GitHub => {
                 let id = number.to_string();
@@ -260,10 +263,15 @@ impl ForgeRepo {
                     "--json",
                     "number,state",
                 ];
-                let output = self.kind.query(path, &args, Query::Issue).await?;
+                let output = self.kind.query(account, &args, Query::Issue).await?;
                 github_state(&output, number)
             }
-            ForgeKind::Forgejo => Ok(self.forgejo_item(ItemKind::Issue, number).await?.item.state),
+            ForgeKind::Forgejo => Ok(self
+                .read(account, ItemKind::Issue, number)
+                .await
+                .context(FORGEJO_LOGIN)?
+                .item
+                .state),
         }
     }
 }

@@ -239,12 +239,13 @@ impl Manager {
             .await?
             .context("watch needs an origin remote")?;
         let forge = ForgeRepo::parse(&remote)?;
+        let account = self.user_account();
         let mut observations = Vec::new();
         for (url, kind) in items {
             let snapshot = match kind {
                 ItemKind::Issue => {
                     let (number, _) = forge.issue(&url)?;
-                    forge.issue_activity(&workspace.path, number).await?
+                    forge.issue_activity(&account, number).await?
                 }
                 ItemKind::Pr => {
                     let (number, _) = forge.pull(&url)?;
@@ -252,7 +253,7 @@ impl Manager {
                         .input
                         .is_none()
                         .then_some(workspace.branch.as_str());
-                    forge.activity(&workspace.path, number, branch).await?
+                    forge.activity(&account, number, branch).await?
                 }
             };
             observations.push((url, snapshot));

@@ -1,6 +1,6 @@
 //! An issue's or PR's content, status and discussion, read on request so
 //! callers need not know whether the forge is GitHub or Forgejo.
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::{Context, Result, ensure};
 use futures_util::future::try_join_all;
@@ -9,6 +9,8 @@ use serde_json::Value;
 
 use super::{
     ForgeKind, ForgeRepo, Query,
+    account::Account,
+    api::{FORGEJO_LOGIN, Request},
     link::ItemKind,
     pr::state::{CheckResult, PrStatus, ReviewState},
 };
@@ -29,7 +31,7 @@ pub struct SelectedItem {
 
 impl Selected {
     /// Each item as the forge reports it now, in selection order.
-    pub(crate) async fn view(&self, comments: bool) -> Result<Vec<ItemView>> {
+    pub(crate) async fn view(&self, account: &Account, comments: bool) -> Result<Vec<ItemView>> {
         let remote = super::repository::remote_url_from_path(&self.path)
             .await?
             .context("item lookup needs an origin remote")?;
@@ -37,7 +39,7 @@ impl Selected {
         Ok(futures_util::future::join_all(
             self.items
                 .iter()
-                .map(|item| forge.view(&self.path, item.kind, &item.url, comments)),
+                .map(|item| forge.view(account, item.kind, &item.url, comments)),
         )
         .await)
     }
@@ -121,13 +123,16 @@ impl ForgeRepo {
     /// carry the state `shoal status` reports.
     pub(crate) async fn view(
         &self,
-        path: &Path,
+        account: &Account,
         kind: ItemKind,
         url: &str,
         comments: bool,
     ) -> ItemView {
         let mut errors = Vec::new();
-        let details = match self.details(path, kind, url, comments, &mut errors).await {
+        let details = match self
+            .details(account, kind, url, comments, &mut errors)
+            .await
+        {
             Ok(details) => Some(details),
             Err(error) => {
                 errors.insert(0, format!("{error:#}"));
@@ -145,7 +150,7 @@ impl ForgeRepo {
 
     async fn details(
         &self,
-        path: &Path,
+        account: &Account,
         kind: ItemKind,
         url: &str,
         comments: bool,
@@ -157,13 +162,16 @@ impl ForgeRepo {
         };
         let content = async {
             match self.kind {
-                ForgeKind::GitHub => self.github_details(path, kind, number, comments).await,
-                ForgeKind::Forgejo => self.forgejo_details(kind, number).await,
+                ForgeKind::GitHub => self.github_details(account, kind, number, comments).await,
+                ForgeKind::Forgejo => self
+                    .forgejo_details(account, kind, number)
+                    .await
+                    .context(FORGEJO_LOGIN),
             }
         };
         let status = async {
             match kind {
-                ItemKind::Pr => Some(self.pr_status(path, url).await),
+                ItemKind::Pr => Some(self.pr_status(account, url).await),
                 ItemKind::Issue => None,
             }
         };
@@ -174,8 +182,11 @@ impl ForgeRepo {
         }
         if comments {
             let discussion = match self.kind {
-                ForgeKind::GitHub => self.github_reviews(path, kind, number).await,
-                ForgeKind::Forgejo => self.forgejo_discussion(kind, number, &mut details).await,
+                ForgeKind::GitHub => self.github_reviews(account, kind, number).await,
+                ForgeKind::Forgejo => self
+                    .forgejo_discussion(account, kind, number, &mut details)
+                    .await
+                    .context(FORGEJO_LOGIN),
             };
             match discussion {
                 Ok(Some(reviews)) => details.reviews = Some(reviews),
@@ -188,7 +199,7 @@ impl ForgeRepo {
 
     async fn github_details(
         &self,
-        path: &Path,
+        account: &Account,
         kind: ItemKind,
         number: u64,
         comments: bool,
@@ -212,14 +223,14 @@ impl ForgeRepo {
             "--json",
             &fields,
         ];
-        let output = self.kind.query(path, &args, Query::View).await?;
+        let output = self.kind.query(account, &args, Query::View).await?;
         github_details(&output, kind, number)
     }
 
     /// Reviews with their inline comments; issues have none.
     async fn github_reviews(
         &self,
-        path: &Path,
+        account: &Account,
         kind: ItemKind,
         number: u64,
     ) -> Result<Option<Vec<Review>>> {
@@ -237,7 +248,7 @@ impl ForgeRepo {
                     "--paginate",
                     "--slurp",
                 ];
-                let output = self.kind.query(path, &args, Query::View).await?;
+                let output = self.kind.query(account, &args, Query::View).await?;
                 let pages: Vec<Vec<Value>> = serde_json::from_str(&output)
                     .with_context(|| format!("invalid gh {resource} response"))?;
                 Ok::<_, anyhow::Error>(pages.into_iter().flatten().collect::<Vec<_>>())
@@ -247,36 +258,39 @@ impl ForgeRepo {
         github_reviews(&reviews, &comments).map(Some)
     }
 
-    async fn forgejo_details(&self, kind: ItemKind, number: u64) -> Result<Details> {
-        let item = match kind {
-            ItemKind::Issue => self.forgejo_api(&format!("issues/{number}")).await?,
-            ItemKind::Pr => self.forgejo_api(&format!("pulls/{number}")).await?,
-        };
+    async fn forgejo_details(
+        &self,
+        account: &Account,
+        kind: ItemKind,
+        number: u64,
+    ) -> Result<Details> {
+        let item = self
+            .send(account, &Request::get(self.item_endpoint(kind, number)))
+            .await?;
         forgejo_details(&item, kind, number)
     }
 
     /// Fills the item's comments and returns a PR's reviews.
     async fn forgejo_discussion(
         &self,
+        account: &Account,
         kind: ItemKind,
         number: u64,
         details: &mut Details,
     ) -> Result<Option<Vec<Review>>> {
-        let comments = self
-            .forgejo_api(&format!("issues/{number}/comments"))
-            .await?;
+        let endpoint = self.repo_endpoint(&format!("issues/{number}/comments"));
+        let comments = self.send(account, &Request::get(endpoint)).await?;
         details.comments = Some(forgejo_comments(&comments)?);
         if kind == ItemKind::Issue {
             return Ok(None);
         }
-        let reviews = self
-            .forgejo_api_pages(&format!("pulls/{number}/reviews"))
-            .await?;
+        let endpoint = self.repo_endpoint(&format!("pulls/{number}/reviews"));
+        let reviews = self.forgejo_pages(account, &endpoint).await?;
         let reviews = try_join_all(reviews.into_iter().map(|review| async move {
             let id = review["id"].as_u64().context("Forgejo review has no ID")?;
             let comments = if review["comments_count"].as_u64().unwrap_or_default() > 0 {
-                self.forgejo_api(&format!("pulls/{number}/reviews/{id}/comments"))
-                    .await?
+                let endpoint = self.repo_endpoint(&format!("pulls/{number}/reviews/{id}/comments"));
+                self.send(account, &Request::get(endpoint)).await?
             } else {
                 Value::Array(Vec::new())
             };

@@ -13,6 +13,7 @@ use crate::{
     },
     forge::{
         ForgeRepo, IssueInput, PullRequest,
+        account::Account,
         link::{ItemKind, Link, LinkTarget},
     },
     git,
@@ -188,7 +189,7 @@ async fn pull_request(
         .await?
         .context("PR review needs an origin remote")?;
     let pull = ForgeRepo::parse(&remote)?
-        .pull_request(&repo.path, input)
+        .pull_request(&Account::user(), input)
         .await?;
     let owner = client::workspaces(&ctx.paths)
         .await?
