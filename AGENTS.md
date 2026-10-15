@@ -224,8 +224,9 @@ the failing test and log excerpt; rerun only after that, never instead of it.
 - Deliver completed work as a PR on a topic branch: commit, push, open or update the
   PR with its `area/`, `type/` and `complexity/` labels, then watch CI and the
   review bot. Review findings are claims to verify against the code and its
-  callers before fixing them or rejecting them with evidence in the thread; merge
-  only when the user says so.
+  callers before fixing them or rejecting them with evidence in the thread.
+  Agents cannot merge PRs; leave merging to the user instead of asking for
+  permission to merge.
 
 ## Subagent approval
 
