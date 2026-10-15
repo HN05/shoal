@@ -374,6 +374,41 @@ async fn tracked_command_child() {
     std::process::exit(code);
 }
 
+// These cases call CLI handlers in-process. Run them in an env-cleared child
+// so a tracked test runner cannot lend its scope to the fixture daemon.
+async fn run_isolated_overload_test(name: &str) {
+    let root = tempfile::tempdir().unwrap();
+    let mut command = crate::test_support::isolated_test(
+        root.path(),
+        "daemon::overload_tests::isolated_overload_test",
+    );
+    command.env("SHOAL_OVERLOAD_TEST", name);
+    assert!(bounded(command.status()).await.unwrap().success());
+}
+
+#[tokio::test]
+#[ignore = "isolated overload test invoked by its in-process wrapper"]
+async fn isolated_overload_test() {
+    if std::env::var_os("SHOAL_TEST_HELPER").is_none() {
+        return;
+    }
+    match std::env::var("SHOAL_OVERLOAD_TEST").unwrap().as_str() {
+        "stop_saves_agents_and_commands_preserving_work_and_leases" => {
+            stop_saves_agents_and_commands_preserving_work_and_leases_body().await
+        }
+        "resume_without_an_agent_reports_stopped_commands_once" => {
+            resume_without_an_agent_reports_stopped_commands_once_body().await
+        }
+        "discard_clears_pending_recovery_without_launching_an_agent" => {
+            discard_clears_pending_recovery_without_launching_an_agent_body().await
+        }
+        "manual_resume_consumes_the_record_on_start_even_if_other_commands_run_or_restore_fails" => {
+            manual_resume_consumes_the_record_on_start_even_if_other_commands_run_or_restore_fails_body().await
+        }
+        name => panic!("unknown isolated overload test: {name}"),
+    }
+}
+
 #[tokio::test]
 #[ignore = "isolated stop operation launched by overload tests"]
 async fn stop_child() {
@@ -410,6 +445,10 @@ async fn resume_child() {
 
 #[tokio::test]
 async fn stop_saves_agents_and_commands_preserving_work_and_leases() {
+    run_isolated_overload_test("stop_saves_agents_and_commands_preserving_work_and_leases").await;
+}
+
+async fn stop_saves_agents_and_commands_preserving_work_and_leases_body() {
     let (_root, manager, workspace, serving) = fixture().await;
     manager
         .acquire_port(
@@ -481,6 +520,10 @@ async fn stop_saves_agents_and_commands_preserving_work_and_leases() {
 
 #[tokio::test]
 async fn resume_without_an_agent_reports_stopped_commands_once() {
+    run_isolated_overload_test("resume_without_an_agent_reports_stopped_commands_once").await;
+}
+
+async fn resume_without_an_agent_reports_stopped_commands_once_body() {
     let (_root, manager, workspace, serving) = fixture().await;
     let command = launch_child(
         &manager,
@@ -662,6 +705,10 @@ async fn failed_restore_expansion_does_not_block_launch_or_manual_recovery_recor
 
 #[tokio::test]
 async fn discard_clears_pending_recovery_without_launching_an_agent() {
+    run_isolated_overload_test("discard_clears_pending_recovery_without_launching_an_agent").await;
+}
+
+async fn discard_clears_pending_recovery_without_launching_an_agent_body() {
     let (_root, manager, workspace, serving) = fixture().await;
     let launched = launch(&manager, &workspace);
     wait_started(&manager, &workspace).await;
@@ -840,6 +887,14 @@ async fn recovery_disconnect_closes_the_connection_without_forgetting_ownership(
 
 #[tokio::test]
 async fn manual_resume_consumes_the_record_on_start_even_if_other_commands_run_or_restore_fails() {
+    run_isolated_overload_test(
+        "manual_resume_consumes_the_record_on_start_even_if_other_commands_run_or_restore_fails",
+    )
+    .await;
+}
+
+async fn manual_resume_consumes_the_record_on_start_even_if_other_commands_run_or_restore_fails_body()
+ {
     let (_root, manager, workspace, serving) = fixture().await;
     let launched = launch(&manager, &workspace);
     wait_started(&manager, &workspace).await;
