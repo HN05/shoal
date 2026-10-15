@@ -25,6 +25,7 @@ struct Progress {
     directory_id: Option<String>,
     /// Workspaces are gone and file deletion has started.
     deleting_files: bool,
+    workspace_paths: Vec<std::path::PathBuf>,
 }
 
 impl Manager {
@@ -70,8 +71,17 @@ impl Manager {
             None => Progress {
                 directory_id: real_directory_identity(&repo.path)?,
                 deleting_files: false,
+                workspace_paths: Vec::new(),
             },
         };
+        let mut workspace_paths = progress.workspace_paths.clone();
+        for workspace in &workspaces {
+            let path =
+                std::fs::canonicalize(&workspace.path).unwrap_or_else(|_| workspace.path.clone());
+            if !workspace_paths.contains(&path) {
+                workspace_paths.push(path);
+            }
+        }
         let identity = progress.directory_id.as_deref();
         verify_directory(&repo.path, identity, progress.deleting_files)?;
         if progress.deleting_files {
@@ -80,7 +90,7 @@ impl Manager {
                 "repository has workspaces after file deletion began"
             );
         } else {
-            self.remove_repository_workspaces(&repo, &workspaces, identity)
+            self.remove_repository_workspaces(&repo, &workspaces, identity, &workspace_paths)
                 .await?;
         }
         verify_directory(&repo.path, identity, true)?;
@@ -124,6 +134,7 @@ impl Manager {
             repository_id: repo.id,
             path: repo.path,
             workspaces_removed: workspaces.len(),
+            workspace_paths,
         })
     }
 
@@ -133,12 +144,23 @@ impl Manager {
             .run(move |db| {
                 Ok(db
                     .query_row(
-                        "SELECT directory_id,deleting_files FROM repository_removals WHERE repository_id=?1",
+                        "SELECT directory_id,deleting_files,workspace_paths FROM repository_removals WHERE repository_id=?1",
                         [id],
                         |row| {
+                            let workspace_paths = row.get::<_, String>(2)?;
+                            let workspace_paths = serde_json::from_str(&workspace_paths).map_err(
+                                |error| {
+                                    rusqlite::Error::FromSqlConversionFailure(
+                                        2,
+                                        rusqlite::types::Type::Text,
+                                        Box::new(error),
+                                    )
+                                },
+                            )?;
                             Ok(Progress {
                                 directory_id: row.get(0)?,
                                 deleting_files: row.get(1)?,
+                                workspace_paths,
                             })
                         },
                     )
@@ -154,6 +176,7 @@ impl Manager {
         repo: &Repository,
         workspaces: &[Workspace],
         identity: Option<&str>,
+        workspace_paths: &[std::path::PathBuf],
     ) -> Result<()> {
         if identity.is_some() {
             check_checkout(repo, workspaces).await?;
@@ -188,14 +211,18 @@ impl Manager {
                 );
             }
         }
-        let (id, recorded_identity) = (repo.id.clone(), identity.map(str::to_owned));
+        let (id, recorded_identity, workspace_paths) = (
+            repo.id.clone(),
+            identity.map(str::to_owned),
+            serde_json::to_string(workspace_paths)?,
+        );
         self.store
             .run(move |db| {
                 let tx = db.transaction()?;
                 crate::daemon::resources::ensure_no_external_leases(&tx, &id)?;
                 tx.execute(
-                    "INSERT INTO repository_removals(repository_id,directory_id) VALUES (?1,?2) ON CONFLICT(repository_id) DO NOTHING",
-                    params![id, recorded_identity],
+                    "INSERT INTO repository_removals(repository_id,directory_id,workspace_paths) VALUES (?1,?2,?3) ON CONFLICT(repository_id) DO UPDATE SET directory_id=excluded.directory_id, workspace_paths=excluded.workspace_paths",
+                    params![id, recorded_identity, workspace_paths],
                 )?;
                 tx.commit()?;
                 Ok(())

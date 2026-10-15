@@ -29,6 +29,9 @@ pub struct RepositoryRemoval {
     pub repository_id: String,
     pub path: PathBuf,
     pub workspaces_removed: usize,
+    /// Canonical worktree paths removed during this operation and prior retry attempts.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub workspace_paths: Vec<PathBuf>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -5,7 +5,7 @@ use anyhow::{Context as _, Result, ensure};
 
 use crate::{
     cli::{
-        RepoCommand,
+        RepoCommand, agents,
         client::{self, request},
         context::Context,
         output::{Palette, Style},
@@ -108,24 +108,26 @@ pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
             confirmation,
         } => {
             let mut repository = chosen(ctx, repository).await?;
+            let repositories = client::repositories(&ctx.paths).await?;
+            let cleanup_repository = repository::select(&repositories, &repository)
+                .await?
+                .clone();
             if !confirmation.yes {
-                let repositories = client::repositories(&ctx.paths).await?;
-                let repo = repository::select(&repositories, &repository).await?;
                 ensure!(
                     ui::confirm(
                         ctx,
                         &format!(
                             "Delete repository: {}\nSource: {}\nCheckout: {}\nDeletes: checkout, all Shoal workspaces and their resources\nWork:    uncommitted and unpushed changes are permanently lost",
-                            repository::name(repo),
-                            repo.source,
-                            repo.path.display(),
+                            repository::name(&cleanup_repository),
+                            cleanup_repository.source,
+                            cleanup_repository.path.display(),
                         ),
                         "--yes",
                     )?,
                     "repository removal canceled"
                 );
                 // A rename while the prompt is open must not redirect deletion.
-                repository = repo.id.clone().into();
+                repository = cleanup_repository.id.clone().into();
             }
             let result = ctx
                 .progress(
@@ -136,6 +138,9 @@ pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
                     ),
                 )
                 .await?;
+            if result.repository_id == cleanup_repository.id {
+                agents::cleanup_repository_trust(ctx, &cleanup_repository, &result.workspace_paths);
+            }
             ctx.emit(
                 &format!(
                     "Deleted {} and {} Shoal workspaces",

@@ -8173,6 +8173,39 @@ fn repository_removal_deletes_local_checkout_workspaces_and_leases_and_stops_com
     let first = fixture.add("first");
     let second = fixture.add("second");
     let first_path = Path::new(first["path"].as_str().unwrap());
+    let second_path = Path::new(second["path"].as_str().unwrap());
+    let repository = fixture.ok(&["repo", "list"])[0].clone();
+    let workspaces_dir = Path::new(repository["workspaces_dir"].as_str().unwrap());
+    let repo_key = fs::canonicalize(&fixture.repo).unwrap();
+    let workspaces_key = fs::canonicalize(workspaces_dir).unwrap();
+    let first_key = fs::canonicalize(first_path).unwrap();
+    let second_key = fs::canonicalize(second_path).unwrap();
+    fs::write(
+        fixture.root.path().join(".claude.json"),
+        serde_json::json!({
+            "projects": {
+                repo_key.to_str().unwrap(): {"hasTrustDialogAccepted": true},
+                workspaces_key.to_str().unwrap(): {"hasTrustDialogAccepted": true},
+                first_key.to_str().unwrap(): {"hasTrustDialogAccepted": true},
+                second_key.to_str().unwrap(): {"hasTrustDialogAccepted": true},
+                "/keep": {"hasTrustDialogAccepted": true}
+            }
+        })
+        .to_string(),
+    )
+    .unwrap();
+    fs::create_dir_all(fixture.root.path().join(".codex")).unwrap();
+    fs::write(
+        fixture.root.path().join(".codex/config.toml"),
+        format!(
+            "[projects]\n{} = {{ trust_level = 'trusted' }}\n{} = {{ trust_level = 'trusted' }}\n{} = {{ trust_level = 'trusted' }}\n{} = {{ trust_level = 'trusted' }}\n'/keep' = {{ trust_level = 'trusted' }}\n",
+            toml_edit::Key::new(repo_key.to_str().unwrap()),
+            toml_edit::Key::new(workspaces_key.to_str().unwrap()),
+            toml_edit::Key::new(first_key.to_str().unwrap()),
+            toml_edit::Key::new(second_key.to_str().unwrap()),
+        ),
+    )
+    .unwrap();
     fs::write(first_path.join("dirty"), "uncommitted work").unwrap();
     fs::write(first_path.join(".shoal.toml"), "[resources.local-lock]\n").unwrap();
     fs::write(fixture.repo.join("untracked"), "repo changes").unwrap();
@@ -8217,6 +8250,23 @@ fn repository_removal_deletes_local_checkout_workspaces_and_leases_and_stops_com
     assert!(!Path::new(second["path"].as_str().unwrap()).exists());
     assert!(fixture.ok(&["repo", "list"]).as_array().unwrap().is_empty());
     assert!(fixture.ok(&["ls"]).as_array().unwrap().is_empty());
+    let claude: Value = serde_json::from_str(
+        &fs::read_to_string(fixture.root.path().join(".claude.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        claude["projects"],
+        serde_json::json!({"/keep": {"hasTrustDialogAccepted": true}})
+    );
+    let codex: toml::Value = toml::from_str(
+        &fs::read_to_string(fixture.root.path().join(".codex/config.toml")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(codex["projects"].as_table().unwrap().len(), 1);
+    assert_eq!(
+        codex["projects"]["/keep"]["trust_level"].as_str(),
+        Some("trusted")
+    );
     let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
     for table in [
         "ports",
@@ -9190,14 +9240,14 @@ test ! -f fail-removal || { echo 'session still busy' >&2; exit 3; }
 }
 
 #[test]
-fn claude_launch_trusts_workspace_and_repository_directories() {
+fn claude_launch_trusts_shared_repository_directory() {
     let fixture = Fixture::new();
     let home = fixture.root.path();
     let workspace = fixture.add("trusted");
     let path = fs::canonicalize(workspace["path"].as_str().unwrap()).unwrap();
     let repository = fixture.ok(&["repo", "list"])[0].clone();
     let directory = fs::canonicalize(repository["workspaces_dir"].as_str().unwrap()).unwrap();
-    let keys = [path.as_path(), directory.as_path(), fixture.repo.as_path()];
+    let keys = [directory.as_path()];
     let bin = home.join("bin");
     install_test_script(bin.join("claude"), "#!/bin/sh\nexit 0\n");
     let config = home.join(".claude.json");
@@ -9211,6 +9261,8 @@ fn claude_launch_trusts_workspace_and_repository_directories() {
             true
         );
     }
+    assert!(root["projects"][path.to_str().unwrap()].is_null());
+    assert!(root["projects"][fixture.repo.to_str().unwrap()].is_null());
     assert!(root["projects"][fixture.shoal_dir().to_str().unwrap()].is_null());
 
     fs::write(&config, r#"{"numStartups": 1, "projects": {}}"#).unwrap();
@@ -9223,6 +9275,8 @@ fn claude_launch_trusts_workspace_and_repository_directories() {
             true
         );
     }
+    assert!(root["projects"][path.to_str().unwrap()].is_null());
+    assert!(root["projects"][fixture.repo.to_str().unwrap()].is_null());
     assert!(root["projects"][fixture.shoal_dir().to_str().unwrap()].is_null());
 
     // An absolute CLAUDE_CONFIG_DIR selects that directory's config instead.
@@ -9244,6 +9298,8 @@ fn claude_launch_trusts_workspace_and_repository_directories() {
             true
         );
     }
+    assert!(overridden["projects"][path.to_str().unwrap()].is_null());
+    assert!(overridden["projects"][fixture.repo.to_str().unwrap()].is_null());
     let untouched: Value = serde_json::from_str(&fs::read_to_string(&config).unwrap()).unwrap();
     assert_eq!(untouched["projects"], serde_json::json!({}));
 
@@ -9259,7 +9315,7 @@ fn claude_launch_trusts_workspace_and_repository_directories() {
 }
 
 #[test]
-fn codex_launches_trust_workspace_and_repository_in_selected_config() {
+fn codex_launches_trust_shared_repository_directory_and_external_workspace() {
     let fixture = Fixture::new();
     let home = fixture.root.path();
     // An explicit path must not make its arbitrary parent a trust root.
@@ -9274,7 +9330,7 @@ fn codex_launches_trust_workspace_and_repository_in_selected_config() {
     let path = fs::canonicalize(workspace["path"].as_str().unwrap()).unwrap();
     let repository = fixture.ok(&["repo", "list"])[0].clone();
     let directory = fs::canonicalize(repository["workspaces_dir"].as_str().unwrap()).unwrap();
-    let keys = [path.as_path(), directory.as_path(), fixture.repo.as_path()];
+    let keys = [path.as_path(), directory.as_path()];
     let bin = home.join("bin");
     // Inspect the config from the child so trust must precede the launch.
     install_test_script(
@@ -9318,6 +9374,11 @@ fn codex_launches_trust_workspace_and_repository_in_selected_config() {
             assert!(
                 root["projects"]
                     .get(fixture.shoal_dir().to_str().unwrap())
+                    .is_none()
+            );
+            assert!(
+                root["projects"]
+                    .get(fixture.repo.to_str().unwrap())
                     .is_none()
             );
             assert_eq!(fs::read(&target).unwrap(), output.stdout);
@@ -11711,15 +11772,12 @@ fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
                 &fs::read_to_string(fixture.root.path().join(".codex/config.toml")).unwrap(),
             )
             .unwrap();
-            let key = fs::canonicalize(workspace["path"].as_str().unwrap()).unwrap();
             let repository = fixture.ok(&["repo", "list"])[0].clone();
             let directory = Path::new(repository["workspaces_dir"].as_str().unwrap());
-            for path in [key.as_path(), directory, fixture.repo.as_path()] {
-                assert_eq!(
-                    config["projects"][path.to_str().unwrap()]["trust_level"].as_str(),
-                    Some("trusted")
-                );
-            }
+            assert_eq!(
+                config["projects"][directory.to_str().unwrap()]["trust_level"].as_str(),
+                Some("trusted")
+            );
             launch
         } else {
             let workspace = fixture.add(&name);
@@ -11742,15 +11800,12 @@ fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
             // Detached Claude launches skip the trust dialog like `shoal claude`.
             let config: Value =
                 serde_json::from_str(&fs::read_to_string(&claude_config).unwrap()).unwrap();
-            let key = fs::canonicalize(workspace["path"].as_str().unwrap()).unwrap();
             let repository = fixture.ok(&["repo", "list"])[0].clone();
             let directory = Path::new(repository["workspaces_dir"].as_str().unwrap());
-            for path in [key.as_path(), directory, fixture.repo.as_path()] {
-                assert_eq!(
-                    config["projects"][path.to_str().unwrap()]["hasTrustDialogAccepted"],
-                    true
-                );
-            }
+            assert_eq!(
+                config["projects"][directory.to_str().unwrap()]["hasTrustDialogAccepted"],
+                true
+            );
             launch
         };
         assert_eq!(launch["agent"], agent);

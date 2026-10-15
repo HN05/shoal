@@ -232,8 +232,10 @@ instead of the PR delivery guidance below.
   not on PATH is refused before any work and left out of pickers, the workspace
   menu and completion.
 - Claude and Codex launches (including Happy and Codex app handoffs) persist
-  trust for the workspace, its repository's Shoal directory, and the registered
-  checkout even when the user config is absent, preserving other settings.
+  trust for the repository's shared Shoal workspaces directory, or an explicitly
+  placed workspace outside it, even when the user config is absent, preserving
+  other settings; successful repository removal removes those trust entries while
+  preserving other project settings.
 - `max_agents` admission is the daemon's: the global value limits the machine and
   a repository's effective value that repository. Slots derive from tracked
   agents, executions awaiting reattachment, resume records and starting queue

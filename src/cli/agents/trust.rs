@@ -6,8 +6,58 @@ use serde_json::json;
 use crate::{
     cli::{client, context::Context},
     env,
-    model::Workspace,
+    model::{Repository, Workspace},
 };
+
+/// Remove trust entries for a repository after its deletion succeeds.
+/// Config cleanup is best effort and never makes repository removal fail.
+pub(crate) fn cleanup_repository_trust(
+    ctx: &Context,
+    repository: &Repository,
+    workspace_paths: &[std::path::PathBuf],
+) {
+    let mut paths = Vec::new();
+    for path in std::iter::once(&repository.path)
+        .chain(repository.workspaces_dir.iter())
+        .chain(workspace_paths.iter())
+    {
+        let path = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_owned());
+        if !paths.contains(&path) {
+            paths.push(path);
+        }
+    }
+    let claude = env::claude_config_dir().map(|dir| {
+        dir.unwrap_or_else(|| ctx.paths.home.clone())
+            .join(".claude.json")
+    });
+    cleanup_config(claude, &paths, "Claude Code", remove_claude_trust);
+    let codex = env::codex_home().map(|dir| {
+        dir.unwrap_or_else(|| ctx.paths.home.join(".codex"))
+            .join("config.toml")
+    });
+    cleanup_config(codex, &paths, "Codex", remove_codex_trust);
+}
+
+fn cleanup_config(
+    config: Result<std::path::PathBuf>,
+    paths: &[std::path::PathBuf],
+    agent: &str,
+    remove: fn(&std::path::Path, &[std::path::PathBuf]) -> Result<bool>,
+) {
+    let config = match config {
+        Ok(config) => config,
+        Err(error) => {
+            eprintln!("warning: could not clean {agent} trust config: {error:#}");
+            return;
+        }
+    };
+    if let Err(error) = remove(&config, paths) {
+        eprintln!(
+            "warning: could not clean {agent} trust config {}: {error:#}",
+            config.display()
+        );
+    }
+}
 
 /// Mark the workspace trusted in Claude Code's config so a launch, attached or
 /// detached, never stops at the trust dialog. Failure only warns.
@@ -48,7 +98,7 @@ async fn trust_launch(
             return;
         }
     };
-    let mut paths = vec![workspace.path.clone()];
+    let mut paths = Vec::new();
     match client::repositories(&ctx.paths).await.and_then(|repos| {
         repos
             .into_iter()
@@ -56,11 +106,11 @@ async fn trust_launch(
             .context("workspace repository is missing")
     }) {
         Ok(repo) => {
-            paths.extend(repo.workspaces_dir);
-            paths.push(repo.path);
+            paths.extend(repository_trust_paths(&repo, &workspace.path));
         }
         Err(error) => {
             eprintln!("warning: could not resolve repository trust paths for {agent}: {error:#}");
+            paths.push(workspace.path.clone());
         }
     }
     for path in paths {
@@ -70,6 +120,19 @@ async fn trust_launch(
                 path.display()
             );
         }
+    }
+}
+
+/// Trust the shared workspaces directory for normal Shoal worktrees. An
+/// explicitly placed worktree outside it needs its own project entry.
+fn repository_trust_paths(
+    repository: &Repository,
+    workspace: &std::path::Path,
+) -> Vec<std::path::PathBuf> {
+    match &repository.workspaces_dir {
+        Some(directory) if workspace.starts_with(directory) => vec![directory.clone()],
+        Some(directory) => vec![directory.clone(), workspace.to_owned()],
+        None => vec![workspace.to_owned()],
     }
 }
 
@@ -118,6 +181,53 @@ fn trust_claude_workspace(config: &std::path::Path, workspace: &std::path::Path)
     Ok(true)
 }
 
+fn remove_claude_trust(config: &std::path::Path, paths: &[std::path::PathBuf]) -> Result<bool> {
+    use serde_json::Value;
+
+    let Some((config, _lock)) = lock_existing_trust_config(config)? else {
+        return Ok(false);
+    };
+    let text = crate::fsutil::read_optional(&config)
+        .with_context(|| format!("read {}", config.display()))?
+        .unwrap_or_else(|| "{}".into());
+    let mut root: Value =
+        serde_json::from_str(&text).with_context(|| format!("parse {}", config.display()))?;
+    let Some(projects) = root.get_mut("projects") else {
+        return Ok(false);
+    };
+    let projects = projects
+        .as_object_mut()
+        .context("Claude config `projects` is not a JSON object")?;
+    let mut changed = false;
+    for path in paths {
+        let key = path.to_str().context("trust path is not UTF-8")?;
+        let remove_project = if let Some(project) = projects.get_mut(key) {
+            let project = project
+                .as_object_mut()
+                .context("Claude project entry is not a JSON object")?;
+            changed |= project.remove("hasTrustDialogAccepted").is_some();
+            project.is_empty()
+        } else {
+            false
+        };
+        if remove_project {
+            projects.remove(key);
+        }
+    }
+    if changed {
+        fsutil::replace_atomically(
+            &config,
+            &serde_json::to_vec_pretty(&root)?,
+            ReplaceOptions {
+                permissions: Permissions::Preserve,
+                sync: false,
+            },
+        )
+        .with_context(|| format!("replace {}", config.display()))?;
+    }
+    Ok(changed)
+}
+
 fn trust_codex_workspace(config: &std::path::Path, workspace: &std::path::Path) -> Result<bool> {
     use toml_edit::{DocumentMut, Item, Table, value};
 
@@ -162,6 +272,54 @@ fn trust_codex_workspace(config: &std::path::Path, workspace: &std::path::Path) 
     Ok(true)
 }
 
+fn remove_codex_trust(config: &std::path::Path, paths: &[std::path::PathBuf]) -> Result<bool> {
+    use toml_edit::DocumentMut;
+
+    let Some((config, _lock)) = lock_existing_trust_config(config)? else {
+        return Ok(false);
+    };
+    let text = crate::fsutil::read_optional(&config)
+        .with_context(|| format!("read {}", config.display()))?
+        .unwrap_or_default();
+    let mut root: DocumentMut = text
+        .parse()
+        .with_context(|| format!("parse {}", config.display()))?;
+    let Some(projects) = root.get_mut("projects") else {
+        return Ok(false);
+    };
+    let projects = projects
+        .as_table_like_mut()
+        .context("Codex config `projects` is not a TOML table")?;
+    let mut changed = false;
+    for path in paths {
+        let key = path.to_str().context("trust path is not UTF-8")?;
+        let remove_project = if let Some(project) = projects.get_mut(key) {
+            let project = project
+                .as_table_like_mut()
+                .context("Codex project entry is not a TOML table")?;
+            changed |= project.remove("trust_level").is_some();
+            project.is_empty()
+        } else {
+            false
+        };
+        if remove_project {
+            projects.remove(key);
+        }
+    }
+    if changed {
+        fsutil::replace_atomically(
+            &config,
+            root.to_string().as_bytes(),
+            ReplaceOptions {
+                permissions: Permissions::Preserve,
+                sync: false,
+            },
+        )
+        .with_context(|| format!("replace {}", config.display()))?;
+    }
+    Ok(changed)
+}
+
 // This lock coordinates Shoal processes; the agents do not use it themselves.
 fn lock_trust_config(config: &std::path::Path) -> Result<std::fs::File> {
     use std::os::unix::fs::OpenOptionsExt;
@@ -177,6 +335,17 @@ fn lock_trust_config(config: &std::path::Path) -> Result<std::fs::File> {
         .open(path)?;
     fs2::FileExt::lock_exclusive(&lock)?;
     Ok(lock)
+}
+
+fn lock_existing_trust_config(
+    config: &std::path::Path,
+) -> Result<Option<(std::path::PathBuf, std::fs::File)>> {
+    let config = match std::fs::canonicalize(config) {
+        Ok(config) => config,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error).with_context(|| format!("resolve {}", config.display())),
+    };
+    Ok(Some((config.clone(), lock_trust_config(&config)?)))
 }
 
 #[cfg(test)]
@@ -205,6 +374,71 @@ mod tests {
                 0o640
             );
         }
+    }
+
+    #[test]
+    fn cleanup_removes_trust_fields_but_preserves_project_settings() {
+        let dir = tempfile::tempdir().unwrap();
+        let workspace = dir.path().join("workspace");
+        let other = dir.path().join("other");
+        fs::create_dir(&workspace).unwrap();
+        fs::create_dir(&other).unwrap();
+        let workspace = fs::canonicalize(workspace).unwrap();
+        let other = fs::canonicalize(other).unwrap();
+        let paths = vec![workspace.clone()];
+
+        let claude = dir.path().join("claude.json");
+        fs::write(
+            &claude,
+            serde_json::to_vec(&json!({
+                "projects": {
+                    workspace.to_str().unwrap(): {
+                        "hasTrustDialogAccepted": true,
+                        "allowedTools": ["Bash"]
+                    },
+                    other.to_str().unwrap(): {"hasTrustDialogAccepted": true}
+                }
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        assert!(remove_claude_trust(&claude, &paths).unwrap());
+        let root: Value = serde_json::from_str(&fs::read_to_string(&claude).unwrap()).unwrap();
+        assert_eq!(
+            root["projects"][workspace.to_str().unwrap()]["allowedTools"],
+            json!(["Bash"])
+        );
+        assert!(root["projects"][workspace.to_str().unwrap()]["hasTrustDialogAccepted"].is_null());
+        assert_eq!(
+            root["projects"][other.to_str().unwrap()]["hasTrustDialogAccepted"],
+            true
+        );
+
+        let codex = dir.path().join("codex.toml");
+        fs::write(
+            &codex,
+            format!(
+                "[projects]\n{} = {{ trust_level = 'trusted', custom = 42 }}\n{} = {{ trust_level = 'trusted' }}\n",
+                toml_edit::Key::new(workspace.to_str().unwrap()),
+                toml_edit::Key::new(other.to_str().unwrap())
+            ),
+        )
+        .unwrap();
+        assert!(remove_codex_trust(&codex, &paths).unwrap());
+        let root: toml::Value = toml::from_str(&fs::read_to_string(&codex).unwrap()).unwrap();
+        assert_eq!(
+            root["projects"][workspace.to_str().unwrap()]["custom"].as_integer(),
+            Some(42)
+        );
+        assert!(
+            root["projects"][workspace.to_str().unwrap()]
+                .get("trust_level")
+                .is_none()
+        );
+        assert_eq!(
+            root["projects"][other.to_str().unwrap()]["trust_level"].as_str(),
+            Some("trusted")
+        );
     }
 
     #[test]

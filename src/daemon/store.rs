@@ -344,7 +344,8 @@ const MIGRATIONS: &[(i64, &str, Option<Precondition>)] = &[
     (38, include_str!("store/agent_queue.sql"), None),
     (
         39,
-        "CREATE TABLE IF NOT EXISTS workspace_item_activity (
+        "ALTER TABLE repository_removals ADD COLUMN workspace_paths TEXT NOT NULL DEFAULT '[]';
+         CREATE TABLE IF NOT EXISTS workspace_item_activity (
             workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
             url TEXT NOT NULL,
             record TEXT NOT NULL,
@@ -747,7 +748,8 @@ mod tests {
         }
         if version >= 39 {
             db.execute_batch(
-                "CREATE TABLE IF NOT EXISTS workspace_item_activity (
+                "ALTER TABLE repository_removals ADD COLUMN workspace_paths TEXT NOT NULL DEFAULT '[]';
+                 CREATE TABLE IF NOT EXISTS workspace_item_activity (
                     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
                     url TEXT NOT NULL,
                     record TEXT NOT NULL,

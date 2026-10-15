@@ -22,20 +22,31 @@ fn run_with_reply(
     env: &[(&str, &str)],
     reply: Option<(bool, serde_json::Value)>,
 ) -> (Output, String) {
+    run_with_replies(args, terminal, env, reply.into_iter().collect())
+}
+
+fn run_with_replies(
+    args: &[&str],
+    terminal: Option<bool>,
+    env: &[(&str, &str)],
+    replies: Vec<(bool, serde_json::Value)>,
+) -> (Output, String) {
     let root = tempfile::tempdir_in("/tmp").unwrap();
     let (progress, drawn) = mpsc::channel();
-    let server = reply.map(|(wait_for_progress, reply)| {
+    let server = (!replies.is_empty()).then(|| {
         let listener = support::fake_daemon::bind_fake_daemon(root.path());
         thread::spawn(move || {
-            let (stream, _) = listener.accept().unwrap();
-            support::fake_daemon::answer(stream, |_| {
-                if wait_for_progress {
-                    drawn
-                        .recv_timeout(Duration::from_secs(60))
-                        .expect("progress was not drawn");
-                }
-                reply
-            });
+            for (wait_for_progress, reply) in replies {
+                let (stream, _) = listener.accept().unwrap();
+                support::fake_daemon::answer(stream, |_| {
+                    if wait_for_progress {
+                        drawn
+                            .recv_timeout(Duration::from_secs(60))
+                            .expect("progress was not drawn");
+                    }
+                    reply
+                });
+            }
         })
     });
     let mut command = support::cli(root.path());
@@ -128,6 +139,10 @@ fn repository_progress_respects_output_mode_and_clears_before_errors() {
         "type": "repository",
         "data": {"id": "test", "path": "/test", "source": "/test", "last_used": 0}
     });
+    let repositories = serde_json::json!({
+        "type": "repositories",
+        "data": [success["data"].clone()]
+    });
     for (terminal, json, env, visible) in [
         (Some(false), false, vec![], true),
         (Some(false), false, vec![("NO_COLOR", "1")], true),
@@ -155,16 +170,19 @@ fn repository_progress_respects_output_mode_and_clears_before_errors() {
             assert_eq!(value["id"], "test");
         }
     }
-    let (output, text) = run_with_reply(
+    let (output, text) = run_with_replies(
         &["repo", "rm", "/test", "--yes"],
         Some(false),
         &[("NO_COLOR", "1")],
-        Some((
-            true,
-            serde_json::json!({
-                "type": "error", "data": {"code": "test", "message": "removal failed"}
-            }),
-        )),
+        vec![
+            (false, repositories),
+            (
+                true,
+                serde_json::json!({
+                    "type": "error", "data": {"code": "test", "message": "removal failed"}
+                }),
+            ),
+        ],
     );
     assert!(!output.status.success());
     assert!(text.contains("Removing repository"), "{text:?}");

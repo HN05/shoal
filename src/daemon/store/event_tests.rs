@@ -200,6 +200,7 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
     )?;
     db.execute_batch("ALTER TABLE workspace_issue DROP COLUMN title;")?;
     db.execute_batch("DROP TABLE agent_queue;")?;
+    db.execute_batch("ALTER TABLE repository_removals DROP COLUMN workspace_paths;")?;
     db.execute_batch("DROP TABLE workspace_item_activity;")?;
     Ok(())
 }
