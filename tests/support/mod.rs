@@ -1,5 +1,7 @@
 //! Process defaults for integration tests. Apply intentional overrides with
 //! `Command::env` / `current_dir` after constructing a command.
+pub mod fake_daemon;
+
 #[allow(dead_code)]
 pub mod wait;
 
