@@ -5,7 +5,10 @@ use std::{
     process::{Output, Stdio},
     time::Duration,
 };
-use tokio::{io::AsyncWriteExt, process::Command};
+use tokio::{
+    io::{AsyncRead, AsyncReadExt, AsyncWriteExt},
+    process::{Child, Command},
+};
 
 /// Stderr kept in error messages; longer output would exceed a protocol frame.
 pub const MAX_DIAGNOSTIC_CHARS: usize = 8192;
@@ -16,6 +19,7 @@ pub struct Run {
     command: Command,
     timeout: Option<Duration>,
     input: Option<Vec<u8>>,
+    output_limit: Option<usize>,
 }
 
 impl Run {
@@ -24,6 +28,7 @@ impl Run {
             command,
             timeout: None,
             input: None,
+            output_limit: None,
         }
     }
 
@@ -34,6 +39,12 @@ impl Run {
 
     pub fn input(mut self, input: impl Into<Vec<u8>>) -> Self {
         self.input = Some(input.into());
+        self
+    }
+
+    /// Stop and kill the child when either output pipe exceeds this byte limit.
+    pub fn output_limit(mut self, bytes: usize) -> Self {
+        self.output_limit = Some(bytes);
         self
     }
 
@@ -70,7 +81,7 @@ impl Run {
                 }
                 Ok::<_, io::Error>(())
             };
-            let (output, ()) = tokio::try_join!(child.wait_with_output(), write)?;
+            let (output, ()) = tokio::try_join!(capture_output(child, self.output_limit), write)?;
             Ok(output)
         };
         match self.timeout {
@@ -101,6 +112,41 @@ impl Run {
     pub async fn output(self) -> Result<String> {
         String::from_utf8(self.checked().await?.stdout).context("tool output is not UTF-8")
     }
+}
+
+async fn capture_output(mut child: Child, limit: Option<usize>) -> io::Result<Output> {
+    let stdout = child.stdout.take().expect("stdout is piped");
+    let stderr = child.stderr.take().expect("stderr is piped");
+    let (status, stdout, stderr) = tokio::try_join!(
+        child.wait(),
+        read_output(stdout, limit),
+        read_output(stderr, limit)
+    )?;
+    Ok(Output {
+        status,
+        stdout,
+        stderr,
+    })
+}
+
+async fn read_output(
+    mut pipe: impl AsyncRead + Unpin,
+    limit: Option<usize>,
+) -> io::Result<Vec<u8>> {
+    let mut bytes = Vec::new();
+    if let Some(limit) = limit {
+        pipe.take(limit.saturating_add(1) as u64)
+            .read_to_end(&mut bytes)
+            .await?;
+        if bytes.len() > limit {
+            return Err(io::Error::other(format!(
+                "tool output exceeded {limit} bytes"
+            )));
+        }
+    } else {
+        pipe.read_to_end(&mut bytes).await?;
+    }
+    Ok(bytes)
 }
 
 /// Run to completion with no stdin and return stdout as UTF-8.
@@ -169,6 +215,30 @@ mod tests {
             .unwrap();
         assert_eq!(&output.stdout[..input.len()], vec![0; input.len()]);
         assert_eq!(&output.stdout[input.len()..], input);
+    }
+
+    #[tokio::test]
+    async fn output_limits_cover_both_pipes_and_interrupt_nonterminating_children() {
+        let output = Run::new(shell("printf 1234; printf 5678 >&2"))
+            .output_limit(4)
+            .capture()
+            .await
+            .unwrap();
+        assert_eq!(output.stdout, b"1234");
+        assert_eq!(output.stderr, b"5678");
+        for redirect in ["", ">&2"] {
+            let error = Run::new(shell(&format!("while :; do printf 12345 {redirect}; done")))
+                .output_limit(4)
+                .input(vec![0; 256 * 1024])
+                .timeout(Duration::from_secs(60))
+                .capture()
+                .await
+                .unwrap_err();
+            assert!(
+                error.to_string().contains("output exceeded 4 bytes"),
+                "{error}"
+            );
+        }
     }
 
     #[tokio::test]

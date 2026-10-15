@@ -16,6 +16,7 @@ use crate::tools::Tool;
 const TIMEOUT: Duration = Duration::from_secs(30);
 /// Forgejo's default maximum page size.
 const PAGE_SIZE: usize = 50;
+const MAX_LOG_BYTES: usize = 8 * 1024 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum HttpMethod {
@@ -92,6 +93,8 @@ impl ForgeRepo {
         let output = crate::subprocess::Run::new(curl)
             .input(token.map(authorization).unwrap_or_default())
             .timeout(TIMEOUT)
+            // curl appends a newline and a three-digit HTTP status.
+            .output_limit(MAX_LOG_BYTES + 4)
             .output()
             .await
             .context("fetch Forgejo job log (maximum 8 MiB)")?;

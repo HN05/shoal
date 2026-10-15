@@ -810,6 +810,35 @@ fn failed_check_responses() -> Value {
 }
 
 #[test]
+fn check_log_downloads_are_bounded_even_when_curl_ignores_max_filesize() {
+    let fixture = Fixture::new(Forge::Forgejo, "");
+    fixture.respond(failed_check_responses());
+    support::install_test_script(
+        fixture.root.path().join("bin/curl"),
+        r#"#!/bin/sh
+for arg; do url=$arg; done
+case "$url" in
+ */actions/jobs/*/logs)
+  exec python3 -c 'import sys
+while True:
+ sys.stdout.buffer.write(b"x" * 65536)
+';;
+ *) exec /usr/bin/curl "$@";;
+esac
+"#,
+    );
+    let result = fixture.request(json!({"check_log": {
+        "workspace": "topic", "selection": {"kind": "pr", "input": "8"}, "check": "rust"
+    }}));
+    let message = result["data"]["message"].as_str().unwrap();
+    assert!(message.contains("maximum 8 MiB"), "{result}");
+    assert!(
+        message.contains("output exceeded 8388612 bytes"),
+        "{result}"
+    );
+}
+
+#[test]
 fn view_prints_check_logs_and_reports_lookup_errors() {
     for available in [true, false] {
         let fixture = Fixture::new(Forge::Forgejo, "");
