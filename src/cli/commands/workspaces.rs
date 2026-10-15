@@ -401,8 +401,18 @@ pub(in crate::cli) async fn execute_add(ctx: &Context, plan: AddPlan) -> Result<
         repositories: tokio::sync::OnceCell::new(),
     };
     let issue = match &plan.issue {
-        Some(url) => Some(super::issues::load(target.repository(ctx).await?, url).await?),
-        None => None,
+        Some(url) => async { super::issues::load(target.repository(ctx).await?, url).await }
+            .await
+            .map(Some),
+        None => Ok(None),
+    };
+    // A queued start reports a failed lookup as it reports any other failure.
+    let issue = match (issue, &plan.queue_entry) {
+        (Err(error), Some(entry)) => {
+            super::agent_queue::fail(ctx, entry, &error).await;
+            return Err(error);
+        }
+        (issue, _) => issue?,
     };
     execute_add_with_target(ctx, plan, target, issue).await
 }
