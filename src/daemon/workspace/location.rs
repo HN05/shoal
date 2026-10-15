@@ -12,8 +12,9 @@ use std::{
 
 impl Manager {
     /// Choose a new workspace's directory: a validated explicit path, or its
-    /// name inside the repository's reserved directory. Any existing entry,
-    /// including a dangling symlink, is refused.
+    /// name inside the repository's reserved directory, resolved so overlap
+    /// checks compare real locations. Any existing entry, including a
+    /// dangling symlink, is refused.
     pub(super) async fn new_workspace_path(
         &self,
         repo: &Repository,
@@ -22,7 +23,7 @@ impl Manager {
     ) -> Result<PathBuf> {
         let path = match path {
             Some(path) => self.workspace_location(repo, &path).await?,
-            None => self.workspaces_dir(repo).await?.join(name),
+            None => canonical_with_missing_tail(&self.workspaces_dir(repo).await?)?.join(name),
         };
         ensure!(
             path.symlink_metadata()

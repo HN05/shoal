@@ -13373,6 +13373,34 @@ fn adopt_copy_refuses_a_dangling_symlink_at_the_default_directory() {
 }
 
 #[test]
+fn adopt_copy_refuses_a_default_directory_that_resolves_into_the_source() {
+    let fixture = Fixture::new();
+    let repo = fixture.repo.to_str().unwrap();
+    let add = |branch: &str, name: &str| {
+        let path = fixture.root.path().join(name);
+        git(
+            &fixture.repo,
+            &["worktree", "add", "-b", branch, path.to_str().unwrap()],
+        );
+        fs::canonicalize(path).unwrap()
+    };
+    let first = add("copy/first", "first worktree");
+    let output = fixture.ok(&["adopt", first.to_str().unwrap(), "--repo", repo, "--copy"]);
+    let directory = PathBuf::from(output["path"].as_str().unwrap())
+        .parent()
+        .unwrap()
+        .to_owned();
+    fixture.ok(&["rm", output["name"].as_str().unwrap(), "--yes"]);
+    let source = add("copy/second", "second worktree");
+    fs::remove_dir_all(&directory).unwrap();
+    std::os::unix::fs::symlink(&source, &directory).unwrap();
+    let output = fixture.run(&["adopt", source.to_str().unwrap(), "--repo", repo, "--copy"]);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("overlaps the source worktree"));
+    assert!(!source.join("copy-second-2").exists());
+}
+
+#[test]
 fn adopt_infers_a_checkout_with_a_separate_git_directory() {
     let fixture = Fixture::new();
     let root = fixture.root.path();
