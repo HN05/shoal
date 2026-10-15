@@ -233,7 +233,7 @@ pub(super) async fn add(
     mut creation: Creation,
     agent: Option<Agent>,
     args: Vec<OsString>,
-    here: bool,
+    options: workspaces::AddOptions,
 ) -> Result<i32> {
     let Some(positional) = input.positional.as_deref() else {
         return workspaces::add(
@@ -243,7 +243,7 @@ pub(super) async fn add(
             input.issue,
             AgentLaunch::Add(agent),
             args,
-            here,
+            options,
         )
         .await;
     };
@@ -267,7 +267,7 @@ pub(super) async fn add(
             input.issue,
             AgentLaunch::Add(agent),
             args,
-            here,
+            options,
         )
         .await;
     }
@@ -287,7 +287,7 @@ pub(super) async fn add(
             Some(positional.into()),
             AgentLaunch::IssueDefault(agent),
             args,
-            here,
+            options,
         )
         .await;
     }
@@ -319,7 +319,7 @@ pub(super) async fn add(
             Some(positional.into()),
             AgentLaunch::IssueDefault(agent),
             args,
-            here,
+            options,
         )
         .await;
     }
@@ -346,7 +346,7 @@ pub(super) async fn add(
         None,
         AgentLaunch::Add(agent),
         args,
-        here,
+        options,
     )
     .await
 }

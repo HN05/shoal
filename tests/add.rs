@@ -59,7 +59,7 @@ fn add_reuses_resolution_requests_without_reordering_failures() {
         ),
         (
             vec!["add", "test", "new", "--agent", "codex"],
-            vec!["layered_config test", "create_workspace"],
+            vec!["layered_config test", "queue_add", "create_workspace"],
             "creation reached",
         ),
     ] {
@@ -198,6 +198,9 @@ impl FakeDaemon {
                             }
                         }})
                     }
+                    "queue_add" => json!({"type": "queue_admission", "data": {
+                        "start": true, "entry": null, "waiting": 0
+                    }}),
                     _ => {
                         json!({"type": "error", "data": {"code": "test", "message": "creation reached"}})
                     }

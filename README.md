@@ -99,6 +99,12 @@ New workspaces branch from the repository's default branch unless `--base REF`
 is supplied to `add`. With shell integration, `shoal add` enters the
 workspace.
 
+To limit how many agents run at once, set `max_agents` globally or for one
+repository (`shoal config set max_agents 3`, `--repo my-project`). `shoal add`
+then queues agents past the limit and starts them as running agents finish;
+`--now` starts one anyway, and `shoal rm <name>` drops a queued one. See the
+[agent queue](docs/reference.md#agent-queue).
+
 ## Everyday commands
 
 After [adding an AI tool](docs/reference.md#agents), run
@@ -107,7 +113,8 @@ After [adding an AI tool](docs/reference.md#agents), run
 ```sh
 shoal                         # Interactive workspace menu
 shoal repo                    # Interactive repository menu
-shoal ls                      # List workspaces
+shoal ls                      # List workspaces and queued agents
+shoal ls --queue              # Agents waiting for a slot under max_agents
 shoal ls --ready              # PRs, issues and workspaces marked ready for review
 shoal status fix-login        # Workspace activity, changes, resources, issue and PR state
 shoal status pr 12            # Workspaces that link PR 12; also issue or resource

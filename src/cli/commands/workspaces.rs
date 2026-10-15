@@ -216,6 +216,15 @@ pub(in crate::cli) struct Creation {
     pub pr: Option<String>,
 }
 
+/// How `shoal add` runs once its workspace is planned.
+#[derive(Debug, Clone, Copy, Default)]
+pub(super) struct AddOptions {
+    /// Run in the current pane instead of opening a Herdr tab.
+    pub here: bool,
+    /// Start the agent even when `max_agents` is reached.
+    pub now: bool,
+}
+
 pub(super) enum AgentLaunch {
     Explicit(Option<Agent>),
     /// An ordinary add uses the interactive picker when no agent is named.
@@ -230,7 +239,7 @@ pub(super) async fn add(
     issue: Option<String>,
     agent: AgentLaunch,
     args: Vec<OsString>,
-    here: bool,
+    options: AddOptions,
 ) -> Result<i32> {
     let mut creation = creation;
     creation.path = creation
@@ -277,7 +286,20 @@ pub(super) async fn add(
         queue_entry: None,
         detached: false,
     };
-    if crate::cli::herdr::handoff(ctx, &mut plan, issue.as_ref(), here).await? {
+    let title = issue.as_ref().map(|issue| issue.title.clone());
+    match super::agent_queue::admit(ctx, &plan, title, options.now).await? {
+        super::agent_queue::Admission::Start(entry) => plan.queue_entry = entry,
+        super::agent_queue::Admission::Queued(entry, waiting) => {
+            return super::agent_queue::report_queued(ctx, &entry, waiting);
+        }
+    }
+    let handoff = crate::cli::herdr::handoff(ctx, &mut plan, issue.as_ref(), options.here).await;
+    if let Some(entry) = &plan.queue_entry
+        && let Err(error) = &handoff
+    {
+        super::agent_queue::fail(ctx, entry, error).await;
+    }
+    if handoff? {
         return Ok(0);
     }
     execute_add_with_target(ctx, plan, target, issue).await
@@ -304,6 +326,22 @@ pub(in crate::cli) struct AddPlan {
 }
 
 impl AddPlan {
+    /// The agent's name, when the addition starts one.
+    pub fn agent_name(&self) -> Option<String> {
+        self.agent.agent.clone().map(String::from)
+    }
+
+    /// The workspace name the planned branch derives.
+    pub fn workspace_name(&self) -> String {
+        let branch = self
+            .creation
+            .branch
+            .as_deref()
+            .or(self.creation.existing.as_deref())
+            .unwrap_or_default();
+        crate::daemon::workspace::derive_workspace_name(branch)
+    }
+
     /// Whether the agent starts with input: an issue prompt or forwarded arguments.
     /// A workspace shell or an agent without input waits for the user.
     pub fn runs_unattended(&self) -> bool {
@@ -1125,8 +1163,16 @@ async fn ignore_setup_failure(ctx: &Context, workspace: &Workspace) -> Result<()
     Ok(())
 }
 
-pub(super) async fn list(ctx: &Context, ready: bool) -> Result<i32> {
+pub(super) async fn list(ctx: &Context, ready: bool, queue: bool) -> Result<i32> {
+    if queue {
+        return super::agent_queue::list(ctx).await;
+    }
     let mut workspaces = client::workspaces(&ctx.paths).await?;
+    let queued = if ready {
+        Vec::new()
+    } else {
+        super::agent_queue::rows(ctx, &super::agent_queue::entries(ctx).await?).await?
+    };
     let rows = if ready {
         workspaces.retain(|workspace| !workspace.review.is_empty());
         // Only text rows name repositories, which reads each checkout's remote.
@@ -1141,7 +1187,7 @@ pub(super) async fn list(ctx: &Context, ready: bool) -> Result<i32> {
         ui::workspace_rows(&workspaces, &[], &stopped, Palette::stdout(ctx.json))
     };
     ctx.show(&workspaces, |_| {
-        for row in rows {
+        for row in rows.into_iter().chain(queued) {
             println!("{row}");
         }
     })?;
@@ -1458,6 +1504,11 @@ pub(super) async fn remove(
     keep_branch: bool,
     delete_branch: bool,
 ) -> Result<i32> {
+    if let Some(selector) = &workspace
+        && let Some(code) = super::agent_queue::remove(ctx, selector).await?
+    {
+        return Ok(code);
+    }
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let caller_pid = std::process::id();
     let check = request::<RemovalCheck>(

@@ -1,6 +1,6 @@
-//! `shoal add` launches under `max_agents`: the queued start workers and the
-//! hold that keeps a starting launch's slot.
-use std::time::Duration;
+//! `shoal add` launches under `max_agents`: admission, the queued start
+//! workers, and the hold that keeps a starting launch's slot.
+use std::{collections::BTreeMap, time::Duration};
 
 use anyhow::Result;
 use tokio::io::AsyncReadExt as _;
@@ -11,15 +11,74 @@ use crate::{
     cli::{
         client::{self, request},
         context::Context,
-        zmx,
+        output::Palette,
+        ui, zmx,
     },
-    model::{QueuedPlan, Workspace},
+    model::{QueueAdmission, QueueEntry, QueueRequest, QueuedPlan, Workspace},
     paths::Paths,
     protocol::Method,
 };
 
 /// Reconnect a hold this soon after the daemon restarts.
 const HOLD_RETRY: Duration = Duration::from_secs(1);
+
+pub(super) enum Admission {
+    /// Start now; the entry, when one tracks the slot.
+    Start(Option<String>),
+    /// Wait in the queue behind this many entries in total.
+    Queued(QueueEntry, usize),
+}
+
+/// Ask the daemon for an agent slot for `plan`. Additions without an agent
+/// never wait.
+pub(super) async fn admit(
+    ctx: &Context,
+    plan: &AddPlan,
+    issue_title: Option<String>,
+    now: bool,
+) -> Result<Admission> {
+    let Some(agent) = plan.agent_name() else {
+        return Ok(Admission::Start(None));
+    };
+    let request = QueueRequest {
+        repository: plan.repository.clone(),
+        name: plan.workspace_name(),
+        agent,
+        issue_title,
+        plan: serde_json::to_string(plan)?,
+        env: multiplexer_environment(),
+        now,
+    };
+    let admission =
+        client::request::<QueueAdmission>(&ctx.paths, Method::QueueAdd { request }).await?;
+    Ok(match (admission.start, admission.entry) {
+        (true, entry) => Admission::Start(entry.map(|entry| entry.id)),
+        (false, Some(entry)) => Admission::Queued(entry, admission.waiting),
+        (false, None) => anyhow::bail!("the daemon queued the agent without an entry"),
+    })
+}
+
+/// Herdr's variables, so a queued start opens its tab in the same Herdr
+/// workspace; the launching pane and tab are left out.
+fn multiplexer_environment() -> BTreeMap<String, String> {
+    std::env::vars()
+        .filter(|(name, _)| {
+            name.starts_with("HERDR_") && !matches!(name.as_str(), "HERDR_PANE_ID" | "HERDR_TAB_ID")
+        })
+        .collect()
+}
+
+pub(super) fn report_queued(ctx: &Context, entry: &QueueEntry, waiting: usize) -> Result<i32> {
+    ctx.emit(
+        &format!(
+            "Queued {} (position {} of {waiting}); it starts when an agent slot is free",
+            entry.name,
+            entry.position.unwrap_or(waiting)
+        ),
+        entry,
+    )?;
+    Ok(0)
+}
 
 /// Record the workspace a starting entry opened, and label the zmx session it
 /// runs in for `shoal attach`.
@@ -134,4 +193,64 @@ pub(super) async fn run(ctx: &Context, entry: String) -> Result<i32> {
     };
     plan.detached = true;
     super::workspaces::execute_add(ctx, plan).await
+}
+
+pub(super) async fn entries(ctx: &Context) -> Result<Vec<QueueEntry>> {
+    request(&ctx.paths, Method::ListQueue).await
+}
+
+/// `shoal ls --queue`.
+pub(super) async fn list(ctx: &Context) -> Result<i32> {
+    let entries = entries(ctx).await?;
+    let rows = rows(ctx, &entries).await?;
+    ctx.show(&entries, |_| {
+        for row in rows {
+            println!("{row}");
+        }
+    })?;
+    Ok(0)
+}
+
+/// Text rows for `entries`; JSON output needs none.
+pub(super) async fn rows(ctx: &Context, entries: &[QueueEntry]) -> Result<Vec<String>> {
+    if ctx.json || entries.is_empty() {
+        return Ok(Vec::new());
+    }
+    let repositories = client::repositories(&ctx.paths).await?;
+    Ok(ui::queue_rows(
+        entries,
+        &repositories,
+        Palette::stdout(ctx.json),
+    ))
+}
+
+/// Remove `selector` from the queue when it names a waiting entry and no
+/// workspace; `None` leaves it to workspace removal.
+pub(super) async fn remove(ctx: &Context, selector: &str) -> Result<Option<i32>> {
+    let workspaces = client::workspaces(&ctx.paths).await?;
+    if workspaces
+        .iter()
+        .any(|workspace| workspace.id == selector || workspace.name == selector)
+    {
+        return Ok(None);
+    }
+    if !entries(ctx)
+        .await?
+        .iter()
+        .any(|entry| entry.id == selector || entry.name == selector)
+    {
+        return Ok(None);
+    }
+    let entry = request::<QueueEntry>(
+        &ctx.paths,
+        Method::QueueRemove {
+            entry: selector.to_owned(),
+        },
+    )
+    .await?;
+    ctx.emit(
+        &format!("Removed {} from the agent queue", entry.name),
+        &entry,
+    )?;
+    Ok(Some(0))
 }

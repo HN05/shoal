@@ -90,6 +90,7 @@ pub(super) async fn choose(ctx: &Context) -> Result<Command> {
             base: None,
             git_profile: None,
             agent: None,
+            now: false,
             args: vec![],
         },
         MenuAction::Enter => Command::Cd { workspace },

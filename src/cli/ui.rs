@@ -19,7 +19,7 @@ use crate::{
         workspace_context::{ScopeOrder, WorkspaceContext},
     },
     forge::link::{self, ItemKind},
-    model::{Repository, ReviewMark, Workspace},
+    model::{QueueEntry, Repository, ReviewMark, Workspace},
     paths::Paths,
     removal::{BranchChoice, RemovalCheck},
     state::{AgentState, WorkspaceState},
@@ -523,6 +523,51 @@ pub fn workspace_rows(
         .iter()
         .zip(aligned(cells, palette))
         .map(|(workspace, row)| format!("{} {row}", palette.workspace_marker(workspace.state)))
+        .collect()
+}
+
+/// One aligned row per agent queue entry: its workspace name, its repository
+/// when the entries span several, its place, and the issue title.
+pub fn queue_rows(
+    entries: &[QueueEntry],
+    repositories: &[Repository],
+    palette: Palette,
+) -> Vec<String> {
+    let names: Vec<&str> = entries
+        .iter()
+        .map(|entry| {
+            repositories
+                .iter()
+                .find(|repo| repo.id == entry.repository_id)
+                .map_or("unknown repository", crate::forge::repository::name)
+        })
+        .collect();
+    let several = names.iter().collect::<HashSet<_>>().len() > 1;
+    let cells: Vec<[Cell; 4]> = entries
+        .iter()
+        .zip(names)
+        .map(|(entry, repository)| {
+            [
+                (entry.name.clone(), Some(Style::Heading)),
+                (
+                    if several {
+                        repository.into()
+                    } else {
+                        String::new()
+                    },
+                    None,
+                ),
+                match entry.position {
+                    Some(position) => (format!("queued, position {position}"), Some(Style::Muted)),
+                    None => ("starting".into(), Some(Style::Warning)),
+                },
+                (entry.issue_title.clone().unwrap_or_default(), None),
+            ]
+        })
+        .collect();
+    aligned(cells, palette)
+        .into_iter()
+        .map(|row| format!("{} {row}", palette.paint(Style::Muted, "◌")))
         .collect()
 }
 

@@ -17475,3 +17475,47 @@ fn terminal_agent_launches_refuse_a_missing_zmx_before_creating_anything() {
         .unwrap();
     assert!(output.status.success(), "{output:?}");
 }
+
+#[test]
+fn add_queues_agents_past_max_agents_until_removed() {
+    let fixture = Fixture::with_config(Some(
+        "max_agents = 1\n[commands]\nwaiter = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
+    ));
+    let repo = fixture.repo.to_str().unwrap();
+    let mut first = fixture
+        .command()
+        .args(["add", repo, "first", "--agent", "waiter"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(60);
+    while !fixture
+        .ok(&["ls"])
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|workspace| workspace["name"] == "first" && workspace["running"] == true)
+    {
+        assert!(Instant::now() < deadline, "the first agent did not start");
+        thread::sleep(Duration::from_millis(10));
+    }
+
+    let queued = fixture.ok(&["add", repo, "second", "--agent", "waiter"]);
+    assert_eq!(queued["state"], "queued", "{queued}");
+    assert_eq!(queued["position"], 1, "{queued}");
+    let entries = fixture.ok(&["ls", "--queue"]);
+    assert_eq!(entries.as_array().unwrap().len(), 1, "{entries}");
+    assert_eq!(entries[0]["name"], "second");
+    let listed = String::from_utf8(fixture.run(&["ls"]).stdout).unwrap();
+    assert!(listed.contains("queued, position 1"), "{listed}");
+    // A queued entry creates nothing until it starts.
+    assert_eq!(fixture.ok(&["ls"]).as_array().unwrap().len(), 1);
+
+    let removed = fixture.ok(&["rm", "second"]);
+    assert_eq!(removed["name"], "second", "{removed}");
+    assert_eq!(fixture.ok(&["ls", "--queue"]), serde_json::json!([]));
+    fixture.ok(&["stop", "first"]);
+    first.wait().unwrap();
+}

@@ -122,6 +122,9 @@ pub enum Command {
         /// Start a built-in agent or a configured command after worktree creation.
         #[arg(long, value_parser = AgentParser)]
         agent: Option<Agent>,
+        /// Start the agent now even when max_agents is reached, instead of queuing it.
+        #[arg(long)]
+        now: bool,
         /// Arguments forwarded to the agent.
         #[arg(last = true)]
         args: Vec<OsString>,
@@ -254,11 +257,14 @@ pub enum Command {
         command: Option<BaseCommand>,
         workspace: Option<String>,
     },
-    /// List workspaces.
+    /// List workspaces and queued agents.
     Ls {
         /// List ready-for-review PRs, issues and workspaces instead.
-        #[arg(long)]
+        #[arg(long, conflicts_with = "queue")]
         ready: bool,
+        /// List only the agents waiting for a slot under max_agents.
+        #[arg(long)]
+        queue: bool,
     },
     /// Show workspace activity, changes, resources, and issue and PR state.
     ///

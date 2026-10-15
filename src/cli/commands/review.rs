@@ -221,7 +221,10 @@ async fn pull_request(
                 None,
                 super::workspaces::AgentLaunch::Explicit(None),
                 Vec::new(),
-                true,
+                super::workspaces::AddOptions {
+                    here: true,
+                    now: false,
+                },
             )
             .await?;
             if code != 0 {
@@ -274,7 +277,10 @@ async fn issue(
                 Some(issue.url.clone()),
                 super::workspaces::AgentLaunch::Explicit(None),
                 Vec::new(),
-                true,
+                super::workspaces::AddOptions {
+                    here: true,
+                    now: false,
+                },
             )
             .await?;
             if code != 0 {

@@ -598,6 +598,42 @@ to report alive, and posts the prompt (`curl`, token on stdin). The prompt is al
 saved beside the log; when Happy is not logged in or delivery fails, Shoal warns
 and leaves it there for you to send from the app.
 
+### Agent queue
+
+```sh
+shoal config set max_agents 3                 # Agents running at once on this machine
+shoal config set max_agents 2 --repo shoal    # And at most two of them in this repository
+shoal add <issue-url> --agent claude          # Starts now, or queues when no slot is free
+shoal add <issue-url> --agent claude --now    # Starts now regardless of the limits
+shoal ls --queue                              # Waiting and starting entries
+shoal rm issue-612-add-a-queue-cmd            # Removes a waiting entry
+```
+
+`max_agents` limits the agents that run at once. The global value counts every
+agent on the machine; a repository's value (saved config or `.shoal.toml` in
+its registered checkout) counts only that repository's agents, within the
+global limit. Without either, nothing is queued. A workspace uses a slot while
+its tracked agent runs, awaits reattachment after a daemon restart, or waits for
+`shoal resume`, unless it is done; `shoal done`, the agent's exit, `resume
+--discard` and removal free it.
+
+`shoal add` with an agent asks the daemon for a slot after resolving the issue,
+branch and agent. When none is free it prints the entry's place and returns
+(`--json` emits the entry); the workspace is created only when the entry
+starts, from the then-current default branch. The daemon starts waiting entries
+in order as slots free, passing over an entry whose repository is full, and
+records a `queue_started` notification. An entry queued from Herdr opens a
+background tab in the same Herdr workspace; otherwise it runs in a detached zmx
+session labelled for `shoal attach`. A start keeps its slot through setup until
+its agent registers; a start that fails, or whose launch ends without opening the
+workspace for two minutes, records a `queue_failed` notification with the reason
+and frees the slot. `--now` starts at once and still takes a slot.
+
+`shoal ls` lists entries after the workspaces as `queued, position N` or
+`starting`; `ls --queue` lists only them (`--json` gives the entries, while `ls
+--json` stays a list of workspaces). `shoal rm` removes a waiting entry by name
+or ID; a starting one belongs to its workspace. Scoped callers see no entries.
+
 ### Agent accounts
 
 `[agent_auth]` selects user-owned executable wrappers for `fj` and `gh`, each
@@ -1414,7 +1450,7 @@ The daemon records what happens while you are not looking: a resource or
 simulator request that found no capacity (naming the workspaces holding the
 pool), a preferred port in use, a tracked agent
 exiting (with its code, or a note to run `doctor` when it left processes
-behind), and workspaces it removed or retained on its own through PR, merge, or
+behind), [agent queue](#agent-queue) starts and failures, and workspaces it removed or retained on its own through PR, merge, or
 idle cleanup, and automatic cleanup that starts failing. `shoal notify` adds a one-line message (at most 512 bytes, without
 control characters) for a workspace; agents use it to ask for attention without
 marking the assignment done. Each line shows the local time, the workspace, and the message;
