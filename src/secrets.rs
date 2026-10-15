@@ -90,10 +90,8 @@ impl Launch {
         })
     }
 
-    /// Put the launchers first on the child's PATH, after any directory an
-    /// earlier step prepended. Hooks started beneath the agent drop the names
-    /// in [`env::SECRET_ENV`] and the directories in [`env::SECRET_TOOLS`],
-    /// including those of an enclosing launch.
+    /// Put the launchers first on the child's PATH, ahead of directories an
+    /// earlier step prepended.
     pub fn apply(&self, command: &mut tokio::process::Command) {
         if !self.environment.is_empty() {
             for (name, value) in &self.environment {
