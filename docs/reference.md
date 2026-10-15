@@ -236,8 +236,10 @@ single agent in the current terminal, opens a background tab per agent where
 agents as `shoal resume` commands to run in separate terminals.
 Use `--discard` to forget the workspace's stopped agents and commands, every
 workspace's with `--all`, or the `--execution` one, without launching anything, allowing normal idle cleanup again.
-The selected execution must stop or be reconciled first; unrelated executions may
-keep running. The command uses
+Restart-quarantined executions with saved recovery records are reconciled
+automatically when their recorded processes are gone; unresolved or surviving
+executions still require `shoal doctor`. Unrelated executions may keep running.
+The command uses
 the current resume configuration; without one, built-in terminal agents continue
 the latest session in the workspace. Other agents require a configured restore
 command. Resume shows the saved pressure reason. Records

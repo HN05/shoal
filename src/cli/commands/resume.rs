@@ -133,10 +133,13 @@ async fn reconcile_stale_execution(
     inspection: &Inspection,
     selected: Option<&str>,
 ) -> Result<()> {
+    let Some(selected) = selected else {
+        return Ok(());
+    };
     let Some(execution) = inspection
         .executions
         .iter()
-        .find(|execution| selected.is_none_or(|selected| selected == execution.id))
+        .find(|execution| execution.id == selected)
     else {
         return Ok(());
     };
@@ -168,7 +171,6 @@ async fn reconcile_stale_execution(
         .into_iter()
         .next()
         .context("daemon returned no reconciliation report")?;
-    let selected = selected.context("unknown execution has no recovery selection")?;
     ensure!(
         report
             .executions
