@@ -1,4 +1,5 @@
-//! Persistent identity for Git administrative directories.
+//! Persistent identity for directories Shoal owns: Git administrative
+//! directories and repository checkouts.
 use anyhow::{Context, Result, ensure};
 use std::{
     fs,
@@ -65,10 +66,21 @@ pub(super) fn directory_identity(path: &Path) -> Result<String> {
     Ok(format_identity(metadata.dev(), metadata.ino(), birth))
 }
 
-fn verify_directory_identity(path: &Path, recorded: &str) -> Result<()> {
+/// Whether a directory still has a recorded identity, including the legacy
+/// `device:inode` form.
+pub(super) fn has_directory_identity(path: &Path, recorded: &str) -> Result<bool> {
     let (metadata, birth) = directory_metadata(path)?;
+    Ok(matches_identity(
+        recorded,
+        metadata.dev(),
+        metadata.ino(),
+        birth,
+    ))
+}
+
+fn verify_directory_identity(path: &Path, recorded: &str) -> Result<()> {
     ensure!(
-        matches_identity(recorded, metadata.dev(), metadata.ino(), birth),
+        has_directory_identity(path, recorded)?,
         "Git worktree metadata was replaced or its recorded filesystem identity changed; ownership cannot be verified"
     );
     Ok(())

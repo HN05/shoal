@@ -1,4 +1,5 @@
 //! Filesystem policies used when claiming and verifying workspace ownership.
+use super::identity::directory_identity;
 use crate::paths::Paths;
 use anyhow::{Context, Result, ensure};
 use std::{
@@ -51,17 +52,11 @@ pub(super) fn canonical_parent_with_missing(path: &Path) -> Result<PathBuf> {
     Ok(parent.join(leaf))
 }
 
-/// `device:inode` of a directory, stable across renames but not replacement.
-fn device_inode(metadata: &fs::Metadata) -> String {
-    use std::os::unix::fs::MetadataExt;
-    format!("{}:{}", metadata.dev(), metadata.ino())
-}
-
-/// `device:inode` of a real, non-redirected directory; `None` when missing.
-pub(super) fn real_directory_identity(path: &Path) -> Result<Option<String>> {
+/// Whether `path` is a real, non-redirected directory; `false` when missing.
+pub(super) fn is_real_directory(path: &Path) -> Result<bool> {
     let metadata = match fs::symlink_metadata(path) {
         Ok(metadata) => metadata,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
         Err(error) => return Err(error).context("inspect repository directory"),
     };
     ensure!(
@@ -72,7 +67,14 @@ pub(super) fn real_directory_identity(path: &Path) -> Result<Option<String>> {
         fs::canonicalize(path)? == path,
         "repository path was redirected; refusing deletion"
     );
-    Ok(Some(device_inode(&metadata)))
+    Ok(true)
+}
+
+/// Identity of a real, non-redirected directory; `None` when missing.
+pub(super) fn real_directory_identity(path: &Path) -> Result<Option<String>> {
+    is_real_directory(path)?
+        .then(|| directory_identity(path))
+        .transpose()
 }
 
 #[cfg(test)]

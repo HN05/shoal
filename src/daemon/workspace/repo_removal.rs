@@ -1,7 +1,11 @@
 //! Explicit repository deletion, retaining ownership and progress for retries.
 use super::{
     Manager,
-    paths::{canonical_parent_with_missing, contains_protected_directory, real_directory_identity},
+    identity::has_directory_identity,
+    paths::{
+        canonical_parent_with_missing, contains_protected_directory, is_real_directory,
+        real_directory_identity,
+    },
 };
 use crate::{
     daemon::{resources::Scope, store},
@@ -264,7 +268,7 @@ async fn delete_checkout(path: std::path::PathBuf) -> Result<()> {
                 .with_context(|| format!("delete {}; retry shoal repo rm --yes", path.display())),
         }?;
         ensure!(
-            real_directory_identity(&path)?.is_none(),
+            !is_real_directory(&path)?,
             "repository directory still exists; retry shoal repo rm --yes"
         );
         Ok(())
@@ -273,9 +277,13 @@ async fn delete_checkout(path: std::path::PathBuf) -> Result<()> {
 }
 
 fn verify_directory(path: &Path, expected: Option<&str>, allow_missing: bool) -> Result<()> {
-    let actual = real_directory_identity(path)?;
+    let unchanged = match (is_real_directory(path)?, expected) {
+        (false, expected) => allow_missing || expected.is_none(),
+        (true, Some(recorded)) => has_directory_identity(path, recorded)?,
+        (true, None) => false,
+    };
     ensure!(
-        actual.as_deref() == expected || (allow_missing && actual.is_none()),
+        unchanged,
         "repository directory was replaced during removal; refusing deletion"
     );
     Ok(())
@@ -291,7 +299,7 @@ async fn check_checkout(repo: &Repository, workspaces: &[Workspace]) -> Result<(
     );
     let git_dir = repo.path.join(".git");
     ensure!(
-        real_directory_identity(&git_dir)?.is_some(),
+        is_real_directory(&git_dir)?,
         "repository Git directory is missing"
     );
     ensure!(
@@ -321,4 +329,37 @@ async fn check_checkout(repo: &Repository, workspaces: &[Workspace]) -> Result<(
         );
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::os::unix::fs::MetadataExt;
+
+    #[test]
+    fn recorded_identity_verifies_including_legacy_device_inode() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let root = fs::canonicalize(temp.path())?;
+        let directory = root.join("checkout");
+        fs::create_dir(&directory)?;
+        let metadata = fs::metadata(&directory)?;
+        let legacy = format!("{}:{}", metadata.dev(), metadata.ino());
+        let current = real_directory_identity(&directory)?.context("missing identity")?;
+        for recorded in [current.as_str(), legacy.as_str()] {
+            verify_directory(&directory, Some(recorded), false)?;
+        }
+        assert!(verify_directory(&directory, None, true).is_err());
+
+        let moved = root.join("moved");
+        fs::rename(&directory, &moved)?;
+        fs::create_dir(&directory)?;
+        for recorded in [current.as_str(), legacy.as_str()] {
+            assert!(verify_directory(&directory, Some(recorded), true).is_err());
+        }
+        fs::remove_dir(&directory)?;
+        verify_directory(&directory, Some(&current), true)?;
+        verify_directory(&directory, None, false)?;
+        assert!(verify_directory(&directory, Some(&current), false).is_err());
+        Ok(())
+    }
 }
