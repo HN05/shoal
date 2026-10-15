@@ -34,6 +34,7 @@ async fn fixture() -> (
     let process_guard = PROCESS_FIXTURE.lock().await;
     let process_file = OpenOptions::new()
         .create(true)
+        .truncate(false)
         .read(true)
         .write(true)
         .open(std::env::temp_dir().join("shoal-overload-tests.lock"))
