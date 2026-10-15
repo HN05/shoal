@@ -1,6 +1,39 @@
 mod support;
 
-use std::{fs, process::Command};
+use std::{fs, os::unix::fs::PermissionsExt, process::Command};
+
+#[test]
+fn installed_scripts_preserve_literal_paths_contents_and_modes() {
+    let root = tempfile::tempdir_in("/tmp").unwrap();
+    let script = root.path().join("nested ' $literal/bin/test script");
+    let contents = "#!/bin/sh\nprintf '%s' \"$1\"\n";
+    support::install_test_script(&script, contents);
+    assert_eq!(fs::read_to_string(&script).unwrap(), contents);
+    assert_eq!(
+        fs::metadata(&script).unwrap().permissions().mode() & 0o777,
+        0o755
+    );
+    let output = support::isolated(root.path(), &script)
+        .arg("quote ' ; $(touch injected)")
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(output.stdout, b"quote ' ; $(touch injected)");
+    assert!(!root.path().join("injected").exists());
+
+    support::install_test_script_with_mode(&script, "#!/bin/sh\nexit 7\n", 0o700);
+    assert_eq!(
+        fs::metadata(&script).unwrap().permissions().mode() & 0o777,
+        0o700
+    );
+    assert_eq!(
+        support::isolated(root.path(), &script)
+            .status()
+            .unwrap()
+            .code(),
+        Some(7)
+    );
+}
 
 #[test]
 fn processes_ignore_launching_environment_and_allow_explicit_overrides() {

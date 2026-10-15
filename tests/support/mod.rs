@@ -1,11 +1,42 @@
-//! Process defaults for integration tests. Apply intentional overrides with
+//! Shared fixtures and process defaults for integration tests. Apply overrides with
 //! `Command::env` / `current_dir` after constructing a command.
 pub mod fake_daemon;
 
 #[allow(dead_code)]
 pub mod wait;
 
-use std::{ffi::OsStr, path::Path, process::Command};
+use std::{ffi::OsStr, fs, io::Write, os::unix::fs::PermissionsExt, path::Path, process::Command};
+
+
+/// Install an executable fixture, including any parent directories it needs.
+#[allow(dead_code)] // Integration test binaries use different subsets of support.
+pub fn install_test_script(path: impl AsRef<Path>, script: impl AsRef<[u8]>) {
+    install_test_script_with_mode(path, script, 0o755);
+}
+
+/// Install an executable fixture with an explicit Unix permission mode.
+#[allow(dead_code)]
+pub fn install_test_script_with_mode(path: impl AsRef<Path>, script: impl AsRef<[u8]>, mode: u32) {
+    let path = std::path::absolute(path).unwrap();
+    let parent = path.parent().unwrap();
+    fs::create_dir_all(parent).unwrap();
+    // Copy in a child so parallel spawns cannot inherit the destination's
+    // writable file descriptor and cause ETXTBSY when executing the fixture.
+    let mut source = tempfile::NamedTempFile::new_in(parent).unwrap();
+    source.write_all(script.as_ref()).unwrap();
+    let output = isolated(parent, "cp")
+        .arg(source.path())
+        .arg(&path)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "install {}: {}",
+        path.display(),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    fs::set_permissions(path, fs::Permissions::from_mode(mode)).unwrap();
+}
 
 /// Keep commands and their descendants in a temporary home, state and cwd.
 /// Preserve PATH for test tooling, preferring executables in the fixture's bin.
