@@ -359,7 +359,7 @@ async fn launch_label(ctx: &Context, workspace: &Workspace) -> String {
 }
 
 /// Only one resume reports a command; another holding its lock skips it.
-fn claim_commands(commands: &mut Vec<SavedCommand>) -> Vec<std::fs::File> {
+fn claim_commands(commands: &mut Vec<SavedCommand>) -> Vec<RecoveryClaim> {
     let mut claims = Vec::new();
     commands.retain(|command| match claim(&command.path) {
         Ok(file) => {
@@ -416,7 +416,17 @@ fn handoff(commands: &[SavedCommand]) -> Option<String> {
     Some(text)
 }
 
-fn claim(path: &std::path::Path) -> Result<std::fs::File> {
+struct RecoveryClaim(std::fs::File);
+
+impl Drop for RecoveryClaim {
+    fn drop(&mut self) {
+        // Unlock before closing so a descriptor inherited by a forked child
+        // cannot keep the recovery record claimed after this process drops it.
+        let _ = fs2::FileExt::unlock(&self.0);
+    }
+}
+
+fn claim(path: &std::path::Path) -> Result<RecoveryClaim> {
     let file = std::fs::OpenOptions::new()
         .read(true)
         .write(true)
@@ -424,7 +434,7 @@ fn claim(path: &std::path::Path) -> Result<std::fs::File> {
     fs2::FileExt::try_lock_exclusive(&file)
         .context("this recovery record is already being resumed")?;
     ensure!(path.try_exists()?, "recovery record was already consumed");
-    Ok(file)
+    Ok(RecoveryClaim(file))
 }
 
 #[cfg(test)]
@@ -458,11 +468,9 @@ mod tests {
         };
         let reporting = claim(&path).unwrap();
         // Model a concurrent fork retaining the open file description until exec.
-        let _inherited = reporting.try_clone().unwrap();
+        let _inherited = reporting.0.try_clone().unwrap();
         assert!(discard_saved(&saved, |_| false).is_err());
         assert!(path.exists());
-        // Closing reporting alone need not release a lock shared with that child.
-        fs2::FileExt::unlock(&reporting).unwrap();
         drop(reporting);
         assert_eq!(discard_saved(&saved, |_| false).unwrap(), ["execution"]);
         assert!(!path.exists());
