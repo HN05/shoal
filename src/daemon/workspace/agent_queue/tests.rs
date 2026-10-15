@@ -250,7 +250,15 @@ async fn only_waiting_entries_can_be_removed() {
     let repo = register(&manager, &temp, "repo").await;
     limit_globally(&manager, 1);
     let starting = add(&manager, &repo, "starting").await.entry.unwrap();
-    add(&manager, &repo, "waiting").await;
+    let waiting = add(&manager, &repo, "waiting").await.entry.unwrap();
+    // Only a start can fail; a waiting entry stays queued.
+    assert!(
+        manager
+            .fail_queue_entry(&waiting.id, "not started")
+            .await
+            .is_err()
+    );
+    assert_eq!(manager.queue_entries().await.unwrap().len(), 2);
 
     let error = manager.queue_remove(&starting.name).await.unwrap_err();
     assert!(format!("{error:#}").contains("already starting"));

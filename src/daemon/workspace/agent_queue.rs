@@ -518,7 +518,10 @@ impl Manager {
                         |row| row.get(0),
                     )
                     .optional()?;
-                db.execute("DELETE FROM agent_queue WHERE id=?1", [&id])?;
+                db.execute(
+                    "DELETE FROM agent_queue WHERE id=?1 AND state=?2",
+                    params![id, QueueState::Starting],
+                )?;
                 Ok(name)
             })
             .await?;

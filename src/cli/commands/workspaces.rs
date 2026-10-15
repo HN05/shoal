@@ -469,7 +469,14 @@ async fn add_planned(
         .await?;
     }
     let navigate = ctx.herdr_tab.is_none() && !detached;
+    let name = opened.workspace.name.clone();
     let Some(workspace) = finish_add_workspace(ctx, opened, pr, navigate).await? else {
+        if let Some(entry) = &queue_entry {
+            let error = anyhow::anyhow!(
+                "setup of {name} did not complete; inspect it with `shoal doctor {name}`"
+            );
+            super::agent_queue::fail(ctx, entry, &error).await;
+        }
         return Ok(1);
     };
     agent.launch(ctx, workspace, issue, args).await
