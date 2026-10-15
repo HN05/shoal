@@ -390,8 +390,12 @@ mod tests {
             }],
         };
         let reporting = claim(&path).unwrap();
+        // Model a concurrent fork retaining the open file description until exec.
+        let _inherited = reporting.try_clone().unwrap();
         assert!(discard_saved(&saved, |_| false).is_err());
         assert!(path.exists());
+        // Closing reporting alone need not release a lock shared with that child.
+        fs2::FileExt::unlock(&reporting).unwrap();
         drop(reporting);
         assert_eq!(discard_saved(&saved, |_| false).unwrap(), ["execution"]);
         assert!(!path.exists());
