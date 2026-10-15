@@ -7,16 +7,17 @@ on:
     inputs:
       focus:
         description: Audit focus (bugs, maintainability, testing, performance or docs)
-        type: string
-        required: false
+        type: choice
+        options:
+          - bugs
+          - maintainability
+          - testing
+          - performance
+          - docs
+        required: true
         default: bugs
       ref:
         description: Branch, tag or commit (empty uses the default branch)
-        type: string
-        required: false
-        default: ''
-      scope:
-        description: Paths or area (empty uses this week's area)
         type: string
         required: false
         default: ''
@@ -61,7 +62,7 @@ jobs:
           agent: codex
           audit-focus: ${{ matrix.focus }}
           audit-ref: ${{ inputs.ref || '' }}
-          audit-scope: ${{ inputs.scope || steps.scope.outputs.area }}
+          audit-scope: ${{ steps.scope.outputs.area }}
           audit-instructions-file: .review/audit.md
           audit-timeout-seconds: '900'
           # Reuse a writable shared mount to serialize issue creation across containers.
