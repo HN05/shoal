@@ -632,7 +632,8 @@ and frees the slot. `--now` starts at once and still takes a slot.
 `shoal ls` lists entries after the workspaces as `queued, position N` or
 `starting`; `ls --queue` lists only them (`--json` gives the entries, while `ls
 --json` stays a list of workspaces). `shoal rm` removes a waiting entry by name
-or ID; a starting one belongs to its workspace. Scoped callers see no entries.
+or ID, and only by ID when a workspace has the same name; a starting one belongs
+to its workspace. Scoped callers see no entries.
 
 ### Agent accounts
 

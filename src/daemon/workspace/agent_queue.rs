@@ -405,6 +405,8 @@ impl Manager {
 
     /// Remove a waiting entry by ID or name.
     pub async fn queue_remove(&self, selector: &str) -> Result<QueueEntry> {
+        // Dispatch cannot start the entry between finding and deleting it.
+        let _gate = self.agent_queue_gate.lock().await;
         let entries = self.queue_entries().await?;
         let mut matches = entries
             .iter()
@@ -423,15 +425,16 @@ impl Manager {
             entry.name
         );
         let id = entry.id.clone();
-        self.store
+        let removed = self
+            .store
             .run(move |db| {
-                db.execute(
+                Ok(db.execute(
                     "DELETE FROM agent_queue WHERE id=?1 AND state=?2",
                     params![id, QueueState::Queued],
-                )?;
-                Ok(())
+                )?)
             })
             .await?;
+        ensure!(removed == 1, "{} is no longer waiting", entry.name);
         Ok(entry)
     }
 

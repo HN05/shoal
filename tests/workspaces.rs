@@ -17516,6 +17516,20 @@ fn add_queues_agents_past_max_agents_until_removed() {
     let removed = fixture.ok(&["rm", "second"]);
     assert_eq!(removed["name"], "second", "{removed}");
     assert_eq!(fixture.ok(&["ls", "--queue"]), serde_json::json!([]));
+
+    // A queued agent named like a workspace is removed only by its ID.
+    let shared = fixture.ok(&["add", repo, "first", "--agent", "waiter"]);
+    assert_eq!(shared["state"], "queued", "{shared}");
+    let ambiguous = fixture.run(&["rm", "first", "--yes"]);
+    assert!(!ambiguous.status.success());
+    let message = String::from_utf8_lossy(&ambiguous.stderr);
+    assert!(
+        message.contains("names both a workspace and a queued agent"),
+        "{message}"
+    );
+    assert_eq!(fixture.ok(&["ls"]).as_array().unwrap().len(), 1);
+    fixture.ok(&["rm", shared["id"].as_str().unwrap()]);
+    assert_eq!(fixture.ok(&["ls", "--queue"]), serde_json::json!([]));
     fixture.ok(&["stop", "first"]);
     first.wait().unwrap();
 }
