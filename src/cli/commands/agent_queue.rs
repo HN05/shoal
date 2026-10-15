@@ -30,20 +30,18 @@ pub(super) enum Admission {
     Queued(QueueEntry, usize),
 }
 
-/// Ask the daemon for an agent slot for `plan`. Additions without an agent
-/// never wait.
+/// Ask the daemon for a slot for `agent`, which `plan` starts in workspace `name`.
 pub(super) async fn admit(
     ctx: &Context,
     plan: &AddPlan,
+    agent: String,
+    name: String,
     issue_title: Option<String>,
     now: bool,
 ) -> Result<Admission> {
-    let Some(agent) = plan.agent_name() else {
-        return Ok(Admission::Start(None));
-    };
     let request = QueueRequest {
         repository: plan.repository.clone(),
-        name: plan.workspace_name(),
+        name,
         agent,
         issue_title,
         plan: serde_json::to_string(plan)?,

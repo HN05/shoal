@@ -286,11 +286,14 @@ pub(super) async fn add(
         queue_entry: None,
         detached: false,
     };
-    let title = issue.as_ref().map(|issue| issue.title.clone());
-    match super::agent_queue::admit(ctx, &plan, title, options.now).await? {
-        super::agent_queue::Admission::Start(entry) => plan.queue_entry = entry,
-        super::agent_queue::Admission::Queued(entry, waiting) => {
-            return super::agent_queue::report_queued(ctx, &entry, waiting);
+    if let Some(agent) = plan.agent_name() {
+        let title = issue.as_ref().map(|issue| issue.title.clone());
+        let name = planned_workspace_name(ctx, &target, &plan.creation).await?;
+        match super::agent_queue::admit(ctx, &plan, agent, name, title, options.now).await? {
+            super::agent_queue::Admission::Start(entry) => plan.queue_entry = entry,
+            super::agent_queue::Admission::Queued(entry, waiting) => {
+                return super::agent_queue::report_queued(ctx, &entry, waiting);
+            }
         }
     }
     let handoff = crate::cli::herdr::handoff(ctx, &mut plan, issue.as_ref(), options.here).await;
@@ -303,6 +306,29 @@ pub(super) async fn add(
         return Ok(0);
     }
     execute_add_with_target(ctx, plan, target, issue).await
+}
+
+/// The workspace name `creation` will derive. An existing branch opens under
+/// its local name, so a remote's prefix is left out, as opening it does.
+async fn planned_workspace_name(
+    ctx: &Context,
+    target: &AddTarget,
+    creation: &Creation,
+) -> Result<String> {
+    let branch = match (&creation.branch, &creation.existing) {
+        (Some(branch), _) => branch.clone(),
+        (None, Some(selector)) => match git::strip_local(selector) {
+            Some(local) => local.to_owned(),
+            None => {
+                let repo = target.repository(ctx).await?;
+                git::remote_branch(&repo.path, selector)
+                    .await?
+                    .map_or_else(|| selector.clone(), |(_, branch)| branch)
+            }
+        },
+        (None, None) => String::new(),
+    };
+    Ok(crate::daemon::workspace::derive_workspace_name(&branch))
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -329,17 +355,6 @@ impl AddPlan {
     /// The agent's name, when the addition starts one.
     pub fn agent_name(&self) -> Option<String> {
         self.agent.agent.clone().map(String::from)
-    }
-
-    /// The workspace name the planned branch derives.
-    pub fn workspace_name(&self) -> String {
-        let branch = self
-            .creation
-            .branch
-            .as_deref()
-            .or(self.creation.existing.as_deref())
-            .unwrap_or_default();
-        crate::daemon::workspace::derive_workspace_name(branch)
     }
 
     /// Whether the agent starts with input: an issue prompt or forwarded arguments.
