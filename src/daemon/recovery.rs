@@ -343,6 +343,9 @@ impl Manager {
         let mut cleared = false;
         let safe = !connected
             && !processes.has_survivors()
+            // An acknowledgement can cover a missing launch identity, but
+            // never an environment that could not be inspected.
+            && processes.unreadable.is_empty()
             && (processes.visibility_complete() || options.acknowledge_stopped);
         if options.repair && safe {
             // Even an explicit acknowledgement cannot ignore visible cwd users.
