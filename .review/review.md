@@ -226,6 +226,12 @@ instead of the PR delivery guidance below.
 - Claude and Codex launches (including Happy and Codex app handoffs) persist
   trust for the workspace, its repository's Shoal directory, and the registered
   checkout even when the user config is absent, preserving other settings.
+- `max_agents` admission is the daemon's: the global value limits the machine and
+  a repository's effective value that repository. Slots derive from tracked
+  agents, executions awaiting reattachment, resume records and starting queue
+  entries, excluding done workspaces, never from a separate counter. A starting
+  entry keeps its slot only while its launch holds it or within the grace
+  period, until its agent registers; queued entries create no worktree.
 - Machine-wide memory overload protection is opt-out; sustained CPU protection is
   opt-in. Stop one connected tracked
   agent at a time through its wrapper, newest first, with configurable thresholds
