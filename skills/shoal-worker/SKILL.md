@@ -60,9 +60,9 @@ with its state, merge conflicts, CI check results, review state and lookup error
 `shoal view` adds the linked issue and each item's description, comments and
 reviews with inline comments; use it instead of `gh` or `fj` to read them, with
 `view pr <number>` or a URL for an unlinked item and `--no-comments` for state only.
-Use `shoal view pr <number> --check '<check name>'` to read a failed Forgejo
-Actions check's log tail; failed-check watch updates include the failing step
-when the runner records it and a command to read the log.
+`shoal view` automatically includes failed Forgejo Actions log tails;
+`--check '<check name>'` selects only that check's log. Failed-check watch updates
+include the failing step when the runner records it and a command to read the log.
 
 `shoal done` defaults to cleanup, which may stop your execution. Use
 `shoal done --keep` when the user wants to review in this workspace; `--cleanup`

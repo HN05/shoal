@@ -155,7 +155,7 @@ pub enum Command {
         /// Leave out comments and reviews.
         #[arg(long)]
         no_comments: bool,
-        /// Print the tail of a failed Forgejo Actions check's log.
+        /// Show only this failed Forgejo Actions check's log.
         #[arg(long, value_name = "NAME")]
         check: Option<String>,
     },

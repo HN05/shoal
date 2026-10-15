@@ -1274,15 +1274,16 @@ branch. Linked items suppress idle cleanup.
 `shoal view` shows linked items as the forge reports them now: title, state,
 author, labels, description, comments, and reviews with their inline comments; a
 PR adds its branches and the merge conflicts, CI checks and review state `status`
-reports. `--check NAME` instead prints the last 8 KiB of that failed Forgejo
-Actions check's log and its failing step when recorded by the runner, fetched
-by the daemon as the workspace's agent account. It selects one PR and reports
-unavailable logs as an error; log downloads are limited to 8 MiB.
+reports, plus the last 8 KiB of each failed Forgejo Actions check's log and its
+failing step when recorded by the runner. The daemon fetches logs as the
+workspace's agent account; successful and pending checks omit log output.
+`--check NAME` selects only that failed check's log on one PR. Unavailable logs
+report an error; log downloads are limited to 8 MiB.
 Kinds and explicit items select as they do for `watch`, and
 `--no-comments` leaves out comments and reviews. Forgejo items also report whether
 each inline thread is resolved. A failed lookup reports its error on that item,
 and the command exits 1 when an item could not be read. `--json` returns an array
-of items, or a check log object with `--check`.
+of items with failed logs in `check_logs`, or a check log object with `--check`.
 
 `shoal watch` polls all linked items every ~30 seconds; `watch pr` or `watch issue`
 filters by kind. `watch <url>`, `watch pr <number-or-url>` and

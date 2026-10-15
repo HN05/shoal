@@ -788,10 +788,11 @@ Item views let agents read issues and PRs without knowing the forge. The daemon
 selects linked or explicit items; the CLI looks them up with the user's forge
 login, because discussion can exceed a protocol frame: `gh` for GitHub, and
 Forgejo's API with fj's saved token for the host, or anonymously without one,
-because fj has no structured output. A requested failed Forgejo check log is
-fetched by the daemon with the workspace's agent account and returned as a
-bounded tail, so scoped callers never need forge credentials. Failed-check watch
-updates include its failing step when recorded by the runner; an unavailable
+because fj has no structured output. Views automatically include failed Forgejo
+check logs, fetched by the daemon with the workspace's agent account and returned as
+bounded tails, so scoped callers never need forge credentials. Successful and
+pending checks omit logs; explicit selection limits output to one failed check.
+Failed-check watch updates include its failing step when recorded by the runner; an unavailable
 log is reported on that update without hiding other activity.
 
 Manual and automatic cleanup share one path: establish ownership, stop owned

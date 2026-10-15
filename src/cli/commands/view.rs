@@ -9,6 +9,7 @@ use crate::{
         ui,
     },
     forge::{
+        ForgeRepo,
         checks::CheckLog,
         link::{ItemKind, Selection},
         view::{Details, ItemView, PrDetails, Review, Selected},
@@ -46,13 +47,17 @@ pub(super) async fn view(
     let selected: Selected = client::request(
         &ctx.paths,
         Method::SelectItems {
-            workspace,
+            workspace: workspace.clone(),
             selection,
         },
     )
     .await?;
     let views = ctx
-        .progress("Reading items", selected.view(!no_comments))
+        .progress("Reading items", async {
+            let mut views = selected.view(!no_comments).await?;
+            read_failed_logs(ctx, &workspace, &mut views).await;
+            Ok::<_, anyhow::Error>(views)
+        })
         .await?;
     let palette = Palette::stdout(ctx.json);
     ctx.show(&views, |views| {
@@ -64,6 +69,44 @@ pub(super) async fn view(
         }
     })?;
     Ok(i32::from(views.iter().any(|view| view.details.is_none())))
+}
+
+async fn read_failed_logs(ctx: &Context, workspace: &str, views: &mut [ItemView]) {
+    for view in views {
+        if !ForgeRepo::from_pull_url(&view.url).is_ok_and(|forge| forge.supports_check_logs()) {
+            continue;
+        }
+        let Some(pr) = view
+            .details
+            .as_ref()
+            .and_then(|details| details.pr.as_ref())
+        else {
+            continue;
+        };
+        for check in &pr.checks {
+            if !matches!(check.result.as_str(), "failure" | "error") {
+                continue;
+            }
+            let result = client::request::<CheckLog>(
+                &ctx.paths,
+                Method::CheckLog {
+                    workspace: workspace.into(),
+                    selection: Selection {
+                        kind: Some(ItemKind::Pr),
+                        input: Some(view.url.clone()),
+                    },
+                    check: check.name.clone(),
+                },
+            )
+            .await;
+            match result {
+                Ok(log) => view.check_logs.push(log),
+                Err(error) => view
+                    .errors
+                    .push(format!("{}: log unavailable: {error:#}", check.name)),
+            }
+        }
+    }
 }
 
 fn render_log(log: &CheckLog) {
@@ -96,6 +139,10 @@ fn render(view: &ItemView, palette: Palette) {
             println!("{}", palette.paint(Style::Heading, kind));
             println!("URL:      {}", view.url);
         }
+    }
+    for log in &view.check_logs {
+        println!();
+        render_log(log);
     }
     for error in &view.errors {
         println!("{}", palette.paint(Style::Warning, error));

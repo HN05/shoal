@@ -52,6 +52,8 @@ pub struct ItemView {
     #[serde(flatten)]
     pub details: Option<Details>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub check_logs: Vec<super::checks::CheckLog>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub errors: Vec<String>,
 }
 
@@ -136,6 +138,7 @@ impl ForgeRepo {
             url: url.into(),
             kind,
             details,
+            check_logs: Vec::new(),
             errors,
         }
     }
@@ -650,6 +653,7 @@ mod tests {
             url: "https://forge.example/o/r/issues/1".into(),
             kind: ItemKind::Issue,
             details: None,
+            check_logs: Vec::new(),
             errors: vec!["lookup failed".into()],
         };
         let json = serde_json::to_value(&view).unwrap();

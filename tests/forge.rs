@@ -838,6 +838,99 @@ fn view_prints_check_logs_and_reports_lookup_errors() {
 }
 
 #[test]
+fn view_automatically_includes_failed_logs_and_leaves_successful_checks_quiet() {
+    for outcome in ["failure", "unavailable", "success"] {
+        let fixture = Fixture::new(Forge::Forgejo, "");
+        let mut responses = failed_check_responses();
+        responses["GET repos/team/project/pulls/8"]["body"] = json!({
+            "number": 8, "title": "Fix crash", "state": "open", "body": "PR description",
+            "head": {"sha": "head", "ref": "topic"}, "base": {"ref": "main"}
+        });
+        responses["GET repos/team/project/issues/8/comments"] =
+            json!({"body": [{"body": "Please fix CI", "user": {"login": "reviewer"}}]});
+        responses["GET repos/team/project/pulls/8/reviews?limit=50&page=1"] = json!({"body": []});
+        if outcome == "unavailable" {
+            responses["GET repos/team/project/actions/jobs/18345/logs"] =
+                json!({"status": 404, "body": {"message": "logs unavailable"}});
+        }
+        fixture.respond(responses);
+        let result = if outcome == "success" {
+            "Success"
+        } else {
+            "Failure"
+        };
+        support::install_test_script(
+            fixture.root.path().join("bin/fj"),
+            format!(
+                r#"#!/bin/sh
+case " $* " in
+ *' status '*) printf 'Open — Can be merged\n- {result} — rust\n- Success — gate\n- Pending — queued\n';;
+ *' review '*) printf 'No reviews.\n';;
+ *) printf 'Title #8\nBy user — Open — +1 -0\nFrom `topic` into `main`\n';;
+esac
+"#
+            ),
+        );
+        fixture.ok(&["link", "pr", "8", "--workspace", "topic"]);
+        fixture.requests();
+        for no_comments in [false, true] {
+            let mut args = vec!["view", "--workspace", "topic"];
+            if no_comments {
+                args.push("--no-comments");
+            }
+            let views = fixture.ok(&args);
+            assert_eq!(views[0]["title"], "Fix crash");
+            assert_eq!(views[0]["body"], "PR description");
+            if !no_comments {
+                assert_eq!(views[0]["comments"][0]["body"], "Please fix CI");
+            }
+            match outcome {
+                "failure" => {
+                    let logs = views[0]["check_logs"].as_array().unwrap();
+                    assert_eq!(logs.len(), 1);
+                    assert_eq!(logs[0]["name"], "rust");
+                    assert_eq!(logs[0]["failed_step"], "Main Test");
+                    assert!(
+                        logs[0]["text"]
+                            .as_str()
+                            .unwrap()
+                            .contains("assertion failed")
+                    );
+                }
+                "unavailable" => assert!(
+                    views[0]["errors"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .any(
+                            |error| error.as_str().unwrap().contains("rust: log unavailable:")
+                                && error.as_str().unwrap().contains("HTTP 404")
+                        ),
+                    "{views}"
+                ),
+                _ => assert!(views[0].get("check_logs").is_none(), "{views}"),
+            }
+            let output = fixture.run(&args);
+            assert!(output.status.success(), "{output:?}");
+            let text = String::from_utf8(output.stdout).unwrap();
+            assert_eq!(text.contains("assertion failed"), outcome == "failure");
+            assert_eq!(
+                text.contains("Failed step: Main Test"),
+                outcome == "failure"
+            );
+        }
+        if outcome == "success" {
+            assert!(
+                !fixture
+                    .requests()
+                    .iter()
+                    .any(|request| request[0].as_str().unwrap().contains("/actions/"))
+            );
+        }
+    }
+}
+
+#[test]
 fn watch_reports_failed_steps_or_log_lookup_errors_without_hiding_comments() {
     for available in [true, false] {
         let fixture = Fixture::new(Forge::Forgejo, "");

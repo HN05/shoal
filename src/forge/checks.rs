@@ -14,7 +14,7 @@ use crate::daemon::workspace::Manager;
 /// Small enough for one protocol frame even when JSON escapes every byte.
 const TAIL_BYTES: usize = 8192;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CheckLog {
     pub url: String,
     pub name: String,
@@ -99,6 +99,10 @@ impl Manager {
 }
 
 impl ForgeRepo {
+    pub(crate) fn supports_check_logs(&self) -> bool {
+        self.kind == ForgeKind::Forgejo
+    }
+
     pub(super) async fn failed_check_log(
         &self,
         account: &Account,

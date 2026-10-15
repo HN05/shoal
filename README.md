@@ -155,9 +155,9 @@ shoal issue open --title Bug  # Open an issue; --link links it
 shoal link pr 42              # Link a PR (or paste its URL)
 shoal link pr 43              # Link another; all must merge before cleanup after done
 shoal watch                   # Wake on all linked item comments, checks, or closure
-shoal view                    # Linked items with state, checks, comments, and reviews
+shoal view                    # Linked items with state, failed CI logs, comments, and reviews
 shoal view pr 44 --no-comments  # One PR, linked or not, without its discussion
-shoal view pr 44 --check rust   # Show the tail of a failed CI check log
+shoal view pr 44 --check rust   # Show only this failed CI check's log
 shoal ready                   # Mark linked items ready for review at HEAD
 shoal unlink pr 43            # Cancel one linked PR
 shoal unlink pr               # Cancel linked PRs
