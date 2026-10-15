@@ -19,6 +19,8 @@ mod benchmark;
 #[cfg(test)]
 mod event_tests;
 mod worker;
+#[cfg(test)]
+mod workspace_availability_tests;
 
 #[derive(Clone)]
 pub struct Store {
@@ -388,6 +390,41 @@ fn validate_simulator_records(db: &Connection) -> Result<()> {
 /// Whether the supplied SELECT query returns any rows.
 pub fn exists(db: &Connection, sql: &str, params: impl Params) -> Result<bool> {
     Ok(db.query_row(&format!("SELECT EXISTS({sql})"), params, |row| row.get(0))?)
+}
+
+/// Check ownership before inserting a workspace or reserving a rename in a transaction.
+/// Names (including pending renames) are global; branches belong to one repository.
+pub fn ensure_name_and_branch_available(
+    db: &Connection,
+    repository_id: &str,
+    name: &str,
+    branch: &str,
+    except_id: Option<&str>,
+) -> Result<()> {
+    ensure!(
+        !exists(
+            db,
+            "SELECT 1 FROM workspaces WHERE name=?1 AND (?2 IS NULL OR id!=?2)",
+            rusqlite::params![name, except_id],
+        )?,
+        "workspace name already exists: {name}"
+    );
+    ensure!(
+        !exists(db, "SELECT 1 FROM workspace_renames WHERE name=?1", [name])?,
+        "workspace name is reserved by an unfinished rename: {name}"
+    );
+    let owner: Option<String> = db
+        .query_row(
+            "SELECT name FROM workspaces WHERE repository_id=?1 AND branch=?2
+                AND (?3 IS NULL OR id!=?3)",
+            rusqlite::params![repository_id, branch, except_id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    if let Some(owner) = owner {
+        anyhow::bail!("branch is already owned by workspace {owner}");
+    }
+    Ok(())
 }
 
 /// Fail while a workspace has an unfinished rename; lifecycle operations

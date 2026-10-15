@@ -122,30 +122,13 @@ impl Manager {
                     )?,
                     "workspace has other active or unknown executions; stop them before renaming"
                 );
-                ensure!(
-                    !store::exists(
-                        &tx,
-                        "SELECT 1 FROM workspaces WHERE name=?1 AND id!=?2",
-                        params![name, workspace.id]
-                    )?,
-                    "workspace name already exists: {name}"
-                );
-                ensure!(
-                    !store::exists(
-                        &tx,
-                        "SELECT 1 FROM workspace_renames WHERE name=?1",
-                        [&name]
-                    )?,
-                    "workspace name is reserved by another rename: {name}"
-                );
-                ensure!(
-                    !store::exists(
-                        &tx,
-                        "SELECT 1 FROM workspaces WHERE repository_id=?1 AND branch=?2 AND id!=?3",
-                        params![workspace.repository_id, branch, workspace.id]
-                    )?,
-                    "branch is already owned by another workspace"
-                );
+                store::ensure_name_and_branch_available(
+                    &tx,
+                    &workspace.repository_id,
+                    &name,
+                    &branch,
+                    Some(&workspace.id),
+                )?;
                 tx.execute(
                     "INSERT INTO workspace_renames(workspace_id,name,branch) VALUES (?1,?2,?3)",
                     params![workspace.id, name, branch],

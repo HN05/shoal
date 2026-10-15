@@ -438,14 +438,13 @@ impl Manager {
         self.store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
-                ensure!(
-                    !store::exists(&tx, "SELECT 1 FROM workspaces WHERE name=?1", [&record.name])?,
-                    "workspace name already exists: {}", record.name
-                );
-                ensure!(
-                    !store::exists(&tx, "SELECT 1 FROM workspace_renames WHERE name=?1", [&record.name])?,
-                    "workspace name is reserved by an unfinished rename: {}", record.name
-                );
+                store::ensure_name_and_branch_available(
+                    &tx,
+                    &record.repository_id,
+                    &record.name,
+                    &record.branch,
+                    None,
+                )?;
                 let workspaces = tx.prepare(&format!("SELECT {} FROM workspaces", store::WORKSPACE_COLUMNS))?
                     .query_map([], store::workspace)?
                     .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -458,8 +457,6 @@ impl Manager {
                     ensure!(record.git_dir.is_none() || (record.git_dir != workspace.git_dir
                         && record.git_dir_id != workspace.git_dir_id),
                         "Git worktree is already owned by {}; restore its recorded path", workspace.name);
-                    ensure!(record.repository_id != workspace.repository_id || record.branch != workspace.branch,
-                        "branch is already owned by workspace {}", workspace.name);
                 }
                 let base_workspace = match &base_branch {
                     Some(branch) => stack::owner(&tx, &record.repository_id, branch)?,
