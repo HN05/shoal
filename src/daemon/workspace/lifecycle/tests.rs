@@ -45,6 +45,120 @@ async fn fixture_with_removal_hook(script: &str) -> (tempfile::TempDir, Arc<Mana
     (root, manager, workspace)
 }
 
+async fn corrupt_completion(manager: &Manager, workspace: &Workspace) {
+    let id = workspace.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO workspace_completion(workspace_id,record) VALUES (?1,'invalid')",
+                [id],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    assert!(manager.inspect_workspace(&workspace.id).await.is_err());
+}
+
+#[tokio::test]
+async fn removal_check_counts_only_its_executions_without_inspection_details() {
+    for missing in [false, true] {
+        let (_root, manager, workspace) = fixture().await;
+        let other = manager
+            .create_workspace(&workspace.repository_id, "other".into(), None, None, None)
+            .await
+            .unwrap();
+        corrupt_completion(&manager, &workspace).await;
+        if missing {
+            fs::remove_dir_all(&workspace.path).unwrap();
+        }
+        let other_id = other.id;
+        manager
+            .store
+            .run(move |db| {
+                db.execute(
+                    "INSERT INTO executions(id,workspace_id,state) VALUES ('other',?1,'running')",
+                    [other_id],
+                )?;
+                Ok(())
+            })
+            .await
+            .unwrap();
+        let check = manager
+            .check_removal(&workspace.name, InspectionPolicy::GitOnly)
+            .await
+            .unwrap();
+        assert_eq!(check.running_commands, 0);
+        assert!(check.safe());
+
+        let id = workspace.id.clone();
+        manager
+            .store
+            .run(move |db| {
+                db.execute(
+                    "INSERT INTO executions(id,workspace_id,state,wrapper) VALUES
+                     ('running',?1,'running','invalid'), ('unknown',?1,'unknown',NULL)",
+                    [id],
+                )?;
+                Ok(())
+            })
+            .await
+            .unwrap();
+        let check = manager
+            .check_removal(&workspace.name, InspectionPolicy::GitOnly)
+            .await
+            .unwrap();
+        assert_eq!(check.running_commands, 2);
+        assert!(!check.safe());
+    }
+}
+
+#[tokio::test]
+async fn deleted_removal_checks_executions_without_inspection_details() {
+    for has_executions in [false, true] {
+        let (_root, manager, workspace) = fixture().await;
+        corrupt_completion(&manager, &workspace).await;
+        if has_executions {
+            let id = workspace.id.clone();
+            manager
+                .store
+                .run(move |db| {
+                    db.execute(
+                        "INSERT INTO executions(id,workspace_id,state) VALUES ('unknown',?1,'unknown')",
+                        [id],
+                    )?;
+                    Ok(())
+                })
+                .await
+                .unwrap();
+        }
+        fs::remove_dir_all(&workspace.path).unwrap();
+        let result = manager.remove_deleted(&workspace.id).await;
+        if has_executions {
+            let error = result.unwrap_err();
+            assert!(
+                error.to_string().contains("commands are recorded"),
+                "{error:#}"
+            );
+            assert!(
+                manager
+                    .workspace_has_executions(&workspace.id)
+                    .await
+                    .unwrap()
+            );
+        } else {
+            let result = result.unwrap();
+            assert!(result.removed);
+            assert!(!result.branch_outcome.is_deleted());
+        }
+        assert_eq!(
+            manager.workspace(&workspace.id).await.is_ok(),
+            has_executions
+        );
+    }
+}
+
 #[tokio::test]
 async fn lifecycle_reservation_returns_replaced_state() {
     let (_root, manager, workspace) = fixture().await;

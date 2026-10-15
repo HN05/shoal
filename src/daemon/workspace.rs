@@ -302,6 +302,21 @@ impl Manager {
             .await
     }
 
+    /// Count recorded executions in every state without decoding their details.
+    pub(super) async fn workspace_execution_count(&self, id: &str) -> Result<usize> {
+        let id = id.to_owned();
+        self.store
+            .run(move |db| {
+                let count: i64 = db.query_row(
+                    "SELECT COUNT(*) FROM executions WHERE workspace_id=?1",
+                    [id],
+                    |row| row.get(0),
+                )?;
+                Ok(usize::try_from(count)?)
+            })
+            .await
+    }
+
     /// Look a workspace up by ID or name.
     pub async fn workspace(&self, selector: &str) -> Result<Workspace> {
         let selector = selector.to_owned();

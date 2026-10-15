@@ -180,22 +180,17 @@ impl Manager {
         selector: &str,
         policy: InspectionPolicy,
     ) -> Result<RemovalCheck> {
-        let inspection = self.inspect_workspace(selector).await?;
-        if inspection.workspace.path.exists() {
-            self.verify_worktree(&inspection.workspace).await?;
+        let workspace = self.workspace(selector).await?;
+        if workspace.path.exists() {
+            self.verify_worktree(&workspace).await?;
         }
-        let repo = self.repository(&inspection.workspace.repository_id).await?;
+        let repo = self.repository(&workspace.repository_id).await?;
         let default_branch =
             crate::git::default_branch::resolve(&repo.path, DefaultBranchLookup::Cached)
                 .await
                 .ok();
-        removal::inspect(
-            inspection.workspace,
-            inspection.executions.len(),
-            policy,
-            default_branch.as_deref(),
-        )
-        .await
+        let executions = self.workspace_execution_count(&workspace.id).await?;
+        removal::inspect(workspace, executions, policy, default_branch.as_deref()).await
     }
 
     pub async fn remove_workspace(
@@ -568,10 +563,7 @@ impl Manager {
         );
         if matches!(removal, Removal::Deleted) {
             ensure!(
-                self.inspect_workspace(&workspace.id)
-                    .await?
-                    .executions
-                    .is_empty(),
+                !self.workspace_has_executions(&workspace.id).await?,
                 "commands are recorded; stop them with shoal stop or shoal rm"
             );
         }
