@@ -69,6 +69,22 @@ pub(super) async fn handoff(
     if here || !available(ctx) {
         return Ok(false);
     }
+    open_tab(ctx, plan, issue, None).await
+}
+
+/// Whether this process runs in Herdr, so new tabs can open beside it.
+fn in_herdr() -> bool {
+    std::env::var("HERDR_ENV").as_deref() == Ok("1")
+}
+
+/// Run `plan` in a new tab when the repository's settings allow; `focus`
+/// overrides the configured focus.
+async fn open_tab(
+    ctx: &Context,
+    plan: &mut AddPlan,
+    issue: Option<&Issue>,
+    focus: Option<bool>,
+) -> Result<bool> {
     let settings = client::settings(
         &ctx.paths,
         ConfigTarget::Repository(plan.repository.clone()),
@@ -81,7 +97,9 @@ pub(super) async fn handoff(
         !env::inherits_scope(&ctx.paths.state),
         "workspace processes cannot allocate workspaces"
     );
-    let focus = settings.herdr.focus.unwrap_or(!plan.runs_unattended());
+    let focus = focus
+        .or(settings.herdr.focus)
+        .unwrap_or(!plan.runs_unattended());
     if let Some(template) = settings.herdr.tab_name {
         let repos = client::repositories(&ctx.paths).await?;
         let repo = crate::forge::repository::select(&repos, &plan.repository).await?;
@@ -145,7 +163,7 @@ pub(crate) fn current_pane() -> Option<String> {
 
 /// Whether this terminal can hand Shoal work to new Herdr tabs.
 pub(in crate::cli) fn available(ctx: &Context) -> bool {
-    ctx.herdr_tab.is_none() && ctx.interactive() && std::env::var("HERDR_ENV").as_deref() == Ok("1")
+    ctx.herdr_tab.is_none() && ctx.interactive() && in_herdr()
 }
 
 /// Run Shoal with `args` in a new background tab at `cwd`.
