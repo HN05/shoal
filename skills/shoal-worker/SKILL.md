@@ -46,7 +46,8 @@ respond to available review findings while other checks run. The first wait
 includes existing activity; later waits share a persistent cursor per workspace.
 Run one wait at a time and read its result: a newer wait in the workspace
 supersedes a running one, which returns `superseded: true` without updates.
-`--timeout <seconds>` bounds the wait (default 3600, maximum 3600); `timed_out`
+`--timeout <seconds>` bounds the wait (1–3600 seconds); omitted, the wait is
+unbounded. `timed_out`
 with empty `updates` means no update. A `lookup_failed` entry names a failed
 activity lookup and repeats every 10 minutes while it persists; until that source
 recovers, check what it covers yourself, such as merge conflicts with
