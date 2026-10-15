@@ -1420,8 +1420,15 @@ messages but cannot send any. Removing the workspace deletes its messages.
 `shoal acquire <kind>` reserves a port, simulator, resource permit, or related
 repository for the current workspace, or the one named by `--workspace`.
 Simulator, resource, and repository leases take `--name` (default `default`) to
-hold several, `--reason`, and `--wait` to poll up to 3600 seconds for capacity
-or approval. `acquire repo` selects only `kind = "repo"` members.
+hold several, `--reason`, and `--queue` to wait, without a time limit, until the
+lease is acquired or its approval denied. `acquire repo` selects only `kind = "repo"` members.
+
+Queued requests get capacity in arrival order, per pool and for simulators. While
+any are queued, every other request for new capacity is busy, even when capacity is
+free; renewing a held lease and requesting approval are not affected. A request
+keeps its place while it is in progress or has polled in the last 30 seconds, so
+stopping the command gives the place up. The daemon keeps the queue in memory: a
+restart loses the order, and commands still polling join again.
 
 `shoal release` releases every lease and active access request the workspace
 holds, in order, and stops at the first failure. A kind narrows it to that kind, a resource or repository name
@@ -1612,7 +1619,7 @@ requests with a `--reason`.
 
 ```sh
 shoal acquire sim                   # Current worktree, configured preference
-shoal acquire sim --profile phone --name tests --wait 60
+shoal acquire sim --profile phone --name tests --queue
 shoal leases sim                    # Profiles, capacity, and managed devices; --all for all
 shoal release sim --name tests     # Or every simulator lease
 ```
@@ -1623,7 +1630,7 @@ returns the same device. Leases belong to worktrees, survive command exit and
 restarts, block automatic removal, and are deleted with the workspace. At capacity,
 idle managed devices shut down first; active leases and personal simulators are
 never touched, every device not confirmed shut down counts toward the limit, and busy requests
-exit 2 unless `--wait <seconds>`. Released devices keep apps and settings until the
+exit 2 unless `--queue`. Released devices keep apps and settings until the
 idle timer deletes them (checked every 15 seconds). Failed operations retain records
 for retry. Only the default CoreSimulator device set and one daemon are covered.
 
@@ -1670,7 +1677,7 @@ letter, at most 64 characters; capacities are 1–65535.
 shoal leases resource                        # Capacities and own leases
 shoal acquire resource devices               # Any available member
 shoal acquire resource devices --member beta --name tests --reason "Integration tests"
-shoal acquire resource signing --wait 60
+shoal acquire resource signing --queue
 shoal leases resource --all                  # Every workspace
 shoal release resource devices --name tests
 ```
@@ -1678,7 +1685,7 @@ shoal release resource devices --name tests
 Each lease takes one slot from the pool and the chosen member; an explicit member
 never changes silently. Repeating a pool and lease name (default `default`) returns
 the existing permit. `--json` returns the lease or `acquired: false` with exit 2;
-`--wait` polls for up to 3600 seconds, in arrival order. Global names cannot be
+`--queue` waits in arrival order. Global names cannot be
 redefined by a repository; repository pools are keyed by repository, so equal names
 elsewhere are independent. Global changes apply on reload, repository config is read
 per request, and conflicting definitions block new claims until they agree or leases
@@ -1757,7 +1764,7 @@ the decision. Pending requests produce a daemon notification, collapsed until re
 
 An acquisition waiting for a decision returns exit 2 and JSON
 `code: "approval_pending"` with the request; denial returns `"approval_denied"`.
-`--wait` polls pending approvals and capacity, stopping on denial. Retrying the same
+`--queue` waits for pending approvals and capacity, stopping on denial. Retrying the same
 name preserves the request; changing its settings or reason requires release first.
 Release cancels a pending or denied request even without a lease. Changed effective
 settings cannot reuse a grant. Requests survive restart and failed removal and are

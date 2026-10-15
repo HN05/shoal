@@ -1084,9 +1084,9 @@ pub enum SimCommand {
         /// Require a fresh or erased device; a reason is mandatory and audited.
         #[arg(long, requires = "reason")]
         clean: bool,
-        /// Wait this many seconds for capacity (0 returns busy immediately).
-        #[arg(long, default_value_t = 0, value_parser = clap::value_parser!(u64).range(0..=3600))]
-        wait: u64,
+        /// Queue for capacity and wait until acquired or denied.
+        #[arg(long)]
+        queue: bool,
     },
     /// Review clean-device requests, including failed and busy requests.
     History {
@@ -1124,9 +1124,9 @@ pub struct LeaseOptions {
     /// Explain what the lease is used for.
     #[arg(long)]
     pub reason: Option<String>,
-    /// Wait this many seconds for capacity or approval (0 returns immediately).
-    #[arg(long, default_value_t = 0, value_parser = clap::value_parser!(u64).range(0..=3600))]
-    pub wait: u64,
+    /// Queue for capacity and wait until acquired or denied.
+    #[arg(long)]
+    pub queue: bool,
 }
 
 #[derive(Debug, Subcommand)]
@@ -1251,8 +1251,9 @@ pub enum ResourceCommand {
         name: String,
         #[arg(long)]
         reason: Option<String>,
-        #[arg(long, default_value_t = 0, value_parser = clap::value_parser!(u64).range(0..=3600))]
-        wait: u64,
+        /// Queue for capacity and wait until acquired or denied.
+        #[arg(long)]
+        queue: bool,
     },
     Release {
         pool: String,

@@ -4708,7 +4708,7 @@ fn simulator_exclusivity_wait_reuse_scope_and_removal() {
     fixture.ok(&["notifications"]);
     let mut waiting = fixture
         .command()
-        .args(["--json", "sim", "acquire", "second", "--wait", "60"])
+        .args(["--json", "sim", "acquire", "second", "--queue"])
         .stdout(Stdio::piped())
         .spawn()
         .unwrap();
@@ -5192,8 +5192,7 @@ fn clean_simulator_wait_retries_share_one_audit_entry() {
             "--clean",
             "--reason",
             "Verify no login session",
-            "--wait",
-            "10",
+            "--queue",
         ])
         .stdout(Stdio::piped())
         .spawn()
@@ -5673,8 +5672,7 @@ fn resource_claims_are_atomic_persistent_and_wait_for_release() {
     let mut waiter = fixture
         .command()
         .args([
-            "--json", "resource", "acquire", "workers", "worker", "--name", "waiter", "--wait",
-            "60",
+            "--json", "resource", "acquire", "workers", "worker", "--name", "waiter", "--queue",
         ])
         .stdout(Stdio::piped())
         .spawn()
@@ -6611,7 +6609,7 @@ fn rwlock_modes_survive_restart_wait_and_failed_removal() {
     let mut waiter = fixture
         .command()
         .args([
-            "--json", "resource", "acquire", "cache", "writer", "--mode", "write", "--wait", "60",
+            "--json", "resource", "acquire", "cache", "writer", "--mode", "write", "--queue",
         ])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -14786,8 +14784,7 @@ fn simulator_approvals_precede_mutations_and_cannot_be_bypassed_by_device_args()
             "--clean",
             "--reason",
             "reset test data",
-            "--wait",
-            "10",
+            "--queue",
         ])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

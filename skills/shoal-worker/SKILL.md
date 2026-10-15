@@ -157,7 +157,7 @@ environment: pass the number to the server explicitly.
 
 ```sh
 shoal --json leases resource
-shoal --json acquire resource devices --wait 60
+shoal --json acquire resource devices --queue
 shoal release resource devices
 ```
 
@@ -165,24 +165,29 @@ Use the returned `resource`; `--member <name>` requests a specific member.
 Standalone resources use the same commands. Each semaphore lease consumes one permit.
 The same `--name` returns the same lease; use distinct names for additional
 permits; release without `--name` frees every lease in the pool. Busy requests exit 2. Actual use is cooperative.
+`--queue` waits until the lease is granted or its approval denied, taking capacity
+in arrival order; while others are queued, requests without it are busy. It has no
+time limit: run it in the background when your tool calls time out, and keep it
+running, since stopping it gives up the place.
 
 For `kind: rwlock` resources, use `--mode read` for read-only access or `--mode write`
 for changes (new leases default to write). Readers share; writers exclude everyone
 on that resource. Check `read_available`/`write_available`, not just free slots.
-Release before changing mode; there are no atomic upgrades or writer priority.
+Release before changing mode; there are no atomic upgrades.
 
 ## Simulators
 
 ```sh
 shoal --json leases sim
-shoal --json acquire sim --wait 60
+shoal --json acquire sim --queue
 shoal release sim
 ```
 
 Acquisition uses configured preferences and returns an exclusive lease. Use its
 `udid` explicitly with app/test tools, never simctl's ambiguous `booted` selector.
 Let Shoal manage device creation, boot, shutdown, erase, and deletion. Exit 2
-means capacity is busy; don't bypass allocation or retry indefinitely.
+means capacity is busy; wait with `--queue` instead of retrying in a loop, and
+don't bypass allocation.
 
 Normal reuse preserves apps, data, and settings. Only request a clean device
 when the task specifically requires pristine state:

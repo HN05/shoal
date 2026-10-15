@@ -10,7 +10,7 @@ use std::{
 };
 
 // Exercise the CLI protocol on every host without allocating real resources or simulators.
-fn acquire(kind: &str, wait: &str, json: bool, replies: Vec<Value>) -> (Output, Vec<Value>) {
+fn acquire(kind: &str, queue: bool, json: bool, replies: Vec<Value>) -> (Output, Vec<Value>) {
     let root = tempfile::tempdir_in("/tmp").unwrap();
     std::fs::create_dir(root.path().join("state")).unwrap();
     let listener = UnixListener::bind(root.path().join("state/daemon.sock")).unwrap();
@@ -48,10 +48,11 @@ fn acquire(kind: &str, wait: &str, json: bool, replies: Vec<Value>) -> (Output, 
     } else {
         command.args(["worker", "--clean"]);
     }
-    let output = command
-        .args(["--reason", "test allocation", "--wait", wait])
-        .output()
-        .unwrap();
+    command.args(["--reason", "test allocation"]);
+    if queue {
+        command.arg("--queue");
+    }
+    let output = command.output().unwrap();
     (output, server.join().unwrap())
 }
 
@@ -93,14 +94,14 @@ fn acquisition_responses_keep_exit_codes_json_details_and_human_approval_text() 
     for kind in ["resource", "sim"] {
         for status in ["pending", "denied"] {
             let reply = approval(kind, status);
-            let (output, _) = acquire(kind, "0", true, vec![reply.clone()]);
+            let (output, _) = acquire(kind, false, true, vec![reply.clone()]);
             assert_eq!(
                 value(&output, 2),
                 json!({
                     "acquired": false, "code": format!("approval_{status}"), "request": reply["data"]
                 })
             );
-            let (output, _) = acquire(kind, "0", false, vec![reply]);
+            let (output, _) = acquire(kind, false, false, vec![reply]);
             assert_eq!(output.status.code(), Some(2), "{output:?}");
             let target = if kind == "resource" {
                 "resource/global/workers"
@@ -114,7 +115,7 @@ fn acquisition_responses_keep_exit_codes_json_details_and_human_approval_text() 
                 )
             );
         }
-        let (output, _) = acquire(kind, "0", true, vec![busy()]);
+        let (output, _) = acquire(kind, false, true, vec![busy()]);
         let mut expected =
             json!({"acquired": false, "code": "simulator_busy", "message": "capacity full"});
         if kind == "resource" {
@@ -131,7 +132,7 @@ fn polling_renders_the_final_denial() {
     for kind in ["resource", "sim"] {
         let (output, _) = acquire(
             kind,
-            "60",
+            true,
             true,
             vec![approval(kind, "pending"), approval(kind, "denied")],
         );
@@ -152,7 +153,7 @@ fn simulator_retries_reuse_the_original_clean_request_through_acquisition() {
     });
     let (output, requests) = acquire(
         "sim",
-        "60",
+        true,
         true,
         vec![
             busy(),
@@ -165,6 +166,7 @@ fn simulator_retries_reuse_the_original_clean_request_through_acquisition() {
     assert!(requests.iter().all(|request| request == &requests[0]));
     let request = &requests[0]["sim_acquire"]["request"];
     assert_eq!(request["clean"], true);
+    assert_eq!(request["queue"], true);
     assert_eq!(request["reason"], "test allocation");
     uuid::Uuid::parse_str(request["request_id"].as_str().unwrap()).unwrap();
 }

@@ -2,7 +2,7 @@
 use anyhow::Result;
 use serde_json::json;
 
-use super::acquisition::{Acquisition, retry};
+use super::acquisition::{Acquisition, obtain};
 use crate::{
     cli::{
         SimCommand, WorkspaceScope,
@@ -40,7 +40,7 @@ pub(super) async fn run(
             runtime,
             reason,
             clean,
-            wait,
+            queue,
         }) => {
             let workspace =
                 ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
@@ -52,9 +52,9 @@ pub(super) async fn run(
                 device,
                 runtime,
                 reason,
-                queue: wait > 0,
+                queue,
             };
-            acquire(ctx, workspace, request, wait).await
+            acquire(ctx, workspace, request).await
         }
         Some(SimCommand::History {
             scope,
@@ -96,14 +96,10 @@ pub(super) async fn run(
     }
 }
 
-/// Exit 2 means the simulator is busy or awaiting approval.
-pub(super) async fn acquire(
-    ctx: &Context,
-    workspace: String,
-    request: SimRequest,
-    wait: u64,
-) -> Result<i32> {
-    let outcome = retry(wait, async || {
+/// Exit 2 means the simulator is busy or awaiting approval; a queued request
+/// returns only once acquired or denied.
+pub(super) async fn acquire(ctx: &Context, workspace: String, request: SimRequest) -> Result<i32> {
+    let outcome = obtain(ctx, "a simulator", request.queue, async || {
         let method = Method::SimAcquire {
             workspace: workspace.clone(),
             request: request.clone(),

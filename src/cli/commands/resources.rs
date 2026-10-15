@@ -3,7 +3,7 @@ use anyhow::{Result, ensure};
 use serde_json::json;
 
 use super::{
-    acquisition::{Acquisition, retry},
+    acquisition::{Acquisition, obtain},
     workspace_overviews,
 };
 use crate::{
@@ -33,7 +33,7 @@ pub(super) async fn run(
             resource,
             name,
             reason,
-            wait,
+            queue,
         }) => {
             let workspace =
                 ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
@@ -44,9 +44,9 @@ pub(super) async fn run(
                 resource,
                 name,
                 reason,
-                queue: wait > 0,
+                queue,
             };
-            acquire(ctx, workspace, request, wait).await
+            acquire(ctx, workspace, request).await
         }
         Some(ResourceCommand::Release {
             pool,
@@ -73,20 +73,25 @@ pub(super) async fn run(
     }
 }
 
-/// Exit 2 means no compatible capacity or a pending or denied approval.
+/// Exit 2 means no compatible capacity or a pending or denied approval; a
+/// queued request returns only once acquired or denied.
 pub(super) async fn acquire(
     ctx: &Context,
     workspace: String,
     request: ResourceRequest,
-    wait: u64,
 ) -> Result<i32> {
-    let outcome = retry(wait, async || {
-        let method = Method::ResourceAcquire {
-            workspace: workspace.clone(),
-            request: request.clone(),
-        };
-        client::request::<Acquisition<ResourceLease>>(&ctx.paths, method).await
-    })
+    let outcome = obtain(
+        ctx,
+        &format!("pool {}", request.pool),
+        request.queue,
+        async || {
+            let method = Method::ResourceAcquire {
+                workspace: workspace.clone(),
+                request: request.clone(),
+            };
+            client::request::<Acquisition<ResourceLease>>(&ctx.paths, method).await
+        },
+    )
     .await?;
     outcome.finish(
         ctx,

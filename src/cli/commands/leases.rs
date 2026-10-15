@@ -64,9 +64,9 @@ pub(super) async fn acquire(
                 device,
                 runtime,
                 reason: lease.reason,
-                queue: lease.wait > 0,
+                queue: lease.queue,
             };
-            simulators::acquire(ctx, workspace, request, lease.wait).await
+            simulators::acquire(ctx, workspace, request).await
         }
         AcquireKind::Resource {
             pool,
@@ -79,7 +79,7 @@ pub(super) async fn acquire(
                 None => resources::pick_pool(ctx, &workspace, Members::Locks).await?,
             };
             let request = resource_request(pool, member, mode, None, &lease);
-            resources::acquire(ctx, workspace, request, lease.wait).await
+            resources::acquire(ctx, workspace, request).await
         }
         AcquireKind::Repo { resource, lease } => {
             let resource = match resource {
@@ -93,7 +93,7 @@ pub(super) async fn acquire(
                 Some(ResourceKind::Repo),
                 &lease,
             );
-            resources::acquire(ctx, workspace, request, lease.wait).await
+            resources::acquire(ctx, workspace, request).await
         }
     }
 }
@@ -112,7 +112,7 @@ fn resource_request(
         name: lease.name.clone(),
         resource: member,
         reason: lease.reason.clone(),
-        queue: lease.wait > 0,
+        queue: lease.queue,
     }
 }
 

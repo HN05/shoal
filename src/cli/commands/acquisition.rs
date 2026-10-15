@@ -1,9 +1,9 @@
-//! Preserve the daemon's last allocation outcome while waiting for access.
+//! Allocation outcomes shared by every acquisition, and the queued wait for them.
 use std::time::Duration;
 
 use anyhow::Result;
 use serde_json::Value;
-use tokio::time::{Instant, sleep};
+use tokio::time::sleep;
 
 use super::{EXIT_BUSY, access};
 use crate::{
@@ -65,22 +65,35 @@ impl<T: TryFrom<Body, Error = anyhow::Error>> TryFrom<Body> for Acquisition<T> {
     }
 }
 
-/// Poll capacity and pending approvals about once a second. On timeout return
-/// the last outcome intact; acquisition, denial and errors finish immediately.
-pub(super) async fn retry<T>(
-    wait_seconds: u64,
+/// Attempt once, or wait in the queue with elapsed-time feedback on a terminal.
+pub(super) async fn obtain<T>(
+    ctx: &Context,
+    subject: &str,
+    queue: bool,
+    attempt: impl AsyncFnMut() -> Result<Acquisition<T>>,
+) -> Result<Acquisition<T>> {
+    if queue {
+        let message = format!("Waiting for {subject}");
+        ctx.progress(&message, retry(true, attempt)).await
+    } else {
+        retry(false, attempt).await
+    }
+}
+
+/// Without a queue, return the first outcome. A queued request polls capacity
+/// and pending approvals about once a second, keeping its place, until
+/// acquisition, denial or an error.
+async fn retry<T>(
+    queue: bool,
     mut attempt: impl AsyncFnMut() -> Result<Acquisition<T>>,
 ) -> Result<Acquisition<T>> {
-    let deadline = Instant::now() + Duration::from_secs(wait_seconds);
     loop {
         let outcome = attempt().await?;
         match outcome {
-            Acquisition::Acquired(_) | Acquisition::ApprovalDenied(_) => return Ok(outcome),
-            _ if Instant::now() >= deadline => return Ok(outcome),
-            Acquisition::Busy(_) | Acquisition::ApprovalPending(_) => {
-                let remaining = deadline.saturating_duration_since(Instant::now());
-                sleep(Duration::from_secs(1).min(remaining)).await;
+            Acquisition::Busy(_) | Acquisition::ApprovalPending(_) if queue => {
+                sleep(Duration::from_secs(1)).await;
             }
+            _ => return Ok(outcome),
         }
     }
 }
@@ -103,9 +116,9 @@ mod tests {
         .unwrap()
     }
 
-    async fn sequence(wait: u64, outcomes: Vec<Acquisition<u8>>) -> Acquisition<u8> {
+    async fn sequence(queue: bool, outcomes: Vec<Acquisition<u8>>) -> Acquisition<u8> {
         let mut outcomes = outcomes.into_iter();
-        let result = retry(wait, async || Ok(outcomes.next().expect("extra attempt")))
+        let result = retry(queue, async || Ok(outcomes.next().expect("extra attempt")))
             .await
             .unwrap();
         assert!(outcomes.next().is_none(), "stopped before final outcome");
@@ -113,19 +126,19 @@ mod tests {
     }
 
     #[tokio::test(start_paused = true)]
-    async fn no_wait_preserves_every_outcome() {
+    async fn unqueued_requests_preserve_every_outcome() {
         assert!(matches!(
-            sequence(0, vec![Acquisition::Acquired(7)]).await,
+            sequence(false, vec![Acquisition::Acquired(7)]).await,
             Acquisition::Acquired(7)
         ));
         assert!(matches!(
-            sequence(0, vec![Acquisition::Busy("full".into())]).await,
+            sequence(false, vec![Acquisition::Busy("full".into())]).await,
             Acquisition::Busy(message) if message == "full"
         ));
         for status in [DecisionStatus::Pending, DecisionStatus::Denied] {
             let request = approval(status);
             let expected = to_value(&request).unwrap();
-            let outcome = sequence(0, vec![Acquisition::approval(request)]).await;
+            let outcome = sequence(false, vec![Acquisition::approval(request)]).await;
             let request = match (status, outcome) {
                 (DecisionStatus::Pending, Acquisition::ApprovalPending(request))
                 | (DecisionStatus::Denied, Acquisition::ApprovalDenied(request)) => request,
@@ -136,35 +149,24 @@ mod tests {
     }
 
     #[tokio::test(start_paused = true)]
-    async fn timeout_preserves_the_latest_busy_or_pending_outcome() {
-        let expected = to_value(approval(DecisionStatus::Pending)).unwrap();
+    async fn queued_requests_wait_through_busy_and_pending_outcomes() {
         let outcome = sequence(
-            1,
+            true,
             vec![
                 Acquisition::Busy("full".into()),
                 Acquisition::approval(approval(DecisionStatus::Pending)),
-            ],
-        )
-        .await;
-        let Acquisition::ApprovalPending(request) = outcome else {
-            panic!("lost pending approval: {outcome:?}");
-        };
-        assert_eq!(to_value(request).unwrap(), expected);
-        let outcome = sequence(
-            1,
-            vec![
-                Acquisition::approval(approval(DecisionStatus::Pending)),
                 Acquisition::Busy("now full".into()),
+                Acquisition::Acquired(7),
             ],
         )
         .await;
-        assert!(matches!(outcome, Acquisition::Busy(message) if message == "now full"));
+        assert!(matches!(outcome, Acquisition::Acquired(7)));
     }
 
     #[tokio::test(start_paused = true)]
-    async fn pending_finishes_on_denial_or_acquisition_before_timeout() {
+    async fn pending_finishes_on_denial_or_acquisition() {
         let outcome = sequence(
-            60,
+            true,
             vec![
                 Acquisition::approval(approval(DecisionStatus::Pending)),
                 Acquisition::approval(approval(DecisionStatus::Denied)),
@@ -180,7 +182,7 @@ mod tests {
         );
         assert!(matches!(
             sequence(
-                60,
+                true,
                 vec![
                     Acquisition::approval(approval(DecisionStatus::Pending)),
                     Acquisition::Acquired(7),
@@ -194,7 +196,7 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn errors_stop_polling() {
         let mut attempts = 0;
-        let error = retry::<()>(60, async || {
+        let error = retry::<()>(true, async || {
             attempts += 1;
             anyhow::bail!("connection lost")
         })

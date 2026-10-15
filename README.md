@@ -220,10 +220,10 @@ shoal acquire port web --reason "Development server"
 shoal leases                  # Every kind, with capacity
 shoal release port web
 
-shoal acquire sim --wait 60   # macOS; requires configured simulator profiles
+shoal acquire sim --queue     # macOS; requires configured simulator profiles
 shoal release sim
 
-shoal acquire resource signing --wait 60
+shoal acquire resource signing --queue
 shoal release resource signing
 ```
 
