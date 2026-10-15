@@ -1,6 +1,8 @@
 //! Fork-point resolution for `shoal diff`.
-use crate::{daemon::workspace::Manager, git, model::DiffBase};
 use anyhow::{Context, Result, ensure};
+
+use super::Manager;
+use crate::{git, model::DiffBase};
 
 impl Manager {
     /// The commit `shoal diff` compares against: the fork point from the

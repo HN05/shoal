@@ -2,6 +2,8 @@
 mod adoption;
 pub(crate) mod agent_state;
 mod agents;
+mod conflicts;
+mod diff;
 mod done;
 mod environment;
 mod executions;
