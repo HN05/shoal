@@ -15,8 +15,11 @@ instead of the PR delivery guidance below.
   streams reconnect after the handoff, preserving event cursors.
 - The minimum Rust version follows current stable; keep the manifest and CI
   toolchain aligned and validate with locked dependencies.
-- Check function abstraction levels against AGENTS.md. Judge responsibility
-  boundaries rather than function length or the number of helpers.
+- Treat function abstraction as a blocking correctness check. Require every
+  function to stay at one abstraction level: orchestration calls named domain
+  operations while helpers own lower-level implementation details. Flag mixed
+  levels before weighing style or test coverage, even when behavior is correct;
+  judge responsibility boundaries rather than function length or helper count.
 - Safety of user work: removal goes through the one shared path, preserves
   work and leases on failure, never adopts moved or replaced worktrees, and
   never signals a process whose recorded identity was not verified. Herdr
