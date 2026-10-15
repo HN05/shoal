@@ -4,7 +4,7 @@ use anyhow::{Context, Result, ensure};
 use serde_json::Value;
 
 use super::{
-    ForgeRepo,
+    ForgeKind, ForgeRepo,
     account::Account,
     api::Request,
     item::{Current, ItemState},
@@ -38,13 +38,9 @@ impl ForgeRepo {
         if pull.item.state != ItemState::Merged {
             return Ok(None);
         }
-        let commits = self
-            .forgejo_pages(
-                account,
-                &self.repo_endpoint(&format!("pulls/{number}/commits")),
-            )
-            .await?;
-        commit_shas(&commits).map(Some)
+        let endpoint = format!("{}/commits", self.item_endpoint(ItemKind::Pr, number));
+        let commits = self.pages(account, &endpoint).await?;
+        commit_shas(&commits, self.kind.commit_field()).map(Some)
     }
 
     /// Title, head and base of a PR whose head branch is in this repository.
@@ -62,14 +58,17 @@ impl ForgeRepo {
         account: &Account,
         kind: ItemKind,
     ) -> Result<Vec<list::Item>> {
-        let endpoint = match kind {
-            ItemKind::Issue => "issues?state=open&type=issues",
-            ItemKind::Pr => "pulls?state=open",
+        let endpoint = match (self.kind, kind) {
+            (ForgeKind::GitLab, ItemKind::Issue) => "issues?state=opened",
+            (ForgeKind::GitLab, ItemKind::Pr) => "merge_requests?state=opened",
+            (_, ItemKind::Issue) => "issues?state=open&type=issues",
+            (_, ItemKind::Pr) => "pulls?state=open",
         };
-        let items = self
-            .forgejo_pages(account, &self.repo_endpoint(endpoint))
-            .await?;
-        items.iter().map(list_item).collect()
+        let items = self.pages(account, &self.repo_endpoint(endpoint)).await?;
+        items
+            .iter()
+            .map(|item| list_item(item, self.kind.number_field()))
+            .collect()
     }
 
     /// The CI checks on the PR's head commit.
@@ -91,7 +90,7 @@ impl ForgeRepo {
         number: u64,
     ) -> Result<Vec<(String, Verdict)>> {
         let endpoint = self.repo_endpoint(&format!("pulls/{number}/reviews"));
-        forgejo_reviews(&self.forgejo_pages(account, &endpoint).await?)
+        forgejo_reviews(&self.pages(account, &endpoint).await?)
     }
 
     /// What changes when a comment is added, edited or deleted.
@@ -109,7 +108,7 @@ impl ForgeRepo {
         number: u64,
     ) -> Result<String> {
         let endpoint = self.repo_endpoint(&format!("pulls/{number}/reviews"));
-        let reviews = self.forgejo_pages(account, &endpoint).await?;
+        let reviews = self.pages(account, &endpoint).await?;
         Ok(fingerprint(
             &reviews,
             &[
@@ -138,11 +137,11 @@ impl ForgeRepo {
 }
 
 /// Full commit IDs, refusing anything else so cleanup never matches a prefix.
-fn commit_shas(commits: &[Value]) -> Result<Vec<String>> {
+fn commit_shas(commits: &[Value], field: &str) -> Result<Vec<String>> {
     commits
         .iter()
         .map(|commit| {
-            commit["sha"]
+            commit[field]
                 .as_str()
                 .filter(|sha| sha.len() == 40 && sha.bytes().all(|byte| byte.is_ascii_hexdigit()))
                 .map(str::to_owned)
@@ -202,8 +201,8 @@ fn forgejo_checks(combined: &Value) -> Result<Vec<RestCheck>> {
         .collect()
 }
 
-fn list_item(item: &Value) -> Result<list::Item> {
-    let number = item["number"]
+fn list_item(item: &Value, field: &str) -> Result<list::Item> {
+    let number = item[field]
         .as_u64()
         .filter(|number| *number > 0)
         .context("listed item has no number")?;
@@ -259,23 +258,23 @@ mod tests {
     #[test]
     fn merged_commits_need_full_ids_and_lists_need_numbers() {
         let sha = "a".repeat(40);
-        assert_eq!(commit_shas(&[json!({"sha": sha})]).unwrap(), [sha]);
+        assert_eq!(commit_shas(&[json!({"id": sha})], "id").unwrap(), [sha]);
         for commit in [
             json!({"sha": "abc"}),
             json!({}),
             json!({"sha": "g".repeat(40)}),
         ] {
-            assert!(commit_shas(&[commit]).is_err());
+            assert!(commit_shas(&[commit], "sha").is_err());
         }
         assert_eq!(
-            list_item(&json!({"number": 3, "title": "Bug"})).unwrap(),
+            list_item(&json!({"iid": 3, "id": 9, "title": "Bug"}), "iid").unwrap(),
             list::Item {
                 number: 3,
                 title: "Bug".into()
             }
         );
-        assert!(list_item(&json!({"number": 0, "title": "Bug"})).is_err());
-        assert!(list_item(&json!({"title": "Bug"})).is_err());
+        assert!(list_item(&json!({"number": 0, "title": "Bug"}), "number").is_err());
+        assert!(list_item(&json!({"title": "Bug"}), "number").is_err());
     }
 
     #[test]

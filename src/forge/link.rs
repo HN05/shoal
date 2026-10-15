@@ -122,9 +122,9 @@ impl Link {
                 target: LinkTarget::Pr,
             });
         }
-        let (repository, branch) = url
-            .split_once("/src/branch/")
-            .or_else(|| url.split_once("/tree/"))
+        let (repository, branch) = ["/src/branch/", "/-/tree/", "/tree/"]
+            .iter()
+            .find_map(|marker| url.split_once(marker))
             .context("expected an issue, PR or branch URL")?;
         let repository = ForgeRepo::parse(repository)?;
         let branch = decode_branch(branch)?;
@@ -171,6 +171,10 @@ mod tests {
                 "http://forge.example:3000/team/repo/src/branch/topic+name",
                 "topic+name",
             ),
+            (
+                "https://gitlab.com/group/sub/project/-/tree/feature/api",
+                "feature/api",
+            ),
         ] {
             let link = Link::parse(url).unwrap();
             assert!(matches!(link.target, LinkTarget::Branch(branch) if branch == expected));
@@ -183,6 +187,12 @@ mod tests {
         ));
         assert!(matches!(
             Link::parse("https://forge.example/team/repo/pulls/2")
+                .unwrap()
+                .target,
+            LinkTarget::Pr
+        ));
+        assert!(matches!(
+            Link::parse("https://gitlab.com/group/project/-/merge_requests/2")
                 .unwrap()
                 .target,
             LinkTarget::Pr

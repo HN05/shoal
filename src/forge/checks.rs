@@ -124,7 +124,7 @@ impl ForgeRepo {
             .as_str()
             .context("PR has no head commit")?;
         let statuses = self
-            .forgejo_pages(
+            .pages(
                 account,
                 &self.repo_endpoint(&format!("commits/{head}/statuses")),
             )

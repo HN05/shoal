@@ -10,7 +10,7 @@ use serde_json::Value;
 use super::{
     ForgeKind, ForgeRepo, Query,
     account::Account,
-    api::{FORGEJO_LOGIN, Request},
+    api::Request,
     link::ItemKind,
     pr::state::{CheckResult, PrStatus, ReviewState},
 };
@@ -166,7 +166,8 @@ impl ForgeRepo {
                 ForgeKind::Forgejo => self
                     .forgejo_details(account, kind, number)
                     .await
-                    .context(FORGEJO_LOGIN),
+                    .context(self.kind.login_hint()),
+                ForgeKind::GitLab => anyhow::bail!("viewing GitLab items is not supported yet"),
             }
         };
         let status = async {
@@ -186,7 +187,8 @@ impl ForgeRepo {
                 ForgeKind::Forgejo => self
                     .forgejo_discussion(account, kind, number, &mut details)
                     .await
-                    .context(FORGEJO_LOGIN),
+                    .context(self.kind.login_hint()),
+                ForgeKind::GitLab => Ok(None),
             };
             match discussion {
                 Ok(Some(reviews)) => details.reviews = Some(reviews),
@@ -285,7 +287,7 @@ impl ForgeRepo {
             return Ok(None);
         }
         let endpoint = self.repo_endpoint(&format!("pulls/{number}/reviews"));
-        let reviews = self.forgejo_pages(account, &endpoint).await?;
+        let reviews = self.pages(account, &endpoint).await?;
         let reviews = try_join_all(reviews.into_iter().map(|review| async move {
             let id = review["id"].as_u64().context("Forgejo review has no ID")?;
             let comments = if review["comments_count"].as_u64().unwrap_or_default() > 0 {

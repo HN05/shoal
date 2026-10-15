@@ -63,9 +63,12 @@ impl ForgeRepo {
                     .cloned()
                     .context("the PR list is not a list")?
             }
+            ForgeKind::GitLab => {
+                anyhow::bail!("opening GitLab merge requests is not supported yet")
+            }
             // Forgejo cannot filter its list by head branch.
             ForgeKind::Forgejo => {
-                self.forgejo_pages(account, &self.repo_endpoint("pulls?state=open"))
+                self.pages(account, &self.repo_endpoint("pulls?state=open"))
                     .await?
             }
         };
@@ -115,7 +118,7 @@ impl ForgeRepo {
             ForgeKind::Forgejo if pull.draft => {
                 body["title"] = draft_title(&pull.title, true).into()
             }
-            ForgeKind::Forgejo => {}
+            ForgeKind::Forgejo | ForgeKind::GitLab => {}
         }
         Request::new(HttpMethod::Post, self.repo_endpoint("pulls"), Some(body))
     }

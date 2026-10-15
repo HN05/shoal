@@ -35,6 +35,7 @@ tools! {
     GitHub => ("gh", None),
     Forgejo => ("fj", None),
     Tea => ("tea", None),
+    GitLab => ("glab", None),
     Curl => ("curl", None),
     Ps => ("ps", None),
     Plutil => ("/usr/bin/plutil", None),

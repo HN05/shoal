@@ -24,9 +24,6 @@ const PAGE_SIZE: usize = 50;
 const MAX_LOG_BYTES: usize = 8 * 1024 * 1024;
 /// Bounds a JSON response read through a CLI, which curl's own limit cannot.
 const MAX_RESPONSE_BYTES: usize = 64 * 1024 * 1024;
-/// Context for a failed read as the user, who may have no fj login.
-pub(super) const FORGEJO_LOGIN: &str =
-    "Forgejo API request failed; private repositories need an fj login";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum HttpMethod {
@@ -122,7 +119,10 @@ impl ForgeRepo {
 
     /// The API endpoint for `path` under this repository.
     pub(crate) fn repo_endpoint(&self, path: &str) -> String {
-        format!("repos/{}/{path}", self.path)
+        match self.kind {
+            ForgeKind::GitHub | ForgeKind::Forgejo => format!("repos/{}/{path}", self.path),
+            ForgeKind::GitLab => format!("projects/{}/{path}", encode(&self.path, false)),
+        }
     }
 
     /// The response body, or null for an empty one.
@@ -131,6 +131,7 @@ impl ForgeRepo {
             let body = match self.kind {
                 ForgeKind::GitHub => self.github_send(account, request).await,
                 ForgeKind::Forgejo => self.forgejo_send(account, request).await,
+                ForgeKind::GitLab => self.passthrough(Tool::GitLab, account, request).await,
             }?;
             if let Some(field) = request.confirm {
                 ensure!(
@@ -148,8 +149,19 @@ impl ForgeRepo {
     }
 
     async fn github_send(&self, account: &Account, request: &Request) -> Result<Value> {
-        let mut gh = Command::new(Tool::GitHub.program());
-        gh.env("NO_COLOR", "1")
+        let body = self.passthrough(Tool::GitHub, account, request).await?;
+        // GraphQL reports a failed mutation in a successful response.
+        if let Some(errors) = graphql_errors(&body) {
+            bail!("{errors}");
+        }
+        Ok(body)
+    }
+
+    /// Send through `gh api` or `glab api`, which own their logins.
+    async fn passthrough(&self, tool: Tool, account: &Account, request: &Request) -> Result<Value> {
+        let program = tool.program();
+        let mut cli = Command::new(program);
+        cli.env("NO_COLOR", "1")
             .env("GH_PROMPT_DISABLED", "1")
             .args([
                 "api",
@@ -160,16 +172,17 @@ impl ForgeRepo {
                 &request.endpoint,
             ]);
         if request.body.is_some() {
-            gh.args(["--input", "-"]);
+            cli.args(["-H", "Content-Type: application/json", "--input", "-"]);
         }
-        account.apply(&mut gh);
+        account.apply(&mut cli);
         let body = request.body.as_ref().map(Value::to_string);
-        let output = crate::subprocess::Run::new(gh)
+        let output = crate::subprocess::Run::new(cli)
             .input(body.unwrap_or_default())
             .timeout(TIMEOUT)
+            .output_limit(MAX_RESPONSE_BYTES)
             .capture()
             .await
-            .context("run gh; is it installed?")?;
+            .with_context(|| format!("run {program}; is it installed?"))?;
         let stdout = String::from_utf8_lossy(&output.stdout);
         if !output.status.success() {
             bail!(
@@ -179,12 +192,7 @@ impl ForgeRepo {
                     .trim()
             );
         }
-        let body = json_body(&stdout)?;
-        // GraphQL reports a failed mutation in a successful response.
-        if let Some(errors) = graphql_errors(&body) {
-            bail!("{errors}");
-        }
-        Ok(body)
+        json_body(&stdout)
     }
 
     async fn forgejo_send(&self, account: &Account, request: &Request) -> Result<Value> {
@@ -231,28 +239,24 @@ impl ForgeRepo {
         forgejo_response(&output)
     }
 
-    /// Every item of a paginated Forgejo list endpoint, read as `account`.
-    pub(super) async fn forgejo_pages(
-        &self,
-        account: &Account,
-        endpoint: &str,
-    ) -> Result<Vec<Value>> {
+    /// Every item of a paginated list endpoint, read as `account`.
+    pub(super) async fn pages(&self, account: &Account, endpoint: &str) -> Result<Vec<Value>> {
         let separator = if endpoint.contains('?') { '&' } else { '?' };
+        let (size, page_size) = match self.kind {
+            ForgeKind::Forgejo => ("limit", PAGE_SIZE),
+            ForgeKind::GitHub | ForgeKind::GitLab => ("per_page", 100),
+        };
         let mut items = Vec::new();
         for page in 1.. {
-            let response = self
-                .send(
-                    account,
-                    &Request::get(format!(
-                        "{endpoint}{separator}limit={PAGE_SIZE}&page={page}"
-                    )),
-                )
-                .await?;
+            let request = Request::get(format!(
+                "{endpoint}{separator}{size}={page_size}&page={page}"
+            ));
+            let response = self.send(account, &request).await?;
             let batch = response
                 .as_array()
-                .with_context(|| format!("Forgejo {endpoint} is not a list"))?;
+                .with_context(|| format!("{endpoint} is not a list"))?;
             items.extend(batch.iter().cloned());
-            if batch.len() < PAGE_SIZE {
+            if batch.len() < page_size {
                 break;
             }
         }
@@ -295,10 +299,28 @@ fn graphql_errors(body: &Value) -> Option<String> {
     )
 }
 
-/// The message a forge's JSON error body carries.
+/// The message a forge's JSON error body carries; GitLab reports invalid
+/// fields as a map of messages, and some failures as `error`.
 fn error_message(text: &str) -> Option<String> {
     let body: Value = serde_json::from_str(text).ok()?;
-    let message = body["message"].as_str()?;
+    if let Some(fields) = body["message"].as_object() {
+        let fields: Vec<_> = fields
+            .iter()
+            .map(|(field, errors)| match errors.as_array() {
+                Some(errors) => format!(
+                    "{field} {}",
+                    errors
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+                None => format!("{field}: {errors}"),
+            })
+            .collect();
+        return Some(fields.join("; "));
+    }
+    let message = body["message"].as_str().or(body["error"].as_str())?;
     let details: Vec<_> = body["errors"]
         .as_array()
         .into_iter()
@@ -424,6 +446,15 @@ mod tests {
             "Validation Failed: A pull request already exists; base invalid"
         );
         assert_eq!(error_message("not json"), None);
+        let gitlab = r#"{"message":{"title":["can't be blank","is too short"],"base":"bad"}}"#;
+        assert_eq!(
+            error_message(gitlab).unwrap(),
+            "base: \"bad\"; title can't be blank, is too short"
+        );
+        assert_eq!(
+            error_message(r#"{"error":"insufficient_scope"}"#).unwrap(),
+            "insufficient_scope"
+        );
     }
 
     #[test]

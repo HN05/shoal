@@ -57,16 +57,17 @@ pub(crate) struct Current {
     /// The commit a PR's head branch points to.
     pub head_sha: Option<String>,
     /// Whether an open PR conflicts with its base; unknown while the forge
-    /// computes it. Drafts report none.
+    /// computes it. Forgejo reports none for drafts.
     pub conflict: Option<bool>,
 }
 
 impl ForgeRepo {
     /// The item's REST endpoint.
     pub(crate) fn item_endpoint(&self, kind: ItemKind, number: u64) -> String {
-        let resource = match kind {
-            ItemKind::Issue => "issues",
-            ItemKind::Pr => "pulls",
+        let resource = match (kind, self.kind) {
+            (ItemKind::Issue, _) => "issues",
+            (ItemKind::Pr, ForgeKind::GitHub | ForgeKind::Forgejo) => "pulls",
+            (ItemKind::Pr, ForgeKind::GitLab) => "merge_requests",
         };
         self.repo_endpoint(&format!("{resource}/{number}"))
     }
@@ -74,19 +75,33 @@ impl ForgeRepo {
     /// Read a REST item; an issue read that returns a PR is refused.
     pub(crate) fn current(&self, kind: ItemKind, number: u64, value: &Value) -> Result<Current> {
         ensure!(
-            value["number"] == number,
+            value[self.kind.number_field()] == number,
             "the forge returned a different item than #{number}"
         );
+        match self.kind {
+            ForgeKind::GitHub | ForgeKind::Forgejo => self.github_current(kind, number, value),
+            ForgeKind::GitLab => self.gitlab_current(kind, number, value),
+        }
+    }
+
+    /// The URL Shoal records for the item.
+    pub(crate) fn item_url(&self, kind: ItemKind, number: u64) -> Result<String> {
+        let number = number.to_string();
+        Ok(match kind {
+            ItemKind::Issue => self.issue(&number)?.1,
+            ItemKind::Pr => self.pull(&number)?.1,
+        })
+    }
+
+    /// GitHub's REST shape, which Forgejo shares.
+    fn github_current(&self, kind: ItemKind, number: u64, value: &Value) -> Result<Current> {
         if kind == ItemKind::Issue {
             ensure!(
                 value["pull_request"].is_null(),
                 "#{number} is a PR; use shoal pr"
             );
         }
-        let url = match kind {
-            ItemKind::Issue => self.issue(&number.to_string())?.1,
-            ItemKind::Pr => self.pull(&number.to_string())?.1,
-        };
+        let url = self.item_url(kind, number)?;
         let title = text(&value["title"]).context("item has no title")?;
         let merged =
             value["merged"].as_bool().unwrap_or_default() || value["merged_at"].as_str().is_some();
@@ -107,9 +122,10 @@ impl ForgeRepo {
             ItemKind::Pr => Some(PrSummary {
                 head: text(&value["head"]["ref"]).context("PR has no head branch")?,
                 base: text(&value["base"]["ref"]).context("PR has no base branch")?,
-                draft: match self.kind {
-                    ForgeKind::GitHub => value["draft"].as_bool().unwrap_or_default(),
-                    ForgeKind::Forgejo => draft_prefix(&title).is_some(),
+                draft: if self.kind == ForgeKind::Forgejo {
+                    draft_prefix(&title).is_some()
+                } else {
+                    value["draft"].as_bool().unwrap_or_default()
                 },
             }),
         };
@@ -136,7 +152,7 @@ impl ForgeRepo {
     }
 }
 
-fn text(value: &Value) -> Option<String> {
+pub(super) fn text(value: &Value) -> Option<String> {
     value.as_str().map(str::to_owned)
 }
 

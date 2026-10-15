@@ -199,6 +199,9 @@ impl ForgeRepo {
                             "delete_branch_after_merge": delete_branch,
                         })),
                     )],
+                    ForgeKind::GitLab => {
+                        anyhow::bail!("merging GitLab merge requests is not supported yet")
+                    }
                 }
             }
         })

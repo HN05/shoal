@@ -5,9 +5,12 @@ pub mod action;
 mod api;
 pub mod checks;
 pub mod create;
+mod gitlab;
+mod glab;
 pub mod issue;
 pub mod item;
 mod items;
+mod kind;
 pub mod link;
 pub mod list;
 mod locator;
@@ -20,9 +23,9 @@ mod tea;
 pub mod updates;
 pub mod view;
 
-use crate::tools::Tool;
 use anyhow::{Context, Result, ensure};
 
+use kind::ForgeKind;
 use locator::ItemRoute;
 use remote_url::{RemoteUrl, Transport};
 
@@ -55,36 +58,6 @@ pub(crate) struct ForgeRepo {
     web_scheme: &'static str,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum ForgeKind {
-    GitHub,
-    Forgejo,
-}
-
-impl ForgeKind {
-    fn from_host(host: &str) -> Self {
-        if host == "github.com" {
-            Self::GitHub
-        } else {
-            Self::Forgejo
-        }
-    }
-
-    fn tool(self) -> &'static str {
-        match self {
-            Self::GitHub => Tool::GitHub.program(),
-            Self::Forgejo => Tool::Forgejo.program(),
-        }
-    }
-
-    fn pull_route(self) -> ItemRoute {
-        match self {
-            Self::GitHub => ItemRoute::Pull,
-            Self::Forgejo => ItemRoute::Pulls,
-        }
-    }
-}
-
 impl PartialEq for ForgeRepo {
     fn eq(&self, other: &Self) -> bool {
         // Transport is not part of repository identity.
@@ -94,8 +67,7 @@ impl PartialEq for ForgeRepo {
 
 impl ForgeRepo {
     pub fn parse(remote: &str) -> Result<Self> {
-        let remote =
-            RemoteUrl::parse(remote).context("issue lookup needs a GitHub or Forgejo remote")?;
+        let remote = RemoteUrl::parse(remote).context("issue lookup needs a forge remote")?;
         Self::from_remote(&remote)
     }
 
@@ -105,7 +77,7 @@ impl ForgeRepo {
                 remote.transport,
                 Transport::Http | Transport::Https | Transport::Ssh | Transport::Scp
             ),
-            "issue lookup needs a GitHub or Forgejo remote"
+            "issue lookup needs an HTTP or SSH forge remote"
         );
         let path = remote.path.context("remote is missing owner/repository")?;
         let host = remote.host.unwrap_or_default();
@@ -120,19 +92,23 @@ impl ForgeRepo {
                 && !host.starts_with('-')
                 && host
                     .chars()
-                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | ':'))
-                && path.split('/').count() == 2
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | ':')),
+            "issue lookup needs a remote with host/owner/repository"
+        );
+        let host = host.to_ascii_lowercase();
+        let kind = ForgeKind::detect(&host);
+        let segments = path.split('/').count();
+        ensure!(
+            (segments == 2 || kind.nests_groups() && segments > 2)
                 && path.split('/').all(|part| !part.is_empty()
-                    && part != "."
-                    && part != ".."
+                    && !matches!(part, "." | ".." | "-")
                     && part
                         .chars()
                         .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_'))),
             "issue lookup needs a remote with host/owner/repository"
         );
-        let host = host.to_ascii_lowercase();
         Ok(Self {
-            kind: ForgeKind::from_host(&host),
+            kind,
             host,
             path: path.into(),
             web_scheme: if remote.transport == Transport::Http {
@@ -153,7 +129,7 @@ impl ForgeRepo {
 
     /// The repository an issue URL belongs to.
     pub fn from_issue_url(url: &str) -> Result<Self> {
-        ItemRoute::Issue.repository(url)
+        ItemRoute::discover(url, &[ItemRoute::GitLabIssue, ItemRoute::Issue])
     }
 
     pub fn repository_url(&self) -> String {
@@ -161,7 +137,7 @@ impl ForgeRepo {
     }
 
     pub fn issue(&self, input: &str) -> Result<(u64, String)> {
-        ItemRoute::Issue.resolve(self, input)
+        self.kind.issue_route().resolve(self, input)
     }
 }
 
@@ -180,10 +156,10 @@ impl ForgeRepo {
     ) -> Result<Option<Vec<String>>> {
         match self.kind {
             ForgeKind::GitHub => github_merged_commits(self, account, number, branch).await,
-            ForgeKind::Forgejo => self
+            ForgeKind::Forgejo | ForgeKind::GitLab => self
                 .rest_merged_commits(account, number, branch)
                 .await
-                .context(api::FORGEJO_LOGIN)
+                .context(self.kind.login_hint())
                 .context(MERGED_HINT.trim_start_matches("; ").to_owned()),
         }
     }
@@ -244,11 +220,11 @@ impl ForgeKind {
     ) -> Result<(String, String)> {
         let (title, details) = match self {
             Self::GitHub => github_issue_details(repo, account, number).await?,
-            Self::Forgejo => {
+            Self::Forgejo | Self::GitLab => {
                 let issue = repo
                     .read(account, link::ItemKind::Issue, number)
                     .await
-                    .context(api::FORGEJO_LOGIN)?;
+                    .context(self.login_hint())?;
                 issue::require_open(issue.item.state)?;
                 (issue.item.title, issue.body)
             }
@@ -302,11 +278,10 @@ pub(crate) struct PullRequest {
 impl ForgeRepo {
     /// The repository a PR URL belongs to.
     pub fn from_pull_url(url: &str) -> Result<Self> {
-        let item = ItemRoute::Pull
-            .split_url(url)
-            .or_else(|| ItemRoute::Pulls.split_url(url))
-            .context("expected a PR URL ending in /pull/<number> or /pulls/<number>")?;
-        Self::parse(item.repository)
+        ItemRoute::discover(
+            url,
+            &[ItemRoute::Pull, ItemRoute::Pulls, ItemRoute::MergeRequest],
+        )
     }
 
     /// Only PRs whose head branch lives in this repository can be checked out.
@@ -340,10 +315,10 @@ impl ForgeKind {
     ) -> Result<(String, String, String)> {
         match self {
             Self::GitHub => github_pull_details(repo, account, number).await,
-            Self::Forgejo => repo
+            Self::Forgejo | Self::GitLab => repo
                 .rest_pull_details(account, number)
                 .await
-                .context(api::FORGEJO_LOGIN),
+                .context(self.login_hint()),
         }
     }
 }
@@ -545,11 +520,70 @@ mod tests {
                 ForgeKind::Forgejo,
                 "fj",
             ),
+            (
+                "git@gitlab.com:group/sub/project.git",
+                ForgeKind::GitLab,
+                "glab",
+            ),
         ] {
             let repo = ForgeRepo::parse(remote).unwrap();
             assert_eq!(repo.kind, kind);
             assert_eq!(repo.kind.tool(), tool);
         }
+    }
+
+    #[test]
+    fn only_gitlab_paths_nest_groups() {
+        let repo = ForgeRepo::parse("https://gitlab.com/group/sub/project.git").unwrap();
+        assert_eq!(repo.path, "group/sub/project");
+        assert_eq!(
+            repo.repo_endpoint("issues/3"),
+            "projects/group%2Fsub%2Fproject/issues/3"
+        );
+        for remote in [
+            "https://github.com/group/sub/repo",
+            "https://forge.example/group/sub/repo",
+            "https://gitlab.com/project",
+            "https://gitlab.com/group/-/project",
+            "https://gitlab.com/group//project",
+        ] {
+            assert!(ForgeRepo::parse(remote).is_err(), "{remote}");
+        }
+    }
+
+    #[test]
+    fn gitlab_items_use_their_own_routes() {
+        let repo = ForgeRepo::parse("git@gitlab.com:group/sub/project.git").unwrap();
+        let base = "https://gitlab.com/group/sub/project";
+        assert_eq!(repo.issue("4").unwrap(), (4, format!("{base}/-/issues/4")));
+        assert_eq!(
+            repo.pull(&format!("{base}/-/merge_requests/5/diffs"))
+                .unwrap_err()
+                .to_string(),
+            "invalid PR number"
+        );
+        assert_eq!(
+            repo.pull(&format!("{base}/-/merge_requests/5#note_1"))
+                .unwrap(),
+            (5, format!("{base}/-/merge_requests/5"))
+        );
+        for (url, kind) in [
+            (format!("{base}/-/issues/4"), "issue"),
+            (format!("{base}/-/merge_requests/5"), "pr"),
+        ] {
+            let discovered = if kind == "issue" {
+                ForgeRepo::from_issue_url(&url)
+            } else {
+                ForgeRepo::from_pull_url(&url)
+            };
+            assert_eq!(discovered.unwrap(), repo, "{url}");
+        }
+        assert!(repo.issue(&format!("{base}/issues/4")).is_err());
+        assert!(repo.pull(&format!("{base}/pulls/5")).is_err());
+        assert!(
+            repo.pull(&format!("{base}/-/merge_requests/5/../6"))
+                .is_err()
+        );
     }
 
     #[test]

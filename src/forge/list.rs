@@ -47,7 +47,7 @@ impl ForgeKind {
                 serde_json::from_str(&text)
                     .with_context(|| format!("invalid gh {noun} list response"))
             }
-            Self::Forgejo => {
+            Self::Forgejo | Self::GitLab => {
                 let kind = if noun == "pr" {
                     ItemKind::Pr
                 } else {
@@ -55,7 +55,7 @@ impl ForgeKind {
                 };
                 repo.rest_open_items(account, kind)
                     .await
-                    .context(super::api::FORGEJO_LOGIN)
+                    .context(self.login_hint())
             }
         }
     }

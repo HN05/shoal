@@ -3,11 +3,18 @@ use anyhow::{Context, Result, ensure};
 
 use super::{ForgeRepo, IssueInput};
 
+const ISSUE_URL: &str = "expected an issue URL ending in /issues/<number>";
+const PULL_URL: &str =
+    "expected a PR URL ending in /pull/<number>, /pulls/<number> or /-/merge_requests/<number>";
+
 #[derive(Clone, Copy)]
 pub(super) enum ItemRoute {
     Issue,
+    /// GitLab keeps item routes under `/-/`, which no project path can contain.
+    GitLabIssue,
     Pull,
     Pulls,
+    MergeRequest,
 }
 
 pub(super) struct ItemUrl<'a> {
@@ -20,15 +27,17 @@ impl ItemRoute {
     fn marker(self) -> &'static str {
         match self {
             Self::Issue => "/issues/",
+            Self::GitLabIssue => "/-/issues/",
             Self::Pull => "/pull/",
             Self::Pulls => "/pulls/",
+            Self::MergeRequest => "/-/merge_requests/",
         }
     }
 
     fn diagnostic(self, issue: &'static str, pull: &'static str) -> &'static str {
         match self {
-            Self::Issue => issue,
-            Self::Pull | Self::Pulls => pull,
+            Self::Issue | Self::GitLabIssue => issue,
+            Self::Pull | Self::Pulls | Self::MergeRequest => pull,
         }
     }
 
@@ -47,15 +56,18 @@ impl ItemRoute {
         })
     }
 
-    pub fn repository(self, input: &str) -> Result<ForgeRepo> {
-        ForgeRepo::parse(self.url(input)?.repository)
+    /// The repository of an item URL in the first of `routes` it uses.
+    pub fn discover(input: &str, routes: &[Self]) -> Result<ForgeRepo> {
+        let item = routes
+            .iter()
+            .find_map(|route| route.split_url(input))
+            .with_context(|| routes[0].diagnostic(ISSUE_URL, PULL_URL))?;
+        ForgeRepo::parse(item.repository)
     }
 
     fn url(self, input: &str) -> Result<ItemUrl<'_>> {
-        self.split_url(input).context(self.diagnostic(
-            "expected an issue URL ending in /issues/<number>",
-            "invalid PR URL",
-        ))
+        self.split_url(input)
+            .context(self.diagnostic(ISSUE_URL, "invalid PR URL"))
     }
 
     pub fn resolve(self, repo: &ForgeRepo, input: &str) -> Result<(u64, String)> {
