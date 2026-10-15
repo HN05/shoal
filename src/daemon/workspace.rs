@@ -660,7 +660,11 @@ impl Manager {
 
     /// Move a ready or failed workspace into a transient lifecycle state,
     /// excluding every other lifecycle operation until it is restored.
-    pub(crate) async fn reserve_lifecycle(&self, id: &str, state: WorkspaceState) -> Result<()> {
+    pub(crate) async fn reserve_lifecycle(
+        &self,
+        id: &str,
+        state: WorkspaceState,
+    ) -> Result<WorkspaceState> {
         self.reserve_lifecycle_inner(id, state, false).await
     }
 
@@ -668,7 +672,7 @@ impl Manager {
         &self,
         id: &str,
         allow_pending_rename: bool,
-    ) -> Result<()> {
+    ) -> Result<WorkspaceState> {
         self.reserve_lifecycle_inner(id, WorkspaceState::Removing, allow_pending_rename)
             .await
     }
@@ -678,39 +682,38 @@ impl Manager {
         id: &str,
         state: WorkspaceState,
         allow_pending_rename: bool,
-    ) -> Result<()> {
+    ) -> Result<WorkspaceState> {
         let _resources = self.resource_guard(id, GuardMode::Shared).await?;
         let id = id.to_owned();
         self.store
             .run(move |db| {
+                let tx = db.transaction()?;
                 // Removal checks pending intent after reserving the lifecycle,
                 // so a confirmed-deleted worktree can release its ownership.
                 if state != WorkspaceState::Reconciling && !allow_pending_rename {
-                    store::ensure_no_pending_rename(db, &id)?;
+                    store::ensure_no_pending_rename(&tx, &id)?;
                 }
-                let changed = db.execute(
-                    "UPDATE workspaces SET state=?2 WHERE id=?1 AND state IN (?3,?4)",
-                    params![id, state, WorkspaceState::Ready, WorkspaceState::Failed],
-                )?;
-                if changed == 1 {
-                    return Ok(());
-                }
-                // Name the operation that holds the workspace; automatic
-                // cleanup may be removing it at the same moment as a user.
-                let current: Option<WorkspaceState> = db
+                let current: Option<WorkspaceState> = tx
                     .query_row("SELECT state FROM workspaces WHERE id=?1", [&id], |row| {
                         row.get(0)
                     })
                     .optional()?;
-                match current {
+                let current = match current {
                     None => bail!("workspace no longer exists"),
+                    Some(current @ (WorkspaceState::Ready | WorkspaceState::Failed)) => current,
                     Some(WorkspaceState::Removing) => {
                         bail!("workspace is already being removed; it will disappear shortly")
                     }
                     Some(current) => bail!(
                         "workspace is {current}; wait for that operation to finish before another lifecycle operation"
                     ),
-                }
+                };
+                tx.execute(
+                    "UPDATE workspaces SET state=?2 WHERE id=?1",
+                    params![id, state],
+                )?;
+                tx.commit()?;
+                Ok(current)
             })
             .await
     }

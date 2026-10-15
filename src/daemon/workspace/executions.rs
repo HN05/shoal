@@ -667,7 +667,8 @@ impl Manager {
         protected: Protected,
     ) -> Result<()> {
         let workspace = self.workspace(selector).await?;
-        self.reserve_lifecycle(&workspace.id, WorkspaceState::Stopping)
+        let reserved_state = self
+            .reserve_lifecycle(&workspace.id, WorkspaceState::Stopping)
             .await?;
         let result = self
             .stop_executions_keeping(
@@ -679,7 +680,7 @@ impl Manager {
             .await;
         self.set_state(
             &workspace.id,
-            workspace.state,
+            reserved_state,
             result
                 .as_ref()
                 .err()

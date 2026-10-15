@@ -327,7 +327,8 @@ impl Manager {
     async fn remove(&self, selector: &str, removal: Removal<'_>) -> Result<RemovalResult> {
         let workspace = self.workspace(selector).await?;
         let present = workspace.path.try_exists()?;
-        self.reserve_lifecycle_for_removal(&workspace.id, !present)
+        let reserved_state = self
+            .reserve_lifecycle_for_removal(&workspace.id, !present)
             .await?;
         // Checked again after the reservation, so a worktree restored meanwhile
         // cannot be deleted by an unattended removal.
@@ -365,7 +366,7 @@ impl Manager {
                 // A deleted directory can no longer be ready.
                 let state = match removal {
                     Removal::Deleted if !present => WorkspaceState::Failed,
-                    _ => workspace.state,
+                    _ => reserved_state,
                 };
                 self.retain_workspace(&workspace.id, state, removal.cause(), &error)
                     .await?;

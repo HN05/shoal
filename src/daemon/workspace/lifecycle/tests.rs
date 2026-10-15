@@ -46,6 +46,26 @@ async fn fixture_with_removal_hook(script: &str) -> (tempfile::TempDir, Arc<Mana
 }
 
 #[tokio::test]
+async fn lifecycle_reservation_returns_replaced_state() {
+    let (_root, manager, workspace) = fixture().await;
+    manager
+        .set_state(&workspace.id, WorkspaceState::Failed, None)
+        .await
+        .unwrap();
+
+    let previous = manager
+        .reserve_lifecycle(&workspace.id, WorkspaceState::Removing)
+        .await
+        .unwrap();
+
+    assert_eq!(previous, WorkspaceState::Failed);
+    assert_eq!(
+        manager.workspace(&workspace.id).await.unwrap().state,
+        WorkspaceState::Removing
+    );
+}
+
+#[tokio::test]
 async fn idle_removal_rechecks_head_and_ignored_activity_after_hooks() {
     for script in [
         "git commit --allow-empty -m 'hook work'",
