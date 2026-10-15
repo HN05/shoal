@@ -17,9 +17,9 @@ const FILE: &str = ".shoal-skills.json";
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub(super) enum Entry {
-    /// A symlink to the packaged skill.
+    /// A symlink to the packaged skill, which earlier versions installed.
     Link(PathBuf),
-    /// A copy of the embedded skill, by the SHA-256 of its contents.
+    /// A copy of the bundled skill, by the SHA-256 of its contents.
     Sha256(String),
     /// Changed or removed by the user; only an explicit install replaces it.
     Kept,

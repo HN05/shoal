@@ -32,7 +32,7 @@ class Shoal < Formula
 
   def caveats
     <<~EOS
-      Install the agent skills once (they follow future Homebrew upgrades).
+      Install the agent skills once (later shoal commands update them after upgrades).
       This fills existing skill directories; name a tool to create its directory:
         #{opt_bin}/shoal skill install
         #{opt_bin}/shoal skill install claude
@@ -55,8 +55,7 @@ class Shoal < Formula
     system bin/"shoal", "skill", "install", "codex"
     %w[shoal-worker shoal-orchestrator].each do |skill|
       installed = testpath/".agents/skills/#{skill}/SKILL.md"
-      assert_predicate installed, :symlink?
-      assert_equal (opt_share/"shoal/skills/#{skill}/SKILL.md").to_s, installed.readlink.to_s
+      refute_predicate installed, :symlink?
       assert_equal (share/"shoal/skills/#{skill}/SKILL.md").read, installed.read
     end
   end

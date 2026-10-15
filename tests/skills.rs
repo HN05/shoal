@@ -41,6 +41,15 @@ fn assert_installed(directory: &Path) {
     }
 }
 
+/// Codex skips a linked `SKILL.md`, so installed skills are regular files.
+fn assert_copies(directory: &Path, contents: &str) {
+    for (name, _) in SKILLS {
+        let path = directory.join(name).join("SKILL.md");
+        assert!(fs::symlink_metadata(&path).unwrap().is_file(), "{path:?}");
+        assert_eq!(fs::read_to_string(path).unwrap(), contents);
+    }
+}
+
 fn success(output: Output) -> Vec<u8> {
     assert!(
         output.status.success(),
@@ -63,7 +72,7 @@ fn copy_executable(home: &Path, destination: &Path) {
 }
 
 #[test]
-fn packaged_binary_runs_from_deleted_cwd_and_installs_stable_skill_links() {
+fn packaged_binary_runs_from_deleted_cwd_and_installs_skill_copies() {
     let home = tempfile::tempdir_in("/tmp").unwrap();
     let package = home.path().join("version one");
     let stable = home.path().join("opt");
@@ -105,22 +114,19 @@ fn packaged_binary_runs_from_deleted_cwd_and_installs_stable_skill_links() {
         }
     }
     let installed = home.path().join(".agents/skills");
-    for (name, _) in SKILLS {
-        assert_eq!(
-            fs::read_link(installed.join(name).join("SKILL.md")).unwrap(),
-            stable.join("skills").join(name).join("SKILL.md")
-        );
-    }
+    assert_copies(&installed, "version one");
     let upgraded = home.path().join("version two");
     write_skills(&upgraded.join("skills"), "version two");
     fs::remove_file(&stable).unwrap();
     symlink(&upgraded, &stable).unwrap();
-    for (name, _) in SKILLS {
-        assert_eq!(
-            fs::read_to_string(installed.join(name).join("SKILL.md")).unwrap(),
-            "version two"
-        );
-    }
+    // The next command copies the upgraded package's skills.
+    success(
+        support::isolated(home.path(), bin.join("shoal"))
+            .arg("skill")
+            .output()
+            .unwrap(),
+    );
+    assert_copies(&installed, "version two");
 
     // The explicit runtime source still overrides the adjacent package link.
     success(
@@ -130,53 +136,52 @@ fn packaged_binary_runs_from_deleted_cwd_and_installs_stable_skill_links() {
             .output()
             .unwrap(),
     );
-    assert_eq!(
-        fs::read_link(installed.join("shoal-worker/SKILL.md")).unwrap(),
-        package.join("skills/shoal-worker/SKILL.md")
-    );
+    assert_copies(&installed, "version one");
     assert!(!home.path().join("state").exists());
 }
 
 #[test]
-fn relative_packaged_skill_link_follows_homebrew_upgrades() {
+fn relative_packaged_skill_link_installs_copies_that_follow_homebrew_upgrades() {
     let home = tempfile::tempdir().unwrap();
     let prefix = fs::canonicalize(home.path()).unwrap();
-    let old = prefix.join("Cellar/shoal/0.5.0");
-    let new = prefix.join("Cellar/shoal/0.5.1");
+    let cellar = prefix.join("Cellar/shoal");
     let skills = Path::new("share/shoal/skills");
-    for (package, contents) in [(&old, "version one"), (&new, "version two")] {
-        write_skills(&package.join(skills), contents);
-    }
-    fs::create_dir_all(old.join("libexec")).unwrap();
-    copy_executable(home.path(), &old.join("libexec/shoal"));
-    symlink(
-        "../../../../opt/shoal/share/shoal/skills",
-        old.join("libexec/shoal-skills"),
-    )
-    .unwrap();
-    fs::create_dir(prefix.join("opt")).unwrap();
-    let stable = prefix.join("opt/shoal");
-    symlink("../Cellar/shoal/0.5.0", &stable).unwrap();
+    fs::create_dir_all(prefix.join("opt")).unwrap();
     fs::create_dir(prefix.join("bin")).unwrap();
+    let stable = prefix.join("opt/shoal");
     let launcher = prefix.join("bin/shoal");
-    symlink("../Cellar/shoal/0.5.0/libexec/shoal", &launcher).unwrap();
-
-    success(
-        support::isolated(home.path(), &launcher)
-            .args(["skill", "install", "codex"])
-            .output()
-            .unwrap(),
-    );
-    let installed = home.path().join(".agents/skills/shoal-worker/SKILL.md");
-    assert_eq!(
-        fs::read_link(&installed).unwrap(),
-        stable.join(skills).join("shoal-worker/SKILL.md")
-    );
-    assert_eq!(fs::read_to_string(&installed).unwrap(), "version one");
-    fs::remove_file(&stable).unwrap();
-    symlink("../Cellar/shoal/0.5.1", &stable).unwrap();
-    fs::remove_dir_all(old).unwrap();
-    assert_eq!(fs::read_to_string(&installed).unwrap(), "version two");
+    let installed = home.path().join(".agents/skills");
+    // Homebrew links the launcher into the versioned keg and the stable prefix to it.
+    for (version, args) in [
+        ("0.5.0", ["skill", "install", "codex"]),
+        ("0.5.1", ["skill", "orchestrator", "--json"]),
+    ] {
+        let package = cellar.join(version);
+        write_skills(&package.join(skills), version);
+        fs::create_dir_all(package.join("libexec")).unwrap();
+        copy_executable(home.path(), &package.join("libexec/shoal"));
+        symlink(
+            "../../../../opt/shoal/share/shoal/skills",
+            package.join("libexec/shoal-skills"),
+        )
+        .unwrap();
+        for link in [&stable, &launcher] {
+            let _ = fs::remove_file(link);
+        }
+        symlink(format!("../Cellar/shoal/{version}"), &stable).unwrap();
+        symlink(
+            format!("../Cellar/shoal/{version}/libexec/shoal"),
+            &launcher,
+        )
+        .unwrap();
+        success(
+            support::isolated(home.path(), &launcher)
+                .args(args)
+                .output()
+                .unwrap(),
+        );
+        assert_copies(&installed, version);
+    }
 }
 
 #[test]
