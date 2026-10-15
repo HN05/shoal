@@ -44,7 +44,7 @@ impl Manager {
         }
         let default_ref = git::local_ref(&default);
         let default_refresh = if upstream(&repo, &default_ref).await?.is_none() {
-            let commit = git_run(&repo.path, &["rev-parse", "--verify", &default_ref])
+            let commit = git::verify_revision(&repo.path, &default_ref, git_run)
                 .await
                 .with_context(|| format!("repository has no local {default} branch"))?
                 .trim()
@@ -74,7 +74,7 @@ impl Manager {
                 "sequencer",
                 "index.lock",
             ] {
-                let path = git_run(checkout, &["rev-parse", "--git-path", marker]).await?;
+                let path = git::metadata_path(checkout, marker, git_run).await?;
                 ensure!(
                     !checkout.join(path.trim()).exists(),
                     "{default} has an unfinished Git operation ({marker})"

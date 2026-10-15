@@ -144,6 +144,8 @@ instead of the PR delivery guidance below.
   own, and worktree files cannot set them.
 - Daemon ref updates disable Git credential and SSH askpass prompts without
   overriding the user's SSH transport; interactive Git retains normal prompting.
+  Production Git command arguments live in `git`; callers use named operations
+  and retain lifecycle and execution policy.
   Ancestry and exact-ref failures stop branch selection, refresh, and removal;
   only a documented negative exit status is a negative answer.
 - Explicit workspace paths override only that creation; reject overlaps with state,

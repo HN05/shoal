@@ -14,6 +14,8 @@ when behavior changes, distinguishing decisions from proposals.
   operations, and their helpers own lower-level implementation details.
 - Invoke external tools with argument arrays. Use Worktrunk for worktree
   operations and preserve Shoal's ownership records and cleanup policy.
+- Keep production Git command arguments in the `git` module; callers use named
+  operations and retain lifecycle and execution policy.
 - Repository TOML lives at `.shoal.toml` or `.shoal/config.toml`; reject both
   together. `setup_cmd` is tracked and gates
   readiness; hooks are untracked user processes with workspace identity and no

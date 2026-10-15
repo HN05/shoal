@@ -129,38 +129,7 @@ fn config_key(path: &[String]) -> Result<String> {
 /// checkout unless migrated to its config.worktree, so those are refused.
 pub async fn apply(worktree: &Path, profile: &Profile) -> Result<()> {
     let settings = profile.settings()?;
-    let shared = |key: &'static str, kind: &'static str| async move {
-        git::run_isolated(
-            worktree,
-            &[
-                "config",
-                "--local",
-                &format!("--type={kind}"),
-                "--default",
-                if kind == "bool" { "false" } else { "" },
-                "--get",
-                key,
-            ],
-        )
-        .await
-        .map(|value| value.trim().to_owned())
-    };
-    if shared("extensions.worktreeConfig", "bool").await? != "true" {
-        ensure!(
-            shared("core.worktree", "path").await?.is_empty()
-                && shared("core.bare", "bool").await? != "true",
-            "the repository's shared Git config sets core.worktree or core.bare; move them to the main worktree's config.worktree before using git profiles"
-        );
-        git::run_isolated(
-            worktree,
-            &["config", "--local", "extensions.worktreeConfig", "true"],
-        )
-        .await?;
-    }
-    for (key, value) in &settings {
-        git::run_isolated(worktree, &["config", "--worktree", key, value]).await?;
-    }
-    Ok(())
+    git::config::apply_worktree_settings(worktree, &settings).await
 }
 
 #[cfg(test)]

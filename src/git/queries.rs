@@ -45,6 +45,14 @@ pub async fn git_dir(repo: &Path) -> Result<PathBuf> {
     Ok(std::fs::canonicalize(dir.trim())?)
 }
 
+pub async fn metadata_path(
+    repo: &Path,
+    name: &str,
+    run: impl AsyncFn(&Path, &[&str]) -> Result<String>,
+) -> Result<String> {
+    run(repo, &["rev-parse", "--git-path", name]).await
+}
+
 pub async fn remotes(
     repo: &Path,
     run: impl AsyncFn(&Path, &[&str]) -> Result<String>,
