@@ -405,13 +405,11 @@ impl Manager {
         if let Some(name) = git_profile {
             self.config().git.profile(name)?;
         }
-        let (base, existing) = match source {
-            WorkspaceSource::New(base) => (base, None),
-            WorkspaceSource::Existing(branch, base) => (base, Some(branch)),
-        };
-        let base_branch = match &base {
-            Some(base) => stack::base_branch(&repo.path, base).await?,
-            None => None,
+        let base_branch = match &source {
+            WorkspaceSource::New(base) | WorkspaceSource::Existing(_, base) => match base {
+                Some(base) => stack::base_branch(&repo.path, base).await?,
+                None => None,
+            },
         };
         let name = derive_workspace_name(&name);
         let path = self.new_workspace_path(repo, &name, path).await?;
@@ -425,7 +423,7 @@ impl Manager {
         self.insert_workspace(workspace.clone(), base_branch)
             .await?;
         let result = self
-            .materialize_worktree(repo, &workspace, base, existing, git_profile)
+            .materialize_worktree(repo, &workspace, source, git_profile)
             .await;
         match result {
             Ok(needs_setup) => {
@@ -509,23 +507,20 @@ impl Manager {
         &self,
         repo: &crate::model::Repository,
         workspace: &Workspace,
-        base: Option<String>,
-        existing: Option<crate::git::existing_branch::Branch>,
+        source: WorkspaceSource,
         git_profile: Option<&str>,
     ) -> Result<bool> {
-        if let Some(branch) = &existing {
+        if let WorkspaceSource::Existing(branch, _) = &source {
             self.materialize_branch(repo, branch).await?;
         }
-        let base = self
-            .resolve_worktree_base(repo, workspace, base, existing.is_some())
-            .await?;
+        let base = self.resolve_worktree_base(repo, workspace, &source).await?;
         let commit = self.record_worktree_base(repo, workspace, &base).await?;
         worktrunk::create(
             &repo.path,
             &self.paths.worktrunk_config(),
             &workspace.path,
             &workspace.branch,
-            existing.is_none().then_some(commit.as_str()),
+            matches!(&source, WorkspaceSource::New(_)).then_some(commit.as_str()),
         )
         .await?;
         self.record_worktree_identity(workspace).await?;
@@ -536,64 +531,76 @@ impl Manager {
         Ok(settings.setup_cmd.is_some() || settings.pre_setup_cmd.is_some())
     }
 
-    /// Select the effective base and, for new branches only, refresh the local
-    /// default or fetch a named remote branch.
+    /// Select the effective base for the source branch.
     async fn resolve_worktree_base(
         &self,
         repo: &Repository,
         workspace: &Workspace,
-        base: Option<String>,
-        existing: bool,
+        source: &WorkspaceSource,
     ) -> Result<String> {
-        let base = if existing && base.is_none() {
-            Some(existing_base(repo, &workspace.branch).await?)
-        } else {
-            base
-        };
+        match source {
+            WorkspaceSource::Existing(_, base) => {
+                self.existing_branch_base(repo, &workspace.branch, base.as_deref())
+                    .await
+            }
+            WorkspaceSource::New(base) => self.new_branch_base(repo, base.as_deref()).await,
+        }
+    }
+
+    async fn existing_branch_base(
+        &self,
+        repo: &Repository,
+        branch: &str,
+        base: Option<&str>,
+    ) -> Result<String> {
+        match base {
+            Some(base) => Ok(base.to_owned()),
+            None => existing_base(repo, branch).await,
+        }
+    }
+
+    /// Select a new branch's base, refreshing the default or fetching a named
+    /// remote branch when needed.
+    async fn new_branch_base(&self, repo: &Repository, base: Option<&str>) -> Result<String> {
         let lookup = if base.is_none() {
             DefaultBranchLookup::Discover
         } else {
             DefaultBranchLookup::Cached
         };
         let default = crate::git::default_branch::resolve(&repo.path, lookup).await;
-        // An explicit ref remains an escape hatch when remote default-branch
-        // discovery is unavailable; only a remote branch it names is fetched.
-        let default = if base.is_none() {
-            Some(default?)
-        } else {
-            default.ok()
-        };
-        let default_ref = default.as_deref().map(git::local_ref);
-        let base = base
-            .as_deref()
-            .or(default_ref.as_deref())
-            .context("workspace base is unknown")?;
-        let refresh =
-            !existing && (default.as_deref() == Some(base) || default_ref.as_deref() == Some(base));
-        if refresh {
-            self.refresh_branch(
-                repo,
-                default.as_deref().unwrap(),
-                UpstreamPolicy::AllowLocalOnly,
-            )
-            .await
-            .context("could not refresh the default branch before creating workspace")?;
-        } else if !existing
-            && let Some((remote, branch)) = git::remote_branch(&repo.path, base).await?
-        {
-            let tracking = git::fetch::configured_branch(&repo.path, &remote, &branch)
-            .await
-            .with_context(|| {
-                format!("could not fetch {remote}/{branch} before creating workspace; pass a commit to start from the local state")
-            })?;
-            return Ok(tracking);
+        match base {
+            None => {
+                let default = default?;
+                self.refresh_branch(repo, &default, UpstreamPolicy::AllowLocalOnly)
+                    .await
+                    .context("could not refresh the default branch before creating workspace")?;
+                Ok(git::local_ref(&default))
+            }
+            Some(base) => {
+                // An explicit ref remains an escape hatch when remote
+                // default-branch discovery is unavailable; only a remote
+                // branch it names is fetched.
+                if let Ok(default) = default {
+                    let default_ref = git::local_ref(&default);
+                    if default == base || default_ref == base {
+                        self.refresh_branch(repo, &default, UpstreamPolicy::AllowLocalOnly)
+                            .await
+                            .context(
+                                "could not refresh the default branch before creating workspace",
+                            )?;
+                        return Ok(default_ref);
+                    }
+                }
+                if let Some((remote, branch)) = git::remote_branch(&repo.path, base).await? {
+                    return git::fetch::configured_branch(&repo.path, &remote, &branch)
+                        .await
+                        .with_context(|| {
+                            format!("could not fetch {remote}/{branch} before creating workspace; pass a commit to start from the local state")
+                        });
+                }
+                Ok(base.to_owned())
+            }
         }
-        let base = if refresh {
-            default_ref.as_deref().unwrap()
-        } else {
-            base
-        };
-        Ok(base.to_owned())
     }
 
     /// Record the base after refresh and before Worktrunk creates the worktree.
