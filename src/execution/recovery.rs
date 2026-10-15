@@ -346,19 +346,21 @@ pub fn pending(paths: &Paths, workspace_id: &str) -> Result<bool> {
     Ok(false)
 }
 
-/// Whether a stopped agent waits for `shoal resume` in the workspace.
-pub fn has_agent_record(paths: &Paths, workspace_id: &str) -> Result<bool> {
+/// The executions of stopped agents that wait for `shoal resume` in the workspace.
+pub fn agent_records(paths: &Paths, workspace_id: &str) -> Result<Vec<String>> {
     let entries = match std::fs::read_dir(paths.workspace_state(workspace_id)) {
         Ok(entries) => entries,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
         Err(error) => return Err(error.into()),
     };
+    let mut records = Vec::new();
     for entry in entries {
-        if entry?.file_name().to_string_lossy().ends_with(AGENT_SUFFIX) {
-            return Ok(true);
+        let name = entry?.file_name();
+        if let Some(id) = name.to_string_lossy().strip_suffix(AGENT_SUFFIX) {
+            records.push(id.to_owned());
         }
     }
-    Ok(false)
+    Ok(records)
 }
 
 pub(crate) fn consume(path: &std::path::Path) -> Result<()> {

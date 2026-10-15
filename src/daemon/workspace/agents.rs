@@ -328,13 +328,14 @@ impl Manager {
         Ok(())
     }
 
-    /// Workspaces with a tracked agent, including one awaiting overload recovery.
-    pub(super) async fn agent_workspaces(&self) -> std::collections::HashSet<String> {
+    /// Each tracked agent's execution and workspace, including one awaiting
+    /// overload recovery.
+    pub(super) async fn agent_executions(&self) -> std::collections::HashMap<String, String> {
         self.agents
             .lock()
             .await
-            .values()
-            .map(|agent| agent.workspace_id.clone())
+            .iter()
+            .map(|(id, agent)| (id.clone(), agent.workspace_id.clone()))
             .collect()
     }
 

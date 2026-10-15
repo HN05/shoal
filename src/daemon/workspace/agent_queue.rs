@@ -251,12 +251,12 @@ impl Manager {
         Ok(limits)
     }
 
-    /// One repository ID per used slot. A workspace that is not done uses a
-    /// slot while an agent runs there, awaits reattachment or resume, or a
-    /// starting entry opened it; a starting entry without a workspace uses its
-    /// own.
+    /// One repository ID per used slot. Each agent in a workspace that is not
+    /// done uses one while it runs, awaits reattachment or waits for resume,
+    /// counted once by its execution; so does each starting entry until its
+    /// agent registers.
     async fn occupied_slots(&self) -> Result<Vec<String>> {
-        let mut busy = self.agent_workspaces().await;
+        let mut agents = self.agent_executions().await;
         let (open, unknown, starting) = self
             .store
             .run(|db| {
@@ -268,9 +268,11 @@ impl Manager {
                     .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
                     .collect::<rusqlite::Result<HashMap<String, String>>>()?;
                 let unknown = db
-                    .prepare("SELECT DISTINCT workspace_id FROM executions WHERE state=?1")?
-                    .query_map([ExecutionState::Unknown], |row| row.get(0))?
-                    .collect::<rusqlite::Result<Vec<String>>>()?;
+                    .prepare("SELECT id,workspace_id FROM executions WHERE state=?1")?
+                    .query_map([ExecutionState::Unknown], |row| {
+                        Ok((row.get(0)?, row.get(1)?))
+                    })?
+                    .collect::<rusqlite::Result<Vec<(String, String)>>>()?;
                 let starting = db
                     .prepare("SELECT repository_id,workspace_id FROM agent_queue WHERE state=?1")?
                     .query_map([QueueState::Starting], |row| Ok((row.get(0)?, row.get(1)?)))?
@@ -278,21 +280,19 @@ impl Manager {
                 Ok((open, unknown, starting))
             })
             .await?;
-        busy.extend(unknown);
-        let mut occupied = Vec::new();
-        for (repository, workspace) in starting {
-            match workspace {
-                Some(workspace) => {
-                    busy.insert(workspace);
-                }
-                None => occupied.push(repository),
+        agents.extend(unknown);
+        for workspace in open.keys() {
+            for execution in crate::execution::recovery::agent_records(&self.paths, workspace)? {
+                agents.insert(execution, workspace.clone());
             }
         }
-        for (workspace, repository) in &open {
-            if busy.contains(workspace)
-                || crate::execution::recovery::has_agent_record(&self.paths, workspace)?
-            {
-                occupied.push(repository.clone());
+        let mut occupied: Vec<String> = agents
+            .values()
+            .filter_map(|workspace| open.get(workspace).cloned())
+            .collect();
+        for (repository, workspace) in starting {
+            if workspace.is_none_or(|workspace| open.contains_key(&workspace)) {
+                occupied.push(repository);
             }
         }
         Ok(occupied)

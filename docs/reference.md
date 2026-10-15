@@ -612,9 +612,9 @@ shoal rm issue-612-add-a-queue-cmd            # Removes a waiting entry
 `max_agents` limits the agents that run at once. The global value counts every
 agent on the machine; a repository's value (saved config or `.shoal.toml` in
 its registered checkout) counts only that repository's agents, within the
-global limit. Without either, nothing is queued. A workspace uses a slot while
-its tracked agent runs, awaits reattachment after a daemon restart, or waits for
-`shoal resume`, unless it is done; `shoal done`, the agent's exit, `resume
+global limit. Without either, nothing is queued. Each tracked agent uses a slot
+while it runs, awaits reattachment after a daemon restart, or waits for `shoal
+resume`, unless its workspace is done; `shoal done`, the agent's exit, `resume
 --discard` and removal free it.
 
 `shoal add` with an agent asks the daemon for a slot after resolving the issue,

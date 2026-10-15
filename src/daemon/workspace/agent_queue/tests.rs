@@ -267,3 +267,35 @@ async fn only_waiting_entries_can_be_removed() {
     assert!(manager.queue_remove("waiting").await.is_err());
     assert!(manager.queued_plan(&starting.id).await.is_ok());
 }
+
+#[tokio::test]
+async fn each_agent_execution_uses_its_own_slot() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 2);
+    let workspace = manager
+        .create_workspace(&repo.id, "busy".into(), None, None, None)
+        .await
+        .unwrap();
+    let id = workspace.id.clone();
+    // Two agents await reattachment in one workspace after a daemon restart.
+    manager
+        .store
+        .run(move |db| {
+            for execution in ["first", "second"] {
+                db.execute(
+                    "INSERT INTO executions(id,workspace_id,state) VALUES (?1,?2,?3)",
+                    params![execution, id, ExecutionState::Unknown],
+                )?;
+            }
+            Ok(())
+        })
+        .await
+        .unwrap();
+    // A resume record of the same execution is the same agent.
+    let record = crate::execution::recovery::record_path(&manager.paths, &workspace.id, "first");
+    std::fs::create_dir_all(record.parent().unwrap()).unwrap();
+    std::fs::write(&record, "{\"agent\":\"claude\"}").unwrap();
+    assert_eq!(manager.occupied_slots().await.unwrap().len(), 2);
+    assert!(!add(&manager, &repo, "waiting").await.start);
+}
