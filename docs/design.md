@@ -834,6 +834,8 @@ and mergeability fall back to the anonymous API, which reads the PR head without
 login, when `fj pr status` fails. The watch shares a
 persistent cursor per workspace and item, reporting existing activity on the first
 wait and changes between waits thereafter; cancelling the watch discards that cursor.
+An omitted timeout keeps the watch unbounded; an explicit timeout remains a bounded
+polling interval.
 Activity lookups run outside completion serialization; persisting results
 rechecks the watch set so cancelled watches cannot recreate their cursors.
 Unacknowledged deliveries persist with the cursor so timeout or disconnection

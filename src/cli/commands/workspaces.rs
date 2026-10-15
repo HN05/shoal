@@ -1747,7 +1747,7 @@ pub(super) async fn watch_items(
     ctx: &Context,
     workspace: String,
     selection: crate::forge::link::Selection,
-    timeout: u64,
+    timeout: Option<u64>,
 ) -> Result<i32> {
     let body = wait_for_items(ctx, &workspace, selection, timeout).await?;
     let updates = crate::forge::pr::wait::Updates::try_from(body)?;
@@ -1792,9 +1792,10 @@ async fn wait_for_items(
     ctx: &Context,
     workspace: &str,
     selection: Selection,
-    timeout: u64,
+    timeout: Option<u64>,
 ) -> Result<Body> {
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(timeout);
+    let deadline =
+        timeout.map(|timeout| std::time::Instant::now() + std::time::Duration::from_secs(timeout));
     let mut timeout_secs = timeout;
     loop {
         let method = Method::WatchItems {
@@ -1807,16 +1808,20 @@ async fn wait_for_items(
             Err(error) if client::stream_closed(&error) => {
                 tokio::time::sleep(crate::protocol::timing::DAEMON_POLL_INTERVAL).await;
                 // The daemon waits whole seconds, so less than one left ends here.
-                timeout_secs = deadline
-                    .saturating_duration_since(std::time::Instant::now())
-                    .as_secs();
-                if timeout_secs == 0 {
-                    return Ok(Body::PrUpdates(crate::forge::pr::wait::Updates {
-                        updates: Vec::new(),
-                        messages: Vec::new(),
-                        timed_out: true,
-                        superseded: false,
-                    }));
+                if let Some(deadline) = deadline {
+                    timeout_secs = Some(
+                        deadline
+                            .saturating_duration_since(std::time::Instant::now())
+                            .as_secs(),
+                    );
+                    if timeout_secs == Some(0) {
+                        return Ok(Body::PrUpdates(crate::forge::pr::wait::Updates {
+                            updates: Vec::new(),
+                            messages: Vec::new(),
+                            timed_out: true,
+                            superseded: false,
+                        }));
+                    }
                 }
             }
             Err(error) => return Err(error),
@@ -1862,7 +1867,7 @@ mod tests {
             assert!(matches!(
                 request.method,
                 Method::WatchItems {
-                    timeout_secs: 600,
+                    timeout_secs: Some(600),
                     ..
                 }
             ));
@@ -1878,7 +1883,7 @@ mod tests {
                 panic!("expected an item wait");
             };
             assert_eq!(workspace, "work");
-            assert!((1..=600).contains(&timeout_secs));
+            assert!((1..=600).contains(&timeout_secs.unwrap()));
             let updates = Updates {
                 updates: Vec::new(),
                 messages: Vec::new(),
@@ -1895,7 +1900,7 @@ mod tests {
         let ctx = Context::new(paths, true);
         let body = tokio::time::timeout(
             std::time::Duration::from_secs(60),
-            super::wait_for_items(&ctx, "work", Default::default(), 600),
+            super::wait_for_items(&ctx, "work", Default::default(), Some(600)),
         )
         .await
         .unwrap()
@@ -1925,7 +1930,7 @@ mod tests {
         let ctx = Context::new(paths, true);
         let body = tokio::time::timeout(
             std::time::Duration::from_secs(60),
-            super::wait_for_items(&ctx, "work", Default::default(), 1),
+            super::wait_for_items(&ctx, "work", Default::default(), Some(1)),
         )
         .await
         .unwrap()

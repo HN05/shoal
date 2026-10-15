@@ -874,7 +874,7 @@ async fn wait_pr_updates(
     request_id: u64,
     manager: Arc<Manager>,
     workspace: String,
-    timeout_secs: u64,
+    timeout_secs: Option<u64>,
 ) -> Result<()> {
     watch_item_updates(
         stream,
@@ -896,7 +896,7 @@ async fn watch_item_updates(
     manager: Arc<Manager>,
     workspace: String,
     selection: crate::forge::link::Selection,
-    timeout_secs: u64,
+    timeout_secs: Option<u64>,
 ) -> Result<()> {
     let mut closed = [0u8; 1];
     let result = tokio::select! {

@@ -153,7 +153,7 @@ pub(super) async fn unlink(ctx: &Context, items: ItemArgs) -> Result<i32> {
     Ok(0)
 }
 
-pub(super) async fn watch(ctx: &Context, items: ItemArgs, timeout: u64) -> Result<i32> {
+pub(super) async fn watch(ctx: &Context, items: ItemArgs, timeout: Option<u64>) -> Result<i32> {
     let selected = Selection::parse(items.kind_or_url, items.item)?;
     let workspace =
         ui::select_workspace(ctx, items.workspace, ui::Fallback::CurrentDirectory).await?;

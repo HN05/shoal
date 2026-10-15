@@ -139,3 +139,18 @@ fn bare_repo_opens_the_repository_menu() {
     let cli = <Cli as clap::Parser>::try_parse_from(["shoal", "repo", "list"]).unwrap();
     assert_eq!(menu_path(cli.command.as_ref()), None);
 }
+
+#[test]
+fn watch_waits_without_a_default_timeout() {
+    let cli = <Cli as clap::Parser>::try_parse_from(["shoal", "watch"]).unwrap();
+    let Command::Watch { timeout, .. } = cli.command.unwrap() else {
+        panic!("expected watch command");
+    };
+    assert_eq!(timeout, None);
+
+    let cli = <Cli as clap::Parser>::try_parse_from(["shoal", "watch", "--timeout", "60"]).unwrap();
+    let Command::Watch { timeout, .. } = cli.command.unwrap() else {
+        panic!("expected watch command");
+    };
+    assert_eq!(timeout, Some(60));
+}

@@ -115,7 +115,7 @@ struct ActivityRecord {
 
 impl Manager {
     #[cfg(test)]
-    pub async fn wait_prs(&self, selector: &str, seconds: u64) -> Result<Updates> {
+    pub async fn wait_prs(&self, selector: &str, seconds: Option<u64>) -> Result<Updates> {
         self.wait_items(
             selector,
             &Selection {
@@ -131,12 +131,14 @@ impl Manager {
         &self,
         selector: &str,
         selection: &Selection,
-        seconds: u64,
+        seconds: Option<u64>,
     ) -> Result<Updates> {
-        ensure!(
-            (1..=3600).contains(&seconds),
-            "watch timeout must be between 1 and 3600 seconds"
-        );
+        if let Some(seconds) = seconds {
+            ensure!(
+                (1..=3600).contains(&seconds),
+                "watch timeout must be between 1 and 3600 seconds"
+            );
+        }
         ensure!(
             selection.input.is_none() || selection.kind.is_some(),
             "explicit items need a kind"
@@ -539,23 +541,27 @@ fn watches_branch(selection: &Selection, items: &[(String, ItemKind)]) -> bool {
 }
 
 async fn wait_for_updates<F: std::future::Future<Output = Result<Vec<Update>>>>(
-    seconds: u64,
+    seconds: Option<u64>,
     mut poll: impl FnMut() -> F,
 ) -> Result<Updates> {
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(seconds);
+    let deadline =
+        seconds.map(|seconds| tokio::time::Instant::now() + Duration::from_secs(seconds));
     loop {
         // A cancelled poll may already have committed a pending delivery. The
         // next wait replays it, so the advertised timeout can remain strict.
-        let updates = match tokio::time::timeout_at(deadline, poll()).await {
-            Ok(updates) => updates?,
-            Err(_) => {
-                return Ok(Updates {
-                    updates: Vec::new(),
-                    messages: Vec::new(),
-                    timed_out: true,
-                    superseded: false,
-                });
-            }
+        let updates = match deadline {
+            Some(deadline) => match tokio::time::timeout_at(deadline, poll()).await {
+                Ok(updates) => updates?,
+                Err(_) => {
+                    return Ok(Updates {
+                        updates: Vec::new(),
+                        messages: Vec::new(),
+                        timed_out: true,
+                        superseded: false,
+                    });
+                }
+            },
+            None => poll().await?,
         };
         if !updates.is_empty() {
             return Ok(Updates {
@@ -565,16 +571,21 @@ async fn wait_for_updates<F: std::future::Future<Output = Result<Vec<Update>>>>(
                 superseded: false,
             });
         }
-        let now = tokio::time::Instant::now();
-        if now >= deadline {
-            return Ok(Updates {
-                updates: Vec::new(),
-                messages: Vec::new(),
-                timed_out: true,
-                superseded: false,
-            });
-        }
-        tokio::time::sleep(POLL_INTERVAL.min(deadline - now)).await;
+        let sleep_for = if let Some(deadline) = deadline {
+            let now = tokio::time::Instant::now();
+            if now >= deadline {
+                return Ok(Updates {
+                    updates: Vec::new(),
+                    messages: Vec::new(),
+                    timed_out: true,
+                    superseded: false,
+                });
+            }
+            POLL_INTERVAL.min(deadline - now)
+        } else {
+            POLL_INTERVAL
+        };
+        tokio::time::sleep(sleep_for).await;
     }
 }
 
@@ -591,7 +602,7 @@ mod tests {
     async fn polling_wakes_for_a_single_result_and_timeout_has_no_update() {
         let attempts = std::sync::atomic::AtomicUsize::new(0);
         let started = tokio::time::Instant::now();
-        let result = wait_for_updates(3600, || async {
+        let result = wait_for_updates(Some(3600), || async {
             Ok(
                 if attempts.fetch_add(1, std::sync::atomic::Ordering::Relaxed) == 0 {
                     Vec::new()
@@ -612,7 +623,7 @@ mod tests {
         assert_eq!(result.updates.len(), 1);
         assert_eq!(tokio::time::Instant::now() - started, POLL_INTERVAL);
         let started = tokio::time::Instant::now();
-        let result = wait_for_updates(75, || async { Ok(Vec::new()) })
+        let result = wait_for_updates(Some(75), || async { Ok(Vec::new()) })
             .await
             .unwrap();
         assert!(result.timed_out && result.updates.is_empty());
@@ -620,10 +631,37 @@ mod tests {
             tokio::time::Instant::now() - started,
             Duration::from_secs(75)
         );
-        let error = wait_for_updates(3600, || async { anyhow::bail!("lookup failed") })
+        let error = wait_for_updates(Some(3600), || async { anyhow::bail!("lookup failed") })
             .await
             .unwrap_err();
         assert_eq!(error.to_string(), "lookup failed");
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn polling_without_a_timeout_stays_unbounded() {
+        let attempts = std::sync::atomic::AtomicUsize::new(0);
+        let started = tokio::time::Instant::now();
+        let result = wait_for_updates(None, || async {
+            if attempts.fetch_add(1, std::sync::atomic::Ordering::Relaxed) == 120 {
+                Ok(vec![Update {
+                    url: "pr".into(),
+                    kind: UpdateKind::CiCompleted,
+                    message: "review passed".into(),
+                    delivery: String::new(),
+                    check: None,
+                }])
+            } else {
+                Ok(Vec::new())
+            }
+        })
+        .await
+        .unwrap();
+        assert!(!result.timed_out);
+        assert_eq!(result.updates.len(), 1);
+        assert_eq!(
+            tokio::time::Instant::now() - started,
+            Duration::from_secs(3600)
+        );
     }
 
     #[tokio::test]
@@ -658,14 +696,14 @@ mod tests {
             .send_agent_message(&workspace.id, "Rebase onto main".into())
             .await
             .unwrap();
-        let updates = manager.wait_prs(&workspace.id, 60).await.unwrap();
+        let updates = manager.wait_prs(&workspace.id, Some(60)).await.unwrap();
         assert!(updates.updates.is_empty() && !updates.timed_out);
         assert_eq!(updates.messages[0].message, "Rebase onto main");
         manager
             .mark_agent_messages_delivered(&workspace.id, vec![updates.messages[0].id])
             .await
             .unwrap();
-        assert!(manager.wait_prs(&workspace.id, 60).await.is_err());
+        assert!(manager.wait_prs(&workspace.id, Some(60)).await.is_err());
 
         let mut queued = manager.agent_messages_changed.subscribe();
         let waiting = {
@@ -829,7 +867,7 @@ mod tests {
         let gate = tokio::sync::Mutex::new(());
         let held = gate.lock().await;
         let started = tokio::time::Instant::now();
-        let result = wait_for_updates(1, || async {
+        let result = wait_for_updates(Some(1), || async {
             let _guard = gate.lock().await;
             Ok(Vec::new())
         })
@@ -843,7 +881,9 @@ mod tests {
         );
         drop(held);
         let started = tokio::time::Instant::now();
-        let result = wait_for_updates(1, std::future::pending).await.unwrap();
+        let result = wait_for_updates(Some(1), std::future::pending)
+            .await
+            .unwrap();
         assert!(result.timed_out);
         assert!(result.updates.is_empty());
         assert_eq!(
@@ -1016,11 +1056,11 @@ mod tests {
             .set_pr(&workspace.id, super::super::Action::Clear)
             .await
             .unwrap();
-        assert!(restarted.wait_prs(&workspace.id, 0).await.is_err());
-        assert!(restarted.wait_prs(&workspace.id, 3601).await.is_err());
+        assert!(restarted.wait_prs(&workspace.id, Some(0)).await.is_err());
+        assert!(restarted.wait_prs(&workspace.id, Some(3601)).await.is_err());
         assert!(
             restarted
-                .wait_prs(&workspace.id, 3600)
+                .wait_prs(&workspace.id, Some(3600))
                 .await
                 .unwrap_err()
                 .to_string()

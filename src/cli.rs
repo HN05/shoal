@@ -144,9 +144,9 @@ pub enum Command {
     Watch {
         #[command(flatten)]
         items: ItemArgs,
-        /// Return no updates when the wait expires (1–3600 seconds).
-        #[arg(long, default_value_t = 3600)]
-        timeout: u64,
+        /// Return no updates when the wait expires (1–3600 seconds); omitted means unbounded.
+        #[arg(long)]
+        timeout: Option<u64>,
     },
     /// Show linked items, one kind, or a selected issue or PR with status and discussion.
     View {
