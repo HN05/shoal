@@ -31,6 +31,12 @@ pub enum Worker<'a> {
         agent: Option<&'a str>,
         command: &'a [OsString],
     },
+    /// A tool run through its secret launcher in `launchers`; the launcher
+    /// appends the tool's arguments.
+    SecretTool {
+        launchers: &'a Path,
+        tool: &'a str,
+    },
     /// A tracked agent inside a zmx session; `records` are recovery records
     /// the launch consumes once it starts.
     Session {
@@ -80,6 +86,14 @@ pub fn internal_command(paths: &Paths, json: bool, worker: Worker<'_>) -> Result
             }
             args.push("--".into());
             args.extend_from_slice(command);
+        }
+        Worker::SecretTool { launchers, tool } => {
+            args.extend([
+                SECRET_TOOL.into(),
+                launchers.as_os_str().to_owned(),
+                tool.into(),
+                "--".into(),
+            ]);
         }
         Worker::Session {
             workspace,
@@ -189,6 +203,28 @@ mod tests {
                 assert_eq!(parsed_command, command);
             }
         }
+    }
+
+    #[test]
+    fn secret_tool_round_trips_launchers_and_tool() {
+        let launchers = Path::new("/state/secret tools");
+        let InternalCommand::SecretTool {
+            launchers: parsed_launchers,
+            tool,
+            args,
+        } = parse(
+            Worker::SecretTool {
+                launchers,
+                tool: "agent-browser",
+            },
+            false,
+        )
+        else {
+            panic!("expected secret tool worker");
+        };
+        assert_eq!(parsed_launchers, launchers);
+        assert_eq!(tool, "agent-browser");
+        assert!(args.is_empty());
     }
 
     #[test]

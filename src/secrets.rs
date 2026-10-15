@@ -129,31 +129,31 @@ impl Launch {
     }
 }
 
-/// One executable per tool that hands its arguments to
-/// `shoal internal secret-tool`, beside the manifest it reads.
+/// One executable per tool that hands its arguments to the secret tool
+/// worker, beside the manifest it reads.
 fn write_launchers(secrets: &Secrets, paths: &Paths) -> Result<tempfile::TempDir> {
     let directory = paths.secret_tools_directory()?;
     std::fs::write(
         directory.path().join(MANIFEST),
         serde_json::to_vec(secrets)?,
     )?;
-    let shoal = crate::fsutil::invoked_executable()?;
-    let words = |path: &Path| {
-        path.to_str()
-            .map(str::to_owned)
-            .with_context(|| format!("{} is not UTF-8", path.display()))
-    };
-    let (shoal, launchers) = (words(&shoal)?, words(directory.path())?);
     let tools: BTreeSet<_> = secrets.values().flat_map(|secret| &secret.tools).collect();
     for tool in tools {
-        let invocation = crate::shell::quote(&[
-            shoal.as_str(),
-            crate::cli::internal::GROUP,
-            crate::cli::internal::SECRET_TOOL,
-            &launchers,
-            tool,
-            "--",
-        ]);
+        let words = crate::cli::internal::internal_command(
+            paths,
+            false,
+            crate::cli::internal::Worker::SecretTool {
+                launchers: directory.path(),
+                tool,
+            },
+        )?
+        .into_iter()
+        .map(|word| {
+            word.into_string()
+                .map_err(|word| anyhow::anyhow!("{} is not UTF-8", word.to_string_lossy()))
+        })
+        .collect::<Result<Vec<_>>>()?;
+        let invocation = crate::shell::quote(&words);
         let path = directory.path().join(tool);
         std::fs::write(&path, format!("#!/bin/sh\nexec {invocation} \"$@\"\n"))?;
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))?;
