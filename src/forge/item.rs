@@ -53,6 +53,7 @@ pub(crate) struct Current {
     pub node_id: Option<String>,
     /// `owner/repository` of a PR's head branch.
     pub head_repository: Option<String>,
+    pub body: String,
 }
 
 impl ForgeRepo {
@@ -119,6 +120,7 @@ impl ForgeRepo {
             },
             node_id: text(&value["node_id"]),
             head_repository: text(&value["head"]["repo"]["full_name"]),
+            body: text(&value["body"]).unwrap_or_default(),
         })
     }
 }

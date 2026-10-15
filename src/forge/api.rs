@@ -10,13 +10,14 @@ use anyhow::{Context, Result, bail, ensure};
 use serde_json::Value;
 use tokio::process::Command;
 
-use super::{ForgeKind, ForgeRepo, account::Account};
+use super::{ForgeKind, ForgeRepo, account::Account, item::Current, link::ItemKind};
 use crate::tools::Tool;
 
 const TIMEOUT: Duration = Duration::from_secs(30);
 /// Forgejo's default maximum page size.
 const PAGE_SIZE: usize = 50;
 const MAX_LOG_BYTES: usize = 8 * 1024 * 1024;
+pub(super) const FORGEJO_LOGIN: &str = "Forgejo API request failed; private repositories need an fj login";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum HttpMethod {
@@ -210,14 +211,21 @@ impl ForgeRepo {
             &Request::get(self.repo_endpoint(endpoint)),
         )
         .await
-        .context("Forgejo API request failed; private repositories need an fj login")
+        .context(FORGEJO_LOGIN)
+    }
+
+    /// An issue or PR, read like [`Self::forgejo_api`].
+    pub(super) async fn forgejo_item(&self, kind: ItemKind, number: u64) -> Result<Current> {
+        self.read(&Account::user(), kind, number)
+            .await
+            .context(FORGEJO_LOGIN)
     }
 
     /// Every item of a paginated list endpoint.
     pub(super) async fn forgejo_api_pages(&self, endpoint: &str) -> Result<Vec<serde_json::Value>> {
         self.forgejo_pages(&Account::user(), &self.repo_endpoint(endpoint))
             .await
-            .context("Forgejo API request failed; private repositories need an fj login")
+            .context(FORGEJO_LOGIN)
     }
 
     /// Every item of a paginated Forgejo list endpoint, read as `account`.

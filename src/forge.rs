@@ -14,6 +14,7 @@ mod locator;
 pub mod pr;
 mod remote_url;
 pub mod repository;
+mod rest;
 mod retarget;
 pub mod updates;
 pub mod view;
@@ -173,7 +174,7 @@ impl ForgeRepo {
         self.kind.pull_route().resolve(self, input)
     }
 
-    /// Fail closed on changed CLI output. Only commits actually listed in the
+    /// Fail closed on changed output. Only commits actually listed in the
     /// merged PR can authorize cleanup, including squash/rebase merges.
     pub async fn merged_commits(
         &self,
@@ -181,71 +182,61 @@ impl ForgeRepo {
         number: u64,
         branch: &str,
     ) -> Result<Option<Vec<String>>> {
-        self.kind.merged_commits(self, path, number, branch).await
+        match self.kind {
+            ForgeKind::GitHub => github_merged_commits(self, path, number, branch).await,
+            ForgeKind::Forgejo => self
+                .rest_merged_commits(&account::Account::user(), number, branch)
+                .await
+                .context(api::FORGEJO_LOGIN)
+                .context(MERGED_HINT.trim_start_matches("; ").to_owned()),
+        }
     }
 }
 
-impl ForgeKind {
-    async fn merged_commits(
-        self,
-        repo: &ForgeRepo,
-        path: &std::path::Path,
-        number: u64,
-        branch: &str,
-    ) -> Result<Option<Vec<String>>> {
-        let number = number.to_string();
-        if self == Self::GitHub {
-            let output = self
-                .query(
-                    path,
-                    &[
-                        "pr",
-                        "view",
-                        &number,
-                        "--repo",
-                        &format!("{}/{}", repo.host, repo.path),
-                        "--json",
-                        "number,state,headRefName,commits",
-                    ],
-                    Query::Pull(MERGED_HINT),
-                )
-                .await?;
-            #[derive(serde::Deserialize)]
-            struct Commit {
-                oid: String,
-            }
-            #[derive(serde::Deserialize)]
-            struct Pull {
-                number: u64,
-                state: String,
-                #[serde(rename = "headRefName")]
-                branch: String,
-                commits: Vec<Commit>,
-            }
-            let pull: Pull = serde_json::from_str(&output)?;
-            ensure!(
-                pull.number.to_string() == number && pull.branch == branch,
-                "PR does not match the workspace branch"
-            );
-            ensure!(
-                matches!(pull.state.as_str(), "OPEN" | "CLOSED" | "MERGED"),
-                "unknown PR state"
-            );
-            Ok((pull.state == "MERGED").then(|| pull.commits.into_iter().map(|c| c.oid).collect()))
-        } else {
-            let args = [
-                "--style", "minimal", "pr", "view", &number, "--host", &repo.host,
-            ];
-            let output = self.query(path, &args, Query::Pull(MERGED_HINT)).await?;
-            if !fj_merged(&output, &number, Some(branch))? {
-                return Ok(None);
-            }
-            let mut args = args.to_vec();
-            args.push("commits");
-            let output = self.query(path, &args, Query::Pull(MERGED_HINT)).await?;
-            Ok(Some(output.lines().filter_map(commit_revision).collect()))
-        }
+async fn github_merged_commits(
+    repo: &ForgeRepo,
+    path: &std::path::Path,
+    number: u64,
+    branch: &str,
+) -> Result<Option<Vec<String>>> {
+    let number = number.to_string();
+    let output = ForgeKind::GitHub
+        .query(
+            path,
+            &[
+                "pr",
+                "view",
+                &number,
+                "--repo",
+                &format!("{}/{}", repo.host, repo.path),
+                "--json",
+                "number,state,headRefName,commits",
+            ],
+            Query::Pull(MERGED_HINT),
+        )
+        .await?;
+    #[derive(serde::Deserialize)]
+    struct Commit {
+        oid: String,
     }
+    #[derive(serde::Deserialize)]
+    struct Pull {
+        number: u64,
+        state: String,
+        #[serde(rename = "headRefName")]
+        branch: String,
+        commits: Vec<Commit>,
+    }
+    let pull: Pull = serde_json::from_str(&output)?;
+    ensure!(
+        pull.number.to_string() == number && pull.branch == branch,
+        "PR does not match the workspace branch"
+    );
+    ensure!(
+        matches!(pull.state.as_str(), "OPEN" | "CLOSED" | "MERGED"),
+        "unknown PR state"
+    );
+    Ok((pull.state == "MERGED").then(|| pull.commits.into_iter().map(|c| c.oid).collect()))
 }
 
 impl ForgeKind {
@@ -255,59 +246,46 @@ impl ForgeKind {
         path: &std::path::Path,
         number: u64,
     ) -> Result<(String, String)> {
-        let id = number.to_string();
-        let (title, details) = if self == Self::GitHub {
-            let repo = format!("{}/{}", repo.host, repo.path);
-            let args = [
-                "issue",
-                "view",
-                &id,
-                "--repo",
-                &repo,
-                "--json",
-                "number,title,body,state",
-            ];
-            let text = self.query(path, &args, Query::Issue).await?;
-            issue::require_open(self, &text, number)?;
-            #[derive(serde::Deserialize)]
-            struct GitHubIssue {
-                number: u64,
-                title: String,
-                body: Option<String>,
+        let (title, details) = match self {
+            Self::GitHub => github_issue_details(repo, path, number).await?,
+            Self::Forgejo => {
+                let issue = repo.forgejo_item(link::ItemKind::Issue, number).await?;
+                issue::require_open(issue.item.state)?;
+                (issue.item.title, issue.body)
             }
-            let issue: GitHubIssue =
-                serde_json::from_str(&text).context("invalid gh issue response")?;
-            ensure!(issue.number == number, "gh returned a different issue");
-            (issue.title, issue.body.unwrap_or_default())
-        } else {
-            let args = [
-                "--style", "minimal", "issue", "view", &id, "--host", &repo.host, "--remote",
-                "origin",
-            ];
-            let text = self.query(path, &args, Query::Issue).await?;
-            issue::require_open(self, &text, number)?;
-            forgejo_details(&text, number)?
         };
         ensure!(!title.trim().is_empty(), "issue title is empty");
         Ok((title, details))
     }
 }
 
-// fj currently has no JSON mode. Minimal output starts with `<title> #<id>`
-// (some versions append a quote), with bidi isolates even when stdout is piped.
-fn forgejo_details(text: &str, number: u64) -> Result<(String, String)> {
-    let text = strip_bidi_isolates(text);
-    let text = text.trim();
-    let (header, details) = text
-        .split_once('\n')
-        .context("unrecognized fj issue output")?;
-    let suffix = format!(" #{number}");
-    let title = header
-        .trim_end()
-        .trim_end_matches('"')
-        .strip_suffix(&suffix)
-        .context("unrecognized fj issue title; expected title and issue number")?;
-    Ok((title.to_owned(), details.trim().to_owned()))
+async fn github_issue_details(
+    repo: &ForgeRepo,
+    path: &std::path::Path,
+    number: u64,
+) -> Result<(String, String)> {
+    let id = number.to_string();
+    let repo = format!("{}/{}", repo.host, repo.path);
+    let args = [
+        "issue",
+        "view",
+        &id,
+        "--repo",
+        &repo,
+        "--json",
+        "number,title,body,state",
+    ];
+    let text = ForgeKind::GitHub.query(path, &args, Query::Issue).await?;
+    issue::require_open(issue::github_state(&text, number)?)?;
+    #[derive(serde::Deserialize)]
+    struct GitHubIssue {
+        number: u64,
+        title: String,
+        body: Option<String>,
+    }
+    let issue: GitHubIssue = serde_json::from_str(&text).context("invalid gh issue response")?;
+    ensure!(issue.number == number, "gh returned a different issue");
+    Ok((issue.title, issue.body.unwrap_or_default()))
 }
 
 /// A PR's branches, for checking it out locally.
@@ -355,87 +333,42 @@ impl ForgeKind {
         path: &std::path::Path,
         number: u64,
     ) -> Result<(String, String, String)> {
-        let id = number.to_string();
-        if self == Self::GitHub {
-            let repo = format!("{}/{}", repo.host, repo.path);
-            let fields = "number,title,headRefName,baseRefName,isCrossRepository";
-            let args = ["pr", "view", &id, "--repo", &repo, "--json", fields];
-            #[derive(serde::Deserialize)]
-            #[serde(rename_all = "camelCase")]
-            struct Pull {
-                number: u64,
-                title: String,
-                head_ref_name: String,
-                base_ref_name: String,
-                is_cross_repository: bool,
-            }
-            let pull: Pull = serde_json::from_str(&self.query(path, &args, Query::Pull("")).await?)
-                .context("invalid gh PR response")?;
-            ensure!(pull.number == number, "gh returned a different PR");
-            ensure!(
-                !pull.is_cross_repository,
-                "PR #{number} comes from a fork; only branches in this repository can be opened"
-            );
-            Ok((pull.title, pull.head_ref_name, pull.base_ref_name))
-        } else {
-            let args = [
-                "--style", "minimal", "pr", "view", &id, "--host", &repo.host,
-            ];
-            fj_pull(&self.query(path, &args, Query::Pull("")).await?, &id)
+        match self {
+            Self::GitHub => github_pull_details(repo, path, number).await,
+            Self::Forgejo => repo
+                .rest_pull_details(&account::Account::user(), number)
+                .await
+                .context(api::FORGEJO_LOGIN),
         }
     }
 }
 
-/// Title, head and base from fj's minimal `pr view`.
-fn fj_pull(text: &str, number: &str) -> Result<(String, String, String)> {
-    let text = strip_bidi_isolates(text);
-    let mut lines = text.lines();
-    let title = lines
-        .next()
-        .and_then(|s| s.trim_end().strip_suffix(&format!(" #{number}")))
-        .context("unrecognized fj PR header")?;
-    let (head, base) = lines
-        .nth(1)
-        .and_then(|s| {
-            s.strip_prefix("From `")?
-                .strip_suffix('`')?
-                .split_once("` into `")
-        })
-        .context("unrecognized fj PR branches")?;
-    // fj names a fork's head `<repository>:<branch>`; branch names cannot contain `:`.
+async fn github_pull_details(
+    repo: &ForgeRepo,
+    path: &std::path::Path,
+    number: u64,
+) -> Result<(String, String, String)> {
+    let id = number.to_string();
+    let repo = format!("{}/{}", repo.host, repo.path);
+    let fields = "number,title,headRefName,baseRefName,isCrossRepository";
+    let args = ["pr", "view", &id, "--repo", &repo, "--json", fields];
+    #[derive(serde::Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Pull {
+        number: u64,
+        title: String,
+        head_ref_name: String,
+        base_ref_name: String,
+        is_cross_repository: bool,
+    }
+    let output = ForgeKind::GitHub.query(path, &args, Query::Pull("")).await?;
+    let pull: Pull = serde_json::from_str(&output).context("invalid gh PR response")?;
+    ensure!(pull.number == number, "gh returned a different PR");
     ensure!(
-        !head.contains(':'),
+        !pull.is_cross_repository,
         "PR #{number} comes from a fork; only branches in this repository can be opened"
     );
-    Ok((title.to_owned(), head.to_owned(), base.to_owned()))
-}
-
-fn fj_merged(text: &str, number: &str, branch: Option<&str>) -> Result<bool> {
-    let text = strip_bidi_isolates(text);
-    let mut lines = text.lines();
-    ensure!(
-        lines
-            .next()
-            .is_some_and(|s| s.trim_end().ends_with(&format!(" #{number}"))),
-        "unrecognized fj PR header"
-    );
-    let state = lines
-        .next()
-        .and_then(|s| s.split(" — ").nth(1))
-        .context("unrecognized fj PR state")?;
-    ensure!(
-        matches!(state, "Open" | "Closed" | "Merged"),
-        "unrecognized fj PR state"
-    );
-    if let Some(branch) = branch {
-        ensure!(
-            lines.next().is_some_and(
-                |s| s.starts_with(&format!("From `{branch}` into `")) && s.ends_with('`')
-            ),
-            "PR does not match the workspace branch"
-        );
-    }
-    Ok(state == "Merged")
+    Ok((pull.title, pull.head_ref_name, pull.base_ref_name))
 }
 
 fn strip_bidi_isolates(text: &str) -> String {
@@ -587,16 +520,6 @@ mod tests {
     }
 
     #[test]
-    fn fj_minimal_output_preserves_issue_details() {
-        let text = "\u{2068}Add issue workspaces\u{2069} #\u{2068}34\u{2069}\"\nBy user — Open\n\n> Needs fj and gh\n\n0 comments\n";
-        let (title, details) = forgejo_details(text, 34).unwrap();
-        assert_eq!(title, "Add issue workspaces");
-        assert!(details.contains("Needs fj and gh"));
-        assert!(forgejo_details(text, 35).is_err());
-        assert!(forgejo_details("changed output", 34).is_err());
-    }
-
-    #[test]
     fn backend_is_selected_from_the_normalized_remote_host() {
         for (remote, kind, tool) in [
             ("git@GitHub.COM:team/repo.git", ForgeKind::GitHub, "gh"),
@@ -623,7 +546,7 @@ mod tests {
     }
 
     #[test]
-    fn pr_identity_and_state_are_strict() {
+    fn pr_identity_is_strict() {
         let repo = ForgeRepo::parse("git@example.com:team/repo.git").unwrap();
         assert_eq!(
             repo.pull("https://example.com/team/repo/pulls/56").unwrap(),
@@ -636,50 +559,10 @@ mod tests {
         ] {
             assert!(repo.pull(url).is_err());
         }
-        let output = "Title #56\nBy user — Merged — +1 -0\nFrom `feature` into `main`\n\n> Merged";
-        assert!(fj_merged(output, "56", Some("feature")).unwrap());
-        assert!(
-            !fj_merged(
-                &output.replacen("— Merged", "— Closed", 1),
-                "56",
-                Some("feature")
-            )
-            .unwrap()
-        );
-        assert!(
-            !fj_merged(
-                &output.replacen("— Merged", "— Open", 1),
-                "56",
-                Some("feature")
-            )
-            .unwrap()
-        );
-        assert!(fj_merged(output, "57", Some("feature")).is_err());
-        assert!(fj_merged(output, "56", Some("other")).is_err());
-        assert!(fj_merged("Merged", "56", Some("feature")).is_err());
-        assert!(fj_merged(output, "56", None).unwrap());
-        assert!(fj_merged(output, "57", None).is_err());
     }
 
     #[test]
-    fn fj_pull_reads_title_and_branches() {
-        let output = "\u{2068}Fix `x` #2\u{2069} #\u{2068}56\u{2069}\nBy user — Open — +1 -0\n\u{2068}From `\u{2068}feature/a\u{2069}` into `\u{2068}main\u{2069}`\u{2069}\n";
-        assert_eq!(
-            fj_pull(output, "56").unwrap(),
-            ("Fix `x` #2".into(), "feature/a".into(), "main".into())
-        );
-        assert!(fj_pull(output, "57").is_err());
-        let fork = output.replace(
-            "From `\u{2068}feature/a",
-            "From `\u{2068}someone/repo:feature/a",
-        );
-        assert!(
-            fj_pull(&fork, "56")
-                .unwrap_err()
-                .to_string()
-                .contains("fork")
-        );
-        assert!(fj_pull("Title #56\nBy user\n", "56").is_err());
+    fn pull_urls_name_their_repository() {
         let repo = ForgeRepo::from_pull_url("https://github.com/team/repo/pull/56/files").unwrap();
         assert_eq!(repo, ForgeRepo::parse("git@github.com:team/repo").unwrap());
         assert!(ForgeRepo::from_pull_url("https://github.com/team/repo/issues/56").is_err());

@@ -1,6 +1,7 @@
 use super::{Check, Snapshot};
 use crate::forge::{
-    ForgeKind, ForgeRepo, Query, commit_revision, fj_merged,
+    ForgeKind, ForgeRepo, Query, commit_revision,
+    link::ItemKind,
     pr::state::{CheckResult, PrState, PrStatus, Verdict, fj_reviews, github_reviews, summarize},
     strip_bidi_isolates,
 };
@@ -45,16 +46,11 @@ impl ForgeRepo {
                 }
             }
             ForgeKind::Forgejo => {
-                let args = [
-                    "--style", "minimal", "issue", "view", &id, "--host", &self.host, "--remote",
-                    "origin",
-                ];
-                let output = self.kind.query(path, &args, Query::Issue).await?;
-                snapshot.state = super::super::issue::state(self.kind, &output, number)?;
-                let args = [&args[..], &["comments"]].concat();
+                let issue = self.forgejo_item(ItemKind::Issue, number).await?;
+                snapshot.state = issue.item.state.as_str().into();
                 snapshot.record_comments(
                     "discussion",
-                    self.kind.query(path, &args, Query::Issue).await,
+                    self.forgejo_discussion_fingerprint(number).await,
                 );
             }
         }
@@ -186,6 +182,14 @@ impl ForgeRepo {
         Ok(snapshot)
     }
 
+    /// What changes when a comment on the item is added, edited or deleted.
+    async fn forgejo_discussion_fingerprint(&self, number: u64) -> Result<String> {
+        let comments = self
+            .forgejo_api(&format!("issues/{number}/comments"))
+            .await?;
+        rest_fingerprint(&comments)
+    }
+
     /// `fj pr status` 0.6 reads CI from the PR commit with the newest timestamp. When a
     /// rebase gives every commit the same timestamp it picks the oldest, and fails when
     /// that commit has no CI. Forgejo's API reads the head commit, so it is the fallback.
@@ -315,6 +319,34 @@ fn record_reviews(status: &mut PrStatus, reviews: Result<Vec<(String, Verdict)>>
     }
 }
 
+fn fj_merged(text: &str, number: &str, branch: Option<&str>) -> Result<bool> {
+    let text = strip_bidi_isolates(text);
+    let mut lines = text.lines();
+    ensure!(
+        lines
+            .next()
+            .is_some_and(|s| s.trim_end().ends_with(&format!(" #{number}"))),
+        "unrecognized fj PR header"
+    );
+    let state = lines
+        .next()
+        .and_then(|s| s.split(" — ").nth(1))
+        .context("unrecognized fj PR state")?;
+    ensure!(
+        matches!(state, "Open" | "Closed" | "Merged"),
+        "unrecognized fj PR state"
+    );
+    if let Some(branch) = branch {
+        ensure!(
+            lines.next().is_some_and(
+                |s| s.starts_with(&format!("From `{branch}` into `")) && s.ends_with('`')
+            ),
+            "PR does not match the workspace branch"
+        );
+    }
+    Ok(state == "Merged")
+}
+
 fn forgejo_state(text: &str, number: &str, branch: Option<&str>) -> Result<PrState> {
     Ok(if fj_merged(text, number, branch)? {
         PrState::Merged
@@ -418,6 +450,25 @@ fn comment_fingerprint(item: &serde_json::Value) -> String {
         "lastEditedAt": item["lastEditedAt"],
     })
     .to_string()
+}
+
+/// Each REST comment's ID, content and edit time.
+fn rest_fingerprint(items: &serde_json::Value) -> Result<String> {
+    let items = items.as_array().context("comments are not a list")?;
+    Ok(serde_json::Value::from(
+        items
+            .iter()
+            .map(|item| {
+                serde_json::json!({
+                    "id": item["id"],
+                    "body": item["body"],
+                    "state": item["state"],
+                    "updated_at": item["updated_at"],
+                })
+            })
+            .collect::<Vec<_>>(),
+    )
+    .to_string())
 }
 
 fn args_for_commits<'a>(id: &'a str, host: &'a str) -> [&'a str; 8] {

@@ -3,7 +3,7 @@ use anyhow::{Context, Result, ensure};
 use rusqlite::OptionalExtension;
 use serde::{Deserialize, Serialize};
 
-use super::{ForgeKind, ForgeRepo, Query, forgejo_details, repository};
+use super::{ForgeKind, ForgeRepo, Query, item::ItemState, link::ItemKind, repository};
 use crate::{
     daemon::{
         events::{self, EventKind},
@@ -240,80 +240,61 @@ impl Manager {
     }
 }
 
-#[derive(Debug, PartialEq, serde::Deserialize)]
-#[serde(rename_all = "UPPERCASE")]
-enum IssueState {
-    Open,
-    Closed,
-}
-
 impl ForgeRepo {
     pub async fn issue_closed(&self, path: &std::path::Path, number: u64) -> Result<bool> {
-        let id = number.to_string();
-        let repo = format!("{}/{}", self.host, self.path);
-        let args = match self.kind {
-            ForgeKind::GitHub => vec![
-                "issue",
-                "view",
-                &id,
-                "--repo",
-                &repo,
-                "--json",
-                "number,state",
-            ],
-            ForgeKind::Forgejo => vec![
-                "--style", "minimal", "issue", "view", &id, "--host", &self.host, "--remote",
-                "origin",
-            ],
-        };
-        let output = self.kind.query(path, &args, Query::Issue).await?;
-        Ok(parse_state(self.kind, &output, number)? == IssueState::Closed)
+        Ok(self.issue_state(path, number).await? == ItemState::Closed)
+    }
+
+    /// An issue's state; a PR's number is refused.
+    pub(super) async fn issue_state(&self, path: &std::path::Path, number: u64) -> Result<ItemState> {
+        match self.kind {
+            ForgeKind::GitHub => {
+                let id = number.to_string();
+                let repo = format!("{}/{}", self.host, self.path);
+                let args = [
+                    "issue",
+                    "view",
+                    &id,
+                    "--repo",
+                    &repo,
+                    "--json",
+                    "number,state",
+                ];
+                let output = self.kind.query(path, &args, Query::Issue).await?;
+                github_state(&output, number)
+            }
+            ForgeKind::Forgejo => Ok(self.forgejo_item(ItemKind::Issue, number).await?.item.state),
+        }
     }
 }
 
-pub(super) fn require_open(kind: ForgeKind, output: &str, number: u64) -> Result<()> {
+pub(super) fn require_open(state: ItemState) -> Result<()> {
     ensure!(
-        parse_state(kind, output, number)? == IssueState::Open,
+        state == ItemState::Open,
         "issue is already closed; reopen it before starting an issue workspace"
     );
     Ok(())
 }
 
-pub(super) fn state(kind: ForgeKind, output: &str, number: u64) -> Result<String> {
-    Ok(match parse_state(kind, output, number)? {
-        IssueState::Open => "open",
-        IssueState::Closed => "closed",
+/// The state `gh issue view --json number,state` reports.
+pub(super) fn github_state(output: &str, number: u64) -> Result<ItemState> {
+    #[derive(serde::Deserialize)]
+    #[serde(rename_all = "UPPERCASE")]
+    enum State {
+        Open,
+        Closed,
     }
-    .into())
-}
-
-fn parse_state(kind: ForgeKind, output: &str, number: u64) -> Result<IssueState> {
-    match kind {
-        ForgeKind::GitHub => {
-            #[derive(serde::Deserialize)]
-            struct Issue {
-                number: u64,
-                state: IssueState,
-            }
-            let issue: Issue = serde_json::from_str(output).context("invalid gh issue response")?;
-            ensure!(issue.number == number, "gh returned a different issue");
-            Ok(issue.state)
-        }
-        ForgeKind::Forgejo => {
-            let (_, details) = forgejo_details(output, number)?;
-            let (_, state) = details
-                .lines()
-                .next()
-                .and_then(|line| line.strip_prefix("By "))
-                .and_then(|line| line.rsplit_once(" — "))
-                .context("unrecognized fj issue state")?;
-            match state {
-                "Open" => Ok(IssueState::Open),
-                "Closed" => Ok(IssueState::Closed),
-                _ => anyhow::bail!("unknown fj issue state: {state}"),
-            }
-        }
+    #[derive(serde::Deserialize)]
+    struct Issue {
+        number: u64,
+        state: State,
     }
+    let issue: Issue = serde_json::from_str(output).context("invalid gh issue response")?;
+    ensure!(issue.number == number, "gh returned a different issue");
+    Ok(match issue.state {
+        State::Open => ItemState::Open,
+        State::Closed => ItemState::Closed,
+    })
 }
 
 #[cfg(test)]
@@ -450,43 +431,17 @@ mod tests {
 
     #[test]
     fn github_requires_matching_number_and_known_state() {
-        for (state, expected) in [("OPEN", IssueState::Open), ("CLOSED", IssueState::Closed)] {
+        for (state, expected) in [("OPEN", ItemState::Open), ("CLOSED", ItemState::Closed)] {
             let output = serde_json::json!({"number": 316, "state": state}).to_string();
-            assert_eq!(
-                parse_state(ForgeKind::GitHub, &output, 316).unwrap(),
-                expected
-            );
-            assert!(parse_state(ForgeKind::GitHub, &output, 1).is_err());
+            assert_eq!(github_state(&output, 316).unwrap(), expected);
+            assert!(github_state(&output, 1).is_err());
         }
         for output in [
             r#"{"number":316,"state":"MERGED"}"#,
             r#"{"number":316}"#,
             "",
         ] {
-            assert!(parse_state(ForgeKind::GitHub, output, 316).is_err());
-        }
-    }
-
-    #[test]
-    fn forgejo_checks_header_state_without_reading_body_as_status() {
-        for (state, expected) in [("Open", IssueState::Open), ("Closed", IssueState::Closed)] {
-            let output = format!(
-                "\u{2068}Issue title\u{2069} #\u{2068}316\u{2069}\"\nBy user — \u{2068}{state}\u{2069}\n\nBy user — Closed\n\n0 comments\n"
-            );
-            assert_eq!(
-                parse_state(ForgeKind::Forgejo, &output, 316).unwrap(),
-                expected
-            );
-            assert!(parse_state(ForgeKind::Forgejo, &output, 1).is_err());
-        }
-        for details in [
-            "By user — Merged",
-            "By user",
-            "garbage\nBy user — Closed",
-            "",
-        ] {
-            let output = format!("Issue title #316\n{details}");
-            assert!(parse_state(ForgeKind::Forgejo, &output, 316).is_err());
+            assert!(github_state(output, 316).is_err());
         }
     }
 }
