@@ -263,7 +263,10 @@ configured command for another agent, plus proven child
   termination, verified ready workspace ownership and sustained healthy headroom.
   Keep waiting wrappers tracked, serialize restores and honor manual stop/removal.
   Persist overload recovery and its reason before delivering the stop, reporting save failures
-  without disabling protection. Manual and automatic restores prompt agents to continue unfinished
+  without disabling protection. Records keep the stop's stage; after a restart a
+  quarantined execution with a saved record is forgotten only once its wrapper
+  exited and no owned process survives, and only survivors or incomplete
+  evidence notify. Manual and automatic restores prompt agents to continue unfinished
   work, through `{prompt}` for configured commands, without replaying the original prompt; consume the
   selected record only after its replacement process is registered. Unrelated
   executions do not block manual recovery.

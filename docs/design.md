@@ -97,9 +97,15 @@ recovered. Manual and automatic restores prompt the agent to continue its
 unfinished assignment; configured restore commands receive that prompt through
 `{prompt}`. Never replay the original task prompt. Keep waiting wrappers tracked, serialize
 restores, and preserve manual recovery across restarts. Saved recovery represents
-unfinished work until restored or explicitly discarded; `shoal resume` reconciles
-the stale execution left by a daemon restart when its saved handoff has no
-surviving process.
+unfinished work until restored or explicitly discarded. A record names the
+stop's stage: the daemon saves `stopping` before delivering a stop, and the
+wrapper saves `stopped` after ending the agent. After a restart the daemon
+forgets a quarantined execution with a saved record once its wrapper has exited
+and no owned process survives, if its launch identity is complete or the record
+reached `stopped`, since the daemon clears a stopped child's identity only after
+verifying the stop. Live wrappers are rechecked when they exit. Survivors and
+incomplete evidence keep the execution for `shoal doctor` and are the only
+outcome that notifies; `shoal resume` still reconciles the execution it selects.
 Agent metadata is transient, so restart cannot select disconnected survivors.
 Warnings come first: below each enabled protection's stop threshold, the daemon
 queues an agent message for every workspace with a running agent, so agents can
@@ -906,8 +912,9 @@ shell integration locally, including when the daemon is unavailable. Opening
 persistence only migrates schema. Under the daemon lock, startup then atomically
 quarantines interrupted operations in a separate transaction before ownership
 auditing, serving requests, or cleanup; failure aborts startup and leaves committed
-migrations available for retry. Startup audits but never deletes, kills, clears
-unknown executions, or releases leases.
+migrations available for retry. Startup audits but never deletes, kills or
+releases leases, and clears an unknown execution only when stopped-agent
+reconciliation proves it ended.
 Survivors are signaled only after verifying PID birth identity and same-user
 ownership; acknowledgement cannot override visible live processes. Recheck
 unreadable process identities before treating visibility as incomplete; an

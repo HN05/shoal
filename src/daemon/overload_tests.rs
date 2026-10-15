@@ -3,6 +3,8 @@ use super::*;
 use crate::test_support::{manager, repository};
 use std::{fs::OpenOptions, future::Future, os::unix::fs::PermissionsExt};
 
+mod restart;
+
 /// A hang guard, not a deadline for process scans on a shared CI host. Its
 /// panic names the caller, so a hang shows which exchange never finished.
 #[track_caller]
@@ -66,14 +68,31 @@ async fn fixture() -> (
         "[agent_resume]\nfixture = ['./resume.sh']\n",
     )
     .unwrap();
+    let serving = serve_fixture(manager.clone());
+    (
+        FixtureRoot {
+            _root: root,
+            _process_guard: process_guard,
+            _process_file_guard: process_file_guard,
+        },
+        manager,
+        workspace,
+        serving,
+    )
+}
+
+/// Serve `manager` on its socket as the daemon does, replacing a socket left
+/// by an earlier fixture server.
+fn serve_fixture(manager: Arc<Manager>) -> tokio::task::JoinHandle<()> {
+    let _ = fs::remove_file(&manager.paths.socket);
     let listener = UnixListener::bind(&manager.paths.socket).unwrap();
     let server = Server {
-        manager: manager.clone(),
+        manager,
         started: Instant::now(),
         managed: false,
         shutdown: watch::channel(false).0,
     };
-    let serving = tokio::spawn(async move {
+    tokio::spawn(async move {
         let mut clients = JoinSet::new();
         loop {
             tokio::select! {
@@ -90,17 +109,7 @@ async fn fixture() -> (
                 }
             }
         }
-    });
-    (
-        FixtureRoot {
-            _root: root,
-            _process_guard: process_guard,
-            _process_file_guard: process_file_guard,
-        },
-        manager,
-        workspace,
-        serving,
-    )
+    })
 }
 
 #[tokio::test]
@@ -365,7 +374,11 @@ async fn tracked_agent_child() {
         Some("fixture".into()),
     )
     .await
-    .unwrap();
+    // A daemon crash ends the wrapper with an error, as it does a real one.
+    .unwrap_or_else(|error| {
+        eprintln!("shoal: {error:#}");
+        1
+    });
     std::process::exit(code);
 }
 

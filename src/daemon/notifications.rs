@@ -23,6 +23,8 @@ states!(NotificationKind {
     AgentStopped => "agent_stopped",
     /// A stopped agent was authorized to restore its session.
     AgentResumed => "agent_resumed",
+    /// A daemon restart left a stopped agent's processes uncertain.
+    RecoveryBlocked => "recovery_blocked",
     /// The daemon removed or forgot a workspace on its own.
     WorkspaceRemoved => "workspace_removed",
     /// An agent explicitly marked its assignment finished.

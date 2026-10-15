@@ -21,6 +21,7 @@ pub mod ports;
 pub(crate) mod queue;
 pub mod recovery;
 pub mod resources;
+mod restart_recovery;
 pub mod scope;
 pub mod store;
 mod warnings;
@@ -136,6 +137,10 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
     background.spawn(supervise("auto cleanup", {
         let manager = manager.clone();
         move || cleanup::run(manager.clone())
+    }));
+    background.spawn(supervise("restart reconciliation", {
+        let manager = manager.clone();
+        move || restart_recovery::run(manager.clone())
     }));
     background.spawn(supervise("overload monitor", {
         let manager = manager.clone();
