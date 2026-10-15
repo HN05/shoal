@@ -3842,6 +3842,51 @@ fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
 }
 
 #[test]
+fn resume_reconciles_a_quarantined_execution_from_a_saved_handoff() {
+    let fixture = Fixture::new();
+    let workspace = fixture.add("quarantined");
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    fs::write(
+        path.join(".shoal.toml"),
+        "[agent_resume]\nclaude = ['sh', './resume.sh', '{prompt}']\n",
+    )
+    .unwrap();
+    fs::write(path.join("resume.sh"), "printf restored > restored\n").unwrap();
+    let execution = "quarantined-execution";
+    let state = fixture
+        .root
+        .path()
+        .join("state/workspaces")
+        .join(workspace["id"].as_str().unwrap());
+    fs::create_dir_all(&state).unwrap();
+    fs::write(
+        state.join(format!("{execution}.recovery.json")),
+        r#"{"agent":"claude"}"#,
+    )
+    .unwrap();
+    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+    db.execute(
+        "INSERT INTO executions(id,workspace_id,state) VALUES (?1,?2,'unknown')",
+        rusqlite::params![execution, workspace["id"].as_str().unwrap()],
+    )
+    .unwrap();
+
+    let output = fixture.run(&["resume", "quarantined", "--execution", execution]);
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(
+        fs::read_to_string(path.join("restored")).unwrap(),
+        "restored"
+    );
+    assert!(!state.join(format!("{execution}.recovery.json")).exists());
+    assert!(
+        fixture.ok(&["inspect", "quarantined"])["executions"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
 fn daemon_restarts_keep_tracked_agents_and_commands_running() {
     let mut fixture = Fixture::with_config(Some("[commands]\nclaude = ['sh', './agent.sh']\n"));
     let workspace = fixture.add("restarted");

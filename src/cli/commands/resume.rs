@@ -8,9 +8,11 @@ use crate::{
         zmx,
     },
     config::Herdr,
+    daemon::recovery::{ReconcileOptions, Report},
     execution::recovery::{Record, Recovery, Saved, SavedCommand, consume},
-    model::Workspace,
-    protocol::ConfigTarget,
+    model::{Inspection, Workspace},
+    protocol::{ConfigTarget, Method},
+    state::ExecutionState,
 };
 use anyhow::{Context as _, Result, ensure};
 use serde_json::json;
@@ -27,9 +29,9 @@ pub async fn run(
         "resume agents outside scoped executions"
     );
     let id = ui::select_workspace(ctx, selector, Fallback::CurrentDirectory).await?;
-    let inspection = client::inspect(&ctx.paths, id).await?;
-    let workspace = &inspection.workspace;
-    let mut saved = Saved::load(&ctx.paths, &workspace.id)?;
+    let mut inspection = client::inspect(&ctx.paths, id).await?;
+    let workspace_id = inspection.workspace.id.clone();
+    let mut saved = Saved::load(&ctx.paths, &workspace_id)?;
     if let Some(execution) = &execution {
         saved.retain_execution(execution, !discard);
     }
@@ -37,6 +39,14 @@ pub async fn run(
         !saved.is_empty(),
         "no stopped agents or commands for this workspace"
     );
+    let recovery_id = execution
+        .as_deref()
+        .or_else(|| (saved.agents.len() == 1).then(|| saved.agents[0].0.as_str()));
+    if !discard {
+        reconcile_stale_execution(ctx, &inspection, recovery_id).await?;
+    }
+    inspection = client::inspect(&ctx.paths, workspace_id).await?;
+    let workspace = &inspection.workspace;
     let active = |id: &str| inspection.executions.iter().any(|e| e.id == id);
     if discard {
         let ids = discard_saved(&saved, active)?;
@@ -113,6 +123,61 @@ pub async fn run(
         records,
     )
     .await
+}
+
+/// A daemon restart quarantines interrupted executions as unknown. Recovery
+/// records are still safe to use once the daemon has rechecked that execution's
+/// recorded processes are gone, so make that repair part of resume itself.
+async fn reconcile_stale_execution(
+    ctx: &Context,
+    inspection: &Inspection,
+    selected: Option<&str>,
+) -> Result<()> {
+    let Some(execution) = inspection
+        .executions
+        .iter()
+        .find(|execution| selected.is_none_or(|selected| selected == execution.id))
+    else {
+        return Ok(());
+    };
+    ensure!(
+        execution.state != ExecutionState::Running,
+        "selected execution is active; stop it before resuming"
+    );
+    if execution.state != ExecutionState::Unknown {
+        return Ok(());
+    }
+    let reports = client::request::<Vec<Report>>(
+        &ctx.paths,
+        Method::Doctor {
+            workspace: Some(inspection.workspace.id.clone()),
+            options: ReconcileOptions {
+                repair: true,
+                // A protection handoff is persisted only after Shoal has
+                // decided to stop this agent. The pause path clears the child
+                // identity before the daemon can restart, so the normal
+                // launch-proof acknowledgement is unavailable even though
+                // process scanning still proves that no survivor is visible.
+                acknowledge_stopped: true,
+                ..Default::default()
+            },
+        },
+    )
+    .await?;
+    let report = reports
+        .into_iter()
+        .next()
+        .context("daemon returned no reconciliation report")?;
+    let selected = selected.context("unknown execution has no recovery selection")?;
+    ensure!(
+        report
+            .executions
+            .iter()
+            .find(|execution| execution.id == selected)
+            .is_some_and(|execution| execution.cleared),
+        "selected execution is still unresolved; inspect it with shoal doctor"
+    );
+    Ok(())
 }
 
 /// Forget saved records, returning their execution IDs.

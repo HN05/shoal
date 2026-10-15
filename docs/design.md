@@ -97,7 +97,9 @@ recovered. Manual and automatic restores prompt the agent to continue its
 unfinished assignment; configured restore commands receive that prompt through
 `{prompt}`. Never replay the original task prompt. Keep waiting wrappers tracked, serialize
 restores, and preserve manual recovery across restarts. Saved recovery represents
-unfinished work until restored or explicitly discarded.
+unfinished work until restored or explicitly discarded; `shoal resume` reconciles
+the stale execution left by a daemon restart when its saved handoff has no
+surviving process.
 Agent metadata is transient, so restart cannot select disconnected survivors.
 Warnings come first: below each enabled protection's stop threshold, the daemon
 queues an agent message for every workspace with a running agent, so agents can
