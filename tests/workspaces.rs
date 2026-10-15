@@ -3214,7 +3214,7 @@ fn configured_environment_renders_for_tracked_commands() {
 
 #[test]
 fn add_starts_agents_only_after_creation_and_preserves_workspace_on_exit() {
-    let fixture = Fixture::new();
+    let fixture = Fixture::with_config(Some("max_agents = 'none'"));
     let bin = fixture.root.path().join("add-agent-bin");
     fs::create_dir(&bin).unwrap();
     let inspection = fixture.root.path().join("agent-inspection.json");
