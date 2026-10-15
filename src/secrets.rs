@@ -115,8 +115,7 @@ impl Launch {
                     std::env::split_paths(list).filter(|entry| !entry.as_os_str().is_empty()),
                 ))
             };
-            // Launcher directories are Shoal state paths, which never contain
-            // a colon.
+            // `prepare` rejects a launcher directory that cannot join a PATH.
             if let (Ok(path), Ok(directories)) = (
                 prepend(&inherited),
                 prepend(&std::env::var_os(env::SECRET_TOOLS).unwrap_or_default()),
@@ -133,6 +132,12 @@ impl Launch {
 /// worker, beside the manifest it reads.
 fn write_launchers(secrets: &Secrets, paths: &Paths) -> Result<tempfile::TempDir> {
     let directory = paths.secret_tools_directory()?;
+    std::env::join_paths([directory.path()]).with_context(|| {
+        format!(
+            "secret tool launchers cannot go on PATH from {}",
+            directory.path().display()
+        )
+    })?;
     std::fs::write(
         directory.path().join(MANIFEST),
         serde_json::to_vec(secrets)?,
@@ -291,6 +296,22 @@ mod tests {
                 "{command:?}"
             );
         }
+    }
+
+    #[tokio::test]
+    async fn launchers_that_cannot_join_path_stop_the_launch() {
+        let root = tempfile::tempdir().unwrap();
+        let paths = Paths::for_test(root.path().join("a:b"));
+        std::fs::create_dir_all(&paths.state).unwrap();
+        let mut scoped = secret(&["true"]);
+        scoped.tools = vec!["agent-browser".into()];
+        let error = Launch::prepare(&Secrets::from([("TOKEN".into(), scoped)]), &paths)
+            .await
+            .unwrap_err();
+        assert!(
+            format!("{error:#}").contains("cannot go on PATH"),
+            "{error:#}"
+        );
     }
 
     #[tokio::test]
