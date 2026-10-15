@@ -15,7 +15,6 @@ use crate::{
         run_isolated as git_run, worktrunk,
     },
     model::{OpenedWorkspace, PulledBranch, Repository, SyncedRepository},
-    state::WorkspaceState,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -234,12 +233,6 @@ impl Manager {
             .find(|w| w.repository_id == repo.id && w.branch == *name)
         {
             ensure!(
-                workspace.state == WorkspaceState::Ready,
-                "workspace {} is {}; inspect or set it up before reopening",
-                workspace.name,
-                workspace.state
-            );
-            ensure!(
                 git_profile.is_none(),
                 "--git-profile applies only to new worktrees; workspace {} already exists",
                 workspace.name
@@ -256,13 +249,7 @@ impl Manager {
                     workspace.path.display()
                 );
             }
-            self.verify_worktree(&workspace).await?;
-            let actual = git::head_branch(&workspace.path, false, git::run_isolated).await?;
-            ensure!(
-                actual.as_deref() == Some(name),
-                "workspace {} is no longer on its recorded branch",
-                workspace.name
-            );
+            self.reopen_owned_workspace(&workspace, name).await?;
             return Ok(OpenedWorkspace {
                 workspace,
                 reused: true,

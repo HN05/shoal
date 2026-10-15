@@ -73,13 +73,7 @@ impl Manager {
                 workspace.repository_id == repo.id && workspace.branch == branch,
                 "worktree no longer matches its recorded repository or branch"
             );
-            ensure!(
-                workspace.state == WorkspaceState::Ready,
-                "workspace is {}; inspect or set it up before reopening",
-                workspace.state
-            );
-            self.verify_worktree(&workspace).await?;
-            self.touch(&workspace.id).await;
+            self.reopen_owned_workspace(&workspace, branch).await?;
             return Ok(workspace);
         }
         let git_dir = git::git_dir(&path).await?;

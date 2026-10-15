@@ -566,6 +566,7 @@ async fn existing_branch_opens_without_suffix_and_reuses_owned_workspace() {
         .unwrap();
     assert!(again.reused);
     assert_eq!(again.workspace.id, opened.workspace.id);
+    assert_eq!(f.manager.activity(&opened.workspace.id).await, 1);
     git(&opened.workspace.path, &["switch", "--detach"]);
     assert!(
         f.manager
@@ -1391,6 +1392,7 @@ async fn adoption_preserves_dirty_worktree_and_persists_identity_and_readiness()
             .id,
         w.id
     );
+    assert_eq!(f.manager.activity(&w.id).await, 1);
     let restored = Manager::open(Paths::for_test(f.root.path())).await.unwrap();
     assert_eq!(
         restored.workspace(&w.id).await.unwrap().git_dir_id,

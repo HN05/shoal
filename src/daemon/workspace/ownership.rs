@@ -4,7 +4,7 @@ use super::{
     identity::{clear_owner, directory_identity, mark_owner, marked_owner, verify_owner},
     paths::canonical_parent_with_missing,
 };
-use crate::{git, model::Workspace};
+use crate::{git, model::Workspace, state::WorkspaceState};
 use anyhow::{Context, Result, ensure};
 use rusqlite::params;
 use std::{
@@ -13,6 +13,29 @@ use std::{
 };
 
 impl Manager {
+    /// Validate and reactivate an owned workspace being reopened by branch or path.
+    pub(crate) async fn reopen_owned_workspace(
+        &self,
+        workspace: &Workspace,
+        expected_branch: &str,
+    ) -> Result<()> {
+        ensure!(
+            workspace.state == WorkspaceState::Ready,
+            "workspace {} is {}; inspect or set it up before reopening",
+            workspace.name,
+            workspace.state
+        );
+        self.verify_worktree(workspace).await?;
+        let actual = git::head_branch(&workspace.path, false, git::run_isolated).await?;
+        ensure!(
+            actual.as_deref() == Some(expected_branch),
+            "workspace {} is no longer on its recorded branch",
+            workspace.name
+        );
+        self.touch(&workspace.id).await;
+        Ok(())
+    }
+
     pub(crate) async fn verify_worktree(&self, workspace: &Workspace) -> Result<()> {
         let actual_git_dir = self.linked_git_dir(workspace).await?;
         verify_owner(
