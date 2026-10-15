@@ -220,6 +220,19 @@ impl Manager {
         let (commit, reference) = recorded_base(repo, &base).await?;
         let git_dir = git::git_dir(&workspace.path).await?;
         let identity = directory_identity(&git_dir)?;
+        self.record_copy_ready(workspace, git_dir, identity, commit, reference)
+            .await
+    }
+
+    /// Persist the copied worktree's verified identity, base, and readiness.
+    async fn record_copy_ready(
+        &self,
+        workspace: &Workspace,
+        git_dir: PathBuf,
+        identity: String,
+        commit: String,
+        reference: Option<String>,
+    ) -> Result<()> {
         let id = workspace.id.clone();
         self.store
             .run(move |db| {
