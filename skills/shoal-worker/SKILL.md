@@ -19,8 +19,10 @@ assignment is finished: every watched PR merged, or no PR needed. Never end a
 session without it.
 
 Open your PR with `shoal --json pr open`: it pushes your branch, then links the
-branch's open PR or opens one (`--title`, `--body-file`, `--label`, `--draft`;
-a linked issue supplies the default title and `Closes #<number>`). Change your
+branch's open PR or opens one (`--title`, `--body-file`, `--label`, `--draft`).
+A linked issue supplies the default title and, when no body is supplied,
+`Closes #<number>`. A supplied body is used verbatim; include a closing reference
+yourself when the PR completes the issue. Change your
 PR or issue through Shoal, which acts as your agent account and records the
 change: `shoal --json pr edit` (`--title`, `--body-file`,
 `--add-label`, `--add-reviewer`, `--draft`/`--no-draft`), `pr comment
