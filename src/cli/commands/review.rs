@@ -343,7 +343,7 @@ async fn update_to_head(repo: &Path, workspace: &Workspace, head: &str) -> Resul
         "workspace {} has diverged from {tracking}; update it before reviewing",
         workspace.name
     );
-    git::existing_branch::fast_forward(path, &tracking)
+    git::branch::fast_forward(path, &tracking)
         .await
         .with_context(|| {
             format!(

@@ -31,31 +31,6 @@ pub async fn ensure_not_checked_out(repo: &std::path::Path, name: &str) -> Resul
     Ok(())
 }
 
-/// Local and remote branch names that can conflict with a new local branch.
-pub async fn names_in_use(repo: &Path) -> Result<Vec<String>> {
-    let refs = git::run(
-        repo,
-        &[
-            "for-each-ref",
-            "--format=%(refname)",
-            git::LOCAL_REFS,
-            git::REMOTE_REFS,
-        ],
-    )
-    .await?;
-    Ok(refs
-        .lines()
-        .filter_map(|reference| {
-            git::strip_local(reference).or_else(|| {
-                git::strip_remote(reference)?
-                    .split_once('/')
-                    .map(|(_, branch)| branch)
-            })
-        })
-        .map(str::to_owned)
-        .collect())
-}
-
 /// Local branches and advertised remote heads, including never-fetched branches.
 pub async fn list(repo: &Path) -> Result<Vec<Branch>> {
     let mut branches: Vec<_> = git::run_isolated(
@@ -101,24 +76,4 @@ pub async fn upstream_ref(repo: &Path, name: &str) -> Result<String> {
 
 pub async fn track(repo: &Path, branch: &str, tracking: &str) -> Result<String> {
     git::run_isolated(repo, &["branch", "--track", "--", branch, tracking]).await
-}
-
-pub async fn rename(repo: &Path, from: &str, to: &str) -> Result<String> {
-    git::run_isolated(repo, &["branch", "-m", "--", from, to]).await
-}
-
-/// Fast-forward a checkout without recursive submodule updates.
-pub async fn fast_forward(repo: &Path, commit: &str) -> Result<String> {
-    git::run_without_submodules(
-        repo,
-        &[
-            "merge",
-            "--ff-only",
-            "--no-edit",
-            "--no-stat",
-            "--no-overwrite-ignore",
-            commit,
-        ],
-    )
-    .await
 }

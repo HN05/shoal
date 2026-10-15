@@ -29,7 +29,7 @@ impl Manager {
     /// The requested branch name, or the nearest free `-2`, `-3`, ... variant.
     /// Called while holding the repository's Git gate, through worktree creation.
     pub(super) async fn available_branch(&self, repo: &Repository, name: &str) -> Result<String> {
-        let mut taken = git::existing_branch::names_in_use(&repo.path).await?;
+        let mut taken = git::branch::names_in_use(&repo.path).await?;
         // Failed/preparing workspaces still own their recorded branch name.
         taken.extend(
             self.list_workspaces()
@@ -146,7 +146,7 @@ impl Manager {
             );
             if let Some(checkout) = &checkout {
                 clean_branch(checkout, branch).await?;
-                git::existing_branch::fast_forward(checkout, commit).await?;
+                git::branch::fast_forward(checkout, commit).await?;
             } else {
                 git::fast_forward_local(&repo.path, commit, &local_ref).await?;
             }

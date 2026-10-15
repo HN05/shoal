@@ -1,4 +1,5 @@
 //! Git invocations shared by workspace creation, removal, branch refreshes, and landing.
+pub mod branch;
 pub mod config;
 pub(crate) mod conflicts;
 pub mod default_branch;
