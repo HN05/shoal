@@ -545,9 +545,7 @@ async fn open_execution(
         reattach: mode.reattaches(),
     };
     let kind = mode.kind();
-    let (mut link, body) = timeout(kind.start_timeout(), Link::open(paths, method))
-        .await
-        .context("daemon did not start the execution in time")??;
+    let (mut link, body) = Link::open(paths, method, kind.start_timeout()).await?;
     let plan = ExecutionPlan::try_from(body)?;
     if mode.reattaches() {
         link.allow_reattach(

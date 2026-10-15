@@ -1,6 +1,6 @@
 //! CLI side of the daemon protocol: one request per connection, plus typed
 //! helpers for the queries every command shares.
-use std::io;
+use std::{io, time::Duration};
 
 use anyhow::{Context, Result, ensure};
 use tokio::{
@@ -19,8 +19,11 @@ use crate::{
     protocol::{self, Body, DaemonStatus, Method, Request, Response, timing},
 };
 
+/// The daemon answered with another protocol `version`.
 #[derive(Debug)]
-pub struct ProtocolMismatch;
+pub struct ProtocolMismatch {
+    pub daemon: u32,
+}
 
 impl std::fmt::Display for ProtocolMismatch {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -39,25 +42,84 @@ pub async fn open(paths: &Paths, method: Method) -> Result<(UnixStream, Body)> {
 
 /// Preserve frames read alongside the initial reply for long-lived streams.
 pub async fn open_buffered(paths: &Paths, method: Method) -> Result<(BufReader<UnixStream>, Body)> {
-    let mut stream = connect(paths).await?;
     let request = Request::new(method);
-    protocol::write(&mut stream, &request).await?;
-    let mut stream = BufReader::new(stream);
-    let body = reply(&mut stream, &request).await?;
-    Ok((stream, body))
+    let mut update = UpdateWait::default();
+    loop {
+        let mut stream = connect(paths).await?;
+        protocol::write(&mut stream, &request).await?;
+        let mut stream = BufReader::new(stream);
+        match reply(&mut stream, &request).await {
+            Ok(body) => return Ok((stream, body)),
+            Err(error) => update.retry(paths, &request, error).await?,
+        }
+    }
 }
 
-/// [`open_buffered`] with the stream split, so a task can own the receive half.
+/// [`open_buffered`] with the stream split, so a task can own the receive
+/// half. `limit` bounds each reply, not a wait for an update.
 pub async fn open_split(
     paths: &Paths,
     method: Method,
+    limit: Duration,
 ) -> Result<(BufReader<OwnedReadHalf>, OwnedWriteHalf, Body)> {
-    let (reader, mut writer) = connect(paths).await?.into_split();
     let request = Request::new(method);
-    protocol::write(&mut writer, &request).await?;
-    let mut reader = BufReader::new(reader);
-    let body = reply(&mut reader, &request).await?;
-    Ok((reader, writer, body))
+    let mut update = UpdateWait::default();
+    loop {
+        let (reader, mut writer) = connect(paths).await?.into_split();
+        protocol::write(&mut writer, &request).await?;
+        let mut reader = BufReader::new(reader);
+        let replied = timeout(limit, reply(&mut reader, &request))
+            .await
+            .context("daemon did not reply in time")?;
+        match replied {
+            Ok(body) => return Ok((reader, writer, body)),
+            Err(error) => update.retry(paths, &request, error).await?,
+        }
+    }
+}
+
+/// A managed daemon from before the installed update refuses requests of the
+/// newer protocol without running them, and restarts with the update once
+/// idle, so the request is sent again until the replacement answers.
+#[derive(Default)]
+struct UpdateWait {
+    deadline: Option<Instant>,
+}
+
+impl UpdateWait {
+    /// Return after a pause to send `request` again, or fail with `error`.
+    async fn retry(
+        &mut self,
+        paths: &Paths,
+        request: &Request,
+        error: anyhow::Error,
+    ) -> Result<()> {
+        if !awaits_update(paths, &request.method, &error) {
+            return Err(error);
+        }
+        let deadline = *self.deadline.get_or_insert_with(|| {
+            eprintln!("Waiting for the daemon to restart with the installed update...");
+            Instant::now() + timing::UPDATE_WAIT_TIMEOUT
+        });
+        if Instant::now() >= deadline {
+            return Err(error.context(format!(
+                "the daemon did not restart with the installed update within {} minutes",
+                timing::UPDATE_WAIT_TIMEOUT.as_secs() / 60
+            )));
+        }
+        sleep(timing::UPDATE_POLL_INTERVAL).await;
+        Ok(())
+    }
+}
+
+/// Whether `error` is an older managed daemon's refusal of `method`. Daemon
+/// controls report the mismatch at once, so they can replace the daemon.
+fn awaits_update(paths: &Paths, method: &Method, error: &anyhow::Error) -> bool {
+    error
+        .downcast_ref::<ProtocolMismatch>()
+        .is_some_and(|mismatch| mismatch.daemon < protocol::VERSION)
+        && !method.controls_daemon()
+        && crate::service::installed(paths)
 }
 
 async fn connect(paths: &Paths) -> Result<UnixStream> {
@@ -72,7 +134,10 @@ async fn connect(paths: &Paths) -> Result<UnixStream> {
 async fn reply(stream: &mut (impl AsyncBufRead + Unpin), request: &Request) -> Result<Body> {
     let reply: Response = protocol::read_buffered(stream).await?;
     if reply.protocol != protocol::VERSION {
-        return Err(ProtocolMismatch.into());
+        return Err(ProtocolMismatch {
+            daemon: reply.protocol,
+        }
+        .into());
     }
     ensure!(reply.id == request.id, "unexpected daemon response ID");
     Ok(reply.body)
@@ -80,10 +145,7 @@ async fn reply(stream: &mut (impl AsyncBufRead + Unpin), request: &Request) -> R
 
 /// One request; daemon errors become `code: message` failures.
 pub async fn call(paths: &Paths, method: Method) -> Result<Body> {
-    let duration = if matches!(
-        method,
-        Method::Status | Method::Shutdown | Method::ReloadConfig
-    ) {
+    let duration = if method.controls_daemon() {
         timing::ADMIN_REQUEST_TIMEOUT
     } else {
         timing::REQUEST_TIMEOUT

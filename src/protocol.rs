@@ -43,6 +43,11 @@ pub mod timing {
     pub const DAEMON_WAIT_TIMEOUT: Duration = Duration::from_secs(10);
     /// Observe daemon transitions promptly without busy-polling the socket.
     pub const DAEMON_POLL_INTERVAL: Duration = Duration::from_millis(100);
+    /// A managed daemon restarts with an installed update once its running
+    /// operations finish, which can include a long setup.
+    pub const UPDATE_WAIT_TIMEOUT: Duration = Duration::from_secs(600);
+    /// Each refused attempt briefly holds back the update it waits for.
+    pub const UPDATE_POLL_INTERVAL: Duration = Duration::from_secs(1);
 
     /// Ordinary command registration needs no slow preparation, but its process
     /// and worktree checks run subprocesses; only guard against a hung daemon.
@@ -477,6 +482,13 @@ pub enum Method {
         limit: u32,
         before: Option<i64>,
     },
+}
+
+impl Method {
+    /// Daemon administration, which must reach a daemon of any release.
+    pub fn controls_daemon(&self) -> bool {
+        matches!(self, Self::Status | Self::Shutdown | Self::ReloadConfig)
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]

@@ -962,3 +962,73 @@ fn event_cli_preserves_adjacent_frames_and_finishes_an_empty_listing() {
         assert_eq!(ids, (1..=count).collect::<Vec<_>>());
     }
 }
+
+#[test]
+fn commands_wait_for_an_older_managed_daemon_to_restart_with_the_update() {
+    let root = tempfile::tempdir_in("/tmp").unwrap();
+    fs::create_dir(root.path().join("state")).unwrap();
+    let listener = UnixListener::bind(root.path().join("state/daemon.sock")).unwrap();
+    // The daemon refuses three requests before the update replaces it.
+    let daemon = thread::spawn(move || {
+        let mut methods = Vec::new();
+        loop {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(60)))
+                .unwrap();
+            let mut line = String::new();
+            BufReader::new(&stream).read_line(&mut line).unwrap();
+            let request: Value = serde_json::from_str(&line).unwrap();
+            methods.push(request["method"].clone());
+            let protocol = request["protocol"].as_u64().unwrap();
+            let reply = |protocol: u64, body: Value| {
+                let mut body = body;
+                body["protocol"] = protocol.into();
+                body["id"] = request["id"].clone();
+                format!("{}\n", serde_json::to_string(&body).unwrap())
+            };
+            if methods.len() <= 3 {
+                let refusal = json!({"type": "error", "data": {
+                    "code": "protocol_mismatch",
+                    "message": "restart the daemon with the installed version"
+                }});
+                stream
+                    .write_all(reply(protocol - 1, refusal).as_bytes())
+                    .unwrap();
+                continue;
+            }
+            let ok = reply(protocol, json!({"type": "ok"}));
+            stream.write_all(format!("{ok}{ok}").as_bytes()).unwrap();
+            return methods;
+        }
+    });
+    let events = || {
+        command(root.path())
+            .args(["internal", "events", "--json", "--since", "0"])
+            .output()
+            .unwrap()
+    };
+    // Without a service, nothing restarts the older daemon.
+    let refused = events();
+    assert!(!refused.status.success());
+    assert!(String::from_utf8_lossy(&refused.stderr).contains("protocol mismatch"));
+    let definition = command(root.path())
+        .args(["--json", "install", "--dry-run"])
+        .output()
+        .unwrap();
+    let definition: Value = serde_json::from_slice(&definition.stdout).unwrap();
+    let path = Path::new(definition["path"].as_str().unwrap());
+    assert!(path.starts_with(root.path()));
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(path, definition["content"].as_str().unwrap()).unwrap();
+    let output = events();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(String::from_utf8_lossy(&output.stderr).contains("Waiting for the daemon to restart"));
+    let methods = daemon.join().unwrap();
+    assert_eq!(methods.len(), 4);
+    assert!(methods.iter().all(|method| method == &methods[0]));
+}

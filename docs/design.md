@@ -144,8 +144,10 @@ once daemon operations are idle and no setup or landing runs; commands reattach.
 Retain the ownership lock and listening socket across exec so queued requests reach
 the replacement under the same service PID. Read-only streams reconnect after the
 handoff, preserving event cursors, and item waits resume for their remaining time.
-An update does not wait for clients of the previous protocol, since the installed
-CLI cannot reach the old daemon; foreground daemons keep explicit restart control.
+An update does not wait for clients of the previous protocol. The old daemon refuses
+newer requests before running them, so the installed CLI sends them again until the
+replacement answers; daemon controls report the mismatch at once. Foreground daemons
+keep explicit restart control.
 
 Advisory repository reviews default to Codex, retaining configured agent overrides
 and automatic fallback. Repository code audits run read-only inspections per focus on a weekly

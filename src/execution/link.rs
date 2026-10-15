@@ -12,7 +12,7 @@ use tokio::{
     },
     sync::mpsc,
     task::JoinHandle,
-    time::{Instant, sleep, timeout},
+    time::{Duration, Instant, sleep, timeout},
 };
 
 use crate::{
@@ -72,8 +72,13 @@ struct Attached {
 
 impl Link {
     /// Send `method` and keep the connection for the execution's lifetime.
-    pub(super) async fn open(paths: &Paths, method: Method) -> Result<(Self, Body)> {
-        let (reader, writer, body) = client::open_split(paths, method).await?;
+    /// `limit` bounds the daemon's reply.
+    pub(super) async fn open(
+        paths: &Paths,
+        method: Method,
+        limit: Duration,
+    ) -> Result<(Self, Body)> {
+        let (reader, writer, body) = client::open_split(paths, method, limit).await?;
         Ok((Self::new(reader, writer), body))
     }
 

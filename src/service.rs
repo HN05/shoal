@@ -262,6 +262,14 @@ pub async fn stop(paths: &Paths) -> Result<()> {
     Ok(())
 }
 
+/// Whether the OS service runs the daemon of this state directory.
+pub fn installed(paths: &Paths) -> bool {
+    Platform::current().is_ok_and(|platform| {
+        let path = file(paths, platform);
+        path.is_file() && check_state_dir(paths, &path, platform).is_ok()
+    })
+}
+
 fn check_state_dir(paths: &Paths, path: &Path, platform: Platform) -> Result<()> {
     let content = fs::read_to_string(path)?;
     let expected = match platform {
