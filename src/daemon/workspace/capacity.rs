@@ -26,14 +26,21 @@ pub(crate) enum MemoryState {
 /// Probe the same memory and disk sources used by overload protection. A
 /// failed probe is retained as `Unavailable`; it never authorizes more work.
 pub(crate) fn sample(state_path: &Path, settings: &Overload) -> HostSample {
-    let memory = match load::critical_memory(settings.memory.used_percent) {
-        Ok(true) => MemoryState::Critical,
-        Ok(false) => match load::memory_warning(settings.warning.memory_used_percent) {
-            Ok(true) => MemoryState::Warning,
+    let memory = if !settings.memory.enabled {
+        MemoryState::Healthy
+    } else {
+        match load::critical_memory(settings.memory.used_percent) {
+            Ok(true) => MemoryState::Critical,
+            Ok(false) if settings.warning.enabled => {
+                match load::memory_warning(settings.warning.memory_used_percent) {
+                    Ok(true) => MemoryState::Warning,
+                    Ok(false) => MemoryState::Healthy,
+                    Err(_) => MemoryState::Unavailable,
+                }
+            }
             Ok(false) => MemoryState::Healthy,
             Err(_) => MemoryState::Unavailable,
-        },
-        Err(_) => MemoryState::Unavailable,
+        }
     };
     HostSample {
         parallelism: std::thread::available_parallelism()
@@ -42,7 +49,12 @@ pub(crate) fn sample(state_path: &Path, settings: &Overload) -> HostSample {
             .max(1),
         cpu_ticks: load::cpu_ticks().ok(),
         memory,
-        disk_free: fsutil::available_bytes(state_path).ok(),
+        disk_free: settings
+            .disk
+            .enabled
+            .then(|| fsutil::available_bytes(state_path).ok())
+            .flatten()
+            .or_else(|| (!settings.disk.enabled).then_some(u64::MAX)),
     }
 }
 
