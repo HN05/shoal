@@ -13346,6 +13346,33 @@ fn adopt_copy_copies_dirty_and_untracked_work_to_the_default_directory() {
 }
 
 #[test]
+fn adopt_copy_refuses_a_dangling_symlink_at_the_default_directory() {
+    let fixture = Fixture::new();
+    let repo = fixture.repo.to_str().unwrap();
+    let add = |branch: &str, name: &str| {
+        let path = fixture.root.path().join(name);
+        git(
+            &fixture.repo,
+            &["worktree", "add", "-b", branch, path.to_str().unwrap()],
+        );
+        path
+    };
+    let first = add("copy/first", "first worktree");
+    let output = fixture.ok(&["adopt", first.to_str().unwrap(), "--repo", repo, "--copy"]);
+    let directory = PathBuf::from(output["path"].as_str().unwrap());
+    let directory = directory.parent().unwrap();
+    let source = add("copy/second", "second worktree");
+    let planted = directory.join("copy-second-2");
+    std::os::unix::fs::symlink(fixture.root.path().join("missing"), &planted).unwrap();
+    let output = fixture.run(&["adopt", source.to_str().unwrap(), "--repo", repo, "--copy"]);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("workspace path already exists"));
+    assert!(planted.is_symlink());
+    let branches = git(&fixture.repo, &["branch", "--list", "copy/second-2"]);
+    assert!(branches.trim().is_empty());
+}
+
+#[test]
 fn adopt_infers_a_checkout_with_a_separate_git_directory() {
     let fixture = Fixture::new();
     let root = fixture.root.path();

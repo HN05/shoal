@@ -11,6 +11,28 @@ use std::{
 };
 
 impl Manager {
+    /// Choose a new workspace's directory: a validated explicit path, or its
+    /// name inside the repository's reserved directory. Any existing entry,
+    /// including a dangling symlink, is refused.
+    pub(super) async fn new_workspace_path(
+        &self,
+        repo: &Repository,
+        name: &str,
+        path: Option<PathBuf>,
+    ) -> Result<PathBuf> {
+        let path = match path {
+            Some(path) => self.workspace_location(repo, &path).await?,
+            None => self.workspaces_dir(repo).await?.join(name),
+        };
+        ensure!(
+            path.symlink_metadata()
+                .is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound),
+            "workspace path already exists: {}",
+            path.display()
+        );
+        Ok(path)
+    }
+
     pub(super) async fn workspace_location(
         &self,
         repo: &Repository,

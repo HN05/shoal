@@ -369,24 +369,13 @@ impl Manager {
             None => None,
         };
         let name = derive_workspace_name(&name);
-        let path = match path {
-            Some(path) => self.workspace_location(repo, &path).await?,
-            None => self.workspaces_dir(repo).await?.join(&name),
-        };
+        let path = self.new_workspace_path(repo, &name, path).await?;
         let workspace = Workspace::new_record(
             repo.id.clone(),
             name,
             path,
             branch,
             WorkspaceState::Preparing,
-        );
-        ensure!(
-            workspace
-                .path
-                .symlink_metadata()
-                .is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound),
-            "workspace path already exists: {}",
-            workspace.path.display()
         );
         self.insert_workspace(workspace.clone(), base_branch)
             .await?;

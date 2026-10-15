@@ -129,13 +129,7 @@ impl Manager {
     ) -> Result<Workspace> {
         let branch = self.available_branch(repo, source_branch).await?;
         let name = derive_workspace_name(&branch);
-        let destination = self.workspaces_dir(repo).await?.join(&name);
-        let destination = self.workspace_location(repo, &destination).await?;
-        ensure!(
-            !destination.exists(),
-            "workspace path already exists: {}",
-            destination.display()
-        );
+        let destination = self.new_workspace_path(repo, &name, None).await?;
         ensure!(
             !destination.starts_with(source) && !source.starts_with(&destination),
             "copied workspace path overlaps the source worktree"
@@ -150,33 +144,30 @@ impl Manager {
         )
         .await
         .context("create copied workspace")?;
-        if let Err(error) = crate::fsutil::copy_worktree(source, &destination) {
-            // Leave Git's linked-worktree metadata consistent when copying
-            // fails before ownership is recorded.
-            let _ = worktrunk::remove(
-                &repo.path,
-                &self.paths.worktrunk_config(),
-                &destination,
-                worktrunk::FileRemoval::Force,
-                worktrunk::BranchRemoval::Delete,
-            )
-            .await;
-            let _ = fs::remove_dir_all(&destination);
-            return Err(error).context("copy worktree files");
-        }
-        let result = self
-            .adopt_linked_worktree(repo, destination.clone(), &branch)
-            .await;
+        let result = match crate::fsutil::copy_worktree(source, &destination) {
+            Ok(()) => {
+                self.adopt_linked_worktree(repo, destination.clone(), &branch)
+                    .await
+            }
+            Err(error) => Err(error).context("copy worktree files"),
+        };
         if result.is_err() {
-            let _ = worktrunk::remove(
-                &repo.path,
-                &self.paths.worktrunk_config(),
-                &destination,
-                worktrunk::FileRemoval::Force,
-                worktrunk::BranchRemoval::Delete,
-            )
-            .await;
+            self.discard_copy(repo, &destination).await;
         }
         result
+    }
+
+    /// Remove an unrecorded copy and its branch, leaving Git's linked-worktree
+    /// metadata consistent.
+    async fn discard_copy(&self, repo: &crate::model::Repository, destination: &Path) {
+        let _ = worktrunk::remove(
+            &repo.path,
+            &self.paths.worktrunk_config(),
+            destination,
+            worktrunk::FileRemoval::Force,
+            worktrunk::BranchRemoval::Delete,
+        )
+        .await;
+        let _ = fs::remove_dir_all(destination);
     }
 }
