@@ -9,10 +9,7 @@ use crate::{
     state::WorkspaceState,
 };
 use anyhow::{Context, Result, ensure};
-use std::{
-    fs,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 impl Manager {
     pub async fn adopt_workspace(
@@ -133,40 +130,112 @@ impl Manager {
             !destination.starts_with(source) && !source.starts_with(&destination),
             "copied workspace path overlaps the source worktree"
         );
+        let workspace = Workspace::new_record(
+            repo.id.clone(),
+            name,
+            destination,
+            branch,
+            WorkspaceState::Preparing,
+        );
+        // Reserve the branch and destination before Worktrunk can mutate Git.
+        self.insert_workspace(workspace.clone(), None).await?;
+        let result = self.materialize_copy(repo, source, &workspace).await;
+        match result {
+            Ok(()) => self.workspace(&workspace.id).await,
+            Err(error) => {
+                // Worktrunk can report an error after Git has created the
+                // worktree. Capture its identity before retaining the failure.
+                if let Err(identity_error) = self.record_copy_identity_if_present(&workspace).await
+                {
+                    log!(
+                        "could not record failed copied workspace {}: {identity_error:#}",
+                        workspace.name
+                    );
+                }
+                // Keep the record and any linked worktree for inspection and
+                // removal. Startup quarantine applies the same transition if
+                // the daemon stops while the copy is in progress.
+                let message = format!("{error:#}");
+                self.set_state(&workspace.id, WorkspaceState::Failed, Some(message))
+                    .await?;
+                Err(error).context(format!(
+                    "workspace {} failed; inspect or remove it with Shoal",
+                    workspace.name
+                ))
+            }
+        }
+    }
+
+    /// Create and own the destination before copying user files into it.
+    async fn materialize_copy(
+        &self,
+        repo: &crate::model::Repository,
+        source: &Path,
+        workspace: &Workspace,
+    ) -> Result<()> {
         let commit = git::resolve_commit(source, "HEAD", git::run_isolated).await?;
         worktrunk::create(
             &repo.path,
             &self.paths.worktrunk_config(),
-            &destination,
-            &branch,
+            &workspace.path,
+            &workspace.branch,
             Some(&commit),
         )
         .await
         .context("create copied workspace")?;
-        let result = match crate::fsutil::copy_worktree(source, &destination) {
-            Ok(()) => {
-                self.adopt_linked_worktree(repo, destination.clone(), &branch)
-                    .await
-            }
-            Err(error) => Err(error).context("copy worktree files"),
-        };
-        if result.is_err() {
-            self.discard_copy(repo, &destination).await;
-        }
-        result
+
+        // Mark and persist the Git admin directory before the potentially long
+        // file copy. A restart can therefore verify and remove the worktree.
+        self.record_copy_identity(workspace).await?;
+        crate::fsutil::copy_worktree(source, &workspace.path).context("copy worktree files")?;
+        self.finish_copy_adoption(repo, workspace).await
     }
 
-    /// Remove an unrecorded copy and its branch, leaving Git's linked-worktree
-    /// metadata consistent.
-    async fn discard_copy(&self, repo: &crate::model::Repository, destination: &Path) {
-        let _ = worktrunk::remove(
-            &repo.path,
-            &self.paths.worktrunk_config(),
-            destination,
-            worktrunk::FileRemoval::Force,
-            worktrunk::BranchRemoval::Delete,
-        )
-        .await;
-        let _ = fs::remove_dir_all(destination);
+    /// Mark and persist the Git admin directory for a copied worktree.
+    async fn record_copy_identity(&self, workspace: &Workspace) -> Result<()> {
+        let git_dir = git::git_dir(&workspace.path).await?;
+        self.release_stale_owner(&git_dir, &workspace.id).await?;
+        self.record_worktree_identity(workspace).await?;
+        Ok(())
+    }
+
+    /// Best-effort identity capture when Worktrunk failed after creating Git data.
+    async fn record_copy_identity_if_present(&self, workspace: &Workspace) -> Result<()> {
+        if !workspace.path.exists() {
+            return Ok(());
+        }
+        if git::git_dir(&workspace.path).await.is_err() {
+            return Ok(());
+        }
+        self.record_copy_identity(workspace).await
+    }
+
+    /// Record the copied worktree's base and readiness after its files arrive.
+    async fn finish_copy_adoption(
+        &self,
+        repo: &crate::model::Repository,
+        workspace: &Workspace,
+    ) -> Result<()> {
+        let base = existing_base(repo, &workspace.branch).await?;
+        let (commit, reference) = recorded_base(repo, &base).await?;
+        let git_dir = git::git_dir(&workspace.path).await?;
+        let identity = directory_identity(&git_dir)?;
+        let id = workspace.id.clone();
+        self.store
+            .run(move |db| {
+                db.execute(
+                    "UPDATE workspaces SET state=?2,error=NULL,git_dir=?3,git_dir_id=?4,base_commit=?5,base_ref=?6,setup_finished=1 WHERE id=?1",
+                    rusqlite::params![
+                        id,
+                        WorkspaceState::Ready,
+                        git_dir.to_str(),
+                        identity,
+                        commit,
+                        reference,
+                    ],
+                )?;
+                Ok(())
+            })
+            .await
     }
 }
