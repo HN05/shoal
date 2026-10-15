@@ -176,10 +176,7 @@ pub async fn run_tool(launchers: &Path, tool: &str, args: Vec<OsString>) -> Resu
         &std::fs::read(&manifest).with_context(|| format!("read {}", manifest.display()))?,
     )
     .with_context(|| format!("parse {}", manifest.display()))?;
-    let inherited = std::env::var_os("PATH").unwrap_or_default();
-    let search = std::env::join_paths(
-        std::env::split_paths(&inherited).filter(|entry| !env::same_directory(entry, launchers)),
-    )?;
+    let search = path_after(&std::env::var_os("PATH").unwrap_or_default(), launchers)?;
     let program = crate::fsutil::find_executable(OsStr::new(tool), &search)
         .with_context(|| format!("{tool} is not on PATH"))?;
     let mut command = std::process::Command::new(&program);
@@ -193,6 +190,22 @@ pub async fn run_tool(launchers: &Path, tool: &str, args: Vec<OsString>) -> Resu
     }
     command.env(env::SECRET_ENV, exported_names(names.into_iter()));
     Err(command.exec()).with_context(|| format!("run {}", program.display()))
+}
+
+/// The PATH entries after `launchers`, or every other entry when PATH does
+/// not hold it. An enclosing launch's launchers come later on PATH, so this
+/// never leads back to an inner launcher for the same tool.
+fn path_after(path: &OsStr, launchers: &Path) -> Result<OsString> {
+    let entries: Vec<_> = std::env::split_paths(path).collect();
+    let start = entries
+        .iter()
+        .position(|entry| env::same_directory(entry, launchers))
+        .map_or(0, |index| index + 1);
+    Ok(std::env::join_paths(
+        entries[start..]
+            .iter()
+            .filter(|entry| !env::same_directory(entry, launchers)),
+    )?)
 }
 
 /// [`env::SECRET_ENV`] after adding `names` to the inherited ones.
@@ -311,6 +324,20 @@ mod tests {
         assert!(
             format!("{error:#}").contains("cannot go on PATH"),
             "{error:#}"
+        );
+    }
+
+    #[test]
+    fn launchers_search_only_later_path_entries() {
+        let path = OsStr::new("/inner:/outer:/bin");
+        assert_eq!(
+            path_after(path, Path::new("/inner")).unwrap(),
+            "/outer:/bin"
+        );
+        assert_eq!(path_after(path, Path::new("/outer")).unwrap(), "/bin");
+        assert_eq!(
+            path_after(path, Path::new("/elsewhere")).unwrap(),
+            "/inner:/outer:/bin"
         );
     }
 

@@ -13013,6 +13013,51 @@ fn tool_secrets_reach_only_their_tools() {
         fs::read_to_string(worktree.join("hook-output")).unwrap(),
         "unset||hook\nunset"
     );
+
+    // An inner launch's launcher hands over to the enclosing launch's, which
+    // runs the tool itself rather than returning to the inner one.
+    let bin = fixture.root.path().join("bin");
+    install_test_script(
+        bin.join("show-tokens"),
+        "#!/bin/sh\nprintf '%s|%s|%s\\n' \"$INNER_TOKEN\" \"$OUTER_TOKEN\" \"$SHOAL_SECRET_ENV\"\n",
+    );
+    let mut path = Vec::new();
+    for name in ["INNER", "OUTER"] {
+        let launchers = fixture.root.path().join(name.to_lowercase());
+        fs::create_dir_all(&launchers).unwrap();
+        fs::write(
+            launchers.join(".secrets.json"),
+            format!(
+                r#"{{"{name}_TOKEN": {{"command": ["printf", "{name}"], "tools": ["show-tokens"]}}}}"#
+            ),
+        )
+        .unwrap();
+        install_test_script(
+            launchers.join("show-tokens"),
+            format!(
+                "#!/bin/sh\nexec {:?} internal secret-tool {:?} show-tokens -- \"$@\"\n",
+                env!("CARGO_BIN_EXE_shoal"),
+                launchers
+            ),
+        );
+        path.push(launchers);
+    }
+    path.push(bin);
+    let path = std::env::join_paths(path.into_iter().chain(std::env::split_paths(
+        &std::env::var_os("PATH").unwrap_or_default(),
+    )))
+    .unwrap();
+    let output = fixture
+        .command()
+        .env("PATH", path)
+        .arg("internal")
+        .arg("secret-tool")
+        .arg(fixture.root.path().join("inner"))
+        .args(["show-tokens", "--"])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(output.stdout, b"INNER|OUTER|INNER_TOKEN:OUTER_TOKEN\n");
 }
 
 #[test]
