@@ -1283,17 +1283,18 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
         &fixture.repo,
         &["remote", "add", "origin", "https://forge.example/team/repo"],
     );
-    let bin = fixture.root.path().join("bin");
-    install_test_script(
-        bin.join("fj"),
-        r#"#!/bin/sh
-case "$*" in
- *' pr view 7 '*) printf 'Title #7\nBy user — Open — +1 -0\nFrom `summary` into `main`\n';;
- *' pr status 7 '*) printf 'Open — Merge conflicts\n- Success — ci / rust\n- Pending — review\n';;
- *' pr review 7 '*) echo 'reviews unavailable' >&2; exit 1;;
- *) exit 1;;
-esac
-"#,
+    let home = fixture.root.path();
+    install_forgejo_curl(&home.join("bin"));
+    let sha = "7".repeat(40);
+    let mut pull = forgejo_pull(7, "open", "summary", &sha);
+    pull["mergeable"] = false.into();
+    forgejo_api(home, "repos/team/repo/pulls/7", &pull);
+    forgejo_api(
+        home,
+        &format!("repos/team/repo/commits/{sha}/status?limit=50"),
+        &serde_json::json!({"total_count": 2, "statuses": [
+            {"context": "ci / rust", "status": "success"}, {"context": "review", "status": "pending"}
+        ]}),
     );
     let status = fixture.ok(&["status", "summary"]);
     assert_eq!(
@@ -2368,9 +2369,12 @@ fn review_refines_an_issue_in_the_workspace_add_continues() {
     ));
     forge_origin(&fixture);
     let bin = fixture.root.path().join("issue-bin");
-    install_test_script(
-        bin.join("fj"),
-        "#!/bin/sh\nprintf '\\342\\201\\250Clarify retries\\342\\201\\251 #\\342\\201\\25012\\342\\201\\251\\nBy user \\342\\200\\224 Open\\n\\n> Retry failed uploads.\\n\\n0 comments\\n'\n",
+    install_forgejo_curl(&bin);
+    forgejo_api(
+        fixture.root.path(),
+        "repos/team/project/issues/12",
+        &serde_json::json!({"number": 12, "title": "Clarify retries", "state": "open",
+            "body": "Retry failed uploads.", "labels": [], "pull_request": null}),
     );
     let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap());
     let review = |target: &[&str]| {
@@ -2479,14 +2483,12 @@ fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
 
     // The daemon also queries the PR when linking it, through the fixture's bin.
     let bin = fixture.root.path().join("bin");
-    let fj_args = fixture.root.path().join("fj-args");
-    install_test_script(
-        bin.join("fj"),
-        format!(
-            "#!/bin/sh\nprintf '%s\\0' \"$@\" > {}\nprintf 'Top change #7\\nBy user — Open — +1 -0\\nFrom `stack/top` into `stack/base`\\n'\n",
-            fj_args.display()
-        ),
-    );
+    install_forgejo_curl(&bin);
+    let mut pull = forgejo_pull(7, "open", "stack/top", &"7".repeat(40));
+    pull["title"] = "Top change".into();
+    pull["base"]["ref"] = "stack/base".into();
+    pull["head"]["repo"]["full_name"] = "team/project".into();
+    forgejo_api(fixture.root.path(), "repos/team/project/pulls/7", &pull);
     let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap());
     let review = |target: &[&str]| {
         fixture
@@ -2514,9 +2516,9 @@ fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
         "{stdout}"
     );
     assert!(
-        fs::read_to_string(&fj_args)
+        fs::read_to_string(fixture.root.path().join("curl-urls"))
             .unwrap()
-            .contains("pr\0view\x007\0--host\0forge.example\0")
+            .contains("https://forge.example/api/v1/repos/team/project/pulls/7\n")
     );
     let url = "https://forge.example/team/project/pulls/7";
     let linked_prs = || fixture.ok(&["inspect", "stack-top"])["workspace"]["links"]["prs"].clone();
@@ -9401,14 +9403,12 @@ fn codex_launches_trust_shared_repository_directory_and_external_workspace() {
 fn add_from_issue_uses_existing_forge_cli_and_passes_context_to_agents() {
     let fixture = Fixture::with_config(Some("[codex]\ndefault_mode = 'app'\n"));
     let bin = fixture.root.path().join("issue-bin");
-    for tool in ["gh", "fj"] {
-        let script = bin.join(tool);
-        install_test_script_with_mode(
-            &script,
-            "#!/bin/sh\nprintf '%s\\0' \"$@\" > \"$ISSUE_ARGS\"\npwd > \"$ISSUE_CWD\"\ncat \"$ISSUE_RESPONSE\"\n",
-            0o700,
-        );
-    }
+    install_test_script_with_mode(
+        bin.join("gh"),
+        "#!/bin/sh\nprintf '%s\\0' \"$@\" > \"$ISSUE_ARGS\"\ncat \"$ISSUE_RESPONSE\"\n",
+        0o700,
+    );
+    install_forgejo_curl(&bin);
     for tool in ["codex", "claude"] {
         let script = bin.join(tool);
         install_test_script_with_mode(
@@ -9419,7 +9419,6 @@ fn add_from_issue_uses_existing_forge_cli_and_passes_context_to_agents() {
     }
     let response = fixture.root.path().join("issue-response");
     let issue_args = fixture.root.path().join("issue-args");
-    let issue_cwd = fixture.root.path().join("issue-cwd");
     let agent_args = fixture.root.path().join("agent-args");
     let title = "Fix API timeout; $(false)";
     let body = "Reproduce with two clients.\nKeep the connection alive.";
@@ -9440,15 +9439,18 @@ fn add_from_issue_uses_existing_forge_cli_and_passes_context_to_agents() {
         } else {
             git(&fixture.repo, &["remote", "set-url", "origin", &remote]);
         }
-        let text = if host == "github.com" {
-            serde_json::json!({"state":"OPEN", "number": number, "title": title, "body": body})
-                .to_string()
+        if host == "github.com" {
+            let text =
+                serde_json::json!({"state":"OPEN", "number": number, "title": title, "body": body});
+            fs::write(&response, text.to_string()).unwrap();
         } else {
-            format!(
-                "\u{2068}{title}\u{2069} #\u{2068}{number}\u{2069}\"\nBy user — Open\n\n> {body}\n\n0 comments\n"
-            )
-        };
-        fs::write(&response, text).unwrap();
+            forgejo_api(
+                fixture.root.path(),
+                &format!("repos/team/project/issues/{number}"),
+                &serde_json::json!({"number": number, "title": title, "body": body,
+                    "state": "open", "labels": [], "pull_request": null}),
+            );
+        }
         let input = if as_url {
             url.clone()
         } else {
@@ -9473,7 +9475,6 @@ fn add_from_issue_uses_existing_forge_cli_and_passes_context_to_agents() {
             .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
             .env("ISSUE_RESPONSE", &response)
             .env("ISSUE_ARGS", &issue_args)
-            .env("ISSUE_CWD", &issue_cwd)
             .env("AGENT_ARGS", &agent_args)
             .output()
             .unwrap();
@@ -9487,16 +9488,15 @@ fn add_from_issue_uses_existing_forge_cli_and_passes_context_to_agents() {
         assert_eq!(workspace["name"], name);
         assert_eq!(workspace["branch"], name);
         assert_eq!(fixture.ok(&["inspect", &name])["issue"]["url"], url);
-        assert_eq!(
-            fs::read_to_string(&issue_cwd).unwrap().trim(),
-            fixture.repo.to_str().unwrap()
-        );
-        let invocation = fs::read_to_string(&issue_args).unwrap();
-        assert!(invocation.contains(&format!("issue\0view\0{number}\0")));
         if host == "github.com" {
+            let invocation = fs::read_to_string(&issue_args).unwrap();
+            assert!(invocation.contains(&format!("issue\0view\0{number}\0")));
             assert!(invocation.contains("--repo\0github.com/team/project\0"));
         } else {
-            assert!(invocation.contains("--host\0forge.example\0--remote\0origin\0"));
+            let urls = fs::read_to_string(fixture.root.path().join("curl-urls")).unwrap();
+            assert!(urls.ends_with(&format!(
+                "https://forge.example/api/v1/repos/team/project/issues/{number}\n"
+            )));
         }
         let invocation = strip_message_hooks(&fs::read_to_string(&agent_args).unwrap(), '\0');
         let prompt = invocation.split('\0').next().unwrap();
@@ -9525,7 +9525,6 @@ fn add_from_issue_uses_existing_forge_cli_and_passes_context_to_agents() {
         .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
         .env("ISSUE_RESPONSE", &response)
         .env("ISSUE_ARGS", &issue_args)
-        .env("ISSUE_CWD", &issue_cwd)
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
@@ -9918,7 +9917,7 @@ fn issue_number_picks_a_repository_before_lookup_interactively() {
         ("fzf", "#!/bin/sh\nhead -n 1\n"),
         (
             "gh",
-            "#!/bin/sh\nprintf 'lookup in %s' \"$PWD\" >&2\nexit 1\n",
+            "#!/bin/sh\nprintf 'lookup with %s' \"$*\" >&2\nexit 1\n",
         ),
     ] {
         let path = bin.join(tool);
@@ -9927,7 +9926,7 @@ fn issue_number_picks_a_repository_before_lookup_interactively() {
     let (output, transcript) = fixture.interactive(&["add", "103", "--base", "HEAD"], "");
     assert!(!output.status.success(), "{output:?}\n{transcript}");
     assert!(
-        transcript.contains(&format!("lookup in {}", fixture.repo.display())),
+        transcript.contains("--repo github.com/team/project"),
         "{transcript}"
     );
     assert_eq!(fixture.ok(&["ls"]), serde_json::json!([]));
@@ -10374,6 +10373,45 @@ esac
     );
 }
 
+/// A `curl` for `bin` that answers Forgejo API requests from files that
+/// [`forgejo_api`] writes, logging each URL to `$HOME/curl-urls`.
+fn install_forgejo_curl(bin: &Path) {
+    install_test_script(
+        bin.join("curl"),
+        r#"#!/bin/sh
+cat >/dev/null
+for arg; do url=$arg; done
+printf '%s\n' "$url" >> "$HOME/curl-urls"
+key=$(printf %s "${url#*/api/v1/}" | tr '/?&=' '____')
+if [ -f "$HOME/api/$key" ]; then
+  cat "$HOME/api/$key"
+  printf '\n200'
+else
+  printf '{"message":"no fixture for %s"}\n404' "$key"
+fi
+"#,
+    );
+}
+
+/// Answer `GET /api/v1/<endpoint>` with `body` through the fake curl.
+fn forgejo_api(home: &Path, endpoint: &str, body: &Value) {
+    let key: String = endpoint
+        .chars()
+        .map(|c| if "/?&=".contains(c) { '_' } else { c })
+        .collect();
+    fs::create_dir_all(home.join("api")).unwrap();
+    fs::write(home.join("api").join(key), body.to_string()).unwrap();
+}
+
+/// A Forgejo PR of `team/repo` from its `head` branch at commit `sha`.
+fn forgejo_pull(number: u64, state: &str, head: &str, sha: &str) -> Value {
+    let merged = state == "merged";
+    serde_json::json!({"number": number, "title": format!("PR {number}"),
+        "state": if merged { "closed" } else { state }, "merged": merged, "body": "", "labels": [],
+        "head": {"ref": head, "sha": sha, "repo": {"full_name": "team/repo"}},
+        "base": {"ref": "main"}, "mergeable": true})
+}
+
 fn wait_removed(fixture: &Fixture, name: &str) {
     try_wait_for(|| {
         (!fixture
@@ -10750,7 +10788,7 @@ fn pr_watch_checks_github_state_and_commit_and_survives_restart() {
 }
 
 #[test]
-fn pr_watch_checks_forgejo_merge_and_commits_with_fixture_cli() {
+fn pr_watch_checks_forgejo_merge_and_commits_through_the_api() {
     let fixture = Fixture::new();
     let workspace = fixture.add("fj-watch");
     git(
@@ -10762,20 +10800,23 @@ fn pr_watch_checks_forgejo_merge_and_commits_with_fixture_cli() {
             "https://forge.example/team/repo.git",
         ],
     );
-    let bin = fixture.root.path().join("bin");
-    install_test_script(
-        bin.join("fj"),
-        "#!/bin/sh\nfor arg; do last=$arg; done\nif [ \"$last\" = commits ]; then cat \"$HOME/commits\"; else printf 'Title #56\\nBy user — Merged — +1 -0\\nFrom `fj-watch` into `main`\\n'; fi\n",
-    );
+    let home = fixture.root.path();
+    install_forgejo_curl(&home.join("bin"));
     let head = git(
         Path::new(workspace["path"].as_str().unwrap()),
         &["rev-parse", "HEAD"],
     );
-    fs::write(
-        fixture.root.path().join("commits"),
-        format!("commit {} (+1, -0)\nAuthor: Test\n", head.trim()),
-    )
-    .unwrap();
+    let head = head.trim();
+    forgejo_api(
+        home,
+        "repos/team/repo/pulls/56",
+        &forgejo_pull(56, "merged", "fj-watch", head),
+    );
+    forgejo_api(
+        home,
+        "repos/team/repo/pulls/56/commits?limit=50&page=1",
+        &serde_json::json!([{"sha": head}]),
+    );
     fixture.ok(&["link", "pr", "56", "--workspace", "fj-watch"]);
     // A merge alone waits for the agent's explicit done.
     assert!(fixture.ok(&["inspect", "fj-watch"])["completion"].is_null());
@@ -11079,21 +11120,26 @@ fn watch_explicit_forgejo_fork_pr_without_linking_or_checkout() {
             "https://forge.example/team/repo.git",
         ],
     );
-    let bin = fixture.root.path().join("bin");
-    install_test_script(
-        bin.join("fj"),
-        r#"#!/bin/sh
-for arg; do last=$arg; done
-case "$*" in
- *'pr status '*) printf 'Open — Can be merged\n- Success — rust\n';;
- *'pr review '*) printf 'No reviews.\n';;
- *) case "$last" in
-     commits) printf 'commit aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n';;
-     comments) printf 'reviewer said: please test forks\n';;
-     *) printf 'Fork PR #7\nBy user — Open — +1 -0\nFrom `other/repo:fork-topic` into `main`\n';;
-    esac;;
-esac
-"#,
+    let home = fixture.root.path();
+    install_forgejo_curl(&home.join("bin"));
+    let sha = "a".repeat(40);
+    let mut pull = forgejo_pull(7, "open", "fork-topic", &sha);
+    pull["head"]["repo"]["full_name"] = "other/repo".into();
+    forgejo_api(home, "repos/team/repo/pulls/7", &pull);
+    forgejo_api(
+        home,
+        "repos/team/repo/issues/7/comments",
+        &serde_json::json!([{"id": 1, "body": "please test forks"}]),
+    );
+    forgejo_api(
+        home,
+        "repos/team/repo/pulls/7/reviews?limit=50&page=1",
+        &serde_json::json!([]),
+    );
+    forgejo_api(
+        home,
+        &format!("repos/team/repo/commits/{sha}/status?limit=50"),
+        &serde_json::json!({"total_count": 1, "statuses": [{"context": "rust", "status": "success"}]}),
     );
     let watched = fixture.ok(&["watch", "pr", "7", "--workspace", "items"]);
     let updates = watched["updates"].as_array().unwrap();
@@ -11129,42 +11175,37 @@ fn watch_forgejo_issue_reports_comments_closure_and_reopening() {
             "refs/remotes/origin/main",
         ],
     );
-    let bin = fixture.root.path().join("bin");
-    install_test_script(
-        bin.join("fj"),
-        r#"#!/bin/sh
-for arg; do last=$arg; done
-if [ "$last" = comments ]; then cat "$HOME/comments"; else cat "$HOME/issue"; fi
-"#,
-    );
-    let state = |state| {
-        fs::write(
-            fixture.root.path().join("issue"),
-            format!("Issue #8\nBy user — {state}\n"),
+    let home = fixture.root.path();
+    install_forgejo_curl(&home.join("bin"));
+    let state = |state: &str| {
+        forgejo_api(
+            home,
+            "repos/team/repo/issues/8",
+            &serde_json::json!({"number": 8, "title": "Issue", "state": state, "body": "",
+                "labels": [], "pull_request": null}),
         )
-        .unwrap()
     };
-    state("Open");
-    fs::write(
-        fixture.root.path().join("comments"),
-        "User said:\n> first comment\n",
-    )
-    .unwrap();
+    state("open");
+    forgejo_api(
+        home,
+        "repos/team/repo/issues/8/comments",
+        &serde_json::json!([{"id": 1, "body": "first comment"}]),
+    );
     fixture.ok(&["link", "issue", "8", "--workspace", "issue-watch"]);
     let first = fixture.ok(&["watch", "issue", "--workspace", "issue-watch"]);
     assert_eq!(first["updates"][0]["kind"], "comment");
-    state("Closed");
+    state("closed");
     let closed = fixture.ok(&["watch", "--workspace", "issue-watch"]);
     assert_eq!(closed["updates"].as_array().unwrap().len(), 1);
     assert_eq!(closed["updates"][0]["kind"], "closed");
-    state("Open");
+    state("open");
     let reopened = fixture.ok(&["watch", "issue", "8", "--workspace", "issue-watch"]);
     assert_eq!(reopened["updates"][0]["kind"], "reopened");
     assert!(fixture.ok(&["inspect", "issue-watch"])["completion"].is_null());
 }
 
 #[test]
-fn pr_wait_reads_forgejo_ci_from_the_api_when_fj_status_fails() {
+fn pr_wait_reads_forgejo_ci_and_conflicts_from_the_api() {
     let fixture = Fixture::with_config(Some("[cleanup.auto]\nenabled=false\n"));
     fixture.add("api");
     git(
@@ -11176,34 +11217,28 @@ fn pr_wait_reads_forgejo_ci_from_the_api_when_fj_status_fails() {
             "https://forge.example/team/repo.git",
         ],
     );
-    let bin = fixture.root.path().join("bin");
-    install_test_script(
-        bin.join("fj"),
-        r#"#!/bin/sh
-case " $* " in
- *' status '*) echo 'unknown variant ``' >&2; exit 1;;
- *' review '*|*' comments '*) ;;
- *' commits '*) printf 'commit 2222222222222222222222222222222222222222\n';;
- *) printf 'Title #7\nBy user — Open — +1 -0\nFrom `api` into `main`\n';;
-esac
-"#,
+    let home = fixture.root.path();
+    install_forgejo_curl(&home.join("bin"));
+    let sha = "2".repeat(40);
+    let mut pull = forgejo_pull(7, "open", "api", &sha);
+    pull["mergeable"] = false.into();
+    forgejo_api(home, "repos/team/repo/pulls/7", &pull);
+    forgejo_api(
+        home,
+        "repos/team/repo/issues/7/comments",
+        &serde_json::json!([]),
     );
-    let curl_args = fixture.root.path().join("curl-args");
-    install_test_script(
-        bin.join("curl"),
-        format!(
-            r#"#!/bin/sh
-for arg; do url=$arg; done
-echo "$url" >> {}
-case "$url" in
- */api/v1/repos/team/repo/pulls/7) echo '{{"title":"Topic","mergeable":false,"head":{{"sha":"2222222222222222222222222222222222222222"}}}}'; printf 200;;
- */api/v1/repos/team/repo/commits/2222222222222222222222222222222222222222/status?limit=50)
-  echo '{{"total_count":2,"statuses":[{{"context":"rust","status":"failure"}},{{"context":"gate","status":"pending"}}]}}'; printf 200;;
- *) exit 22;;
-esac
-"#,
-            curl_args.display()
-        ),
+    forgejo_api(
+        home,
+        "repos/team/repo/pulls/7/reviews?limit=50&page=1",
+        &serde_json::json!([]),
+    );
+    forgejo_api(
+        home,
+        &format!("repos/team/repo/commits/{sha}/status?limit=50"),
+        &serde_json::json!({"total_count": 2, "statuses": [
+            {"context": "rust", "status": "failure"}, {"context": "gate", "status": "pending"}
+        ]}),
     );
     fixture.ok(&["link", "pr", "7", "--workspace", "api"]);
     let watched = fixture.ok(&["watch", "pr", "--workspace", "api"]);
@@ -11224,14 +11259,14 @@ esac
     );
     assert_eq!(updates[1]["message"], "PR has merge conflicts");
     assert!(
-        fs::read_to_string(&curl_args)
+        fs::read_to_string(home.join("curl-urls"))
             .unwrap()
             .starts_with("https://forge.example/api/v1/repos/team/repo/pulls/7\n")
     );
 }
 
 #[test]
-fn pr_wait_reports_forgejo_reviews_when_status_lookup_fails() {
+fn pr_wait_reports_forgejo_reviews_when_the_ci_lookup_fails() {
     let fixture = Fixture::with_config(Some("[cleanup.auto]\nenabled=false\n"));
     fixture.add("watch");
     git(
@@ -11243,43 +11278,49 @@ fn pr_wait_reports_forgejo_reviews_when_status_lookup_fails() {
             "https://forge.example/team/repo.git",
         ],
     );
-    let bin = fixture.root.path().join("bin");
-    install_test_script(
-        bin.join("fj"),
-        "#!/bin/sh\ncase \" $* \" in\n *' status '*) cat \"$HOME/status\";;\n *' review '*) cat \"$HOME/reviews\";;\n *' comments '*) cat \"$HOME/comments\";;\n *' commits '*) printf 'commit 1111111111111111111111111111111111111111\\n';;\n *) printf 'Title #7\\nBy user — Open — +1 -0\\nFrom `watch` into `main`\\n';;\nesac\n",
+    let home = fixture.root.path();
+    install_forgejo_curl(&home.join("bin"));
+    let sha = "1".repeat(40);
+    let status = format!("repos/team/repo/commits/{sha}/status?limit=50");
+    let checks = |rust: &str| {
+        serde_json::json!({"total_count": 2, "statuses": [
+            {"context": "review/default", "status": "success"}, {"context": "rust", "status": rust}
+        ]})
+    };
+    let review = |body: &str| serde_json::json!([{"id": 1, "state": "COMMENT", "body": body, "user": {"login": "review-bot"}}]);
+    let reviews = "repos/team/repo/pulls/7/reviews?limit=50&page=1";
+    forgejo_api(
+        home,
+        "repos/team/repo/pulls/7",
+        &forgejo_pull(7, "open", "watch", &sha),
     );
-    install_test_script(bin.join("curl"), "#!/bin/sh\nexit 22\n");
-    fs::write(
-        fixture.root.path().join("status"),
-        "Open — Can be merged\n- Success — review/default\n- Pending — rust\n",
-    )
-    .unwrap();
-    fs::write(
-        fixture.root.path().join("reviews"),
-        "Comment by review-bot\n> A finding\n",
-    )
-    .unwrap();
-    fs::write(fixture.root.path().join("comments"), "").unwrap();
+    forgejo_api(
+        home,
+        "repos/team/repo/issues/7/comments",
+        &serde_json::json!([]),
+    );
+    forgejo_api(home, &status, &checks("pending"));
+    forgejo_api(home, reviews, &review("A finding"));
     fixture.ok(&["link", "pr", "7", "--workspace", "watch"]);
     let first = fixture.ok(&["watch", "pr", "--workspace", "watch"]);
-    assert_eq!(first["updates"].as_array().unwrap().len(), 2);
+    assert_eq!(first["updates"].as_array().unwrap().len(), 2, "{first}");
     assert_eq!(first["updates"][1]["message"], "review/default: Success");
-    fs::write(fixture.root.path().join("status"), "malformed response").unwrap();
-    fs::write(
-        fixture.root.path().join("reviews"),
-        "Comment by review-bot\n> Another finding\n",
+    // A failed CI lookup reports itself without hiding a new review.
+    fs::remove_file(
+        home.join("api")
+            .join(status.replace(['/', '?', '&', '='], "_")),
     )
     .unwrap();
+    forgejo_api(home, reviews, &review("Another finding"));
     let second = fixture.ok(&["watch", "pr", "--workspace", "watch"]);
-    assert_eq!(second["updates"][0]["kind"], "comment");
+    assert_eq!(second["updates"][0]["kind"], "comment", "{second}");
     assert_eq!(second["updates"][1]["kind"], "lookup_failed");
-    fs::write(
-        fixture.root.path().join("status"),
-        "Open — Merge conflicts\n- Success — review/default\n- Failure — rust\n",
-    )
-    .unwrap();
+    let mut conflicting = forgejo_pull(7, "open", "watch", &sha);
+    conflicting["mergeable"] = false.into();
+    forgejo_api(home, "repos/team/repo/pulls/7", &conflicting);
+    forgejo_api(home, &status, &checks("failure"));
     let third = fixture.ok(&["watch", "pr", "--workspace", "watch"]);
-    assert_eq!(third["updates"].as_array().unwrap().len(), 2);
+    assert_eq!(third["updates"].as_array().unwrap().len(), 2, "{third}");
     assert!(
         third["updates"][0]["message"]
             .as_str()
@@ -16016,24 +16057,32 @@ fn merged_base_prs_retarget_and_restack_the_workspaces_stacked_on_them() {
         let root = fixture.root.path().to_owned();
         let bin = root.join("bin");
         fs::create_dir_all(&bin).unwrap();
-        // Both forges PATCH the PR through their API: gh api, or curl with fj's token.
-        let scripts = [
-            (
-                "gh",
-                "if [ \"$1\" = api ]; then echo \"$5 $6 $(cat)\" >> \"$HOME/edits\"; echo '{}'; else cat \"$HOME/pr-$3\"; fi",
+        // Both forges read and PATCH the PR through their API: gh api, or
+        // curl with fj's token.
+        install_test_script(
+            bin.join("gh"),
+            r#"#!/bin/sh
+if [ "$1" != api ]; then cat "$HOME/pr-$3"
+elif [ "$5" = GET ]; then cat "$HOME/rest-${6##*/}"
+else echo "$5 $6 $(cat)" >> "$HOME/edits"; echo '{}'
+fi
+"#,
+        );
+        install_forgejo_curl(&bin);
+        let fake_api = fs::read_to_string(bin.join("curl")).unwrap();
+        install_test_script(
+            bin.join("curl"),
+            fake_api.replacen(
+                "cat >/dev/null\n",
+                r#"case "$*" in *PATCH*)
+  printf '%s\n' "$@" > "$HOME/curl-args"; cat > "$HOME/curl-stdin"
+  echo "2 main" >> "$HOME/edits"; printf '{}\n200'; exit;;
+esac
+cat >/dev/null
+"#,
+                1,
             ),
-            (
-                "fj",
-                "if [ \"$8\" = commits ]; then echo \"commit $(cat \"$HOME/head\")\"; else cat \"$HOME/pr-$5\"; fi",
-            ),
-            (
-                "curl",
-                "case \"$*\" in *PATCH*) printf '%s\\n' \"$@\" > \"$HOME/curl-args\"; cat > \"$HOME/curl-stdin\"; echo \"2 main\" >> \"$HOME/edits\";; *) cat > /dev/null;; esac; printf '{}\\n200'",
-            ),
-        ];
-        for (name, body) in scripts {
-            install_test_script(bin.join(name), format!("#!/bin/sh\n{body}\n"));
-        }
+        );
         let keys = if cfg!(target_os = "macos") {
             root.join("Library/Application Support/forgejo-cli.forgejo-cli/keys.json")
         } else {
@@ -16050,19 +16099,21 @@ fn merged_base_prs_retarget_and_restack_the_workspaces_stacked_on_them() {
             &["rev-parse", "HEAD"],
         );
         let head = head.trim();
-        fs::write(root.join("head"), head).unwrap();
+        forgejo_api(
+            &root,
+            "repos/team/project/pulls/1/commits?limit=50&page=1",
+            &serde_json::json!([{"sha": head}]),
+        );
         let write_pr = |number: u64, state: &str, head_branch: &str, base: &str| {
-            let text = if tool == "gh" {
-                serde_json::json!({"number": number, "state": state.to_uppercase(), "title": "Stacked",
-                    "headRefName": head_branch, "baseRefName": base, "isCrossRepository": false,
-                    "commits": [{"oid": head}]})
-                .to_string()
-            } else {
-                format!(
-                    "Stacked #{number}\nBy user — {state} — +1 -0\nFrom `{head_branch}` into `{base}`\n"
-                )
-            };
-            fs::write(root.join(format!("pr-{number}")), text).unwrap();
+            let mut rest = forgejo_pull(number, &state.to_lowercase(), head_branch, head);
+            rest["base"]["ref"] = base.into();
+            rest["head"]["repo"]["full_name"] = "team/project".into();
+            forgejo_api(&root, &format!("repos/team/project/pulls/{number}"), &rest);
+            fs::write(root.join(format!("rest-{number}")), rest.to_string()).unwrap();
+            let cli = serde_json::json!({"number": number, "state": state.to_uppercase(),
+                "title": "Stacked", "headRefName": head_branch, "baseRefName": base,
+                "isCrossRepository": false, "commits": [{"oid": head}]});
+            fs::write(root.join(format!("pr-{number}")), cli.to_string()).unwrap();
         };
         write_pr(1, "Open", "lower", "main");
         write_pr(2, "Open", "upper", "lower");
@@ -16242,7 +16293,11 @@ fn issue_completion_fixture(tool: &str, cleanup: bool) -> Fixture {
         ],
     );
     let bin = fixture.root.path().join("bin");
-    install_test_script(bin.join(tool), "#!/bin/sh\ncat \"$HOME/issue-response\"\n");
+    if tool == "gh" {
+        install_test_script(bin.join(tool), "#!/bin/sh\ncat \"$HOME/issue-response\"\n");
+    } else {
+        install_forgejo_curl(&bin);
+    }
     write_issue_state(&fixture, tool, "Open");
     fixture.ok(&[
         "add",
@@ -16257,12 +16312,19 @@ fn issue_completion_fixture(tool: &str, cleanup: bool) -> Fixture {
 }
 
 fn write_issue_state(fixture: &Fixture, tool: &str, state: &str) {
-    let response = if tool == "gh" {
-        serde_json::json!({"number":316,"title":"Issue","body":"context","state":state.to_uppercase()}).to_string()
+    if tool == "gh" {
+        let response = serde_json::json!({"number":316,"title":"Issue","body":"context",
+            "state":state.to_uppercase()});
+        fs::write(
+            fixture.root.path().join("issue-response"),
+            response.to_string(),
+        )
+        .unwrap();
     } else {
-        format!("Issue #316\nBy user — {state}\n\ncontext\n\n0 comments\n")
-    };
-    fs::write(fixture.root.path().join("issue-response"), response).unwrap();
+        let response = serde_json::json!({"number":316,"title":"Issue","body":"context",
+            "state":state.to_lowercase(),"labels":[],"pull_request":null});
+        forgejo_api(fixture.root.path(), "repos/team/repo/issues/316", &response);
+    }
 }
 
 fn wait_issue_field(fixture: &Fixture, field: &str, expected: &str) -> Value {
@@ -16285,7 +16347,12 @@ fn closed_issue_completes_for_both_forges_and_failed_queries_retain_work() {
         assert!(fixture.ok(&["inspect", "issue-work"])["completion"].is_null());
         write_issue_state(&fixture, tool, "Unexpected");
         fixture.restart();
-        let inspection = wait_issue_field(&fixture, "/issue/error", "issue");
+        let expected = if tool == "gh" {
+            "issue"
+        } else {
+            "unrecognized item state"
+        };
+        let inspection = wait_issue_field(&fixture, "/issue/error", expected);
         assert!(inspection["completion"].is_null());
         // A saved URL must not silently follow an edited origin, even if closed.
         write_issue_state(&fixture, tool, "Closed");

@@ -873,7 +873,8 @@ fn view_automatically_includes_failed_logs_and_leaves_successful_checks_quiet() 
         let mut responses = failed_check_responses();
         responses["GET repos/team/project/pulls/8"]["body"] = json!({
             "number": 8, "title": "Fix crash", "state": "open", "body": "PR description",
-            "head": {"sha": "head", "ref": "topic"}, "base": {"ref": "main"}
+            "head": {"sha": "head", "ref": "topic", "repo": {"full_name": "team/project"}},
+            "base": {"ref": "main"}, "mergeable": true
         });
         responses["GET repos/team/project/issues/8/comments"] =
             json!({"body": [{"body": "Please fix CI", "user": {"login": "reviewer"}}]});
@@ -882,24 +883,19 @@ fn view_automatically_includes_failed_logs_and_leaves_successful_checks_quiet() 
             responses["GET repos/team/project/actions/jobs/18345/logs"] =
                 json!({"status": 404, "body": {"message": "logs unavailable"}});
         }
-        fixture.respond(responses);
         let result = if outcome == "success" {
-            "Success"
+            "success"
         } else {
-            "Failure"
+            "failure"
         };
-        support::install_test_script(
-            fixture.root.path().join("bin/fj"),
-            format!(
-                r#"#!/bin/sh
-case " $* " in
- *' status '*) printf 'Open — Can be merged\n- {result} — rust\n- Success — gate\n- Pending — queued\n';;
- *' review '*) printf 'No reviews.\n';;
- *) printf 'Title #8\nBy user — Open — +1 -0\nFrom `topic` into `main`\n';;
-esac
-"#
-            ),
-        );
+        responses["GET repos/team/project/commits/head/status?limit=50"] = json!({"body": {
+            "total_count": 3, "statuses": [
+                {"context": "rust", "status": result},
+                {"context": "gate", "status": "success"},
+                {"context": "queued", "status": "pending"}
+            ]
+        }});
+        fixture.respond(responses);
         fixture.ok(&["link", "pr", "8", "--workspace", "topic"]);
         fixture.requests();
         for no_comments in [false, true] {
@@ -968,19 +964,18 @@ fn watch_reports_failed_steps_or_log_lookup_errors_without_hiding_comments() {
             responses["GET repos/team/project/actions/jobs/18345/logs"] =
                 json!({"status": 404, "body": {"message": "logs unavailable"}});
         }
+        responses["GET repos/team/project/pulls/8"]["body"] = json!({
+            "number": 8, "title": "Fix crash", "state": "open",
+            "head": {"sha": "head", "ref": "topic", "repo": {"full_name": "team/project"}},
+            "base": {"ref": "main"}, "mergeable": true
+        });
+        responses["GET repos/team/project/commits/head/status?limit=50"] = json!({"body": {
+            "total_count": 1, "statuses": [{"context": "rust", "status": "failure"}]
+        }});
+        responses["GET repos/team/project/issues/8/comments"] =
+            json!({"body": [{"id": 1, "body": "A review is ready", "user": {"login": "bot"}}]});
+        responses["GET repos/team/project/pulls/8/reviews?limit=50&page=1"] = json!({"body": []});
         fixture.respond(responses);
-        support::install_test_script(
-            fixture.root.path().join("bin/fj"),
-            r#"#!/bin/sh
-case " $* " in
- *' status '*) printf 'Open — Can be merged\n- Failure — rust\n';;
- *' review '*) printf 'No reviews.\n';;
- *' comments '*) printf 'A review is ready\n';;
- *' commits '*) printf 'commit 1111111111111111111111111111111111111111\n';;
- *) printf 'Title #8\nBy user — Open — +1 -0\nFrom `topic` into `main`\n';;
-esac
-"#,
-        );
         let result = fixture.ok(&[
             "watch",
             "pr",
