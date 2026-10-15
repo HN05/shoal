@@ -15,8 +15,10 @@ root_dir = "~/shoal"
 # A built-in launcher or a name defined in [commands].
 # default_agent = "codex"
 
-# Agents that run at once (no default limit); `shoal add` queues the rest and
-# starts them as slots free. A repository's value limits its own agents.
+# Agents that run at once (dynamic host capacity by default); `shoal add`
+# queues the rest and starts them as slots free. Set a positive number for a
+# fixed limit or `none` for unlimited admission. A repository's value limits
+# its own agents.
 # max_agents = 3
 
 # Prompt templates normally live beside this file as issue-template.md and
