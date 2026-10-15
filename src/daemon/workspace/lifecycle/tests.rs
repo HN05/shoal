@@ -138,6 +138,65 @@ async fn removal_retains_session_logs_until_ownership_is_released() {
 }
 
 #[tokio::test]
+async fn keep_branch_refuses_detached_head_with_unpushed_commits() {
+    let (_root, manager, workspace) = fixture().await;
+    git(&workspace.path, &["switch", "--detach"]);
+    fs::write(workspace.path.join("detached-work"), "work to keep\n").unwrap();
+    crate::test_support::commit(&workspace.path, "detached-work");
+    let head = git(&workspace.path, &["rev-parse", "HEAD"]);
+
+    let error = manager
+        .remove_workspace(
+            &workspace.id,
+            BranchChoice::KeepBranch,
+            InspectionPolicy::GitOnly,
+        )
+        .await
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("detached HEAD has unpushed commits"),
+        "{error:#}"
+    );
+    assert!(workspace.path.is_dir());
+    assert!(manager.workspace(&workspace.id).await.is_ok());
+    assert_eq!(git(&workspace.path, &["rev-parse", "HEAD"]), head);
+    assert_eq!(
+        fs::read_to_string(workspace.path.join("detached-work")).unwrap(),
+        "work to keep\n"
+    );
+
+    manager
+        .remove_workspace(
+            &workspace.id,
+            BranchChoice::DeleteBranch,
+            InspectionPolicy::GitOnly,
+        )
+        .await
+        .unwrap();
+    assert!(!workspace.path.exists());
+    assert!(manager.workspace(&workspace.id).await.is_err());
+}
+
+#[tokio::test]
+async fn keep_branch_removes_detached_head_without_unpushed_commits() {
+    let (_root, manager, workspace) = fixture().await;
+    git(&workspace.path, &["switch", "--detach"]);
+
+    manager
+        .remove_workspace(
+            &workspace.id,
+            BranchChoice::KeepBranch,
+            InspectionPolicy::GitOnly,
+        )
+        .await
+        .unwrap();
+    assert!(!workspace.path.exists());
+    assert!(manager.workspace(&workspace.id).await.is_err());
+}
+
+#[tokio::test]
 async fn directory_activity_distinguishes_inspection_from_removal_checks() {
     for (removal, scans_directory) in [
         (
