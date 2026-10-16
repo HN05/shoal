@@ -1,5 +1,5 @@
 //! Read-only issue and PR activity through the user's existing forge login.
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -11,6 +11,9 @@ mod queries;
 /// How long a lookup may keep failing with the same error before it is
 /// reported again, so a failing source cannot silence a wait indefinitely.
 const FAILURE_REPORT_INTERVAL: u64 = 600;
+
+/// The comment source of an item's discussion, where Shoal posts comments.
+pub(super) const DISCUSSION: &str = "discussion";
 
 /// Conflicted paths named in a branch conflict message; `shoal conflicts` lists all.
 const MAX_LISTED_FILES: usize = 10;
@@ -171,7 +174,7 @@ impl Snapshot {
         if self.errors.contains_key("CI") {
             self.checks = previous.checks.clone();
         }
-        for source in ["discussion", "reviews"] {
+        for source in [DISCUSSION, "reviews"] {
             if self.errors.contains_key(source) {
                 let prefix = format!("{source}:");
                 self.comments.extend(
@@ -182,6 +185,27 @@ impl Snapshot {
                         .map(|(key, comment)| (key.clone(), comment.clone())),
                 );
             }
+        }
+    }
+
+    /// Take comments in `authored` that `next` shows for the first time as
+    /// already seen, and stop tracking each one `next` shows.
+    pub(crate) fn adopt_authored(&mut self, next: &Self, authored: &mut BTreeSet<String>) {
+        authored.retain(|key| match next.comments.get(key) {
+            Some(comment) => {
+                self.comments
+                    .entry(key.clone())
+                    .or_insert_with(|| comment.clone());
+                false
+            }
+            None => true,
+        });
+    }
+
+    /// Take `state` as already seen, once a state has been observed.
+    pub(crate) fn adopt_state(&mut self, state: &str) {
+        if !self.state.is_empty() {
+            state.clone_into(&mut self.state);
         }
     }
 
@@ -229,6 +253,11 @@ pub(super) fn id_text(id: &serde_json::Value) -> String {
         serde_json::Value::String(id) => id.clone(),
         id => id.to_string(),
     }
+}
+
+/// The activity key of the discussion comment `id`.
+pub(crate) fn discussion_key(id: &serde_json::Value) -> String {
+    format!("{DISCUSSION}:{}", id_text(id))
 }
 
 #[cfg(test)]
@@ -315,6 +344,44 @@ mod tests {
         let mut recovered = failed.clone();
         recovered.errors.clear();
         assert!(failed.changes(&recovered, "pr").is_empty());
+    }
+
+    #[test]
+    fn authored_comments_wake_only_once_they_change() {
+        let mut previous = Snapshot::default();
+        previous.record_comments(DISCUSSION, Ok(vec![("1".into(), "hi".into())]));
+        let mut authored = BTreeSet::from(["discussion:2".to_owned(), "discussion:3".to_owned()]);
+        let mut next = previous.clone();
+        next.record_comments(DISCUSSION, Ok(vec![("2".into(), "mine".into())]));
+        previous.adopt_authored(&next, &mut authored);
+        assert!(previous.changes(&next, "pr").is_empty());
+        assert_eq!(authored, BTreeSet::from(["discussion:3".to_owned()]));
+        let mut edited = next.clone();
+        edited.record_comments(DISCUSSION, Ok(vec![("2".into(), "edited".into())]));
+        next.adopt_authored(&edited, &mut authored);
+        assert_eq!(next.changes(&edited, "pr")[0].kind, UpdateKind::Comment);
+        let mut others = next.clone();
+        others.record_comments(DISCUSSION, Ok(vec![("4".into(), "theirs".into())]));
+        next.adopt_authored(&others, &mut authored);
+        assert_eq!(next.changes(&others, "pr")[0].kind, UpdateKind::Comment);
+    }
+
+    #[test]
+    fn adopted_states_wake_only_after_a_first_observation() {
+        let open = Snapshot {
+            state: "open".into(),
+            ..Default::default()
+        };
+        let closed = Snapshot {
+            state: "closed".into(),
+            ..Default::default()
+        };
+        let mut seen = open.clone();
+        seen.adopt_state("closed");
+        assert!(seen.changes(&closed, "pr").is_empty());
+        let mut unseen = Snapshot::default();
+        unseen.adopt_state("closed");
+        assert_eq!(unseen.changes(&closed, "pr")[0].kind, UpdateKind::Closed);
     }
 
     #[test]

@@ -92,6 +92,14 @@ impl Action {
     }
 }
 
+/// What an action left on the forge.
+pub(crate) struct Acted {
+    /// The item as the forge reports it afterwards.
+    pub item: Item,
+    /// The activity key of the comment the action posted.
+    pub comment: Option<String>,
+}
+
 impl ForgeRepo {
     /// Apply `action` as `account` and return the item as the forge reports it
     /// afterwards.
@@ -102,16 +110,49 @@ impl ForgeRepo {
         number: u64,
         action: &Action,
     ) -> Result<Item> {
+        Ok(self.apply(account, kind, number, action).await?.item)
+    }
+
+    /// [`Self::act`], also naming the comment the action posted.
+    pub(crate) async fn apply(
+        &self,
+        account: &Account,
+        kind: ItemKind,
+        number: u64,
+        action: &Action,
+    ) -> Result<Acted> {
         action.validate(kind)?;
         let mut current = self.read(account, kind, number).await?;
         if let (Action::Edit(edit), ForgeKind::GitLab) = (action, self.kind) {
             self.gitlab_user_ids(account, &edit.add_reviewers, &mut current)
                 .await?;
         }
+        let mut comment = None;
         for request in self.plan(&current, action)? {
-            self.send(account, &request).await?;
+            let response = self.send(account, &request).await?;
+            if matches!(action, Action::Comment { .. }) {
+                comment = self.posted_comment(&response);
+            }
         }
-        Ok(self.read(account, kind, number).await?.item)
+        Ok(Acted {
+            item: self.read(account, kind, number).await?.item,
+            comment,
+        })
+    }
+
+    /// The activity key of a posted comment. GitHub activity reads the GraphQL
+    /// node ID, which its REST response carries as `node_id`. Without one the
+    /// comment is reported back like anyone else's, rather than failing a
+    /// comment that was posted.
+    fn posted_comment(&self, response: &serde_json::Value) -> Option<String> {
+        let field = match self.kind {
+            ForgeKind::GitHub => "node_id",
+            ForgeKind::Forgejo | ForgeKind::GitLab | ForgeKind::Bitbucket => "id",
+        };
+        response
+            .get(field)
+            .filter(|id| id.is_string() || id.is_number())
+            .map(crate::forge::updates::discussion_key)
     }
 
     pub(crate) async fn read(

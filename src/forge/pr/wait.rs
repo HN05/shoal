@@ -1,6 +1,6 @@
 //! Workspace-owned activity cursors; waiting does not change completion policy.
 use std::{
-    collections::HashMap,
+    collections::{BTreeSet, HashMap},
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -111,6 +111,9 @@ struct ActivityRecord {
     snapshot: Snapshot,
     #[serde(default)]
     pending: Vec<Update>,
+    /// Comments the workspace posted through Shoal that no poll has seen yet.
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    authored: BTreeSet<String>,
 }
 
 impl Manager {
@@ -452,20 +455,21 @@ impl Manager {
                     "SELECT record FROM pr_activity WHERE workspace_id=?1 AND url=?2",
                     params![id, url], |row| row.get(0),
                 ).optional()?;
-                let previous: ActivityRecord = previous.map(|text| serde_json::from_str(&text)).transpose()?.unwrap_or_default();
+                let mut previous: ActivityRecord = previous.map(|text| serde_json::from_str(&text)).transpose()?.unwrap_or_default();
                 if !previous.pending.is_empty() {
                     updates.extend(previous.pending);
                     continue;
                 }
                 snapshot.retain_failed_checks(&previous.snapshot);
                 snapshot.schedule_failure_reports(&previous.snapshot, crate::time::unix_seconds());
+                previous.snapshot.adopt_authored(&snapshot, &mut previous.authored);
                 let mut pending = previous.snapshot.changes(&snapshot, &url);
                 let delivery = uuid::Uuid::new_v4().to_string();
                 for update in &mut pending {
                     update.delivery.clone_from(&delivery);
                 }
                 updates.extend(pending.clone());
-                let record = ActivityRecord { snapshot, pending };
+                let record = ActivityRecord { snapshot, pending, authored: previous.authored };
                 tx.execute("INSERT INTO pr_activity(workspace_id,url,record) VALUES (?1,?2,?3) ON CONFLICT(workspace_id,url) DO UPDATE SET record=excluded.record", params![id, url, serde_json::to_string(&record)?])?;
             }
             ensure!(serde_json::to_vec(&updates)?.len() < crate::protocol::MAX_FRAME - 256,
@@ -555,6 +559,44 @@ impl Manager {
             })
             .await
     }
+}
+
+/// A change the workspace's agent made to `url` through Shoal, which its
+/// watches do not report back: the comment it posted and the state it set.
+pub(crate) struct OwnChange<'a> {
+    pub url: &'a str,
+    pub comment: Option<String>,
+    pub state: Option<&'a str>,
+}
+
+/// Record `change` on the workspace's cursor. The caller holds `pr_gate` from
+/// before the change, so no poll that observed it can record it first.
+pub(crate) fn record_own_change(
+    db: &rusqlite::Connection,
+    workspace_id: &str,
+    change: OwnChange<'_>,
+) -> Result<()> {
+    let previous: Option<String> = db
+        .query_row(
+            "SELECT record FROM pr_activity WHERE workspace_id=?1 AND url=?2",
+            params![workspace_id, change.url],
+            |row| row.get(0),
+        )
+        .optional()?;
+    let mut record: ActivityRecord = previous
+        .map(|text| serde_json::from_str(&text))
+        .transpose()?
+        .unwrap_or_default();
+    record.authored.extend(change.comment);
+    if let Some(state) = change.state {
+        record.snapshot.adopt_state(state);
+    }
+    db.execute(
+        "INSERT INTO pr_activity(workspace_id,url,record) VALUES (?1,?2,?3)
+         ON CONFLICT(workspace_id,url) DO UPDATE SET record=excluded.record",
+        params![workspace_id, change.url, serde_json::to_string(&record)?],
+    )?;
+    Ok(())
 }
 
 /// Queue an update for the workspace's next watch of `update.url`, ahead of
@@ -698,7 +740,7 @@ mod tests {
         forge::updates::UpdateKind,
         test_support::{manager, repository},
     };
-    use serde_json::json;
+    use serde_json::{Value, json};
 
     #[tokio::test(start_paused = true)]
     async fn polling_wakes_for_a_single_result_and_timeout_has_no_update() {
@@ -889,6 +931,55 @@ mod tests {
         assert_eq!(activity.kind, ItemKind::Pr);
         assert_eq!(activity.url, "pr");
         assert_eq!(activity.update.kind, UpdateKind::Comment);
+    }
+
+    #[tokio::test]
+    async fn own_changes_are_not_reported_back_to_the_workspace() {
+        let (root, manager) = manager().await;
+        let repo_path = repository(root.path(), "repo");
+        let repo = manager
+            .register_repository(repo_path.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        let workspace = manager
+            .create_workspace(&repo.id, "own".into(), None, None, None)
+            .await
+            .unwrap();
+        register_watch(&manager, &workspace.id, "pr").await;
+        let observe = |comments: Value, state: &str| {
+            let snapshot = serde_json::from_value(json!({"comments": comments, "checks": {},
+                "conflict": null, "state": state, "errors": {}}))
+            .unwrap();
+            manager.record_pr_activity(&workspace.id, vec![("pr".into(), snapshot)])
+        };
+        let first = observe(json!({"discussion:1": "theirs"}), "open")
+            .await
+            .unwrap();
+        manager
+            .acknowledge_pr_updates(&workspace.id, vec![first[0].delivery.clone()])
+            .await
+            .unwrap();
+        let id = workspace.id.clone();
+        manager
+            .store
+            .run(move |db| {
+                let change = OwnChange {
+                    url: "pr",
+                    comment: Some("discussion:2".into()),
+                    state: Some("closed"),
+                };
+                record_own_change(db, &id, change)
+            })
+            .await
+            .unwrap();
+        let own = json!({"discussion:1": "theirs", "discussion:2": "mine"});
+        assert!(observe(own, "closed").await.unwrap().is_empty());
+        let next = json!({"discussion:1": "theirs", "discussion:2": "mine", "discussion:3": "new"});
+        let updates = observe(next, "closed").await.unwrap();
+        assert_eq!(
+            updates.iter().map(|update| update.kind).collect::<Vec<_>>(),
+            [UpdateKind::Comment]
+        );
     }
 
     #[tokio::test]
