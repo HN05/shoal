@@ -7,7 +7,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{Result, ensure};
+use anyhow::{Context as _, Result, ensure};
 
 use super::{
     commands::{issues::Issue, workspaces::AddPlan},
@@ -150,6 +150,67 @@ pub(in crate::cli) async fn run_chat(
         return Ok(None);
     }
     zmx::run_chat(repository, agent, command).await.map(Some)
+}
+
+/// The place a backend opened for this process to add a workspace in,
+/// hosting it in place of the caller's shell.
+pub(in crate::cli) enum Place {
+    Tab(herdr::Tab),
+    Session,
+}
+
+/// Tell the place this process runs in that it hosts `workspace`, whose
+/// `agent` starts there: a tab takes `label` and closes with the workspace,
+/// and a session is labelled for `shoal attach`. A session the user opened
+/// is labelled once an agent starts in it.
+pub(in crate::cli) async fn host_workspace(
+    ctx: &Context,
+    workspace: &Workspace,
+    agent: Option<&str>,
+    label: &str,
+) -> Result<()> {
+    let agent = match &ctx.place {
+        Some(Place::Tab(tab)) => {
+            tab.watch_workspace(ctx, &workspace.id)?;
+            tab.rename(label).await;
+            return Ok(());
+        }
+        Some(Place::Session) => agent.unwrap_or_default(),
+        None => match agent {
+            Some(agent) => agent,
+            None => return Ok(()),
+        },
+    };
+    if let Err(error) = label_current(&workspace.id, agent).await {
+        eprintln!("warning: {error:#}");
+    }
+    Ok(())
+}
+
+/// Whether the caller's shell enters a new workspace afterwards: only when
+/// this process runs in the caller's own terminal.
+pub(in crate::cli) fn follows_caller(ctx: &Context) -> bool {
+    ctx.place.is_none()
+}
+
+/// Give a workspace added without an agent a shell at `cwd` in the place
+/// opened for it, which stays open while the shell runs. The caller's own
+/// terminal gets its shell back instead.
+pub(in crate::cli) async fn open_shell(ctx: &Context, cwd: &Path) -> Result<i32> {
+    if ctx.place.is_none() {
+        return Ok(0);
+    }
+    let shell = std::env::var_os("SHELL")
+        .filter(|shell| !shell.is_empty())
+        .unwrap_or_else(|| "/bin/sh".into());
+    let status = tokio::process::Command::new(shell)
+        .arg("-i")
+        .current_dir(cwd)
+        .env_remove(env::SHELL_DIRECTIVE)
+        .status()
+        .await
+        .context("open workspace shell")?;
+    Ok(crate::execution::exit_code(status))
 }
 
 /// Label the session this process runs in, when it runs in one, so

@@ -13,7 +13,7 @@ use super::{
     },
     context::Context,
     internal,
-    terminal::Placement,
+    terminal::{Place, Placement},
 };
 use crate::{
     config::{Config, Effective},
@@ -164,7 +164,7 @@ pub(crate) fn current_pane() -> Option<String> {
 
 /// Whether this terminal can hand Shoal work to new Herdr tabs.
 pub(in crate::cli) fn available(ctx: &Context) -> bool {
-    ctx.herdr_tab.is_none() && ctx.interactive() && in_herdr()
+    ctx.place.is_none() && ctx.interactive() && in_herdr()
 }
 
 /// Run Shoal with `args` in a new tab at `cwd`, focused when `focus` is set.
@@ -338,10 +338,10 @@ pub async fn worker(mut ctx: Context, close_when_done: bool, payload: &str) -> R
         .ok()
         .filter(|id| !id.is_empty())
         .context("Herdr did not provide HERDR_TAB_ID")?;
-    ctx.herdr_tab = Some(Tab {
+    ctx.place = Some(Place::Tab(Tab {
         id,
         close_when_done,
-    });
+    }));
     execute_add(&ctx, plan).await
 }
 
@@ -374,20 +374,6 @@ impl Tab {
             serde_json::from_slice::<TabInfo>(&output.stdout)
                 .map_or(AgentStatus::Unknown, |info| info.result.tab.agent_status),
         )
-    }
-
-    pub async fn shell(&self, cwd: &Path) -> Result<i32> {
-        let shell = std::env::var_os("SHELL")
-            .filter(|shell| !shell.is_empty())
-            .unwrap_or_else(|| "/bin/sh".into());
-        let status = Command::new(shell)
-            .arg("-i")
-            .current_dir(cwd)
-            .env_remove(env::SHELL_DIRECTIVE)
-            .status()
-            .await
-            .context("open workspace shell")?;
-        Ok(crate::execution::exit_code(status))
     }
 
     /// Observe lifecycle separately so returning from an agent leaves the tab open.

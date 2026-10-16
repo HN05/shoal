@@ -17999,6 +17999,40 @@ fn terminal_add_detaches_launches_with_input_and_attaches_the_rest() {
 }
 
 #[test]
+fn background_add_without_an_agent_opens_the_workspace_shell_in_its_session() {
+    let fixture = Fixture::with_config(Some("focus = false\n"));
+    let home = fixture.root.path();
+    let shell = home.join("bin/test-shell");
+    install_test_script(&shell, "#!/bin/sh\npwd > \"$HOME/shell-cwd\"\n");
+    let (output, transcript) = fixture.terminal_command(
+        fixture.command().env("SHELL", &shell).args([
+            "add",
+            fixture.repo.to_str().unwrap(),
+            "shell-only",
+        ]),
+        "",
+        true,
+    );
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(transcript.contains("detached zmx session"), "{transcript}");
+    let workspace = fixture.ok(&["inspect", "shell-only"]);
+    let log = fs::read_to_string(home.join("zmx-shell-only.log")).unwrap_or_default();
+    assert_eq!(
+        fs::read_to_string(home.join("shell-cwd"))
+            .unwrap_or_default()
+            .trim(),
+        fs::canonicalize(workspace["workspace"]["path"].as_str().unwrap())
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        "{log}"
+    );
+    let id = workspace["workspace"]["id"].as_str().unwrap();
+    let labels = ["set", "shell-only", &format!("shoal.workspace={id}")];
+    assert!(zmx_calls(&fixture).iter().any(|call| call == &labels));
+}
+
+#[test]
 fn terminal_resume_all_starts_each_agent_in_a_detached_session() {
     let fixture = Fixture::new();
     let mut expected = Vec::new();

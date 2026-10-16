@@ -282,7 +282,6 @@ pub(super) async fn add(
         agent,
         args,
         queue_entry: None,
-        detached: false,
     };
     if let Some(agent) = plan.agent_name() {
         let title = issue.as_ref().map(|issue| issue.title.clone());
@@ -365,9 +364,6 @@ pub(in crate::cli) struct AddPlan {
     /// The agent queue entry whose slot this launch uses.
     #[serde(default)]
     pub queue_entry: Option<String>,
-    /// Runs in a detached session, where no shell follows the workspace.
-    #[serde(skip)]
-    pub detached: bool,
 }
 
 impl AddPlan {
@@ -414,13 +410,6 @@ pub(in crate::cli) async fn start_queued(
     )
     .await?;
     terminal::start_queued(ctx, &settings, &mut plan, name).await
-}
-
-/// A detached session's worker: add the workspace its launch planned.
-pub(super) async fn detached_worker(ctx: &Context, payload: &str) -> Result<i32> {
-    let mut plan: AddPlan = serde_json::from_str(payload).context("invalid workspace plan")?;
-    plan.detached = true;
-    execute_add(ctx, plan).await
 }
 
 pub(in crate::cli) async fn execute_add(ctx: &Context, plan: AddPlan) -> Result<i32> {
@@ -479,29 +468,21 @@ async fn add_planned(
         agent,
         args,
         queue_entry,
-        detached,
     } = plan;
     let pr = creation.pr.clone();
     let opened = open_add_workspace(ctx, &target, creation).await?;
     if let Some(entry) = &queue_entry {
         super::agent_queue::attach(ctx, entry, &opened.workspace).await?;
     }
-    if let Some(name) = agent.agent.clone().map(String::from)
-        && let Err(error) = terminal::label_current(&opened.workspace.id, &name).await
-    {
-        eprintln!("warning: {error:#}");
-    }
-    if let Some(tab) = &ctx.herdr_tab {
-        tab.watch_workspace(ctx, &opened.workspace.id)?;
-        let label = match tab_name {
-            Some(name) => name.render(&opened.workspace.branch),
-            None => match &issue {
-                Some(issue) => issue.tab_label(target.repository(ctx).await?),
-                None => opened.workspace.branch.clone(),
-            },
-        };
-        tab.rename(&label).await;
-    }
+    let label = match tab_name {
+        Some(name) => name.render(&opened.workspace.branch),
+        None => match &issue {
+            Some(issue) => issue.tab_label(target.repository(ctx).await?),
+            None => opened.workspace.branch.clone(),
+        },
+    };
+    let agent_name = agent.agent.clone().map(String::from);
+    terminal::host_workspace(ctx, &opened.workspace, agent_name.as_deref(), &label).await?;
     if let Some(issue) = &issue {
         request::<()>(
             &ctx.paths,
@@ -513,7 +494,7 @@ async fn add_planned(
         )
         .await?;
     }
-    let navigate = ctx.herdr_tab.is_none() && !detached;
+    let navigate = terminal::follows_caller(ctx);
     let name = opened.workspace.name.clone();
     let Some(workspace) = finish_add_workspace(ctx, opened, pr, navigate).await? else {
         if let Some(entry) = &queue_entry {
@@ -950,10 +931,7 @@ impl ResolvedAddAgent {
         args: Vec<OsString>,
     ) -> Result<i32> {
         let Some(agent) = self.agent else {
-            return match &ctx.herdr_tab {
-                Some(tab) => tab.shell(&workspace.path).await,
-                None => Ok(0),
-            };
+            return terminal::open_shell(ctx, &workspace.path).await;
         };
         // Use the ready worktree's settings: setup may have changed its template.
         let prompt = if let Some(issue) = issue {

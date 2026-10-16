@@ -11,7 +11,8 @@ use crate::{
 
 pub struct Context {
     pub paths: Paths,
-    pub herdr_tab: Option<super::herdr::Tab>,
+    /// The place a backend opened for this process, when it runs in one.
+    pub(in crate::cli) place: Option<super::terminal::Place>,
     /// Emit machine-readable output and never prompt.
     pub json: bool,
 }
@@ -37,7 +38,7 @@ impl Context {
         Self {
             paths,
             json,
-            herdr_tab: None,
+            place: None,
         }
     }
 

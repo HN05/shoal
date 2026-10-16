@@ -13,9 +13,10 @@ use tokio::process::Command;
 
 use super::{
     agents::ensure_program,
-    commands::workspaces::AddPlan,
+    commands::workspaces::{AddPlan, execute_add},
     context::Context,
     internal::{self, Worker, internal_command},
+    terminal::Place,
 };
 use crate::{
     env,
@@ -129,6 +130,14 @@ pub(in crate::cli) async fn run_chat(
         eprintln!("shoal: detached from {name}; run `zmx attach {name}` to return");
     }
     Ok(0)
+}
+
+/// The detached session's worker: add the workspace its launch planned, in
+/// the session in place of the caller's shell.
+pub async fn worker(mut ctx: Context, payload: &str) -> Result<i32> {
+    let plan = serde_json::from_str(payload).context("invalid workspace plan")?;
+    ctx.place = Some(Place::Session);
+    execute_add(&ctx, plan).await
 }
 
 /// Run `plan` in a new detached session named after its planned workspace

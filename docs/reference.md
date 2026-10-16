@@ -533,7 +533,8 @@ agent in a detached zmx session and returns with a `shoal attach` hint, and any
 other launch runs here and attaches its agent's session. The top-level `focus`
 option overrides the choice, as it does for tabs, and `--here` keeps the launch
 in this terminal. A detached session whose start fails keeps its shell open to
-show why.
+show why, and one without an agent opens the workspace shell there, as a tab
+does.
 
 `shoal attach [workspace]` reattaches to the workspace's session, with a picker
 or `--session <name>` when it has several; `shoal status` lists them. Sessions
