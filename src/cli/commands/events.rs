@@ -1,12 +1,17 @@
 //! `shoal internal events`: the integration stream that never consumes user notifications.
 use crate::{
-    cli::{client, context::Context},
+    cli::{
+        client,
+        context::Context,
+        installed::{Executable, arguments_with},
+    },
     daemon::events::EventItem,
     protocol::{self, Body, Method, Response},
 };
 use anyhow::{Context as _, Result};
 
 pub(super) async fn run(ctx: &Context, follow: bool, since: Option<i64>) -> Result<i32> {
+    let executable = Executable::current();
     let (mut reader, body) =
         client::open_buffered(&ctx.paths, Method::WatchWorkspaceEvents { since, follow }).await?;
     <()>::try_from(body)?;
@@ -19,7 +24,10 @@ pub(super) async fn run(ctx: &Context, follow: bool, since: Option<i64>) -> Resu
                     since: cursor,
                     follow,
                 })
-                .await?;
+                .await
+                .map_err(|error| {
+                    executable.resume_or(error, || arguments_with("--since", cursor))
+                })?;
                 <()>::try_from(body)?;
                 reader = next;
                 continue;

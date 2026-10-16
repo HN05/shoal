@@ -1800,6 +1800,7 @@ async fn wait_for_items(
     selection: Selection,
     timeout: Option<u64>,
 ) -> Result<Body> {
+    let executable = crate::cli::installed::Executable::current();
     let deadline =
         timeout.map(|timeout| std::time::Instant::now() + std::time::Duration::from_secs(timeout));
     let mut timeout_secs = timeout;
@@ -1830,7 +1831,12 @@ async fn wait_for_items(
                     }
                 }
             }
-            Err(error) => return Err(error),
+            // The installed release waits for the rest of the timeout.
+            Err(error) => {
+                return Err(executable.resume_or(error, || {
+                    crate::cli::installed::arguments_with("--timeout", timeout_secs)
+                }));
+            }
         }
     }
 }

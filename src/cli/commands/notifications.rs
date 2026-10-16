@@ -9,6 +9,7 @@ use crate::{
     cli::{
         client::{self, request},
         context::Context,
+        installed::{Executable, arguments},
         output::{Palette, Style},
         ui::{self, Fallback},
     },
@@ -67,6 +68,7 @@ pub(super) async fn send(ctx: &Context, workspace: Option<String>, message: Stri
 /// each one is also raised as a terminal notification so the emulator can show
 /// it while another window has focus.
 async fn follow_stream(ctx: &Context) -> Result<i32> {
+    let executable = Executable::current();
     let (mut stream, body) = client::open_buffered(&ctx.paths, Method::WatchNotifications).await?;
     <()>::try_from(body)?;
     let palette = Palette::stdout(ctx.json);
@@ -75,8 +77,11 @@ async fn follow_stream(ctx: &Context) -> Result<i32> {
         let response: Response = match protocol::read_buffered(&mut stream).await {
             Ok(response) => response,
             Err(error) if client::stream_closed(&error) => {
-                let (next, body) =
-                    client::reconnect(&ctx.paths, || Method::WatchNotifications).await?;
+                // Delivered notifications are read, so the installed release
+                // continues after them.
+                let (next, body) = client::reconnect(&ctx.paths, || Method::WatchNotifications)
+                    .await
+                    .map_err(|error| executable.resume_or(error, arguments))?;
                 <()>::try_from(body)?;
                 stream = next;
                 continue;

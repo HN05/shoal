@@ -143,7 +143,9 @@ Managed daemons watch their stable executable path and restart after a replaceme
 once daemon operations are idle and no setup or landing runs; commands reattach.
 Retain the ownership lock and listening socket across exec so queued requests reach
 the replacement under the same service PID. Read-only streams reconnect after the
-handoff, preserving event cursors, and item waits resume for their remaining time.
+handoff, preserving event cursors, and item waits resume for their remaining time;
+when the replacement speaks a newer protocol, they continue by executing the
+installed release with that cursor or time.
 An update does not wait for clients of the previous protocol. The old daemon refuses
 newer requests before running them, so the installed CLI sends them again until the
 replacement answers; daemon controls report the mismatch at once. Foreground daemons
