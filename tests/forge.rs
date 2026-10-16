@@ -456,6 +456,57 @@ fn forgejo_threads_take_replies_but_cannot_be_resolved() {
 }
 
 #[test]
+fn watches_do_not_report_the_agents_own_comments_back() {
+    let fixture = Fixture::new(Forge::Forgejo, "[cleanup.auto]\nenabled=false\n");
+    let issue = |state: &str| {
+        json!({"body": {"number": 8, "title": "Issue", "state": state, "body": "",
+            "labels": [], "pull_request": null}})
+    };
+    let comments = |ids: &[u64]| {
+        json!({"body": ids.iter().map(|id| json!({"id": id, "body": format!("comment {id}")}))
+            .collect::<Vec<_>>()})
+    };
+    fixture.respond(json!({
+        "GET repos/team/project/issues/8": issue("open"),
+        "GET repos/team/project/issues/8/comments": comments(&[1]),
+    }));
+    fixture.ok(&["link", "issue", "8", "--workspace", "topic"]);
+    let first = fixture.ok(&["watch", "issue", "--workspace", "topic"]);
+    assert_eq!(first["updates"][0]["kind"], "comment", "{first}");
+
+    fixture.respond(json!({
+        "GET repos/team/project/issues/8": issue("open"),
+        "POST repos/team/project/issues/8/comments": {"body": {"id": 2, "body": "comment 2"}},
+        "GET repos/team/project/issues/8/comments": comments(&[1, 2]),
+    }));
+    let note = fixture.root.path().join("note.md");
+    fs::write(&note, "comment 2").unwrap();
+    let body = note.to_str().unwrap();
+    fixture.ok(&[
+        "issue",
+        "comment",
+        "--workspace",
+        "topic",
+        "--body-file",
+        body,
+    ]);
+    // Closing in the web interface is someone else's change; the agent's own
+    // comment beside it is not reported.
+    fixture.respond(json!({
+        "GET repos/team/project/issues/8": issue("closed"),
+        "GET repos/team/project/issues/8/comments": comments(&[1, 2]),
+    }));
+    let closed = fixture.ok(&["watch", "issue", "--workspace", "topic"]);
+    let kinds: Vec<_> = closed["updates"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|update| update["kind"].clone())
+        .collect();
+    assert_eq!(kinds, ["closed"], "{closed}");
+}
+
+#[test]
 fn pr_and_issue_commands_act_on_linked_or_named_items() {
     let fixture = Fixture::new(Forge::GitHub, "");
     let endpoint = "repos/team/project/pulls/8";

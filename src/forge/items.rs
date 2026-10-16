@@ -9,6 +9,7 @@ use super::{
     create::{NewIssue, NewPull, PullOptions},
     item::{Item, Opened},
     link::ItemKind,
+    pr::wait::{OwnChange, record_own_change},
     repository,
 };
 use crate::{
@@ -43,17 +44,39 @@ impl Manager {
             Action::Merge { .. } => self.user_account(),
             _ => self.agent_account(&workspace).await?,
         };
-        let item = forge
-            .act(&account, kind, number, &action)
+        // Held from before the change, so a poll that observes it records
+        // it after the workspace's cursor knows it as its own.
+        let _gate = self.pr_gate.lock().await;
+        let acted = forge
+            .apply(&account, kind, number, &action)
             .await
             .with_context(|| format!("could not {} {url}", action.name()))?;
         let id = workspace.id.clone();
         let name = action.name();
+        let own = own_state(&action).then(|| acted.item.state.as_str());
+        let comment = acted.comment;
         self.store
-            .run(move |db| events::record_item(db, &id, kind, &url, name))
+            .run(move |db| {
+                let tx = db.transaction()?;
+                events::record_item(&tx, &id, kind, &url, name)?;
+                let change = OwnChange {
+                    url: &url,
+                    comment,
+                    state: own,
+                };
+                record_own_change(&tx, &id, change)?;
+                tx.commit()?;
+                Ok(())
+            })
             .await?;
-        Ok(item)
+        Ok(acted.item)
     }
+}
+
+/// Whether the state an action leaves is the agent's own change. Merging is
+/// the user's decision, which the agent still hears about.
+fn own_state(action: &Action) -> bool {
+    matches!(action, Action::Close | Action::Reopen)
 }
 
 impl Manager {

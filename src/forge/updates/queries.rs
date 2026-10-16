@@ -52,10 +52,9 @@ impl ForgeRepo {
             .context("missing issue comments")?
         {
             let id = comment.get("id").context("issue comment has no ID")?;
-            snapshot.comments.insert(
-                format!("discussion:{}", super::id_text(id)),
-                comment_fingerprint(comment),
-            );
+            snapshot
+                .comments
+                .insert(super::discussion_key(id), comment_fingerprint(comment));
         }
         Ok(snapshot)
     }
@@ -67,7 +66,7 @@ impl ForgeRepo {
             ..Default::default()
         };
         snapshot.record_comments(
-            "discussion",
+            super::DISCUSSION,
             self.rest_discussion(account, ItemKind::Issue, number).await,
         );
         Ok(snapshot)
@@ -148,7 +147,7 @@ impl ForgeRepo {
             ..Default::default()
         };
         snapshot.record_comments(
-            "discussion",
+            super::DISCUSSION,
             self.rest_discussion(account, ItemKind::Pr, number).await,
         );
         snapshot.record_comments("reviews", self.rest_review_activity(account, number).await);
@@ -284,7 +283,7 @@ fn github_snapshot(text: &str, number: u64, branch: Option<&str>) -> Result<Snap
         },
         ..Default::default()
     };
-    for (field, source) in [("comments", "discussion"), ("reviews", "reviews")] {
+    for (field, source) in [("comments", super::DISCUSSION), ("reviews", "reviews")] {
         for item in pull[field]
             .as_array()
             .context("missing PR comments or reviews")?
