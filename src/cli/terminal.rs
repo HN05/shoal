@@ -105,6 +105,26 @@ impl Backend {
         }
     }
 
+    /// Run Shoal with `args` at `cwd` with focus, labelled `label`, returning
+    /// whether it left this process. A focused zmx launch stays here and
+    /// attaches its session; Herdr tabs need `herdr.new_tab`.
+    pub async fn run_focused(
+        self,
+        ctx: &Context,
+        settings: &Effective,
+        cwd: &Path,
+        label: &str,
+        args: &[OsString],
+    ) -> Result<bool> {
+        match self {
+            Self::Herdr if settings.herdr.new_tab => {
+                herdr::run_in_tab(ctx, cwd, label, args, true).await?;
+                Ok(true)
+            }
+            Self::Herdr | Self::Zmx => Ok(false),
+        }
+    }
+
     /// Run Shoal with `args` where the agent of `record` stopped, when that
     /// place is another one still open and idle. Returns whether it ran.
     pub async fn rerun_where_stopped(

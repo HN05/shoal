@@ -10,7 +10,7 @@ use anyhow::{Context as _, Result, ensure};
 
 use crate::{
     agent::{Agent, BuiltinAgent},
-    cli::{agents, client, context::Context, herdr, ui, zmx},
+    cli::{agents, client, context::Context, terminal::Backend, ui, zmx},
     config::{Effective, named_commands, templates},
     forge::repository,
     model::Repository,
@@ -33,8 +33,11 @@ pub(super) async fn start(
     let settings =
         client::settings(&ctx.paths, ConfigTarget::Repository(repo.id.clone().into())).await?;
     let agent = chat_agent(ctx, &settings, agent)?;
-    if !here && opens_tab(ctx, &settings) {
-        return open_tab(ctx, &repo, agent, args).await;
+    if !here
+        && let Some(backend) = Backend::current(ctx, &settings)
+        && start_focused(ctx, backend, &settings, &repo, agent, &args).await?
+    {
+        return Ok(0);
     }
     agents::trust_checkout(ctx, agent, &repo);
     let command = command(&settings, &repo, agent, args)?;
@@ -110,17 +113,16 @@ fn pick_agent(ctx: &Context, settings: &Effective) -> Result<BuiltinAgent> {
     ui::pick_choice(ctx, "Agent> ", &choices)
 }
 
-fn opens_tab(ctx: &Context, settings: &Effective) -> bool {
-    herdr::available(ctx) && settings.herdr.enabled && settings.herdr.new_tab
-}
-
-/// Run this chat in a new focused Herdr tab at the checkout.
-async fn open_tab(
+/// Hand this chat to `backend` at the checkout with focus, returning whether
+/// it left this process; otherwise it runs here.
+async fn start_focused(
     ctx: &Context,
+    backend: Backend,
+    settings: &Effective,
     repo: &Repository,
     agent: BuiltinAgent,
-    args: Vec<OsString>,
-) -> Result<i32> {
+    args: &[OsString],
+) -> Result<bool> {
     let mut chat: Vec<OsString> = vec![
         "chat".into(),
         "--here".into(),
@@ -130,11 +132,12 @@ async fn open_tab(
     ];
     if !args.is_empty() {
         chat.push("--".into());
-        chat.extend(args);
+        chat.extend_from_slice(args);
     }
     let label = format!("{} chat", repository::name(repo));
-    herdr::run_in_tab(ctx, &repo.path, &label, &chat, true).await?;
-    Ok(0)
+    backend
+        .run_focused(ctx, settings, &repo.path, &label, &chat)
+        .await
 }
 
 /// The agent's configured launcher with the chat instructions, run at the checkout.
