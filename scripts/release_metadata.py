@@ -1,8 +1,22 @@
-"""Pure validation of stable release versions and immutable Git tag identity."""
+"""Shared validation and error handling for the release scripts."""
+import json
 import re
+from urllib.error import HTTPError
 
 STABLE_VERSION = r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
 STABLE_TAG = re.compile("v" + STABLE_VERSION)
+
+
+def http_error_message(error: HTTPError):
+    """Format an API error, including its JSON response message when present."""
+    body = error.read().decode(errors="replace").strip()
+    error.close()
+    try:
+        message = json.loads(body).get("message", body)
+    except (AttributeError, json.JSONDecodeError):
+        message = body
+    detail = f": {message}" if message else ""
+    return f"HTTP {error.code} {error.reason}{detail}"
 
 
 def version_parts(version):

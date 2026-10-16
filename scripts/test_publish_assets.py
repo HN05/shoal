@@ -1,6 +1,8 @@
 import importlib
 import io
 from pathlib import Path
+from contextlib import redirect_stderr
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -133,6 +135,21 @@ class PublishAssetsTests(unittest.TestCase):
         for tag in ("1.2.3", "v1.2", "v1.2.3-rc1", "v01.2.3"):
             with self.subTest(tag=tag), self.assertRaises(ValueError):
                 publish.version(tag)
+
+    def test_main_reports_http_response_message(self):
+        error = HTTPError("url", 422, "Unprocessable Entity", {},
+                          io.BytesIO(b'{"message":"asset already exists"}'))
+        with tempfile.TemporaryDirectory() as root:
+            path = self.files(root, "shoal.tar.gz")[0]
+            output = io.StringIO()
+            with patch.object(sys, "argv", ["publish-assets.py", "forgejo", "v0.2.0", str(path)]), \
+                    patch.object(publish, "forgejo", side_effect=error), \
+                    redirect_stderr(output), self.assertRaises(SystemExit) as raised:
+                publish.main()
+        self.assertEqual(raised.exception.code, 1)
+        self.assertEqual(output.getvalue(),
+                         "Publishing assets failed: HTTP 422 Unprocessable Entity: "
+                         "asset already exists\n")
 
 
 if __name__ == "__main__":

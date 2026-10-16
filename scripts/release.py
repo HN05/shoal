@@ -12,7 +12,8 @@ import tomllib
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 import release_notes
-from release_metadata import commit_id, pull_branch, tag_version, version_parts as parts, version_tag
+from release_metadata import (commit_id, http_error_message, pull_branch, tag_version,
+                               version_parts as parts, version_tag)
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -76,17 +77,6 @@ def api(path, data=None, authenticated=True):
     with urlopen(request, timeout=60) as response:
         body = response.read()
         return json.loads(body) if body else None
-
-
-def http_error_message(error):
-    body = error.read().decode(errors="replace").strip()
-    error.close()
-    try:
-        message = json.loads(body).get("message", body)
-    except (AttributeError, json.JSONDecodeError):
-        message = body
-    detail = f": {message}" if message else ""
-    return f"HTTP {error.code} {error.reason}{detail}"
 
 
 def prepare(requested, dry_run, automated=False):

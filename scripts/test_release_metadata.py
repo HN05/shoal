@@ -1,9 +1,17 @@
+from io import BytesIO
 import unittest
+from urllib.error import HTTPError
 
 import release_metadata as metadata
 
 
 class ReleaseMetadataTests(unittest.TestCase):
+    def test_http_errors_include_the_response_message(self):
+        error = HTTPError("url", 422, "Unprocessable Entity", {},
+                          BytesIO(b'{"message":"asset already exists"}'))
+        self.assertEqual(metadata.http_error_message(error),
+                         "HTTP 422 Unprocessable Entity: asset already exists")
+
     def test_stable_version_and_tag_round_trip(self):
         for version, parts in (("0.0.0", (0, 0, 0)), ("12.34.56", (12, 34, 56))):
             with self.subTest(version=version):

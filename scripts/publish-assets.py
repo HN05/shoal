@@ -20,7 +20,8 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 import release_notes
-from release_metadata import commit_id, tag_version as version, verified_tag_commit
+from release_metadata import (commit_id, http_error_message, tag_version as version,
+                               verified_tag_commit)
 
 GITHUB_API = "https://api.github.com"
 GITHUB_UPLOADS = "https://uploads.github.com"
@@ -146,7 +147,9 @@ def main():
         else:
             commit_id(args.revision or "")
             github(args.tag, args.files, args.revision)
-    except (ValueError, KeyError, subprocess.CalledProcessError, HTTPError) as error:
+    except HTTPError as error:
+        parser.exit(1, f"Publishing assets failed: {http_error_message(error)}\n")
+    except (ValueError, KeyError, subprocess.CalledProcessError) as error:
         parser.exit(1, f"Publishing assets failed: {error}\n")
 
 
