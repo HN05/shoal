@@ -612,11 +612,13 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             deliveries,
             messages,
         } => {
-            manager
-                .mark_agent_messages_delivered(&workspace, messages)
-                .await?;
+            // Item updates first: a failure then leaves both to be delivered
+            // again, while deleted messages could not be.
             manager
                 .acknowledge_pr_updates(&workspace, deliveries)
+                .await?;
+            manager
+                .mark_agent_messages_delivered(&workspace, messages)
                 .await?;
             Body::Ok
         }
