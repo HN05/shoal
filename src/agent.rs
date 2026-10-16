@@ -127,46 +127,55 @@ fn claude_wake_hook(shoal: &str) -> (&'static str, serde_json::Value) {
 
 impl BuiltinAgent {
     /// Arguments that register Shoal's hooks for this agent's session:
-    /// `shoal messages --hook`, and for Claude Code its turn state and the
-    /// wake hook. The hooks inherit the execution's scope and state directory.
+    /// `shoal messages --hook`, its turn state, and for Claude Code the wake
+    /// hook. The hooks inherit the execution's scope and state directory.
     pub fn hook_args(self) -> std::io::Result<Vec<std::ffi::OsString>> {
         let shoal = crate::fsutil::invoked_executable()?;
         let shoal = crate::shell::quote(&[&shoal.to_string_lossy()]);
         let command = format!("{shoal} messages --hook");
         let handler = serde_json::json!({"type": "command", "command": command, "timeout": 10});
+        let messages = MESSAGE_HOOK_EVENTS
+            .iter()
+            .map(|event| (*event, serde_json::json!({"hooks": [handler]})));
         Ok(match self {
             Self::Claude => {
                 // One `--settings` carries every hook; Claude Code merges it
                 // with the user's own settings.
-                let mut hooks = serde_json::Map::new();
-                let groups = MESSAGE_HOOK_EVENTS
-                    .iter()
-                    .map(|event| (*event, serde_json::json!({"hooks": [handler]})))
+                let groups = messages
                     .chain(state_hooks::claude(&shoal))
                     .chain([claude_wake_hook(&shoal)]);
-                for (event, group) in groups {
-                    if let serde_json::Value::Array(groups) =
-                        hooks.entry(event).or_insert_with(|| serde_json::json!([]))
-                    {
-                        groups.push(group);
-                    }
-                }
                 vec![
                     "--settings".into(),
-                    serde_json::json!({"hooks": hooks}).to_string().into(),
+                    serde_json::json!({"hooks": by_event(groups)})
+                        .to_string()
+                        .into(),
                 ]
             }
-            Self::Codex => {
-                let groups: toml::Value =
-                    serde_json::from_value(serde_json::json!([{"hooks": [handler]}]))
-                        .expect("hook groups are valid TOML");
-                MESSAGE_HOOK_EVENTS
-                    .iter()
-                    .flat_map(|event| ["-c".into(), format!("hooks.{event}={groups}").into()])
-                    .collect()
-            }
+            Self::Codex => by_event(messages.chain(state_hooks::codex(&shoal)))
+                .into_iter()
+                .flat_map(|(event, groups)| {
+                    let groups: toml::Value =
+                        serde_json::from_value(groups).expect("hook groups are valid TOML");
+                    ["-c".into(), format!("hooks.{event}={groups}").into()]
+                })
+                .collect(),
         })
     }
+}
+
+/// Hook groups collected under their events, in order.
+fn by_event(
+    groups: impl IntoIterator<Item = (&'static str, serde_json::Value)>,
+) -> serde_json::Map<String, serde_json::Value> {
+    let mut hooks = serde_json::Map::new();
+    for (event, group) in groups {
+        if let serde_json::Value::Array(groups) =
+            hooks.entry(event).or_insert_with(|| serde_json::json!([]))
+        {
+            groups.push(group);
+        }
+    }
+    hooks
 }
 
 #[cfg(test)]
@@ -202,13 +211,22 @@ mod tests {
         assert_eq!(wake["asyncRewake"], true);
         assert_eq!(wake["timeout"], WAKE_TIMEOUT_SECS);
         let codex = BuiltinAgent::Codex.hook_args().unwrap();
-        assert_eq!(codex.len(), 4);
-        for (flag, event) in codex.chunks(2).zip(MESSAGE_HOOK_EVENTS) {
-            assert_eq!(flag[0], "-c");
-            let (key, value) = flag[1].to_str().unwrap().split_once('=').unwrap();
-            assert_eq!(key, format!("hooks.{event}"));
-            let parsed: toml::Table = toml::from_str(&format!("value = {value}")).unwrap();
-            let handler = &parsed["value"][0]["hooks"][0];
+        let hooks: std::collections::BTreeMap<_, _> = codex
+            .chunks(2)
+            .map(|flag| {
+                assert_eq!(flag[0], "-c");
+                let (key, value) = flag[1].to_str().unwrap().split_once('=').unwrap();
+                let parsed: toml::Table = toml::from_str(&format!("value = {value}")).unwrap();
+                (key.to_owned(), parsed["value"].clone())
+            })
+            .collect();
+        assert_eq!(
+            hooks.keys().collect::<Vec<_>>(),
+            ["hooks.PostToolUse", "hooks.Stop", "hooks.UserPromptSubmit"]
+        );
+        for event in MESSAGE_HOOK_EVENTS {
+            let groups = &hooks[&format!("hooks.{event}")];
+            let handler = &groups[0]["hooks"][0];
             assert_eq!(handler["type"].as_str(), Some("command"));
             assert!(
                 handler["command"]
@@ -216,6 +234,12 @@ mod tests {
                     .unwrap()
                     .ends_with(" messages --hook")
             );
+            let state = groups[1]["hooks"][0]["command"].as_str().unwrap();
+            assert!(state.contains(" agent-state working "), "{state}");
         }
+        let stop = hooks["hooks.Stop"][0]["hooks"][0]["command"]
+            .as_str()
+            .unwrap();
+        assert!(stop.contains(" agent-state idle "), "{stop}");
     }
 }
