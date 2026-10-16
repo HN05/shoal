@@ -274,6 +274,12 @@ pub enum Method {
         selection: crate::forge::link::Selection,
         timeout_secs: Option<u64>,
     },
+    /// Long-lived: answers once whether the workspace's agent is idle with
+    /// undelivered messages or queued item updates matches `due`.
+    AwaitAgentWake {
+        workspace: String,
+        due: bool,
+    },
     AcknowledgePrUpdates {
         workspace: String,
         deliveries: Vec<String>,
