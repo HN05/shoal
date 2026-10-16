@@ -14,6 +14,7 @@ use super::{
     gh,
     link::ItemKind,
     pr::state::{CheckResult, PrStatus, ReviewState},
+    thread::{GitHubThread, forgejo_thread_key, forgejo_threads},
 };
 
 /// The items a view selects and the worktree whose origin and forge login
@@ -110,12 +111,16 @@ pub struct Review {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReviewComment {
+    /// The ID `shoal pr reply` and `pr resolve` take.
+    pub id: u64,
+    /// The ID of the comment that starts the thread; its own for a first comment.
+    pub thread: u64,
     pub author: String,
     pub created_at: String,
     pub path: String,
     pub line: Option<u64>,
     pub body: String,
-    /// Unknown on GitHub, whose REST API does not report thread resolution.
+    /// Whether the thread is resolved; unknown where the forge does not say.
     pub resolved: Option<bool>,
 }
 
@@ -271,8 +276,12 @@ impl ForgeRepo {
                 Ok::<_, anyhow::Error>(pages.into_iter().flatten().collect::<Vec<_>>())
             }
         };
-        let (reviews, comments) = tokio::try_join!(pages("reviews"), pages("comments"))?;
-        github_reviews(&reviews, &comments).map(Some)
+        let (reviews, comments, threads) = tokio::try_join!(
+            pages("reviews"),
+            pages("comments"),
+            self.github_threads(account, number)
+        )?;
+        github_reviews(&reviews, &comments, &threads).map(Some)
     }
 
     async fn forgejo_details(
@@ -301,9 +310,18 @@ impl ForgeRepo {
         if kind == ItemKind::Issue {
             return Ok(None);
         }
+        forgejo_reviews(&self.forgejo_review_comments(account, number).await?).map(Some)
+    }
+
+    /// Each review of a PR with its inline comments.
+    pub(super) async fn forgejo_review_comments(
+        &self,
+        account: &Account,
+        number: u64,
+    ) -> Result<Vec<(Value, Value)>> {
         let endpoint = self.repo_endpoint(&format!("pulls/{number}/reviews"));
         let reviews = self.pages(account, &endpoint).await?;
-        let reviews = try_join_all(reviews.into_iter().map(|review| async move {
+        try_join_all(reviews.into_iter().map(|review| async move {
             let id = review["id"].as_u64().context("Forgejo review has no ID")?;
             let comments = if review["comments_count"].as_u64().unwrap_or_default() > 0 {
                 let endpoint = self.repo_endpoint(&format!("pulls/{number}/reviews/{id}/comments"));
@@ -313,8 +331,7 @@ impl ForgeRepo {
             };
             Ok::<_, anyhow::Error>((review, comments))
         }))
-        .await?;
-        forgejo_reviews(&reviews).map(Some)
+        .await
     }
 }
 
@@ -387,8 +404,12 @@ fn github_details(text: &str, kind: ItemKind, number: u64) -> Result<Details> {
 }
 
 /// REST reviews and inline comments; each comment belongs to the review that
-/// posted it, including replies.
-fn github_reviews(reviews: &[Value], comments: &[Value]) -> Result<Vec<Review>> {
+/// posted it, including replies, and takes its thread's resolution.
+fn github_reviews(
+    reviews: &[Value],
+    comments: &[Value],
+    threads: &[GitHubThread],
+) -> Result<Vec<Review>> {
     let mut result = Vec::new();
     for review in reviews {
         let Some(state) = review_state(review["state"].as_str())? else {
@@ -404,7 +425,15 @@ fn github_reviews(reviews: &[Value], comments: &[Value]) -> Result<Vec<Review>> 
                 .iter()
                 .filter(|comment| comment["pull_request_review_id"].as_u64() == Some(id))
                 .map(|comment| {
-                    review_comment(comment, &comment["line"], &comment["original_line"], None)
+                    let id = comment["id"].as_u64().unwrap_or_default();
+                    let thread = threads.iter().find(|thread| thread.comments.contains(&id));
+                    review_comment(
+                        comment,
+                        &comment["line"],
+                        &comment["original_line"],
+                        comment["in_reply_to_id"].as_u64().unwrap_or(id),
+                        thread.map(|thread| thread.resolved),
+                    )
                 })
                 .collect(),
         });
@@ -464,39 +493,38 @@ fn forgejo_comments(comments: &Value) -> Result<Vec<Comment>> {
 }
 
 /// Each review with the inline comments Forgejo lists under it, replies
-/// included. Forgejo records resolution on a thread's first comment only, so
-/// it applies to every comment on the same line.
+/// included. A thread is every comment on its line, whichever review posted it.
 fn forgejo_reviews(reviews: &[(Value, Value)]) -> Result<Vec<Review>> {
+    let reviews = reviews
+        .iter()
+        .map(|(review, comments)| {
+            let comments = comments
+                .as_array()
+                .context("Forgejo review comments are not a list")?;
+            Ok((review, comments))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let threads = forgejo_threads(reviews.iter().flat_map(|(_, comments)| comments.iter()));
     let mut result = Vec::new();
     for (review, comments) in reviews {
         let Some(state) = review_state(review["state"].as_str())? else {
             continue;
         };
         let comments = comments
-            .as_array()
-            .context("Forgejo review comments are not a list")?
             .iter()
             .map(|comment| {
-                let resolved = !comment["resolver"].is_null();
-                let comment = review_comment(
+                let id = comment["id"].as_u64().unwrap_or_default();
+                let (thread, resolved) = threads
+                    .get(&forgejo_thread_key(comment))
+                    .copied()
+                    .unwrap_or((id, false));
+                review_comment(
                     comment,
                     &comment["position"],
                     &comment["original_position"],
-                    None,
-                );
-                (comment, resolved)
-            })
-            .collect::<Vec<_>>();
-        let resolved = comments
-            .iter()
-            .filter(|(_, resolved)| *resolved)
-            .map(|(comment, _)| (comment.path.clone(), comment.line))
-            .collect::<Vec<_>>();
-        let comments = comments
-            .into_iter()
-            .map(|(mut comment, _)| {
-                comment.resolved = Some(resolved.contains(&(comment.path.clone(), comment.line)));
-                comment
+                    thread,
+                    Some(resolved),
+                )
             })
             .collect();
         result.push(Review {
@@ -530,10 +558,13 @@ fn review_comment(
     comment: &Value,
     line: &Value,
     original: &Value,
+    thread: u64,
     resolved: Option<bool>,
 ) -> ReviewComment {
     let positive = |value: &Value| value.as_u64().filter(|line| *line > 0);
     ReviewComment {
+        id: comment["id"].as_u64().unwrap_or_default(),
+        thread,
         author: login(&comment["user"]),
         created_at: text_field(&comment["created_at"]),
         path: text_field(&comment["path"]),
@@ -609,17 +640,30 @@ mod tests {
             json!({"id": 3, "user": {"login": "me"}, "state": "COMMENTED", "body": "", "submitted_at": "t2"}),
         ];
         let comments = [
-            json!({"pull_request_review_id": 1, "user": {"login": "bot"}, "path": "a.rs", "line": 3, "original_line": 2, "body": "Bug", "created_at": "t1"}),
-            json!({"pull_request_review_id": 3, "user": {"login": "me"}, "path": "a.rs", "line": null, "original_line": 2, "body": "Fixed", "created_at": "t2"}),
+            json!({"id": 10, "pull_request_review_id": 1, "user": {"login": "bot"}, "path": "a.rs", "line": 3, "original_line": 2, "body": "Bug", "created_at": "t1"}),
+            json!({"id": 11, "in_reply_to_id": 10, "pull_request_review_id": 3, "user": {"login": "me"}, "path": "a.rs", "line": null, "original_line": 2, "body": "Fixed", "created_at": "t2"}),
+            json!({"id": 12, "pull_request_review_id": 3, "user": {"login": "me"}, "path": "b.rs", "line": 1, "body": "New", "created_at": "t2"}),
         ];
-        let reviews = github_reviews(&reviews, &comments).unwrap();
+        let threads = [GitHubThread {
+            node: "T_1".into(),
+            resolved: true,
+            comments: vec![10, 11],
+        }];
+        let reviews = github_reviews(&reviews, &comments, &threads).unwrap();
         assert_eq!(reviews.len(), 2);
         assert_eq!(reviews[0].state, "changes_requested");
-        assert_eq!(reviews[0].comments[0].line, Some(3));
-        assert_eq!(reviews[0].comments[0].resolved, None);
-        assert_eq!(reviews[1].comments[0].body, "Fixed");
-        assert_eq!(reviews[1].comments[0].line, Some(2));
-        assert!(github_reviews(&[json!({"id": 4, "state": "LATER"})], &[]).is_err());
+        let bug = &reviews[0].comments[0];
+        assert_eq!((bug.id, bug.thread, bug.line), (10, 10, Some(3)));
+        assert_eq!(bug.resolved, Some(true));
+        let fixed = &reviews[1].comments[0];
+        assert_eq!((fixed.body.as_str(), fixed.line), ("Fixed", Some(2)));
+        assert_eq!(
+            (fixed.id, fixed.thread, fixed.resolved),
+            (11, 10, Some(true))
+        );
+        // A thread GraphQL did not list has unknown resolution.
+        assert_eq!(reviews[1].comments[1].resolved, None);
+        assert!(github_reviews(&[json!({"id": 4, "state": "LATER"})], &[], &[]).is_err());
     }
 
     #[test]
@@ -649,11 +693,11 @@ mod tests {
             (
                 json!({"id": 1, "user": {"login": "bot"}, "state": "COMMENT", "body": "Blocker", "submitted_at": "t1"}),
                 json!([
-                    {"user": {"login": "bot"}, "path": "a.py", "position": 182, "original_position": 0,
+                    {"id": 20, "user": {"login": "bot"}, "path": "a.py", "position": 182, "original_position": 0,
                         "body": "Fetch first", "created_at": "t1", "resolver": {"login": "dev"}},
-                    {"user": {"login": "dev"}, "path": "a.py", "position": 182, "original_position": 0,
+                    {"id": 21, "user": {"login": "dev"}, "path": "a.py", "position": 182, "original_position": 0,
                         "body": "Done", "created_at": "t2", "resolver": null},
-                    {"user": {"login": "dev"}, "path": "a.py", "position": 0, "original_position": 9,
+                    {"id": 22, "user": {"login": "dev"}, "path": "a.py", "position": 0, "original_position": 9,
                         "body": "Old", "created_at": "t3", "resolver": null}
                 ]),
             ),
@@ -661,22 +705,27 @@ mod tests {
                 json!({"id": 2, "user": {"login": "x"}, "state": "REQUEST_REVIEW", "body": ""}),
                 json!([]),
             ),
+            (
+                json!({"id": 3, "user": {"login": "dev"}, "state": "COMMENT", "body": "", "submitted_at": "t4"}),
+                json!([
+                    {"id": 23, "user": {"login": "dev"}, "path": "a.py", "position": 0, "original_position": 9,
+                        "body": "Reply", "created_at": "t4", "resolver": null}
+                ]),
+            ),
         ];
         let reviews = forgejo_reviews(&reviews).unwrap();
-        assert_eq!(reviews.len(), 1);
+        assert_eq!(reviews.len(), 2);
         assert_eq!(reviews[0].state, "commented");
         let comments = &reviews[0].comments;
+        let thread =
+            |comment: &ReviewComment| (comment.id, comment.thread, comment.line, comment.resolved);
+        assert_eq!(thread(&comments[0]), (20, 20, Some(182), Some(true)));
+        assert_eq!(thread(&comments[1]), (21, 20, Some(182), Some(true)));
+        assert_eq!(thread(&comments[2]), (22, 22, Some(9), Some(false)));
+        // A reply in another review joins the thread it answers.
         assert_eq!(
-            (comments[0].line, comments[0].resolved),
-            (Some(182), Some(true))
-        );
-        assert_eq!(
-            (comments[1].line, comments[1].resolved),
-            (Some(182), Some(true))
-        );
-        assert_eq!(
-            (comments[2].line, comments[2].resolved),
-            (Some(9), Some(false))
+            thread(&reviews[1].comments[0]),
+            (23, 22, Some(9), Some(false))
         );
         assert_eq!(
             forgejo_comments(&json!([{"user": {"login": "a"}, "body": "b", "created_at": "c"}]))

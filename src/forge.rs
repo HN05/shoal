@@ -21,6 +21,7 @@ pub mod repository;
 mod rest;
 mod retarget;
 mod tea;
+mod thread;
 pub mod updates;
 pub mod view;
 

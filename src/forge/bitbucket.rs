@@ -410,7 +410,7 @@ fn threads(comments: &[Value]) -> (Vec<Comment>, Vec<Review>) {
         }
         // Bitbucket records resolution on the thread's first comment.
         let resolved = start.is_some_and(|start| start["resolution"].is_object());
-        let review_comment = review_comment(comment, resolved);
+        let review_comment = review_comment(comment, thread, resolved);
         match reviews.iter_mut().find(|(root, _)| *root == thread) {
             Some((_, review)) => review.comments.push(review_comment),
             None => reviews.push((
@@ -432,9 +432,11 @@ fn threads(comments: &[Value]) -> (Vec<Comment>, Vec<Review>) {
 }
 
 /// An inline comment on the new side, or the old side of a removed line.
-fn review_comment(comment: &Value, resolved: bool) -> ReviewComment {
+fn review_comment(comment: &Value, thread: u64, resolved: bool) -> ReviewComment {
     let inline = &comment["inline"];
     ReviewComment {
+        id: comment["id"].as_u64().unwrap_or_default(),
+        thread,
         author: nickname(&comment["user"]),
         created_at: text(&comment["created_on"]).unwrap_or_default(),
         path: text(&inline["path"]).unwrap_or_default(),
@@ -588,11 +590,11 @@ mod tests {
         assert_eq!(
             thread
                 .iter()
-                .map(|c| (c.body.as_str(), c.path.as_str(), c.line, c.resolved))
+                .map(|c| (c.id, c.thread, c.body.as_str(), c.line, c.resolved))
                 .collect::<Vec<_>>(),
             [
-                ("Bug", "a.rs", Some(3), Some(true)),
-                ("Fixed", "a.rs", Some(3), Some(true))
+                (2, 2, "Bug", Some(3), Some(true)),
+                (3, 2, "Fixed", Some(3), Some(true))
             ]
         );
     }

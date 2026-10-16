@@ -1415,8 +1415,9 @@ workspace's agent account; successful and pending checks omit log output.
 `--check NAME` selects only that failed check's log on one PR. Unavailable logs
 report an error; log downloads are limited to 8 MiB.
 Kinds and explicit items select as they do for `watch`, and
-`--no-comments` leaves out comments and reviews. Forgejo items also report whether
-each inline thread is resolved. A failed lookup reports its error on that item,
+`--no-comments` leaves out comments and reviews. Each inline comment shows its ID,
+the ID of the comment that starts its thread when it is a reply, and whether
+the thread is resolved. A failed lookup reports its error on that item,
 and the command exits 1 when an item could not be read. `--json` returns an array
 of items with failed logs in `check_logs`, or a check log object with `--check`.
 

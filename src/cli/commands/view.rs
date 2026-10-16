@@ -208,14 +208,19 @@ fn render_review(review: &Review) {
         let line = comment
             .line
             .map_or_else(String::new, |line| format!(":{line}"));
-        let resolved = if comment.resolved == Some(true) {
-            " (resolved)"
+        let thread = if comment.thread == comment.id {
+            String::new()
         } else {
-            ""
+            format!(" in thread {}", comment.thread)
+        };
+        let resolved = match comment.resolved {
+            Some(true) => " · resolved",
+            Some(false) => " · unresolved",
+            None => "",
         };
         println!(
-            "    {}{line} · {} · {}{resolved}",
-            comment.path, comment.author, comment.created_at
+            "    {}{line} · {} · {} · comment {}{thread}{resolved}",
+            comment.path, comment.author, comment.created_at, comment.id
         );
         print_indented(&comment.body, 6);
     }

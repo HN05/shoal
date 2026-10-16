@@ -399,7 +399,10 @@ fn discussions(discussions: &[Value]) -> (Vec<Comment>, Vec<Review>) {
                 state: "commented".into(),
                 submitted_at: text(&first["created_at"]).unwrap_or_default(),
                 body: String::new(),
-                comments: notes.iter().map(|note| review_comment(note)).collect(),
+                comments: notes
+                    .iter()
+                    .map(|note| review_comment(note, first["id"].as_u64().unwrap_or_default()))
+                    .collect(),
             });
         } else {
             comments.extend(notes.iter().map(|note| Comment {
@@ -413,9 +416,11 @@ fn discussions(discussions: &[Value]) -> (Vec<Comment>, Vec<Review>) {
 }
 
 /// A diff note on the new side, or the old side of a removed line.
-fn review_comment(note: &Value) -> ReviewComment {
+fn review_comment(note: &Value, thread: u64) -> ReviewComment {
     let position = &note["position"];
     ReviewComment {
+        id: note["id"].as_u64().unwrap_or_default(),
+        thread,
         author: username(&note["author"]),
         created_at: text(&note["created_at"]).unwrap_or_default(),
         path: text(&position["new_path"])
@@ -549,9 +554,9 @@ mod tests {
             {"notes": [{"system": true, "body": "added 1 commit"}]},
             {"notes": [{"author": {"username": "ann"}, "body": "Looks fine", "created_at": "t1"}]},
             {"notes": [
-                {"type": "DiffNote", "author": {"username": "bob"}, "body": "Bug", "created_at": "t2",
+                {"id": 30, "type": "DiffNote", "author": {"username": "bob"}, "body": "Bug", "created_at": "t2",
                     "resolved": false, "position": {"new_path": "a.rs", "new_line": 3}},
-                {"type": "DiffNote", "author": null, "body": "Fixed", "created_at": "t3",
+                {"id": 31, "type": "DiffNote", "author": null, "body": "Fixed", "created_at": "t3",
                     "resolved": true, "position": {"old_path": "b.rs", "new_line": null, "old_line": 9}}
             ]}
         ]);
@@ -582,6 +587,10 @@ mod tests {
                 threads[1].line
             ),
             ("ghost", "b.rs", Some(9))
+        );
+        assert_eq!(
+            threads.iter().map(|c| (c.id, c.thread)).collect::<Vec<_>>(),
+            [(30, 30), (31, 30)]
         );
     }
 
