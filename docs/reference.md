@@ -243,7 +243,8 @@ stopped agent once its wrapper has exited and none of its processes remain,
 keeping the record for `shoal resume`, which repeats the check for the execution
 it selects. When processes survive or Shoal cannot prove that none do, the
 execution stays and a `recovery_blocked` notification names the problem;
-inspect it with `shoal doctor`. Unrelated executions may keep running.
+inspect it with `shoal doctor`. An agent still running when its wrapper
+reattaches drops a protection stop that never reached it. Unrelated executions may keep running.
 The command uses
 the current resume configuration; without one, built-in terminal agents continue
 the latest session in the workspace. Other agents require a configured restore

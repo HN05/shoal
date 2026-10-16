@@ -103,7 +103,9 @@ wrapper saves `stopped` after ending the agent. After a restart the daemon
 forgets a quarantined execution with a saved record once its wrapper has exited
 and no owned process survives, if its launch identity is complete or the record
 reached `stopped`, since the daemon clears a stopped child's identity only after
-verifying the stop. Live wrappers are rechecked when they exit. Survivors and
+verifying the stop. Live wrappers are rechecked when they exit; one that
+reattaches with its command running discards a `stopping` record, whose stop
+never arrived. Survivors and
 incomplete evidence keep the execution for `shoal doctor` and are the only
 outcome that notifies; `shoal resume` still reconciles the execution it selects.
 Agent metadata is transient, so restart cannot select disconnected survivors.

@@ -262,3 +262,56 @@ async fn daemon_crash_under_disk_pressure_leaves_the_agent_resumable() {
     })
     .await;
 }
+
+/// Protection saved its stop, then an update restarted the daemon before the
+/// stop reached the wrapper, which detached with its agent still running.
+#[tokio::test]
+async fn update_restart_discards_a_stop_that_never_reached_the_agent() {
+    let (_root, manager, workspace, serving) = fixture().await;
+    let launched = launch(&manager, &workspace);
+    wait_started(&manager, &workspace).await;
+    let id = executions(&manager, &workspace).await[0].id.clone();
+    crate::execution::recovery::save_record(
+        &manager.paths,
+        &workspace.id,
+        &id,
+        "fixture",
+        Some("test memory pressure"),
+    )
+    .unwrap();
+    // A daemon stops accepting before it shuts down; the next one serves the
+    // reattachment.
+    fs::remove_file(&manager.paths.socket).unwrap();
+    bounded(manager.stop_for_shutdown()).await;
+    serving.abort();
+    let reopened = restart(&manager).await;
+    // The live wrapper may still reattach, so nothing is decided yet.
+    assert_eq!(
+        reopened.reconcile_interrupted_agents().await.unwrap().len(),
+        1
+    );
+    assert_eq!(
+        record(&reopened, &workspace, &id).unwrap().stage,
+        Stage::Stopping
+    );
+    let serving = serve_fixture(reopened.clone());
+    bounded(async {
+        while executions(&reopened, &workspace).await[0].state != ExecutionState::Running {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await;
+    assert!(record(&reopened, &workspace, &id).is_none());
+    assert!(blocked(&reopened).await.is_empty());
+    // A stop the agent receives saves the wrapper's record as usual.
+    bounded(reopened.stop_workspace(&workspace.id, StopRequest::manual()))
+        .await
+        .unwrap();
+    assert_eq!(bounded(launched).await.unwrap().unwrap(), 0);
+    assert_eq!(
+        record(&reopened, &workspace, &id).unwrap().stage,
+        Stage::Stopped
+    );
+    reopened.store.shutdown().await;
+    serving.abort();
+}

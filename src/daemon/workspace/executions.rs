@@ -1,6 +1,7 @@
 //! Daemon-side execution registration and stopping. Terminal I/O stays in
 //! crate::execution, in the invoking CLI process.
 use super::{GuardMode, Manager, ResourceGuard};
+use crate::daemon::log;
 use crate::{
     daemon::{
         scope::{Caller, ScopedExecution},
@@ -566,6 +567,8 @@ impl Manager {
             })
             .await?;
         let workspace = self.workspace(&workspace_id).await?;
+        // Before protection can know the agent again and save a new stop.
+        self.discard_undelivered_stop(&workspace, &request.execution);
         let (sender, stop) = watch::channel(false);
         connections.insert(request.execution.clone(), sender);
         self.issue_scope(
@@ -593,6 +596,22 @@ impl Manager {
         }
         self.touch(&workspace.id).await;
         Ok(ReattachedExecution { workspace, stop })
+    }
+
+    /// A reattaching wrapper still runs its command, so a stop the previous
+    /// daemon saved but never delivered no longer describes the agent.
+    fn discard_undelivered_stop(&self, workspace: &Workspace, execution: &str) {
+        match crate::execution::recovery::discard_undelivered(&self.paths, &workspace.id, execution)
+        {
+            Ok(true) => log!(
+                "discarded an undelivered stop for execution {execution} in {}",
+                workspace.name
+            ),
+            Ok(false) => {}
+            Err(error) => {
+                log!("undelivered stop for execution {execution} not discarded: {error:#}")
+            }
+        }
     }
 
     /// Drop a wrapper's connection without recording completion, so its

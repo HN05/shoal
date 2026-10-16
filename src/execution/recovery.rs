@@ -217,6 +217,19 @@ fn write_record(
     Ok(path)
 }
 
+/// Remove a record whose stop never reached the agent, returning whether it
+/// did. A record the wrapper saved after stopping the agent is kept.
+pub(crate) fn discard_undelivered(paths: &Paths, workspace_id: &str, id: &str) -> Result<bool> {
+    let path = record_path(paths, workspace_id, id);
+    match Record::load(&path)? {
+        Some(record) if record.stage == Stage::Stopping => {
+            consume(&path)?;
+            Ok(true)
+        }
+        _ => Ok(false),
+    }
+}
+
 pub(crate) fn record_path(paths: &Paths, workspace_id: &str, id: &str) -> PathBuf {
     paths
         .workspace_state(workspace_id)
