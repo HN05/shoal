@@ -7,6 +7,7 @@ mod help;
 pub(crate) mod herdr;
 mod installed;
 pub mod internal;
+pub mod list_status;
 pub mod output;
 mod progress;
 pub mod ui;

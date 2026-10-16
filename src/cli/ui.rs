@@ -15,14 +15,15 @@ use crate::{
     cli::{
         WorkspaceScope, client,
         context::Context,
-        output::{Palette, Style, workspace_state_style},
+        list_status::ListStatus,
+        output::{Palette, Style},
         workspace_context::{ScopeOrder, WorkspaceContext},
     },
     forge::link::{self, ItemKind},
     model::{QueueEntry, Repository, ReviewMark, Workspace},
     paths::Paths,
     removal::{BranchChoice, RemovalCheck},
-    state::{AgentState, WorkspaceState},
+    state::AgentState,
 };
 
 fn require_interactive(ctx: &Context) -> Result<()> {
@@ -498,44 +499,14 @@ pub fn stopped_workspaces(paths: &Paths, workspaces: &[Workspace]) -> HashSet<St
         .collect()
 }
 
-/// How lists and status name an agent's reported turn state. A finished turn
-/// is not called idle, which in lists means nothing runs.
+/// How lists and status name an agent's reported turn state.
 pub fn agent_state_label(state: AgentState) -> &'static str {
-    match state {
-        AgentState::Working => "working",
-        AgentState::Waiting => "waiting for input",
-        AgentState::Idle => "turn finished",
-    }
+    ListStatus::agent(state).label()
 }
 
-/// What a workspace is doing: its state unless ready, then stopped work, an
-/// agent waiting for input, a current ready-for-review mark, the agent's other
-/// turn states, a running agent or command, an outdated mark, or idle.
 fn status_cell(workspace: &Workspace, stopped: bool) -> Cell {
-    if workspace.state != WorkspaceState::Ready {
-        return (
-            workspace.state.to_string(),
-            Some(workspace_state_style(workspace.state)),
-        );
-    }
-    let outdated = workspace.review.iter().any(|mark| mark.stale == Some(true));
-    let agent = workspace.agent_state.map(|status| status.state);
-    let (text, style) = if stopped {
-        ("stopped", Style::Warning)
-    } else if agent == Some(AgentState::Waiting) {
-        (agent_state_label(AgentState::Waiting), Style::Warning)
-    } else if !workspace.review.is_empty() && !outdated {
-        ("ready for review", Style::Success)
-    } else if let Some(state) = agent {
-        (agent_state_label(state), Style::Heading)
-    } else if workspace.running {
-        ("running", Style::Heading)
-    } else if outdated {
-        ("ready for review (outdated)", Style::Warning)
-    } else {
-        ("idle", Style::Muted)
-    };
-    (text.into(), Some(style))
+    let status = ListStatus::of_workspace(workspace, stopped);
+    (status.label().into(), Some(status.style()))
 }
 
 /// One aligned row per workspace: a state marker, the name, the repository
@@ -564,6 +535,15 @@ pub fn workspace_rows(
         .zip(aligned(cells, palette))
         .map(|(workspace, row)| format!("{} {row}", palette.workspace_marker(workspace.state)))
         .collect()
+}
+
+fn queue_status_cell(entry: &QueueEntry) -> Cell {
+    let status = ListStatus::of_entry(entry);
+    let text = match entry.position {
+        Some(position) => format!("{}, position {position}", status.label()),
+        None => status.label().into(),
+    };
+    (text, Some(status.style()))
 }
 
 /// One aligned row per agent queue entry: its workspace name, its repository
@@ -597,10 +577,7 @@ pub fn queue_rows(
                     },
                     None,
                 ),
-                match entry.position {
-                    Some(position) => (format!("queued, position {position}"), Some(Style::Muted)),
-                    None => ("starting".into(), Some(Style::Warning)),
-                },
+                queue_status_cell(entry),
                 (entry.issue_title.clone().unwrap_or_default(), None),
             ]
         })
@@ -780,6 +757,7 @@ pub fn repository_selector(value: String) -> Result<crate::forge::repository::Se
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::state::WorkspaceState;
 
     fn workspace(repository: &str, name: &str, branch: &str, state: WorkspaceState) -> Workspace {
         Workspace::new_record(
