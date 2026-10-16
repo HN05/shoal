@@ -16,9 +16,8 @@ Finish every assignment with these steps:
 
 1. Open the PR with `shoal pr open`, which pushes the branch and links the PR.
    Link a PR opened another way with `shoal link pr <number-or-url>`.
-2. While watched PRs are open, run `shoal watch pr`. Handle the reported
-   comments, reviews, CI results and merge conflicts, then wait again; a timeout
-   means no update. When a PR is ready to merge, run `shoal ready`, and again
+2. While watched PRs are open, {updates}
+   When a PR is ready to merge, run `shoal ready`, and again
    after later fixes. Run `shoal notify "<message>"` when you need the user.
    Merge only when authorized.
 3. When the assignment is finished (every watched PR merged, or no PR needed),

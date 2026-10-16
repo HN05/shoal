@@ -15,7 +15,10 @@ use crate::{
         terminal,
         ui::{self, Fallback},
     },
-    config::{Effective, named_commands, templates},
+    config::{
+        Effective, named_commands,
+        templates::{self, Delivery},
+    },
     execution,
     model::Workspace,
     protocol::ConfigTarget,
@@ -30,7 +33,9 @@ pub(in crate::cli) async fn claude(
     let launch = ResolvedLaunch::inspect(ctx, workspace, None).await?;
     ensure_installed(&Agent::Claude, &launch.settings.commands)?;
     trust_claude(ctx, &launch.workspace).await;
-    let args = templates::instruction_args(BuiltinAgent::Claude, launch.instructions())
+    // Claude Code's hooks deliver updates and start its next turn with them.
+    let instructions = launch.instructions(Delivery::Pushed);
+    let args = templates::instruction_args(BuiltinAgent::Claude, instructions)
         .into_iter()
         .chain(BuiltinAgent::Claude.hook_args()?)
         .chain(args)
@@ -56,7 +61,13 @@ pub(in crate::cli) async fn codex(
     let launch = ResolvedLaunch::inspect(ctx, workspace, Some(settings)).await?;
     ensure_installed(&Agent::Codex, &launch.settings.commands)?;
     trust_codex(ctx, &launch.workspace).await;
-    let args = templates::instruction_args(BuiltinAgent::Codex, launch.instructions())
+    // Its wrapper starts an idle Codex's next turn only in a zmx session.
+    let delivery = if terminal::agents_can_be_prompted(&launch.settings) {
+        Delivery::Pushed
+    } else {
+        Delivery::Watched
+    };
+    let args = templates::instruction_args(BuiltinAgent::Codex, launch.instructions(delivery))
         .into_iter()
         .chain(BuiltinAgent::Codex.hook_args()?)
         .chain(args)
@@ -77,11 +88,14 @@ pub(super) async fn custom_agent(
         workspace,
         settings,
     };
-    let prompt = [launch.instructions(), prompt.unwrap_or_default()]
-        .into_iter()
-        .filter(|part| !part.is_empty())
-        .collect::<Vec<_>>()
-        .join("\n\n");
+    let prompt = [
+        launch.instructions(Delivery::Watched),
+        prompt.unwrap_or_default(),
+    ]
+    .into_iter()
+    .filter(|part| !part.is_empty())
+    .collect::<Vec<_>>()
+    .join("\n\n");
     let commands = &launch.settings.commands;
     ensure_installed(&Agent::Custom(name.into()), commands)?;
     let argv = &commands[name];
@@ -117,8 +131,12 @@ impl ResolvedLaunch {
         })
     }
 
-    fn instructions(&self) -> String {
-        templates::instructions(self.settings.agent_template.as_deref(), &self.workspace)
+    fn instructions(&self, delivery: Delivery) -> String {
+        templates::instructions(
+            self.settings.agent_template.as_deref(),
+            &self.workspace,
+            delivery,
+        )
     }
 
     async fn run(

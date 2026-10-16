@@ -33,7 +33,12 @@ pub(in crate::cli) async fn happy(
     let settings =
         client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
     super::ensure_installed(&Agent::Happy(agent), &settings.commands)?;
-    let instructions = templates::instructions(settings.agent_template.as_deref(), &workspace);
+    // Happy sessions run without Shoal's hooks.
+    let instructions = templates::instructions(
+        settings.agent_template.as_deref(),
+        &workspace,
+        templates::Delivery::Watched,
+    );
     let prompt = if agent == BuiltinAgent::Codex && !instructions.is_empty() {
         Some(match prompt {
             Some(prompt) if !prompt.is_empty() => format!("{instructions}\n\n{prompt}"),
