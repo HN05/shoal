@@ -172,10 +172,15 @@ impl Snapshot {
             self.checks = previous.checks.clone();
         }
         for source in ["discussion", "reviews"] {
-            if self.errors.contains_key(source)
-                && let Some(comment) = previous.comments.get(source)
-            {
-                self.comments.insert(source.into(), comment.clone());
+            if self.errors.contains_key(source) {
+                let prefix = format!("{source}:");
+                self.comments.extend(
+                    previous
+                        .comments
+                        .iter()
+                        .filter(|(key, _)| key.starts_with(&prefix))
+                        .map(|(key, comment)| (key.clone(), comment.clone())),
+                );
             }
         }
     }
@@ -201,15 +206,28 @@ impl Snapshot {
             .collect();
     }
 
-    fn record_comments(&mut self, source: &str, result: Result<String>) {
+    /// Record each comment of `source` by its ID.
+    fn record_comments(&mut self, source: &str, result: Result<Vec<(String, String)>>) {
         match result {
             Ok(comments) => {
-                self.comments.insert(source.into(), comments);
+                self.comments.extend(
+                    comments
+                        .into_iter()
+                        .map(|(id, comment)| (format!("{source}:{id}"), comment)),
+                );
             }
             Err(error) => {
                 self.errors.insert(source.into(), format!("{error:#}"));
             }
         }
+    }
+}
+
+/// A forge ID as text: strings without JSON quotes, numbers as digits.
+pub(super) fn id_text(id: &serde_json::Value) -> String {
+    match id {
+        serde_json::Value::String(id) => id.clone(),
+        id => id.to_string(),
     }
 }
 
@@ -282,6 +300,21 @@ mod tests {
         recovered.schedule_failure_reports(&changed, 5000);
         assert!(changed.changes(&recovered, "pr").is_empty());
         assert!(recovered.reported.is_empty());
+    }
+
+    #[test]
+    fn a_failed_comment_lookup_keeps_that_sources_comments() {
+        let mut previous = Snapshot::default();
+        previous.record_comments("discussion", Ok(vec![("1".into(), "hi".into())]));
+        previous.record_comments("reviews", Ok(vec![("2".into(), "lgtm".into())]));
+        let mut failed = Snapshot::default();
+        failed.record_comments("discussion", Err(anyhow::anyhow!("timed out")));
+        failed.record_comments("reviews", Ok(Vec::new()));
+        failed.retain_failed_checks(&previous);
+        assert_eq!(failed.comments.keys().collect::<Vec<_>>(), ["discussion:1"]);
+        let mut recovered = failed.clone();
+        recovered.errors.clear();
+        assert!(failed.changes(&recovered, "pr").is_empty());
     }
 
     #[test]

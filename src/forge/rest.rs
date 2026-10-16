@@ -108,52 +108,49 @@ impl ForgeRepo {
         }
     }
 
-    /// What changes when a comment is added, edited or deleted.
+    /// Each comment by ID, with what changes when it is added or edited.
     pub(super) async fn rest_discussion(
         &self,
         account: &Account,
         kind: ItemKind,
         number: u64,
-    ) -> Result<String> {
+    ) -> Result<Vec<(String, String)>> {
         match self.kind {
             ForgeKind::GitHub | ForgeKind::Forgejo => {
                 let endpoint = self.repo_endpoint(&format!("issues/{number}/comments"));
                 let comments = self.send(account, &Request::get(endpoint)).await?;
                 let comments = comments.as_array().context("comments are not a list")?;
-                Ok(fingerprint(comments, &["id", "body", "updated_at"]))
+                fingerprints(comments, &["body", "updated_at"])
             }
             ForgeKind::GitLab => {
                 let notes = self.gitlab_notes(account, kind, number).await?;
-                Ok(fingerprint(
-                    &notes,
-                    &["id", "body", "updated_at", "resolved"],
-                ))
+                fingerprints(&notes, &["body", "updated_at", "resolved"])
             }
             ForgeKind::Bitbucket => {
                 let endpoint = format!("{}/comments", self.item_endpoint(kind, number));
                 let comments = self.pages(account, &endpoint).await?;
-                Ok(fingerprint(
+                fingerprints(
                     &comments,
-                    &["id", "content", "updated_on", "deleted", "resolution"],
-                ))
+                    &["content", "updated_on", "deleted", "resolution"],
+                )
             }
         }
     }
 
-    /// What changes when a review is submitted, edited, dismissed or answered.
+    /// Each review by ID with what changes when it is submitted, edited,
+    /// dismissed or answered.
     pub(super) async fn rest_review_activity(
         &self,
         account: &Account,
         number: u64,
-    ) -> Result<String> {
+    ) -> Result<Vec<(String, String)>> {
         match self.kind {
             ForgeKind::GitHub | ForgeKind::Forgejo => {
                 let endpoint = self.repo_endpoint(&format!("pulls/{number}/reviews"));
                 let reviews = self.pages(account, &endpoint).await?;
-                Ok(fingerprint(
+                fingerprints(
                     &reviews,
                     &[
-                        "id",
                         "body",
                         "state",
                         "comments_count",
@@ -161,15 +158,18 @@ impl ForgeRepo {
                         "dismissed",
                         "updated_at",
                     ],
-                ))
+                )
             }
-            // Inline comments are part of the discussion.
-            ForgeKind::GitLab | ForgeKind::Bitbucket => Ok(self
-                .rest_verdicts(account, number)
-                .await?
-                .iter()
-                .map(|(reviewer, verdict)| format!("{reviewer}:{verdict:?}\n"))
-                .collect()),
+            // Inline comments are part of the discussion; verdicts have no
+            // ID, so they change as one entry.
+            ForgeKind::GitLab | ForgeKind::Bitbucket => Ok(vec![(
+                "verdicts".into(),
+                self.rest_verdicts(account, number)
+                    .await?
+                    .iter()
+                    .map(|(reviewer, verdict)| format!("{reviewer}:{verdict:?}\n"))
+                    .collect(),
+            )]),
         }
     }
 
@@ -206,22 +206,22 @@ fn commit_shas(commits: &[Value], field: &str) -> Result<Vec<String>> {
         .collect()
 }
 
-/// The fields of each item that matter for activity; empty for no items, so
-/// an item without comments reads the same as before it had any.
-pub(super) fn fingerprint(items: &[Value], fields: &[&str]) -> String {
-    if items.is_empty() {
-        return String::new();
-    }
-    let items: Vec<Value> = items
+/// Each item's ID with the fields of it that matter for activity.
+pub(super) fn fingerprints(items: &[Value], fields: &[&str]) -> Result<Vec<(String, String)>> {
+    items
         .iter()
         .map(|item| {
-            fields
+            let id = item.get("id").context("comment or review has no ID")?;
+            let fields: serde_json::Map<String, Value> = fields
                 .iter()
                 .map(|field| ((*field).to_owned(), item[*field].clone()))
-                .collect()
+                .collect();
+            Ok((
+                crate::forge::updates::id_text(id),
+                Value::from(fields).to_string(),
+            ))
         })
-        .collect();
-    Value::from(items).to_string()
+        .collect()
 }
 
 /// Forgejo's combined status; a commit without statuses has `"statuses": null`.
@@ -366,18 +366,17 @@ mod tests {
     }
 
     #[test]
-    fn fingerprints_ignore_other_fields_and_read_empty_lists_as_nothing() {
+    fn fingerprints_key_items_by_id_and_ignore_other_fields() {
         let comment = json!({"id": 1, "body": "hi", "reactions": 1});
         let reacted = json!({"id": 1, "body": "hi", "reactions": 2});
         assert_eq!(
-            fingerprint(std::slice::from_ref(&comment), &["id", "body"]),
-            fingerprint(&[reacted], &["id", "body"])
+            fingerprints(std::slice::from_ref(&comment), &["body"]).unwrap(),
+            fingerprints(&[reacted], &["body"]).unwrap()
         );
         let edited = json!({"id": 1, "body": "edited"});
-        assert_ne!(
-            fingerprint(&[comment], &["id", "body"]),
-            fingerprint(&[edited], &["id", "body"])
-        );
-        assert_eq!(fingerprint(&[], &["id"]), "");
+        let edited = fingerprints(&[edited], &["body"]).unwrap();
+        assert_eq!(edited[0].0, "1");
+        assert_ne!(fingerprints(&[comment], &["body"]).unwrap(), edited);
+        assert!(fingerprints(&[json!({"body": "hi"})], &["body"]).is_err());
     }
 }
