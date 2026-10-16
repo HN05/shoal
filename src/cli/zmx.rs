@@ -192,6 +192,27 @@ async fn start_detached(name: &str, argv: &[OsString], env: &[(&str, &str)]) -> 
     Ok(())
 }
 
+/// The zmx session this process runs in, if any.
+pub(crate) fn current_session() -> Option<OsString> {
+    std::env::var_os(SESSION_VAR)
+}
+
+/// Submit `text` as a prompt in `session`, as if pasted and sent: bracketed
+/// paste keeps it one prompt, and Enter in the same write submits it rather
+/// than ending the paste.
+pub(crate) async fn submit_prompt(session: &std::ffi::OsStr, text: &str) -> Result<()> {
+    let mut send = Command::new(Tool::Zmx.program());
+    send.arg("send")
+        .arg(session)
+        .arg(format!("\x1b[200~{text}\x1b[201~\r"))
+        .stdin(std::process::Stdio::null());
+    Run::new(send)
+        .checked()
+        .await
+        .context("type into the zmx session")?;
+    Ok(())
+}
+
 /// Label the zmx session this process runs in, when it runs in one, so
 /// `shoal attach` finds the workspace's agent there.
 pub(in crate::cli) async fn label_current(workspace_id: &str, agent: &str) -> Result<()> {

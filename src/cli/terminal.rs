@@ -237,6 +237,17 @@ pub(in crate::cli) fn launcher_program() -> Option<&'static str> {
     zmx::on_terminal().then(|| Tool::Zmx.program())
 }
 
+/// The session this process runs in, where an agent's wrapper can type a
+/// prompt for it.
+pub(crate) fn prompt_session() -> Option<OsString> {
+    zmx::current_session()
+}
+
+/// Submit `text` as a prompt in `session`, from [`prompt_session`].
+pub(crate) async fn submit_prompt(session: &std::ffi::OsStr, text: &str) -> Result<()> {
+    zmx::submit_prompt(session, text).await
+}
+
 /// Whether agents launched here run in a session: they need a terminal to
 /// attach, never nest, and leave an enabled Herdr pane to Herdr, which reads
 /// the agent's state from the process in the pane.

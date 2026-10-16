@@ -622,14 +622,18 @@ removal uses its own hooks. Desktop or push delivery was considered and not adop
 
 Messages to agents travel the other way: the user queues them for a workspace,
 and the daemon holds them until an agent in that workspace reads them, then
-deletes them. Shoal never writes to an agent's terminal, which it does not own;
-agents read messages through Shoal commands, and a pending watch ends for a new
-message. Messages and item activity are pushed rather than polled by the agent,
+deletes them. Agents read messages through Shoal commands, and a pending watch
+ends for a new message. Messages and item activity are pushed rather than polled by the agent,
 because agents forget or misuse watches: built-in agent launches register a hook
 that delivers both after each tool call and prompt, the only point where a
 working agent accepts new context, and replaces a running watch so nothing is
 delivered twice. Claude Code also runs a background `Stop` hook that waits for
-the next update and wakes the idle agent with it through `asyncRewake`. Shoal does not
+the next update and wakes the idle agent with it through `asyncRewake`. Codex
+has no hook that can start a turn, so its tracked wrapper types a fixed prompt
+into the zmx session it runs in once Codex is idle with updates, at most once
+per idle stretch, and the prompt's hook delivers them. That is the only input
+Shoal writes to an agent's terminal: the daemon never does, the prompt carries
+no forge text, and it is appended to anything typed but not yet sent. Shoal does not
 pre-trust hooks where the agent requires review. Identical unread messages collapse,
 and scoped processes may read their own workspace's messages but not send any.
 
