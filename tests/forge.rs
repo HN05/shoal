@@ -347,6 +347,93 @@ fn changes_use_the_agent_account_and_merges_the_users() {
 }
 
 #[test]
+fn review_threads_take_replies_and_ask_before_resolving_without_one() {
+    let fixture = Fixture::new(Forge::GitHub, "");
+    let endpoint = "repos/team/project/pulls/8";
+    let threads = |comments: Value| {
+        json!({"data": {"repository": {"pullRequest": {"reviewThreads": {
+            "pageInfo": {"hasNextPage": false, "endCursor": null},
+            "nodes": [{"id": "T_1", "isResolved": false, "comments": {"nodes": comments}}]}}}}})
+    };
+    fixture.respond(json!({
+        format!("GET {endpoint}"): {"body": pull(8, "open", "Fix", &[])},
+        "POST graphql": {"body": threads(json!([{"databaseId": 5}]))},
+        format!("POST {endpoint}/comments/5/replies"): {"body": {}},
+    }));
+    let pr = ["--workspace", "topic", "8"];
+
+    // Without a reply, a non-interactive resolve asks for one or for --yes.
+    let unanswered = fixture.run(&[&["pr", "resolve", "5"][..], &pr].concat());
+    let stderr = String::from_utf8_lossy(&unanswered.stderr);
+    assert!(!unanswered.status.success());
+    assert!(
+        stderr.contains("Thread 5 has no reply") && stderr.contains("--yes"),
+        "{stderr}"
+    );
+    let sent: Vec<_> = fixture
+        .requests()
+        .into_iter()
+        .map(|r| r[0].clone())
+        .collect();
+    assert_eq!(sent, ["POST graphql"]);
+
+    // A reply goes to the thread's first comment, before the resolution.
+    fixture.ok(&[&["pr", "resolve", "5", "--body", "Fixed"][..], &pr].concat());
+    let sent = fixture.requests();
+    assert_eq!(
+        sent[2],
+        json!([format!("POST {endpoint}/comments/5/replies"), {"body": "Fixed"}, null])
+    );
+    assert_eq!(sent[3][0], "POST graphql");
+    assert!(
+        sent[3][1]["query"]
+            .as_str()
+            .unwrap()
+            .contains("resolveReviewThread")
+    );
+
+    // A thread someone answered resolves without asking.
+    fixture.respond(json!({
+        format!("GET {endpoint}"): {"body": pull(8, "open", "Fix", &[])},
+        "POST graphql": {"body": threads(json!([{"databaseId": 5}, {"databaseId": 6}]))},
+    }));
+    fixture.ok(&[&["pr", "resolve", "6"][..], &pr].concat());
+    let nothing = fixture.run(&[&["pr", "reply", "7"][..], &pr].concat());
+    assert!(String::from_utf8_lossy(&nothing.stderr).contains("a reply needs --body"));
+}
+
+#[test]
+fn forgejo_threads_take_replies_but_cannot_be_resolved() {
+    let fixture = Fixture::new(Forge::Forgejo, "");
+    let endpoint = "repos/team/project/pulls/8";
+    fixture.respond(json!({
+        format!("GET {endpoint}"): {"body": pull(8, "open", "Fix", &[])},
+        format!("GET {endpoint}/reviews?limit=50&page=1"): {"body": [{"id": 3, "comments_count": 1}]},
+        format!("GET {endpoint}/reviews/3/comments"): {"body": [{"id": 5, "path": "a.rs",
+            "position": 4, "original_position": 0, "resolver": null}]},
+        format!("POST {endpoint}/reviews/3/comments"): {"body": {}},
+    }));
+    let pr = ["--workspace", "topic", "8"];
+    fixture.ok(&[&["pr", "reply", "5", "--body", "Kept"][..], &pr].concat());
+    assert!(fixture.requests().contains(&json!([
+        format!("POST {endpoint}/reviews/3/comments"),
+        {"body": "Kept", "path": "a.rs", "new_position": 4},
+        "token usertoken"
+    ])));
+    let refused = fixture.run(&[&["pr", "resolve", "5", "--body", "Kept"][..], &pr].concat());
+    assert!(
+        String::from_utf8_lossy(&refused.stderr).contains("no API for resolving"),
+        "{refused:?}"
+    );
+    assert!(
+        fixture
+            .requests()
+            .iter()
+            .all(|request| request[0].as_str().unwrap().starts_with("GET")),
+    );
+}
+
+#[test]
 fn pr_and_issue_commands_act_on_linked_or_named_items() {
     let fixture = Fixture::new(Forge::GitHub, "");
     let endpoint = "repos/team/project/pulls/8";

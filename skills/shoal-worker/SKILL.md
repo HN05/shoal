@@ -26,7 +26,11 @@ yourself when the PR completes the issue. Change your
 PR or issue through Shoal, which acts as your agent account and records the
 change: `shoal --json pr edit` (`--title`, `--body-file`,
 `--add-label`, `--add-reviewer`, `--draft`/`--no-draft`), `pr comment
---body-file`, `pr close`, and the same `issue` commands. They default to the
+--body-file`, `pr close`, and the same `issue` commands. Answer each review
+finding in its thread: `shoal view` shows every review comment's ID, and
+`shoal pr reply <comment-id> --body-file F` replies there, while
+`shoal pr resolve <comment-id> --body-file F` replies and then resolves the thread
+(Forgejo cannot resolve threads through its API; reply there instead). They default to the
 linked item; pass a number or URL for another item in the repository. File
 follow-up work with `shoal issue open --title`; it stays unlinked without
 `--link`. Merging is

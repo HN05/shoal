@@ -632,7 +632,11 @@ to own a login, so a user-configured command supplies its token per lookup, as
 user's Bitbucket credentials until a separate agent token is configurable. Forge differences stay in planning, such as Forgejo keeping draft
 state in the title, so callers see the same item either way. Actions run in the
 daemon, where scope applies: they act as the workspace's agent account, and
-merging stays the user's decision, so scoped callers cannot merge. Each action
+merging stays the user's decision, so scoped callers cannot merge. Review
+threads are named by any of their comments' IDs. Shoal does not sign in to a
+forge's web UI, so it cannot resolve threads on Forgejo, whose API has no
+endpoint for it. Resolving a thread nobody has answered needs confirmation,
+because the reply tells the reviewer why. Each action
 returns the item as the forge reports it afterwards and records an
 `item_changed` event for integrations. A new issue is linked only on request:
 a workspace's linked issue is its assignment, while an issue an agent opens is

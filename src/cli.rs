@@ -653,6 +653,33 @@ pub enum PrCommand {
         #[command(flatten)]
         body: BodyArgs,
     },
+    /// Reply in the thread of a review comment.
+    Reply {
+        /// ID of any comment in the thread, as `shoal view` shows it.
+        comment: u64,
+        #[command(flatten)]
+        item: ItemSelector,
+        #[command(flatten)]
+        body: BodyArgs,
+    },
+    /// Resolve the thread of a review comment, after replying with the body given.
+    Resolve {
+        /// ID of any comment in the thread, as `shoal view` shows it.
+        comment: u64,
+        #[command(flatten)]
+        item: ItemSelector,
+        #[command(flatten)]
+        body: BodyArgs,
+        #[command(flatten)]
+        confirmation: ConfirmationArgs,
+    },
+    /// Unresolve the thread of a review comment.
+    Unresolve {
+        /// ID of any comment in the thread, as `shoal view` shows it.
+        comment: u64,
+        #[command(flatten)]
+        item: ItemSelector,
+    },
     /// Close a PR without merging it.
     Close {
         #[command(flatten)]

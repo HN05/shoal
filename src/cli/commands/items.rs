@@ -7,10 +7,12 @@ use crate::{
         BodyArgs, EditArgs, IssueCommand, ItemSelector, PrCommand, client, context::Context, ui,
     },
     forge::{
-        action::{Action, Edit},
+        ForgeRepo,
+        action::{Action, Edit, ThreadChange},
         create::{NewIssue, PullOptions},
         item::{Item, Opened},
-        link::ItemKind,
+        link::{ItemKind, Selection},
+        view::Selected,
     },
     git,
     model::Workspace,
@@ -57,6 +59,35 @@ pub(super) async fn pr(ctx: &Context, command: PrCommand) -> Result<i32> {
             (item, Action::Edit(edit), "PR updated")
         }
         PrCommand::Comment { item, body } => (item, comment(body)?, "Commented on PR"),
+        PrCommand::Reply {
+            comment,
+            item,
+            body,
+        } => {
+            let reply = read_body(body)?.context("a reply needs --body or --body-file")?;
+            (
+                item,
+                thread(comment, Some(reply), None),
+                "Replied in thread",
+            )
+        }
+        PrCommand::Resolve {
+            comment,
+            item,
+            body,
+            confirmation,
+        } => {
+            let reply = read_body(body)?;
+            if reply.is_none() && !confirmation.yes {
+                confirm_unanswered(ctx, &item, comment).await?;
+            }
+            (item, thread(comment, reply, Some(true)), "Thread resolved")
+        }
+        PrCommand::Unresolve { comment, item } => (
+            item,
+            thread(comment, None, Some(false)),
+            "Thread unresolved",
+        ),
         PrCommand::Close { item } => (item, Action::Close, "PR closed"),
         PrCommand::Reopen { item } => (item, Action::Reopen, "PR reopened"),
         PrCommand::Merge {
@@ -215,6 +246,61 @@ fn edit_fields(edit: EditArgs) -> Result<Edit> {
 fn comment(body: BodyArgs) -> Result<Action> {
     let body = read_body(body)?.context("a comment needs --body or --body-file")?;
     Ok(Action::Comment { body })
+}
+
+fn thread(comment: u64, reply: Option<String>, resolve: Option<bool>) -> Action {
+    Action::Thread(ThreadChange {
+        comment,
+        reply,
+        resolve,
+    })
+}
+
+/// Ask before resolving a thread without a reply, which leaves the reviewer
+/// no reason. Without exactly one selected PR the action itself fails, so
+/// there is nothing to ask.
+async fn confirm_unanswered(ctx: &Context, selector: &ItemSelector, comment: u64) -> Result<()> {
+    let workspace = ui::select_workspace(
+        ctx,
+        selector.workspace.clone(),
+        ui::Fallback::CurrentDirectory,
+    )
+    .await?;
+    let selection = Selection {
+        kind: Some(ItemKind::Pr),
+        input: selector.item.clone(),
+    };
+    let selected: Selected = client::request(
+        &ctx.paths,
+        Method::SelectItems {
+            workspace,
+            selection,
+        },
+    )
+    .await?;
+    let [item] = selected.items.as_slice() else {
+        return Ok(());
+    };
+    let forge = ForgeRepo::from_pull_url(&item.url)?;
+    forge.ensure_resolves_threads()?;
+    let (number, _) = forge.pull(&item.url)?;
+    let thread = ctx
+        .progress(
+            "Reading thread",
+            forge.thread(&ctx.forge_account()?, number, comment),
+        )
+        .await?;
+    if thread.replies == 0 {
+        ensure!(
+            ui::confirm(
+                ctx,
+                &format!("Thread {} has no reply.", thread.first),
+                "--body-file with the reason, or --yes"
+            )?,
+            "thread resolution canceled"
+        );
+    }
+    Ok(())
 }
 
 fn read_body(body: BodyArgs) -> Result<Option<String>> {

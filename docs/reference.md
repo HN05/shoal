@@ -1354,6 +1354,8 @@ requests. Agents' changes use your Bitbucket credentials.
 shoal pr open --label area/cli      # push, then link the branch's open PR or open one
 shoal pr edit --title "Fix login" --add-label bug --draft
 shoal pr comment --body-file notes.md
+shoal pr reply 812 --body-file why.md   # in the thread of review comment 812
+shoal pr resolve 812 --body-file why.md # reply, then resolve; unresolve reopens
 shoal pr close 12                   # reopen works the same way
 shoal pr merge --method rebase --delete-branch
 shoal issue edit --add-label bug    # comment, close and reopen work too
@@ -1380,6 +1382,12 @@ takes `--title`, `--body` or `--body-file`, and repeated `--add-label` and
 and a failed request stops the rest with the forge's message. Labels are
 replaced as a set by name; Forgejo's draft state is the title's `WIP: ` prefix,
 and GitLab's its `Draft: ` prefix.
+`reply`, `resolve` and `unresolve` take the ID of any comment in a review
+thread, as `shoal view` shows it, before the PR's number or URL. `reply` takes
+`--body` or `--body-file`; `resolve` posts one as a reply first when given.
+Resolving a thread that has no reply asks for confirmation; `--yes` skips it.
+Forgejo and Gitea have no API for thread resolution, so `resolve` and
+`unresolve` fail there without sending anything.
 `merge` takes `--method merge|rebase|squash`; `--delete-branch` deletes the
 PR's branch on the forge when it is in the repository, never a local branch.
 `issue open` takes `--title`, `--body` or `--body-file`, and repeated `--label`;
