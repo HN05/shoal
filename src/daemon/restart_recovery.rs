@@ -78,12 +78,18 @@ async fn reconcile_until_done(manager: &Manager) -> Vec<Waiting> {
     }
 }
 
-/// A reattached wrapper reports to the daemon like any other.
+/// A reattached wrapper reports to the daemon like any other. An entry whose
+/// state cannot be read stays, so the next pass decides it.
 async fn still_unknown(manager: &Manager, waiting: Vec<Waiting>) -> Vec<Waiting> {
     let mut unknown = Vec::with_capacity(waiting.len());
     for entry in waiting {
-        if manager.execution_unknown(&entry.execution).await {
-            unknown.push(entry);
+        match manager.execution_unknown(&entry.execution).await {
+            Ok(false) => {}
+            Ok(true) => unknown.push(entry),
+            Err(error) => {
+                log!("restart reconciliation: {error:#}");
+                unknown.push(entry);
+            }
         }
     }
     unknown
@@ -182,14 +188,13 @@ impl Manager {
         .await;
     }
 
-    async fn execution_unknown(&self, id: &str) -> bool {
+    async fn execution_unknown(&self, id: &str) -> Result<bool> {
         let id = id.to_owned();
-        self.store
+        let execution = self
+            .store
             .run(move |db| store::find_execution(db, &id))
-            .await
-            .is_ok_and(|execution| {
-                execution.is_some_and(|execution| execution.state == ExecutionState::Unknown)
-            })
+            .await?;
+        Ok(execution.is_some_and(|execution| execution.state == ExecutionState::Unknown))
     }
 }
 
