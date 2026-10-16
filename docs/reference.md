@@ -370,7 +370,10 @@ conflicts, each CI check's result, and a review state from each reviewer's lates
 approval or change request. A failed lookup reports its error on that item
 without failing the command. When the
 daemon's automatic cleanup is failing or has not finished a pass for 10 minutes,
-status says so in `cleanup_error` and `doctor` reports the error. `--json`
+status says so in `cleanup_error` and `doctor` reports the error. Status also
+names the first condition that keeps the workspace from automatic cleanup, holds
+and assignment state before commands, leases and Git state, or the idle delay
+when nothing does, in `cleanup_reason`. `--json`
 returns the same data, with PRs in `prs`, the issue in `issue_status` and sessions
 in `sessions`, or a failed `zmx list` in `sessions_error`; `inspect` keeps the raw workspace and
 execution records. Workspace records from `ls --json` and `inspect --json` include

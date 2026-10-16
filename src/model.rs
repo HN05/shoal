@@ -209,12 +209,83 @@ pub struct WorkspaceStatus {
     /// it qualifies, is failing or stalled.
     #[serde(default)]
     pub cleanup_error: Option<String>,
+    /// Why automatic cleanup keeps this workspace now.
+    pub cleanup_reason: CleanupReason,
     /// The current state of each watched PR.
     #[serde(default)]
     pub prs: Vec<crate::forge::pr::state::PrStatus>,
     /// The linked issue's current state.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub issue_status: Option<IssueStatus>,
+}
+
+/// The first condition that keeps a workspace from automatic cleanup, in the
+/// order the daemon checks them, or the idle delay when none does.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "reason", rename_all = "snake_case")]
+pub enum CleanupReason {
+    NotReady {
+        state: WorkspaceState,
+    },
+    Held,
+    Kept,
+    PrWatch,
+    Completed,
+    Issue,
+    Recovering,
+    RunningCommands,
+    Permits,
+    Simulators,
+    MissingDirectory,
+    Dirty,
+    Unpushed {
+        commits: u64,
+    },
+    DirectoryProcesses {
+        processes: Vec<String>,
+    },
+    IdleDisabled,
+    InspectionFailed {
+        error: String,
+    },
+    /// Nothing keeps the workspace; idle cleanup removes it after this delay.
+    Idle {
+        minutes: u64,
+    },
+}
+
+impl std::fmt::Display for CleanupReason {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NotReady { state } => write!(f, "Workspace state: {state}"),
+            Self::Held => f.write_str("Kept by holds"),
+            Self::Kept => f.write_str("Kept by done --keep"),
+            Self::PrWatch => f.write_str("Waiting for watched PRs to merge"),
+            Self::Completed => f.write_str("Done; completion cleanup pending"),
+            Self::Issue => f.write_str("Linked issue"),
+            Self::Recovering => f.write_str("Execution recovery pending"),
+            Self::RunningCommands => f.write_str("Tracked commands running"),
+            Self::Permits => f.write_str("Resource permits held"),
+            Self::Simulators => f.write_str("Simulator leases held"),
+            Self::MissingDirectory => f.write_str("Directory missing"),
+            Self::Dirty => f.write_str("Uncommitted or untracked changes"),
+            Self::Unpushed { commits } => write!(
+                f,
+                "{commits} {} neither pushed nor on the local default branch",
+                if *commits == 1 { "commit" } else { "commits" }
+            ),
+            Self::DirectoryProcesses { processes } => {
+                write!(f, "Processes using the directory: {}", processes.join(", "))
+            }
+            Self::IdleDisabled => f.write_str("Idle cleanup disabled"),
+            Self::InspectionFailed { error } => write!(f, "Inspection failed: {error}"),
+            Self::Idle { minutes } => write!(
+                f,
+                "Removed after {minutes} idle {}",
+                if *minutes == 1 { "minute" } else { "minutes" }
+            ),
+        }
+    }
 }
 
 /// A failed lookup leaves `state` empty and records its error.

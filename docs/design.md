@@ -307,7 +307,9 @@ all removal hooks, with branch deletion derived from the final inspection.
 Idle cleanup requires unchanged
 HEAD, activity and file metadata; sweeps compare HEAD and activity, and walk the
 tree only when the timer starts, when it expires and after removal hooks, since
-change times only move forward and cannot be set. Manual removal without a branch choice
+change times only move forward and cannot be set. Status reports the first reason
+cleanup keeps a workspace from the checks the sweep runs, so it cannot disagree
+with the sweep and lsof still scans only clean worktrees. Manual removal without a branch choice
 retains changed HEAD.
 Post-remove runs after ownership is released,
 from the repository checkout with its copy of the executable, retaining the old

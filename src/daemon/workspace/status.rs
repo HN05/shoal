@@ -39,6 +39,7 @@ impl Manager {
             issue_status(&account, &inspection)
         );
         let unread_notifications = self.unread_notifications().await?;
+        let cleanup_reason = self.cleanup_reason(&inspection.workspace).await;
         let workspace_id = inspection.workspace.id.clone();
         let setup_finished = self
             .store
@@ -54,6 +55,7 @@ impl Manager {
             diff_error,
             unread_notifications,
             cleanup_error: self.cleanup_problem(),
+            cleanup_reason,
             prs,
             issue_status,
         })

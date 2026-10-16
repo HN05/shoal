@@ -11,7 +11,7 @@ use crate::{
         worktrunk::{self, BranchRemoval, FileRemoval},
     },
     hooks::{self, Hook, HookKind},
-    model::Workspace,
+    model::{CleanupReason, Workspace},
     removal::{self, BranchChoice, BranchOutcome, InspectionPolicy, RemovalCheck, RemovalResult},
     state::WorkspaceState,
 };
@@ -167,6 +167,27 @@ impl Stage<'_> {
     }
 }
 
+/// What the worktree's state keeps from automatic cleanup, if anything.
+fn worktree_cleanup_reason(check: &RemovalCheck) -> Option<CleanupReason> {
+    if !check.workspace.path.is_dir() {
+        Some(CleanupReason::MissingDirectory)
+    } else if check.dirty {
+        Some(CleanupReason::Dirty)
+    } else if check.unpushed_commits > 0 {
+        Some(CleanupReason::Unpushed {
+            commits: check.unpushed_commits,
+        })
+    } else if check.running_commands > 0 {
+        Some(CleanupReason::RunningCommands)
+    } else if !check.processes.is_empty() {
+        Some(CleanupReason::DirectoryProcesses {
+            processes: check.processes.clone(),
+        })
+    } else {
+        None
+    }
+}
+
 /// A post-remove hook resolved while the workspace record still exists.
 struct PostRemoveHook {
     command: PathBuf,
@@ -209,34 +230,107 @@ impl Manager {
         Ok(self
             .cleanup_candidate(id)
             .await?
+            .ok()
             .map(|(_, signals)| signals))
     }
 
     /// Everything automatic cleanup must see unchanged before removing the
     /// workspace, or `None` when it is not a cleanup candidate.
     pub async fn cleanup_snapshot(&self, id: &str) -> Result<Option<Snapshot>> {
-        let Some((path, signals)) = self.cleanup_candidate(id).await? else {
-            return Ok(None);
+        Ok(self.cleanup_candidacy(id).await?.ok())
+    }
+
+    /// The snapshot of a cleanup candidate, or why it is not one.
+    pub async fn cleanup_candidacy(&self, id: &str) -> Result<Result<Snapshot, CleanupReason>> {
+        let (path, signals) = match self.cleanup_candidate(id).await? {
+            Ok(candidate) => candidate,
+            Err(reason) => return Ok(Err(reason)),
         };
         let tree = tokio::task::spawn_blocking(move || crate::daemon::cleanup::fingerprint(&path))
             .await??;
-        Ok(Some(Snapshot { signals, tree }))
+        Ok(Ok(Snapshot { signals, tree }))
     }
 
-    async fn cleanup_candidate(&self, id: &str) -> Result<Option<(PathBuf, u64)>> {
-        if crate::execution::recovery::pending(&self.paths, id)?
-            || self.workspace_has_executions(id).await?
-        {
-            return Ok(None);
+    /// Why automatic cleanup keeps the workspace, or its idle delay when
+    /// nothing does; a failed inspection is reported as the reason.
+    pub async fn cleanup_reason(&self, workspace: &Workspace) -> CleanupReason {
+        let reason = async {
+            if workspace.state != WorkspaceState::Ready {
+                return Ok(CleanupReason::NotReady {
+                    state: workspace.state,
+                });
+            }
+            if let Err(reason) = self.cleanup_candidate(&workspace.id).await? {
+                return Ok(reason);
+            }
+            let auto = self.workspace_settings(workspace).await?.cleanup.auto;
+            Ok(if auto.enabled {
+                CleanupReason::Idle {
+                    minutes: auto.idle_minutes,
+                }
+            } else {
+                CleanupReason::IdleDisabled
+            })
         }
-        if self.completion(id).await?.is_some()
-            || self.pr_registration(id).await?.is_some()
-            || self.issue_registration(id).await?.is_some()
-        {
-            return Ok(None);
+        .await;
+        reason.unwrap_or_else(|error: anyhow::Error| CleanupReason::InspectionFailed {
+            error: format!("{error:#}"),
+        })
+    }
+
+    /// The path and cleanup signals of a candidate, or the first reason it is not one.
+    async fn cleanup_candidate(&self, id: &str) -> Result<Result<(PathBuf, u64), CleanupReason>> {
+        if let Some(reason) = self.recorded_cleanup_reason(id).await? {
+            return Ok(Err(reason));
         }
-        if self.has_holds(id).await? || !self.list_resources(Some(id)).await?.is_empty() {
-            return Ok(None);
+        // Git state rules out most workspaces, so lsof only scans for safe ones.
+        let mut check = self.check_removal(id, InspectionPolicy::GitOnly).await?;
+        if let Some(reason) = worktree_cleanup_reason(&check) {
+            return Ok(Err(reason));
+        }
+        check.load_directory_processes().await?;
+        if let Some(reason) = worktree_cleanup_reason(&check) {
+            return Ok(Err(reason));
+        }
+        let head = git::revision(&check.workspace.path, "HEAD", git::run).await?;
+        let activity = self.activity(id).await;
+        Ok(Ok((
+            check.workspace.path,
+            crate::daemon::cleanup::signals(&head, activity),
+        )))
+    }
+
+    /// What daemon records keep the workspace: holds and assignment state
+    /// first, since their own cleanup paths decide removal, then commands and
+    /// leases.
+    async fn recorded_cleanup_reason(&self, id: &str) -> Result<Option<CleanupReason>> {
+        if self.has_holds(id).await? {
+            return Ok(Some(CleanupReason::Held));
+        }
+        let completion = self.completion(id).await?;
+        if completion
+            .as_ref()
+            .is_some_and(|completion| !completion.cleanup)
+        {
+            return Ok(Some(CleanupReason::Kept));
+        }
+        if self.pr_registration(id).await?.is_some() {
+            return Ok(Some(CleanupReason::PrWatch));
+        }
+        if completion.is_some() {
+            return Ok(Some(CleanupReason::Completed));
+        }
+        if self.issue_registration(id).await?.is_some() {
+            return Ok(Some(CleanupReason::Issue));
+        }
+        if crate::execution::recovery::pending(&self.paths, id)? {
+            return Ok(Some(CleanupReason::Recovering));
+        }
+        if self.workspace_has_executions(id).await? {
+            return Ok(Some(CleanupReason::RunningCommands));
+        }
+        if !self.list_resources(Some(id)).await?.is_empty() {
+            return Ok(Some(CleanupReason::Permits));
         }
         if self
             .list_simulators(Some(id))
@@ -244,23 +338,9 @@ impl Manager {
             .iter()
             .any(|s| s.workspace_id.is_some())
         {
-            return Ok(None);
+            return Ok(Some(CleanupReason::Simulators));
         }
-        // Git state rules out most workspaces, so lsof only scans for safe ones.
-        let mut check = self.check_removal(id, InspectionPolicy::GitOnly).await?;
-        if !check.safe() || !check.workspace.path.is_dir() {
-            return Ok(None);
-        }
-        check.load_directory_processes().await?;
-        if !check.safe() {
-            return Ok(None);
-        }
-        let head = git::revision(&check.workspace.path, "HEAD", git::run).await?;
-        let activity = self.activity(id).await;
-        Ok(Some((
-            check.workspace.path,
-            crate::daemon::cleanup::signals(&head, activity),
-        )))
+        Ok(None)
     }
 
     pub async fn remove_idle(&self, selector: &str, snapshot: Snapshot) -> Result<()> {

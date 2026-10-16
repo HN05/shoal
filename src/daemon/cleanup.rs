@@ -927,6 +927,52 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn status_names_the_first_reason_cleanup_keeps_a_workspace() {
+        use crate::{
+            model::CleanupReason,
+            test_support::{commit, git, manager, repository},
+        };
+        let (temp, manager) = manager().await;
+        let checkout = repository(temp.path(), "repo");
+        let repo = manager
+            .register_repository(checkout.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        let workspace = manager
+            .create_workspace(&repo.id, "kept".into(), None, None, None)
+            .await
+            .unwrap();
+        let reason = || async { manager.cleanup_reason(&workspace).await };
+        assert_eq!(reason().await, CleanupReason::Idle { minutes: 10 });
+
+        fs::write(workspace.path.join("work"), "work").unwrap();
+        assert_eq!(reason().await, CleanupReason::Dirty);
+        commit(&workspace.path, "work");
+        assert_eq!(reason().await, CleanupReason::Unpushed { commits: 1 });
+        git(&checkout, &["merge", "--ff-only", "kept"]);
+
+        manager
+            .acquire_hold(&workspace.id, "review".into(), None)
+            .await
+            .unwrap();
+        manager.mark_done(&workspace.id, Some(false)).await.unwrap();
+        assert_eq!(reason().await, CleanupReason::Held);
+        manager
+            .release_hold(&workspace.id, "review".into())
+            .await
+            .unwrap();
+        assert_eq!(reason().await, CleanupReason::Kept);
+        manager.undo_done(&workspace.id).await.unwrap();
+
+        manager
+            .set_repository_config(&repo.id, Some("[cleanup.auto]\nenabled = false\n".into()))
+            .await
+            .unwrap();
+        let status = manager.workspace_status(&workspace.id).await.unwrap();
+        assert_eq!(status.cleanup_reason, CleanupReason::IdleDisabled);
+    }
+
+    #[tokio::test]
     async fn cleanup_preserves_work_and_rechecks_activity_before_deleting() {
         use crate::{
             daemon::{ports::PortRequest, resources::ResourceRequest},
