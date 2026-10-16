@@ -11565,7 +11565,7 @@ fn view_shows_linked_items_with_status_and_discussion() {
     let bin = fixture.root.path().join("bin");
     install_test_script(
         bin.join("gh"),
-        "#!/bin/sh\ncase \"$1 $2\" in\n'issue view') [ \"$3\" = 3 ] && cat \"$HOME/issue.json\" || echo '{\"number\":3}';;\n'pr view') cat \"$HOME/pr.json\";;\n*) case \"$4\" in */reviews) cat \"$HOME/reviews.json\";; *) cat \"$HOME/inline.json\";; esac;;\nesac\n",
+        "#!/bin/sh\ncase \"$1 $2\" in\n'issue view') [ \"$3\" = 3 ] && cat \"$HOME/issue.json\" || echo '{\"number\":3}';;\n'pr view') cat \"$HOME/pr.json\";;\n*) case \"$4 $6\" in */reviews\\ *) cat \"$HOME/reviews.json\";; '-X graphql') cat \"$HOME/threads.json\";; *) cat \"$HOME/inline.json\";; esac;;\nesac\n",
     );
     let root = fixture.root.path();
     // Longer than a protocol frame: lookups run in the CLI.
@@ -11596,7 +11596,16 @@ fn view_shows_linked_items_with_status_and_discussion() {
     .unwrap();
     fs::write(
         root.join("inline.json"),
-        r#"[[{"pull_request_review_id":11,"user":{"login":"bot"},"path":"src/a.rs","line":3,"body":"Handle None","created_at":"t3"}]]"#,
+        r#"[[{"id":21,"pull_request_review_id":11,"user":{"login":"bot"},"path":"src/a.rs","line":3,"body":"Handle None","created_at":"t3"}]]"#,
+    )
+    .unwrap();
+    fs::write(
+        root.join("threads.json"),
+        serde_json::json!({"data":{"repository":{"pullRequest":{"reviewThreads":{
+            "pageInfo":{"hasNextPage":false,"endCursor":null},
+            "nodes":[{"id":"T_1","isResolved":false,"comments":{
+                "pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[{"databaseId":21}]}}]}}}}})
+        .to_string(),
     )
     .unwrap();
     fixture.ok(&["link", "issue", "3", "--workspace", "view"]);
@@ -11614,7 +11623,16 @@ fn view_shows_linked_items_with_status_and_discussion() {
     assert_eq!(pr["pr"]["merge_conflicts"], true);
     assert_eq!(pr["pr"]["checks"][0]["result"], "failure");
     assert_eq!(pr["pr"]["review"], "changes_requested");
-    assert_eq!(pr["reviews"][0]["comments"][0]["path"], "src/a.rs");
+    let finding = &pr["reviews"][0]["comments"][0];
+    assert_eq!(finding["path"], "src/a.rs");
+    assert_eq!(
+        (&finding["id"], &finding["thread"], &finding["resolved"]),
+        (
+            &serde_json::json!(21),
+            &serde_json::json!(21),
+            &serde_json::json!(false)
+        )
+    );
     assert!(pr.get("errors").is_none(), "{pr}");
 
     let status = fixture.ok(&["status", "view"]);
@@ -11629,7 +11647,10 @@ fn view_shows_linked_items_with_status_and_discussion() {
     let text = String::from_utf8_lossy(&text.stdout);
     assert!(text.contains("PR #7: Fix crash"), "{text}");
     assert!(text.contains("Branch:   view → main"), "{text}");
-    assert!(text.contains("src/a.rs:3 · bot · t3"), "{text}");
+    assert!(
+        text.contains("src/a.rs:3 · bot · t3 · comment 21 · unresolved"),
+        "{text}"
+    );
 
     // An unreadable item reports its error and fails the command.
     let missing = fixture.run(&["--json", "view", "issue", "9", "--workspace", "view"]);
