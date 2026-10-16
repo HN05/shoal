@@ -1,21 +1,26 @@
 //! Herdr terminal handoffs; workspace ownership stays with the daemon.
 use std::{ffi::OsString, path::Path, process::Stdio, time::Duration};
 
-use anyhow::{Context as _, Result, ensure};
+use anyhow::{Context as _, Result};
 use serde::{Deserialize, Serialize};
 use tokio::process::Command;
 
 use super::{
     client,
     commands::{
-        issues::Issue,
+        issues::{self, Issue},
         workspaces::{AddPlan, execute_add},
     },
     context::Context,
     internal,
+    terminal::Placement,
 };
 use crate::{
-    config::Config, env, model::Repository, paths::Paths, protocol::ConfigTarget, subprocess::Run,
+    config::{Config, Effective},
+    env,
+    execution::recovery::Record,
+    model::{Repository, Workspace},
+    subprocess::Run,
 };
 
 pub struct Tab {
@@ -60,60 +65,29 @@ impl TabName {
     }
 }
 
-pub(super) async fn handoff(
-    ctx: &Context,
-    plan: &mut AddPlan,
-    issue: Option<&Issue>,
-    here: bool,
-) -> Result<bool> {
-    if here || !available(ctx) {
-        return Ok(false);
-    }
-    open_tab(ctx, plan, issue, None).await
-}
-
 /// Whether this process runs in Herdr, so new tabs can open beside it.
 pub(in crate::cli) fn in_herdr() -> bool {
     std::env::var("HERDR_ENV").as_deref() == Ok("1")
 }
 
-/// Open an admitted queue entry's tab in the background, where the terminal
-/// that queued it would have opened it, unless Herdr tabs are turned off.
-pub(in crate::cli) async fn start_queued(
+/// Run `plan` in a new tab that takes focus as `placement` asks, unless
+/// `herdr.new_tab` is off.
+pub(in crate::cli) async fn start_add(
     ctx: &Context,
+    settings: &Effective,
     plan: &mut AddPlan,
     issue: Option<&Issue>,
+    placement: Placement,
 ) -> Result<bool> {
-    open_tab(ctx, plan, issue, Some(false)).await
-}
-
-/// Run `plan` in a new tab when the repository's settings allow; `focus`
-/// overrides the configured focus.
-async fn open_tab(
-    ctx: &Context,
-    plan: &mut AddPlan,
-    issue: Option<&Issue>,
-    focus: Option<bool>,
-) -> Result<bool> {
-    let settings = client::settings(
-        &ctx.paths,
-        ConfigTarget::Repository(plan.repository.clone()),
-    )
-    .await?;
-    if !(settings.herdr.enabled && settings.herdr.new_tab) {
+    if !settings.herdr.new_tab {
         return Ok(false);
     }
-    ensure!(
-        !env::inherits_scope(&ctx.paths.state),
-        "workspace processes cannot allocate workspaces"
-    );
-    let focus = focus.or(settings.focus).unwrap_or(!plan.runs_unattended());
-    if let Some(template) = settings.herdr.tab_name {
+    if let Some(template) = settings.herdr.tab_name.clone() {
         let repos = client::repositories(&ctx.paths).await?;
         let repo = crate::forge::repository::select(&repos, &plan.repository).await?;
         plan.tab_name = Some(TabName::new(template, repo, issue));
     }
-    let created = create_tab(ctx, plan, focus).await?;
+    let created = create_tab(ctx, plan, placement == Placement::Focus).await?;
     submit_worker(ctx, created, settings.herdr.close_when_done).await?;
     Ok(true)
 }
@@ -132,17 +106,30 @@ pub(in crate::cli) fn tab_label(
     }
 }
 
-/// Run Shoal with `args` in `pane` if it is back at its shell prompt, as a
-/// stopped agent's pane is once its wrapper exits. Returns whether it ran.
-pub(in crate::cli) async fn run_at_prompt(
+/// Run Shoal with `args` in the pane the agent of `record` stopped in, once
+/// that pane is back at its shell prompt, as it is after the wrapper exits.
+/// This terminal's own pane is never reused. Returns whether it ran.
+pub(in crate::cli) async fn rerun_in_recorded_pane(
     ctx: &Context,
-    pane: &str,
+    record: &Path,
     args: &[OsString],
 ) -> Result<bool> {
+    let pane = std::fs::read(record)
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<Record>(&bytes).ok())
+        .and_then(|record| record.herdr_pane)
+        .filter(|pane| current_pane().as_ref() != Some(pane));
+    match pane {
+        Some(pane) => run_at_prompt(ctx, &pane, args).await,
+        None => Ok(false),
+    }
+}
+
+async fn run_at_prompt(ctx: &Context, pane: &str, args: &[OsString]) -> Result<bool> {
     if !at_prompt(pane).await {
         return Ok(false);
     }
-    let mut argv = shoal_argv(&ctx.paths)?;
+    let mut argv = internal::shoal_argv(&ctx.paths)?;
     argv.extend_from_slice(args);
     run_in_pane(pane, &argv).await?;
     Ok(true)
@@ -183,9 +170,51 @@ pub(in crate::cli) async fn run_in_tab(
     focus: bool,
 ) -> Result<()> {
     let created = created(tab_command(ctx, cwd, label, focus)?).await?;
-    let mut argv = shoal_argv(&ctx.paths)?;
+    let mut argv = internal::shoal_argv(&ctx.paths)?;
     argv.extend_from_slice(args);
     run_in_pane(&created.root_pane.pane_id, &argv).await
+}
+
+/// Run Shoal with `args` in a new background tab in `workspace`, labelled
+/// as `shoal add` labels it, unless `herdr.new_tab` is off.
+pub(in crate::cli) async fn run_in_background(
+    ctx: &Context,
+    settings: &Effective,
+    workspace: &Workspace,
+    args: &[OsString],
+) -> Result<bool> {
+    if !settings.herdr.new_tab {
+        return Ok(false);
+    }
+    let label = workspace_label(ctx, settings, workspace).await;
+    run_in_tab(ctx, &workspace.path, &label, args, false).await?;
+    Ok(true)
+}
+
+/// The tab label `shoal add` would give `workspace`. A failed issue lookup
+/// falls back to the branch.
+async fn workspace_label(ctx: &Context, settings: &Effective, workspace: &Workspace) -> String {
+    let labelled = async {
+        let repositories = client::repositories(&ctx.paths).await?;
+        let repo = repositories
+            .iter()
+            .find(|repo| repo.id == workspace.repository_id)
+            .context("repository is no longer registered")?;
+        let issue = match &workspace.links.issue {
+            Some(url) => Some(issues::load(&ctx.forge_account()?, repo, url).await?),
+            None => None,
+        };
+        anyhow::Ok(tab_label(
+            settings.herdr.tab_name.clone(),
+            repo,
+            issue.as_ref(),
+            &workspace.branch,
+        ))
+    };
+    labelled.await.unwrap_or_else(|error| {
+        eprintln!("warning: cannot label the Herdr tab: {error:#}");
+        workspace.branch.clone()
+    })
 }
 
 // The tab environment carries the plan, keeping the typed command short.
@@ -193,7 +222,7 @@ async fn create_tab(ctx: &Context, plan: &AddPlan, focus: bool) -> Result<Create
     let mut create = tab_command(ctx, &std::env::current_dir()?, &plan.label(), focus)?;
     create.arg("--env").arg(format!(
         "{}={}",
-        env::HERDR_PLAN,
+        env::ADD_PLAN,
         serde_json::to_string(plan)?
     ));
     created(create).await
@@ -235,7 +264,7 @@ async fn created(create: Command) -> Result<CreatedResult> {
 }
 
 async fn submit_worker(ctx: &Context, created: CreatedResult, close_when_done: bool) -> Result<()> {
-    let mut argv = shoal_argv(&ctx.paths)?;
+    let mut argv = internal::shoal_argv(&ctx.paths)?;
     argv.extend([internal::GROUP.into(), internal::HERDR.into()]);
     if close_when_done {
         argv.push("--close-when-done".into());
@@ -253,15 +282,6 @@ async fn run_in_pane(pane: &str, argv: &[OsString]) -> Result<()> {
         .await
         .context("run Shoal in the Herdr tab (tab retained)")?;
     Ok(())
-}
-
-// The tab inherits HOME, so only a non-default state directory needs naming.
-fn shoal_argv(paths: &Paths) -> Result<Vec<OsString>> {
-    let mut argv = vec![crate::fsutil::invoked_executable()?.into_os_string()];
-    if !paths.is_default_state() {
-        argv.extend(["--state-dir".into(), paths.state.clone().into_os_string()]);
-    }
-    Ok(argv)
 }
 
 #[derive(Deserialize)]
@@ -510,6 +530,7 @@ mod tests {
     use super::*;
     use crate::{
         model::{Completion, Execution, Inspection, Workspace},
+        paths::Paths,
         protocol::{self, Body, Method, Request, Response},
         state::{ExecutionState, WorkspaceState},
     };
@@ -684,20 +705,6 @@ mod tests {
             .unwrap();
         server.await.unwrap();
         lifecycle
-    }
-
-    #[test]
-    fn shoal_argv_names_only_a_non_default_state_directory() {
-        let custom = Paths::for_test("/home");
-        let default = Paths {
-            state: "/home/.local/state/shoal".into(),
-            ..custom.clone()
-        };
-        assert_eq!(shoal_argv(&default).unwrap().len(), 1);
-        assert_eq!(
-            shoal_argv(&custom).unwrap()[1..],
-            ["--state-dir", "/home/state"]
-        );
     }
 
     #[test]

@@ -14,6 +14,7 @@ use crate::{
         client::{self, request},
         context::Context,
         output::{Palette, Style},
+        terminal::{Backend, Placement},
         ui::{self, Fallback},
         zmx,
     },
@@ -293,7 +294,7 @@ pub(super) async fn add(
             }
         }
     }
-    let handoff = crate::cli::herdr::handoff(ctx, &mut plan, issue.as_ref(), options.here).await;
+    let handoff = start_beside(ctx, &target, &mut plan, issue.as_ref(), options.here).await;
     if let Some(entry) = &plan.queue_entry
         && let Err(error) = &handoff
     {
@@ -303,6 +304,37 @@ pub(super) async fn add(
         return Ok(0);
     }
     execute_add_with_target(ctx, plan, target, issue).await
+}
+
+/// Hand `plan` to this terminal's backend, focused or in the background,
+/// unless `here` keeps it in place. Returns whether it left this process.
+async fn start_beside(
+    ctx: &Context,
+    target: &AddTarget,
+    plan: &mut AddPlan,
+    issue: Option<&super::issues::Issue>,
+    here: bool,
+) -> Result<bool> {
+    if here || !ctx.interactive() {
+        return Ok(false);
+    }
+    let settings = client::settings(
+        &ctx.paths,
+        ConfigTarget::Repository(plan.repository.clone()),
+    )
+    .await?;
+    let Some(backend) = Backend::current(ctx, &settings) else {
+        return Ok(false);
+    };
+    let placement = Placement::choose(settings.focus, !plan.runs_unattended());
+    let name = planned_workspace_name(ctx, target, &plan.creation).await?;
+    let started = backend
+        .start_add(ctx, &settings, plan, issue, &name, placement)
+        .await?;
+    if started && placement == Placement::Background {
+        println!("{}", backend.background_note(&name));
+    }
+    Ok(started)
 }
 
 /// The workspace name `creation` will derive. An existing branch opens under
@@ -374,37 +406,47 @@ impl AddPlan {
     }
 }
 
-/// Start an admitted queue entry's plan where `shoal add` would have: in a
-/// background Herdr tab of the terminal that queued it, otherwise in a
-/// detached zmx session that `shoal attach` reaches.
+/// Start an admitted queue entry's plan in the background where `shoal add`
+/// would have: in the Herdr workspace of the terminal that queued it,
+/// otherwise in a detached zmx session that `shoal attach` reaches.
 pub(in crate::cli) async fn start_queued(
     ctx: &Context,
     mut plan: AddPlan,
     name: &str,
 ) -> Result<()> {
-    let entry = plan
-        .queue_entry
-        .clone()
-        .context("a queued start needs its queue entry")?;
-    if crate::cli::herdr::in_herdr() {
-        let issue = match &plan.issue {
-            Some(url) => {
-                let repos = client::repositories(&ctx.paths).await?;
-                let repo = crate::forge::repository::select(&repos, &plan.repository).await?;
-                Some(super::issues::load(&ctx.forge_account()?, repo, url).await?)
-            }
-            None => None,
-        };
-        if crate::cli::herdr::start_queued(ctx, &mut plan, issue.as_ref()).await? {
-            return Ok(());
-        }
-    }
-    zmx::start_detached(
-        ctx,
-        name,
-        crate::cli::internal::Worker::QueueRun { entry: &entry },
+    let settings = client::settings(
+        &ctx.paths,
+        ConfigTarget::Repository(plan.repository.clone()),
     )
-    .await
+    .await?;
+    let backend = Backend::queued(&settings);
+    // Only tabs are labelled from the issue; a session's worker reads it again.
+    let issue = match (backend, &plan.issue) {
+        (Backend::Herdr, Some(url)) => {
+            let repos = client::repositories(&ctx.paths).await?;
+            let repo = crate::forge::repository::select(&repos, &plan.repository).await?;
+            Some(super::issues::load(&ctx.forge_account()?, repo, url).await?)
+        }
+        _ => None,
+    };
+    backend
+        .start_add(
+            ctx,
+            &settings,
+            &mut plan,
+            issue.as_ref(),
+            name,
+            Placement::Background,
+        )
+        .await?;
+    Ok(())
+}
+
+/// A detached zmx session's worker: add the workspace its launch planned.
+pub(super) async fn detached_worker(ctx: &Context, payload: &str) -> Result<i32> {
+    let mut plan: AddPlan = serde_json::from_str(payload).context("invalid workspace plan")?;
+    plan.detached = true;
+    execute_add(ctx, plan).await
 }
 
 pub(in crate::cli) async fn execute_add(ctx: &Context, plan: AddPlan) -> Result<i32> {
@@ -468,7 +510,12 @@ async fn add_planned(
     let pr = creation.pr.clone();
     let opened = open_add_workspace(ctx, &target, creation).await?;
     if let Some(entry) = &queue_entry {
-        super::agent_queue::attach(ctx, entry, &opened.workspace, agent.agent.as_ref()).await?;
+        super::agent_queue::attach(ctx, entry, &opened.workspace).await?;
+    }
+    if let Some(name) = agent.agent.clone().map(String::from)
+        && let Err(error) = zmx::label_current(&opened.workspace.id, &name).await
+    {
+        eprintln!("warning: {error:#}");
     }
     if let Some(tab) = &ctx.herdr_tab {
         tab.watch_workspace(ctx, &opened.workspace.id)?;

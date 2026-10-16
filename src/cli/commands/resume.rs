@@ -3,11 +3,10 @@ use crate::{
     cli::{
         client,
         context::Context,
-        herdr,
+        terminal::Backend,
         ui::{self, Fallback},
         zmx,
     },
-    config::Herdr,
     daemon::recovery::{ReconcileOptions, Report},
     execution::recovery::{Record, Recovery, Saved, SavedCommand, consume},
     model::{Inspection, Workspace},
@@ -210,10 +209,10 @@ fn discard_saved(saved: &Saved, active: impl Fn(&str) -> bool) -> Result<Vec<Str
 }
 
 /// Resume each workspace's stopped work. Commands without an agent are
-/// reported here. Inside Herdr an agent resumes in the pane it stopped in
-/// when that pane is back at its prompt; otherwise one agent resumes in this
-/// terminal, several in new Herdr tabs, and without Herdr each is listed for
-/// its own terminal.
+/// reported here. An agent resumes where it stopped when the terminal backend
+/// can reuse that place; otherwise one agent resumes in this terminal, several
+/// in the backend's background, and without a backend each is listed for its
+/// own terminal.
 pub async fn run_all(ctx: &Context, discard: bool) -> Result<i32> {
     ensure!(
         !crate::env::inherits_scope(&ctx.paths.state),
@@ -264,98 +263,57 @@ pub async fn run_all(ctx: &Context, discard: bool) -> Result<i32> {
     }
     let single = sessions.len() == 1 && ctx.interactive();
     let mut agents = Vec::new();
+    let mut place = None;
     for (workspace, id, record) in &sessions {
-        let integration = herdr_settings(ctx, workspace).await?;
+        let settings =
+            client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
+        let backend = Backend::current(ctx, &settings);
         let args = ["resume", &workspace.id, "--execution", id].map(OsString::from);
-        let reused = integration.is_some() && resume_in_recorded_pane(ctx, record, &args).await?;
+        let reused = match backend {
+            Some(backend) => backend.rerun_where_stopped(ctx, record, &args).await?,
+            None => false,
+        };
         if single && !reused {
             return run(ctx, Some(workspace.id.clone()), Some(id.clone()), false).await;
         }
-        let tabs = reused || integration.is_some_and(|settings| settings.new_tab);
-        if tabs && !reused {
-            let label = launch_label(ctx, workspace).await;
-            herdr::run_in_tab(ctx, &workspace.path, &label, &args, false).await?;
+        let background = match backend {
+            Some(backend) if !reused => {
+                backend
+                    .run_in_background(ctx, &settings, workspace, &args)
+                    .await?
+            }
+            _ => reused,
+        };
+        if background {
+            place = backend;
         }
         agents.push(json!({
             "workspace": workspace.name,
             "execution": id,
-            "tab": tabs,
+            "background": background,
             "reused": reused,
         }));
     }
     ctx.show(&json!({"commands": commands, "agents": agents}), |_| {
-        let listed = agents.iter().filter(|agent| agent["tab"] == false).count();
-        if listed < sessions.len() {
-            println!("Resuming {} agents in Herdr tabs", sessions.len() - listed);
+        let listed = agents
+            .iter()
+            .filter(|agent| agent["background"] == false)
+            .count();
+        if let Some(place) = place {
+            let started = sessions.len() - listed;
+            println!("Resuming {started} agents in {}", place.background_places());
         }
         if listed > 0 {
             println!("Resume each agent in its own terminal:");
         }
         for ((workspace, id, _), agent) in sessions.iter().zip(&agents) {
-            if agent["tab"] == false {
+            if agent["background"] == false {
                 let words = ["shoal", "resume", &workspace.name, "--execution", id];
                 println!("  {}", crate::shell::quote(&words));
             }
         }
     })?;
     Ok(0)
-}
-
-/// The workspace's Herdr settings when this terminal is a Herdr pane and the
-/// integration is enabled.
-async fn herdr_settings(ctx: &Context, workspace: &Workspace) -> Result<Option<Herdr>> {
-    if !herdr::available(ctx) {
-        return Ok(None);
-    }
-    let settings =
-        client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
-    Ok(Some(settings.herdr).filter(|herdr| herdr.enabled))
-}
-
-/// Restore the agent in the Herdr pane it stopped in, unless that pane is
-/// this terminal, busy or gone.
-async fn resume_in_recorded_pane(
-    ctx: &Context,
-    record: &std::path::Path,
-    args: &[OsString],
-) -> Result<bool> {
-    let pane = std::fs::read(record)
-        .ok()
-        .and_then(|bytes| serde_json::from_slice::<Record>(&bytes).ok())
-        .and_then(|record| record.herdr_pane)
-        .filter(|pane| herdr::current_pane().as_ref() != Some(pane));
-    match pane {
-        Some(pane) => herdr::run_at_prompt(ctx, &pane, args).await,
-        None => Ok(false),
-    }
-}
-
-/// The tab label `shoal add` would give the workspace. A failed issue lookup
-/// falls back to the branch.
-async fn launch_label(ctx: &Context, workspace: &Workspace) -> String {
-    let labelled = async {
-        let settings =
-            client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
-        let repositories = client::repositories(&ctx.paths).await?;
-        let repo = repositories
-            .iter()
-            .find(|repo| repo.id == workspace.repository_id)
-            .context("repository is no longer registered")?;
-        let issue = match &workspace.links.issue {
-            Some(url) => Some(super::issues::load(&ctx.forge_account()?, repo, url).await?),
-            None => None,
-        };
-        anyhow::Ok(herdr::tab_label(
-            settings.herdr.tab_name,
-            repo,
-            issue.as_ref(),
-            &workspace.branch,
-        ))
-    };
-    labelled.await.unwrap_or_else(|error| {
-        eprintln!("warning: cannot label the Herdr tab: {error:#}");
-        workspace.branch.clone()
-    })
 }
 
 /// Only one resume reports a command; another holding its lock skips it.

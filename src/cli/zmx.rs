@@ -13,9 +13,10 @@ use tokio::process::Command;
 
 use super::{
     agents::ensure_program,
+    commands::workspaces::AddPlan,
     context::Context,
     herdr,
-    internal::{Worker, internal_command},
+    internal::{self, Worker, internal_command},
 };
 use crate::{
     config::Effective,
@@ -139,18 +140,35 @@ pub(in crate::cli) async fn run_chat(
     Ok(0)
 }
 
-/// Run `worker` in a new detached session named after `name`, as if typed at
-/// its shell: zmx gives commands it runs itself no terminal input. The worker
-/// replaces the shell, so the session ends with it as `run`'s sessions do.
-pub(in crate::cli) async fn start_detached(
+/// Run `plan` in a new detached session named after its planned workspace
+/// `name`. The session's worker reads the plan from its environment, as a
+/// Herdr tab's does.
+pub(in crate::cli) async fn start_add(ctx: &Context, plan: &AddPlan, name: &str) -> Result<()> {
+    let argv = internal_command(&ctx.paths, false, Worker::Add)?;
+    let plan = serde_json::to_string(plan)?;
+    start_detached(name, &argv, &[(env::ADD_PLAN, &plan)]).await
+}
+
+/// Run Shoal with `args` for `workspace` in a new detached session named
+/// after it.
+pub(in crate::cli) async fn run_in_background(
     ctx: &Context,
-    name: &str,
-    worker: Worker<'_>,
+    workspace: &Workspace,
+    args: &[OsString],
 ) -> Result<()> {
-    ensure_program("queued agent", Tool::Zmx.program())?;
+    let mut argv = internal::shoal_argv(&ctx.paths)?;
+    argv.extend_from_slice(args);
+    start_detached(&workspace.name, &argv, &[]).await
+}
+
+/// Run `argv` in a new detached session named after `name`, as if typed at
+/// its shell, since zmx gives commands it runs itself no terminal input. The
+/// shell exits once `argv` succeeds and otherwise stays to show why it failed.
+/// `env` reaches the shell, which keeps it, inert, while it stays.
+async fn start_detached(name: &str, argv: &[OsString], env: &[(&str, &str)]) -> Result<()> {
+    ensure_program("background launch", Tool::Zmx.program())?;
     let taken = list().await?.into_iter().map(|session| session.0).collect();
     let name = free_name(name, &taken);
-    let argv = internal_command(&ctx.paths, false, worker)?;
     let words = argv
         .iter()
         .map(|arg| arg.to_str().context("Shoal command path is not UTF-8"))
@@ -158,6 +176,7 @@ pub(in crate::cli) async fn start_detached(
     let mut create = Command::new(Tool::Zmx.program());
     create
         .args(["run", &name, "-d", "true"])
+        .envs(env.iter().copied())
         .stdin(std::process::Stdio::null());
     Run::new(create)
         .checked()
@@ -165,11 +184,11 @@ pub(in crate::cli) async fn start_detached(
         .context("create a zmx session")?;
     let mut send = Command::new(Tool::Zmx.program());
     send.args(["send", &name])
-        .arg(format!("exec {}\r", crate::shell::quote(&words)));
+        .arg(format!("{} && exit\r", crate::shell::quote(&words)));
     Run::new(send)
         .checked()
         .await
-        .context("start the queued agent in its zmx session")?;
+        .context("start Shoal in its zmx session")?;
     Ok(())
 }
 

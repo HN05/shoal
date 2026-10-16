@@ -7,12 +7,11 @@ use tokio::io::AsyncReadExt as _;
 
 use super::{listing::ListFilter, workspaces::AddPlan};
 use crate::{
-    agent::Agent,
     cli::{
         client::{self, request},
         context::Context,
         output::Palette,
-        ui, zmx,
+        ui,
     },
     model::{QueueAdmission, QueueEntry, QueueRequest, QueuedPlan, Workspace},
     paths::Paths,
@@ -79,14 +78,8 @@ pub(super) fn report_queued(ctx: &Context, entry: &QueueEntry, waiting: usize) -
     Ok(0)
 }
 
-/// Record the workspace a starting entry opened, and label the zmx session it
-/// runs in for `shoal attach`.
-pub(super) async fn attach(
-    ctx: &Context,
-    entry: &str,
-    workspace: &Workspace,
-    agent: Option<&Agent>,
-) -> Result<()> {
+/// Record the workspace a starting entry opened.
+pub(super) async fn attach(ctx: &Context, entry: &str, workspace: &Workspace) -> Result<()> {
     request::<()>(
         &ctx.paths,
         Method::QueueAttach {
@@ -94,13 +87,7 @@ pub(super) async fn attach(
             workspace: workspace.id.clone(),
         },
     )
-    .await?;
-    if let Some(agent) = agent
-        && let Err(error) = zmx::label_current(&workspace.id, &String::from(agent.clone())).await
-    {
-        eprintln!("warning: {error:#}");
-    }
-    Ok(())
+    .await
 }
 
 /// Free a starting entry's slot after its launch failed; the daemon notifies
@@ -179,19 +166,6 @@ pub(super) async fn start(ctx: &Context, entry: String) -> Result<i32> {
         fail(ctx, &entry, error).await;
     }
     started.map(|()| 0)
-}
-
-/// Add an admitted entry's workspace in this terminal and start its agent.
-pub(super) async fn run(ctx: &Context, entry: String) -> Result<i32> {
-    let (_, mut plan) = match plan(ctx, &entry).await {
-        Ok(planned) => planned,
-        Err(error) => {
-            fail(ctx, &entry, &error).await;
-            return Err(error);
-        }
-    };
-    plan.detached = true;
-    super::workspaces::execute_add(ctx, plan).await
 }
 
 pub(super) async fn entries(ctx: &Context) -> Result<Vec<QueueEntry>> {

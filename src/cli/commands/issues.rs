@@ -176,7 +176,11 @@ pub(super) async fn origin_forge(repo: &Repository) -> Result<ForgeRepo> {
     ForgeRepo::parse(&remote)
 }
 
-pub(super) async fn load(account: &Account, repo: &Repository, input: &str) -> Result<Issue> {
+pub(in crate::cli) async fn load(
+    account: &Account,
+    repo: &Repository,
+    input: &str,
+) -> Result<Issue> {
     let forge = origin_forge(repo).await?;
     let (number, url) = forge.issue(input)?;
     let (title, details) = forge.issue_details(account, number).await?;

@@ -10,6 +10,7 @@ pub mod internal;
 pub mod list_status;
 pub mod output;
 mod progress;
+mod terminal;
 pub mod ui;
 pub mod workspace_context;
 mod zmx;
@@ -1020,7 +1021,7 @@ pub enum InternalCommand {
     Herdr {
         #[arg(long)]
         close_when_done: bool,
-        #[arg(env = crate::env::HERDR_PLAN, hide_env_values = true)]
+        #[arg(env = crate::env::ADD_PLAN, hide_env_values = true)]
         plan: String,
     },
     /// Close a Herdr tab once its workspace completes or is removed.
@@ -1048,9 +1049,12 @@ pub enum InternalCommand {
     /// Start an admitted agent queue entry; the daemon runs it.
     #[command(name = internal::QUEUE_START)]
     QueueStart { entry: String },
-    /// Add an admitted agent queue entry's workspace in this terminal.
-    #[command(name = internal::QUEUE_RUN)]
-    QueueRun { entry: String },
+    /// Add the planned workspace inside its detached zmx session.
+    #[command(name = internal::ADD)]
+    Add {
+        #[arg(env = crate::env::ADD_PLAN, hide_env_values = true)]
+        plan: String,
+    },
     /// Tracked agent inside a zmx session; consumes recovery records once started.
     #[command(name = internal::SESSION)]
     Session {

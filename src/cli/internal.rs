@@ -16,7 +16,7 @@ pub const DETACHED: &str = "detached";
 pub const SESSION: &str = "session";
 pub const SECRET_TOOL: &str = "secret-tool";
 pub const QUEUE_START: &str = "queue-start";
-pub const QUEUE_RUN: &str = "queue-run";
+pub const ADD: &str = "add";
 
 pub enum Worker<'a> {
     HerdrWatch {
@@ -51,10 +51,18 @@ pub enum Worker<'a> {
     QueueStart {
         entry: &'a str,
     },
-    /// Add an admitted queue entry's workspace in the current terminal.
-    QueueRun {
-        entry: &'a str,
-    },
+    /// Add the workspace planned in the environment in this detached session.
+    Add,
+}
+
+/// This executable for a command a terminal runs as typed. The terminal
+/// inherits HOME, so only a non-default state directory needs naming.
+pub fn shoal_argv(paths: &Paths) -> Result<Vec<OsString>> {
+    let mut argv = vec![crate::fsutil::invoked_executable()?.into_os_string()];
+    if !paths.is_default_state() {
+        argv.extend(["--state-dir".into(), paths.state.clone().into_os_string()]);
+    }
+    Ok(argv)
 }
 
 /// Build an argv for this executable, preserving the caller's resolved globals.
@@ -119,7 +127,7 @@ pub fn internal_command(paths: &Paths, json: bool, worker: Worker<'_>) -> Result
             args.extend_from_slice(command);
         }
         Worker::QueueStart { entry } => args.extend([QUEUE_START.into(), entry.into()]),
-        Worker::QueueRun { entry } => args.extend([QUEUE_RUN.into(), entry.into()]),
+        Worker::Add => args.push(ADD.into()),
     }
     Ok(args)
 }
@@ -132,6 +140,20 @@ mod tests {
 
     use super::*;
     use crate::cli::{Cli, Command, InternalCommand};
+
+    #[test]
+    fn shoal_argv_names_only_a_non_default_state_directory() {
+        let custom = Paths::for_test("/home");
+        let default = Paths {
+            state: "/home/.local/state/shoal".into(),
+            ..custom.clone()
+        };
+        assert_eq!(shoal_argv(&default).unwrap().len(), 1);
+        assert_eq!(
+            shoal_argv(&custom).unwrap()[1..],
+            ["--state-dir", "/home/state"]
+        );
+    }
 
     fn parse(worker: Worker<'_>, json: bool) -> InternalCommand {
         let root = tempfile::tempdir().unwrap();
@@ -276,17 +298,11 @@ mod tests {
     }
 
     #[test]
-    fn queue_workers_round_trip_their_entry() {
+    fn queue_start_round_trips_its_entry() {
         let InternalCommand::QueueStart { entry } =
             parse(Worker::QueueStart { entry: "entry-id" }, false)
         else {
             panic!("expected queue start worker");
-        };
-        assert_eq!(entry, "entry-id");
-        let InternalCommand::QueueRun { entry } =
-            parse(Worker::QueueRun { entry: "entry-id" }, false)
-        else {
-            panic!("expected queue run worker");
         };
         assert_eq!(entry, "entry-id");
     }

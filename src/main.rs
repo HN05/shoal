@@ -53,9 +53,9 @@ fn main() {
         eprintln!("error: daemon handoff requires managed daemon run");
         std::process::exit(1);
     }
-    // SAFETY: no other threads exist before the runtime starts. The Herdr plan is
+    // SAFETY: no other threads exist before the runtime starts. The add plan is
     // parsed above and must not reach the worker's children.
-    unsafe { std::env::remove_var(env::HERDR_PLAN) };
+    unsafe { std::env::remove_var(env::ADD_PLAN) };
     // SAFETY: as above; the queue entry goes to this process's own launch only.
     unsafe { env::take_queue_entry() };
     run_cli(cli);

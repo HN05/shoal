@@ -16,8 +16,9 @@ pub const PREFIX: &str = "SHOAL_";
 pub const STATE_DIR: &str = "SHOAL_STATE_DIR";
 /// Private socket and lock descriptors transferred across a managed update.
 pub(crate) const DAEMON_HANDOFF: &str = "SHOAL_DAEMON_HANDOFF";
-/// Resolved launch plan a new Herdr tab hands its worker; removed at startup.
-pub const HERDR_PLAN: &str = "SHOAL_HERDR_PLAN";
+/// Resolved launch plan a new Herdr tab or zmx session hands its worker;
+/// removed at startup.
+pub const ADD_PLAN: &str = "SHOAL_ADD_PLAN";
 /// The agent queue entry whose slot a launched agent takes over when it
 /// registers; passed to launch workers and removed at startup.
 pub const QUEUE_ENTRY: &str = "SHOAL_QUEUE_ENTRY";

@@ -3821,7 +3821,7 @@ fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
     let all = fixture.ok(&["resume", "--all"]);
     let agents = all["agents"].as_array().unwrap();
     assert_eq!(agents.len(), 2, "{all}");
-    assert!(agents.iter().all(|agent| agent["tab"] == false));
+    assert!(agents.iter().all(|agent| agent["background"] == false));
     assert!(all["commands"].as_array().unwrap().is_empty());
     let output = fixture.run(&["resume", "stopped"]);
     assert!(!output.status.success());
@@ -16719,7 +16719,7 @@ fn herdr_calls(fixture: &Fixture) -> Vec<Vec<String>> {
 #[test]
 fn herdr_handoff_preserves_choices_and_literal_arguments() {
     let fixture = Fixture::with_config(Some(
-        "[commands]\npi = ['sh', '-c', 'printf \"%s\\0\" \"$@\" > \"$HOME/agent-args\"; echo \"${SHOAL_HERDR_PLAN-unset}\" > \"$HOME/agent-plan\"; exit 7', 'agent', '{args}']\n",
+        "[commands]\npi = ['sh', '-c', 'printf \"%s\\0\" \"$@\" > \"$HOME/agent-args\"; echo \"${SHOAL_ADD_PLAN-unset}\" > \"$HOME/agent-plan\"; exit 7', 'agent', '{args}']\n",
     ));
     install_fake_herdr(&fixture);
     let directive = fixture.root.path().join("caller-directive");
@@ -17093,7 +17093,7 @@ fn herdr_plans_carry_issue_urls_instead_of_bodies() {
     let calls = herdr_calls(&fixture);
     let plan = calls[0]
         .iter()
-        .find_map(|arg| arg.strip_prefix("SHOAL_HERDR_PLAN="))
+        .find_map(|arg| arg.strip_prefix("SHOAL_ADD_PLAN="))
         .unwrap();
     let plan: Value = serde_json::from_str(plan).unwrap();
     assert_eq!(plan["issue"], "https://github.com/team/project/issues/34");
