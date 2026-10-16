@@ -17,6 +17,7 @@ use super::{
     link::ItemKind,
     pr::state::Verdict,
     rest::RestCheck,
+    thread::{Target, Thread},
     view::{Comment, Details, PrDetails, Review, ReviewComment},
 };
 
@@ -378,20 +379,8 @@ fn verdicts(pull: &Value) -> Result<Vec<(String, Verdict)>> {
 
 /// Comments, and a review for each inline thread with its replies.
 fn threads(comments: &[Value]) -> (Vec<Comment>, Vec<Review>) {
-    let comments: Vec<&Value> = comments
-        .iter()
-        .filter(|comment| comment["deleted"] != true)
-        .collect();
-    let parents: BTreeMap<u64, u64> = comments
-        .iter()
-        .filter_map(|comment| Some((comment["id"].as_u64()?, comment["parent"]["id"].as_u64()?)))
-        .collect();
-    let root = |mut id: u64| {
-        while let Some(parent) = parents.get(&id) {
-            id = *parent;
-        }
-        id
-    };
+    let comments = listed(comments);
+    let root = roots(&comments);
     let mut general = Vec::new();
     let mut reviews: Vec<(u64, Review)> = Vec::new();
     for comment in &comments {
@@ -429,6 +418,47 @@ fn threads(comments: &[Value]) -> (Vec<Comment>, Vec<Review>) {
         general,
         reviews.into_iter().map(|(_, review)| review).collect(),
     )
+}
+
+/// The thread with `comment`, named by its first comment.
+pub(super) fn bitbucket_thread(comments: &[Value], comment: u64) -> Option<Thread> {
+    let comments = listed(comments);
+    let root = roots(&comments);
+    comments.iter().find(|value| value["id"] == comment)?;
+    let first = root(comment);
+    let start = comments.iter().find(|value| value["id"] == first)?;
+    let replies = comments
+        .iter()
+        .filter_map(|value| value["id"].as_u64())
+        .filter(|id| *id != first && root(*id) == first)
+        .count();
+    Some(Thread {
+        first,
+        replies,
+        resolved: Some(start["resolution"].is_object()),
+        target: Target::Bitbucket,
+    })
+}
+
+fn listed(comments: &[Value]) -> Vec<&Value> {
+    comments
+        .iter()
+        .filter(|comment| comment["deleted"] != true)
+        .collect()
+}
+
+/// The first comment of the thread of each comment ID.
+fn roots(comments: &[&Value]) -> impl Fn(u64) -> u64 {
+    let parents: BTreeMap<u64, u64> = comments
+        .iter()
+        .filter_map(|comment| Some((comment["id"].as_u64()?, comment["parent"]["id"].as_u64()?)))
+        .collect();
+    move |mut id| {
+        while let Some(parent) = parents.get(&id) {
+            id = *parent;
+        }
+        id
+    }
 }
 
 /// An inline comment on the new side, or the old side of a removed line.
@@ -597,6 +627,25 @@ mod tests {
                 (3, 2, "Fixed", Some(3), Some(true))
             ]
         );
+    }
+
+    #[test]
+    fn replies_find_the_thread_they_belong_to() {
+        let listed = json!([
+            {"id": 2, "resolution": {"type": "comment_resolution"}},
+            {"id": 3, "parent": {"id": 2}},
+            {"id": 4, "parent": {"id": 3}},
+            {"id": 5, "parent": {"id": 2}, "deleted": true},
+            {"id": 6}
+        ]);
+        let listed = listed.as_array().unwrap();
+        let thread = bitbucket_thread(listed, 4).unwrap();
+        assert_eq!(
+            (thread.first, thread.replies, thread.resolved),
+            (2, 2, Some(true))
+        );
+        assert_eq!(bitbucket_thread(listed, 6).unwrap().resolved, Some(false));
+        assert!(bitbucket_thread(listed, 5).is_none());
     }
 
     #[test]

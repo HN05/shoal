@@ -14,6 +14,7 @@ use super::{
     link::ItemKind,
     pr::state::Verdict,
     rest::RestCheck,
+    thread::{Target, Thread},
     view::{Comment, Details, PrDetails, Review, ReviewComment},
 };
 
@@ -386,12 +387,7 @@ fn discussions(discussions: &[Value]) -> (Vec<Comment>, Vec<Review>) {
     let mut comments = Vec::new();
     let mut reviews = Vec::new();
     for discussion in discussions {
-        let notes: Vec<&Value> = discussion["notes"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter(|note| note["system"] != true)
-            .collect();
+        let notes = notes(discussion);
         let Some(first) = notes.first() else { continue };
         if first["type"] == "DiffNote" {
             reviews.push(Review {
@@ -413,6 +409,33 @@ fn discussions(discussions: &[Value]) -> (Vec<Comment>, Vec<Review>) {
         }
     }
     (comments, reviews)
+}
+
+/// The discussion with note `comment`, which replies and resolution name.
+pub(super) fn gitlab_thread(discussions: &[Value], comment: u64) -> Option<Thread> {
+    discussions.iter().find_map(|discussion| {
+        let notes = notes(discussion);
+        notes.iter().find(|note| note["id"] == comment)?;
+        let first = notes.first()?;
+        Some(Thread {
+            first: first["id"].as_u64()?,
+            replies: notes.len() - 1,
+            resolved: first["resolved"].as_bool(),
+            target: Target::GitLab {
+                discussion: text(&discussion["id"])?,
+            },
+        })
+    })
+}
+
+/// A discussion's notes without the ones GitLab writes for events.
+fn notes(discussion: &Value) -> Vec<&Value> {
+    discussion["notes"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|note| note["system"] != true)
+        .collect()
 }
 
 /// A diff note on the new side, or the old side of a removed line.
@@ -592,6 +615,29 @@ mod tests {
             threads.iter().map(|c| (c.id, c.thread)).collect::<Vec<_>>(),
             [(30, 30), (31, 30)]
         );
+    }
+
+    #[test]
+    fn notes_find_their_discussion() {
+        let listed = json!([
+            {"id": "d1", "notes": [{"id": 1, "system": true}, {"id": 2, "resolved": false}, {"id": 3}]},
+            {"id": "d2", "notes": [{"id": 4, "resolved": true}]}
+        ]);
+        let listed = listed.as_array().unwrap();
+        let thread = gitlab_thread(listed, 3).unwrap();
+        assert_eq!(
+            (thread.first, thread.replies, thread.resolved),
+            (2, 1, Some(false))
+        );
+        assert_eq!(
+            thread.target,
+            Target::GitLab {
+                discussion: "d1".into()
+            }
+        );
+        assert_eq!(gitlab_thread(listed, 4).unwrap().resolved, Some(true));
+        // System notes are events, not comments.
+        assert!(gitlab_thread(listed, 1).is_none());
     }
 
     #[test]

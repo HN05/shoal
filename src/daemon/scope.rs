@@ -89,7 +89,12 @@ pub async fn authorize(
         | Method::VerifyWorkspace { workspace, .. }
         | Method::ItemAction {
             workspace,
-            action: Action::Edit(_) | Action::Comment { .. } | Action::Close | Action::Reopen,
+            action:
+                Action::Edit(_)
+                | Action::Comment { .. }
+                | Action::Thread(_)
+                | Action::Close
+                | Action::Reopen,
             ..
         }
         | Method::WorkspaceStatus { workspace }

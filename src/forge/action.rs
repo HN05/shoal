@@ -28,6 +28,7 @@ pub enum Action {
         method: MergeMethod,
         delete_branch: bool,
     },
+    Thread(ThreadChange),
 }
 
 /// Fields left empty stay as they are; base, reviewers and draft state are
@@ -45,6 +46,16 @@ pub struct Edit {
     pub draft: Option<bool>,
 }
 
+/// A reply in the review thread of a PR's inline comment, a change to the
+/// thread's resolution, or both, replying first.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ThreadChange {
+    /// Any comment of the thread.
+    pub comment: u64,
+    pub reply: Option<String>,
+    pub resolve: Option<bool>,
+}
+
 states!(MergeMethod: ValueEnum {
     Merge => "merge",
     Rebase => "rebase",
@@ -59,6 +70,11 @@ impl Action {
             Self::Close => "close",
             Self::Reopen => "reopen",
             Self::Merge { .. } => "merge",
+            Self::Thread(change) => match change.resolve {
+                Some(true) => "resolve",
+                Some(false) => "unresolve",
+                None => "reply",
+            },
         }
     }
 
@@ -86,6 +102,16 @@ impl Action {
             }
             Self::Comment { body } => ensure!(!body.trim().is_empty(), "the comment is empty"),
             Self::Merge { .. } => pr_only("merge")?,
+            Self::Thread(change) => {
+                pr_only("review threads")?;
+                ensure!(
+                    change.reply.is_some() || change.resolve.is_some(),
+                    "nothing to change; pass a reply or a resolution"
+                );
+                if let Some(reply) = &change.reply {
+                    ensure!(!reply.trim().is_empty(), "the reply is empty");
+                }
+            }
             Self::Close | Self::Reopen => {}
         }
         Ok(())
@@ -103,15 +129,34 @@ impl ForgeRepo {
         action: &Action,
     ) -> Result<Item> {
         action.validate(kind)?;
-        let mut current = self.read(account, kind, number).await?;
-        if let (Action::Edit(edit), ForgeKind::GitLab) = (action, self.kind) {
-            self.gitlab_user_ids(account, &edit.add_reviewers, &mut current)
-                .await?;
-        }
-        for request in self.plan(&current, action)? {
+        let current = self.read(account, kind, number).await?;
+        for request in self.requests(account, current, action).await? {
             self.send(account, &request).await?;
         }
         Ok(self.read(account, kind, number).await?.item)
+    }
+
+    /// The requests that carry out `action`, after reading what it needs
+    /// beyond the item.
+    async fn requests(
+        &self,
+        account: &Account,
+        mut current: Current,
+        action: &Action,
+    ) -> Result<Vec<Request>> {
+        match (action, self.kind) {
+            (Action::Thread(change), _) => {
+                let number = current.item.number;
+                let thread = self.thread(account, number, change.comment).await?;
+                self.plan_thread(number, &thread, change)
+            }
+            (Action::Edit(edit), ForgeKind::GitLab) => {
+                self.gitlab_user_ids(account, &edit.add_reviewers, &mut current)
+                    .await?;
+                self.plan(&current, action)
+            }
+            _ => self.plan(&current, action),
+        }
     }
 
     pub(crate) async fn read(
@@ -163,6 +208,7 @@ impl ForgeRepo {
                 );
                 self.plan_merge(current, *method, *delete_branch)?
             }
+            Action::Thread(_) => anyhow::bail!("a review thread change is planned from its thread"),
         })
     }
 
@@ -655,5 +701,22 @@ mod tests {
                 .validate(ItemKind::Issue)
                 .is_err()
         );
+        let thread = |reply: Option<&str>, resolve| {
+            Action::Thread(ThreadChange {
+                comment: 5,
+                reply: reply.map(str::to_owned),
+                resolve,
+            })
+        };
+        assert!(thread(Some("Why"), None).validate(ItemKind::Pr).is_ok());
+        assert!(thread(None, Some(true)).validate(ItemKind::Pr).is_ok());
+        assert!(thread(None, Some(true)).validate(ItemKind::Issue).is_err());
+        assert!(thread(None, None).validate(ItemKind::Pr).is_err());
+        assert!(
+            thread(Some(" "), Some(true))
+                .validate(ItemKind::Pr)
+                .is_err()
+        );
+        assert_eq!(thread(None, Some(false)).name(), "unresolve");
     }
 }
