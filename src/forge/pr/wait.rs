@@ -114,6 +114,10 @@ struct ActivityRecord {
     /// Comments the workspace posted through Shoal that no poll has seen yet.
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     authored: BTreeSet<String>,
+    /// Unix seconds when the workspace last set the item's state through
+    /// Shoal; observations that started by then cannot show it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    own_state_at: Option<u64>,
 }
 
 impl Manager {
@@ -272,6 +276,7 @@ impl Manager {
             return Ok(pending);
         }
         drop(guard);
+        let observed_at = crate::time::unix_seconds();
         let items = self.item_activity(&workspace, items, selection).await;
         let mut observations = Vec::new();
         if let Some(branch) = branch {
@@ -281,13 +286,17 @@ impl Manager {
         match items {
             Ok(items) => {
                 observations.splice(0..0, items);
-                let mut updates = self.record_activity(id, observations, selection).await?;
+                let mut updates = self
+                    .record_observed(id, observations, selection, observed_at)
+                    .await?;
                 self.summarize_failed_checks(id, &mut updates).await;
                 Ok(updates)
             }
             // A failed item lookup must not hold back the branch's conflicts.
             Err(error) => {
-                let updates = self.record_activity(id, observations, selection).await?;
+                let updates = self
+                    .record_observed(id, observations, selection, observed_at)
+                    .await?;
                 if updates.is_empty() {
                     return Err(error);
                 }
@@ -369,12 +378,13 @@ impl Manager {
         items: Vec<(String, ItemKind)>,
     ) -> Result<()> {
         self.verify_worktree(workspace).await?;
+        let observed_at = crate::time::unix_seconds();
         let observations = self
             .item_activity(workspace, items, &Selection::default())
             .await?;
         self.record_background_activity(&workspace.id, observations.clone())
             .await?;
-        self.queue_background_updates(&workspace.id, observations)
+        self.queue_background_updates(&workspace.id, observations, observed_at)
             .await
     }
 
@@ -384,9 +394,10 @@ impl Manager {
         &self,
         id: &str,
         observations: Vec<(String, Snapshot)>,
+        observed_at: u64,
     ) -> Result<()> {
         let updates = self
-            .record_activity(id, observations, &Selection::default())
+            .record_observed(id, observations, &Selection::default(), observed_at)
             .await?;
         if !updates.is_empty() {
             self.item_updates_queued.send_modify(|count| *count += 1);
@@ -510,11 +521,24 @@ impl Manager {
         .await
     }
 
+    #[cfg(test)]
     async fn record_activity(
         &self,
         id: &str,
         observations: Vec<(String, Snapshot)>,
         selection: &Selection,
+    ) -> Result<Vec<Update>> {
+        self.record_observed(id, observations, selection, crate::time::unix_seconds())
+            .await
+    }
+
+    /// Record `observations` from a poll that started at `observed_at`.
+    async fn record_observed(
+        &self,
+        id: &str,
+        observations: Vec<(String, Snapshot)>,
+        selection: &Selection,
+        observed_at: u64,
     ) -> Result<Vec<Update>> {
         let selection = selection.clone();
         let _guard = self.pr_gate.lock().await;
@@ -549,13 +573,20 @@ impl Manager {
                 snapshot.retain_failed_checks(&previous.snapshot);
                 snapshot.schedule_failure_reports(&previous.snapshot, crate::time::unix_seconds());
                 previous.snapshot.adopt_authored(&snapshot, &mut previous.authored);
+                // A poll that started by the agent's own state change may
+                // have read the state before it.
+                if previous.own_state_at.is_some_and(|at| observed_at <= at) {
+                    snapshot.adopt_state(previous.snapshot.state());
+                } else {
+                    previous.own_state_at = None;
+                }
                 let mut pending = previous.snapshot.changes(&snapshot, &url);
                 let delivery = uuid::Uuid::new_v4().to_string();
                 for update in &mut pending {
                     update.delivery.clone_from(&delivery);
                 }
                 updates.extend(pending.clone());
-                let record = ActivityRecord { snapshot, pending, authored: previous.authored };
+                let record = ActivityRecord { snapshot, pending, authored: previous.authored, own_state_at: previous.own_state_at };
                 tx.execute("INSERT INTO pr_activity(workspace_id,url,record) VALUES (?1,?2,?3) ON CONFLICT(workspace_id,url) DO UPDATE SET record=excluded.record", params![id, url, serde_json::to_string(&record)?])?;
             }
             ensure!(serde_json::to_vec(&updates)?.len() < crate::protocol::MAX_FRAME - 256,
@@ -678,6 +709,7 @@ pub(crate) fn record_own_change(
     record.authored.extend(change.comment);
     if let Some(state) = change.state {
         record.snapshot.adopt_state(state);
+        record.own_state_at = Some(crate::time::unix_seconds());
     }
     db.execute(
         "INSERT INTO pr_activity(workspace_id,url,record) VALUES (?1,?2,?3)
@@ -1077,7 +1109,11 @@ mod tests {
         register_watch(&manager, &workspace.id, "pr").await;
         let queued = manager.item_updates_queued.subscribe();
         manager
-            .queue_background_updates(&workspace.id, vec![("pr".into(), snapshot("first"))])
+            .queue_background_updates(
+                &workspace.id,
+                vec![("pr".into(), snapshot("first"))],
+                crate::time::unix_seconds(),
+            )
             .await
             .unwrap();
         assert!(queued.has_changed().unwrap());
@@ -1187,6 +1223,14 @@ mod tests {
             })
             .await
             .unwrap();
+        // A poll that read the item before the agent closed it records its
+        // comments, but not its stale state.
+        let stale = serde_json::from_value(json!({"comments": {"discussion:1": "theirs"},
+            "checks": {}, "conflict": null, "state": "open", "errors": {}}))
+        .unwrap();
+        let all = Selection::default();
+        let before = manager.record_observed(&workspace.id, vec![("pr".into(), stale)], &all, 0);
+        assert!(before.await.unwrap().is_empty());
         let own = json!({"discussion:1": "theirs", "discussion:2": "mine"});
         assert!(observe(own, "closed").await.unwrap().is_empty());
         let next = json!({"discussion:1": "theirs", "discussion:2": "mine", "discussion:3": "new"});
