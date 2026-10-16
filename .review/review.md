@@ -244,15 +244,19 @@ instead of the PR delivery guidance below.
   placed workspace outside it, even when the user config is absent, preserving
   other settings; successful repository removal removes those trust entries while
   preserving other project settings.
-- `max_agents` admission is the daemon's: it defaults to host CPU parallelism
-  plus existing memory and disk pressure readings, accepts a positive fixed
-  value or `none`, and the global value limits the machine while a repository's effective value limits that repository. Slots derive from tracked
+- `max_agents` admission is the daemon's: it defaults to `dynamic`, which starts
+  one agent at a time, staggered, while measured CPU plus the expected load of
+  recently started agents stays below the warning thresholds; critical or
+  failed memory and disk readings start none, and an idle machine starts one.
+  It accepts a positive fixed value or `none`; the global value limits the
+  machine while a repository's fixed value limits that repository. Slots derive from tracked
   agents, executions awaiting reattachment, resume records and starting queue
   entries, excluding done workspaces, never from a separate counter. A starting
   entry keeps its slot only while its launch holds it or within the grace
   period, until its agent registers; queued entries create no worktree.
 - Machine-wide memory overload protection is opt-out; sustained CPU protection is
-  opt-in. Stop one connected tracked
+  opt-in. The machine-only `load` level sets the CPU and memory thresholds the
+  file leaves out; explicit values win. Stop one connected tracked
   agent at a time through its wrapper, newest first, with configurable thresholds
   and timing; retain work and leases, notify with the pressure reason and recovery
   path, distinguish automatic recovery from manual or unavailable recovery, and never select disconnected
