@@ -1,6 +1,6 @@
 //! `shoal add` launches under `max_agents`: admission, the queued start
 //! workers, and the hold that keeps a starting launch's slot.
-use std::{collections::BTreeMap, time::Duration};
+use std::time::Duration;
 
 use anyhow::Result;
 use tokio::io::AsyncReadExt as _;
@@ -11,7 +11,7 @@ use crate::{
         client::{self, request},
         context::Context,
         output::Palette,
-        ui,
+        terminal, ui,
     },
     model::{QueueAdmission, QueueEntry, QueueRequest, QueuedPlan, Workspace},
     paths::Paths,
@@ -44,7 +44,7 @@ pub(super) async fn admit(
         agent,
         issue_title,
         plan: serde_json::to_string(plan)?,
-        env: multiplexer_environment(),
+        env: terminal::environment(),
         now,
     };
     let admission =
@@ -54,16 +54,6 @@ pub(super) async fn admit(
         (false, Some(entry)) => Admission::Queued(entry, admission.waiting),
         (false, None) => anyhow::bail!("the daemon queued the agent without an entry"),
     })
-}
-
-/// Herdr's variables, so a queued start opens its tab in the same Herdr
-/// workspace; the launching pane and tab are left out.
-fn multiplexer_environment() -> BTreeMap<String, String> {
-    std::env::vars()
-        .filter(|(name, _)| {
-            name.starts_with("HERDR_") && !matches!(name.as_str(), "HERDR_PANE_ID" | "HERDR_TAB_ID")
-        })
-        .collect()
 }
 
 pub(super) fn report_queued(ctx: &Context, entry: &QueueEntry, waiting: usize) -> Result<i32> {

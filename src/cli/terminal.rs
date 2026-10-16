@@ -3,6 +3,7 @@
 //! background, and which backend carries that out with its own primitives:
 //! Herdr tabs or zmx sessions. Commands never name a backend.
 use std::{
+    collections::BTreeMap,
     ffi::OsString,
     path::{Path, PathBuf},
 };
@@ -58,6 +59,12 @@ pub(in crate::cli) async fn start_queued(
         .start_add(ctx, settings, plan, None, name, Placement::Background)
         .await?;
     Ok(())
+}
+
+/// The variables a later start needs to reach this terminal's backend, such
+/// as a queued start the daemon runs without a terminal.
+pub(in crate::cli) fn environment() -> BTreeMap<String, String> {
+    herdr::environment()
 }
 
 /// Run Shoal with `args` where the agent of `record` stopped, when that

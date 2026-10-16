@@ -1,5 +1,5 @@
 //! Herdr terminal handoffs; workspace ownership stays with the daemon.
-use std::{ffi::OsString, path::Path, process::Stdio, time::Duration};
+use std::{collections::BTreeMap, ffi::OsString, path::Path, process::Stdio, time::Duration};
 
 use anyhow::{Context as _, Result};
 use serde::{Deserialize, Serialize};
@@ -63,6 +63,16 @@ impl TabName {
             ],
         )
     }
+}
+
+/// Herdr's variables, so a later start opens its tab in the same Herdr
+/// workspace; the launching pane and tab are left out.
+pub(in crate::cli) fn environment() -> BTreeMap<String, String> {
+    std::env::vars()
+        .filter(|(name, _)| {
+            name.starts_with("HERDR_") && !matches!(name.as_str(), "HERDR_PANE_ID" | "HERDR_TAB_ID")
+        })
+        .collect()
 }
 
 /// Whether this process runs in Herdr, so new tabs can open beside it.
