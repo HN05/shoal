@@ -493,29 +493,27 @@ fn forgejo_comments(comments: &Value) -> Result<Vec<Comment>> {
 }
 
 /// Each review with the inline comments Forgejo lists under it, replies
-/// included. A thread is every comment on its line, whichever review posted it.
+/// included, each in its review's thread on the same lines.
 fn forgejo_reviews(reviews: &[(Value, Value)]) -> Result<Vec<Review>> {
-    let reviews = reviews
-        .iter()
-        .map(|(review, comments)| {
-            let comments = comments
-                .as_array()
-                .context("Forgejo review comments are not a list")?;
-            Ok((review, comments))
-        })
-        .collect::<Result<Vec<_>>>()?;
-    let threads = forgejo_threads(reviews.iter().flat_map(|(_, comments)| comments.iter()));
     let mut result = Vec::new();
     for (review, comments) in reviews {
         let Some(state) = review_state(review["state"].as_str())? else {
             continue;
         };
+        let id = review["id"].as_u64().unwrap_or_default();
+        let comments: Vec<(u64, &Value)> = comments
+            .as_array()
+            .context("Forgejo review comments are not a list")?
+            .iter()
+            .map(|comment| (id, comment))
+            .collect();
+        let threads = forgejo_threads(&comments);
         let comments = comments
             .iter()
-            .map(|comment| {
+            .map(|&(review, comment)| {
                 let id = comment["id"].as_u64().unwrap_or_default();
                 let (thread, resolved) = threads
-                    .get(&forgejo_thread_key(comment))
+                    .get(&forgejo_thread_key(review, comment))
                     .copied()
                     .unwrap_or((id, false));
                 review_comment(
@@ -722,10 +720,10 @@ mod tests {
         assert_eq!(thread(&comments[0]), (20, 20, Some(182), Some(true)));
         assert_eq!(thread(&comments[1]), (21, 20, Some(182), Some(true)));
         assert_eq!(thread(&comments[2]), (22, 22, Some(9), Some(false)));
-        // A reply in another review joins the thread it answers.
+        // Another review's comment on the same line starts its own thread.
         assert_eq!(
             thread(&reviews[1].comments[0]),
-            (23, 22, Some(9), Some(false))
+            (23, 23, Some(9), Some(false))
         );
         assert_eq!(
             forgejo_comments(&json!([{"user": {"login": "a"}, "body": "b", "created_at": "c"}]))

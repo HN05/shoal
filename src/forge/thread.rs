@@ -38,11 +38,13 @@ pub(crate) enum Target {
         discussion: String,
     },
     Bitbucket,
-    /// A reply is a comment of the first comment's review on the same line.
+    /// A reply is a comment of the thread's review on the first comment's
+    /// lines: `line` starts them, negative on the old side.
     Forgejo {
         review: u64,
         path: String,
         line: i64,
+        extra_lines: i64,
     },
 }
 
@@ -127,7 +129,12 @@ impl ForgeRepo {
                 format!("{pr}/comments"),
                 json!({ "content": { "raw": body }, "parent": { "id": thread.first } }),
             ),
-            Target::Forgejo { review, path, line } => {
+            Target::Forgejo {
+                review,
+                path,
+                line,
+                extra_lines,
+            } => {
                 let side = if *line < 0 {
                     "old_position"
                 } else {
@@ -135,7 +142,8 @@ impl ForgeRepo {
                 };
                 (
                     self.repo_endpoint(&format!("pulls/{number}/reviews/{review}/comments")),
-                    json!({ "body": body, "path": path, side: line.abs() }),
+                    json!({ "body": body, "path": path, side: line.abs(),
+                        "extra_lines_count": extra_lines }),
                 )
             }
         };
@@ -198,10 +206,33 @@ fn github_thread(threads: &[GitHubThread], comment: u64) -> Option<Thread> {
     })
 }
 
-/// The Forgejo thread with `comment`: every inline comment on its line,
-/// whichever review posted it.
+/// The Forgejo thread with `comment`.
 fn forgejo_thread(reviews: &[(Value, Value)], comment: u64) -> Option<Thread> {
-    let comments: Vec<(u64, &Value)> = reviews
+    let comments = forgejo_inline_comments(reviews);
+    let found = comments.iter().find(|(_, value)| value["id"] == comment)?;
+    let key = forgejo_thread_key(found.0, found.1);
+    let thread: Vec<&Value> = comments
+        .iter()
+        .filter(|(review, value)| forgejo_thread_key(*review, value) == key)
+        .map(|(_, value)| *value)
+        .collect();
+    let first = thread.iter().min_by_key(|value| value["id"].as_u64())?;
+    Some(Thread {
+        first: first["id"].as_u64()?,
+        replies: thread.len() - 1,
+        resolved: Some(thread.iter().any(|value| !value["resolver"].is_null())),
+        target: Target::Forgejo {
+            review: key.review,
+            path: key.path,
+            line: forgejo_line(first),
+            extra_lines: first["extra_lines_count"].as_i64().unwrap_or_default(),
+        },
+    })
+}
+
+/// Each inline comment with the ID of the review that lists it.
+fn forgejo_inline_comments(reviews: &[(Value, Value)]) -> Vec<(u64, &Value)> {
+    reviews
         .iter()
         .flat_map(|(review, comments)| {
             let review = review["id"].as_u64().unwrap_or_default();
@@ -211,26 +242,7 @@ fn forgejo_thread(reviews: &[(Value, Value)], comment: u64) -> Option<Thread> {
                 .flatten()
                 .map(move |comment| (review, comment))
         })
-        .collect();
-    let (_, found) = comments.iter().find(|(_, value)| value["id"] == comment)?;
-    let (path, line) = forgejo_thread_key(found);
-    let thread: Vec<&(u64, &Value)> = comments
-        .iter()
-        .filter(|(_, value)| forgejo_thread_key(value) == (path.clone(), line))
-        .collect();
-    let (review, first) = thread
-        .iter()
-        .min_by_key(|(_, value)| value["id"].as_u64())?;
-    Some(Thread {
-        first: first["id"].as_u64()?,
-        replies: thread.len() - 1,
-        resolved: Some(thread.iter().any(|(_, value)| !value["resolver"].is_null())),
-        target: Target::Forgejo {
-            review: *review,
-            path,
-            line,
-        },
-    })
+        .collect()
 }
 
 /// A GitHub review thread, which only GraphQL reports.
@@ -348,32 +360,45 @@ fn next_cursor(connection: &Value) -> Result<Option<String>> {
         .context("GitHub did not return the next page's cursor")
 }
 
-/// Forgejo's thread of an inline comment: its path and line, with lines of
-/// the old side negative.
-pub(super) fn forgejo_thread_key(comment: &Value) -> (String, i64) {
+/// What makes a Forgejo conversation: Forgejo adds a comment to the one of
+/// its review that ends on the same line, and starts one otherwise.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub(super) struct ForgejoKey {
+    review: u64,
+    path: String,
+    /// The last line of the comment's range, negative on the old side.
+    line: i64,
+}
+
+pub(super) fn forgejo_thread_key(review: u64, comment: &Value) -> ForgejoKey {
+    let line = forgejo_line(comment);
+    let extra = comment["extra_lines_count"].as_i64().unwrap_or_default();
+    ForgejoKey {
+        review,
+        path: comment["path"].as_str().unwrap_or_default().to_owned(),
+        line: if line < 0 { line - extra } else { line + extra },
+    }
+}
+
+/// The first line a comment covers, negative on the old side.
+fn forgejo_line(comment: &Value) -> i64 {
     let side = |field: &str| comment[field].as_i64().filter(|line| *line > 0);
-    let line = side("position")
+    side("position")
         .or_else(|| side("original_position").map(|line| -line))
-        .unwrap_or_default();
-    (
-        comment["path"].as_str().unwrap_or_default().to_owned(),
-        line,
-    )
+        .unwrap_or_default()
 }
 
 /// The first comment and resolution of each Forgejo thread. Forgejo marks
 /// resolution on one comment of the thread, which the web UI shows for all.
-pub(super) fn forgejo_threads<'a>(
-    comments: impl IntoIterator<Item = &'a Value>,
-) -> BTreeMap<(String, i64), (u64, bool)> {
+pub(super) fn forgejo_threads(comments: &[(u64, &Value)]) -> BTreeMap<ForgejoKey, (u64, bool)> {
     let mut threads: BTreeMap<_, (u64, bool)> = BTreeMap::new();
-    for comment in comments {
+    for (review, comment) in comments {
         let Some(id) = comment["id"].as_u64() else {
             continue;
         };
         let resolved = !comment["resolver"].is_null();
         threads
-            .entry(forgejo_thread_key(comment))
+            .entry(forgejo_thread_key(*review, comment))
             .and_modify(|(first, any)| {
                 *first = (*first).min(id);
                 *any |= resolved;
@@ -501,6 +526,7 @@ mod tests {
             review: 3,
             path: "a.rs".into(),
             line: -9,
+            extra_lines: 2,
         };
         assert_eq!(
             planned(
@@ -513,7 +539,7 @@ mod tests {
             [(
                 "POST".into(),
                 "repos/team/repo/pulls/7/reviews/3/comments".into(),
-                json!({"body": "Kept", "path": "a.rs", "old_position": 9})
+                json!({"body": "Kept", "path": "a.rs", "old_position": 9, "extra_lines_count": 2})
             )]
         );
         // Refused before the reply is sent.
@@ -558,14 +584,17 @@ mod tests {
         let reviews = [
             (
                 json!({"id": 1}),
-                json!([{"id": 5, "path": "a.rs", "position": 0, "original_position": 9, "resolver": null},
-                    {"id": 6, "path": "a.rs", "position": 9, "original_position": 0, "resolver": null}]),
+                json!([{"id": 5, "path": "a.rs", "position": 0, "original_position": 9,
+                        "extra_lines_count": 1, "resolver": null},
+                    {"id": 8, "path": "a.rs", "position": 0, "original_position": 10, "resolver": {"login": "dev"}},
+                    {"id": 6, "path": "a.rs", "position": 10, "original_position": 0, "resolver": null}]),
             ),
             (
                 json!({"id": 2}),
-                json!([{"id": 8, "path": "a.rs", "position": 0, "original_position": 9, "resolver": {"login": "dev"}}]),
+                json!([{"id": 9, "path": "a.rs", "position": 0, "original_position": 10, "resolver": null}]),
             ),
         ];
+        // Comment 8 ends on the line comment 5's range ends on.
         let found = forgejo_thread(&reviews, 8).unwrap();
         assert_eq!(
             (found.first, found.replies, found.resolved),
@@ -576,10 +605,14 @@ mod tests {
             Target::Forgejo {
                 review: 1,
                 path: "a.rs".into(),
-                line: -9
+                line: -9,
+                extra_lines: 1,
             }
         );
         assert_eq!(forgejo_thread(&reviews, 6).unwrap().replies, 0);
+        // Another review's comment on the same line is its own thread.
+        let other = forgejo_thread(&reviews, 9).unwrap();
+        assert_eq!((other.first, other.replies), (9, 0));
         assert!(forgejo_thread(&reviews, 7).is_none());
     }
 
@@ -607,14 +640,16 @@ mod tests {
     }
 
     #[test]
-    fn forgejo_threads_group_by_path_and_side() {
+    fn forgejo_threads_group_by_review_path_and_side() {
         let comments = [
             json!({"id": 4, "path": "a.rs", "position": 3, "original_position": 0, "resolver": null}),
             json!({"id": 2, "path": "a.rs", "position": 3, "original_position": 0, "resolver": {"login": "dev"}}),
             json!({"id": 3, "path": "a.rs", "position": 0, "original_position": 3, "resolver": null}),
         ];
-        let threads = forgejo_threads(&comments);
-        assert_eq!(threads[&("a.rs".into(), 3)], (2, true));
-        assert_eq!(threads[&("a.rs".into(), -3)], (3, false));
+        let listed: Vec<(u64, &Value)> = comments.iter().map(|comment| (1, comment)).collect();
+        let threads = forgejo_threads(&listed);
+        assert_eq!(threads[&forgejo_thread_key(1, &comments[0])], (2, true));
+        assert_eq!(threads[&forgejo_thread_key(1, &comments[2])], (3, false));
+        assert!(!threads.contains_key(&forgejo_thread_key(2, &comments[0])));
     }
 }

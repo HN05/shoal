@@ -439,7 +439,7 @@ fn forgejo_threads_take_replies_but_cannot_be_resolved() {
     fixture.ok(&[&["pr", "reply", "5", "--body", "Kept"][..], &pr].concat());
     assert!(fixture.requests().contains(&json!([
         format!("POST {endpoint}/reviews/3/comments"),
-        {"body": "Kept", "path": "a.rs", "new_position": 4},
+        {"body": "Kept", "path": "a.rs", "new_position": 4, "extra_lines_count": 0},
         "token usertoken"
     ])));
     let refused = fixture.run(&[&["pr", "resolve", "5", "--body", "Kept"][..], &pr].concat());
