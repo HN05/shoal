@@ -282,6 +282,30 @@ pub fn release(tx: &Transaction<'_>, owner: &str, target: &Target, name: &str) -
     Ok(true)
 }
 
+/// Record a decision on a pending request; repeating the same decision is a no-op.
+pub fn decide(tx: &Transaction<'_>, id: &str, approve: bool) -> Result<ApprovalRequest> {
+    let mut request = by_id(tx, id)?.ok_or_else(|| anyhow::anyhow!("unknown approval request"))?;
+    store::require_ready(tx, &request.workspace_id)?;
+    let status = if approve {
+        DecisionStatus::Approved
+    } else {
+        DecisionStatus::Denied
+    };
+    ensure!(
+        request.status == DecisionStatus::Pending || request.status == status,
+        "approval request already decided"
+    );
+    if request.status == DecisionStatus::Pending {
+        request.status = status;
+        request.decided_at = Some(crate::time::unix_seconds());
+        tx.execute(
+            "UPDATE access_requests SET record=?2 WHERE id=?1",
+            params![id, serde_json::to_string(&request)?],
+        )?;
+    }
+    Ok(request)
+}
+
 impl Manager {
     pub async fn approval_requests(&self, selector: Option<&str>) -> Result<Vec<ApprovalRequest>> {
         let owner = self.workspace_filter(selector).await?;
@@ -295,26 +319,7 @@ impl Manager {
         self.store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                let mut request =
-                    by_id(&tx, &id)?.ok_or_else(|| anyhow::anyhow!("unknown approval request"))?;
-                store::require_ready(&tx, &request.workspace_id)?;
-                let status = if approve {
-                    DecisionStatus::Approved
-                } else {
-                    DecisionStatus::Denied
-                };
-                ensure!(
-                    request.status == DecisionStatus::Pending || request.status == status,
-                    "approval request already decided"
-                );
-                if request.status == DecisionStatus::Pending {
-                    request.status = status;
-                    request.decided_at = Some(crate::time::unix_seconds());
-                    tx.execute(
-                        "UPDATE access_requests SET record=?2 WHERE id=?1",
-                        params![id, serde_json::to_string(&request)?],
-                    )?;
-                }
+                let request = decide(&tx, &id, approve)?;
                 tx.commit()?;
                 Ok(request)
             })

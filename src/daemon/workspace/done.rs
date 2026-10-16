@@ -1,9 +1,11 @@
 //! Assignment completion is a signal; the cleanup sweep owns removal.
 use anyhow::{Result, ensure};
 use rusqlite::OptionalExtension;
+use std::path::{Path, PathBuf};
 
-use super::{GuardMode, Manager};
+use super::{GuardMode, Manager, ResourceGuard};
 use crate::{
+    config::Effective,
     daemon::{events::EventCause, notifications::NotificationKind, store},
     hooks::{self, Hook, HookKind},
     model::{Completion, Workspace},
@@ -77,17 +79,7 @@ impl Manager {
         cause: EventCause,
     ) -> Result<Completion> {
         let settings = self.workspace_settings(workspace).await?;
-        let command = HookKind::PostDone
-            .command(&settings)
-            .map(|path| workspace.path.join(path));
-        let _resources = if command.is_some() {
-            Some(
-                self.resource_guard(&workspace.id, GuardMode::Exclusive)
-                    .await?,
-            )
-        } else {
-            None
-        };
+        let hook = self.done_hook(workspace, &settings).await?;
         self.verify_worktree(workspace).await?;
         let cleanup = cleanup.unwrap_or(settings.done.cleanup);
         let completion = Completion {
@@ -128,30 +120,51 @@ impl Manager {
             },
         )
         .await;
-        if let Some(command) = command {
-            let result = async {
-                let configured_env = self.configured_workspace_environment(workspace).await?;
-                hooks::run_detached(
-                    Hook::PostDone(&completion),
-                    workspace,
-                    &command,
-                    &self.paths,
-                    &configured_env,
-                )
-                .await
-            }
-            .await;
-            if let Err(error) = result {
-                self.notify(
-                    Some(&workspace.name),
-                    NotificationKind::HookFailed,
-                    format!("assignment finished; {error:#}"),
-                )
-                .await;
-            }
+        if let Some((command, _resources)) = hook {
+            self.run_done_hook(workspace, &command, &completion).await;
         }
         self.cleanup_notify.notify_one();
         Ok(completion)
+    }
+
+    /// The configured `post_done_cmd`, holding off permit and lifecycle changes
+    /// until it has run.
+    async fn done_hook(
+        &self,
+        workspace: &Workspace,
+        settings: &Effective,
+    ) -> Result<Option<(PathBuf, ResourceGuard)>> {
+        let Some(path) = HookKind::PostDone.command(settings) else {
+            return Ok(None);
+        };
+        let guard = self
+            .resource_guard(&workspace.id, GuardMode::Exclusive)
+            .await?;
+        Ok(Some((workspace.path.join(path), guard)))
+    }
+
+    /// Failure only notifies; it never undoes completion.
+    async fn run_done_hook(&self, workspace: &Workspace, command: &Path, completion: &Completion) {
+        let result = async {
+            let configured_env = self.configured_workspace_environment(workspace).await?;
+            hooks::run_detached(
+                Hook::PostDone(completion),
+                workspace,
+                command,
+                &self.paths,
+                &configured_env,
+            )
+            .await
+        }
+        .await;
+        if let Err(error) = result {
+            self.notify(
+                Some(&workspace.name),
+                NotificationKind::HookFailed,
+                format!("assignment finished; {error:#}"),
+            )
+            .await;
+        }
     }
 
     /// A keep choice also blocks older PR watches. A completion must never
