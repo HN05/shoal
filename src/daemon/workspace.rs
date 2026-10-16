@@ -133,6 +133,8 @@ pub struct Manager {
     agent_queue_holds: std::sync::Mutex<HashMap<String, usize>>,
     /// Wakes the queue dispatcher when a slot may have freed.
     pub(crate) agent_queue_wake: tokio::sync::Notify,
+    /// Recent CPU readings for dynamic agent admission.
+    pub(crate) cpu_usage: std::sync::Mutex<crate::daemon::cpu_usage::CpuUsage>,
 }
 
 impl Manager {
@@ -172,6 +174,7 @@ impl Manager {
             agent_queue_gate: Mutex::new(()),
             agent_queue_holds: Default::default(),
             agent_queue_wake: tokio::sync::Notify::new(),
+            cpu_usage: Default::default(),
         }))
     }
 

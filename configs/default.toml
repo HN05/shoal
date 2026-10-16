@@ -15,7 +15,8 @@ root_dir = "~/shoal"
 # A built-in launcher or a name defined in [commands].
 # default_agent = "codex"
 
-# Agents that run at once (dynamic host capacity by default); `shoal add`
+# Agents that run at once; by default `dynamic` starts them one at a time while
+# measured load stays below the warning thresholds `load` sets. `shoal add`
 # queues the rest and starts them as slots free. Set a positive number for a
 # fixed limit or `none` for unlimited admission. A repository's value limits
 # its own agents.
@@ -23,7 +24,7 @@ root_dir = "~/shoal"
 
 # How hard Shoal may load this machine: "light" for a computer you work on,
 # "balanced", or "full" for one that only runs agents. It sets the default
-# CPU and memory thresholds in [overload].
+# CPU and memory thresholds in [overload] and dynamic agent admission.
 # load = "balanced"
 
 # Prompt templates normally live beside this file as issue-template.md and

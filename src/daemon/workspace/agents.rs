@@ -340,14 +340,21 @@ impl Manager {
         Ok(())
     }
 
-    /// Each tracked agent's execution and workspace, including one awaiting
-    /// overload recovery.
-    pub(super) async fn agent_executions(&self) -> std::collections::HashMap<String, String> {
+    /// Each tracked agent's execution, workspace and running time, including
+    /// one awaiting overload recovery.
+    pub(super) async fn agent_executions(
+        &self,
+    ) -> std::collections::HashMap<String, (String, Duration)> {
         self.agents
             .lock()
             .await
             .iter()
-            .map(|(id, agent)| (id.clone(), agent.workspace_id.clone()))
+            .map(|(id, agent)| {
+                (
+                    id.clone(),
+                    (agent.workspace_id.clone(), agent.started.elapsed()),
+                )
+            })
             .collect()
     }
 

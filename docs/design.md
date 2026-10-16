@@ -417,12 +417,17 @@ they started, and no separate counter can leak a slot. The global value limits
 the machine and a repository's effective value limits that repository; a
 repository without its own value inherits the global one, which already bounds
 it, so normal precedence serves both. The setting defaults to `dynamic`, which
-uses host CPU parallelism and the existing memory-pressure and disk-space
-providers when admission runs; warning pressure halves capacity and critical
-readings stop new dynamic admissions. A positive number fixes a limit and
-`none` disables it for that layer. Sustained CPU utilization, per-agent resource
-profiles and routing automatic recovery through admission remain proposals;
-the provider boundary and existing slot accounting support those extensions.
+admits from measured load instead of a slot count, so the machine runs as many
+agents as it can without congestion. Agents start one at a time and staggered;
+an agent reads files before it edits and compiles, so a recent start reserves
+the load a settled agent shows, learned from CPU use per settled agent, until
+its own load is measured. The target is the warning thresholds that `load`
+sets, so the user picks how hard to push the machine rather than the
+mechanism's windows and intervals. An idle machine always admits one agent;
+critical readings admit none. Dynamic is machine-wide, so a repository's
+`dynamic` adds no limit. A positive number fixes a limit and `none` disables it
+for that layer. Per-agent memory profiles and routing automatic recovery
+through admission remain proposals.
 The queue stores
 the CLI's launch plan opaquely and creates nothing until a slot frees, so a
 waiting entry costs no worktree and branches from the default branch current

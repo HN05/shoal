@@ -9,7 +9,10 @@ use std::{
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{OptionalExtension, params};
 
-use super::Manager;
+use super::{
+    Manager,
+    capacity::{self, Activity, Agents},
+};
 use crate::{
     config::AgentLimit,
     daemon::notifications::NotificationKind,
@@ -71,6 +74,12 @@ pub(crate) fn admit(
     admitted
 }
 
+/// One used slot.
+pub(crate) struct Slot {
+    repository: String,
+    activity: Activity,
+}
+
 /// An admitted entry the daemon starts itself.
 pub(crate) struct Start {
     pub id: String,
@@ -87,7 +96,8 @@ impl Manager {
         crate::validate::name("queued workspace", &request.name)?;
         let repository = self.repository(&request.repository).await?;
         let _gate = self.agent_queue_gate.lock().await;
-        let limits = self.agent_limits(vec![repository.id.clone()]).await?;
+        // Whether any limit applies does not depend on the slots in use.
+        let limits = self.agent_limits(vec![repository.id.clone()], &[]).await?;
         if !limits.apply_to(&repository.id) {
             return Ok(QueueAdmission {
                 start: true,
@@ -177,8 +187,9 @@ impl Manager {
             .iter()
             .map(|(_, repository)| repository.clone())
             .collect();
-        let limits = self.agent_limits(repositories).await?;
-        let occupied = self.occupied_slots().await?;
+        let slots = self.occupied_slots().await?;
+        let limits = self.agent_limits(repositories, &slots).await?;
+        let occupied: Vec<String> = slots.into_iter().map(|slot| slot.repository).collect();
         let admitted = admit(&occupied, &waiting, &limits);
         let starts = self
             .store
@@ -230,21 +241,16 @@ impl Manager {
         Ok(caller_admitted)
     }
 
-    /// The global limit and each named repository's effective limit. A
-    /// repository without its own value inherits the global one, which the
-    /// machine limit already covers.
-    async fn agent_limits(&self, repositories: Vec<String>) -> Result<Limits> {
+    /// The global limit given the `slots` in use, and each named
+    /// repository's effective limit. A repository without its own value
+    /// inherits the global one, which the machine limit already covers.
+    async fn agent_limits(&self, repositories: Vec<String>, slots: &[Slot]) -> Result<Limits> {
         let config = self.config();
-        let workspaces = self.list_workspaces().await?;
-        let capacity_paths: Vec<&std::path::Path> = std::iter::once(self.paths.state.as_path())
-            .chain(workspaces.iter().map(|workspace| workspace.path.as_path()))
-            .collect();
         let mut limits = Limits {
-            global: resolve_limit(
-                config.max_agents.or(Some(AgentLimit::Dynamic)),
-                &capacity_paths,
-                &config.overload,
-            ),
+            global: match config.max_agents.unwrap_or_default() {
+                AgentLimit::Dynamic => Some(self.dynamic_limit(slots).await?),
+                limit => fixed_limit(limit),
+            },
             repositories: HashMap::new(),
         };
         for id in repositories {
@@ -255,18 +261,42 @@ impl Manager {
                 .config_layers_for(ConfigTarget::Repository(id.clone().into()))
                 .await?;
             let resolved = config.resolve(&layers)?;
-            let limit = resolve_limit(resolved.max_agents, &capacity_paths, &config.overload);
-            limits.repositories.insert(id, limit);
+            limits
+                .repositories
+                .insert(id, resolved.max_agents.and_then(fixed_limit));
         }
         Ok(limits)
     }
 
-    /// One repository ID per used slot. Each agent in a workspace that is not
-    /// done uses one while it runs, awaits reattachment or waits for resume,
-    /// counted once by its execution; so does each starting entry until its
-    /// agent registers.
-    async fn occupied_slots(&self) -> Result<Vec<String>> {
-        let mut agents = self.agent_executions().await;
+    /// The machine-wide limit measured load allows for `slots`.
+    async fn dynamic_limit(&self, slots: &[Slot]) -> Result<u32> {
+        let config = self.config();
+        let workspaces = self.list_workspaces().await?;
+        let paths: Vec<&std::path::Path> = std::iter::once(self.paths.state.as_path())
+            .chain(workspaces.iter().map(|workspace| workspace.path.as_path()))
+            .collect();
+        let cpu = self
+            .cpu_usage
+            .lock()
+            .unwrap()
+            .admission(tokio::time::Instant::now());
+        Ok(capacity::limit(
+            capacity::sample(&paths, &config.overload, cpu),
+            Agents::count(slots.iter().map(|slot| slot.activity)),
+            &config.overload,
+        ))
+    }
+
+    /// The used slots. Each agent in a workspace that is not done uses one
+    /// while it runs, awaits reattachment or waits for resume, counted once by
+    /// its execution; so does each starting entry until its agent registers.
+    async fn occupied_slots(&self) -> Result<Vec<Slot>> {
+        let mut agents: HashMap<String, (String, Activity)> = self
+            .agent_executions()
+            .await
+            .into_iter()
+            .map(|(id, (workspace, running))| (id, (workspace, Activity::Running(running))))
+            .collect();
         let (open, unknown, starting) = self
             .store
             .run(|db| {
@@ -284,28 +314,49 @@ impl Manager {
                     })?
                     .collect::<rusqlite::Result<Vec<(String, String)>>>()?;
                 let starting = db
-                    .prepare("SELECT repository_id,workspace_id FROM agent_queue WHERE state=?1")?
-                    .query_map([QueueState::Starting], |row| Ok((row.get(0)?, row.get(1)?)))?
-                    .collect::<rusqlite::Result<Vec<(String, Option<String>)>>>()?;
+                    .prepare(
+                        "SELECT repository_id,workspace_id,seen_at FROM agent_queue WHERE state=?1",
+                    )?
+                    .query_map([QueueState::Starting], |row| {
+                        Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+                    })?
+                    .collect::<rusqlite::Result<Vec<(String, Option<String>, Option<i64>)>>>()?;
                 Ok((open, unknown, starting))
             })
             .await?;
-        agents.extend(unknown);
+        let stopped = |workspace: String| (workspace, Activity::Stopped);
+        for (execution, workspace) in unknown {
+            agents
+                .entry(execution)
+                .or_insert_with(|| stopped(workspace));
+        }
         for workspace in open.keys() {
             for execution in crate::execution::recovery::agent_records(&self.paths, workspace)? {
-                agents.insert(execution, workspace.clone());
+                agents
+                    .entry(execution)
+                    .or_insert_with(|| stopped(workspace.clone()));
             }
         }
-        let mut occupied: Vec<String> = agents
-            .values()
-            .filter_map(|workspace| open.get(workspace).cloned())
+        let mut slots: Vec<Slot> = agents
+            .into_values()
+            .filter_map(|(workspace, activity)| {
+                Some(Slot {
+                    repository: open.get(&workspace)?.clone(),
+                    activity,
+                })
+            })
             .collect();
-        for (repository, workspace) in starting {
+        let now = crate::time::unix_seconds() as i64;
+        for (repository, workspace, seen_at) in starting {
             if workspace.is_none_or(|workspace| open.contains_key(&workspace)) {
-                occupied.push(repository);
+                let since = now.saturating_sub(seen_at.unwrap_or(now)).max(0) as u64;
+                slots.push(Slot {
+                    repository,
+                    activity: Activity::Starting(Duration::from_secs(since)),
+                });
             }
         }
-        Ok(occupied)
+        Ok(slots)
     }
 
     /// End starting entries whose holder has been gone for the grace period.
@@ -568,22 +619,13 @@ impl Manager {
     }
 }
 
-/// Resolve one configured limit at admission time. Dynamic limits are sampled
-/// for each admission so a daemon keeps following the host's available
-/// parallelism after configuration reloads or hardware changes.
-fn resolve_limit(
-    limit: Option<AgentLimit>,
-    paths: &[&std::path::Path],
-    settings: &crate::config::overload::Overload,
-) -> Option<u32> {
-    limit.and_then(|limit| match limit {
-        AgentLimit::Dynamic => Some(crate::daemon::workspace::capacity::limit(
-            crate::daemon::workspace::capacity::sample(paths, settings),
-            settings,
-        )),
+/// A configured value as a slot count. Dynamic admission measures the whole
+/// machine, so it adds no repository limit of its own.
+fn fixed_limit(limit: AgentLimit) -> Option<u32> {
+    match limit {
         AgentLimit::Fixed(value) => Some(value.get()),
-        AgentLimit::Unlimited => None,
-    })
+        AgentLimit::Dynamic | AgentLimit::Unlimited => None,
+    }
 }
 
 fn entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<QueueEntry> {

@@ -6,6 +6,7 @@ pub mod allocation;
 pub mod approvals;
 mod auto_update;
 pub mod cleanup;
+pub(crate) mod cpu_usage;
 mod disk;
 pub mod doctor;
 pub mod events;
@@ -149,6 +150,10 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
     background.spawn(supervise("disk monitor", {
         let manager = manager.clone();
         move || disk::run(manager.clone())
+    }));
+    background.spawn(supervise("CPU usage", {
+        let manager = manager.clone();
+        move || cpu_usage::run(manager.clone())
     }));
     background.spawn(supervise("agent queue", {
         let manager = manager.clone();

@@ -191,7 +191,9 @@ sustained_seconds = 60
 
 `load` says how hard Shoal may load the machine, and sets each CPU and memory
 percentage the file leaves out; the values above are `balanced` without swap.
-Use `light` for a computer you work on and `full` for one that only runs agents:
+Use `light` for a computer you work on and `full` for one that only runs agents.
+The warning levels are also where [dynamic admission](#agent-queue) stops
+starting agents:
 
 | `load` | CPU warning / stop / recovery | Memory warning / stop / recovery |
 |---|---|---|
@@ -658,7 +660,7 @@ or resumed.
 ### Agent queue
 
 ```sh
-shoal config set max_agents dynamic           # Follow the host's CPU parallelism
+shoal config set max_agents dynamic           # Start agents while measured load allows
 shoal config set max_agents 3                 # Fixed machine-wide limit
 shoal config set max_agents 2 --repo shoal    # And at most two of them in this repository
 shoal config set max_agents none --repo docs  # No repository limit
@@ -668,16 +670,22 @@ shoal ls --queue                              # Waiting and starting entries
 shoal rm issue-612-add-a-queue-cmd            # Removes a waiting entry
 ```
 
-`max_agents` limits the agents that run at once. It defaults to `dynamic`, which
-uses host CPU parallelism and samples enabled memory-pressure and disk
-space sources at each admission, covering daemon state and existing workspace paths.
-The configured overload warning thresholds halve capacity when warnings are enabled;
-critical memory or disk below the overload stop threshold admits no new agent.
-Unavailable readings admit no additional dynamic work. Set a positive number
-for a fixed limit or `none` for unlimited admission. The global value counts
-every agent on the machine; a repository's value (saved config or `.shoal.toml`
-in its registered checkout) counts only that repository's agents, within the
-global limit. Each tracked agent uses a slot while it runs, awaits reattachment
+`max_agents` limits the agents that run at once. It defaults to `dynamic`,
+which starts one agent at a time, at least 10 seconds apart, while measured load
+leaves room below the [`[overload.warning]`](#overload-protection) CPU, memory
+and disk thresholds, which [`load`](#overload-protection) sets. A new agent
+mostly reads files at first and compiles later, so for its first three minutes
+it counts at the load a settled agent shows: average CPU use over the last five
+minutes divided by the agents that have run longer, at least half a core each,
+or two cores each before any has. A start must fit the last minute's CPU use
+plus every such warming agent. With no agent running, one starts whatever the
+load. Critical memory, disk below `overload.disk.stop_free_gib`, or a failed
+memory or disk reading starts none; a missing CPU reading starts only that first
+agent. Disabled memory or disk protection ignores that signal. Set a positive
+number for a fixed limit or `none` for unlimited admission. The global value
+counts every agent on the machine; a repository's fixed value (saved config or
+`.shoal.toml` in its registered checkout) counts only that repository's agents,
+within the global limit, while `dynamic` there adds no repository limit. Each tracked agent uses a slot while it runs, awaits reattachment
 after a daemon restart, or waits for `shoal resume`, unless its workspace is
 done; `shoal done`, the agent's exit, `resume --discard` and removal free it.
 

@@ -309,3 +309,20 @@ async fn each_agent_execution_uses_its_own_slot() {
     assert_eq!(manager.occupied_slots().await.unwrap().len(), 2);
     assert!(!add(&manager, &repo, "waiting").await.start);
 }
+
+#[tokio::test]
+async fn dynamic_admission_staggers_starts() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    // Host memory and disk must not decide this test.
+    manager.publish_config(
+        toml::from_str("[overload.memory]\nenabled = false\n[overload.disk]\nenabled = false")
+            .unwrap(),
+    );
+    // An idle machine starts the first agent whatever its CPU reads.
+    assert!(add(&manager, &repo, "first").await.start);
+    // The next waits for the stagger even with room.
+    let second = add(&manager, &repo, "second").await;
+    assert!(!second.start);
+    assert_eq!(second.waiting, 1);
+}

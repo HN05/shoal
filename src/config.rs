@@ -20,9 +20,9 @@ pub use resolve::Effective;
 
 /// How many tracked agents may run concurrently.
 ///
-/// Numeric values retain the original fixed limit. `dynamic` derives a limit
-/// from host parallelism and enabled pressure signals, while `none` disables
-/// admission limits for the selected layer.
+/// Numeric values retain the original fixed limit. `dynamic` starts agents
+/// while measured load allows, while `none` disables admission limits for
+/// the selected layer.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum AgentLimit {
     #[default]
@@ -97,7 +97,7 @@ pub struct Config {
     pub repositories_dir: Option<PathBuf>,
     /// Agent an issue workspace starts when `--agent` is omitted.
     pub default_agent: Option<crate::agent::Agent>,
-    /// Agents running at once on this machine; defaults to host capacity and
+    /// Agents running at once on this machine; defaults to measured load and
     /// `shoal add` queues past it. Use `none` for unlimited admission.
     pub max_agents: Option<AgentLimit>,
     /// How hard Shoal may load this machine; sets `[overload]` defaults.
