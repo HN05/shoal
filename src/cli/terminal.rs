@@ -67,6 +67,12 @@ pub(in crate::cli) fn environment() -> BTreeMap<String, String> {
     herdr::environment()
 }
 
+/// Where an agent running in this process sits, as its backend names it, so
+/// a later resume can restore it there.
+pub(crate) fn current_place() -> Option<String> {
+    herdr::current_pane()
+}
+
 /// Run Shoal with `args` where the agent of `record` stopped, when that
 /// place is another one still open and idle. Returns what such restarts run
 /// in, or `None` when it did not run.

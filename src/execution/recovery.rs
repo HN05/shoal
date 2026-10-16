@@ -47,9 +47,10 @@ pub(crate) struct Record {
     /// either side of the stop.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stage: Option<Stage>,
-    /// The Herdr pane the agent ran in, where `shoal resume --all` restores it.
+    /// Where the agent ran, as its terminal backend names it, so `shoal
+    /// resume --all` can restore it there.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub herdr_pane: Option<String>,
+    pub place: Option<String>,
 }
 
 impl Recovery {
@@ -142,20 +143,20 @@ impl Recovery {
         workspace_id: &str,
         id: &str,
         reason: Option<&str>,
-        herdr_pane: Option<String>,
+        place: Option<String>,
     ) -> Result<PathBuf> {
-        let record = Record::new(&self.agent, reason, Stage::Stopped, herdr_pane);
+        let record = Record::new(&self.agent, reason, Stage::Stopped, place);
         write_record(paths, workspace_id, id, record)
     }
 }
 
 impl Record {
-    fn new(agent: &str, reason: Option<&str>, stage: Stage, herdr_pane: Option<String>) -> Self {
+    fn new(agent: &str, reason: Option<&str>, stage: Stage, place: Option<String>) -> Self {
         Self {
             agent: agent.replace(' ', "-"),
             stop_reason: reason.map(str::to_owned),
             stage: Some(stage),
-            herdr_pane,
+            place,
         }
     }
 
@@ -198,7 +199,7 @@ fn write_record(
     // and never moves the stage back.
     if let Ok(Some(saved)) = Record::load(&path) {
         record.stop_reason = record.stop_reason.or(saved.stop_reason);
-        record.herdr_pane = record.herdr_pane.or(saved.herdr_pane);
+        record.place = record.place.or(saved.place);
         if saved.stage == Some(Stage::Stopped) {
             record.stage = saved.stage;
         }
@@ -465,7 +466,7 @@ mod tests {
             record.stop_reason.as_deref(),
             Some("critical memory pressure")
         );
-        assert_eq!(record.herdr_pane.as_deref(), Some("w1:p2"));
+        assert_eq!(record.place.as_deref(), Some("w1:p2"));
         // The daemon's late handoff cannot undo the wrapper's stop.
         assert_eq!(record.stage, Some(Stage::Stopped));
     }

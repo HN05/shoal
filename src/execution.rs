@@ -408,16 +408,16 @@ async fn run_tracked(
                         "restore with shoal resume {} --execution {}",
                         plan.workspace.name, plan.id
                     );
-                    // A detached agent never ran in the launching terminal's pane.
-                    let pane = (!matches!(mode, Mode::Detached { .. }))
-                        .then(crate::cli::herdr::current_pane)
+                    // A detached agent never ran in the launching terminal.
+                    let place = (!matches!(mode, Mode::Detached { .. }))
+                        .then(crate::cli::terminal::current_place)
                         .flatten();
                     let saved = recovery.save(
                         paths,
                         &plan.workspace.id,
                         &plan.id,
                         stop.saved_reason(),
-                        pane,
+                        place,
                     );
                     match &saved {
                         Ok(path) => {

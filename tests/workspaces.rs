@@ -16821,7 +16821,7 @@ fn herdr_resume_all_reuses_stopped_panes_and_labels_new_tabs_as_add_does() {
         fs::create_dir_all(&state).unwrap();
         fs::write(
             state.join(format!("{name}-agent.recovery.json")),
-            format!(r#"{{"agent":"claude","herdr_pane":"{pane}"}}"#),
+            format!(r#"{{"agent":"claude","place":"{pane}"}}"#),
         )
         .unwrap();
         expected.push((
@@ -16875,7 +16875,7 @@ fn herdr_resume_honors_new_tab_and_enabled_settings() {
         fs::create_dir_all(&state).unwrap();
         fs::write(
             state.join(format!("{name}-agent.recovery.json")),
-            format!(r#"{{"agent":"claude","herdr_pane":"{pane}"}}"#),
+            format!(r#"{{"agent":"claude","place":"{pane}"}}"#),
         )
         .unwrap();
     }

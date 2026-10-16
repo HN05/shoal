@@ -10,7 +10,7 @@ pub mod internal;
 pub mod list_status;
 pub mod output;
 mod progress;
-mod terminal;
+pub(crate) mod terminal;
 pub mod ui;
 pub mod workspace_context;
 mod zmx;

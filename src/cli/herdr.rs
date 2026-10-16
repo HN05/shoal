@@ -133,7 +133,7 @@ pub(in crate::cli) async fn rerun_in_recorded_pane(
     let pane = std::fs::read(record)
         .ok()
         .and_then(|bytes| serde_json::from_slice::<Record>(&bytes).ok())
-        .and_then(|record| record.herdr_pane)
+        .and_then(|record| record.place)
         .filter(|pane| current_pane().as_ref() != Some(pane));
     match pane {
         Some(pane) => run_at_prompt(ctx, &pane, args).await,
@@ -163,7 +163,7 @@ async fn at_prompt(pane: &str) -> bool {
 }
 
 /// The Herdr pane this process runs in.
-pub(crate) fn current_pane() -> Option<String> {
+pub(in crate::cli) fn current_pane() -> Option<String> {
     if std::env::var("HERDR_ENV").as_deref() != Ok("1") {
         return None;
     }
