@@ -628,7 +628,8 @@ one, else the current checkout's or workspace's, else a picker. The agent is
 one of them, else a picker of the installed ones. The agent's configured launcher
 runs in the registered checkout with chat instructions passed as native
 instructions, so it waits for your first message; `{path}` is the checkout and
-other workspace placeholders stay literal.
+other workspace placeholders stay literal. The checkout is trusted in the agent's
+config as workspace launches trust theirs.
 
 Every call starts a new chat and focuses it. Inside Herdr it opens a focused tab
 labelled `<repo> chat` regardless of `herdr.focus`, unless `--here` or

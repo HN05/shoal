@@ -17721,6 +17721,13 @@ fn chat_runs_the_agent_in_the_checkout_in_a_labelled_zmx_session() {
     assert_eq!(args[0], "--append-system-prompt");
     assert!(args[1].contains(checkout.to_str().unwrap()), "{}", args[1]);
     assert_eq!(args[2..], ["--model", "fast"]);
+    // The checkout is trusted as workspace launches trust theirs.
+    let claude: Value =
+        serde_json::from_str(&fs::read_to_string(home.join(".claude.json")).unwrap()).unwrap();
+    assert_eq!(
+        claude["projects"][checkout.to_str().unwrap()]["hasTrustDialogAccepted"],
+        true
+    );
     // Chats are not workspace executions.
     assert_eq!(fixture.ok(&["ls"]), serde_json::json!([]));
 
@@ -17804,6 +17811,11 @@ fn chat_opens_a_focused_herdr_tab_at_the_checkout() {
     );
     // Codex's default launcher appends its own options after forwarded ones.
     assert_eq!(args[2], "--search");
+    let codex = fs::read_to_string(fixture.root.path().join(".codex/config.toml")).unwrap();
+    assert!(
+        codex.contains(checkout.to_str().unwrap()) && codex.contains("trusted"),
+        "{codex}"
+    );
     assert!(!fixture.root.path().join("zmx-calls").exists());
 }
 

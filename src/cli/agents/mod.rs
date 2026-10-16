@@ -31,7 +31,7 @@ use crate::{
 pub(super) use desktop::open_app;
 pub(super) use happy::happy;
 pub(super) use native::{claude, codex};
-pub(super) use trust::cleanup_repository_trust;
+pub(super) use trust::{cleanup_repository_trust, trust_checkout};
 
 /// The requested agent, else the configured `default_agent`, else a picker.
 pub(super) async fn default_agent(

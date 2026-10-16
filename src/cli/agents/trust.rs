@@ -4,6 +4,7 @@ use anyhow::{Context as _, Result};
 use serde_json::json;
 
 use crate::{
+    agent::BuiltinAgent,
     cli::{client, context::Context},
     env,
     model::{Repository, Workspace},
@@ -26,16 +27,13 @@ pub(crate) fn cleanup_repository_trust(
             paths.push(path);
         }
     }
-    let claude = env::claude_config_dir().map(|dir| {
-        dir.unwrap_or_else(|| ctx.paths.home.clone())
-            .join(".claude.json")
-    });
-    cleanup_config(claude, &paths, "Claude Code", remove_claude_trust);
-    let codex = env::codex_home().map(|dir| {
-        dir.unwrap_or_else(|| ctx.paths.home.join(".codex"))
-            .join("config.toml")
-    });
-    cleanup_config(codex, &paths, "Codex", remove_codex_trust);
+    cleanup_config(
+        claude_config(ctx),
+        &paths,
+        "Claude Code",
+        remove_claude_trust,
+    );
+    cleanup_config(codex_config(ctx), &paths, "Codex", remove_codex_trust);
 }
 
 fn cleanup_config(
@@ -62,59 +60,87 @@ fn cleanup_config(
 /// Mark the workspace trusted in Claude Code's config so a launch, attached or
 /// detached, never stops at the trust dialog. Failure only warns.
 pub(super) async fn trust_claude(ctx: &Context, workspace: &Workspace) {
-    let config = env::claude_config_dir().map(|dir| {
-        dir.unwrap_or_else(|| ctx.paths.home.clone())
-            .join(".claude.json")
-    });
-    trust_launch(
-        ctx,
-        workspace,
-        config,
+    let paths = workspace_trust_paths(ctx, workspace, "Claude Code").await;
+    mark_trusted(
+        claude_config(ctx),
         "Claude Code",
         trust_claude_workspace,
-    )
-    .await;
+        &paths,
+    );
 }
 
 pub(super) async fn trust_codex(ctx: &Context, workspace: &Workspace) {
-    let config = env::codex_home().map(|dir| {
-        dir.unwrap_or_else(|| ctx.paths.home.join(".codex"))
-            .join("config.toml")
-    });
-    trust_launch(ctx, workspace, config, "Codex", trust_codex_workspace).await;
+    let paths = workspace_trust_paths(ctx, workspace, "Codex").await;
+    mark_trusted(codex_config(ctx), "Codex", trust_codex_workspace, &paths);
 }
 
-async fn trust_launch(
+/// Trust a repository's checkout for a chat as workspace launches trust
+/// theirs; repository removal clears the entries. Failure only warns.
+pub(in crate::cli) fn trust_checkout(ctx: &Context, agent: BuiltinAgent, repository: &Repository) {
+    let paths = repository_trust_paths(repository, &repository.path);
+    match agent {
+        BuiltinAgent::Claude => mark_trusted(
+            claude_config(ctx),
+            "Claude Code",
+            trust_claude_workspace,
+            &paths,
+        ),
+        BuiltinAgent::Codex => {
+            mark_trusted(codex_config(ctx), "Codex", trust_codex_workspace, &paths)
+        }
+    }
+}
+
+fn claude_config(ctx: &Context) -> Result<std::path::PathBuf> {
+    env::claude_config_dir().map(|dir| {
+        dir.unwrap_or_else(|| ctx.paths.home.clone())
+            .join(".claude.json")
+    })
+}
+
+fn codex_config(ctx: &Context) -> Result<std::path::PathBuf> {
+    env::codex_home().map(|dir| {
+        dir.unwrap_or_else(|| ctx.paths.home.join(".codex"))
+            .join("config.toml")
+    })
+}
+
+/// The workspace's repository trust paths, or the workspace alone when its
+/// repository cannot be resolved.
+async fn workspace_trust_paths(
     ctx: &Context,
     workspace: &Workspace,
-    config: Result<std::path::PathBuf>,
     agent: &str,
-    update: fn(&std::path::Path, &std::path::Path) -> Result<bool>,
-) {
-    let config = match config {
-        Ok(config) => config,
-        Err(error) => {
-            eprintln!("warning: could not mark the workspace as trusted for {agent}: {error:#}");
-            return;
-        }
-    };
-    let mut paths = Vec::new();
+) -> Vec<std::path::PathBuf> {
     match client::repositories(&ctx.paths).await.and_then(|repos| {
         repos
             .into_iter()
             .find(|repo| repo.id == workspace.repository_id)
             .context("workspace repository is missing")
     }) {
-        Ok(repo) => {
-            paths.extend(repository_trust_paths(&repo, &workspace.path));
-        }
+        Ok(repo) => repository_trust_paths(&repo, &workspace.path),
         Err(error) => {
             eprintln!("warning: could not resolve repository trust paths for {agent}: {error:#}");
-            paths.push(workspace.path.clone());
+            vec![workspace.path.clone()]
         }
     }
+}
+
+fn mark_trusted(
+    config: Result<std::path::PathBuf>,
+    agent: &str,
+    update: fn(&std::path::Path, &std::path::Path) -> Result<bool>,
+    paths: &[std::path::PathBuf],
+) {
+    let config = match config {
+        Ok(config) => config,
+        Err(error) => {
+            eprintln!("warning: could not mark directories as trusted for {agent}: {error:#}");
+            return;
+        }
+    };
     for path in paths {
-        if let Err(error) = update(&config, &path) {
+        if let Err(error) = update(&config, path) {
             eprintln!(
                 "warning: could not mark {} as trusted for {agent}: {error:#}",
                 path.display()

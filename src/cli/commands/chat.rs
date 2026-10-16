@@ -36,6 +36,7 @@ pub(super) async fn start(
     if !here && opens_tab(ctx, &settings) {
         return open_tab(ctx, &repo, agent, args).await;
     }
+    agents::trust_checkout(ctx, agent, &repo);
     let command = command(&settings, &repo, agent, args)?;
     if zmx::hosts(&settings) {
         return zmx::run_chat(&repo, agent.as_str(), &command).await;
