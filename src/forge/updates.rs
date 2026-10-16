@@ -202,6 +202,10 @@ impl Snapshot {
         });
     }
 
+    pub(crate) fn state(&self) -> &str {
+        &self.state
+    }
+
     /// Take `state` as already seen, even before a first observation, whose
     /// other activity is still reported.
     pub(crate) fn adopt_state(&mut self, state: &str) {
