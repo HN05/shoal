@@ -725,6 +725,9 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::AgentMessages { workspace } => {
             Body::AgentMessages(manager.agent_messages(&workspace).await?)
         }
+        Method::AgentUpdates { workspace } => {
+            Body::PrUpdates(manager.agent_updates(&workspace).await?)
+        }
         Method::MarkAgentMessagesDelivered { workspace, ids } => {
             manager
                 .mark_agent_messages_delivered(&workspace, ids)

@@ -176,6 +176,33 @@ impl Manager {
         })
     }
 
+    /// What the workspace's agent has not received: its messages and the
+    /// updates queued on its cursor, without waiting or polling the forge.
+    /// Delivery replaces a running watch, which would otherwise deliver the
+    /// same updates again.
+    pub async fn agent_updates(&self, selector: &str) -> Result<Updates> {
+        let workspace = self.workspace(selector).await?;
+        let _delivery = self.item_waits.start(&workspace.id);
+        let messages = self.agent_messages(&workspace.id).await?;
+        let id = workspace.id.clone();
+        let items = self
+            .store
+            .run(move |db| linked_items(db, &id, None))
+            .await?;
+        let branch = watches_branch(&Selection::default(), &items).then_some(workspace.branch);
+        let keys = items
+            .into_iter()
+            .map(|(url, _)| url)
+            .chain(branch)
+            .collect::<Vec<_>>();
+        Ok(Updates {
+            updates: self.pending_activity(&workspace.id, &keys).await?,
+            messages,
+            timed_out: false,
+            superseded: false,
+        })
+    }
+
     async fn next_agent_messages(
         &self,
         id: &str,
@@ -995,7 +1022,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn background_activity_queues_on_the_workspace_cursor() {
+    async fn background_activity_queues_for_the_agents_hooks() {
         let (root, manager) = manager().await;
         let repo_path = repository(root.path(), "repo");
         let repo = manager
@@ -1013,8 +1040,27 @@ mod tests {
             .await
             .unwrap();
         assert!(queued.has_changed().unwrap());
-        let pending = manager.pending_pr_activity(&workspace.id).await.unwrap();
-        assert_eq!(pending[0].kind, UpdateKind::Comment);
+        manager
+            .send_agent_message(&workspace.id, "Rebase onto main".into())
+            .await
+            .unwrap();
+        // Handing them to the agent's hook replaces the running watch.
+        let watch = manager.item_waits.start(&workspace.id);
+        let delivered = manager.agent_updates(&workspace.id).await.unwrap();
+        watch.superseded.notified().await;
+        assert!(!watch.is_current());
+        assert_eq!(delivered.updates[0].kind, UpdateKind::Comment);
+        assert_eq!(delivered.messages[0].message, "Rebase onto main");
+        manager
+            .mark_agent_messages_delivered(&workspace.id, vec![delivered.messages[0].id])
+            .await
+            .unwrap();
+        manager
+            .acknowledge_pr_updates(&workspace.id, vec![delivered.updates[0].delivery.clone()])
+            .await
+            .unwrap();
+        let after = manager.agent_updates(&workspace.id).await.unwrap();
+        assert!(after.updates.is_empty() && after.messages.is_empty());
     }
 
     #[tokio::test]

@@ -26,7 +26,7 @@ use crate::{
     sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
 };
 
-pub const VERSION: u32 = 87;
+pub const VERSION: u32 = 88;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -421,6 +421,12 @@ pub enum Method {
     MarkAgentMessagesDelivered {
         workspace: String,
         ids: Vec<i64>,
+    },
+    /// The workspace's undelivered agent messages and queued item updates,
+    /// without waiting or polling the forge; acknowledge them with
+    /// [`Method::AcknowledgePrUpdates`]. It replaces a running watch.
+    AgentUpdates {
+        workspace: String,
     },
     /// Long-lived: unread notifications, then new ones as they are recorded,
     /// each as a [`Body::Notification`] response and marked read on delivery.
