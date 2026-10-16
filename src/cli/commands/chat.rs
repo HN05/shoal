@@ -6,7 +6,7 @@ use std::{
     os::unix::process::CommandExt,
 };
 
-use anyhow::{Context as _, Result, bail, ensure};
+use anyhow::{Context as _, Result, ensure};
 
 use crate::{
     agent::{Agent, BuiltinAgent},
@@ -30,12 +30,9 @@ pub(super) async fn start(
     );
     ensure!(ctx.interactive(), "chat needs a terminal");
     let repo = chosen(ctx, repository).await?;
-    let target = || ConfigTarget::Repository(repo.id.clone().into());
-    let Some(agent) = agents::default_agent(ctx, target(), agent).await? else {
-        return Ok(0);
-    };
-    let agent = terminal_agent(agent)?;
-    let settings = client::settings(&ctx.paths, target()).await?;
+    let settings =
+        client::settings(&ctx.paths, ConfigTarget::Repository(repo.id.clone().into())).await?;
+    let agent = chat_agent(ctx, &settings, agent)?;
     if !here && opens_tab(ctx, &settings) {
         return open_tab(ctx, &repo, agent, args).await;
     }
@@ -60,15 +57,56 @@ async fn chosen(ctx: &Context, repository: Option<String>) -> Result<Repository>
 
 /// Chats run Claude Code or Codex CLI, which take instructions apart from the
 /// first message and so wait for the user to speak first.
-fn terminal_agent(agent: Agent) -> Result<BuiltinAgent> {
-    match agent {
-        Agent::Claude => Ok(BuiltinAgent::Claude),
-        Agent::Codex => Ok(BuiltinAgent::Codex),
-        other => bail!(
-            "chat runs claude or codex, not {}; pass --agent claude or --agent codex",
-            String::from(other)
-        ),
+const CHAT_AGENTS: [BuiltinAgent; 2] = [BuiltinAgent::Claude, BuiltinAgent::Codex];
+
+/// `--agent`, else `default_agent` when it can chat, else a picker of the
+/// installed chat agents.
+fn chat_agent(ctx: &Context, settings: &Effective, agent: Option<Agent>) -> Result<BuiltinAgent> {
+    let chosen = match agent {
+        Some(agent) => Some(builtin(&agent).with_context(|| {
+            format!(
+                "chat runs claude or codex, not {}",
+                String::from(agent.clone())
+            )
+        })?),
+        None => settings.default_agent.as_ref().and_then(builtin),
+    };
+    match chosen {
+        Some(agent) => {
+            agents::ensure_installed(&launcher(agent), &settings.commands)?;
+            Ok(agent)
+        }
+        None => pick_agent(ctx, settings),
     }
+}
+
+fn builtin(agent: &Agent) -> Option<BuiltinAgent> {
+    match agent {
+        Agent::Claude => Some(BuiltinAgent::Claude),
+        Agent::Codex => Some(BuiltinAgent::Codex),
+        _ => None,
+    }
+}
+
+fn launcher(agent: BuiltinAgent) -> Agent {
+    match agent {
+        BuiltinAgent::Claude => Agent::Claude,
+        BuiltinAgent::Codex => Agent::Codex,
+    }
+}
+
+fn pick_agent(ctx: &Context, settings: &Effective) -> Result<BuiltinAgent> {
+    let search_path = std::env::var_os("PATH").unwrap_or_default();
+    let choices: Vec<_> = CHAT_AGENTS
+        .into_iter()
+        .filter(|agent| agents::installed(&launcher(*agent), &settings.commands, &search_path))
+        .map(|agent| (agent, agent.as_str()))
+        .collect();
+    ensure!(
+        !choices.is_empty(),
+        "chat runs claude or codex, and neither is installed"
+    );
+    ui::pick_choice(ctx, "Agent> ", &choices)
 }
 
 fn opens_tab(ctx: &Context, settings: &Effective) -> bool {

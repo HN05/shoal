@@ -17808,10 +17808,20 @@ fn chat_opens_a_focused_herdr_tab_at_the_checkout() {
 }
 
 #[test]
-fn chat_refuses_scoped_callers_detached_agents_and_missing_terminals() {
-    let fixture = Fixture::new();
+fn chat_picks_chat_agents_and_refuses_unsupported_launches() {
+    let fixture = Fixture::with_config(Some("default_agent = \"happy-claude\"\n"));
     install_fake_agents(&fixture, &["claude", "happy"]);
     let repo = fixture.repo.to_str().unwrap();
+    // A default agent that cannot chat leaves the choice to a picker of the
+    // installed chat agents.
+    let (output, rows) = fixture.pick(&["chat", repo], "0", "");
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(
+        rows.lines()
+            .map(|row| row.split('\t').nth(1).unwrap())
+            .collect::<Vec<_>>(),
+        ["claude"]
+    );
     let (output, transcript) = fixture.interactive_command(
         fixture
             .command()
