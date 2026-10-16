@@ -7,8 +7,24 @@ const GROUPS: &[(&str, &[&str])] = &[
     (
         "Workspaces",
         &[
-            "add", "ls", "hold", "cd", "edit", "status", "setup", "adopt", "rename", "base",
-            "notify", "message", "messages", "done", "undone", "rm", "cleanup",
+            "add",
+            "ls",
+            "hold",
+            "cd",
+            "edit",
+            "status",
+            "setup",
+            "adopt",
+            "rename",
+            "base",
+            "notify",
+            "message",
+            "messages",
+            "approvals",
+            "done",
+            "undone",
+            "rm",
+            "cleanup",
         ],
     ),
     (
@@ -36,10 +52,7 @@ const GROUPS: &[(&str, &[&str])] = &[
             "unready",
         ],
     ),
-    (
-        "Shared resources",
-        &["acquire", "release", "leases", "sim", "approvals"],
-    ),
+    ("Shared resources", &["acquire", "release", "leases", "sim"]),
     (
         "Diagnostics and activity",
         &["inspect", "notifications", "doctor"],

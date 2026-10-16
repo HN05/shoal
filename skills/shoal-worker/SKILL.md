@@ -66,8 +66,11 @@ reviews with inline comments; use it instead of `gh` or `fj` to read them, with
 include the failing step when the runner records it and a command to read the log.
 
 `shoal done` defaults to cleanup, which may stop your execution. Use
-`shoal done --keep` when the user wants to review in this workspace; `--cleanup`
-overrides a `[done] cleanup = false` default. Dirty or newer work is retained;
+`shoal done --keep --reason "<why>"` when the user wants to review in this
+workspace: it records completion and asks the user to approve keeping the
+workspace (`keep_request` names the request). Cleanup waits for the decision, and
+denial requests cleanup; do not retry a denied keep. `--cleanup` overrides a
+`[done] cleanup = false` default. Dirty or newer work is retained;
 completion without a PR watch also requires every commit pushed or on the local
 default branch. Completion does not claim a merge occurred. Inspect
 `completion.error` and `pr_cleanup.error` for cleanup or lookup failures.

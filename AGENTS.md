@@ -94,10 +94,12 @@ when behavior changes, distinguishing decisions from proposals.
   persisted and before release, including workspace removal; failure retains
   leases. Retries rerun hooks, and permit/lifecycle changes cannot overlap them
   in the same workspace. User scripts own underlying resource integrations.
-- Configured resource approvals are daemon-owned: scoped callers request and inspect
-  their own access; only unscoped callers approve or deny. Grants bind effective
+- Approvals are daemon-owned: scoped callers request and inspect their own;
+  only unscoped callers approve or deny. Resource grants bind effective
   allocation settings, consume no capacity, and last until release or workspace
   removal according to configuration. Never bypass existing allocation rules.
+  A scoped keep overriding configured cleanup is a request bound to HEAD;
+  cleanup waits for its decision, and denial requests cleanup.
 - Lifecycle states, resource scopes, approval targets and approval
   specifications are typed; preserve their existing SQLite/JSON representation
   and reject unknown values.

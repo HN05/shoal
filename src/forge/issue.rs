@@ -222,6 +222,7 @@ impl Manager {
                 head,
                 None,
                 crate::daemon::events::EventCause::Issue,
+                crate::daemon::workspace::Requester::Unscoped,
             )
             .await?;
         }

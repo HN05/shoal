@@ -210,7 +210,13 @@ async fn removal_causes_and_retained_errors_survive_ownership_and_notification_r
             EventCause::Issue => {
                 let head = crate::forge::pr::current_head(&workspace).await.unwrap();
                 manager
-                    .record_done(&workspace, head, Some(true), EventCause::Issue)
+                    .record_done(
+                        &workspace,
+                        head,
+                        Some(true),
+                        EventCause::Issue,
+                        crate::daemon::workspace::Requester::Unscoped,
+                    )
                     .await
                     .unwrap();
                 manager.sweep_completed().await.unwrap();
@@ -239,7 +245,14 @@ async fn removal_causes_and_retained_errors_survive_ownership_and_notification_r
         .await
         .unwrap();
     std::fs::write(workspace.path.join("dirty"), "keep this work").unwrap();
-    manager.mark_done(&workspace.id, Some(true)).await.unwrap();
+    manager
+        .mark_done(
+            &workspace.id,
+            Some(true),
+            crate::daemon::workspace::Requester::Unscoped,
+        )
+        .await
+        .unwrap();
     manager.sweep_completed().await.unwrap();
     let notifications = manager.notifications(true, 100).await.unwrap();
     manager

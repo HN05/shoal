@@ -240,11 +240,15 @@ pub enum Command {
     Done {
         workspace: Option<String>,
         /// Keep the workspace for review, overriding [done] cleanup and automatic cleanup.
+        /// A workspace process overriding [done] cleanup asks the user to approve.
         #[arg(long, conflicts_with = "cleanup")]
         keep: bool,
         /// Request cleanup even when [done] cleanup is false; preserve dirty or unpushed work.
         #[arg(long)]
         cleanup: bool,
+        /// Why the workspace should be kept, shown with the approval request.
+        #[arg(long, requires = "keep")]
+        reason: Option<String>,
     },
     /// Withdraw a recorded completion without keeping the workspace.
     Undone { workspace: Option<String> },
@@ -1551,6 +1555,7 @@ mod tests {
                 keep,
                 cleanup,
                 workspace,
+                ..
             } = command
             else {
                 panic!("wrong command");
@@ -1559,6 +1564,7 @@ mod tests {
             assert!(workspace.is_none());
         }
         assert!(Cli::try_parse_from(["shoal", "done", "--keep", "--cleanup"]).is_err());
+        assert!(Cli::try_parse_from(["shoal", "done", "--reason", "review"]).is_err());
         assert!(
             matches!(Cli::try_parse_from(["shoal", "done", "review", "--keep"]).unwrap().command,
             Some(Command::Done { workspace: Some(name), keep: true, .. }) if name == "review")

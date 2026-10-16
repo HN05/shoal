@@ -234,6 +234,8 @@ pub enum Method {
     WorkspaceDone {
         workspace: String,
         cleanup: Option<bool>,
+        /// Why a workspace process wants to keep the workspace.
+        reason: Option<String>,
     },
     MarkReady {
         workspace: String,

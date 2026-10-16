@@ -103,7 +103,9 @@ instead of the PR delivery guidance below.
   manual acknowledgements bind to exactly the recorded HEAD. Completion cleanup
   requires preserved commits without a PR registration, honors existing merge
   checks, and rechecks its recorded HEAD; keeping completion blocks idle and PR
-  cleanup. This is cooperative,
+  cleanup. A scoped keep overriding configured cleanup is an approval request bound
+  to HEAD: cleanup waits for the unscoped decision, denial requests cleanup, and a
+  decision changes only the completion still waiting on that request. This is cooperative,
   not a security boundary, so judge it as such.
 - Simulator plans never authorize mutations by themselves: the executor rechecks
   recorded ownership and live capacity under the simulator gate. Indexed workspace

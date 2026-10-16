@@ -15779,9 +15779,18 @@ fn post_done_hook_runs_for_scoped_keep_and_retained_cleanup_with_config_layers()
         "--json",
         "done",
         "--keep",
+        "--reason",
+        "review",
     ]);
     assert_eq!(completion["cleanup"], false);
     let events = fixture.root.path().join("done-events");
+    // The hook runs once the user decides the keep request.
+    assert!(!events.exists());
+    fixture.ok(&[
+        "approvals",
+        "approve",
+        completion["keep_request"].as_str().unwrap(),
+    ]);
     let identity = format!(
         "post_done|hooked|{}|{}|{}|{}|",
         workspace["id"].as_str().unwrap(),
@@ -15930,30 +15939,60 @@ fn done_defaults_to_cleanup_and_releases_workspace_resources() {
 }
 
 #[test]
-fn done_keep_is_scoped_persistent_and_can_be_overridden_in_both_directions() {
-    let mut fixture = Fixture::new();
+fn agent_keep_waits_for_approval_and_denial_requests_cleanup() {
+    let mut fixture = Fixture::with_config(Some("[cleanup.auto]\nenabled=false\n"));
+    let hook = install_done_hook(&fixture);
     let workspace = fixture.add("review");
-    let output = fixture.ok(&[
-        "exec",
+    fixture.add("denied");
+    set_repository_toml(&fixture, &format!("post_done_cmd = '{}'\n", hook.display()));
+    let events = fixture.root.path().join("done-events");
+    let unexplained = scoped_command(&fixture, "review", &["done", "--keep"]);
+    assert!(!unexplained.status.success());
+    assert!(String::from_utf8_lossy(&unexplained.stderr).contains("--reason"));
+    let output = scoped_command(
+        &fixture,
         "review",
-        "--",
-        env!("CARGO_BIN_EXE_shoal"),
-        "--json",
-        "done",
-        "--keep",
-    ]);
+        &["done", "--keep", "--reason", "review the UI"],
+    );
+    let output: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(output["cleanup"], false);
+    let id = output["keep_request"].as_str().unwrap().to_owned();
+    assert!(!events.exists());
     let path = Path::new(workspace["path"].as_str().unwrap());
     fixture.restart();
-    assert_eq!(
-        fixture.ok(&["status", "review"])["completion"]["cleanup"],
-        false
+    let status = fixture.run(&["status", "review"]);
+    assert!(
+        String::from_utf8_lossy(&status.stdout)
+            .contains(&format!("done (keep requested, approval {id})"))
     );
+    let request = fixture.ok(&["approvals"])[0].clone();
+    assert_eq!(request["target"], "keep");
+    assert_eq!(request["reason"], "review the UI");
+    fixture.ok(&["approvals", "approve", &id]);
     let status = fixture.run(&["status", "review"]);
     assert!(String::from_utf8_lossy(&status.stdout).contains("done (kept for review)"));
+    wait_until("keep hook", || {
+        fs::read_to_string(&events).is_ok_and(|events| events.contains("|review|"))
+    });
+    assert!(fs::read_to_string(&events).unwrap().contains("|keep|"));
     assert!(path.exists());
     fixture.ok(&["done", "review", "--cleanup"]);
     wait_removed(&fixture, "review");
+
+    let output = scoped_command(&fixture, "denied", &["done", "--keep", "--reason", "demo"]);
+    let output: Value = serde_json::from_slice(&output.stdout).unwrap();
+    fixture.ok(&[
+        "approvals",
+        "deny",
+        output["keep_request"].as_str().unwrap(),
+    ]);
+    wait_removed(&fixture, "denied");
+    assert!(
+        fs::read_to_string(&events)
+            .unwrap()
+            .lines()
+            .any(|line| line.contains("|denied|") && line.contains("|cleanup|"))
+    );
 
     let fixture = Fixture::with_config(Some("[done]\ncleanup=false\n"));
     fixture.add("keep-default");
@@ -17334,7 +17373,7 @@ fn scoped_undone_withdraws_completion_without_keeping_the_workspace() {
         command.extend_from_slice(args);
         fixture.ok(&command)
     };
-    scoped(&fixture, &["done", "--keep"]);
+    scoped(&fixture, &["done", "--keep", "--reason", "review"]);
     let undone = scoped(&fixture, &["undone"]);
     assert_eq!(undone["withdrawn"]["cleanup"], false);
     assert!(scoped(&fixture, &["undone"])["withdrawn"].is_null());

@@ -65,13 +65,11 @@ async fn pick_pending(ctx: &Context) -> Result<String> {
 
 fn describe(request: &ApprovalRequest) -> String {
     format!(
-        "{} [{}] {} / {} (workspace {}, {}): {}",
+        "{} [{}] {} in workspace {}: {}",
         request.id,
         request.status,
-        request.target,
-        request.name,
+        request.subject(),
         request.workspace,
-        request.lifetime,
         request.reason
     )
 }

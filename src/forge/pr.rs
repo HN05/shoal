@@ -504,6 +504,7 @@ impl Manager {
                         head.to_owned(),
                         None,
                         crate::daemon::events::EventCause::Pr,
+                        crate::daemon::workspace::Requester::Unscoped,
                     )
                     .await?;
                 }

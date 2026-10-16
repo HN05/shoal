@@ -31,13 +31,22 @@ states!(DecisionStatus {
 });
 
 /// What a decision authorizes; one active request per workspace, target and
-/// name. Keyed as `resource/<scope>/<pool>`, `port/<name>` or `simulator`.
+/// name. Keyed as `resource/<scope>/<pool>`, `port/<name>`, `simulator` or
+/// `keep`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Target {
-    Resource { scope: Scope, pool: String },
+    Resource {
+        scope: Scope,
+        pool: String,
+    },
     Port(String),
     Simulator,
+    /// Keeping a workspace after an agent marks its assignment done.
+    Keep,
 }
+
+/// The name of a workspace's single keep request.
+pub const KEEP: &str = "done";
 
 impl fmt::Display for Target {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -45,6 +54,7 @@ impl fmt::Display for Target {
             Self::Resource { scope, pool } => write!(f, "resource/{scope}/{pool}"),
             Self::Port(name) => write!(f, "port/{name}"),
             Self::Simulator => f.write_str("simulator"),
+            Self::Keep => f.write_str("keep"),
         }
     }
 }
@@ -53,8 +63,10 @@ impl FromStr for Target {
     type Err = anyhow::Error;
 
     fn from_str(text: &str) -> Result<Self> {
-        if text == "simulator" {
-            return Ok(Self::Simulator);
+        match text {
+            "simulator" => return Ok(Self::Simulator),
+            "keep" => return Ok(Self::Keep),
+            _ => {}
         }
         if let Some(name) = text.strip_prefix("port/")
             && !name.is_empty()
@@ -86,6 +98,7 @@ pub enum Specification {
     Resource(ResourceSpecification),
     Port(PortSpecification),
     Simulator(SimulatorSpecification),
+    Keep(KeepSpecification),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -114,6 +127,13 @@ pub struct PortSpecification {
 pub struct SimulatorSpecification {
     pub clean: bool,
     pub profile: Profile,
+}
+
+/// A keep decision covers the completed HEAD; later commits need a new one.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct KeepSpecification {
+    pub head: String,
 }
 
 impl fmt::Display for Specification {
@@ -209,7 +229,7 @@ pub fn check(
     }
     ensure!(
         !request.reason.trim().is_empty(),
-        "approval requires --reason explaining the requested access"
+        "approval requires --reason explaining the request"
     );
     crate::validate::reason("approval", Some(&request.reason))?;
     request.workspace = tx.query_row(
@@ -264,6 +284,14 @@ impl ApprovalRequest {
             active: true,
         }
     }
+
+    /// What the user is asked to decide: the target and lease name, or `keep`.
+    pub fn subject(&self) -> String {
+        match self.target {
+            Target::Keep => self.target.to_string(),
+            _ => format!("{} / {} ({})", self.target, self.name, self.lifetime),
+        }
+    }
 }
 
 /// Cancel requests or end lease grants; retain approved workspace grants.
@@ -280,6 +308,39 @@ pub fn release(tx: &Transaction<'_>, owner: &str, target: &Target, name: &str) -
         tx.execute("DELETE FROM access_requests WHERE id=?1", [&request.id])?;
     }
     Ok(true)
+}
+
+/// Replace the workspace's keep request with `request`, or cancel it when the
+/// completion needs none. Returns the request still awaiting a decision; an
+/// approval for the same HEAD is reused and a denial refused.
+pub fn request_keep(
+    tx: &Transaction<'_>,
+    owner: &str,
+    request: Option<ApprovalRequest>,
+) -> Result<Option<ApprovalRequest>> {
+    let existing = current(tx, owner, &Target::Keep, KEEP)?;
+    let Some(mut request) = request else {
+        release(tx, owner, &Target::Keep, KEEP)?;
+        return Ok(None);
+    };
+    match existing {
+        // A repeated request keeps the reason the user is deciding on.
+        Some(existing) if existing.specification == request.specification => {
+            request.reason = existing.reason;
+        }
+        Some(_) => {
+            release(tx, owner, &Target::Keep, KEEP)?;
+        }
+        None => {}
+    }
+    let pending = check(tx, request)?;
+    ensure!(
+        pending
+            .as_ref()
+            .is_none_or(|request| request.status != DecisionStatus::Denied),
+        "the user denied keeping this workspace; run shoal done without --keep"
+    );
+    Ok(pending)
 }
 
 /// Record a decision on a pending request; repeating the same decision is a no-op.
@@ -313,6 +374,11 @@ impl Manager {
     }
 
     pub async fn decide_approval(&self, id: String, approve: bool) -> Result<ApprovalRequest> {
+        if let Some(request) = self.approval_request(&id).await?
+            && request.target == Target::Keep
+        {
+            return self.decide_keep(request, approve).await;
+        }
         // Simulator allocation checks approval and mutates devices in separate
         // transactions under this gate; a decision must not land between them.
         let _guard = self.simulator_gate.lock().await;
@@ -326,14 +392,24 @@ impl Manager {
             .await
     }
 
+    /// A request's target never changes, so it can be read before taking the
+    /// gate its decision needs.
+    async fn approval_request(&self, id: &str) -> Result<Option<ApprovalRequest>> {
+        let id = id.to_owned();
+        self.store.run(move |db| by_id(db, &id)).await
+    }
+
     pub async fn notify_approval(&self, workspace: &str, request: &ApprovalRequest) {
         if request.status == DecisionStatus::Pending {
             self.notify(
                 Some(workspace),
                 crate::daemon::notifications::NotificationKind::ApprovalRequested,
                 format!(
-                    "approval {}: {} / {}: {}; approve with shoal approvals approve {}",
-                    request.id, request.target, request.name, request.reason, request.id
+                    "approval {}: {}: {}; approve with shoal approvals approve {}",
+                    request.id,
+                    request.subject(),
+                    request.reason,
+                    request.id
                 ),
             )
             .await;

@@ -219,7 +219,7 @@ async fn select_held(
     .await?
     .into_iter()
     .filter(|request| request.active)
-    .map(requested);
+    .filter_map(requested);
     let mut selected = Vec::new();
     for held in ports.chain(simulators).chain(resources).chain(requests) {
         if matches_kind(&held, kind.as_ref()) && !selected.contains(&held) {
@@ -242,10 +242,11 @@ async fn select_held(
     Ok(selected)
 }
 
-/// Release cancels a pending or denied request even without a lease.
-fn requested(request: ApprovalRequest) -> Held {
+/// Release cancels a pending or denied request even without a lease. A keep
+/// request belongs to completion, not to a lease.
+fn requested(request: ApprovalRequest) -> Option<Held> {
     let name = request.name;
-    match (request.target, request.specification) {
+    Some(match (request.target, request.specification) {
         (Target::Port(_), _) => Held::Port { name },
         (Target::Simulator, _) => Held::Sim { name },
         (Target::Resource { pool, .. }, Specification::Resource(bound))
@@ -254,7 +255,8 @@ fn requested(request: ApprovalRequest) -> Held {
             Held::Repo { pool, name }
         }
         (Target::Resource { pool, .. }, _) => Held::Resource { pool, name },
-    }
+        (Target::Keep, _) => return None,
+    })
 }
 
 fn matches_kind(held: &Held, kind: Option<&ReleaseKind>) -> bool {

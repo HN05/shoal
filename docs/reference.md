@@ -1191,6 +1191,14 @@ either direction and cannot be combined. The setting follows normal repository
 and worktree configuration precedence. Scoped agents may mark only their own
 workspace done; completion does not verify or assert a merge.
 
+A scoped `--keep` that overrides `[done] cleanup = true` asks the user: it needs
+`--reason`, records completion with `keep_request` naming the request, and cleanup
+waits for the decision in `shoal approvals` (see
+[resource approvals](#resource-approvals)). Approval keeps the workspace; denial
+turns the completion into cleanup. The decision covers the completed HEAD:
+repeating `done --keep` there reuses it, a new HEAD needs a new request, and
+`done` without `--keep` or `undone` cancels a pending one.
+
 Only `done` completes an assignment by default, so issue closure and merged PRs
 leave the workspace in place until the agent finishes. `[done] automatic = true`
 also records completion when the associated issue closes or every watched PR
@@ -1213,7 +1221,8 @@ with the worktree as its working directory, no terminal, and a 60-second limit.
 It follows normal global and repository configuration precedence and receives the
 [hook identity environment](#workspace-setup-and-hooks) plus
 `SHOAL_DONE_CHOICE=keep` or `cleanup`. It runs for explicit and automatic
-completion even when cleanup retains the workspace. Failure records
+completion even when cleanup retains the workspace; for a keep request it runs
+when the user decides, with the decided choice. Failure records
 a `hook_failed` notification without undoing completion or blocking cleanup.
 Lifecycle and permit changes are rejected while it runs. The hook holds the
 completion/PR gate, so it must not call Shoal commands that change completion or
@@ -1935,7 +1944,7 @@ the installed device/runtime and whether a clean device was requested; clean req
 still need a reason and the usual audit before mutations.
 
 Agents use the normal acquire command with `--reason`. `shoal approvals` lists
-requests and retained workspace grants; `shoal approvals list <workspace>` filters
+these requests, keep requests from `shoal done --keep`, and retained workspace grants; `shoal approvals list <workspace>` filters
 by workspace. Scoped callers can see only their own requests. An unscoped user
 reviews the recorded settings and uses `shoal approvals approve [id]` or
 `shoal approvals deny [id]`. Approval reserves no capacity: retry acquisition after

@@ -101,7 +101,7 @@ mod tests {
         assert_eq!(
             notifications[2].message,
             format!(
-                "approval {}: port/web / web: serve the app; approve with shoal approvals approve {}",
+                "approval {}: port/web / web (lease): serve the app; approve with shoal approvals approve {}",
                 request.id, request.id
             )
         );

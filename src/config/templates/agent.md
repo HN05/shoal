@@ -23,7 +23,8 @@ Finish every assignment with these steps:
    Merge only when authorized.
 3. When the assignment is finished (every watched PR merged, or no PR needed),
    run `shoal done` as your last command. It may stop this session and removes
-   the workspace once its work is merged or pushed. Run `shoal done --keep`
-   instead when the user wants to review the workspace.
+   the workspace once its work is merged or pushed. Run
+   `shoal done --keep --reason "<why>"` instead when the user wants to review
+   the workspace; the user approves keeping it.
 
 Do not end your session without running `shoal done`.

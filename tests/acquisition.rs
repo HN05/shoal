@@ -111,7 +111,7 @@ fn acquisition_responses_keep_exit_codes_json_details_and_human_approval_text() 
             assert_eq!(
                 String::from_utf8(output.stdout).unwrap(),
                 format!(
-                    "approval-id [{status}] {target} / default (workspace worker, lease): test allocation\n"
+                    "approval-id [{status}] {target} / default (lease) in workspace worker: test allocation\n"
                 )
             );
         }

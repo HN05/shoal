@@ -776,6 +776,9 @@ and a place lasts while a request is in progress or polled within 30 seconds. Th
 queue lives in memory, so a daemon restart loses the order; commands still polling
 join again.
 
+Approvals are the one daemon-owned way a scoped caller asks the user to decide;
+`shoal approvals` lists and decides every kind. Keeping a completed workspace is
+one kind (see completion); resource access is the other.
 Configured resources may require human approval for scoped acquisition. The daemon
 persists a request with a caller-supplied reason and the effective allocation settings;
 only an unscoped caller decides it. Pending requests consume no capacity. Approval
@@ -828,7 +831,9 @@ covers the hook, which must not call gated Shoal mutations. Completion without a
 hook takes no resource guard, so an agent-exit hook may signal it; configured
 completion hooks cannot nest inside another guarded hook. Keeping a completed workspace
 suppresses idle and PR cleanup until another completion requests cleanup or the
-user removes it. Completion
+user removes it. A scoped keep that overrides configured cleanup is an approval
+request bound to the completed HEAD: cleanup waits for the user, denial turns the
+completion into cleanup, and `post_done_cmd` runs with the decided choice. Completion
 cleanup without a PR registration requires clean files and every commit pushed or
 on the local default branch; an existing PR registration keeps its merge checks.
 The daemon stops tracked executions through shared removal and rechecks files and

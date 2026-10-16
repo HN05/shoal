@@ -69,8 +69,9 @@ shoal approvals deny <id>
 ```
 
 Report pending requests to the user with their recorded settings and reason,
-then approve or deny as the user decides. Approval reserves no capacity; the
-agent retries its acquisition.
+then approve or deny as the user decides. Resource approval reserves no
+capacity; the agent retries its acquisition. A `keep` request comes from an
+agent's `shoal done --keep`: approval keeps the workspace, denial cleans it up.
 
 ## Finish and clean up
 

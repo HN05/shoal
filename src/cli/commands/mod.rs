@@ -369,6 +369,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             workspace,
             keep,
             cleanup,
+            reason,
         } => {
             let cleanup = if keep {
                 Some(false)
@@ -377,7 +378,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             } else {
                 None
             };
-            workspaces::done(&ctx, workspace, cleanup).await
+            workspaces::done(&ctx, workspace, cleanup, reason).await
         }
         Command::Env { workspace, revoke } => {
             workspaces::environment(&ctx, workspace, revoke).await

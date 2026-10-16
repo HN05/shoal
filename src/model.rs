@@ -174,8 +174,13 @@ pub struct Execution {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Completion {
     pub head: String,
+    /// False also while a keep request awaits the user's decision.
     pub cleanup: bool,
     pub error: Option<String>,
+    /// An agent's keep request awaiting the user's decision; denial turns
+    /// the completion into cleanup.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub keep_request: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

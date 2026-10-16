@@ -12,7 +12,10 @@ async fn completion_without_a_hook_allows_concurrent_resource_hooks() {
         .resource_guard(&workspace.id, GuardMode::Exclusive)
         .await
         .unwrap();
-    manager.mark_done(&workspace.id, Some(false)).await.unwrap();
+    manager
+        .mark_done(&workspace.id, Some(false), Requester::Unscoped)
+        .await
+        .unwrap();
     manager
         .set_repository_config(
             &workspace.repository_id,
@@ -21,7 +24,7 @@ async fn completion_without_a_hook_allows_concurrent_resource_hooks() {
         .await
         .unwrap();
     let error = manager
-        .mark_done(&workspace.id, Some(true))
+        .mark_done(&workspace.id, Some(true), Requester::Unscoped)
         .await
         .unwrap_err();
     assert!(
@@ -40,7 +43,7 @@ async fn completion_without_a_hook_allows_concurrent_resource_hooks() {
     drop(resources);
     assert!(
         manager
-            .mark_done(&workspace.id, Some(true))
+            .mark_done(&workspace.id, Some(true), Requester::Unscoped)
             .await
             .unwrap()
             .cleanup
@@ -53,7 +56,7 @@ async fn completion_persists_and_explicit_choices_override_the_repository_defaul
     let repo = manager.repository(&workspace.repository_id).await.unwrap();
     assert!(
         manager
-            .mark_done(&workspace.id, None)
+            .mark_done(&workspace.id, None, Requester::Unscoped)
             .await
             .unwrap()
             .cleanup
@@ -64,14 +67,14 @@ async fn completion_persists_and_explicit_choices_override_the_repository_defaul
         .unwrap();
     assert!(
         !manager
-            .mark_done(&workspace.id, None)
+            .mark_done(&workspace.id, None, Requester::Unscoped)
             .await
             .unwrap()
             .cleanup
     );
     assert!(
         manager
-            .mark_done(&workspace.id, Some(true))
+            .mark_done(&workspace.id, Some(true), Requester::Unscoped)
             .await
             .unwrap()
             .cleanup
@@ -80,7 +83,10 @@ async fn completion_persists_and_explicit_choices_override_the_repository_defaul
         .set_repository_config(&repo.id, Some("[done]\ncleanup=true\n".into()))
         .await
         .unwrap();
-    let kept = manager.mark_done(&workspace.id, Some(false)).await.unwrap();
+    let kept = manager
+        .mark_done(&workspace.id, Some(false), Requester::Unscoped)
+        .await
+        .unwrap();
     assert!(!kept.cleanup);
     let reopened = Manager::open(manager.paths.clone()).await.unwrap();
     let completion = reopened
@@ -123,7 +129,10 @@ async fn keep_blocks_idle_and_pr_cleanup_until_explicitly_changed() {
         .set_pr(&workspace.id, Action::Acknowledge)
         .await
         .unwrap();
-    manager.mark_done(&workspace.id, Some(false)).await.unwrap();
+    manager
+        .mark_done(&workspace.id, Some(false), Requester::Unscoped)
+        .await
+        .unwrap();
     let reopened = Manager::open(manager.paths.clone()).await.unwrap();
     assert!(
         reopened
@@ -135,7 +144,10 @@ async fn keep_blocks_idle_and_pr_cleanup_until_explicitly_changed() {
     reopened.sweep_completed().await.unwrap();
     reopened.sweep_prs().await.unwrap();
     assert!(workspace.path.exists());
-    reopened.mark_done(&workspace.id, Some(true)).await.unwrap();
+    reopened
+        .mark_done(&workspace.id, Some(true), Requester::Unscoped)
+        .await
+        .unwrap();
     reopened.sweep_prs().await.unwrap();
     assert!(!workspace.path.exists());
     assert!(reopened.completion(&workspace.id).await.unwrap().is_none());
@@ -147,11 +159,17 @@ async fn completion_retains_dirty_unpushed_and_newer_work() {
     let (_root, manager, workspace) = fixture().await;
     let file = workspace.path.join("new-work");
     fs::write(&file, "keep").unwrap();
-    manager.mark_done(&workspace.id, None).await.unwrap();
+    manager
+        .mark_done(&workspace.id, None, Requester::Unscoped)
+        .await
+        .unwrap();
     manager.sweep_completed().await.unwrap();
     assert_error(&manager, &workspace, "uncommitted").await;
     commit(&workspace.path, "new-work");
-    manager.mark_done(&workspace.id, None).await.unwrap();
+    manager
+        .mark_done(&workspace.id, None, Requester::Unscoped)
+        .await
+        .unwrap();
     manager.sweep_completed().await.unwrap();
     assert_error(&manager, &workspace, "neither pushed").await;
     // Simulate a fetched remote-tracking branch preserving the completed HEAD.
@@ -177,7 +195,10 @@ async fn completion_retains_dirty_unpushed_and_newer_work() {
             .is_none()
     );
     assert_eq!(fs::read_to_string(&file).unwrap(), "newer");
-    reopened.mark_done(&workspace.id, Some(true)).await.unwrap();
+    reopened
+        .mark_done(&workspace.id, Some(true), Requester::Unscoped)
+        .await
+        .unwrap();
     reopened.sweep_completed().await.unwrap();
     assert!(!workspace.path.exists());
     // A nonredundant branch is retained even when its commits are pushed.
@@ -209,7 +230,10 @@ async fn completion_rechecks_work_after_removal_hooks() {
         )
         .await
         .unwrap();
-    manager.mark_done(&workspace.id, None).await.unwrap();
+    manager
+        .mark_done(&workspace.id, None, Requester::Unscoped)
+        .await
+        .unwrap();
     manager.sweep_completed().await.unwrap();
     assert_error(&manager, &workspace, "uncommitted").await;
     assert_eq!(
@@ -221,7 +245,10 @@ async fn completion_rechecks_work_after_removal_hooks() {
 #[tokio::test]
 async fn undone_withdraws_completion_without_blocking_cleanup() {
     let (_root, manager, workspace) = fixture().await;
-    manager.mark_done(&workspace.id, Some(true)).await.unwrap();
+    manager
+        .mark_done(&workspace.id, Some(true), Requester::Unscoped)
+        .await
+        .unwrap();
     let withdrawn = manager.undo_done(&workspace.id).await.unwrap().unwrap();
     assert!(withdrawn.cleanup);
     assert!(manager.undo_done(&workspace.id).await.unwrap().is_none());
@@ -278,11 +305,20 @@ async fn explicit_done_releases_only_the_hold_migrated_from_continuation() {
     // Automatic completion never ended a continuation.
     let head = crate::forge::pr::current_head(&workspace).await.unwrap();
     manager
-        .record_done(&workspace, head, Some(false), EventCause::Issue)
+        .record_done(
+            &workspace,
+            head,
+            Some(false),
+            EventCause::Issue,
+            Requester::Unscoped,
+        )
         .await
         .unwrap();
     assert_eq!(names().await, ["continue", "thread"]);
-    manager.mark_done(&workspace.id, Some(false)).await.unwrap();
+    manager
+        .mark_done(&workspace.id, Some(false), Requester::Unscoped)
+        .await
+        .unwrap();
     assert_eq!(names().await, ["thread"]);
 }
 
@@ -338,7 +374,10 @@ async fn issue_and_watch_completion_wait_for_explicit_done_by_default() {
     assert!(inspection.issue.unwrap().error.is_none());
     assert!(inspection.pr_cleanup.unwrap().error.is_none());
     // Explicit completion applies the watch's merge checks.
-    manager.mark_done(&workspace.id, Some(true)).await.unwrap();
+    manager
+        .mark_done(&workspace.id, Some(true), Requester::Unscoped)
+        .await
+        .unwrap();
     manager.sweep_prs().await.unwrap();
     let inspection = manager.inspect_workspace(&workspace.id).await.unwrap();
     assert!(
@@ -359,7 +398,10 @@ async fn holds_retain_completion_without_turning_it_into_an_error() {
         .acquire_hold(&workspace.id, "app".into(), None)
         .await
         .unwrap();
-    let completed = manager.mark_done(&workspace.id, None).await.unwrap();
+    let completed = manager
+        .mark_done(&workspace.id, None, Requester::Unscoped)
+        .await
+        .unwrap();
     manager.sweep_completed().await.unwrap();
     let completion = manager.completion(&workspace.id).await.unwrap().unwrap();
     assert_eq!(completion.head, completed.head);
@@ -372,4 +414,120 @@ async fn holds_retain_completion_without_turning_it_into_an_error() {
         .unwrap();
     manager.sweep_completed().await.unwrap();
     assert!(!workspace.path.exists());
+}
+
+fn agent(reason: &str) -> Requester {
+    Requester::Agent {
+        reason: Some(reason.into()),
+    }
+}
+
+#[tokio::test]
+async fn agent_keep_waits_for_the_user_and_denial_requests_cleanup() {
+    let (_root, manager, workspace) = fixture().await;
+    let pending = manager
+        .mark_done(&workspace.id, Some(false), agent("review the UI"))
+        .await
+        .unwrap();
+    assert!(!pending.cleanup);
+    let id = pending.keep_request.unwrap();
+    // Repeating the request keeps the one the user is deciding on.
+    let repeated = manager
+        .mark_done(&workspace.id, Some(false), agent("other words"))
+        .await
+        .unwrap();
+    assert_eq!(repeated.keep_request.as_ref(), Some(&id));
+    let requests = manager
+        .approval_requests(Some(&workspace.id))
+        .await
+        .unwrap();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0].reason, "review the UI");
+    manager.sweep_completed().await.unwrap();
+    assert!(workspace.path.exists());
+
+    manager.decide_approval(id, false).await.unwrap();
+    let completion = manager.completion(&workspace.id).await.unwrap().unwrap();
+    assert!(completion.cleanup);
+    assert!(completion.keep_request.is_none());
+    let error = manager
+        .mark_done(&workspace.id, Some(false), agent("review the UI"))
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("denied"), "{error:#}");
+    manager.sweep_completed().await.unwrap();
+    assert!(!workspace.path.exists());
+}
+
+#[tokio::test]
+async fn approved_keep_covers_its_head_and_other_choices_cancel_the_request() {
+    let (_root, manager, workspace) = fixture().await;
+    let id = manager
+        .mark_done(&workspace.id, Some(false), agent("review"))
+        .await
+        .unwrap()
+        .keep_request
+        .unwrap();
+    manager.decide_approval(id.clone(), true).await.unwrap();
+    let completion = manager.completion(&workspace.id).await.unwrap().unwrap();
+    assert!(!completion.cleanup);
+    assert!(completion.keep_request.is_none());
+    let again = manager
+        .mark_done(&workspace.id, Some(false), agent("review"))
+        .await
+        .unwrap();
+    assert!(!again.cleanup);
+    assert!(again.keep_request.is_none());
+
+    fs::write(workspace.path.join("new-work"), "more").unwrap();
+    commit(&workspace.path, "new-work");
+    let next = manager
+        .mark_done(&workspace.id, Some(false), agent("review again"))
+        .await
+        .unwrap()
+        .keep_request
+        .unwrap();
+    assert_ne!(next, id);
+    manager.undo_done(&workspace.id).await.unwrap();
+    assert!(
+        manager
+            .approval_requests(Some(&workspace.id))
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(manager.decide_approval(next, true).await.is_err());
+}
+
+#[tokio::test]
+async fn agent_keep_needs_approval_only_against_configured_cleanup() {
+    let (_root, manager, workspace) = fixture().await;
+    let unexplained = Requester::Agent { reason: None };
+    let error = manager
+        .mark_done(&workspace.id, Some(false), unexplained.clone())
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("--reason"), "{error:#}");
+    assert!(manager.completion(&workspace.id).await.unwrap().is_none());
+    let user = manager
+        .mark_done(&workspace.id, Some(false), Requester::Unscoped)
+        .await
+        .unwrap();
+    assert!(user.keep_request.is_none());
+
+    manager
+        .set_repository_config(
+            &workspace.repository_id,
+            Some("[done]\ncleanup = false\n".into()),
+        )
+        .await
+        .unwrap();
+    for cleanup in [None, Some(false)] {
+        let completion = manager
+            .mark_done(&workspace.id, cleanup, unexplained.clone())
+            .await
+            .unwrap();
+        assert!(!completion.cleanup);
+        assert!(completion.keep_request.is_none());
+    }
 }

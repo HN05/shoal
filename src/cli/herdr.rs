@@ -665,6 +665,7 @@ mod tests {
                     head: "head".into(),
                     cleanup: false,
                     error: None,
+                    keep_request: None,
                 }),
                 executions,
                 issue: None,

@@ -26,6 +26,7 @@ mod stack;
 mod status;
 
 pub(crate) use agents::Protection;
+pub use done::Requester;
 pub use executions::{ExecutionKind, StopRequest};
 pub(crate) use executions::{ReattachedExecution, StartedExecution};
 pub(crate) use stack::record_base_changed;
