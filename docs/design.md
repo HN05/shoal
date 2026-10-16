@@ -603,6 +603,8 @@ daemon keeps a separate activity snapshot for each item and appends an
 `item_activity` event for each newly observed comment, completed check,
 conflict, closure, merge, reopen, or lookup failure. The first observation
 establishes the baseline, and watch acknowledgements do not affect this stream.
+The same poll queues each change on the workspace's watch cursor and wakes a
+running watch, so an agent receives activity without watching for it.
 
 Notifications stay in the terminal: the daemon records what a user would
 otherwise miss (busy resources and who holds them, port conflicts, exits of
