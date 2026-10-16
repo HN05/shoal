@@ -378,7 +378,12 @@ than carrying its unbounded body, and preserving
 state/config selection and literal arguments without hook scripts or state files.
 By default, agents that start with an issue prompt or forwarded arguments stay in
 the background, and tabs that wait for the user's input receive focus; an
-explicit focus setting overrides this choice.
+explicit focus setting overrides this choice. Commands choose this placement
+once and a terminal backend carries it out, so focus behaves alike everywhere
+and another backend plugs in with its own primitives: Herdr focuses a tab or
+opens it in the background, and outside Herdr zmx attaches the caller or starts
+a detached session running the plan, which it receives in its environment as a
+tab does.
 The worker drops the plan before starting children; a retained tab's shell keeps
 it, inert, while a non-default state directory is passed only to the worker.
 Herdr tabs remain open after tracked agent exits. Completion closes them only
@@ -404,7 +409,8 @@ unchanged and the daemon still never touches terminal I/O. When zmx returns
 control to the caller, the CLI resets emulator input modes on the caller's
 terminal. Sessions are named
 after their workspace and labelled with its ID, which `attach` and `status` look
-up through `zmx list`. Launches without a terminal, inside a zmx session, or in
+up through `zmx list`; a detached session that Shoal starts labels itself once its
+workspace exists. Launches without a terminal, inside a zmx session, or in
 a Herdr pane with the integration enabled run in place, since Herdr reads agent
 state from the pane's process. zmx reports no exit status, so a session launch
 exits 0; the daemon still records the agent's exit.

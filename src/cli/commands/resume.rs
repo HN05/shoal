@@ -114,6 +114,9 @@ pub async fn run(
     if zmx::hosts(&settings) {
         return zmx::run(ctx, workspace, &recovery.agent, &records, &recovery.command).await;
     }
+    if let Err(error) = zmx::label_current(&workspace.id, &recovery.agent).await {
+        eprintln!("warning: {error:#}");
+    }
     crate::execution::run_recovery(
         &ctx.paths,
         workspace.id.clone(),

@@ -16600,15 +16600,27 @@ fn already_closed_issues_are_rejected_before_creating_workspaces() {
 }
 
 /// Runs a session's command in place of a zmx session, recording each call
-/// and serving the sessions listed in `$HOME/zmx-sessions`.
+/// and serving the sessions listed in `$HOME/zmx-sessions`. A detached
+/// session keeps the environment it was created with and runs sent text as
+/// its shell would, logging the output to `$HOME/zmx-<name>.log`.
 const PASSTHROUGH_ZMX: &str = r#"#!/usr/bin/env python3
-import json, os, sys
+import json, os, subprocess, sys
 from pathlib import Path
 root = Path(os.environ['HOME'])
 args = sys.argv[1:]
 with (root / 'zmx-calls').open('a') as calls:
     calls.write(json.dumps(args) + '\n')
-if args[:1] == ['list']:
+if args[:1] == ['set']:
+    pass
+elif args[:1] == ['run']:
+    (root / f'zmx-{args[1]}.env').write_text(json.dumps(dict(os.environ)))
+elif args[:1] == ['send']:
+    env = json.loads((root / f'zmx-{args[1]}.env').read_text())
+    env['ZMX_SESSION'] = args[1]
+    with (root / f'zmx-{args[1]}.log').open('a') as log:
+        subprocess.run(['sh', '-c', args[2].rstrip('\r')], env=env,
+            stdin=subprocess.DEVNULL, stdout=log, stderr=log)
+elif args[:1] == ['list']:
     sessions = root / 'zmx-sessions'
     print(sessions.read_text() if sessions.exists() else 'no sessions found')
 elif args[:1] == ['attach']:
@@ -17901,6 +17913,117 @@ fn chat_picks_chat_agents_and_refuses_unsupported_launches() {
         String::from_utf8_lossy(&output.stderr).contains("workspace processes cannot start chats"),
         "{output:?}"
     );
+}
+
+#[test]
+fn terminal_add_detaches_launches_with_input_and_attaches_the_rest() {
+    let fixture = Fixture::with_config(Some(
+        "[commands]\npi = ['sh', '-c', 'echo \"$ZMX_SESSION ${SHOAL_EXECUTION_ID:+tracked} $*\" >> \"$HOME/agent-runs\"', 'agent', '{args}']\n",
+    ));
+    let home = fixture.root.path();
+    let repo = fixture.repo.to_str().unwrap();
+    let runs = || fs::read_to_string(home.join("agent-runs")).unwrap_or_default();
+
+    // An agent with input starts in a detached session that runs the plan.
+    let (output, transcript) = fixture.terminal_command(
+        fixture
+            .command()
+            .args(["add", repo, "background", "--agent", "pi", "--", "go"]),
+        "",
+        true,
+    );
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        transcript.contains(
+            "Started background in a detached zmx session; attach with `shoal attach background`"
+        ),
+        "{transcript}"
+    );
+    let calls = zmx_calls(&fixture);
+    assert_eq!(calls[1], ["run", "background", "-d", "true"]);
+    assert_eq!(calls[2][..2], ["send", "background"]);
+    assert!(
+        calls[2][2].ends_with(" internal add && exit\r"),
+        "{calls:?}"
+    );
+    let session: Value =
+        serde_json::from_str(&fs::read_to_string(home.join("zmx-background.env")).unwrap())
+            .unwrap();
+    assert!(session["SHOAL_ADD_PLAN"].is_string(), "{session}");
+    let log = fs::read_to_string(home.join("zmx-background.log")).unwrap_or_default();
+    assert_eq!(runs(), "background tracked go\n", "{log}");
+    let workspace = fixture.ok(&["inspect", "background"]);
+    let id = workspace["workspace"]["id"].as_str().unwrap();
+    let labels = [
+        "set",
+        "background",
+        &format!("shoal.workspace={id}"),
+        "shoal.agent=pi",
+    ];
+    assert!(calls.iter().any(|call| call == &labels), "{calls:?}");
+
+    // An agent waiting for its first prompt attaches this terminal.
+    let (output, transcript) = fixture.terminal_command(
+        fixture
+            .command()
+            .args(["add", repo, "focused", "--agent", "pi"]),
+        "",
+        true,
+    );
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    let calls = zmx_calls(&fixture);
+    let attach = calls.iter().rfind(|call| call[0] == "attach").unwrap();
+    assert_eq!(attach[..2], ["attach", "--labels"]);
+    assert_eq!(attach[3], "focused");
+    assert_eq!(runs(), "background tracked go\nfocused tracked \n");
+}
+
+#[test]
+fn terminal_resume_all_starts_each_agent_in_a_detached_session() {
+    let fixture = Fixture::new();
+    let mut expected = Vec::new();
+    for name in ["first", "second"] {
+        let workspace = fixture.add(name);
+        let id = workspace["id"].as_str().unwrap().to_owned();
+        let state = fixture.root.path().join("state/workspaces").join(&id);
+        fs::create_dir_all(&state).unwrap();
+        fs::write(
+            state.join(format!("{name}-agent.recovery.json")),
+            r#"{"agent":"claude"}"#,
+        )
+        .unwrap();
+        expected.push((name, id, format!("{name}-agent")));
+    }
+    // The sessions cannot resume without a configured restore command; the
+    // test observes what each was asked to run.
+    let (output, transcript) =
+        fixture.terminal_command(fixture.command().args(["resume", "--all"]), "", true);
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        transcript.contains("Resuming 2 agents in detached zmx sessions"),
+        "{transcript}"
+    );
+    assert!(!transcript.contains("in its own terminal"), "{transcript}");
+    let calls = zmx_calls(&fixture);
+    for (name, id, execution) in &expected {
+        assert!(
+            calls.contains(&vec![
+                "run".into(),
+                name.to_string(),
+                "-d".into(),
+                "true".into()
+            ]),
+            "{calls:?}"
+        );
+        let send = calls
+            .iter()
+            .find(|call| call.starts_with(&["send".into(), name.to_string()]))
+            .unwrap();
+        assert!(
+            send[2].ends_with(&format!(" resume {id} --execution {execution} && exit\r")),
+            "{send:?}"
+        );
+    }
 }
 
 #[test]

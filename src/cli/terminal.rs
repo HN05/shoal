@@ -39,9 +39,13 @@ pub(in crate::cli) enum Backend {
 
 impl Backend {
     /// The backend of this interactive terminal under `settings`: an enabled
-    /// Herdr pane.
+    /// Herdr pane, otherwise a terminal outside zmx. A Herdr pane is never
+    /// handed to zmx, since Herdr reads agent state from the pane's process.
     pub fn current(ctx: &Context, settings: &Effective) -> Option<Self> {
-        (herdr::available(ctx) && settings.herdr.enabled).then_some(Self::Herdr)
+        if herdr::available(ctx) {
+            return settings.herdr.enabled.then_some(Self::Herdr);
+        }
+        (ctx.interactive() && zmx::on_terminal()).then_some(Self::Zmx)
     }
 
     /// The backend of the terminal that queued an entry, from the Herdr

@@ -250,9 +250,11 @@ stopped, resume prints them as `shoal exec` commands. Either way they are report
 `--all` resumes every workspace and reports commands without an agent. In an
 interactive Herdr pane with `herdr.enabled`, it restores each agent in the
 pane it stopped in once that pane is back at its prompt. Otherwise it restores a
-single agent in the current terminal, opens a background tab per agent where
-`herdr.new_tab` allows, labelled as `shoal add` labels it, and lists the remaining
-agents as `shoal resume` commands to run in separate terminals.
+single agent in the current terminal and starts several in the background, as
+`shoal add` does: a tab per agent where `herdr.new_tab` allows, labelled as
+`shoal add` labels it, or a detached zmx session per agent on a terminal outside
+Herdr. Without a terminal it lists them as `shoal resume` commands to run in
+separate terminals.
 Use `--discard` to forget the workspace's stopped agents and commands, every
 workspace's with `--all`, or the `--execution` one, without launching anything, allowing normal idle cleanup again.
 After a daemon restart, the daemon forgets the quarantined execution of a
@@ -523,6 +525,14 @@ zmx session (`ZMX_SESSION` is set), or in a Herdr pane with `herdr.enabled` runs
 in place. On a terminal outside zmx, a missing zmx refuses the agent as a missing
 agent executable does.
 
+Interactive `shoal add` on a terminal outside Herdr and zmx places its launch
+as a Herdr tab would be: an agent that starts with input runs setup and the
+agent in a detached zmx session and returns with a `shoal attach` hint, and any
+other launch runs here and attaches its agent's session. The top-level `focus`
+option overrides the choice, as it does for tabs, and `--here` keeps the launch
+in this terminal. A detached session whose start fails keeps its shell open to
+show why.
+
 `shoal attach [workspace]` reattaches to the workspace's session, with a picker
 or `--session <name>` when it has several; `shoal status` lists them. Sessions
 are named after the workspace, suffixed `-2`, `-3`, ... when the name is in use,
@@ -541,7 +551,7 @@ The `[herdr]` table in global or repository config uses normal per-option
 precedence. New tabs stay in the background by default when launching an agent
 with an issue prompt or forwarded arguments, and focus otherwise, so a workspace
 shell or an agent waiting for its first prompt is ready to type into; the
-top-level `focus` option overrides this.
+top-level `focus` option overrides this for tabs and zmx sessions alike.
 `enabled`, `new_tab` and `close_when_done` default to true; with `enabled = false`
 Shoal treats a Herdr pane as a plain terminal:
 

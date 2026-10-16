@@ -27,8 +27,9 @@ root_dir = "~/shoal"
 # CPU and memory thresholds in [overload] and dynamic agent admission.
 # load = "balanced"
 
-# New Herdr tabs focus workspace shells and leave agent launches that start
-# with input in the background; set to always (true) or never (false) focus.
+# `shoal add` focuses workspace shells and agents waiting for a prompt, and
+# starts agents with input in the background: a background Herdr tab, or a
+# detached zmx session outside Herdr. Set to always (true) or never (false) focus.
 # focus = true
 
 # Prompt templates normally live beside this file as issue-template.md and
