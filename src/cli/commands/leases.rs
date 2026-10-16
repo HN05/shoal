@@ -321,17 +321,15 @@ pub(super) async fn show(
         Some(LeaseKind::Sim) => simulators::overview(ctx, scope).await,
         Some(LeaseKind::Resource) => resources::overview(ctx, scope, Members::Locks).await,
         Some(LeaseKind::Repo) => resources::overview(ctx, scope, Members::Repositories).await,
-        None if scope.all => {
-            workspace_overviews(
-                ctx,
-                async |workspace| fetch_leases(ctx, &workspace.id).await,
-                render_leases,
-            )
-            .await
-        }
         None => {
-            let workspace =
-                ui::select_workspace(ctx, scope.workspace, Fallback::CurrentDirectory).await?;
+            let Some(workspace) = ui::select_workspace_filter(ctx, scope).await? else {
+                return workspace_overviews(
+                    ctx,
+                    async |workspace| fetch_leases(ctx, &workspace.id).await,
+                    render_leases,
+                )
+                .await;
+            };
             let leases = fetch_leases(ctx, &workspace).await?;
             ctx.show(&leases, |leases| {
                 render_leases(leases, Palette::stdout(ctx.json))

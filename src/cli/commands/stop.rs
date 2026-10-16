@@ -9,7 +9,7 @@ use crate::{
         client::{self, request},
         context::Context,
         output::{Palette, Style},
-        ui::{self, Fallback},
+        ui,
     },
     execution::recovery,
     model::Workspace,
@@ -18,10 +18,9 @@ use crate::{
 };
 
 pub(super) async fn run(ctx: &Context, scope: WorkspaceScope) -> Result<i32> {
-    if scope.all {
+    let Some(workspace) = ui::select_workspace_filter(ctx, scope).await? else {
         return stop_all(ctx).await;
-    }
-    let workspace = ui::select_workspace(ctx, scope.workspace, Fallback::CurrentDirectory).await?;
+    };
     request::<()>(
         &ctx.paths,
         Method::StopWorkspace {

@@ -14,7 +14,7 @@ use clap_complete::engine::{ArgValueCompleter, CompletionCandidate};
 use crate::{
     agent::{Agent, BuiltinAgent},
     cli::{
-        agents, client,
+        agents, client, ui,
         workspace_context::{ScopeOrder, WorkspaceContext},
     },
     config::{
@@ -37,6 +37,8 @@ struct Typed {
     state: Option<PathBuf>,
     workspace: Option<String>,
     pool: Option<String>,
+    /// `--all` is already on the line.
+    all: bool,
     custom: Option<String>,
     settings: OnceLock<Settings>,
 }
@@ -101,6 +103,7 @@ pub fn command() -> Command {
                 .and_then(|arg| arg.to_str().map(str::to_owned))
         });
         typed.pool = value(leaf, "pool");
+        typed.all = leaf.try_get_one::<bool>("all").ok().flatten() == Some(&true);
     }
     let search_path = std::env::var_os("PATH").unwrap_or_default();
     let commands = typed.commands();
@@ -158,8 +161,16 @@ fn value(matches: &clap::ArgMatches, id: &str) -> Option<String> {
 /// Attach live completers to the arguments that name daemon-managed objects.
 fn decorate(command: Command, parent: &str, typed: Arc<Typed>) -> Command {
     let name = command.get_name().to_owned();
+    // A workspace argument beside `--all` offers it first among the names,
+    // so the flag itself is not listed again after them.
+    let offer_all = ["workspace", "all"]
+        .iter()
+        .all(|id| command.get_arguments().any(|arg| arg.get_id() == id));
     command
         .mut_args(|arg| {
+            if offer_all && arg.get_id() == "all" {
+                return arg.hide(true);
+            }
             let target = match (arg.get_id().as_str(), parent, name.as_str()) {
                 ("id", "approvals", "approve" | "deny") => Some(Target::ApprovalRequests),
                 ("name", _, "run") => Some(Target::Commands),
@@ -182,8 +193,15 @@ fn decorate(command: Command, parent: &str, typed: Arc<Typed>) -> Command {
             };
             if let Some(target) = target {
                 let typed = typed.clone();
+                let offer_all = offer_all && !typed.all && matches!(target, Target::Workspaces);
                 arg.add(ArgValueCompleter::new(move |current: &OsStr| {
-                    typed.complete(target, current)
+                    let mut values = typed.complete(target, current);
+                    if offer_all && "--all".starts_with(current.to_string_lossy().as_ref()) {
+                        let all =
+                            CompletionCandidate::new("--all").help(Some(ui::ALL_WORKSPACES.into()));
+                        values.insert(0, all);
+                    }
+                    values
                 }))
             } else if matches!(name.as_str(), "add" | "review") && arg.get_id() == "agent" {
                 let typed = typed.clone();

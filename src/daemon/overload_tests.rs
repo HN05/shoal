@@ -465,7 +465,7 @@ async fn resume_child() {
     let id = std::env::var("SHOAL_TEST_WORKSPACE").unwrap();
     let discard = std::env::var("SHOAL_TEST_DISCARD").unwrap() == "true";
     let ctx = crate::cli::context::Context::new(paths, true);
-    match crate::cli::commands::resume::run(&ctx, Some(id), None, discard).await {
+    match crate::cli::commands::resume::run(&ctx, id, None, discard).await {
         Ok(code) => std::process::exit(code),
         Err(error) => {
             eprintln!("{error:#}");

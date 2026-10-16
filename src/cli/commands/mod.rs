@@ -391,13 +391,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             scope,
             execution,
             discard,
-        } => {
-            if scope.all {
-                resume::run_all(&ctx, discard).await
-            } else {
-                resume::run(&ctx, scope.workspace, execution, discard).await
-            }
-        }
+        } => resume::select(&ctx, scope, execution, discard).await,
         Command::Stop { scope } => stop::run(&ctx, scope).await,
         Command::Rm {
             workspace,

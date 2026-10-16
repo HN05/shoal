@@ -202,7 +202,7 @@ pub(super) async fn overview(
     scope: WorkspaceScope,
     members: Members,
 ) -> Result<i32> {
-    if scope.all {
+    let Some(workspace) = ui::select_workspace_filter(ctx, scope).await? else {
         return workspace_overviews(
             ctx,
             async |workspace| {
@@ -215,14 +215,11 @@ pub(super) async fn overview(
             |overview, palette| render_overview(&overview.overview, palette),
         )
         .await;
-    } else {
-        let workspace =
-            ui::select_workspace(ctx, scope.workspace, Fallback::CurrentDirectory).await?;
-        let overview = fetch_overview(ctx, workspace, members).await?;
-        ctx.show(&overview, |overview| {
-            render_overview(overview, Palette::stdout(ctx.json))
-        })?;
-    }
+    };
+    let overview = fetch_overview(ctx, workspace, members).await?;
+    ctx.show(&overview, |overview| {
+        render_overview(overview, Palette::stdout(ctx.json))
+    })?;
     Ok(0)
 }
 

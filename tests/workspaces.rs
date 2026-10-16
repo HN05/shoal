@@ -960,6 +960,12 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
             .filter(|(_, v)| v.starts_with('-'))
             .all(|(i, _)| i > target)
     );
+    // `--all` comes once, before a scope's workspaces, until it is typed.
+    let choices = complete(&["resume", ""], fixture.root.path());
+    assert_eq!(choices[0], "--all", "{choices:?}");
+    assert!(choices.contains(&"first".into()), "{choices:?}");
+    assert_eq!(choices.iter().filter(|v| *v == "--all").count(), 1);
+    assert!(!complete(&["stop", "--all", ""], fixture.root.path()).contains(&"--all".into()));
     let cwd = Path::new(first["path"].as_str().unwrap());
     fs::write(cwd.join(".shoal.toml"), "[commands]\nreview = ['tuicr']\n").unwrap();
     // Complete the command name with an unknown workspace already on the line.
@@ -6922,6 +6928,20 @@ head -n 1 "$HOME/picker-input"
             }
         }
     }
+}
+
+#[test]
+fn workspace_pickers_offer_all_workspaces_after_the_workspaces() {
+    let fixture = Fixture::new();
+    fixture.add("first");
+    let (output, rows) = fixture.pick(&["resume"], "--all", "");
+    assert!(output.status.success(), "{output:?}");
+    assert!(rows.contains("first"), "{rows}");
+    assert_eq!(rows.lines().last(), Some("--all\tAll workspaces"), "{rows}");
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("No stopped agents or commands"),
+        "{output:?}"
+    );
 }
 
 #[test]

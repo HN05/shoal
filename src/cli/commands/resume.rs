@@ -1,12 +1,6 @@
 //! Manual recovery uses saved agent identity and today's restore configuration.
 use crate::{
-    cli::{
-        client,
-        context::Context,
-        terminal::Backend,
-        ui::{self, Fallback},
-        zmx,
-    },
+    cli::{WorkspaceScope, client, context::Context, terminal::Backend, ui, zmx},
     daemon::recovery::{ReconcileOptions, Report},
     execution::recovery::{Record, Recovery, Saved, SavedCommand, consume},
     model::{Inspection, Workspace},
@@ -17,9 +11,11 @@ use anyhow::{Context as _, Result, ensure};
 use serde_json::json;
 use std::ffi::OsString;
 
-pub async fn run(
+/// `shoal resume`: the selected workspace, or every one for `--all` or the
+/// picker's entry for all.
+pub async fn select(
     ctx: &Context,
-    selector: Option<String>,
+    scope: WorkspaceScope,
     execution: Option<String>,
     discard: bool,
 ) -> Result<i32> {
@@ -27,8 +23,19 @@ pub async fn run(
         !crate::env::inherits_scope(&ctx.paths.state),
         "resume agents outside scoped executions"
     );
-    let id = ui::select_workspace(ctx, selector, Fallback::CurrentDirectory).await?;
-    let mut inspection = client::inspect(&ctx.paths, id).await?;
+    match ui::select_workspace_filter(ctx, scope).await? {
+        None => run_all(ctx, discard).await,
+        Some(workspace) => run(ctx, workspace, execution, discard).await,
+    }
+}
+
+pub async fn run(
+    ctx: &Context,
+    workspace: String,
+    execution: Option<String>,
+    discard: bool,
+) -> Result<i32> {
+    let mut inspection = client::inspect(&ctx.paths, workspace).await?;
     let workspace_id = inspection.workspace.id.clone();
     let mut saved = Saved::load(&ctx.paths, &workspace_id)?;
     if let Some(execution) = &execution {
@@ -216,11 +223,7 @@ fn discard_saved(saved: &Saved, active: impl Fn(&str) -> bool) -> Result<Vec<Str
 /// can reuse that place; otherwise one agent resumes in this terminal, several
 /// in the backend's background, and without a backend each is listed for its
 /// own terminal.
-pub async fn run_all(ctx: &Context, discard: bool) -> Result<i32> {
-    ensure!(
-        !crate::env::inherits_scope(&ctx.paths.state),
-        "resume agents outside scoped executions"
-    );
+async fn run_all(ctx: &Context, discard: bool) -> Result<i32> {
     let mut stopped = Vec::new();
     for workspace in client::workspaces(&ctx.paths).await? {
         let saved = Saved::load(&ctx.paths, &workspace.id)?;
@@ -277,7 +280,7 @@ pub async fn run_all(ctx: &Context, discard: bool) -> Result<i32> {
             None => false,
         };
         if single && !reused {
-            return run(ctx, Some(workspace.id.clone()), Some(id.clone()), false).await;
+            return run(ctx, workspace.id.clone(), Some(id.clone()), false).await;
         }
         let background = match backend {
             Some(backend) if !reused => {

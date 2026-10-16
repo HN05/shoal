@@ -440,24 +440,14 @@ pub async fn select_workspace(
     explicit: Option<String>,
     fallback: Fallback,
 ) -> Result<String> {
-    if let Some(selector) = explicit {
-        return Ok(selector);
+    match resolve_workspace(ctx, explicit, fallback).await? {
+        Resolution::Workspace(id) => Ok(id),
+        Resolution::Picker(workspaces) => pick_workspace(ctx, workspaces),
     }
-    let workspaces = client::workspaces(&ctx.paths).await?;
-    let scoped = crate::env::is_scoped();
-    let cwd = if !scoped { current_directory()? } else { None };
-    let context = WorkspaceContext::from_directory(&workspaces, cwd.as_deref());
-    if let Some(workspace) = context.resolve(None, scoped, ScopeOrder::BeforeDirectory) {
-        return Ok(workspace.id.clone());
-    }
-    ensure!(!scoped, "scoped workspace is unavailable");
-    if matches!(fallback, Fallback::CurrentDirectoryOnly) {
-        return Err(NoCurrentWorkspace.into());
-    }
-    pick_workspace(ctx, workspaces)
 }
 
-/// `Some(workspace)` unless `--all` was passed.
+/// `Some(workspace)` unless `--all` was passed or picked; the picker offers
+/// every workspace after the individual ones.
 pub async fn select_workspace_filter(
     ctx: &Context,
     scope: WorkspaceScope,
@@ -465,9 +455,48 @@ pub async fn select_workspace_filter(
     if scope.all {
         return Ok(None);
     }
-    select_workspace(ctx, scope.workspace, Fallback::CurrentDirectory)
-        .await
-        .map(Some)
+    match resolve_workspace(ctx, scope.workspace, Fallback::CurrentDirectory).await? {
+        Resolution::Workspace(id) => Ok(Some(id)),
+        Resolution::Picker(workspaces) => {
+            let mut entries = workspace_entries(ctx, workspaces);
+            entries.push((ALL_ID.to_owned(), ALL_WORKSPACES.to_owned()));
+            let id = pick(ctx, "Workspace> ", entries)?;
+            Ok((id != ALL_ID).then_some(id))
+        }
+    }
+}
+
+/// How pickers and completion name `--all`.
+pub const ALL_WORKSPACES: &str = "All workspaces";
+/// The picker ID of the entry that stands for `--all`; no workspace has it.
+const ALL_ID: &str = "--all";
+
+enum Resolution {
+    Workspace(String),
+    /// No workspace is explicit or current; the user picks among these.
+    Picker(Vec<Workspace>),
+}
+
+async fn resolve_workspace(
+    ctx: &Context,
+    explicit: Option<String>,
+    fallback: Fallback,
+) -> Result<Resolution> {
+    if let Some(selector) = explicit {
+        return Ok(Resolution::Workspace(selector));
+    }
+    let workspaces = client::workspaces(&ctx.paths).await?;
+    let scoped = crate::env::is_scoped();
+    let cwd = if !scoped { current_directory()? } else { None };
+    let context = WorkspaceContext::from_directory(&workspaces, cwd.as_deref());
+    if let Some(workspace) = context.resolve(None, scoped, ScopeOrder::BeforeDirectory) {
+        return Ok(Resolution::Workspace(workspace.id.clone()));
+    }
+    ensure!(!scoped, "scoped workspace is unavailable");
+    if matches!(fallback, Fallback::CurrentDirectoryOnly) {
+        return Err(NoCurrentWorkspace.into());
+    }
+    Ok(Resolution::Picker(workspaces))
 }
 
 /// Always run the picker, including for scoped callers (whose list is filtered).
@@ -481,13 +510,13 @@ pub async fn workspace_picker(ctx: &Context) -> Result<String> {
 }
 
 pub fn pick_workspace(ctx: &Context, workspaces: Vec<Workspace>) -> Result<String> {
+    pick(ctx, "Workspace> ", workspace_entries(ctx, workspaces))
+}
+
+fn workspace_entries(ctx: &Context, workspaces: Vec<Workspace>) -> Entries {
     let stopped = stopped_workspaces(&ctx.paths, &workspaces);
     let rows = workspace_rows(&workspaces, &[], &stopped, Palette::stderr(ctx.json));
-    pick(
-        ctx,
-        "Workspace> ",
-        workspaces.into_iter().map(|w| w.id).zip(rows).collect(),
-    )
+    workspaces.into_iter().map(|w| w.id).zip(rows).collect()
 }
 
 /// Workspaces with agents or commands saved by `shoal stop` for `shoal resume`.

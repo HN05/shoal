@@ -62,7 +62,7 @@ pub(super) async fn run(
 }
 
 async fn list(ctx: &Context, scope: WorkspaceScope) -> Result<i32> {
-    if scope.all {
+    let Some(workspace) = ui::select_workspace_filter(ctx, scope).await? else {
         let workspaces = client::workspaces(&ctx.paths).await?;
         ctx.show(&workspaces, |workspaces| {
             for workspace in workspaces {
@@ -73,14 +73,11 @@ async fn list(ctx: &Context, scope: WorkspaceScope) -> Result<i32> {
                 render(&workspace.holds);
             }
         })?;
-    } else {
-        let workspace =
-            ui::select_workspace(ctx, scope.workspace, Fallback::CurrentDirectory).await?;
-        let holds =
-            client::request::<Vec<WorkspaceHold>>(&ctx.paths, Method::HoldList { workspace })
-                .await?;
-        ctx.show(&holds, |holds| render(holds))?;
-    }
+        return Ok(0);
+    };
+    let holds =
+        client::request::<Vec<WorkspaceHold>>(&ctx.paths, Method::HoldList { workspace }).await?;
+    ctx.show(&holds, |holds| render(holds))?;
     Ok(0)
 }
 

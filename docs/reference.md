@@ -374,7 +374,9 @@ current workspace, noninteractive and JSON calls require a target. Scoped caller
 remain confined to their own workspace. Another omitted required argument that
 names an existing record opens a picker of those records, under the same
 noninteractive rule. Bare `shoal cd` always opens a picker;
-all-workspace listings and `--all` retain their scope. `config show` checks the
+all-workspace listings and `--all` retain their scope. A command that accepts
+`--all` lists it as the last picker entry, "All workspaces", and as the first
+completion of its workspace argument. `config show` checks the
 registered checkout before the picker, as described below.
 `shoal add` offers repositories in most-recently-used order, then
 a new-branch prompt or a picker of existing branches, open issues or open PRs; a

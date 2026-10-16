@@ -51,6 +51,7 @@ pub struct ConfirmationArgs {
 #[derive(Debug, Default, Args)]
 pub struct WorkspaceScope {
     pub workspace: Option<String>,
+    /// All workspaces.
     #[arg(long, conflicts_with = "workspace")]
     pub all: bool,
 }

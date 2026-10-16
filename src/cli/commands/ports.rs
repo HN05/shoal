@@ -135,7 +135,7 @@ fn describe(port: &PortReservation, palette: Palette) -> String {
 }
 
 pub(super) async fn overview(ctx: &Context, scope: WorkspaceScope) -> Result<i32> {
-    if scope.all {
+    let Some(workspace) = ui::select_workspace_filter(ctx, scope).await? else {
         return workspace_overviews(
             ctx,
             async |workspace| {
@@ -150,15 +150,11 @@ pub(super) async fn overview(ctx: &Context, scope: WorkspaceScope) -> Result<i32
             render_overview,
         )
         .await;
-    } else {
-        let workspace =
-            ui::select_workspace(ctx, scope.workspace, Fallback::CurrentDirectory).await?;
-        let overview =
-            request::<PortOverview>(&ctx.paths, Method::PortOverview { workspace }).await?;
-        ctx.show(&overview, |overview| {
-            render_overview(overview, Palette::stdout(ctx.json))
-        })?;
-    }
+    };
+    let overview = request::<PortOverview>(&ctx.paths, Method::PortOverview { workspace }).await?;
+    ctx.show(&overview, |overview| {
+        render_overview(overview, Palette::stdout(ctx.json))
+    })?;
     Ok(0)
 }
 
