@@ -5,6 +5,7 @@
 //! of the terminal, so the invoking CLI returns once the launch is recorded.
 mod link;
 pub mod recovery;
+mod wake;
 
 use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
@@ -363,6 +364,7 @@ async fn run_tracked(
     mode: Mode,
     agent: Option<String>,
 ) -> Result<i32> {
+    let wake = wake::session(agent.as_deref(), &mode);
     let TrackedLaunch {
         mut link,
         mut plan,
@@ -376,6 +378,10 @@ async fn run_tracked(
         let outcome = if mode.is_setup() && next_command.is_empty() {
             Ok(Outcome::Exited(0))
         } else {
+            // Prompts only while this child runs, which reports its state.
+            let _waker = wake
+                .clone()
+                .map(|session| wake::start(paths, &plan.workspace.id, session));
             supervise(
                 &mut link,
                 paths,

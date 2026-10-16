@@ -16650,6 +16650,9 @@ if args[:1] == ['set']:
     pass
 elif args[:1] == ['run']:
     (root / f'zmx-{args[1]}.env').write_text(json.dumps(dict(os.environ)))
+elif args[:1] == ['send'] and not (root / f'zmx-{args[1]}.env').exists():
+    # An attached session's agent reads what is typed; record that it was.
+    (root / 'zmx-sent').touch()
 elif args[:1] == ['send']:
     env = json.loads((root / f'zmx-{args[1]}.env').read_text())
     env['ZMX_SESSION'] = args[1]
@@ -18094,6 +18097,40 @@ fn terminal_resume_all_starts_each_agent_in_a_detached_session() {
             "{send:?}"
         );
     }
+}
+
+#[test]
+fn an_idle_codex_with_updates_is_prompted_in_its_zmx_session() {
+    let fixture = Fixture::new();
+    fixture.add("prompted");
+    fixture.ok(&["message", "Rebase onto main", "--workspace", "prompted"]);
+    let home = fixture.root.path();
+    // Codex's Stop hook reports the finished turn; it then waits, with a
+    // generous hang guard, for the prompt Shoal types into its session.
+    install_test_script(
+        home.join("bin/codex"),
+        format!(
+            "#!/bin/sh\n'{}' internal agent-state idle >/dev/null || exit 3\n\
+             for _ in $(seq 600); do [ -e \"$HOME/zmx-sent\" ] && exit 0; /bin/sleep 0.1; done\n\
+             exit 4\n",
+            env!("CARGO_BIN_EXE_shoal")
+        ),
+    );
+    let (output, transcript) =
+        fixture.terminal_command(fixture.command().args(["codex", "prompted"]), "", true);
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    let sent: Vec<_> = zmx_calls(&fixture)
+        .into_iter()
+        .filter(|call| call[0] == "send")
+        .collect();
+    assert_eq!(
+        sent,
+        [[
+            "send",
+            "prompted",
+            "\x1b[200~Shoal: new messages or activity on this workspace's issues and PRs.\x1b[201~\r"
+        ]]
+    );
 }
 
 #[test]
