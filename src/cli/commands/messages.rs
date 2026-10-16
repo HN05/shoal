@@ -80,6 +80,39 @@ async fn deliver_to_hook(ctx: &Context, input: &str) -> Result<()> {
     acknowledge(ctx, workspace, &updates).await
 }
 
+/// Claude Code's `asyncRewake` `Stop` hook: wait for the workspace's next
+/// messages or item activity, then exit 2, which starts the idle agent's next
+/// turn with them. A newer delivery or a failure exits 0 and leaves the agent
+/// idle.
+pub(super) async fn wake(ctx: &Context) -> Result<i32> {
+    let (workspace, updates) = match next_updates(ctx).await {
+        Ok(Some(next)) => next,
+        Ok(None) => return Ok(0),
+        Err(error) => {
+            eprintln!("shoal: waiting for agent updates failed: {error:#}");
+            return Ok(0);
+        }
+    };
+    eprintln!("{}", hook_context(&updates));
+    std::io::Write::flush(&mut std::io::stderr())?;
+    if let Err(error) = acknowledge(ctx, workspace, &updates).await {
+        eprintln!("shoal: these updates may be delivered again: {error:#}");
+    }
+    Ok(2)
+}
+
+/// The workspace's next messages or item activity, or `None` when a newer
+/// delivery takes them.
+async fn next_updates(ctx: &Context) -> Result<Option<(String, Updates)>> {
+    let workspace = ui::select_workspace(ctx, None, Fallback::CurrentDirectoryOnly).await?;
+    let body = super::workspaces::wait_for_items(ctx, &workspace, Default::default(), None).await?;
+    let updates = Updates::try_from(body)?;
+    if updates.updates.is_empty() && updates.messages.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some((workspace, updates)))
+}
+
 /// What an agent hook tells the agent about `updates`.
 pub(super) fn hook_context(updates: &Updates) -> String {
     let mut lines = Vec::new();

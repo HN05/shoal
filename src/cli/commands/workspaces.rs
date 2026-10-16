@@ -1810,7 +1810,7 @@ pub(super) async fn watch_items(
 /// A daemon update closes the wait, and the replacement inherits the socket,
 /// so wait again there for the rest of the timeout. Waiting acknowledges
 /// nothing, and undelivered updates stay pending for the next wait.
-async fn wait_for_items(
+pub(super) async fn wait_for_items(
     ctx: &Context,
     workspace: &str,
     selection: Selection,

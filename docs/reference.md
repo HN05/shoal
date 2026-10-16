@@ -1631,7 +1631,10 @@ register `shoal messages --hook` for the `PostToolUse` and `UserPromptSubmit`
 events, so a working agent receives new messages, and the activity on its linked
 issues and PRs that the daemon has queued for the next watch, as additional
 context after its next tool call or prompt. Delivering through the hook replaces a running watch in
-the workspace, which ends with `superseded: true`. Codex runs the hook only after you trust it in Codex's
+the workspace, which ends with `superseded: true`. Claude Code launches also run
+`shoal internal wake` as a background `Stop` hook with `asyncRewake`: after each
+turn it waits up to a week for the next message or item activity, prints it and
+exits 2, so Claude Code starts the idle agent's next turn with it. Codex runs the hook only after you trust it in Codex's
 hook review. The hook reads the event from stdin and prints nothing when there
 is nothing new; failures go to stderr and never fail the agent. Other agents
 whose hooks accept Claude Code's `hookSpecificOutput.additionalContext` output can
