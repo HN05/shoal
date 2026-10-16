@@ -213,6 +213,53 @@ pub fn replace_atomically(path: &Path, contents: &[u8], options: ReplaceOptions)
     Ok(())
 }
 
+/// Clone `source`, a file or directory tree, to the missing `destination`
+/// without copying data: APFS clones on macOS and reflinks on Linux, keeping
+/// modification times. Fails instead of falling back to a full copy, which
+/// would cost the disk space cloning saves.
+pub async fn clone_tree(source: &Path, destination: &Path) -> anyhow::Result<()> {
+    #[cfg(target_os = "macos")]
+    {
+        use std::os::unix::ffi::OsStrExt as _;
+        // clone(2) flag: clone a symlink itself instead of its target.
+        const CLONE_NOFOLLOW: u32 = 0x0001;
+        let source = std::ffi::CString::new(source.as_os_str().as_bytes())?;
+        let target = std::ffi::CString::new(destination.as_os_str().as_bytes())?;
+        tokio::task::spawn_blocking(move || {
+            // SAFETY: both arguments are NUL-terminated paths that outlive the call.
+            let status =
+                unsafe { libc::clonefile(source.as_ptr(), target.as_ptr(), CLONE_NOFOLLOW) };
+            if status == 0 {
+                Ok(())
+            } else {
+                Err(io::Error::last_os_error())
+            }
+        })
+        .await?
+        .with_context(|| format!("clone {}", destination.display()))
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let mut command = tokio::process::Command::new("cp");
+        command
+            .args([
+                "--reflink=always",
+                "--archive",
+                "--no-target-directory",
+                "--",
+            ])
+            .arg(source)
+            .arg(destination);
+        let result = crate::subprocess::output(command).await;
+        if result.is_err() {
+            let _ = remove_existing(destination);
+        }
+        result
+            .map(drop)
+            .with_context(|| format!("clone {}", destination.display()))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

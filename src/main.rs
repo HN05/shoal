@@ -18,6 +18,7 @@ mod process;
 mod protocol;
 mod removal;
 mod secrets;
+mod seed;
 mod service;
 mod shell;
 mod sim;
