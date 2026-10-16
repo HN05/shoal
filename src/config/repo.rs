@@ -96,6 +96,52 @@ pub struct RepoConfig {
     pub done: Done,
     pub review: Review,
     pub land: Land,
+    pub seed: Seed,
+}
+
+/// The default-branch build new workspaces start from.
+#[derive(Debug, Default, Clone, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Seed {
+    /// Executable in the seed worktree that builds the default branch.
+    pub cmd: Option<String>,
+    /// Worktree-relative build outputs cloned into each new workspace.
+    pub paths: Vec<String>,
+}
+
+impl Seed {
+    fn validate(&self) -> Result<()> {
+        // The seed runs unattended from the default branch, so its command
+        // is the repository's own file, like its outputs.
+        if let Some(command) = &self.cmd {
+            ensure!(
+                inside_worktree(command),
+                "seed.cmd must be a relative path inside the worktree: {command}"
+            );
+        }
+        for (index, path) in self.paths.iter().enumerate() {
+            ensure!(
+                inside_worktree(path),
+                "seed.paths entries must be relative paths inside the worktree: {path}"
+            );
+            // Each output is cloned whole, so one cannot contain another.
+            for other in &self.paths[..index] {
+                ensure!(
+                    !Path::new(path).starts_with(other) && !Path::new(other).starts_with(path),
+                    "seed.paths entries overlap: {other} and {path}"
+                );
+            }
+        }
+        Ok(())
+    }
+}
+
+fn inside_worktree(path: &str) -> bool {
+    !path.trim().is_empty()
+        && !path.contains('\0')
+        && Path::new(path).components().all(
+            |component| matches!(component, std::path::Component::Normal(name) if name != ".git"),
+        )
 }
 
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
@@ -184,6 +230,7 @@ pub fn parse(text: &str) -> Result<RepoConfig> {
     crate::daemon::resources::definitions(&config.resources, &config.resource_pools)?;
     crate::env::validate_configured_environment(&config.env)?;
     crate::secrets::validate(&config.secrets)?;
+    config.seed.validate()?;
     Ok(config)
 }
 
@@ -327,6 +374,32 @@ mod tests {
         assert!(parse("[cleanup.auto]\nidle_minutes = 0\n").is_err());
         assert!(parse("default_agent = 'happy'\n").is_err());
         assert!(parse("[codex]\ndefault_mode = 'desktop'\n").is_err());
+    }
+
+    #[test]
+    fn seed_paths_stay_inside_the_worktree() {
+        let seed = parse("[seed]\ncmd = 'scripts/seed'\npaths = ['target', 'ios/build']\n")
+            .unwrap()
+            .seed;
+        assert_eq!(seed.cmd.as_deref(), Some("scripts/seed"));
+        assert_eq!(seed.paths, ["target", "ios/build"]);
+        for text in [
+            "[seed]\ncmd = ' '",
+            "[seed]\ncmd = '/usr/bin/make'",
+            "[seed]\ncmd = '../seed.sh'",
+            "[seed]\npaths = ['']",
+            "[seed]\npaths = ['/target']",
+            "[seed]\npaths = ['../target']",
+            "[seed]\npaths = ['./target']",
+            "[seed]\npaths = ['.git']",
+            "[seed]\npaths = ['target', 'target']",
+            "[seed]\npaths = ['target', 'target/debug']",
+            "[seed]\npaths = ['ios/build', 'ios']",
+            "[seed]\npaths = ['build/../..']",
+            "[seed]\ncommand = 'x'",
+        ] {
+            assert!(parse(text).is_err(), "{text}");
+        }
     }
 
     #[test]

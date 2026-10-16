@@ -51,6 +51,7 @@ pub struct Effective {
     pub done: Done,
     pub review: Review,
     pub land: Land,
+    pub seed: config::repo::Seed,
 }
 
 /// One effective value and the layer that supplied it.
@@ -226,6 +227,7 @@ impl Effective {
             land: Land {
                 push: built_in(merged.land.push, "land.push")?,
             },
+            seed: merged.seed,
         })
     }
 }
@@ -563,6 +565,8 @@ fn build_fields() -> Vec<Box<dyn Field + Send + Sync>> {
         scalar!(done.automatic),
         scalar!(review.post),
         scalar!(land.push),
+        scalar!(seed.cmd),
+        list!(seed.paths),
     ];
     fields.extend(rest);
     fields
@@ -586,7 +590,8 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
 [resources.lock]\ncapacity = 1\n[resource_pools.devices]\ncapacity = 2\n\
 [resource_pools.devices.resources.phone]\ncapacity = 1\n\
 [simulators]\nrequires_approval = true\napproval_lifetime = 'workspace'\npreferred = ['phone']\n\
-[cleanup.auto]\nenabled = false\nidle_minutes = 30\n[cleanup.pr]\nenabled = false\n[done]\ncleanup = false\nautomatic = true\n[review]\npost = false\n[land]\npush = true\n";
+[cleanup.auto]\nenabled = false\nidle_minutes = 30\n[cleanup.pr]\nenabled = false\n[done]\ncleanup = false\nautomatic = true\n[review]\npost = false\n[land]\npush = true\n\
+[seed]\ncmd = 'scripts/seed'\npaths = ['target']\n";
 
     fn json<T: Serialize>(value: &T) -> Value {
         serde_json::to_value(value).unwrap()
@@ -813,6 +818,7 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
             done,
             review,
             land,
+            seed,
         } = full.clone();
         assert!(
             !commands.is_empty()
@@ -822,7 +828,11 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
                 && !resources.is_empty()
                 && !resource_pools.is_empty()
         );
-        assert!(!ports.definitions.is_empty() && !simulators.preferred.is_empty());
+        assert!(
+            !ports.definitions.is_empty()
+                && !simulators.preferred.is_empty()
+                && !seed.paths.is_empty()
+        );
         for present in [
             issue_template.is_some(),
             agent_template.is_some(),
@@ -863,6 +873,7 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
             done.automatic.is_some(),
             review.post.is_some(),
             land.push.is_some(),
+            seed.cmd.is_some(),
         ] {
             assert!(present, "the fixture must set every option");
         }
