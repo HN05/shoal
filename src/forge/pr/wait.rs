@@ -150,11 +150,12 @@ impl Manager {
         let wait = self.item_waits.start(&workspace.id);
         // Subscribe before reading, so a message queued in between still wakes.
         let mut queued = self.agent_messages_changed.subscribe();
+        let mut background = self.item_updates_queued.subscribe();
         let mut messages = self.agent_messages(&workspace.id).await?;
         if messages.is_empty() {
             // A cancelled poll leaves its deliveries pending for the newer wait.
             tokio::select! {
-                updates = wait_for_updates(seconds, || {
+                updates = wait_for_updates(seconds, &mut background, || {
                     self.poll_item_activity(&workspace.id, selection)
                 }) => {
                     let updates = updates?;
@@ -264,7 +265,8 @@ impl Manager {
         Ok(observations)
     }
 
-    /// Poll linked items for integrations without sharing the watch cursor.
+    /// Poll linked items for integrations, with their own baseline, and queue
+    /// the changes on each workspace's cursor.
     pub(crate) async fn poll_linked_item_activity(&self) -> Result<()> {
         let mut failure = None;
         for workspace in self.list_workspaces().await? {
@@ -304,8 +306,26 @@ impl Manager {
         let observations = self
             .item_activity(workspace, items, &Selection::default())
             .await?;
-        self.record_background_activity(&workspace.id, observations)
+        self.record_background_activity(&workspace.id, observations.clone())
+            .await?;
+        self.queue_background_updates(&workspace.id, observations)
             .await
+    }
+
+    /// Queue `observations` on the workspace's cursor, so its agent receives
+    /// them without a running watch, and wake the watches that wait for them.
+    async fn queue_background_updates(
+        &self,
+        id: &str,
+        observations: Vec<(String, Snapshot)>,
+    ) -> Result<()> {
+        let updates = self
+            .record_activity(id, observations, &Selection::default())
+            .await?;
+        if !updates.is_empty() {
+            self.item_updates_queued.send_modify(|count| *count += 1);
+        }
+        Ok(())
     }
 
     async fn record_background_activity(
@@ -684,8 +704,10 @@ fn watches_branch(selection: &Selection, items: &[(String, ItemKind)]) -> bool {
         && !items.iter().any(|(_, kind)| *kind == ItemKind::Pr)
 }
 
+/// Poll every [`POLL_INTERVAL`], and at once whenever `queued` changes.
 async fn wait_for_updates<F: std::future::Future<Output = Result<Vec<Update>>>>(
     seconds: Option<u64>,
+    queued: &mut tokio::sync::watch::Receiver<u64>,
     mut poll: impl FnMut() -> F,
 ) -> Result<Updates> {
     let deadline =
@@ -729,7 +751,11 @@ async fn wait_for_updates<F: std::future::Future<Output = Result<Vec<Update>>>>(
         } else {
             POLL_INTERVAL
         };
-        tokio::time::sleep(sleep_for).await;
+        // A closed channel only disables the early wake.
+        tokio::select! {
+            () = tokio::time::sleep(sleep_for) => {}
+            Ok(()) = queued.changed() => {}
+        }
     }
 }
 
@@ -746,46 +772,81 @@ mod tests {
     async fn polling_wakes_for_a_single_result_and_timeout_has_no_update() {
         let attempts = std::sync::atomic::AtomicUsize::new(0);
         let started = tokio::time::Instant::now();
-        let result = wait_for_updates(Some(3600), || async {
-            Ok(
-                if attempts.fetch_add(1, std::sync::atomic::Ordering::Relaxed) == 0 {
-                    Vec::new()
-                } else {
-                    vec![Update {
-                        url: "pr".into(),
-                        kind: UpdateKind::CiCompleted,
-                        message: "review passed".into(),
-                        delivery: String::new(),
-                        check: None,
-                    }]
-                },
-            )
-        })
+        let result = wait_for_updates(
+            Some(3600),
+            &mut tokio::sync::watch::channel(0).1,
+            || async {
+                Ok(
+                    if attempts.fetch_add(1, std::sync::atomic::Ordering::Relaxed) == 0 {
+                        Vec::new()
+                    } else {
+                        vec![Update {
+                            url: "pr".into(),
+                            kind: UpdateKind::CiCompleted,
+                            message: "review passed".into(),
+                            delivery: String::new(),
+                            check: None,
+                        }]
+                    },
+                )
+            },
+        )
         .await
         .unwrap();
         assert!(!result.timed_out);
         assert_eq!(result.updates.len(), 1);
         assert_eq!(tokio::time::Instant::now() - started, POLL_INTERVAL);
         let started = tokio::time::Instant::now();
-        let result = wait_for_updates(Some(75), || async { Ok(Vec::new()) })
-            .await
-            .unwrap();
+        let result = wait_for_updates(Some(75), &mut tokio::sync::watch::channel(0).1, || async {
+            Ok(Vec::new())
+        })
+        .await
+        .unwrap();
         assert!(result.timed_out && result.updates.is_empty());
         assert_eq!(
             tokio::time::Instant::now() - started,
             Duration::from_secs(75)
         );
-        let error = wait_for_updates(Some(3600), || async { anyhow::bail!("lookup failed") })
-            .await
-            .unwrap_err();
+        let error = wait_for_updates(
+            Some(3600),
+            &mut tokio::sync::watch::channel(0).1,
+            || async { anyhow::bail!("lookup failed") },
+        )
+        .await
+        .unwrap_err();
         assert_eq!(error.to_string(), "lookup failed");
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn queued_background_updates_wake_a_wait_before_its_next_poll() {
+        let (queue, mut queued) = tokio::sync::watch::channel(0);
+        let attempts = std::sync::atomic::AtomicUsize::new(0);
+        let started = tokio::time::Instant::now();
+        let wait = wait_for_updates(None, &mut queued, || async {
+            Ok(
+                if attempts.fetch_add(1, std::sync::atomic::Ordering::Relaxed) == 0 {
+                    queue.send_modify(|count| *count += 1);
+                    Vec::new()
+                } else {
+                    vec![Update {
+                        url: "pr".into(),
+                        kind: UpdateKind::Comment,
+                        message: "queued".into(),
+                        delivery: String::new(),
+                        check: None,
+                    }]
+                },
+            )
+        });
+        assert_eq!(wait.await.unwrap().updates[0].message, "queued");
+        assert_eq!(tokio::time::Instant::now(), started);
     }
 
     #[tokio::test(start_paused = true)]
     async fn polling_without_a_timeout_stays_unbounded() {
         let attempts = std::sync::atomic::AtomicUsize::new(0);
         let started = tokio::time::Instant::now();
-        let result = wait_for_updates(None, || async {
+        let result = wait_for_updates(None, &mut tokio::sync::watch::channel(0).1, || async {
             if attempts.fetch_add(1, std::sync::atomic::Ordering::Relaxed) == 120 {
                 Ok(vec![Update {
                     url: "pr".into(),
@@ -931,6 +992,29 @@ mod tests {
         assert_eq!(activity.kind, ItemKind::Pr);
         assert_eq!(activity.url, "pr");
         assert_eq!(activity.update.kind, UpdateKind::Comment);
+    }
+
+    #[tokio::test]
+    async fn background_activity_queues_on_the_workspace_cursor() {
+        let (root, manager) = manager().await;
+        let repo_path = repository(root.path(), "repo");
+        let repo = manager
+            .register_repository(repo_path.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        let workspace = manager
+            .create_workspace(&repo.id, "queued".into(), None, None, None)
+            .await
+            .unwrap();
+        register_watch(&manager, &workspace.id, "pr").await;
+        let queued = manager.item_updates_queued.subscribe();
+        manager
+            .queue_background_updates(&workspace.id, vec![("pr".into(), snapshot("first"))])
+            .await
+            .unwrap();
+        assert!(queued.has_changed().unwrap());
+        let pending = manager.pending_pr_activity(&workspace.id).await.unwrap();
+        assert_eq!(pending[0].kind, UpdateKind::Comment);
     }
 
     #[tokio::test]
@@ -1142,7 +1226,7 @@ mod tests {
         let gate = tokio::sync::Mutex::new(());
         let held = gate.lock().await;
         let started = tokio::time::Instant::now();
-        let result = wait_for_updates(Some(1), || async {
+        let result = wait_for_updates(Some(1), &mut tokio::sync::watch::channel(0).1, || async {
             let _guard = gate.lock().await;
             Ok(Vec::new())
         })
@@ -1156,9 +1240,13 @@ mod tests {
         );
         drop(held);
         let started = tokio::time::Instant::now();
-        let result = wait_for_updates(Some(1), std::future::pending)
-            .await
-            .unwrap();
+        let result = wait_for_updates(
+            Some(1),
+            &mut tokio::sync::watch::channel(0).1,
+            std::future::pending,
+        )
+        .await
+        .unwrap();
         assert!(result.timed_out);
         assert!(result.updates.is_empty());
         assert_eq!(

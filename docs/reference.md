@@ -1420,8 +1420,9 @@ each inline thread is resolved. A failed lookup reports its error on that item,
 and the command exits 1 when an item could not be read. `--json` returns an array
 of items with failed logs in `check_logs`, or a check log object with `--check`.
 
-`shoal watch` polls all linked items every ~30 seconds; `watch pr` or `watch issue`
-filters by kind. `watch <url>`, `watch pr <number-or-url>` and
+`shoal watch` polls all linked items every ~30 seconds, and the daemon queues
+what its own polling of a ready workspace's linked items observes for the next
+watch, which returns at once; `watch pr` or `watch issue` filters by kind. `watch <url>`, `watch pr <number-or-url>` and
 `watch issue <number-or-url>` select an explicit item in the workspace's repository
 without linking it or changing completion policy; explicit PR watches also accept
 PRs whose head branch is in a fork. Watches return on comments,
