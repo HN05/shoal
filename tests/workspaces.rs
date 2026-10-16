@@ -6954,6 +6954,28 @@ fn base_set_picks_a_workspace_of_the_same_repository() {
 }
 
 #[test]
+fn ls_lists_only_the_selected_repository() {
+    let fixture = Fixture::new();
+    fixture.add("local");
+    let other = init_repo(fixture.root.path(), "other", &[("tracked", "other\n")]);
+    fixture.ok(&["repo", "add", other.to_str().unwrap()]);
+    fixture.ok(&["add", other.to_str().unwrap(), "foreign"]);
+    let names = |repository: &str| -> Vec<_> {
+        fixture
+            .ok(&["ls", "--repo", repository])
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|w| w["name"].clone())
+            .collect()
+    };
+    assert_eq!(names("other"), ["foreign"]);
+    assert_eq!(names(fixture.repo.to_str().unwrap()), ["local"]);
+    let unknown = fixture.run(&["ls", "--repo", "missing"]);
+    assert!(!unknown.status.success());
+}
+
+#[test]
 fn hold_release_picks_an_omitted_hold() {
     let fixture = Fixture::new();
     fixture.add("upper");
@@ -17789,6 +17811,12 @@ fn add_queues_agents_past_max_agents_until_removed() {
     let entries = fixture.ok(&["ls", "--queue"]);
     assert_eq!(entries.as_array().unwrap().len(), 1, "{entries}");
     assert_eq!(entries[0]["name"], "second");
+    let other = init_repo(fixture.root.path(), "other", &[("tracked", "other\n")]);
+    fixture.ok(&["repo", "add", other.to_str().unwrap()]);
+    assert_eq!(
+        fixture.ok(&["ls", "--queue", "--repo", "other"]),
+        serde_json::json!([])
+    );
     let listed = String::from_utf8(fixture.run(&["ls"]).stdout).unwrap();
     assert!(listed.contains("queued, position 1"), "{listed}");
     // A queued entry creates nothing until it starts.

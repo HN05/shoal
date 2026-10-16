@@ -13,6 +13,7 @@ pub(super) mod issues;
 mod items;
 mod leases;
 mod links;
+mod listing;
 mod menu;
 mod messages;
 mod notifications;
@@ -307,7 +308,14 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         Command::Rename { workspace, branch } => workspaces::rename(&ctx, workspace, branch).await,
         Command::Internal { command } => internal(ctx, command).await,
         Command::Setup { workspace } => workspaces::setup(&ctx, workspace).await,
-        Command::Ls { ready, queue } => workspaces::list(&ctx, ready, queue).await,
+        Command::Ls {
+            ready,
+            queue,
+            repository,
+        } => {
+            let filter = listing::ListFilter::resolve(&ctx, repository).await?;
+            workspaces::list(&ctx, ready, queue, &filter).await
+        }
         Command::Hold { command, scope } => holds::run(&ctx, command, scope).await,
         Command::Base { command, workspace } => base::run(&ctx, command, workspace).await,
         Command::Status { workspace, item } => workspaces::status(&ctx, workspace, item).await,

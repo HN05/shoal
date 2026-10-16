@@ -1198,15 +1198,21 @@ async fn ignore_setup_failure(ctx: &Context, workspace: &Workspace) -> Result<()
     Ok(())
 }
 
-pub(super) async fn list(ctx: &Context, ready: bool, queue: bool) -> Result<i32> {
+pub(super) async fn list(
+    ctx: &Context,
+    ready: bool,
+    queue: bool,
+    filter: &super::listing::ListFilter,
+) -> Result<i32> {
     if queue {
-        return super::agent_queue::list(ctx).await;
+        return super::agent_queue::list(ctx, filter).await;
     }
     let mut workspaces = client::workspaces(&ctx.paths).await?;
+    workspaces.retain(|workspace| filter.keeps_workspace(workspace));
     let queued = if ready {
         Vec::new()
     } else {
-        super::agent_queue::rows(ctx, &super::agent_queue::entries(ctx).await?).await?
+        super::agent_queue::rows(ctx, &super::agent_queue::listed(ctx, filter).await?).await?
     };
     let rows = if ready {
         workspaces.retain(|workspace| !workspace.review.is_empty());

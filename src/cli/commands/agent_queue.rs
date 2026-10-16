@@ -5,7 +5,7 @@ use std::{collections::BTreeMap, time::Duration};
 use anyhow::Result;
 use tokio::io::AsyncReadExt as _;
 
-use super::workspaces::AddPlan;
+use super::{listing::ListFilter, workspaces::AddPlan};
 use crate::{
     agent::Agent,
     cli::{
@@ -198,9 +198,16 @@ pub(super) async fn entries(ctx: &Context) -> Result<Vec<QueueEntry>> {
     request(&ctx.paths, Method::ListQueue).await
 }
 
+/// The entries `shoal ls` shows under `filter`.
+pub(super) async fn listed(ctx: &Context, filter: &ListFilter) -> Result<Vec<QueueEntry>> {
+    let mut entries = entries(ctx).await?;
+    entries.retain(|entry| filter.keeps_entry(entry));
+    Ok(entries)
+}
+
 /// `shoal ls --queue`.
-pub(super) async fn list(ctx: &Context) -> Result<i32> {
-    let entries = entries(ctx).await?;
+pub(super) async fn list(ctx: &Context, filter: &ListFilter) -> Result<i32> {
+    let entries = listed(ctx, filter).await?;
     let rows = rows(ctx, &entries).await?;
     ctx.show(&entries, |_| {
         for row in rows {

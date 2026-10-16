@@ -270,6 +270,9 @@ pub enum Command {
         /// List only the agents waiting for a slot under max_agents.
         #[arg(long)]
         queue: bool,
+        /// List only this registered repository's workspaces and agents.
+        #[arg(long = "repo")]
+        repository: Option<String>,
     },
     /// Show workspace activity, changes, resources, and issue and PR state.
     ///
