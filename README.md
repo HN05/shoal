@@ -308,7 +308,8 @@ its branch and uncommitted work. `shoal stop` keeps the workspace.
 
 Automatic cleanup removes idle, clean, pushed or landed workspaces after 10 minutes,
 and forgets workspaces whose directory you deleted yourself, keeping the branch.
-Remove them now with `shoal cleanup`; `shoal cleanup --dry-run` lists them.
+Remove them now with `shoal cleanup`; `shoal cleanup --dry-run` lists them and why
+it keeps the others, and `shoal status` shows why it keeps one workspace.
 An app hosting an external session can hold its workspace while the session is open:
 
 ```sh

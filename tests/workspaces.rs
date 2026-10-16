@@ -613,10 +613,21 @@ fn cleanup_removes_idle_candidates_on_request() {
     assert!(String::from_utf8_lossy(&denied.stderr).contains("workspace processes can only"));
     let preview = fixture.ok(&["cleanup", "--dry-run"]);
     assert_eq!(preview["removed"], serde_json::json!(["clean"]));
+    assert_eq!(
+        preview["kept"],
+        serde_json::json!([{"workspace": "dirty", "reason": {"reason": "dirty"}}])
+    );
+    let text = fixture.run(&["cleanup", "--dry-run"]);
+    let text = String::from_utf8(text.stdout).unwrap();
+    assert!(
+        text.contains("Would remove clean\nKept:\n  dirty  Uncommitted or untracked changes\n"),
+        "{text:?}"
+    );
     assert!(Path::new(clean["path"].as_str().unwrap()).exists());
     let report = fixture.ok(&["cleanup"]);
     assert_eq!(report["removed"], serde_json::json!(["clean"]));
     assert_eq!(report["retained"], serde_json::json!([]));
+    assert_eq!(report["kept"], serde_json::json!([]));
     assert!(!Path::new(clean["path"].as_str().unwrap()).exists());
     let names: Vec<_> = fixture
         .ok(&["ls"])

@@ -22,7 +22,7 @@ use crate::{
         notifications::NotificationKind,
         workspace::Manager,
     },
-    model::Workspace,
+    model::{CleanupReason, Workspace},
     state::WorkspaceState,
     time::{local_seconds, unix_seconds},
 };
@@ -437,18 +437,35 @@ fn skip_failed<T>(workspace: &Workspace, observed: Result<Option<T>>) -> Option<
 }
 
 /// The workspaces a manual cleanup removed, or would remove in a dry run,
-/// and those it retained because inspection or removal failed.
+/// and those it retained because inspection or removal failed. A dry run
+/// also lists why it keeps each other workspace.
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct ManualCleanup {
     pub dry_run: bool,
     pub removed: Vec<String>,
     pub retained: Vec<Retained>,
+    #[serde(default)]
+    pub kept: Vec<Kept>,
+}
+
+impl ManualCleanup {
+    fn keep(&mut self, workspace: String, reason: CleanupReason) {
+        if self.dry_run {
+            self.kept.push(Kept { workspace, reason });
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Retained {
     pub workspace: String,
     pub error: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Kept {
+    pub workspace: String,
+    pub reason: CleanupReason,
 }
 
 /// Remove every workspace idle cleanup would remove, now: the user's request
@@ -460,11 +477,16 @@ pub async fn on_request(manager: &Manager, dry_run: bool) -> Result<ManualCleanu
     };
     for workspace in manager.list_workspaces().await? {
         if workspace.state != WorkspaceState::Ready {
+            let state = workspace.state;
+            report.keep(workspace.name, CleanupReason::NotReady { state });
             continue;
         }
-        let snapshot = match manager.cleanup_snapshot(&workspace.id).await {
-            Ok(Some(snapshot)) => snapshot,
-            Ok(None) => continue,
+        let snapshot = match manager.cleanup_candidacy(&workspace.id).await {
+            Ok(Ok(snapshot)) => snapshot,
+            Ok(Err(reason)) => {
+                report.keep(workspace.name, reason);
+                continue;
+            }
             Err(error) => {
                 log!("manual cleanup skipped {}: {error:#}", workspace.name);
                 report.retained.push(Retained {
@@ -928,10 +950,7 @@ mod tests {
 
     #[tokio::test]
     async fn status_names_the_first_reason_cleanup_keeps_a_workspace() {
-        use crate::{
-            model::CleanupReason,
-            test_support::{commit, git, manager, repository},
-        };
+        use crate::test_support::{commit, git, manager, repository};
         let (temp, manager) = manager().await;
         let checkout = repository(temp.path(), "repo");
         let repo = manager
@@ -1191,12 +1210,28 @@ mod tests {
         let preview = on_request(&manager, true).await.unwrap();
         assert_eq!(preview.removed, ["idle"]);
         assert_eq!(retained(&preview), ["broken"]);
+        let kept = preview
+            .kept
+            .iter()
+            .map(|kept| (kept.workspace.as_str(), kept.reason.clone()))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            kept,
+            [
+                ("dirty", CleanupReason::Dirty),
+                ("held", CleanupReason::Held)
+            ]
+        );
         assert_eq!(names(&manager).await, ["broken", "dirty", "held", "idle"]);
 
         let report = on_request(&manager, false).await.unwrap();
         assert!(!report.dry_run);
         assert_eq!(report.removed, ["idle"]);
         assert_eq!(retained(&report), ["broken"]);
+        assert!(
+            report.kept.is_empty(),
+            "only a dry run lists kept workspaces"
+        );
         assert_eq!(names(&manager).await, ["broken", "dirty", "held"]);
     }
 

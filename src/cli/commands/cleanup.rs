@@ -33,6 +33,18 @@ pub(super) async fn run(ctx: &Context, dry_run: bool) -> Result<i32> {
                 );
             }
         }
+        if !report.kept.is_empty() {
+            println!("Kept:");
+            let width = report
+                .kept
+                .iter()
+                .map(|kept| kept.workspace.chars().count())
+                .max()
+                .unwrap_or(0);
+            for kept in &report.kept {
+                println!("  {:width$}  {}", kept.workspace, kept.reason);
+            }
+        }
         let palette = Palette::stderr(ctx.json);
         for retained in &report.retained {
             eprintln!(

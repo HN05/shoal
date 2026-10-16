@@ -1468,7 +1468,7 @@ Sweeps run about every 30 seconds; a failed step does not skip the others, and
 timers reset on restart. The daemon needs `lsof` on PATH.
 `shoal cleanup` removes these workspaces now, without their idle delay and also
 where idle cleanup is disabled, and reports any it retained; `--dry-run` lists them
-instead. Removals record the `manual` event cause. Workspace processes cannot run it.
+instead, with the reason `status` gives for keeping each other workspace. Removals record the `manual` event cause. Workspace processes cannot run it.
 
 ```toml
 [cleanup.auto]
