@@ -183,7 +183,16 @@ impl Manager {
     pub async fn agent_updates(&self, selector: &str) -> Result<Updates> {
         let workspace = self.workspace(selector).await?;
         let _delivery = self.item_waits.start(&workspace.id);
-        let messages = self.agent_messages(&workspace.id).await?;
+        Ok(Updates {
+            messages: self.agent_messages(&workspace.id).await?,
+            updates: self.queued_updates(workspace).await?,
+            timed_out: false,
+            superseded: false,
+        })
+    }
+
+    /// The updates queued on the workspace's cursor for an unfiltered watch.
+    async fn queued_updates(&self, workspace: Workspace) -> Result<Vec<Update>> {
         let id = workspace.id.clone();
         let items = self
             .store
@@ -195,12 +204,42 @@ impl Manager {
             .map(|(url, _)| url)
             .chain(branch)
             .collect::<Vec<_>>();
-        Ok(Updates {
-            updates: self.pending_activity(&workspace.id, &keys).await?,
-            messages,
-            timed_out: false,
-            superseded: false,
-        })
+        self.pending_activity(&workspace.id, &keys).await
+    }
+
+    /// Return once whether the workspace's agent is idle with undelivered
+    /// messages or queued updates matches `due`, so a launcher can prompt an
+    /// agent that has no hook to wake it, then wait for it to take them.
+    pub async fn wait_agent_wake(&self, selector: &str, due: bool) -> Result<()> {
+        let workspace = self.workspace(selector).await?;
+        // Subscribe before reading, so a change in between still wakes.
+        let mut messages = self.agent_messages_changed.subscribe();
+        let mut queued = self.item_updates_queued.subscribe();
+        let mut changed = self.agent_wake_changed.subscribe();
+        while self.agent_wake_due(&workspace).await? != due {
+            // Closed channels only disable their wake; the poll interval
+            // still rechecks.
+            tokio::select! {
+                Ok(()) = messages.changed() => {}
+                Ok(()) = queued.changed() => {}
+                Ok(()) = changed.changed() => {}
+                () = tokio::time::sleep(POLL_INTERVAL) => {}
+            }
+        }
+        Ok(())
+    }
+
+    async fn agent_wake_due(&self, workspace: &Workspace) -> Result<bool> {
+        let id = workspace.id.clone();
+        let state = self
+            .store
+            .run(move |db| crate::daemon::workspace::agent_state::get(db, &id))
+            .await?;
+        if state.is_none_or(|status| status.state != crate::state::AgentState::Idle) {
+            return Ok(false);
+        }
+        Ok(!self.agent_messages(&workspace.id).await?.is_empty()
+            || !self.queued_updates(workspace.clone()).await?.is_empty())
     }
 
     async fn next_agent_messages(
@@ -604,7 +643,9 @@ impl Manager {
                 // it and must report these updates as well.
                 waits.unless_running(&workspace.id, || Ok(tx.commit()?))
             })
-            .await
+            .await?;
+        self.agent_wake_changed.send_modify(|count| *count += 1);
+        Ok(())
     }
 }
 
@@ -1061,6 +1102,50 @@ mod tests {
             .unwrap();
         let after = manager.agent_updates(&workspace.id).await.unwrap();
         assert!(after.updates.is_empty() && after.messages.is_empty());
+    }
+
+    #[tokio::test]
+    async fn agent_wakes_are_due_while_an_idle_agent_has_updates() {
+        let (root, manager) = manager().await;
+        let manager = Arc::new(manager);
+        let repo_path = repository(root.path(), "repo");
+        let repo = manager
+            .register_repository(repo_path.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        let workspace = manager
+            .create_workspace(&repo.id, "wake".into(), None, None, None)
+            .await
+            .unwrap();
+        let wait = |due| {
+            let manager = manager.clone();
+            let id = workspace.id.clone();
+            tokio::spawn(async move { manager.wait_agent_wake(&id, due).await })
+        };
+        // A hang guard only: each wait ends on the change before it.
+        let finish = |task: tokio::task::JoinHandle<Result<()>>| async {
+            tokio::time::timeout(Duration::from_secs(60), task)
+                .await
+                .expect("wait ended")
+                .unwrap()
+                .unwrap();
+        };
+        let state = |state| manager.set_agent_state(&workspace.id, state, None);
+        state(crate::state::AgentState::Working).await.unwrap();
+        manager
+            .send_agent_message(&workspace.id, "Rebase onto main".into())
+            .await
+            .unwrap();
+        let due = wait(true);
+        state(crate::state::AgentState::Idle).await.unwrap();
+        finish(due).await;
+        let taken = wait(false);
+        let messages = manager.agent_messages(&workspace.id).await.unwrap();
+        manager
+            .mark_agent_messages_delivered(&workspace.id, vec![messages[0].id])
+            .await
+            .unwrap();
+        finish(taken).await;
     }
 
     #[tokio::test]

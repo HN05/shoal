@@ -129,6 +129,9 @@ pub struct Manager {
     pub(crate) agent_messages_changed: watch::Sender<u64>,
     /// Counts background polls that queued item updates; wakes watches.
     pub(crate) item_updates_queued: watch::Sender<u64>,
+    /// Counts agent state changes and deliveries to agents; wakes waits for
+    /// an idle agent's updates.
+    pub(crate) agent_wake_changed: watch::Sender<u64>,
     /// Serializes agent queue admission, so two passes cannot fill one slot.
     agent_queue_gate: Mutex<()>,
     /// Open holds per starting queue entry.
@@ -174,6 +177,7 @@ impl Manager {
             notifications_changed: watch::channel(0).0,
             agent_messages_changed: watch::channel(0).0,
             item_updates_queued: watch::channel(0).0,
+            agent_wake_changed: watch::channel(0).0,
             agent_queue_gate: Mutex::new(()),
             agent_queue_holds: Default::default(),
             agent_queue_wake: tokio::sync::Notify::new(),

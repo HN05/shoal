@@ -369,6 +369,10 @@ async fn serve(
             return wait_pr_updates(stream, request.id, server.manager, workspace, timeout_secs)
                 .await;
         }
+        Method::AwaitAgentWake { workspace, due } => {
+            drop(operation_guard);
+            return await_agent_wake(stream, request.id, server.manager, workspace, due).await;
+        }
         Method::WatchItems {
             workspace,
             selection,
@@ -420,6 +424,7 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         | Method::QueueHold { .. }
         | Method::WatchWorkspaceEvents { .. }
         | Method::PrWait { .. }
+        | Method::AwaitAgentWake { .. }
         | Method::WatchItems { .. } => {
             anyhow::bail!("unsupported operation")
         }
@@ -949,6 +954,25 @@ async fn watch_item_updates(
     // the updates remain pending.
     let Ok(_operation) = manager.background_operations.clone().try_read_owned() else {
         return Ok(());
+    };
+    protocol::write(&mut stream, &Response::new(request_id, body)).await
+}
+
+async fn await_agent_wake(
+    mut stream: UnixStream,
+    request_id: u64,
+    manager: Arc<Manager>,
+    workspace: String,
+    due: bool,
+) -> Result<()> {
+    let mut closed = [0u8; 1];
+    let result = tokio::select! {
+        result = manager.wait_agent_wake(&workspace, due) => result,
+        _ = tokio::io::AsyncReadExt::read(&mut stream, &mut closed) => return Ok(()),
+    };
+    let body = match result {
+        Ok(()) => Body::Ok,
+        Err(error) => Body::error(ErrorCode::OperationFailed, format!("{error:#}")),
     };
     protocol::write(&mut stream, &Response::new(request_id, body)).await
 }

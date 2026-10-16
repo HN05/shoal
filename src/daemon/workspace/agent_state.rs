@@ -33,10 +33,11 @@ impl Manager {
     ) -> Result<AgentStatus> {
         let id = self.workspace(selector).await?.id;
         let now = i64::try_from(crate::time::unix_seconds())?;
-        self.store
+        let (status, changed) = self
+            .store
             .run(move |db| {
                 let tx = db.transaction()?;
-                tx.execute(
+                let changed = tx.execute(
                     "INSERT INTO workspace_agent_state(workspace_id,state,execution_id,since)
                      VALUES (?1,?2,?3,?4)
                      ON CONFLICT(workspace_id) DO UPDATE SET
@@ -48,9 +49,13 @@ impl Manager {
                 )?;
                 let status = get(&tx, &id)?.expect("agent state was just recorded");
                 tx.commit()?;
-                Ok(status)
+                Ok((status, changed > 0))
             })
-            .await
+            .await?;
+        if changed {
+            self.agent_wake_changed.send_modify(|count| *count += 1);
+        }
+        Ok(status)
     }
 }
 

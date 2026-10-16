@@ -111,7 +111,9 @@ impl Manager {
                 tx.commit()?;
                 Ok(())
             })
-            .await
+            .await?;
+        self.agent_wake_changed.send_modify(|count| *count += 1);
+        Ok(())
     }
 }
 

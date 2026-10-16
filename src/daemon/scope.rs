@@ -70,6 +70,7 @@ pub async fn authorize(
         | Method::AgentMessages { workspace }
         | Method::MarkAgentMessagesDelivered { workspace, .. }
         | Method::AgentUpdates { workspace }
+        | Method::AwaitAgentWake { workspace, .. }
         | Method::MarkReady { workspace, .. }
         | Method::ClearReady { workspace, .. }
         | Method::SetAgentState { workspace, .. }
