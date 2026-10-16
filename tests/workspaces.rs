@@ -12277,12 +12277,6 @@ fn happy_codex_prompts_are_delivered_through_a_seeded_session() {
     install_test_script_with_mode(&happy, "#!/nonexistent/interpreter\n", 0o700);
     let output = launch_orphan();
     assert!(!output.status.success(), "{output:?}");
-    wait_until("orphan session cleanup", || {
-        server.state()["requests"]
-            .as_array()
-            .and_then(|requests| requests.last())
-            .is_some_and(|request| request["method"] == "DELETE")
-    });
     let state = server.state();
     let methods: Vec<&str> = state["requests"]
         .as_array()

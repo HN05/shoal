@@ -48,53 +48,59 @@ class Handler(BaseHTTPRequestHandler):
                 "client": self.headers.get("X-Happy-Client"),
                 "body": body,
             })
-            if method == "POST" and self.path.startswith("/test/activate/"):
-                session_id = self.path.rsplit("/", 1)[1]
-                if session_id in STATE["sessions"]:
-                    STATE["sessions"][session_id]["active"] = True
-                    self.reply(200, {"ok": True})
-                else:
-                    self.reply(404, {"error": "unknown session"})
-            elif self.headers.get("Authorization") != "Bearer test-token":
-                self.reply(401, {"error": "unauthorized"})
-            elif method == "POST" and self.path == "/v1/sessions":
-                session = {
-                    "id": "session-" + uuid.uuid4().hex[:8],
-                    "seq": 0,
-                    "createdAt": 1,
-                    "updatedAt": 1,
-                    "active": False,
-                    "activeAt": 0,
-                    "metadata": body["metadata"],
-                    "metadataVersion": 1,
-                    "agentState": body.get("agentState"),
-                    "agentStateVersion": 1,
-                    "dataEncryptionKey": body.get("dataEncryptionKey"),
-                    "tag": body["tag"],
-                }
-                STATE["sessions"][session["id"]] = session
-                self.reply(200, {"session": session})
-            elif method == "DELETE" and self.path.startswith("/v1/sessions/"):
-                session_id = self.path.rsplit("/", 1)[1]
-                if STATE["sessions"].pop(session_id, None) is None:
-                    self.reply(404, {"error": "Session not found"})
-                else:
-                    self.reply(200, {"ok": True})
-            elif method == "GET" and self.path == "/v2/sessions/active":
-                active = [s for s in STATE["sessions"].values() if s["active"]]
-                self.reply(200, {"sessions": active})
-            elif method == "POST" and self.path.startswith("/v3/sessions/") and self.path.endswith("/messages"):
-                session_id = self.path.split("/")[3]
-                if session_id not in STATE["sessions"]:
-                    self.reply(404, {"error": "Session not found"})
-                else:
-                    stored = STATE["messages"].setdefault(session_id, [])
-                    for index, message in enumerate(body["messages"]):
-                        stored.append({"seq": len(stored) + 1, "localId": message["localId"], "content": message["content"]})
-                    self.reply(200, {"messages": stored})
-            else:
-                self.reply(404, {"error": "no route"})
+            status, payload = self.route(method, body)
+            # Persist before replying: the test reads the record as soon as
+            # the client has its answer.
             persist()
+            self.reply(status, payload)
+
+    def route(self, method, body):
+        if method == "POST" and self.path.startswith("/test/activate/"):
+            session_id = self.path.rsplit("/", 1)[1]
+            if session_id in STATE["sessions"]:
+                STATE["sessions"][session_id]["active"] = True
+                return 200, {"ok": True}
+            else:
+                return 404, {"error": "unknown session"}
+        elif self.headers.get("Authorization") != "Bearer test-token":
+            return 401, {"error": "unauthorized"}
+        elif method == "POST" and self.path == "/v1/sessions":
+            session = {
+                "id": "session-" + uuid.uuid4().hex[:8],
+                "seq": 0,
+                "createdAt": 1,
+                "updatedAt": 1,
+                "active": False,
+                "activeAt": 0,
+                "metadata": body["metadata"],
+                "metadataVersion": 1,
+                "agentState": body.get("agentState"),
+                "agentStateVersion": 1,
+                "dataEncryptionKey": body.get("dataEncryptionKey"),
+                "tag": body["tag"],
+            }
+            STATE["sessions"][session["id"]] = session
+            return 200, {"session": session}
+        elif method == "DELETE" and self.path.startswith("/v1/sessions/"):
+            session_id = self.path.rsplit("/", 1)[1]
+            if STATE["sessions"].pop(session_id, None) is None:
+                return 404, {"error": "Session not found"}
+            else:
+                return 200, {"ok": True}
+        elif method == "GET" and self.path == "/v2/sessions/active":
+            active = [s for s in STATE["sessions"].values() if s["active"]]
+            return 200, {"sessions": active}
+        elif method == "POST" and self.path.startswith("/v3/sessions/") and self.path.endswith("/messages"):
+            session_id = self.path.split("/")[3]
+            if session_id not in STATE["sessions"]:
+                return 404, {"error": "Session not found"}
+            else:
+                stored = STATE["messages"].setdefault(session_id, [])
+                for index, message in enumerate(body["messages"]):
+                    stored.append({"seq": len(stored) + 1, "localId": message["localId"], "content": message["content"]})
+                return 200, {"messages": stored}
+        else:
+            return 404, {"error": "no route"}
 
     def do_GET(self):
         self.handle_request("GET")
