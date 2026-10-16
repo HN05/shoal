@@ -398,6 +398,28 @@ fn review_threads_take_replies_and_ask_before_resolving_without_one() {
         "POST graphql": {"body": threads(json!([{"databaseId": 5}, {"databaseId": 6}]))},
     }));
     fixture.ok(&[&["pr", "resolve", "6"][..], &pr].concat());
+    fixture.requests();
+
+    // Comments past a thread's first page are read from the thread itself.
+    let first_page = threads(json!([{"databaseId": 5}]));
+    let mut first_page_more = first_page.clone();
+    first_page_more["data"]["repository"]["pullRequest"]["reviewThreads"]["nodes"][0]["comments"]
+        ["pageInfo"] = json!({"hasNextPage": true, "endCursor": "c1"});
+    fixture.respond(json!({
+        format!("GET {endpoint}"): {"body": pull(8, "open", "Fix", &[])},
+        "POST graphql": [{"body": first_page_more}, {"body": {"data": {"node": {"comments": {
+            "pageInfo": {"hasNextPage": false, "endCursor": null}, "nodes": [{"databaseId": 6}]}}}}}],
+    }));
+    fixture.ok(&[&["pr", "resolve", "6", "--yes"][..], &pr].concat());
+    let sent = fixture.requests();
+    assert_eq!(sent[2][1]["variables"], json!({"id": "T_1", "after": "c1"}));
+    assert!(
+        sent[3][1]["query"]
+            .as_str()
+            .unwrap()
+            .contains("resolveReviewThread")
+    );
+
     let nothing = fixture.run(&[&["pr", "reply", "7"][..], &pr].concat());
     assert!(String::from_utf8_lossy(&nothing.stderr).contains("a reply needs --body"));
 }

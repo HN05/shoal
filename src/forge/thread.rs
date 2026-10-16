@@ -243,7 +243,9 @@ pub(super) struct GitHubThread {
     pub comments: Vec<u64>,
 }
 
-const GITHUB_THREADS: &str = "query($owner: String!, $name: String!, $number: Int!, $after: String) { repository(owner: $owner, name: $name) { pullRequest(number: $number) { reviewThreads(first: 100, after: $after) { pageInfo { hasNextPage endCursor } nodes { id isResolved comments(first: 100) { nodes { databaseId } } } } } } }";
+const GITHUB_THREADS: &str = "query($owner: String!, $name: String!, $number: Int!, $after: String) { repository(owner: $owner, name: $name) { pullRequest(number: $number) { reviewThreads(first: 100, after: $after) { pageInfo { hasNextPage endCursor } nodes { id isResolved comments(first: 100) { pageInfo { hasNextPage endCursor } nodes { databaseId } } } } } } }";
+
+const GITHUB_THREAD_COMMENTS: &str = "query($id: ID!, $after: String) { node(id: $id) { ... on PullRequestReviewThread { comments(first: 100, after: $after) { pageInfo { hasNextPage endCursor } nodes { databaseId } } } } }";
 
 impl ForgeRepo {
     pub(super) async fn github_threads(
@@ -255,62 +257,95 @@ impl ForgeRepo {
             .path
             .split_once('/')
             .context("GitHub repository path has no owner")?;
+        let variables = json!({ "owner": owner, "name": name, "number": number });
+        let nodes = self
+            .graphql_nodes(account, GITHUB_THREADS, variables, |data| {
+                &data["repository"]["pullRequest"]["reviewThreads"]
+            })
+            .await?;
         let mut threads = Vec::new();
-        let mut after = Value::Null;
+        for node in nodes {
+            let mut thread = github_thread_node(&node)?;
+            let comments = &node["comments"];
+            if let Some(after) = next_cursor(comments)? {
+                let variables = json!({ "id": thread.node, "after": after });
+                let more = self
+                    .graphql_nodes(account, GITHUB_THREAD_COMMENTS, variables, |data| {
+                        &data["node"]["comments"]
+                    })
+                    .await?;
+                thread.comments.extend(comment_ids(&more));
+            }
+            threads.push(thread);
+        }
+        Ok(threads)
+    }
+
+    /// Every node of the connection `connection` finds in the query's data,
+    /// following its pages from the `after` in `variables`.
+    async fn graphql_nodes(
+        &self,
+        account: &Account,
+        query: &str,
+        mut variables: Value,
+        connection: fn(&Value) -> &Value,
+    ) -> Result<Vec<Value>> {
+        let mut nodes = Vec::new();
         loop {
             let request = Request::new(
                 HttpMethod::Post,
                 "graphql".into(),
-                Some(json!({
-                    "query": GITHUB_THREADS,
-                    "variables": { "owner": owner, "name": name, "number": number, "after": after },
-                })),
+                Some(json!({ "query": query, "variables": variables })),
             );
-            let (page, next) = github_thread_page(&self.send(account, &request).await?)?;
-            threads.extend(page);
-            match next {
-                Some(cursor) => after = cursor.into(),
-                None => return Ok(threads),
+            let response = self.send(account, &request).await?;
+            let page = connection(&response["data"]);
+            nodes.extend(
+                page["nodes"]
+                    .as_array()
+                    .context("GitHub did not return a page of review threads or comments")?
+                    .iter()
+                    .cloned(),
+            );
+            match next_cursor(page)? {
+                Some(after) => variables["after"] = after.into(),
+                None => return Ok(nodes),
             }
         }
     }
 }
 
-/// One page of threads and the cursor of the next.
-fn github_thread_page(response: &Value) -> Result<(Vec<GitHubThread>, Option<String>)> {
-    let threads = &response["data"]["repository"]["pullRequest"]["reviewThreads"];
-    let page = threads["nodes"]
+/// A thread with its first page of comments.
+fn github_thread_node(node: &Value) -> Result<GitHubThread> {
+    let comments = node["comments"]["nodes"]
         .as_array()
-        .context("GitHub did not list the PR's review threads")?
+        .context("GitHub did not return the thread's comments")?;
+    Ok(GitHubThread {
+        node: node["id"]
+            .as_str()
+            .context("GitHub review thread has no ID")?
+            .to_owned(),
+        resolved: node["isResolved"] == true,
+        comments: comment_ids(comments),
+    })
+}
+
+fn comment_ids(comments: &[Value]) -> Vec<u64> {
+    comments
         .iter()
-        .map(|thread| {
-            Ok(GitHubThread {
-                node: thread["id"]
-                    .as_str()
-                    .context("GitHub review thread has no ID")?
-                    .to_owned(),
-                resolved: thread["isResolved"] == true,
-                comments: thread["comments"]["nodes"]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .filter_map(|comment| comment["databaseId"].as_u64())
-                    .collect(),
-            })
-        })
-        .collect::<Result<_>>()?;
-    let info = &threads["pageInfo"];
-    let next = if info["hasNextPage"] == true {
-        Some(
-            info["endCursor"]
-                .as_str()
-                .context("GitHub did not return the next page's cursor")?
-                .to_owned(),
-        )
-    } else {
-        None
-    };
-    Ok((page, next))
+        .filter_map(|comment| comment["databaseId"].as_u64())
+        .collect()
+}
+
+/// The cursor of the page after `connection`'s, when there is one.
+fn next_cursor(connection: &Value) -> Result<Option<String>> {
+    let info = &connection["pageInfo"];
+    if info["hasNextPage"] != true {
+        return Ok(None);
+    }
+    info["endCursor"]
+        .as_str()
+        .map(|cursor| Some(cursor.to_owned()))
+        .context("GitHub did not return the next page's cursor")
 }
 
 /// Forgejo's thread of an inline comment: its path and line, with lines of
@@ -549,25 +584,26 @@ mod tests {
     }
 
     #[test]
-    fn github_thread_pages_carry_resolution_comments_and_cursor() {
-        let page = json!({"data": {"repository": {"pullRequest": {"reviewThreads": {
+    fn github_threads_carry_resolution_comments_and_cursors() {
+        let node = json!({"id": "T_1", "isResolved": true, "comments": {
             "pageInfo": {"hasNextPage": true, "endCursor": "c1"},
-            "nodes": [{"id": "T_1", "isResolved": true,
-                "comments": {"nodes": [{"databaseId": 5}, {"databaseId": 9}]}}]}}}}});
-        let (threads, next) = github_thread_page(&page).unwrap();
+            "nodes": [{"databaseId": 5}, {"databaseId": 9}]}});
         assert_eq!(
-            threads,
-            [GitHubThread {
+            github_thread_node(&node).unwrap(),
+            GitHubThread {
                 node: "T_1".into(),
                 resolved: true,
                 comments: vec![5, 9],
-            }]
+            }
         );
-        assert_eq!(next.as_deref(), Some("c1"));
-        let last = json!({"data": {"repository": {"pullRequest": {"reviewThreads": {
-            "pageInfo": {"hasNextPage": false, "endCursor": null}, "nodes": []}}}}});
-        assert_eq!(github_thread_page(&last).unwrap(), (Vec::new(), None));
-        assert!(github_thread_page(&json!({"data": null})).is_err());
+        assert_eq!(
+            next_cursor(&node["comments"]).unwrap().as_deref(),
+            Some("c1")
+        );
+        let last = json!({"pageInfo": {"hasNextPage": false, "endCursor": null}});
+        assert_eq!(next_cursor(&last).unwrap(), None);
+        assert!(next_cursor(&json!({"pageInfo": {"hasNextPage": true}})).is_err());
+        assert!(github_thread_node(&json!({"id": "T_2"})).is_err());
     }
 
     #[test]
