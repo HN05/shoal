@@ -274,7 +274,7 @@ pub async fn run_all(ctx: &Context, discard: bool) -> Result<i32> {
         let tabs = reused || integration.is_some_and(|settings| settings.new_tab);
         if tabs && !reused {
             let label = launch_label(ctx, workspace).await;
-            herdr::run_in_tab(ctx, &workspace.path, &label, &args).await?;
+            herdr::run_in_tab(ctx, &workspace.path, &label, &args, false).await?;
         }
         agents.push(json!({
             "workspace": workspace.name,

@@ -88,7 +88,7 @@ pub(in crate::cli) async fn run(
     let mut zmx = Command::new(Tool::Zmx.program());
     zmx.arg("attach")
         .arg("--labels")
-        .arg(labels(&workspace.id, agent))
+        .arg(labels(WORKSPACE_LABEL, &workspace.id, agent))
         .arg(&name)
         .args(&worker)
         .env_remove(env::SHELL_DIRECTIVE);
@@ -142,7 +142,7 @@ pub(in crate::cli) async fn label_current(workspace_id: &str, agent: &str) -> Re
     let mut set = Command::new(Tool::Zmx.program());
     set.arg("set")
         .arg(session)
-        .args(labels(workspace_id, agent).split(' '));
+        .args(labels(WORKSPACE_LABEL, workspace_id, agent).split(' '));
     Run::new(set)
         .checked()
         .await
@@ -235,8 +235,8 @@ fn field<'a>(fields: &'a Fields, key: &str) -> Option<&'a str> {
 }
 
 /// zmx separates labels with spaces, so an agent name containing one is left out.
-fn labels(workspace_id: &str, agent: &str) -> String {
-    let mut labels = format!("{WORKSPACE_LABEL}={workspace_id}");
+fn labels(owner: &str, id: &str, agent: &str) -> String {
+    let mut labels = format!("{owner}={id}");
     if !agent.is_empty() && !agent.contains(char::is_whitespace) {
         labels.push_str(&format!(" {AGENT_LABEL}={agent}"));
     }
@@ -284,9 +284,12 @@ mod tests {
     #[test]
     fn labels_leave_out_agent_names_zmx_cannot_hold() {
         assert_eq!(
-            labels("w1", "claude"),
+            labels(WORKSPACE_LABEL, "w1", "claude"),
             "shoal.workspace=w1 shoal.agent=claude"
         );
-        assert_eq!(labels("w1", "my agent"), "shoal.workspace=w1");
+        assert_eq!(
+            labels(WORKSPACE_LABEL, "w1", "my agent"),
+            "shoal.workspace=w1"
+        );
     }
 }

@@ -176,14 +176,15 @@ pub(in crate::cli) fn available(ctx: &Context) -> bool {
     ctx.herdr_tab.is_none() && ctx.interactive() && in_herdr()
 }
 
-/// Run Shoal with `args` in a new background tab at `cwd`.
+/// Run Shoal with `args` in a new tab at `cwd`, focused when `focus` is set.
 pub(in crate::cli) async fn run_in_tab(
     ctx: &Context,
     cwd: &Path,
     label: &str,
     args: &[OsString],
+    focus: bool,
 ) -> Result<()> {
-    let created = created(tab_command(ctx, cwd, label, false)?).await?;
+    let created = created(tab_command(ctx, cwd, label, focus)?).await?;
     let mut argv = shoal_argv(&ctx.paths)?;
     argv.extend_from_slice(args);
     run_in_pane(&created.root_pane.pane_id, &argv).await

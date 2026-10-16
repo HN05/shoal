@@ -259,17 +259,22 @@ pub async fn expand_with_fields(
         fields.push(("{diff_base}", OsStr::new(base)));
     }
     fields.extend_from_slice(extra_fields);
+    Ok(substitute(argv, &fields, args))
+}
+
+/// Render each argument once, putting `args` at `{args}` or after the command.
+fn substitute(argv: &[String], fields: &[(&str, &OsStr)], args: Vec<OsString>) -> Vec<OsString> {
     let mut command = Vec::new();
     let mut args = Some(args);
     for arg in argv {
         if arg == "{args}" {
             command.extend(args.take().unwrap_or_default());
         } else {
-            command.push(render(arg, &fields));
+            command.push(render(arg, fields));
         }
     }
     command.extend(args.unwrap_or_default());
-    Ok(command)
+    command
 }
 
 fn unknown_command(name: &str) -> anyhow::Error {
