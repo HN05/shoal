@@ -11,8 +11,10 @@ instead of the PR delivery guidance below.
 ## What matters most
 
 - Managed daemon updates wait for tracked execution records and daemon operations
-  to finish. Preserve the socket backlog and ownership lock across exec; read-only
-  streams reconnect after the handoff, preserving event cursors.
+  to finish; write replies only while holding an operation. Preserve the socket
+  backlog and ownership lock across exec; read-only streams reconnect after the
+  handoff, preserving event cursors, and continue in the installed release when
+  the protocol changes. Only requests a daemon refused unrun are sent again.
 - The minimum Rust version follows current stable; keep the manifest and CI
   toolchain aligned and validate with locked dependencies.
 - Treat function abstraction as a blocking correctness check. Require every
