@@ -1311,6 +1311,7 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
         ])
     );
     assert_eq!(status["prs"][0]["review"], Value::Null);
+    assert_eq!(status["cleanup_reason"]["reason"], "pr_watch");
     assert!(
         status["prs"][0]["errors"][0]
             .as_str()
@@ -1331,6 +1332,7 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
         "Simulators:    0",
         "Resources:     2",
         "PR watch:      https://forge.example/team/repo/pulls/7\n  State:       open, merge conflicts\n  Checks:      2\n    ci / rust: success\n    review: pending\n  reviews lookup failed",
+        "Cleanup:       Waiting for watched PRs to merge",
         "Notifications: 1 unread",
     ] {
         assert!(text.contains(expected), "missing {expected:?} in {text:?}");

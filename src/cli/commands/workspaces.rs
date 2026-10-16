@@ -1488,6 +1488,7 @@ fn render_status(view: &StatusView, json: bool) {
         }
         None => println!("PR watch:      none"),
     }
+    println!("Cleanup:       {}", status.cleanup_reason);
     if let Some(error) = &status.cleanup_error {
         println!("Auto cleanup:  {}", palette.paint(Style::Warning, error));
     }
