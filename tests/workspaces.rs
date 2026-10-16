@@ -17672,6 +17672,178 @@ fn terminal_agents_run_tracked_in_a_labelled_zmx_session_unless_nested_or_detach
     );
 }
 
+/// A fake agent that records its directory and NUL-separated arguments.
+fn install_recording_agent(fixture: &Fixture, agent: &str) {
+    install_test_script(
+        fixture.root.path().join("bin").join(agent),
+        "#!/bin/sh\npwd > \"$HOME/chat-cwd\"\nprintf '%s\\0' \"$@\" > \"$HOME/chat-args\"\necho \"${ZMX_SESSION:-none}\" >> \"$HOME/chat-sessions\"\n",
+    );
+}
+
+fn chat_args(fixture: &Fixture) -> Vec<String> {
+    fs::read_to_string(fixture.root.path().join("chat-args"))
+        .unwrap()
+        .split_terminator('\0')
+        .map(str::to_owned)
+        .collect()
+}
+
+#[test]
+fn chat_runs_the_agent_in_the_checkout_in_a_labelled_zmx_session() {
+    let fixture = Fixture::new();
+    let home = fixture.root.path();
+    install_recording_agent(&fixture, "claude");
+    let repository = fixture.ok(&["repo", "list"])[0].clone();
+    let id = repository["id"].as_str().unwrap();
+    let checkout = fs::canonicalize(&fixture.repo).unwrap();
+
+    let launch = |command: &mut Command| fixture.terminal_command(command, "", true);
+    let (output, transcript) = launch(fixture.command().args([
+        "chat",
+        fixture.repo.to_str().unwrap(),
+        "--agent",
+        "claude",
+        "--",
+        "--model",
+        "fast",
+    ]));
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    let calls = zmx_calls(&fixture);
+    assert_eq!(calls[0], ["list"]);
+    let labels = format!("shoal.chat={id} shoal.agent=claude");
+    assert_eq!(calls[1][..3], ["attach", "--labels", &labels]);
+    assert_eq!(calls[1][4], "claude");
+    assert_eq!(
+        fs::read_to_string(home.join("chat-cwd")).unwrap().trim(),
+        checkout.to_str().unwrap()
+    );
+    let args = chat_args(&fixture);
+    assert_eq!(args[0], "--append-system-prompt");
+    assert!(args[1].contains(checkout.to_str().unwrap()), "{}", args[1]);
+    assert_eq!(args[2..], ["--model", "fast"]);
+    // Chats are not workspace executions.
+    assert_eq!(fixture.ok(&["ls"]), serde_json::json!([]));
+
+    // Inside a session the agent replaces Shoal in place, and a later chat
+    // starts another one instead of reusing it.
+    let before = zmx_calls(&fixture).len();
+    let (output, transcript) = launch(
+        fixture
+            .command()
+            .current_dir(&fixture.repo)
+            .env("ZMX_SESSION", "outer")
+            .args(["chat", "--agent", "claude"]),
+    );
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert_eq!(zmx_calls(&fixture).len(), before);
+    assert_eq!(
+        fs::read_to_string(home.join("chat-sessions")).unwrap(),
+        format!("{}\nouter\n", calls[1][3])
+    );
+}
+
+#[test]
+fn chat_opens_a_focused_herdr_tab_at_the_checkout() {
+    let fixture = Fixture::with_config(Some("[herdr]\nfocus = false\n"));
+    install_fake_herdr(&fixture);
+    install_recording_agent(&fixture, "codex");
+    let repository = fixture.ok(&["repo", "list"])[0].clone();
+    let id = repository["id"].as_str().unwrap();
+    let checkout = fs::canonicalize(&fixture.repo).unwrap();
+
+    let (caller, transcript) = herdr_call(
+        &fixture,
+        &[
+            "chat",
+            fixture.repo.to_str().unwrap(),
+            "--agent",
+            "codex",
+            "--",
+            "--search",
+        ],
+        "",
+    );
+    assert!(caller.status.success(), "{caller:?} {transcript}");
+    let create = &herdr_calls(&fixture)[0];
+    assert_eq!(create[..2], ["tab", "create"]);
+    let option = |name: &str| {
+        let at = create.iter().position(|arg| arg == name).unwrap();
+        create[at + 1].clone()
+    };
+    assert_eq!(Path::new(&option("--cwd")), fixture.repo);
+    assert!(option("--label").ends_with(" chat"));
+    assert!(create.iter().any(|arg| arg == "--focus"));
+    let worker = herdr_worker(&fixture);
+    let chat = worker.iter().position(|arg| arg == "chat").unwrap();
+    assert_eq!(
+        worker[chat..],
+        ["chat", "--here", id, "--agent", "codex", "--", "--search"]
+    );
+
+    // The tab's own call runs the agent in its pane.
+    let (output, transcript) = fixture.interactive_command(
+        herdr_worker_command(&fixture)
+            .current_dir(&fixture.repo)
+            .env("HERDR_ENV", "1")
+            .env("HERDR_PANE_ID", "w1:p9"),
+        "",
+    );
+    assert!(output.status.success(), "{output:?} {transcript}");
+    assert_eq!(
+        fs::read_to_string(fixture.root.path().join("chat-cwd"))
+            .unwrap()
+            .trim(),
+        checkout.to_str().unwrap()
+    );
+    let args = chat_args(&fixture);
+    assert_eq!(args[0], "-c");
+    assert!(
+        args[1].starts_with("developer_instructions="),
+        "{}",
+        args[1]
+    );
+    // Codex's default launcher appends its own options after forwarded ones.
+    assert_eq!(args[2], "--search");
+    assert!(!fixture.root.path().join("zmx-calls").exists());
+}
+
+#[test]
+fn chat_refuses_scoped_callers_detached_agents_and_missing_terminals() {
+    let fixture = Fixture::new();
+    install_fake_agents(&fixture, &["claude", "happy"]);
+    let repo = fixture.repo.to_str().unwrap();
+    let (output, transcript) = fixture.interactive_command(
+        fixture
+            .command()
+            .args(["chat", repo, "--agent", "happy-claude"]),
+        "",
+    );
+    assert!(!output.status.success());
+    assert!(
+        transcript.contains("chat runs claude or codex"),
+        "{transcript}"
+    );
+    let output = fixture.run(&["chat", repo, "--agent", "claude"]);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("chat needs a terminal"));
+    fixture.add("scoped");
+    let output = fixture.run(&[
+        "exec",
+        "scoped",
+        "--",
+        env!("CARGO_BIN_EXE_shoal"),
+        "chat",
+        repo,
+        "--agent",
+        "claude",
+    ]);
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("workspace processes cannot start chats"),
+        "{output:?}"
+    );
+}
+
 #[test]
 fn zmx_agent_exit_resets_input_modes_for_the_calling_shell() {
     let fixture = Fixture::new();

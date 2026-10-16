@@ -544,6 +544,23 @@ pub enum Command {
         #[arg(last = true)]
         args: Vec<OsString>,
     },
+    /// Start a new chat with an agent about a repository in its registered checkout.
+    ///
+    /// Inside Herdr the chat opens in a focused tab; on a terminal it runs in
+    /// a zmx session. Chats are not tracked by the daemon.
+    Chat {
+        /// Run in the current pane instead of opening a Herdr tab.
+        #[arg(long)]
+        here: bool,
+        /// Registered repository; defaults to the current checkout or workspace, else a picker.
+        repository: Option<String>,
+        /// Agent to start, claude or codex; defaults to default_agent, otherwise a picker.
+        #[arg(long, value_parser = AgentParser)]
+        agent: Option<Agent>,
+        /// Arguments forwarded to the agent.
+        #[arg(last = true)]
+        args: Vec<OsString>,
+    },
     /// Start a detached agent session in Happy.
     Happy {
         #[arg(value_enum)]

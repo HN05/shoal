@@ -14,7 +14,8 @@ const GROUPS: &[(&str, &[&str])] = &[
     (
         "Run commands and agents",
         &[
-            "exec", "env", "run", "claude", "codex", "happy", "t3", "attach", "stop", "resume",
+            "exec", "env", "run", "claude", "codex", "happy", "t3", "chat", "attach", "stop",
+            "resume",
         ],
     ),
     (

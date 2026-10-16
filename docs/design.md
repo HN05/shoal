@@ -657,6 +657,17 @@ notification. Codex reports no state yet: its `notify` runs only after a turn,
 so a busy agent would show as finished. Proposal: report it from the Codex
 hooks that deliver messages.
 
+A chat is a conversation with an agent about a repository, not an assignment,
+so it runs in the registered checkout with the user's authority instead of in a
+workspace: coordinating work is one thing a chat may do, and scoped sessions
+cannot create workspaces. Its instructions describe the discussion only; the
+orchestrator skill is available when the user asks for coordination. Belonging
+to no workspace, a chat is not a tracked execution: queuing, overload stops and
+resume serve unattended agents, while the user attends a chat. A repository may
+have several chats, so each call starts a new one and focuses it. Only Claude and
+Codex run chats, because they take instructions apart from the first message.
+Proposal: show chats in `ls` and journal events (#732).
+
 Skills are split by role: `shoal-worker` covers an agent's own workspace and
 `shoal-orchestrator` covers unscoped coordination from a console, so neither
 role loads the other's commands. Both are installed together at user scope,

@@ -5,6 +5,7 @@ mod acquisition;
 mod agent_queue;
 mod agent_state;
 mod base;
+mod chat;
 mod cleanup;
 mod configuration;
 mod events;
@@ -437,6 +438,12 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             prompt,
             args,
         } => agents::happy(&ctx, agent, workspace, prompt, args).await,
+        Command::Chat {
+            here,
+            repository,
+            agent,
+            args,
+        } => chat::start(&ctx, repository, agent, here, args).await,
         Command::Acquire { kind, workspace } => leases::acquire(&ctx, kind, workspace).await,
         Command::Release { kind, workspace } => leases::release(&ctx, kind, workspace).await,
         Command::Leases {

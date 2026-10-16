@@ -262,6 +262,18 @@ pub async fn expand_with_fields(
     Ok(substitute(argv, &fields, args))
 }
 
+/// `name`'s command with only `fields` known, for launches outside a workspace;
+/// other placeholders stay literal.
+pub fn expand_outside_workspace(
+    commands: &Commands,
+    name: &str,
+    fields: &[(&str, &OsStr)],
+    args: Vec<OsString>,
+) -> Result<Vec<OsString>> {
+    let argv = commands.get(name).ok_or_else(|| unknown_command(name))?;
+    Ok(substitute(argv, fields, args))
+}
+
 /// Render each argument once, putting `args` at `{args}` or after the command.
 fn substitute(argv: &[String], fields: &[(&str, &OsStr)], args: Vec<OsString>) -> Vec<OsString> {
     let mut command = Vec::new();

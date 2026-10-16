@@ -618,6 +618,26 @@ to report alive, and posts the prompt (`curl`, token on stdin). The prompt is al
 saved beside the log; when Happy is not logged in or delivery fails, Shoal warns
 and leaves it there for you to send from the app.
 
+### Chats
+
+`shoal chat [repository] [--agent NAME] [--here] [-- ARGS]` starts a new chat
+with Claude Code or Codex CLI about a repository, to discuss it, its issues and
+plans, or to coordinate work, without changing code. The repository is the named
+one, else the current checkout's or workspace's, else a picker; the agent is
+`--agent`, else `default_agent`, else a picker, and must be `claude` or `codex`.
+The agent's configured launcher runs in the registered checkout with chat
+instructions passed as native instructions, so it waits for your first message;
+`{path}` is the checkout and other workspace placeholders stay literal.
+
+Every call starts a new chat and focuses it. Inside Herdr it opens a focused tab
+labelled `<repo> chat` regardless of `herdr.focus`, unless `--here` or
+`new_tab = false` keeps it in the current pane; on a terminal it runs in a zmx
+session labelled `shoal.chat=<repository id>`, which `zmx attach` returns to;
+inside a zmx session or a Herdr pane it runs in place. Chats run with your
+authority, not a workspace scope, and workspace processes cannot start one. The
+daemon does not track them: they are not listed, queued, stopped under pressure
+or resumed.
+
 ### Agent queue
 
 ```sh

@@ -1,7 +1,8 @@
 //! zmx sessions keep terminal agents running after their terminal closes. zmx
 //! owns the pty, passes output through unchanged while attached, and restores
 //! the screen on attach; Shoal names each session after its workspace and
-//! labels it with the workspace ID so `shoal attach` can find it.
+//! labels it with the workspace ID so `shoal attach` can find it. Repository
+//! chats are labelled with the repository ID instead.
 use std::{
     collections::HashSet, ffi::OsString, io::IsTerminal, path::PathBuf, process::ExitStatus,
 };
@@ -16,11 +17,19 @@ use super::{
     herdr,
     internal::{Worker, internal_command},
 };
-use crate::{config::Effective, env, model::Workspace, subprocess::Run, tools::Tool};
+use crate::{
+    config::Effective,
+    env,
+    forge::repository,
+    model::{Repository, Workspace},
+    subprocess::Run,
+    tools::Tool,
+};
 
 /// zmx sets this inside a session; a launch there runs in place.
 const SESSION_VAR: &str = "ZMX_SESSION";
 const WORKSPACE_LABEL: &str = "shoal.workspace";
+const CHAT_LABEL: &str = "shoal.chat";
 const AGENT_LABEL: &str = "shoal.agent";
 /// zmx names its socket after the session, and `sun_path` is short on macOS.
 const MAX_NAME_LEN: usize = 32;
@@ -97,6 +106,37 @@ pub(in crate::cli) async fn run(
     }
     let status = zmx.status().await.context("run zmx")?;
     finish(workspace, &name, status).await
+}
+
+/// Start a chat's `command` in a new session at the repository's checkout and
+/// attach this terminal to it. Chats are not tracked executions, so the
+/// session runs the agent directly.
+pub(in crate::cli) async fn run_chat(
+    repository: &Repository,
+    agent: &str,
+    command: &[OsString],
+) -> Result<i32> {
+    let taken = list().await?.into_iter().map(|session| session.0).collect();
+    let name = free_name(&format!("{}-chat", repository::name(repository)), &taken);
+    let status = Command::new(Tool::Zmx.program())
+        .arg("attach")
+        .arg("--labels")
+        .arg(labels(CHAT_LABEL, &repository.id, agent))
+        .arg(&name)
+        .args(command)
+        .current_dir(&repository.path)
+        .env_remove(env::SHELL_DIRECTIVE)
+        .status()
+        .await
+        .context("run zmx")?;
+    crate::execution::reset_input_modes();
+    if !status.success() {
+        bail!("zmx exited with {status}");
+    }
+    if list().await?.iter().any(|(session, _)| *session == name) {
+        eprintln!("shoal: detached from {name}; run `zmx attach {name}` to return");
+    }
+    Ok(0)
 }
 
 /// Run `worker` in a new detached session named after `name`, as if typed at
@@ -290,6 +330,10 @@ mod tests {
         assert_eq!(
             labels(WORKSPACE_LABEL, "w1", "my agent"),
             "shoal.workspace=w1"
+        );
+        assert_eq!(
+            labels(CHAT_LABEL, "r1", "codex"),
+            "shoal.chat=r1 shoal.agent=codex"
         );
     }
 }
