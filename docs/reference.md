@@ -1199,6 +1199,48 @@ JSON `hook_error`, and a `hook_failed`
 notification. It is skipped for already-missing worktrees and is not replayed
 following a daemon restart. Use a pre-remove hook when failure must retain ownership.
 
+### Seed builds
+
+A repository can keep a build of its default branch that new workspaces start
+from, so a branch rebuilds only what it changed and shares the rest on disk:
+
+```toml
+[seed]
+cmd = "scripts/seed.sh"  # In the worktree; builds the default branch and must exit 0
+paths = ["target"]       # Build outputs, relative to the worktree, new workspaces start with
+```
+
+The daemon keeps a locked, detached worktree at the local default branch's tip in
+the repository directory's `.seed`, and runs `seed.cmd` there when that branch or
+the seed's settings change. It checks every minute, one repository at a time, and
+waits while memory or free disk space is past its `[overload.warning]` threshold;
+a build that failed is retried only after such a change or a daemon restart. The
+settings come from the repository's saved config and its registered checkout's
+file. The command is an executable inside the seed worktree, given as a relative
+path and run like `setup_cmd`. It gets the repository's `[env]`, with placeholders
+rendered for the seed worktree, but no inherited `SHOAL_*` variables or agent secrets. It has a
+two-hour limit, writes its output to `.seed/build.log`, and anything it leaves
+running in its process group is stopped when it exits.
+
+A successful build freezes `paths` as a copy-on-write snapshot: APFS clones on
+macOS, reflinks on Linux, never a full copy. A new worktree whose own settings
+match the snapshot's clones its paths before setup, keeping any path that already
+exists. When it clones at least one, it gives every tracked file its commit left
+unchanged the seed's modification time, so tools that compare modification times,
+such as Cargo and make, rebuild only changed files; next to outputs the worktree
+already had, older times could hide changed sources. Cloned files share disk blocks with the snapshot
+until rewritten. A failed build or clone records a `seed_failed` notification, and
+the workspace starts without the seed.
+
+Removing the repository or its `[seed]` stops a running build and deletes the
+seed worktree, snapshot and log, keeping anything else in `.seed`. Shoal marks
+`.seed` and the seed worktree's Git metadata with the repository, and neither
+builds in nor deletes a seed whose marks are missing; `doctor` reports such a
+`.seed/worktree`. Point outputs a tool keeps
+outside the worktree at a path inside it, such as
+`xcodebuild -derivedDataPath build/DerivedData`, so workspace removal deletes them
+too.
+
 ### Remove a workspace
 
 Removal retains the default branch unless `--delete-branch`, and every branch while
@@ -1605,7 +1647,7 @@ The daemon records what happens while you are not looking: a resource or
 simulator request that found no capacity (naming the workspaces holding the
 pool), a preferred port in use, a tracked agent
 exiting (with its code, or a note to run `doctor` when it left processes
-behind), [agent queue](#agent-queue) starts and failures, and workspaces it removed or retained on its own through PR, merge, or
+behind), [agent queue](#agent-queue) starts and failures, [seed build](#seed-builds) failures, and workspaces it removed or retained on its own through PR, merge, or
 idle cleanup, and automatic cleanup that starts failing. `shoal notify` adds a one-line message (at most 512 bytes, without
 control characters) for a workspace; agents use it to ask for attention without
 marking the assignment done. Each line shows the local time, the workspace, and the message;

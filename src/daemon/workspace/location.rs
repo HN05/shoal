@@ -58,7 +58,8 @@ impl Manager {
             if let Some(directory) = &other.workspaces_dir {
                 ensure!(
                     !directory.starts_with(&path)
-                        && (other.id == repo.id || !path.starts_with(directory)),
+                        && (other.id == repo.id || !path.starts_with(directory))
+                        && !overlaps(&path, crate::seed::Layout::new(directory, &other.id).root()),
                     "workspace path overlaps a reserved repository directory"
                 );
             }

@@ -15,7 +15,7 @@ use std::{
 const OWNER_MARKER: &str = "shoal-workspace";
 
 /// The workspace ID recorded in an admin directory, if Shoal marked it.
-pub(super) fn marked_owner(git_dir: &Path) -> Result<Option<String>> {
+pub(in crate::daemon) fn marked_owner(git_dir: &Path) -> Result<Option<String>> {
     match fs::read_to_string(git_dir.join(OWNER_MARKER)) {
         Ok(owner) => Ok(Some(owner.trim_end().to_owned())),
         Err(error) if error.kind() == ErrorKind::NotFound => Ok(None),
@@ -23,7 +23,7 @@ pub(super) fn marked_owner(git_dir: &Path) -> Result<Option<String>> {
     }
 }
 
-pub(super) fn mark_owner(git_dir: &Path, workspace_id: &str) -> Result<()> {
+pub(in crate::daemon) fn mark_owner(git_dir: &Path, workspace_id: &str) -> Result<()> {
     // Rename into place so a crash never leaves a truncated marker.
     let partial = git_dir.join(format!("{OWNER_MARKER}.partial"));
     fs::write(&partial, format!("{workspace_id}\n")).context("write Git worktree owner marker")?;

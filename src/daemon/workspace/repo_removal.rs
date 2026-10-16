@@ -54,6 +54,7 @@ impl Manager {
         // gate also serializes with workspace creation, branch refresh, and reconciliation.
         let _registry = self.registry_gate.lock().await;
         let repo = self.repository(selector).await?;
+        let _seed = self.stop_seed_build(&repo.id).await;
         let _git = self.lock_repository_git(&repo.id).await;
         let id = repo.id.clone();
         self.store
@@ -94,6 +95,7 @@ impl Manager {
                 .await?;
         }
         verify_directory(&repo.path, identity, true)?;
+        self.remove_seed(&repo).await?;
         delete_checkout(repo.path.clone()).await?;
         delete_empty_workspaces_dir(repo.workspaces_dir.clone()).await?;
         self.unregister_repository(&repo.id).await?;
@@ -362,8 +364,9 @@ async fn check_checkout(repo: &Repository, workspaces: &[Workspace]) -> Result<(
             w.path == tree.path
                 || canonical_parent_with_missing(&w.path).is_ok_and(|p| p == tree.path)
         });
+        let seed = crate::seed::Layout::of(repo).is_some_and(|seed| seed.is_worktree(&tree.path));
         ensure!(
-            tree.path == repo.path || owned,
+            tree.path == repo.path || owned || seed,
             "repository has a worktree outside Shoal: {}; remove it first",
             tree.path.display()
         );

@@ -24,6 +24,7 @@ pub mod recovery;
 pub mod resources;
 mod restart_recovery;
 pub mod scope;
+pub(crate) mod seed;
 pub mod store;
 mod warnings;
 pub mod workspace;
@@ -162,6 +163,10 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
     background.spawn(supervise("simulator cleanup", {
         let manager = manager.clone();
         move || expire_simulators(manager.clone())
+    }));
+    background.spawn(supervise("seed builds", {
+        let manager = manager.clone();
+        move || seed::run(manager.clone())
     }));
     background.spawn(supervise("item activity", {
         let manager = manager.clone();

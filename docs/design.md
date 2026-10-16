@@ -344,6 +344,19 @@ After cancellation, the wrapper rolls back incomplete merges after stopping the
 process group, preserving completed merges and reporting unsafe recovery failures.
 Refresh fetches use private temporary refs; landing merges run in the tracked wrapper.
 
+A repository's `[seed]` keeps one build of its local default branch that new
+worktrees start from, instead of sharing build directories between live
+workspaces: a shared directory serialises or corrupts concurrent builds, while a
+copy-on-write clone costs no space until a branch rewrites a file and needs no
+tool support. The daemon owns a locked, detached seed worktree in the repository
+directory, builds it when the branch moves and freezes the configured outputs as
+a snapshot, so a running build never reaches a workspace. Creation clones the
+snapshot under the repository Git gate and restores the seed's modification times
+on tracked files its commit left unchanged, since mtime-based tools otherwise treat
+every freshly checked-out file as new. Platforms without clones skip the seed
+rather than copy. Seeds are best effort: failures notify and never fail creation,
+and builds wait under host pressure so they never add load an agent would feel.
+
 ## Scope and user interfaces
 
 Tracked executions and processes started with exported workspace environments

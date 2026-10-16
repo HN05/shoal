@@ -42,6 +42,8 @@ states!(NotificationKind {
     QueueStarted => "queue_started",
     /// A queued agent could not start.
     QueueFailed => "queue_failed",
+    /// A seed build failed, or a new workspace could not start from it.
+    SeedFailed => "seed_failed",
 });
 
 impl NotificationKind {

@@ -135,6 +135,10 @@ pub struct Manager {
     pub(crate) agent_queue_wake: tokio::sync::Notify,
     /// Recent CPU readings for dynamic agent admission.
     pub(crate) cpu_usage: std::sync::Mutex<crate::daemon::cpu_usage::CpuUsage>,
+    /// The commit and settings whose seed build last failed, per repository.
+    pub(super) seed_failures: std::sync::Mutex<HashMap<String, (String, String)>>,
+    /// Running seed builds, which repository removal cancels and waits for.
+    pub(super) seed_builds: std::sync::Mutex<HashMap<String, Arc<super::seed::SeedSlot>>>,
 }
 
 impl Manager {
@@ -175,6 +179,8 @@ impl Manager {
             agent_queue_holds: Default::default(),
             agent_queue_wake: tokio::sync::Notify::new(),
             cpu_usage: Default::default(),
+            seed_failures: Default::default(),
+            seed_builds: Default::default(),
         }))
     }
 
@@ -547,6 +553,7 @@ impl Manager {
         let settings = self.workspace_settings_from(&config, workspace).await?;
         self.apply_workspace_git_profile(workspace, &config, &settings, git_profile)
             .await?;
+        self.apply_seed(repo, workspace, &settings).await;
         Ok(settings.setup_cmd.is_some() || settings.pre_setup_cmd.is_some())
     }
 

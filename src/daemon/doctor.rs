@@ -95,12 +95,29 @@ impl Manager {
                 .into_iter()
                 .map(|w| w.path)
                 .collect();
+            let seed = crate::seed::Layout::new(root, &repo.id);
+            let verified_seed = crate::daemon::seed::is_seed_worktree(&repo, &seed)
+                .await
+                .unwrap_or(false);
             match git::worktrees(&repo.path, git::run).await {
                 Ok(trees) => {
                     let mut untracked = false;
+                    let seed_path = seed.worktree();
+                    if seed_path.symlink_metadata().is_ok() && !verified_seed {
+                        untracked = true;
+                        checks.push(Check::new(
+                            &name,
+                            CheckStatus::Warning,
+                            format!(
+                                "Seed path is not Shoal's seed worktree; Shoal will neither rebuild nor remove it: {}",
+                                seed_path.display()
+                            ),
+                        ));
+                    }
                     for tree in trees {
                         if tree.path.starts_with(root)
                             && tree.path != repo.path
+                            && !(verified_seed && seed.is_worktree(&tree.path))
                             && !tracked.contains(&tree.path)
                         {
                             untracked = true;
