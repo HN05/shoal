@@ -274,6 +274,9 @@ pub enum Command {
         /// List only this registered repository's workspaces and agents.
         #[arg(long = "repo")]
         repository: Option<String>,
+        /// List only workspaces and agents with this status; repeat or separate with commas.
+        #[arg(long, value_delimiter = ',', conflicts_with = "ready")]
+        status: Vec<list_status::ListStatus>,
     },
     /// Show workspace activity, changes, resources, and issue and PR state.
     ///

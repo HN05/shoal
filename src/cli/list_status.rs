@@ -5,8 +5,9 @@ use crate::{
     state::{AgentState, QueueState, WorkspaceState},
 };
 
-/// What a list row shows a workspace or queued agent doing.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// What a list row shows a workspace or queued agent doing. Its value name
+/// is the row's label in kebab case.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum ListStatus {
     Preparing,
     Stopping,
@@ -106,3 +107,24 @@ impl ListStatus {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use clap::ValueEnum;
+
+    use super::*;
+
+    #[test]
+    fn value_names_spell_the_labels() {
+        for status in ListStatus::value_variants() {
+            let name = status.to_possible_value().unwrap();
+            assert_eq!(
+                name.get_name(),
+                status
+                    .label()
+                    .replace(" (", " ")
+                    .replace(')', "")
+                    .replace(' ', "-")
+            );
+        }
+    }
+}

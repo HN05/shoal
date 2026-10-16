@@ -6976,6 +6976,43 @@ fn ls_lists_only_the_selected_repository() {
 }
 
 #[test]
+fn ls_lists_only_the_selected_statuses() {
+    let fixture = Fixture::new();
+    fixture.add("quiet");
+    fixture.add("reviewed");
+    fixture.ok(&["ready", "--workspace", "reviewed"]);
+    let names = |statuses: &[&str]| -> Vec<_> {
+        let mut args = vec!["ls"];
+        for status in statuses {
+            args.extend(["--status", status]);
+        }
+        fixture
+            .ok(&args)
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|w| w["name"].clone())
+            .collect()
+    };
+    assert_eq!(names(&["idle"]), ["quiet"]);
+    assert_eq!(names(&["ready-for-review"]), ["reviewed"]);
+    assert_eq!(names(&["idle,ready-for-review"]), ["quiet", "reviewed"]);
+    assert_eq!(names(&["failed", "ready-for-review"]), ["reviewed"]);
+    assert!(names(&["working"]).is_empty());
+    let listed = String::from_utf8(fixture.run(&["ls", "--status", "idle"]).stdout).unwrap();
+    assert!(
+        listed.contains("quiet") && !listed.contains("reviewed"),
+        "{listed}"
+    );
+    for args in [
+        &["ls", "--status", "unknown"][..],
+        &["ls", "--ready", "--status", "idle"],
+    ] {
+        assert!(!fixture.run(args).status.success(), "{args:?}");
+    }
+}
+
+#[test]
 fn hold_release_picks_an_omitted_hold() {
     let fixture = Fixture::new();
     fixture.add("upper");

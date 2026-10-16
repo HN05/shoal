@@ -312,8 +312,9 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             ready,
             queue,
             repository,
+            status,
         } => {
-            let filter = listing::ListFilter::resolve(&ctx, repository).await?;
+            let filter = listing::ListFilter::resolve(&ctx, repository, status).await?;
             workspaces::list(&ctx, ready, queue, &filter).await
         }
         Command::Hold { command, scope } => holds::run(&ctx, command, scope).await,

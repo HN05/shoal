@@ -336,7 +336,9 @@ state unless ready; for a ready workspace it is, in order of precedence,
 `waiting for input`, `ready for review`, the other [agent states](#agent-state),
 `running` while an agent or command runs, `ready for review (outdated)`, or `idle`. Branches and paths are in `shoal status`.
 `ls --repo <repository>`, with or without `--ready` or `--queue`, lists only that
-registered repository's workspaces and queued agents.
+registered repository's workspaces and queued agents. `ls --status <status>`,
+repeated or comma-separated, lists only rows with one of those statuses, spelled
+in kebab case (`waiting-for-input`, `ready-for-review-outdated`, `queued`).
 Enter enters the selection; Ctrl-D deletes, Ctrl-E
 runs Claude/Codex CLI, starts a Happy session, opens Codex/T3 apps, or runs a shell command, Ctrl-A adds,
 Ctrl-O inspects, Ctrl-S stops, Ctrl-F shows the diff. Each action returns to your

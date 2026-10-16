@@ -1208,7 +1208,9 @@ pub(super) async fn list(
         return super::agent_queue::list(ctx, filter).await;
     }
     let mut workspaces = client::workspaces(&ctx.paths).await?;
-    workspaces.retain(|workspace| filter.keeps_workspace(workspace));
+    let stopped = ui::stopped_workspaces(&ctx.paths, &workspaces);
+    workspaces
+        .retain(|workspace| filter.keeps_workspace(workspace, stopped.contains(&workspace.id)));
     let queued = if ready {
         Vec::new()
     } else {
@@ -1224,7 +1226,6 @@ pub(super) async fn list(
         };
         ui::review_rows(&workspaces, &repositories, Palette::stdout(ctx.json))
     } else {
-        let stopped = ui::stopped_workspaces(&ctx.paths, &workspaces);
         ui::workspace_rows(&workspaces, &[], &stopped, Palette::stdout(ctx.json))
     };
     ctx.show(&workspaces, |_| {
