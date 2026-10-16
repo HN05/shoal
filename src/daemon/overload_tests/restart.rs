@@ -164,6 +164,12 @@ async fn restart_keeps_uncertain_stopped_agents_and_notifies_once() {
     )
     .await;
     interrupted(&manager, &workspace, "legacy", &wrapper, None, None).await;
+    interrupted(&manager, &workspace, "unreadable", &wrapper, None, None).await;
+    fs::write(
+        record_path(&manager.paths, &workspace.id, "unreadable"),
+        "not json",
+    )
+    .unwrap();
     let (_alive, live) = sleeper();
     interrupted(
         &manager,
@@ -185,9 +191,18 @@ async fn restart_keeps_uncertain_stopped_agents_and_notifies_once() {
         .map(|execution| execution.id)
         .collect();
     kept.sort();
-    assert_eq!(kept, ["legacy", "reattaching", "survivor", "unproven"]);
+    assert_eq!(
+        kept,
+        [
+            "legacy",
+            "reattaching",
+            "survivor",
+            "unproven",
+            "unreadable"
+        ]
+    );
     let messages = blocked(&reopened).await;
-    assert_eq!(messages.len(), 3, "{messages:?}");
+    assert_eq!(messages.len(), 4, "{messages:?}");
     let survivor = messages.iter().find(|m| m.contains("survivor")).unwrap();
     assert!(
         survivor.contains(&format!(
@@ -209,6 +224,9 @@ async fn restart_keeps_uncertain_stopped_agents_and_notifies_once() {
         legacy.contains("process identity is incomplete"),
         "{legacy}"
     );
+    let unreadable = messages.iter().find(|m| m.contains("unreadable")).unwrap();
+    assert!(unreadable.contains("cannot be read"), "{unreadable}");
+    assert!(unreadable.contains("shoal doctor load"), "{unreadable}");
     assert!(record(&reopened, &workspace, "survivor").is_some());
     reopened.store.shutdown().await;
     serving.abort();

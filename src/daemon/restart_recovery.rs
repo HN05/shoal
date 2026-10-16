@@ -28,6 +28,13 @@ struct Interrupted {
     record: Record,
 }
 
+/// A quarantined execution whose saved recovery record cannot be read.
+struct Unreadable {
+    workspace: Workspace,
+    execution: String,
+    error: anyhow::Error,
+}
+
 /// A wrapper that was alive during reconciliation, so it may still reattach
 /// or report its exit.
 pub(crate) struct Waiting {
@@ -100,7 +107,10 @@ impl Manager {
     /// gone, keeping their recovery records, and notify about the ones that
     /// remain uncertain. Returns the wrappers that are still alive.
     pub(crate) async fn reconcile_interrupted_agents(&self) -> Result<Vec<Waiting>> {
-        let interrupted = self.interrupted_agents().await?;
+        let (interrupted, unreadable) = self.interrupted_agents().await?;
+        for unreadable in &unreadable {
+            self.notify_unreadable(unreadable).await;
+        }
         if interrupted.is_empty() {
             return Ok(vec![]);
         }
@@ -121,8 +131,8 @@ impl Manager {
         Ok(waiting)
     }
 
-    async fn interrupted_agents(&self) -> Result<Vec<Interrupted>> {
-        let mut interrupted = Vec::new();
+    async fn interrupted_agents(&self) -> Result<(Vec<Interrupted>, Vec<Unreadable>)> {
+        let (mut interrupted, mut unreadable) = (Vec::new(), Vec::new());
         for workspace in self.list_workspaces().await? {
             let id = workspace.id.clone();
             let executions = self.store.run(move |db| store::executions(db, &id)).await?;
@@ -138,12 +148,15 @@ impl Manager {
                         record,
                     }),
                     Ok(None) => {}
-                    // Doctor still reports the execution; resume reports the record.
-                    Err(error) => log!("restart reconciliation skipped a record: {error:#}"),
+                    Err(error) => unreadable.push(Unreadable {
+                        workspace: workspace.clone(),
+                        execution: execution.id,
+                        error,
+                    }),
                 }
             }
         }
-        Ok(interrupted)
+        Ok((interrupted, unreadable))
     }
 
     async fn forget_stopped_agent(&self, interrupted: &Interrupted) -> Result<()> {
@@ -183,6 +196,23 @@ impl Manager {
             format!(
                 "{} stopped{reason}, but its execution {} cannot be reconciled after the daemon restarted: {issue}; inspect it with shoal doctor {}, then run shoal resume {} --execution {}",
                 record.agent, execution.id, workspace.name, workspace.name, execution.id
+            ),
+        )
+        .await;
+    }
+
+    async fn notify_unreadable(&self, unreadable: &Unreadable) {
+        let Unreadable {
+            workspace,
+            execution,
+            error,
+        } = unreadable;
+        self.notify(
+            Some(&workspace.name),
+            NotificationKind::RecoveryBlocked,
+            format!(
+                "The recovery record of execution {execution} cannot be read after the daemon restarted: {error:#}; inspect it with shoal doctor {}",
+                workspace.name
             ),
         )
         .await;
