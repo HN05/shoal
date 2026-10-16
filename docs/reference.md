@@ -1628,10 +1628,12 @@ message once they have printed it.
 
 `shoal claude`, `shoal codex` and their automatic or `shoal resume` restores
 register `shoal messages --hook` for the `PostToolUse` and `UserPromptSubmit`
-events, so a working agent receives new messages as additional context after its
-next tool call or prompt. Codex runs the hook only after you trust it in Codex's
+events, so a working agent receives new messages, and the activity on its linked
+issues and PRs that the daemon has queued for the next watch, as additional
+context after its next tool call or prompt. Delivering through the hook replaces a running watch in
+the workspace, which ends with `superseded: true`. Codex runs the hook only after you trust it in Codex's
 hook review. The hook reads the event from stdin and prints nothing when there
-are no messages; failures go to stderr and never fail the agent. Other agents
+is nothing new; failures go to stderr and never fail the agent. Other agents
 whose hooks accept Claude Code's `hookSpecificOutput.additionalContext` output can
 run the same command; the rest rely on `shoal messages` and `shoal watch`, which
 the default agent template mentions.

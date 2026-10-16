@@ -10,6 +10,7 @@ use crate::{
         ui::{self, Fallback},
     },
     daemon::agent_messages::AgentMessage,
+    forge::pr::wait::Updates,
     protocol::Method,
 };
 
@@ -48,7 +49,7 @@ pub(super) async fn show(ctx: &Context, workspace: Option<String>) -> Result<i32
 }
 
 /// Agent hooks run after every tool call, so a hook prints nothing without
-/// messages and reports failures without blocking the agent.
+/// messages or item updates and reports failures without blocking the agent.
 pub(super) async fn hook(ctx: &Context) -> Result<i32> {
     let mut input = String::new();
     // Hook input is optional context; a terminal, closed or unreadable stdin
@@ -64,32 +65,48 @@ pub(super) async fn hook(ctx: &Context) -> Result<i32> {
 
 async fn deliver_to_hook(ctx: &Context, input: &str) -> Result<()> {
     let workspace = ui::select_workspace(ctx, None, Fallback::CurrentDirectoryOnly).await?;
-    let messages: Vec<AgentMessage> = request(
+    let updates: Updates = request(
         &ctx.paths,
-        Method::AgentMessages {
+        Method::AgentUpdates {
             workspace: workspace.clone(),
         },
     )
     .await?;
-    if messages.is_empty() {
+    if updates.updates.is_empty() && updates.messages.is_empty() {
         return Ok(());
     }
-    println!("{}", hook_output(input, &messages));
+    println!("{}", hook_output(input, &hook_context(&updates)));
     std::io::Write::flush(&mut std::io::stdout())?;
-    delivered(ctx, workspace, &messages).await
+    acknowledge(ctx, workspace, &updates).await
+}
+
+/// What an agent hook tells the agent about `updates`.
+pub(super) fn hook_context(updates: &Updates) -> String {
+    let mut lines = Vec::new();
+    if !updates.messages.is_empty() {
+        lines.push("New Shoal messages for this workspace:".to_owned());
+        lines.extend(
+            updates
+                .messages
+                .iter()
+                .map(|message| format!("- {}", message.message)),
+        );
+    }
+    if !updates.updates.is_empty() {
+        lines.push("New activity on this workspace's issues and PRs:".to_owned());
+        lines.extend(
+            updates
+                .updates
+                .iter()
+                .map(|update| format!("- {} [{}]: {}", update.url, update.kind, update.message)),
+        );
+    }
+    lines.join("\n")
 }
 
 /// Claude Code and Codex read `additionalContext` for the event named in the
 /// hook input; without one, the context is plain text.
-fn hook_output(input: &str, messages: &[AgentMessage]) -> String {
-    let context = std::iter::once("New Shoal messages for this workspace:".to_owned())
-        .chain(
-            messages
-                .iter()
-                .map(|message| format!("- {}", message.message)),
-        )
-        .collect::<Vec<_>>()
-        .join("\n");
+fn hook_output(input: &str, context: &str) -> String {
     let event = serde_json::from_str::<serde_json::Value>(input)
         .ok()
         .and_then(|input| input["hook_event_name"].as_str().map(str::to_owned));
@@ -98,8 +115,25 @@ fn hook_output(input: &str, messages: &[AgentMessage]) -> String {
             "hookSpecificOutput": {"hookEventName": event, "additionalContext": context}
         })
         .to_string(),
-        None => context,
+        None => context.to_owned(),
     }
+}
+
+/// Shown once: the messages and updates a hook printed do not come back.
+pub(super) async fn acknowledge(ctx: &Context, workspace: String, updates: &Updates) -> Result<()> {
+    request::<()>(
+        &ctx.paths,
+        Method::AcknowledgePrUpdates {
+            workspace,
+            deliveries: updates
+                .updates
+                .iter()
+                .map(|update| update.delivery.clone())
+                .collect(),
+            messages: updates.messages.iter().map(|message| message.id).collect(),
+        },
+    )
+    .await
 }
 
 /// Shown once: exactly the messages a caller printed do not come back.
@@ -124,27 +158,40 @@ pub(super) async fn delivered(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::forge::updates::{Update, UpdateKind};
 
     #[test]
     fn hook_output_names_the_event_it_answers() {
-        let messages = [AgentMessage {
-            id: 1,
-            created_at: 0,
-            message: "Stop the dev server".into(),
-        }];
+        let updates = Updates {
+            updates: vec![Update {
+                url: "https://forge.example/team/repo/pulls/7".into(),
+                kind: UpdateKind::Comment,
+                message: "Comments or reviews changed".into(),
+                delivery: "one".into(),
+                check: None,
+            }],
+            messages: vec![AgentMessage {
+                id: 1,
+                created_at: 0,
+                message: "Stop the dev server".into(),
+            }],
+            timed_out: false,
+            superseded: false,
+        };
+        let context = hook_context(&updates);
+        assert_eq!(
+            context,
+            "New Shoal messages for this workspace:\n- Stop the dev server\n\
+             New activity on this workspace's issues and PRs:\n\
+             - https://forge.example/team/repo/pulls/7 [comment]: Comments or reviews changed"
+        );
         let output: serde_json::Value = serde_json::from_str(&hook_output(
             r#"{"hook_event_name":"PostToolUse","tool_name":"Bash"}"#,
-            &messages,
+            &context,
         ))
         .unwrap();
         assert_eq!(output["hookSpecificOutput"]["hookEventName"], "PostToolUse");
-        assert_eq!(
-            output["hookSpecificOutput"]["additionalContext"],
-            "New Shoal messages for this workspace:\n- Stop the dev server"
-        );
-        assert_eq!(
-            hook_output("", &messages),
-            "New Shoal messages for this workspace:\n- Stop the dev server"
-        );
+        assert_eq!(output["hookSpecificOutput"]["additionalContext"], context);
+        assert_eq!(hook_output("", &context), context);
     }
 }
