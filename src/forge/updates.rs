@@ -202,11 +202,10 @@ impl Snapshot {
         });
     }
 
-    /// Take `state` as already seen, once a state has been observed.
+    /// Take `state` as already seen, even before a first observation, whose
+    /// other activity is still reported.
     pub(crate) fn adopt_state(&mut self, state: &str) {
-        if !self.state.is_empty() {
-            state.clone_into(&mut self.state);
-        }
+        state.clone_into(&mut self.state);
     }
 
     /// Keeps each unchanged failure's report time until the interval passes,
@@ -367,21 +366,27 @@ mod tests {
     }
 
     #[test]
-    fn adopted_states_wake_only_after_a_first_observation() {
+    fn adopted_states_do_not_wake_even_before_a_first_observation() {
         let open = Snapshot {
             state: "open".into(),
             ..Default::default()
         };
-        let closed = Snapshot {
+        let mut closed = Snapshot {
             state: "closed".into(),
             ..Default::default()
         };
         let mut seen = open.clone();
         seen.adopt_state("closed");
         assert!(seen.changes(&closed, "pr").is_empty());
+        closed.record_comments(DISCUSSION, Ok(vec![("1".into(), "theirs".into())]));
         let mut unseen = Snapshot::default();
         unseen.adopt_state("closed");
-        assert_eq!(unseen.changes(&closed, "pr")[0].kind, UpdateKind::Closed);
+        let kinds: Vec<_> = unseen
+            .changes(&closed, "pr")
+            .iter()
+            .map(|update| update.kind)
+            .collect();
+        assert_eq!(kinds, [UpdateKind::Comment]);
     }
 
     #[test]
