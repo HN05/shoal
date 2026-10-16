@@ -18,6 +18,8 @@ use crate::{
 
 /// How often to look again at wrappers that were alive at startup.
 const WRAPPER_POLL_INTERVAL: Duration = Duration::from_secs(1);
+/// How long to wait before repeating a pass that failed.
+const RETRY_INTERVAL: Duration = Duration::from_secs(30);
 
 /// An execution quarantined by a restart whose stop saved a recovery record.
 struct Interrupted {
@@ -43,37 +45,48 @@ enum Outcome {
     Unresolved(String),
 }
 
-/// Reconcile at startup, then again whenever a wrapper that was alive exits.
+/// Reconcile at startup, then again whenever a wrapper that was alive exits,
+/// repeating a pass that failed until one succeeds.
 pub(super) async fn run(manager: Arc<Manager>) {
-    let mut waiting = reconcile(&manager).await;
+    let mut waiting = reconcile_until_done(&manager).await;
     while !waiting.is_empty() {
         tokio::time::sleep(WRAPPER_POLL_INTERVAL).await;
-        // A reattached wrapper reports to the daemon like any other.
-        let mut unknown = Vec::with_capacity(waiting.len());
-        for entry in waiting {
-            if manager.execution_unknown(&entry.execution).await {
-                unknown.push(entry);
-            }
-        }
-        waiting = unknown;
+        waiting = still_unknown(&manager, waiting).await;
         if waiting
             .iter()
             .any(|entry| !process::alive(&entry.wrapper).unwrap_or(true))
         {
-            waiting = reconcile(&manager).await;
+            waiting = reconcile_until_done(&manager).await;
         }
     }
 }
 
-async fn reconcile(manager: &Manager) -> Vec<Waiting> {
-    let _operation = manager.background_operations.read().await;
-    manager
-        .reconcile_interrupted_agents()
-        .await
-        .unwrap_or_else(|error| {
-            log!("restart reconciliation: {error:#}");
-            vec![]
-        })
+async fn reconcile_until_done(manager: &Manager) -> Vec<Waiting> {
+    loop {
+        let result = {
+            let _operation = manager.background_operations.read().await;
+            manager.reconcile_interrupted_agents().await
+        };
+        match result {
+            Ok(waiting) => return waiting,
+            Err(error) => log!(
+                "restart reconciliation failed; retrying in {}s: {error:#}",
+                RETRY_INTERVAL.as_secs()
+            ),
+        }
+        tokio::time::sleep(RETRY_INTERVAL).await;
+    }
+}
+
+/// A reattached wrapper reports to the daemon like any other.
+async fn still_unknown(manager: &Manager, waiting: Vec<Waiting>) -> Vec<Waiting> {
+    let mut unknown = Vec::with_capacity(waiting.len());
+    for entry in waiting {
+        if manager.execution_unknown(&entry.execution).await {
+            unknown.push(entry);
+        }
+    }
+    unknown
 }
 
 impl Manager {
