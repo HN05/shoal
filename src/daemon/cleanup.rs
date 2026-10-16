@@ -974,7 +974,14 @@ mod tests {
             .acquire_hold(&workspace.id, "review".into(), None)
             .await
             .unwrap();
-        manager.mark_done(&workspace.id, Some(false)).await.unwrap();
+        manager
+            .mark_done(
+                &workspace.id,
+                Some(false),
+                crate::daemon::workspace::Requester::Unscoped,
+            )
+            .await
+            .unwrap();
         assert_eq!(reason().await, CleanupReason::Held);
         manager
             .release_hold(&workspace.id, "review".into())
