@@ -52,9 +52,10 @@ impl ForgeRepo {
             .context("missing issue comments")?
         {
             let id = comment.get("id").context("issue comment has no ID")?;
-            snapshot
-                .comments
-                .insert(id.to_string(), comment_fingerprint(comment));
+            snapshot.comments.insert(
+                format!("discussion:{}", super::id_text(id)),
+                comment_fingerprint(comment),
+            );
         }
         Ok(snapshot)
     }
@@ -121,9 +122,10 @@ impl ForgeRepo {
             serde_json::from_str(&output).context("invalid gh review comments response")?;
         for comment in pages.into_iter().flatten() {
             let id = comment.get("id").context("review comment has no ID")?;
-            snapshot
-                .comments
-                .insert(format!("inline:{id}"), comment_fingerprint(&comment));
+            snapshot.comments.insert(
+                format!("inline:{}", super::id_text(id)),
+                comment_fingerprint(&comment),
+            );
         }
         Ok(snapshot)
     }
@@ -282,15 +284,16 @@ fn github_snapshot(text: &str, number: u64, branch: Option<&str>) -> Result<Snap
         },
         ..Default::default()
     };
-    for field in ["comments", "reviews"] {
+    for (field, source) in [("comments", "discussion"), ("reviews", "reviews")] {
         for item in pull[field]
             .as_array()
             .context("missing PR comments or reviews")?
         {
             let id = item.get("id").context("PR comment or review has no ID")?;
-            snapshot
-                .comments
-                .insert(format!("{field}:{id}"), comment_fingerprint(item));
+            snapshot.comments.insert(
+                format!("{source}:{}", super::id_text(id)),
+                comment_fingerprint(item),
+            );
         }
     }
     for item in pull["statusCheckRollup"]
@@ -576,7 +579,7 @@ mod tests {
         failed.record_checks(&pull, Err(anyhow::anyhow!("no status available")));
         failed
             .comments
-            .insert("discussion".into(), "new finding".into());
+            .insert("discussion:1".into(), "new finding".into());
         failed.retain_failed_checks(&before);
         let updates = before.changes(&failed, "pr");
         assert_eq!(
@@ -592,7 +595,7 @@ mod tests {
         let mut recovered = rest_snapshot("rev-1", true, &[("review", "Success")]);
         recovered
             .comments
-            .insert("discussion".into(), "new finding".into());
+            .insert("discussion:1".into(), "new finding".into());
         assert!(failed.changes(&recovered, "pr").is_empty());
         let mut unknown = Snapshot::default();
         unknown.retain_failed_checks(&recovered);
