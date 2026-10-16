@@ -222,6 +222,18 @@ fn agent_limits_accept_dynamic_fixed_and_unlimited_values() {
 }
 
 #[test]
+fn load_sets_overload_defaults_on_the_machine_only() {
+    let paths = Paths::for_test("/home/test");
+    let config =
+        Config::parse("load = 'light'\n[overload.cpu]\nused_percent = 85", &paths).unwrap();
+    assert_eq!(config.overload.warning.cpu_used_percent, 60);
+    assert_eq!(config.overload.recovery.cpu_used_percent, 55);
+    assert_eq!(config.overload.cpu.used_percent, 85);
+    assert!(Config::parse("load = 'heavy'", &paths).is_err());
+    assert!(crate::config::repo::parse("load = 'full'").is_err());
+}
+
+#[test]
 fn cleanup_defaults_can_be_disabled_and_typos_are_rejected() {
     let config: Config = toml::from_str("").unwrap();
     assert_eq!(config.cleanup.auto.enabled, None);

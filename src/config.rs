@@ -100,6 +100,8 @@ pub struct Config {
     /// Agents running at once on this machine; defaults to host capacity and
     /// `shoal add` queues past it. Use `none` for unlimited admission.
     pub max_agents: Option<AgentLimit>,
+    /// How hard Shoal may load this machine; sets `[overload]` defaults.
+    pub load: overload::Load,
     pub codex: repo::Codex,
     pub herdr: repo::Herdr,
     pub overload: overload::Overload,
@@ -402,7 +404,7 @@ impl Config {
         let Some(text) = crate::fsutil::read_optional(&path)
             .with_context(|| format!("read {}", path.display()))?
         else {
-            return Ok(Self::default());
+            return Self::parse("", paths);
         };
         Self::parse(&text, paths).with_context(|| format!("parse {}", path.display()))
     }
@@ -481,6 +483,13 @@ impl Config {
 
     fn parse(text: &str, paths: &Paths) -> Result<Self> {
         let mut config: Self = toml::from_str(text)?;
+        let written: toml::Table = toml::from_str(text)?;
+        let overload = written.get("overload").and_then(toml::Value::as_table);
+        config.overload.follow_load(
+            config.load,
+            crate::process::load::swap(),
+            overload.unwrap_or(&toml::Table::new()),
+        );
         config
             .cleanup
             .fold_legacy(&mut config.auto_cleanup, &mut config.pr_cleanup);

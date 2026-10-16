@@ -6,7 +6,7 @@
 # .shoal.toml (or the config saved with `shoal repo config`) holds its named
 # ports, setup and hook commands and resource pools, and may set any value below
 # for that repository except root_dir, AI skill directories, the simulator limits and profiles, Git profile definitions, and
-# the shared resources and overload protection.
+# the shared resources, load and overload protection.
 
 # Parent of every repository's workspaces and URL clones.
 root_dir = "~/shoal"
@@ -20,6 +20,11 @@ root_dir = "~/shoal"
 # fixed limit or `none` for unlimited admission. A repository's value limits
 # its own agents.
 # max_agents = 3
+
+# How hard Shoal may load this machine: "light" for a computer you work on,
+# "balanced", or "full" for one that only runs agents. It sets the default
+# CPU and memory thresholds in [overload].
+# load = "balanced"
 
 # Prompt templates normally live beside this file as issue-template.md and
 # agent-template.md. Inline text takes precedence over the corresponding file.
@@ -97,19 +102,20 @@ default_mode = "cli"
 
 [overload]
 # Machine-wide agent protection; allow stop requests to free memory before retrying.
+# Commented CPU and memory percentages are the balanced defaults of `load`.
 poll_seconds = 2
 cooldown_seconds = 5
 
 [overload.memory]
 enabled = true
 # Linux usage excludes reclaimable cache; macOS uses native critical pressure.
-used_percent = 95
+# used_percent = 95
 sustained_seconds = 0
 
 [overload.cpu]
 # Optional aggregate CPU protection, sustained for five minutes.
 enabled = false
-used_percent = 90
+# used_percent = 90
 sustained_seconds = 300
 
 [overload.disk]
@@ -124,16 +130,16 @@ stop_free_gib = 2
 # Automatically restore agents with a configured [agent_resume] command.
 enabled = true
 # Require headroom for a full minute; restart agents one at a time.
-memory_used_percent = 85
-cpu_used_percent = 75
+# memory_used_percent = 80
+# cpu_used_percent = 75
 sustained_seconds = 60
 
 [overload.warning]
 # Message running agents to reduce load before an enabled protection stops them.
 enabled = true
 # Linux usage; macOS warns at native warning pressure.
-memory_used_percent = 90
-cpu_used_percent = 80
+# memory_used_percent = 85
+# cpu_used_percent = 80
 cpu_sustained_seconds = 60
 disk_free_gib = 10
 # Least time between repeated warnings about one signal to one workspace.

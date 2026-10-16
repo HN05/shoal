@@ -2,6 +2,60 @@
 use anyhow::{Result, ensure};
 use serde::Deserialize;
 
+crate::state::states! {
+    /// How hard Shoal may load this machine: a computer someone works on, or
+    /// one that only runs agents. It sets the CPU and memory thresholds that
+    /// `[overload]` leaves out.
+    #[derive(Default)]
+    Load {
+        Light => "light",
+        #[default]
+        Balanced => "balanced",
+        Full => "full",
+    }
+}
+
+/// Warning, stop and recovery percentages for one signal.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Levels {
+    warning: u8,
+    stop: u8,
+    recovery: u8,
+}
+
+impl Levels {
+    const fn new(warning: u8, stop: u8, recovery: u8) -> Self {
+        Self {
+            warning,
+            stop,
+            recovery,
+        }
+    }
+}
+
+impl Load {
+    fn cpu(self) -> Levels {
+        match self {
+            Self::Light => Levels::new(60, 80, 55),
+            Self::Balanced => Levels::new(80, 90, 75),
+            Self::Full => Levels::new(95, 100, 90),
+        }
+    }
+
+    /// Swap gives memory room to fill further before the kernel kills
+    /// processes. Only Linux reads these; macOS uses native pressure.
+    fn memory(self, swap: bool) -> Levels {
+        match (self, swap) {
+            (Self::Light, false) => Levels::new(75, 90, 70),
+            (Self::Light, true) => Levels::new(80, 93, 75),
+            (Self::Balanced, false) => Levels::new(85, 95, 80),
+            (Self::Balanced, true) => Levels::new(90, 97, 85),
+            (Self::Full, false) => Levels::new(95, 98, 90),
+            (Self::Full, true) => Levels::new(97, 99, 93),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Overload {
@@ -41,7 +95,7 @@ impl Default for Memory {
     fn default() -> Self {
         Self {
             enabled: true,
-            used_percent: 95,
+            used_percent: Load::default().memory(false).stop,
             sustained_seconds: 0,
         }
     }
@@ -59,7 +113,7 @@ impl Default for Cpu {
     fn default() -> Self {
         Self {
             enabled: false,
-            used_percent: 90,
+            used_percent: Load::default().cpu().stop,
             sustained_seconds: 300,
         }
     }
@@ -109,8 +163,8 @@ impl Default for Recovery {
     fn default() -> Self {
         Self {
             enabled: true,
-            memory_used_percent: 85,
-            cpu_used_percent: 75,
+            memory_used_percent: Load::default().memory(false).recovery,
+            cpu_used_percent: Load::default().cpu().recovery,
             sustained_seconds: 60,
         }
     }
@@ -135,8 +189,8 @@ impl Default for Warning {
     fn default() -> Self {
         Self {
             enabled: true,
-            memory_used_percent: 90,
-            cpu_used_percent: 80,
+            memory_used_percent: Load::default().memory(false).warning,
+            cpu_used_percent: Load::default().cpu().warning,
             cpu_sustained_seconds: 60,
             disk_free_gib: 10,
             repeat_minutes: 30,
@@ -151,6 +205,55 @@ impl Warning {
 }
 
 impl Overload {
+    /// Set the CPU and memory thresholds `written`, the `[overload]` table as
+    /// the file spells it, leaves out from `load`.
+    pub(crate) fn follow_load(&mut self, load: Load, swap: bool, written: &toml::Table) {
+        let unset = |table: &str, key: &str| {
+            written
+                .get(table)
+                .and_then(toml::Value::as_table)
+                .is_none_or(|table| !table.contains_key(key))
+        };
+        let (cpu, memory) = (load.cpu(), load.memory(swap));
+        for (table, key, value, level) in [
+            (
+                "memory",
+                "used_percent",
+                &mut self.memory.used_percent,
+                memory.stop,
+            ),
+            ("cpu", "used_percent", &mut self.cpu.used_percent, cpu.stop),
+            (
+                "warning",
+                "memory_used_percent",
+                &mut self.warning.memory_used_percent,
+                memory.warning,
+            ),
+            (
+                "warning",
+                "cpu_used_percent",
+                &mut self.warning.cpu_used_percent,
+                cpu.warning,
+            ),
+            (
+                "recovery",
+                "memory_used_percent",
+                &mut self.recovery.memory_used_percent,
+                memory.recovery,
+            ),
+            (
+                "recovery",
+                "cpu_used_percent",
+                &mut self.recovery.cpu_used_percent,
+                cpu.recovery,
+            ),
+        ] {
+            if unset(table, key) {
+                *value = level;
+            }
+        }
+    }
+
     pub fn validate(&self) -> Result<()> {
         ensure!(
             (50..=99).contains(&self.memory.used_percent),
@@ -228,6 +331,34 @@ fn validate_seconds(value: u64, key: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn load_sets_the_thresholds_the_file_leaves_out() {
+        let mut balanced = Overload::default();
+        balanced.follow_load(Load::Balanced, false, &toml::Table::new());
+        assert_eq!(balanced, Overload::default());
+        for load in [Load::Light, Load::Balanced, Load::Full] {
+            for swap in [false, true] {
+                let mut settings = Overload::default();
+                settings.follow_load(load, swap, &toml::Table::new());
+                settings.validate().unwrap();
+                assert!(settings.warning.cpu_used_percent < settings.cpu.used_percent);
+                assert!(settings.warning.memory_used_percent < settings.memory.used_percent);
+            }
+        }
+        let text = "[warning]\ncpu_used_percent = 70\n[memory]\nused_percent = 96";
+        let mut settings: Overload = toml::from_str(text).unwrap();
+        settings.follow_load(Load::Full, true, &toml::from_str(text).unwrap());
+        assert_eq!(settings.warning.cpu_used_percent, 70);
+        assert_eq!(settings.memory.used_percent, 96);
+        assert_eq!(settings.cpu.used_percent, 100);
+        assert_eq!(settings.warning.memory_used_percent, 97);
+        assert_eq!(settings.recovery.memory_used_percent, 93);
+        let mut light = Overload::default();
+        light.follow_load(Load::Light, false, &toml::Table::new());
+        assert_eq!(light.warning.cpu_used_percent, 60);
+        assert_eq!(light.warning.memory_used_percent, 75);
+    }
 
     #[test]
     fn memory_is_opt_out_and_settings_are_bounded() {

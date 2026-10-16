@@ -153,6 +153,8 @@ against stop thresholds; a warning at or above one arrives with the stop.
 Configure machine-wide settings in global TOML and reload the daemon:
 
 ```toml
+load = "balanced"              # "light", "balanced" or "full"
+
 [overload]
 poll_seconds = 2
 cooldown_seconds = 5
@@ -174,7 +176,7 @@ stop_free_gib = 2              # Stop executions below this; 1 to cleanup_free_g
 
 [overload.warning]
 enabled = true                 # Message running agents before a stop
-memory_used_percent = 90       # Linux; macOS warns at native warning pressure
+memory_used_percent = 85       # Linux; macOS warns at native warning pressure
 cpu_used_percent = 80
 cpu_sustained_seconds = 60
 disk_free_gib = 10
@@ -182,10 +184,23 @@ repeat_minutes = 30            # Least time between repeats per signal and works
 
 [overload.recovery]
 enabled = true                 # Applies only with a configured resume command
-memory_used_percent = 85       # Linux; macOS requires normal pressure
+memory_used_percent = 80       # Linux; macOS requires normal pressure
 cpu_used_percent = 75
 sustained_seconds = 60
 ```
+
+`load` says how hard Shoal may load the machine, and sets each CPU and memory
+percentage the file leaves out; the values above are `balanced` without swap.
+Use `light` for a computer you work on and `full` for one that only runs agents:
+
+| `load` | CPU warning / stop / recovery | Memory warning / stop / recovery |
+|---|---|---|
+| `light` | 60 / 80 / 55 | 75 / 90 / 70, with swap 80 / 93 / 75 |
+| `balanced` | 80 / 90 / 75 | 85 / 95 / 80, with swap 90 / 97 / 85 |
+| `full` | 95 / 100 / 90 | 95 / 98 / 90, with swap 97 / 99 / 93 |
+
+Memory percentages apply on Linux, where configured swap lets memory fill
+further before the kernel kills processes.
 
 Durations are seconds, bounded to one day; polling, cooldown and sustained CPU
 and recovery durations must be positive. CPU usage measures aggregate busy time

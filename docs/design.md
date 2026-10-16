@@ -85,7 +85,11 @@ stops the rest as manual stop does, within the workspace stop timeout. Setup and
 landing hold daemon gates, so they never reattach.
 
 Overload protection is configured machine-wide: memory is enabled by default,
-CPU is opt-in and requires sustained aggregate busy time. Stop connected tracked
+CPU is opt-in and requires sustained aggregate busy time. One `load` setting
+(`light`, `balanced`, `full`) sets the default CPU and memory thresholds, so a
+user chooses how hard to load the machine without tuning each percentage;
+explicit thresholds override it. Linux memory defaults rise with swap, which
+makes the OOM killer a later risk. Stop connected tracked
 agents through their execution wrappers, preserving work and leases. Stop and exit
 notifications carry the pressure reason and recovery path, distinguishing automatic
 restore from manual recovery and missing recovery records. Persist a minimal

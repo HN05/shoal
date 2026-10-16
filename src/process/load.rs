@@ -32,6 +32,28 @@ fn linux_memory(text: &str, threshold: u8) -> Result<bool> {
     Ok(u128::from(available) * 100 <= u128::from(total) * u128::from(100 - threshold))
 }
 
+/// Whether the machine can page memory out to swap. A failed reading says no,
+/// keeping memory thresholds at their lower defaults.
+#[cfg(target_os = "linux")]
+pub fn swap() -> bool {
+    std::fs::read_to_string("/proc/meminfo").is_ok_and(|text| linux_swap(&text))
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn linux_swap(text: &str) -> bool {
+    text.lines()
+        .find_map(|line| line.strip_prefix("SwapTotal:"))
+        .and_then(|value| value.split_whitespace().next()?.parse::<u64>().ok())
+        .is_some_and(|total| total > 0)
+}
+
+/// macOS always swaps and reports pressure natively, so no Linux memory
+/// threshold applies.
+#[cfg(not(target_os = "linux"))]
+pub fn swap() -> bool {
+    false
+}
+
 #[cfg(target_os = "macos")]
 pub fn critical_memory(_used_percent: u8) -> Result<bool> {
     Ok(memory_level()? == 4)
@@ -74,6 +96,14 @@ pub fn critical_memory(_used_percent: u8) -> Result<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn swap_requires_configured_space() {
+        assert!(linux_swap("MemTotal: 10 kB\nSwapTotal: 2048 kB\n"));
+        assert!(!linux_swap("SwapTotal: 0 kB\n"));
+        assert!(!linux_swap("SwapTotal: x kB\n"));
+        assert!(!linux_swap("MemTotal: 10 kB\n"));
+    }
 
     #[test]
     fn memory_uses_available_including_reclaimable_cache() {
