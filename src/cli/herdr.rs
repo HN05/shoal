@@ -71,7 +71,8 @@ pub(in crate::cli) fn in_herdr() -> bool {
 }
 
 /// Run `plan` in a new tab that takes focus as `placement` asks, unless
-/// `herdr.new_tab` is off.
+/// `herdr.new_tab` is off. Without `issue`, a tab name template that names it
+/// looks it up.
 pub(in crate::cli) async fn start_add(
     ctx: &Context,
     settings: &Effective,
@@ -85,7 +86,12 @@ pub(in crate::cli) async fn start_add(
     if let Some(template) = settings.herdr.tab_name.clone() {
         let repos = client::repositories(&ctx.paths).await?;
         let repo = crate::forge::repository::select(&repos, &plan.repository).await?;
-        plan.tab_name = Some(TabName::new(template, repo, issue));
+        // A queued start has only the issue's URL; the template may name it.
+        let found = match (issue, plan.issue_url()) {
+            (None, Some(url)) => Some(issues::load(&ctx.forge_account()?, repo, url).await?),
+            _ => None,
+        };
+        plan.tab_name = Some(TabName::new(template, repo, issue.or(found.as_ref())));
     }
     let created = create_tab(ctx, plan, placement == Placement::Focus).await?;
     submit_worker(ctx, created, settings.herdr.close_when_done).await?;

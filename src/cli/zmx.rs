@@ -15,11 +15,9 @@ use super::{
     agents::ensure_program,
     commands::workspaces::AddPlan,
     context::Context,
-    herdr,
     internal::{self, Worker, internal_command},
 };
 use crate::{
-    config::Effective,
     env,
     forge::repository,
     model::{Repository, Workspace},
@@ -55,13 +53,6 @@ impl Session {
         }
         label
     }
-}
-
-/// Whether a terminal agent launch runs in a zmx session: it needs a terminal
-/// to attach, never nests, and leaves an enabled Herdr pane to Herdr, which
-/// reads the agent's state from the process in the pane.
-pub(in crate::cli) fn hosts(settings: &Effective) -> bool {
-    on_terminal() && !(settings.herdr.enabled && herdr::current_pane().is_some())
 }
 
 /// Whether this process could attach a new session: a terminal outside zmx.

@@ -10,7 +10,7 @@ use anyhow::{Context as _, Result, ensure};
 
 use crate::{
     agent::{Agent, BuiltinAgent},
-    cli::{agents, client, context::Context, terminal::Backend, ui, zmx},
+    cli::{agents, client, context::Context, terminal, ui},
     config::{Effective, named_commands, templates},
     forge::repository,
     model::Repository,
@@ -33,18 +33,15 @@ pub(super) async fn start(
     let settings =
         client::settings(&ctx.paths, ConfigTarget::Repository(repo.id.clone().into())).await?;
     let agent = chat_agent(ctx, &settings, agent)?;
-    if !here
-        && let Some(backend) = Backend::current(ctx, &settings)
-        && start_focused(ctx, backend, &settings, &repo, agent, &args).await?
-    {
+    if !here && start_in_tab(ctx, &settings, &repo, agent, &args).await? {
         return Ok(0);
     }
     agents::trust_checkout(ctx, agent, &repo);
     let command = command(&settings, &repo, agent, args)?;
-    if zmx::hosts(&settings) {
-        return zmx::run_chat(&repo, agent.as_str(), &command).await;
+    match terminal::run_chat(&settings, &repo, agent.as_str(), &command).await? {
+        Some(code) => Ok(code),
+        None => run_here(&repo, &command),
     }
-    run_here(&repo, &command)
 }
 
 /// The named repository, else the current checkout's or workspace's, else a picker.
@@ -113,11 +110,10 @@ fn pick_agent(ctx: &Context, settings: &Effective) -> Result<BuiltinAgent> {
     ui::pick_choice(ctx, "Agent> ", &choices)
 }
 
-/// Hand this chat to `backend` at the checkout with focus, returning whether
-/// it left this process; otherwise it runs here.
-async fn start_focused(
+/// Hand this chat to a new focused tab at the checkout, returning whether it
+/// left this process; otherwise it runs here.
+async fn start_in_tab(
     ctx: &Context,
-    backend: Backend,
     settings: &Effective,
     repo: &Repository,
     agent: BuiltinAgent,
@@ -135,9 +131,7 @@ async fn start_focused(
         chat.extend_from_slice(args);
     }
     let label = format!("{} chat", repository::name(repo));
-    backend
-        .run_focused(ctx, settings, &repo.path, &label, &chat)
-        .await
+    terminal::start_chat(ctx, settings, &repo.path, &label, &chat).await
 }
 
 /// The agent's configured launcher with the chat instructions, run at the checkout.

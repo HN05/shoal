@@ -132,9 +132,7 @@ fn programs<'a>(agent: &'a Agent, commands: &'a Commands) -> Option<Vec<&'a str>
             .and_then(|argv| argv.first())
             .map(|program| {
                 let mut programs = vec![program.as_str()];
-                if super::zmx::on_terminal() {
-                    programs.push(Tool::Zmx.program());
-                }
+                programs.extend(super::terminal::launcher_program());
                 programs
             }),
     }

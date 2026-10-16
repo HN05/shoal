@@ -1,7 +1,11 @@
-//! Where Shoal starts work beside the caller's terminal. Commands choose a
-//! placement; a backend carries it out with its own primitives: Herdr tabs or
-//! zmx sessions.
-use std::{ffi::OsString, path::Path};
+//! Where Shoal runs work for the caller's terminal. Commands say what they
+//! launch; this module chooses whether it takes the terminal or runs in the
+//! background, and which backend carries that out with its own primitives:
+//! Herdr tabs or zmx sessions. Commands never name a backend.
+use std::{
+    ffi::OsString,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{Result, ensure};
 
@@ -10,7 +14,161 @@ use super::{
     context::Context,
     herdr, zmx,
 };
-use crate::{config::Effective, env, model::Workspace};
+use crate::{
+    config::Effective,
+    env,
+    model::{Repository, Workspace},
+    tools::Tool,
+};
+
+/// Start `plan` beside this terminal: focused when it waits for the user,
+/// otherwise in the background, unless the `focus` setting says otherwise.
+/// Returns whether it left this process; a focused launch without a new tab
+/// stays here, where its agent runs in a session this terminal attaches to.
+/// `name` is the planned workspace name.
+pub(in crate::cli) async fn start_add(
+    ctx: &Context,
+    settings: &Effective,
+    plan: &mut AddPlan,
+    issue: Option<&Issue>,
+    name: &str,
+) -> Result<bool> {
+    let Some(backend) = Backend::current(ctx, settings) else {
+        return Ok(false);
+    };
+    let placement = Placement::choose(settings.focus, !plan.runs_unattended());
+    let started = backend
+        .start_add(ctx, settings, plan, issue, name, placement)
+        .await?;
+    if started && placement == Placement::Background {
+        println!("{}", backend.background_note(name));
+    }
+    Ok(started)
+}
+
+/// Start an admitted queue entry's `plan` in the background where the
+/// terminal that queued it would have; the daemon's worker has no terminal.
+pub(in crate::cli) async fn start_queued(
+    ctx: &Context,
+    settings: &Effective,
+    plan: &mut AddPlan,
+    name: &str,
+) -> Result<()> {
+    Backend::queued(settings)
+        .start_add(ctx, settings, plan, None, name, Placement::Background)
+        .await?;
+    Ok(())
+}
+
+/// Run Shoal with `args` where the agent of `record` stopped, when that
+/// place is another one still open and idle. Returns what such restarts run
+/// in, or `None` when it did not run.
+pub(in crate::cli) async fn rerun_where_stopped(
+    ctx: &Context,
+    settings: &Effective,
+    record: &Path,
+    args: &[OsString],
+) -> Result<Option<&'static str>> {
+    let reused = match Backend::current(ctx, settings) {
+        Some(backend @ Backend::Herdr) => herdr::rerun_in_recorded_pane(ctx, record, args)
+            .await?
+            .then(|| backend.background_places()),
+        // A session ends with its agent, so nothing remains to reuse.
+        Some(Backend::Zmx) | None => None,
+    };
+    Ok(reused)
+}
+
+/// Run Shoal with `args` for `workspace` in the background, returning what
+/// such starts run in, or `None` when this terminal cannot start them.
+pub(in crate::cli) async fn run_in_background(
+    ctx: &Context,
+    settings: &Effective,
+    workspace: &Workspace,
+    args: &[OsString],
+) -> Result<Option<&'static str>> {
+    let Some(backend) = Backend::current(ctx, settings) else {
+        return Ok(None);
+    };
+    let started = match backend {
+        Backend::Herdr => herdr::run_in_background(ctx, settings, workspace, args).await?,
+        Backend::Zmx => {
+            zmx::run_in_background(ctx, workspace, args).await?;
+            true
+        }
+    };
+    Ok(started.then(|| backend.background_places()))
+}
+
+/// Run a tracked agent's `command` in a new session and attach this terminal
+/// to it, when this terminal keeps agents in sessions. `None` means the agent
+/// runs in place in this process. `records` are recovery records the launch
+/// consumes once it starts.
+pub(in crate::cli) async fn run_agent(
+    ctx: &Context,
+    settings: &Effective,
+    workspace: &Workspace,
+    agent: &str,
+    records: &[PathBuf],
+    command: &[OsString],
+) -> Result<Option<i32>> {
+    if !keeps_agents_in_sessions(settings) {
+        return Ok(None);
+    }
+    zmx::run(ctx, workspace, agent, records, command)
+        .await
+        .map(Some)
+}
+
+/// Hand a chat to a new focused tab at `cwd`, where Shoal runs it with
+/// `args`. Returns whether it left this process.
+pub(in crate::cli) async fn start_chat(
+    ctx: &Context,
+    settings: &Effective,
+    cwd: &Path,
+    label: &str,
+    args: &[OsString],
+) -> Result<bool> {
+    match Backend::current(ctx, settings) {
+        Some(Backend::Herdr) if settings.herdr.new_tab => {
+            herdr::run_in_tab(ctx, cwd, label, args, true).await?;
+            Ok(true)
+        }
+        _ => Ok(false),
+    }
+}
+
+/// Run a chat's `command` in a new session and attach this terminal to it,
+/// as `run_agent` does for tracked agents. `None` means it runs in place.
+pub(in crate::cli) async fn run_chat(
+    settings: &Effective,
+    repository: &Repository,
+    agent: &str,
+    command: &[OsString],
+) -> Result<Option<i32>> {
+    if !keeps_agents_in_sessions(settings) {
+        return Ok(None);
+    }
+    zmx::run_chat(repository, agent, command).await.map(Some)
+}
+
+/// Label the session this process runs in, when it runs in one, so
+/// `shoal attach` finds the workspace's agent there.
+pub(in crate::cli) async fn label_current(workspace_id: &str, agent: &str) -> Result<()> {
+    zmx::label_current(workspace_id, agent).await
+}
+
+/// The program an agent launch here needs besides the agent's own.
+pub(in crate::cli) fn launcher_program() -> Option<&'static str> {
+    zmx::on_terminal().then(|| Tool::Zmx.program())
+}
+
+/// Whether agents launched here run in a session: they need a terminal to
+/// attach, never nest, and leave an enabled Herdr pane to Herdr, which reads
+/// the agent's state from the process in the pane.
+fn keeps_agents_in_sessions(settings: &Effective) -> bool {
+    zmx::on_terminal() && !(settings.herdr.enabled && herdr::current_pane().is_some())
+}
 
 /// Whether a launch takes the caller's terminal or runs in the background.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -21,7 +179,7 @@ pub(in crate::cli) enum Placement {
 
 impl Placement {
     /// The `focus` setting, otherwise focus a launch that waits for the user.
-    pub fn choose(setting: Option<bool>, waits_for_user: bool) -> Self {
+    fn choose(setting: Option<bool>, waits_for_user: bool) -> Self {
         if setting.unwrap_or(waits_for_user) {
             Self::Focus
         } else {
@@ -32,7 +190,7 @@ impl Placement {
 
 /// A terminal backend that starts Shoal work beside the caller.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(in crate::cli) enum Backend {
+enum Backend {
     Herdr,
     Zmx,
 }
@@ -41,7 +199,7 @@ impl Backend {
     /// The backend of this interactive terminal under `settings`: an enabled
     /// Herdr pane, otherwise a terminal outside zmx. A Herdr pane is never
     /// handed to zmx, since Herdr reads agent state from the pane's process.
-    pub fn current(ctx: &Context, settings: &Effective) -> Option<Self> {
+    fn current(ctx: &Context, settings: &Effective) -> Option<Self> {
         if herdr::available(ctx) {
             return settings.herdr.enabled.then_some(Self::Herdr);
         }
@@ -49,9 +207,10 @@ impl Backend {
     }
 
     /// The backend of the terminal that queued an entry, from the Herdr
-    /// variables the daemon gave its worker; the worker has no terminal.
-    pub fn queued(settings: &Effective) -> Self {
-        if herdr::in_herdr() && settings.herdr.enabled {
+    /// variables the daemon gave its worker: a tab where Herdr may open one,
+    /// otherwise a detached session.
+    fn queued(settings: &Effective) -> Self {
+        if herdr::in_herdr() && settings.herdr.enabled && settings.herdr.new_tab {
             Self::Herdr
         } else {
             Self::Zmx
@@ -59,10 +218,9 @@ impl Backend {
     }
 
     /// Start `plan` as `placement` asks, returning whether it left this
-    /// process. A focused zmx launch stays here: its agent attaches to its
-    /// session. Herdr tabs need `herdr.new_tab`; `name` is the planned
-    /// workspace name that names a session.
-    pub async fn start_add(
+    /// process. A focused zmx launch stays here. Herdr tabs need
+    /// `herdr.new_tab`; `name` names a session.
+    async fn start_add(
         self,
         ctx: &Context,
         settings: &Effective,
@@ -87,61 +245,8 @@ impl Backend {
         }
     }
 
-    /// Run Shoal with `args` for `workspace` in the background, returning
-    /// whether it started there; Herdr tabs need `herdr.new_tab`.
-    pub async fn run_in_background(
-        self,
-        ctx: &Context,
-        settings: &Effective,
-        workspace: &Workspace,
-        args: &[OsString],
-    ) -> Result<bool> {
-        match self {
-            Self::Herdr => herdr::run_in_background(ctx, settings, workspace, args).await,
-            Self::Zmx => {
-                zmx::run_in_background(ctx, workspace, args).await?;
-                Ok(true)
-            }
-        }
-    }
-
-    /// Run Shoal with `args` at `cwd` with focus, labelled `label`, returning
-    /// whether it left this process. A focused zmx launch stays here and
-    /// attaches its session; Herdr tabs need `herdr.new_tab`.
-    pub async fn run_focused(
-        self,
-        ctx: &Context,
-        settings: &Effective,
-        cwd: &Path,
-        label: &str,
-        args: &[OsString],
-    ) -> Result<bool> {
-        match self {
-            Self::Herdr if settings.herdr.new_tab => {
-                herdr::run_in_tab(ctx, cwd, label, args, true).await?;
-                Ok(true)
-            }
-            Self::Herdr | Self::Zmx => Ok(false),
-        }
-    }
-
-    /// Run Shoal with `args` where the agent of `record` stopped, when that
-    /// place is another one still open and idle. Returns whether it ran.
-    pub async fn rerun_where_stopped(
-        self,
-        ctx: &Context,
-        record: &Path,
-        args: &[OsString],
-    ) -> Result<bool> {
-        match self {
-            Self::Herdr => herdr::rerun_in_recorded_pane(ctx, record, args).await,
-            // A session ends with its agent, so nothing remains to reuse.
-            Self::Zmx => Ok(false),
-        }
-    }
-
     /// What several background starts run in.
-    pub fn background_places(self) -> &'static str {
+    fn background_places(self) -> &'static str {
         match self {
             Self::Herdr => "Herdr tabs",
             Self::Zmx => "detached zmx sessions",
@@ -149,7 +254,7 @@ impl Backend {
     }
 
     /// How a background start is reported: where it runs and how to reach it.
-    pub fn background_note(self, name: &str) -> String {
+    fn background_note(self, name: &str) -> String {
         match self {
             Self::Herdr => format!("Started {name} in a background Herdr tab"),
             Self::Zmx => format!(

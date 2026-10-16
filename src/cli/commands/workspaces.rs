@@ -14,7 +14,7 @@ use crate::{
         client::{self, request},
         context::Context,
         output::{Palette, Style},
-        terminal::{Backend, Placement},
+        terminal,
         ui::{self, Fallback},
         zmx,
     },
@@ -306,8 +306,8 @@ pub(super) async fn add(
     execute_add_with_target(ctx, plan, target, issue).await
 }
 
-/// Hand `plan` to this terminal's backend, focused or in the background,
-/// unless `here` keeps it in place. Returns whether it left this process.
+/// Start `plan` beside this terminal, focused or in the background, unless
+/// `here` keeps it in place. Returns whether it left this process.
 async fn start_beside(
     ctx: &Context,
     target: &AddTarget,
@@ -323,18 +323,8 @@ async fn start_beside(
         ConfigTarget::Repository(plan.repository.clone()),
     )
     .await?;
-    let Some(backend) = Backend::current(ctx, &settings) else {
-        return Ok(false);
-    };
-    let placement = Placement::choose(settings.focus, !plan.runs_unattended());
     let name = planned_workspace_name(ctx, target, &plan.creation).await?;
-    let started = backend
-        .start_add(ctx, &settings, plan, issue, &name, placement)
-        .await?;
-    if started && placement == Placement::Background {
-        println!("{}", backend.background_note(&name));
-    }
-    Ok(started)
+    terminal::start_add(ctx, &settings, plan, issue, &name).await
 }
 
 /// The workspace name `creation` will derive. An existing branch opens under
@@ -386,6 +376,11 @@ impl AddPlan {
         self.agent.agent.clone().map(String::from)
     }
 
+    /// The found issue's URL.
+    pub fn issue_url(&self) -> Option<&str> {
+        self.issue.as_deref()
+    }
+
     /// Whether the agent starts with input: an issue prompt or forwarded arguments.
     /// A workspace shell or an agent without input waits for the user.
     pub fn runs_unattended(&self) -> bool {
@@ -407,8 +402,7 @@ impl AddPlan {
 }
 
 /// Start an admitted queue entry's plan in the background where `shoal add`
-/// would have: in the Herdr workspace of the terminal that queued it,
-/// otherwise in a detached zmx session that `shoal attach` reaches.
+/// would have from the terminal that queued it.
 pub(in crate::cli) async fn start_queued(
     ctx: &Context,
     mut plan: AddPlan,
@@ -419,30 +413,10 @@ pub(in crate::cli) async fn start_queued(
         ConfigTarget::Repository(plan.repository.clone()),
     )
     .await?;
-    let backend = Backend::queued(&settings);
-    // Only tabs are labelled from the issue; a session's worker reads it again.
-    let issue = match (backend, &plan.issue) {
-        (Backend::Herdr, Some(url)) => {
-            let repos = client::repositories(&ctx.paths).await?;
-            let repo = crate::forge::repository::select(&repos, &plan.repository).await?;
-            Some(super::issues::load(&ctx.forge_account()?, repo, url).await?)
-        }
-        _ => None,
-    };
-    backend
-        .start_add(
-            ctx,
-            &settings,
-            &mut plan,
-            issue.as_ref(),
-            name,
-            Placement::Background,
-        )
-        .await?;
-    Ok(())
+    terminal::start_queued(ctx, &settings, &mut plan, name).await
 }
 
-/// A detached zmx session's worker: add the workspace its launch planned.
+/// A detached session's worker: add the workspace its launch planned.
 pub(super) async fn detached_worker(ctx: &Context, payload: &str) -> Result<i32> {
     let mut plan: AddPlan = serde_json::from_str(payload).context("invalid workspace plan")?;
     plan.detached = true;
@@ -513,7 +487,7 @@ async fn add_planned(
         super::agent_queue::attach(ctx, entry, &opened.workspace).await?;
     }
     if let Some(name) = agent.agent.clone().map(String::from)
-        && let Err(error) = zmx::label_current(&opened.workspace.id, &name).await
+        && let Err(error) = terminal::label_current(&opened.workspace.id, &name).await
     {
         eprintln!("warning: {error:#}");
     }

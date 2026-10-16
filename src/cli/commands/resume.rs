@@ -1,6 +1,6 @@
 //! Manual recovery uses saved agent identity and today's restore configuration.
 use crate::{
-    cli::{WorkspaceScope, client, context::Context, terminal::Backend, ui, zmx},
+    cli::{WorkspaceScope, client, context::Context, terminal, ui},
     daemon::recovery::{ReconcileOptions, Report},
     execution::recovery::{Record, Recovery, Saved, SavedCommand, consume},
     model::{Inspection, Workspace},
@@ -118,10 +118,19 @@ pub async fn run(
     records.extend(saved.commands.into_iter().map(|command| command.path));
     let settings =
         client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
-    if zmx::hosts(&settings) {
-        return zmx::run(ctx, workspace, &recovery.agent, &records, &recovery.command).await;
+    if let Some(code) = terminal::run_agent(
+        ctx,
+        &settings,
+        workspace,
+        &recovery.agent,
+        &records,
+        &recovery.command,
+    )
+    .await?
+    {
+        return Ok(code);
     }
-    if let Err(error) = zmx::label_current(&workspace.id, &recovery.agent).await {
+    if let Err(error) = terminal::label_current(&workspace.id, &recovery.agent).await {
         eprintln!("warning: {error:#}");
     }
     crate::execution::run_recovery(
@@ -273,26 +282,17 @@ async fn run_all(ctx: &Context, discard: bool) -> Result<i32> {
     for (workspace, id, record) in &sessions {
         let settings =
             client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
-        let backend = Backend::current(ctx, &settings);
         let args = ["resume", &workspace.id, "--execution", id].map(OsString::from);
-        let reused = match backend {
-            Some(backend) => backend.rerun_where_stopped(ctx, record, &args).await?,
-            None => false,
-        };
-        if single && !reused {
+        let reused = terminal::rerun_where_stopped(ctx, &settings, record, &args).await?;
+        if single && reused.is_none() {
             return run(ctx, workspace.id.clone(), Some(id.clone()), false).await;
         }
-        let background = match backend {
-            Some(backend) if !reused => {
-                backend
-                    .run_in_background(ctx, &settings, workspace, &args)
-                    .await?
-            }
-            _ => reused,
+        let started = match reused {
+            Some(places) => Some(places),
+            None => terminal::run_in_background(ctx, &settings, workspace, &args).await?,
         };
-        if background {
-            place = backend;
-        }
+        place = started.or(place);
+        let (background, reused) = (started.is_some(), reused.is_some());
         agents.push(json!({
             "workspace": workspace.name,
             "execution": id,
@@ -307,7 +307,7 @@ async fn run_all(ctx: &Context, discard: bool) -> Result<i32> {
             .count();
         if let Some(place) = place {
             let started = sessions.len() - listed;
-            println!("Resuming {started} agents in {}", place.background_places());
+            println!("Resuming {started} agents in {place}");
         }
         if listed > 0 {
             println!("Resume each agent in its own terminal:");
