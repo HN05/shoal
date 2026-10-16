@@ -12,7 +12,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 39;
+const SCHEMA_VERSION: i64 = 40;
 
 #[cfg(test)]
 mod benchmark;
@@ -353,6 +353,14 @@ const MIGRATIONS: &[(i64, &str, Option<Precondition>)] = &[
             record TEXT NOT NULL,
             PRIMARY KEY(workspace_id,url)
         );",
+        None,
+    ),
+    // `shoal access` became `shoal approvals`.
+    (
+        40,
+        "UPDATE notifications SET kind='approval_requested',
+            message=replace(message, 'shoal access approve', 'shoal approvals approve')
+            WHERE kind='access_requested';",
         None,
     ),
 ];
@@ -886,6 +894,33 @@ mod tests {
             [
                 "Kept by shoal continue",
                 "Converted from an earlier Shoal version"
+            ]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn migrated_approval_notifications_name_the_renamed_command() -> Result<()> {
+        let mut db = historical_database(39)?;
+        db.execute_batch(
+            "INSERT INTO notifications(created_at,workspace,kind,message) VALUES
+                (1,'w','access_requested','access 7: port/web / web: serve; approve with shoal access approve 7'),
+                (2,'w','agent_message','run shoal access approve 7');",
+        )?;
+        migrate(&mut db)?;
+        let rows = db
+            .prepare("SELECT kind,message FROM notifications ORDER BY id")?
+            .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        assert_eq!(
+            rows,
+            [
+                (
+                    "approval_requested".into(),
+                    "access 7: port/web / web: serve; approve with shoal approvals approve 7"
+                        .into()
+                ),
+                ("agent_message".into(), "run shoal access approve 7".into()),
             ]
         );
         Ok(())

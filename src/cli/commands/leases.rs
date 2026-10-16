@@ -14,7 +14,7 @@ use crate::{
         ui::{self, Fallback},
     },
     daemon::{
-        access::{AccessRequest, Specification, Target},
+        approvals::{ApprovalRequest, Specification, Target},
         ports::PortRequest,
         resources::{LockMode, Overview, ResourceKind, ResourceRequest},
     },
@@ -116,7 +116,7 @@ fn resource_request(
     }
 }
 
-/// One lease or active access request a workspace holds, named as its
+/// One lease or active approval request a workspace holds, named as its
 /// release request needs it.
 #[derive(Debug, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "lowercase")]
@@ -210,9 +210,9 @@ async fn select_held(
             }
         }
     });
-    let requests = client::request::<Vec<AccessRequest>>(
+    let requests = client::request::<Vec<ApprovalRequest>>(
         &ctx.paths,
-        Method::ListAccess {
+        Method::ListApprovals {
             workspace: Some(workspace.to_owned()),
         },
     )
@@ -243,7 +243,7 @@ async fn select_held(
 }
 
 /// Release cancels a pending or denied request even without a lease.
-fn requested(request: AccessRequest) -> Held {
+fn requested(request: ApprovalRequest) -> Held {
     let name = request.name;
     match (request.target, request.specification) {
         (Target::Port(_), _) => Held::Port { name },

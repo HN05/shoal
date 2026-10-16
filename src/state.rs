@@ -219,7 +219,7 @@ mod tests {
             agent::{BuiltinAgent, CodexMode},
             config::repo::ConflictPolicy,
             daemon::{
-                access::{DecisionStatus, Lifetime},
+                approvals::{DecisionStatus, Lifetime},
                 doctor::CheckStatus,
                 recovery::DirectoryState,
                 resources::{LockMode, ResourceKind},

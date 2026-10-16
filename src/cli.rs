@@ -419,10 +419,10 @@ pub enum Command {
         #[command(flatten)]
         scope: WorkspaceScope,
     },
-    /// Review, approve, or deny requests for resource access.
-    Access {
+    /// List, approve, or deny approval requests from workspace processes.
+    Approvals {
         #[command(subcommand)]
-        command: Option<AccessCommand>,
+        command: Option<ApprovalsCommand>,
     },
     /// Acquire and release shared resource permits; superseded by acquire, release, and leases.
     #[command(
@@ -1280,7 +1280,7 @@ pub enum ReleaseKind {
 }
 
 #[derive(Debug, Subcommand)]
-pub enum AccessCommand {
+pub enum ApprovalsCommand {
     /// List requests and retained grants (scoped callers see their own workspace).
     List { workspace: Option<String> },
     /// Approve the exact settings recorded in a request; does not allocate capacity.

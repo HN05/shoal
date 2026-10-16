@@ -1,6 +1,6 @@
 ---
 name: shoal-orchestrator
-description: Use outside any Shoal workspace to coordinate work for the user — create workspaces for issues or branches, start detached agent sessions, follow their progress, answer resource access requests, and clean up. Agents working inside a Shoal workspace use the shoal-worker skill instead.
+description: Use outside any Shoal workspace to coordinate work for the user — create workspaces for issues or branches, start detached agent sessions, follow their progress, answer approval requests, and clean up. Agents working inside a Shoal workspace use the shoal-worker skill instead.
 ---
 
 # Shoal orchestrator
@@ -13,7 +13,7 @@ own checkout. Change or remove another agent's workspace only when the user asks
 
 Sessions launched through Shoal are scoped to their own workspace and cannot
 create workspaces or start sessions elsewhere; you and the user do. Unscoped
-commands also approve access requests, so act on those only as the user directs.
+commands also decide approval requests, so act on those only as the user directs.
 
 ## Start work
 
@@ -54,18 +54,18 @@ shoal --json internal events --follow --since <id>
 ```
 
 Notifications report agent exits, messages agents sent with `shoal notify`,
-busy resources, pending access requests and cleanup Shoal did on its own; reading them marks them read. Events stream
+busy resources, pending approval requests and cleanup Shoal did on its own; reading them marks them read. Events stream
 workspace lifecycle changes, including `review_ready` marks agents set with
 `shoal ready` and `agent_state` turn states (`working`, `waiting`, `idle`) their
 hooks report, which `ls` and `status` also show, without consuming notifications; resume from the
 last `id` you handled and resync with `shoal --json ls` after a `gap`.
 
-## Resource access requests
+## Approval requests
 
 ```sh
-shoal --json access
-shoal access approve <id>
-shoal access deny <id>
+shoal --json approvals
+shoal approvals approve <id>
+shoal approvals deny <id>
 ```
 
 Report pending requests to the user with their recorded settings and reason,

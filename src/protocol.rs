@@ -440,10 +440,10 @@ pub enum Method {
     PortOverview {
         workspace: String,
     },
-    ListAccess {
+    ListApprovals {
         workspace: Option<String>,
     },
-    DecideAccess {
+    DecideApproval {
         id: String,
         approve: bool,
     },
@@ -523,7 +523,7 @@ impl<T> Allocation<T> {
         match self {
             Self::Granted(value) => granted(value),
             Self::Busy(message) => Body::Busy { message },
-            Self::Approval(request) => Body::AccessRequest(request),
+            Self::Approval(request) => Body::ApprovalRequest(request),
         }
     }
 }
@@ -622,8 +622,8 @@ response_bodies! {
     Port(PortReservation),
     PortSuggestion(PortSuggestion),
     PortOverview(PortOverview),
-    AccessRequest(Box<crate::daemon::access::AccessRequest>),
-    AccessRequests(Vec<crate::daemon::access::AccessRequest>),
+    ApprovalRequest(Box<crate::daemon::approvals::ApprovalRequest>),
+    ApprovalRequests(Vec<crate::daemon::approvals::ApprovalRequest>),
     ResourceLease(ResourceLease),
     ResourceOverview(Overview),
     Simulator(Simulator),

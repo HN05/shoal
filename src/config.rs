@@ -177,7 +177,7 @@ pub fn validate_port_range(start: Option<u16>, end: Option<u16>) -> Result<()> {
 #[derive(Debug, Default, Clone, Serialize)]
 pub struct Simulators {
     pub requires_approval: bool,
-    pub approval_lifetime: crate::daemon::access::Lifetime,
+    pub approval_lifetime: crate::daemon::approvals::Lifetime,
     pub preferred: Vec<String>,
 }
 

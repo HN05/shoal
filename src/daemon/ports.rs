@@ -10,8 +10,8 @@ use std::{
 use crate::{
     config::repo::ConflictPolicy,
     daemon::{
-        access::{self, AccessRequest, PortSpecification, Specification, Target},
         allocation::Allocation,
+        approvals::{self, ApprovalRequest, PortSpecification, Specification, Target},
         notifications::NotificationKind,
         scope::Caller,
         store,
@@ -177,9 +177,9 @@ impl Manager {
                 if scoped && definition.requires_approval {
                     let bound = PortSpecification { env: env_var.clone(), on_conflict: policy, preferred,
                         range: [range.start, range.end] };
-                    let approval = AccessRequest::new(&workspace.id, Target::Port(name.clone()), &name,
+                    let approval = ApprovalRequest::new(&workspace.id, Target::Port(name.clone()), &name,
                         Specification::Port(bound), definition.approval_lifetime, request.reason.as_deref());
-                    if let Some(approval) = access::check(&tx, approval)? {
+                    if let Some(approval) = approvals::check(&tx, approval)? {
                         tx.commit()?;
                         return Ok((Acquisition::Allocation(Allocation::Approval(Box::new(approval))), None));
                     }
@@ -278,14 +278,14 @@ impl Manager {
                 let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
                 store::require_ready(&tx, &workspace.id)?;
                 let released =
-                    access::release(&tx, &workspace.id, &Target::Port(name.clone()), &name)?;
+                    approvals::release(&tx, &workspace.id, &Target::Port(name.clone()), &name)?;
                 ensure!(
                     tx.execute(
                         "DELETE FROM ports WHERE workspace_id=?1 AND name=?2",
                         params![workspace.id, name]
                     )? == 1
                         || released,
-                    "unknown port reservation or access request"
+                    "unknown port reservation or approval request"
                 );
                 tx.commit()?;
                 Ok(())

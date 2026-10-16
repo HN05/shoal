@@ -1,23 +1,23 @@
-//! Review daemon-owned access requests and render allocation decisions.
+//! Review daemon-owned approval requests and render allocation decisions.
 use anyhow::{Result, ensure};
 use serde_json::json;
 
 use super::EXIT_BUSY;
 use crate::{
-    cli::{AccessCommand, client::request, context::Context, output::Style, ui},
-    daemon::access::{AccessRequest, DecisionStatus},
+    cli::{ApprovalsCommand, client::request, context::Context, output::Style, ui},
+    daemon::approvals::{ApprovalRequest, DecisionStatus},
     protocol::Method,
 };
 
-pub(super) async fn run(ctx: &Context, command: Option<AccessCommand>) -> Result<i32> {
+pub(super) async fn run(ctx: &Context, command: Option<ApprovalsCommand>) -> Result<i32> {
     match command {
-        Some(command @ (AccessCommand::Approve { .. } | AccessCommand::Deny { .. })) => {
+        Some(command @ (ApprovalsCommand::Approve { .. } | ApprovalsCommand::Deny { .. })) => {
             ensure!(
                 !crate::env::inherits_scope(&ctx.paths.state),
-                "workspace processes cannot decide access requests; ask the user to run this command"
+                "workspace processes cannot decide approval requests; ask the user to run this command"
             );
-            let approve = matches!(command, AccessCommand::Approve { .. });
-            let (AccessCommand::Approve { id } | AccessCommand::Deny { id }) = command else {
+            let approve = matches!(command, ApprovalsCommand::Approve { .. });
+            let (ApprovalsCommand::Approve { id } | ApprovalsCommand::Deny { id }) = command else {
                 unreachable!()
             };
             let id = match id {
@@ -25,26 +25,26 @@ pub(super) async fn run(ctx: &Context, command: Option<AccessCommand>) -> Result
                 None => pick_pending(ctx).await?,
             };
             let request =
-                request::<Box<AccessRequest>>(&ctx.paths, Method::DecideAccess { id, approve })
+                request::<Box<ApprovalRequest>>(&ctx.paths, Method::DecideApproval { id, approve })
                     .await?;
             ctx.emit(&describe(&request), &request)?;
             Ok(0)
         }
-        Some(AccessCommand::List { workspace }) => list(ctx, workspace).await,
+        Some(ApprovalsCommand::List { workspace }) => list(ctx, workspace).await,
         None => list(ctx, None).await,
     }
 }
 
 async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32> {
     let requests =
-        request::<Vec<AccessRequest>>(&ctx.paths, Method::ListAccess { workspace }).await?;
+        request::<Vec<ApprovalRequest>>(&ctx.paths, Method::ListApprovals { workspace }).await?;
     ctx.show(&requests, |requests| {
         for request in requests {
             println!("{}", describe(request));
             println!("  {}", request.specification);
         }
         if requests.is_empty() {
-            println!("No access requests");
+            println!("No approval requests");
         }
     })?;
     Ok(0)
@@ -52,17 +52,18 @@ async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32> {
 
 async fn pick_pending(ctx: &Context) -> Result<String> {
     let requests =
-        request::<Vec<AccessRequest>>(&ctx.paths, Method::ListAccess { workspace: None }).await?;
+        request::<Vec<ApprovalRequest>>(&ctx.paths, Method::ListApprovals { workspace: None })
+            .await?;
     let pending: Vec<_> = requests
         .iter()
         .filter(|request| request.status == DecisionStatus::Pending)
         .map(|request| (request.id.clone(), describe(request)))
         .collect();
-    ensure!(!pending.is_empty(), "no pending access requests");
-    ui::pick(ctx, "Access request> ", pending)
+    ensure!(!pending.is_empty(), "no pending approval requests");
+    ui::pick(ctx, "Approval request> ", pending)
 }
 
-fn describe(request: &AccessRequest) -> String {
+fn describe(request: &ApprovalRequest) -> String {
     format!(
         "{} [{}] {} / {} (workspace {}, {}): {}",
         request.id,
@@ -75,7 +76,7 @@ fn describe(request: &AccessRequest) -> String {
     )
 }
 
-pub(super) fn declined(ctx: &Context, request: &AccessRequest) -> Result<i32> {
+pub(super) fn declined(ctx: &Context, request: &ApprovalRequest) -> Result<i32> {
     let code = if request.status == DecisionStatus::Denied {
         "approval_denied"
     } else {

@@ -38,7 +38,7 @@ const GROUPS: &[(&str, &[&str])] = &[
     ),
     (
         "Shared resources",
-        &["acquire", "release", "leases", "sim", "access"],
+        &["acquire", "release", "leases", "sim", "approvals"],
     ),
     (
         "Diagnostics and activity",

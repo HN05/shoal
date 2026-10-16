@@ -111,7 +111,7 @@ pub struct PortDefaults {
 #[serde(default, deny_unknown_fields)]
 pub struct PortDefinition {
     pub requires_approval: bool,
-    pub approval_lifetime: crate::daemon::access::Lifetime,
+    pub approval_lifetime: crate::daemon::approvals::Lifetime,
     pub port: Option<u16>,
     pub env: Option<String>,
     pub reason: Option<String>,
@@ -189,7 +189,7 @@ pub fn parse(text: &str) -> Result<RepoConfig> {
 #[serde(default, deny_unknown_fields)]
 pub struct SimulatorPreferences {
     pub requires_approval: Option<bool>,
-    pub approval_lifetime: Option<crate::daemon::access::Lifetime>,
+    pub approval_lifetime: Option<crate::daemon::approvals::Lifetime>,
     pub preferred: Vec<String>,
 }
 

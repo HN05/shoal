@@ -1,9 +1,9 @@
 //! CLI dispatch. Domain handlers own requests, prompts, and rendering;
 //! daemon modules own lifecycle and allocation policy.
-mod access;
 mod acquisition;
 mod agent_queue;
 mod agent_state;
+mod approvals;
 mod base;
 mod chat;
 mod cleanup;
@@ -452,7 +452,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
             all,
         } => leases::show(&ctx, kind, WorkspaceScope { workspace, all }).await,
         Command::Port { command, scope } => ports::run(&ctx, command, scope).await,
-        Command::Access { command } => access::run(&ctx, command).await,
+        Command::Approvals { command } => approvals::run(&ctx, command).await,
         Command::Resource { command, scope } => resources::run(&ctx, command, scope).await,
         Command::Sim { command, scope } => simulators::run(&ctx, command, scope).await,
         Command::Doctor {

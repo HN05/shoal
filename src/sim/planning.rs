@@ -160,7 +160,7 @@ pub(super) fn resolve_request(
         };
         Profile {
             requires_approval: false,
-            approval_lifetime: crate::daemon::access::Lifetime::Lease,
+            approval_lifetime: crate::daemon::approvals::Lifetime::Lease,
             device: device.clone(),
             runtime: request.runtime.clone().unwrap_or_default(),
         }
@@ -219,10 +219,10 @@ pub(super) fn resolve_request(
         lifetimes.push(repo.approval_lifetime);
     }
     profile.requires_approval = !lifetimes.is_empty();
-    profile.approval_lifetime = if lifetimes.contains(&crate::daemon::access::Lifetime::Lease) {
-        crate::daemon::access::Lifetime::Lease
+    profile.approval_lifetime = if lifetimes.contains(&crate::daemon::approvals::Lifetime::Lease) {
+        crate::daemon::approvals::Lifetime::Lease
     } else {
-        crate::daemon::access::Lifetime::Workspace
+        crate::daemon::approvals::Lifetime::Workspace
     };
     ensure!(
         allowed || config.allow_any,
@@ -305,7 +305,7 @@ fn resolve_runtime<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{daemon::access::Lifetime, sim::simctl::DeviceState};
+    use crate::{daemon::approvals::Lifetime, sim::simctl::DeviceState};
     use serde_json::json;
 
     fn inventory() -> Inventory {

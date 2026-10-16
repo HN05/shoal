@@ -1,9 +1,9 @@
 //! The per-user daemon: owns shared state, serves protocol requests over a
 //! Unix socket, and runs background cleanup.
-pub mod access;
 pub mod agent_messages;
 pub(crate) mod agent_queue;
 pub mod allocation;
+pub mod approvals;
 mod auto_update;
 pub mod cleanup;
 mod disk;
@@ -735,11 +735,11 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
         Method::PortOverview { workspace } => {
             Body::PortOverview(manager.port_overview(&workspace).await?)
         }
-        Method::ListAccess { workspace } => {
-            Body::AccessRequests(manager.access_requests(workspace.as_deref()).await?)
+        Method::ListApprovals { workspace } => {
+            Body::ApprovalRequests(manager.approval_requests(workspace.as_deref()).await?)
         }
-        Method::DecideAccess { id, approve } => {
-            Body::AccessRequest(Box::new(manager.decide_access(id, approve).await?))
+        Method::DecideApproval { id, approve } => {
+            Body::ApprovalRequest(Box::new(manager.decide_approval(id, approve).await?))
         }
         Method::ResourceAcquire { workspace, request } => manager
             .acquire_resource(&workspace, request, caller)

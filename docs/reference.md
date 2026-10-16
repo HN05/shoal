@@ -1607,7 +1607,7 @@ keeps its place while it is in progress or has polled in the last 30 seconds, so
 stopping the command gives the place up. The daemon keeps the queue in memory: a
 restart loses the order, and commands still polling join again.
 
-`shoal release` releases every lease and active access request the workspace
+`shoal release` releases every lease and active approval request the workspace
 holds, in order, and stops at the first failure. A kind narrows it to that kind, a resource or repository name
 to its pool, and `--name` or a port name to one lease. Holds are released
 separately.
@@ -1934,11 +1934,11 @@ suggestion with changed settings requires a new request. Simulator approvals bin
 the installed device/runtime and whether a clean device was requested; clean requests
 still need a reason and the usual audit before mutations.
 
-Agents use the normal acquire command with `--reason`. `shoal access` lists
-requests and retained workspace grants; `shoal access list <workspace>` filters
+Agents use the normal acquire command with `--reason`. `shoal approvals` lists
+requests and retained workspace grants; `shoal approvals list <workspace>` filters
 by workspace. Scoped callers can see only their own requests. An unscoped user
-reviews the recorded settings and uses `shoal access approve [id]` or
-`shoal access deny [id]`. Approval reserves no capacity: retry acquisition after
+reviews the recorded settings and uses `shoal approvals approve [id]` or
+`shoal approvals deny [id]`. Approval reserves no capacity: retry acquisition after
 the decision. Pending requests produce a daemon notification, collapsed until read.
 
 An acquisition waiting for a decision returns exit 2 and JSON

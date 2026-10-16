@@ -23,7 +23,7 @@ use crate::{
         repo::ConfigLayers,
         resolve::Stack,
     },
-    daemon::{access::AccessRequest, resources::Overview},
+    daemon::{approvals::ApprovalRequest, resources::Overview},
     env,
     model::{PortOverview, Workspace},
     paths::Paths,
@@ -56,7 +56,7 @@ enum Target {
     Pools,
     Members,
     ResourceNames,
-    AccessRequests,
+    ApprovalRequests,
     Ports,
     ReservedPorts,
     SimNames,
@@ -161,7 +161,7 @@ fn decorate(command: Command, parent: &str, typed: Arc<Typed>) -> Command {
     command
         .mut_args(|arg| {
             let target = match (arg.get_id().as_str(), parent, name.as_str()) {
-                ("id", "access", "approve" | "deny") => Some(Target::AccessRequests),
+                ("id", "approvals", "approve" | "deny") => Some(Target::ApprovalRequests),
                 ("name", _, "run") => Some(Target::Commands),
                 ("repository" | "repository_override", _, _) => Some(Target::Repositories),
                 ("workspace", _, _) => Some(Target::Workspaces),
@@ -373,15 +373,15 @@ impl Typed {
                 current,
             ));
         }
-        if matches!(target, Target::AccessRequests) {
-            let requests = client::request::<Vec<AccessRequest>>(
+        if matches!(target, Target::ApprovalRequests) {
+            let requests = client::request::<Vec<ApprovalRequest>>(
                 &paths,
-                Method::ListAccess { workspace: None },
+                Method::ListApprovals { workspace: None },
             )
             .await?;
             return Ok(requests
                 .into_iter()
-                .filter(|r| r.status == crate::daemon::access::DecisionStatus::Pending)
+                .filter(|r| r.status == crate::daemon::approvals::DecisionStatus::Pending)
                 .map(|r| CompletionCandidate::new(r.id))
                 .collect());
         }
@@ -440,7 +440,7 @@ impl Typed {
             Target::Commands
             | Target::Repositories
             | Target::Workspaces
-            | Target::AccessRequests => unreachable!(),
+            | Target::ApprovalRequests => unreachable!(),
         }
         Ok(names.into_iter().map(CompletionCandidate::new).collect())
     }

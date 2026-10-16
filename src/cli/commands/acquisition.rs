@@ -5,10 +5,10 @@ use anyhow::Result;
 use serde_json::Value;
 use tokio::time::sleep;
 
-use super::{EXIT_BUSY, access};
+use super::{EXIT_BUSY, approvals};
 use crate::{
     cli::{context::Context, output::Style},
-    daemon::access::{AccessRequest, DecisionStatus},
+    daemon::approvals::{ApprovalRequest, DecisionStatus},
     protocol::Body,
 };
 
@@ -16,12 +16,12 @@ use crate::{
 pub(super) enum Acquisition<T> {
     Acquired(T),
     Busy(String),
-    ApprovalPending(Box<AccessRequest>),
-    ApprovalDenied(Box<AccessRequest>),
+    ApprovalPending(Box<ApprovalRequest>),
+    ApprovalDenied(Box<ApprovalRequest>),
 }
 
 impl<T> Acquisition<T> {
-    fn approval(request: Box<AccessRequest>) -> Self {
+    fn approval(request: Box<ApprovalRequest>) -> Self {
         if request.status == DecisionStatus::Denied {
             Self::ApprovalDenied(request)
         } else {
@@ -43,7 +43,7 @@ impl<T> Acquisition<T> {
                 Ok(0)
             }
             Self::ApprovalPending(request) | Self::ApprovalDenied(request) => {
-                access::declined(ctx, &request)
+                approvals::declined(ctx, &request)
             }
             Self::Busy(message) => {
                 ctx.emit_styled(Style::Warning, &message, busy(&message))?;
@@ -58,7 +58,7 @@ impl<T: TryFrom<Body, Error = anyhow::Error>> TryFrom<Body> for Acquisition<T> {
 
     fn try_from(body: Body) -> Result<Self> {
         match body {
-            Body::AccessRequest(request) => Ok(Self::approval(request)),
+            Body::ApprovalRequest(request) => Ok(Self::approval(request)),
             Body::Busy { message } => Ok(Self::Busy(message)),
             body => T::try_from(body).map(Self::Acquired),
         }
@@ -103,7 +103,7 @@ mod tests {
     use super::*;
     use serde_json::{json, to_value};
 
-    fn approval(status: DecisionStatus) -> Box<AccessRequest> {
+    fn approval(status: DecisionStatus) -> Box<ApprovalRequest> {
         serde_json::from_value(json!({
             "id": "approval-id", "workspace_id": "workspace-id", "workspace": "worker",
             "target": "port/web", "name": "web", "reason": "serve preview",

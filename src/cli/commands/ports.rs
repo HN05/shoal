@@ -79,7 +79,7 @@ pub(super) async fn acquire(
                 )?;
                 return Ok(0);
             }
-            Body::AccessRequest(request) => return super::access::declined(ctx, &request),
+            Body::ApprovalRequest(request) => return super::approvals::declined(ctx, &request),
             Body::PortSuggestion(proposal) => {
                 if !ctx.interactive() {
                     let mut value = serde_json::to_value(&proposal)?;
@@ -119,7 +119,7 @@ pub(super) async fn acquire(
                     on_conflict: request.on_conflict,
                 };
             }
-            body => return Err(body.unexpected("Port, AccessRequest or PortSuggestion")),
+            body => return Err(body.unexpected("Port, ApprovalRequest or PortSuggestion")),
         }
     }
 }

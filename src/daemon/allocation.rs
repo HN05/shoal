@@ -1,10 +1,12 @@
 //! Shared outcomes of daemon-owned resource allocation.
-use crate::daemon::{access::AccessRequest, notifications::NotificationKind, workspace::Manager};
+use crate::daemon::{
+    approvals::ApprovalRequest, notifications::NotificationKind, workspace::Manager,
+};
 
 pub enum Allocation<T> {
     Granted(T),
     Busy(String),
-    Approval(Box<AccessRequest>),
+    Approval(Box<ApprovalRequest>),
 }
 
 impl Manager {
@@ -25,7 +27,7 @@ impl Manager {
                 )
                 .await;
             }
-            Allocation::Approval(request) => self.notify_access(workspace, request).await,
+            Allocation::Approval(request) => self.notify_approval(workspace, request).await,
         }
     }
 }
@@ -33,7 +35,7 @@ impl Manager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::daemon::access::{
+    use crate::daemon::approvals::{
         DecisionStatus, Lifetime, PortSpecification, Specification, Target,
     };
 
@@ -43,7 +45,7 @@ mod tests {
         manager
             .notify_allocation("worker", &Allocation::Granted(()), "")
             .await;
-        let mut request = AccessRequest::new(
+        let mut request = ApprovalRequest::new(
             "owner",
             Target::Port("web".into()),
             "web",
@@ -95,11 +97,11 @@ mod tests {
         assert_eq!(notifications[0].message, "busy");
         assert_eq!(notifications[1].kind, NotificationKind::ResourceBusy);
         assert_eq!(notifications[1].message, "simulator: busy");
-        assert_eq!(notifications[2].kind, NotificationKind::AccessRequested);
+        assert_eq!(notifications[2].kind, NotificationKind::ApprovalRequested);
         assert_eq!(
             notifications[2].message,
             format!(
-                "access {}: port/web / web: serve the app; approve with shoal access approve {}",
+                "approval {}: port/web / web: serve the app; approve with shoal approvals approve {}",
                 request.id, request.id
             )
         );

@@ -72,7 +72,7 @@ impl FromStr for Target {
                 pool: pool.into(),
             });
         }
-        bail!("invalid access target: {text}")
+        bail!("invalid approval target: {text}")
     }
 }
 text_key!(Target);
@@ -123,7 +123,7 @@ impl fmt::Display for Specification {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AccessRequest {
+pub struct ApprovalRequest {
     pub id: String,
     pub workspace_id: String,
     #[serde(default)]
@@ -147,9 +147,9 @@ const CURRENT: &str = "SELECT id,record,active FROM access_requests
 const CANDIDATES: &str = "SELECT id,record,active FROM access_requests
     WHERE workspace_id=?1 AND target_key=?2 ORDER BY rowid";
 
-fn decode_record((id, record, active): (String, String, bool)) -> Result<AccessRequest> {
-    let mut request: AccessRequest = serde_json::from_str(&record)
-        .with_context(|| format!("access request {id} has an invalid record"))?;
+fn decode_record((id, record, active): (String, String, bool)) -> Result<ApprovalRequest> {
+    let mut request: ApprovalRequest = serde_json::from_str(&record)
+        .with_context(|| format!("approval request {id} has an invalid record"))?;
     request.active = active;
     Ok(request)
 }
@@ -158,18 +158,18 @@ fn record_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<(String, String, bool
     Ok((row.get(0)?, row.get(1)?, row.get(2)?))
 }
 
-fn lookup(db: &Connection, sql: &str, params: impl Params) -> Result<Option<AccessRequest>> {
+fn lookup(db: &Connection, sql: &str, params: impl Params) -> Result<Option<ApprovalRequest>> {
     db.query_row(sql, params, record_row)
         .optional()?
         .map(decode_record)
         .transpose()
 }
 
-fn by_id(db: &Connection, id: &str) -> Result<Option<AccessRequest>> {
+fn by_id(db: &Connection, id: &str) -> Result<Option<ApprovalRequest>> {
     lookup(db, BY_ID, [id])
 }
 
-pub fn list(db: &Connection, owner: Option<&str>) -> Result<Vec<AccessRequest>> {
+pub fn list(db: &Connection, owner: Option<&str>) -> Result<Vec<ApprovalRequest>> {
     db.prepare("SELECT id,record,active FROM access_requests WHERE ?1 IS NULL OR workspace_id=?1 ORDER BY rowid")?
         .query_map([owner], record_row)?
         .map(|row| decode_record(row?))
@@ -181,23 +181,26 @@ pub fn current(
     owner: &str,
     target: &Target,
     name: &str,
-) -> Result<Option<AccessRequest>> {
+) -> Result<Option<ApprovalRequest>> {
     lookup(db, CURRENT, params![owner, target, name])
 }
 
 /// The caller holds the allocation transaction (or simulator gate). The exact
 /// specification includes effective policy, so a changed policy cannot reuse a grant.
-pub fn check(tx: &Transaction<'_>, mut request: AccessRequest) -> Result<Option<AccessRequest>> {
+pub fn check(
+    tx: &Transaction<'_>,
+    mut request: ApprovalRequest,
+) -> Result<Option<ApprovalRequest>> {
     store::require_ready(tx, &request.workspace_id)?;
     if let Some(existing) = current(tx, &request.workspace_id, &request.target, &request.name)? {
         ensure!(
             existing.specification == request.specification
                 && existing.lifetime == request.lifetime,
-            "access request settings changed; release the resource name before retrying"
+            "approval request settings changed; release the resource name before retrying"
         );
         ensure!(
             request.reason.is_empty() || request.reason == existing.reason,
-            "access request reason changed; release the resource name before retrying"
+            "approval request reason changed; release the resource name before retrying"
         );
         return Ok((existing.status != DecisionStatus::Approved).then_some(existing));
     }
@@ -208,7 +211,7 @@ pub fn check(tx: &Transaction<'_>, mut request: AccessRequest) -> Result<Option<
         !request.reason.trim().is_empty(),
         "approval requires --reason explaining the requested access"
     );
-    crate::validate::reason("access", Some(&request.reason))?;
+    crate::validate::reason("approval", Some(&request.reason))?;
     request.workspace = tx.query_row(
         "SELECT name FROM workspaces WHERE id=?1",
         [&request.workspace_id],
@@ -220,7 +223,7 @@ pub fn check(tx: &Transaction<'_>, mut request: AccessRequest) -> Result<Option<
     Ok(Some(request))
 }
 
-fn reusable_grant(db: &Connection, request: &AccessRequest) -> Result<bool> {
+fn reusable_grant(db: &Connection, request: &ApprovalRequest) -> Result<bool> {
     // Decode every candidate before matching: even a later malformed record must
     // fail the check. Released workspace grants remain candidates.
     let candidates = db
@@ -237,7 +240,7 @@ fn reusable_grant(db: &Connection, request: &AccessRequest) -> Result<bool> {
     }))
 }
 
-impl AccessRequest {
+impl ApprovalRequest {
     pub fn new(
         owner: &str,
         target: Target,
@@ -280,12 +283,12 @@ pub fn release(tx: &Transaction<'_>, owner: &str, target: &Target, name: &str) -
 }
 
 impl Manager {
-    pub async fn access_requests(&self, selector: Option<&str>) -> Result<Vec<AccessRequest>> {
+    pub async fn approval_requests(&self, selector: Option<&str>) -> Result<Vec<ApprovalRequest>> {
         let owner = self.workspace_filter(selector).await?;
         self.store.run(move |db| list(db, owner.as_deref())).await
     }
 
-    pub async fn decide_access(&self, id: String, approve: bool) -> Result<AccessRequest> {
+    pub async fn decide_approval(&self, id: String, approve: bool) -> Result<ApprovalRequest> {
         // Simulator allocation checks approval and mutates devices in separate
         // transactions under this gate; a decision must not land between them.
         let _guard = self.simulator_gate.lock().await;
@@ -293,7 +296,7 @@ impl Manager {
             .run(move |db| {
                 let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
                 let mut request =
-                    by_id(&tx, &id)?.ok_or_else(|| anyhow::anyhow!("unknown access request"))?;
+                    by_id(&tx, &id)?.ok_or_else(|| anyhow::anyhow!("unknown approval request"))?;
                 store::require_ready(&tx, &request.workspace_id)?;
                 let status = if approve {
                     DecisionStatus::Approved
@@ -302,7 +305,7 @@ impl Manager {
                 };
                 ensure!(
                     request.status == DecisionStatus::Pending || request.status == status,
-                    "access request already decided"
+                    "approval request already decided"
                 );
                 if request.status == DecisionStatus::Pending {
                     request.status = status;
@@ -318,13 +321,13 @@ impl Manager {
             .await
     }
 
-    pub async fn notify_access(&self, workspace: &str, request: &AccessRequest) {
+    pub async fn notify_approval(&self, workspace: &str, request: &ApprovalRequest) {
         if request.status == DecisionStatus::Pending {
             self.notify(
                 Some(workspace),
-                crate::daemon::notifications::NotificationKind::AccessRequested,
+                crate::daemon::notifications::NotificationKind::ApprovalRequested,
                 format!(
-                    "access {}: {} / {}: {}; approve with shoal access approve {}",
+                    "approval {}: {} / {}: {}; approve with shoal approvals approve {}",
                     request.id, request.target, request.name, request.reason, request.id
                 ),
             )
@@ -364,7 +367,7 @@ mod tests {
         Ok(())
     }
 
-    fn save(db: &Connection, request: &AccessRequest) -> Result<()> {
+    fn save(db: &Connection, request: &ApprovalRequest) -> Result<()> {
         db.execute(
             "INSERT OR REPLACE INTO access_requests(id,workspace_id,target_key,name,record,active)
             VALUES (?1,?2,?3,?4,?5,?6)",
@@ -380,8 +383,8 @@ mod tests {
         Ok(())
     }
 
-    fn sample(owner: &str, target: Target) -> AccessRequest {
-        AccessRequest::new(
+    fn sample(owner: &str, target: Target) -> ApprovalRequest {
+        ApprovalRequest::new(
             owner,
             target,
             "default",
@@ -444,22 +447,22 @@ mod tests {
             ("approve", true, DecisionStatus::Approved),
             ("deny", false, DecisionStatus::Denied),
         ] {
-            let decision = manager.decide_access(id.into(), approve).await?;
+            let decision = manager.decide_approval(id.into(), approve).await?;
             assert_eq!(decision.status, status);
-            let retry = manager.decide_access(id.into(), approve).await?;
+            let retry = manager.decide_approval(id.into(), approve).await?;
             assert_eq!(
                 serde_json::to_value(retry)?,
                 serde_json::to_value(decision)?
             );
-            assert!(manager.decide_access(id.into(), !approve).await.is_err());
+            assert!(manager.decide_approval(id.into(), !approve).await.is_err());
         }
         for (id, message) in [
-            ("missing", "unknown access request"),
-            ("broken", "access request broken has an invalid record"),
+            ("missing", "unknown approval request"),
+            ("broken", "approval request broken has an invalid record"),
         ] {
             assert!(
                 manager
-                    .decide_access(id.into(), true)
+                    .decide_approval(id.into(), true)
                     .await
                     .unwrap_err()
                     .to_string()
@@ -473,7 +476,12 @@ mod tests {
                 Ok(())
             })
             .await?;
-        assert!(manager.decide_access("approve".into(), true).await.is_err());
+        assert!(
+            manager
+                .decide_approval("approve".into(), true)
+                .await
+                .is_err()
+        );
         Ok(())
     }
 
@@ -611,7 +619,7 @@ mod tests {
                         check(&tx, request.clone())
                             .unwrap_err()
                             .to_string()
-                            .contains("access request broken has an invalid record")
+                            .contains("approval request broken has an invalid record")
                     );
                     assert!(by_id(&tx, "broken").is_err());
                 }
@@ -775,7 +783,7 @@ mod tests {
         store.run(|db| {
             db.execute_batch("INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
                 INSERT INTO workspaces(id,repository_id,name,path,branch,state) VALUES ('owner','repo','worker','/work','worker','ready');")?;
-            let request = AccessRequest::new("owner", Target::Simulator, "default",
+            let request = ApprovalRequest::new("owner", Target::Simulator, "default",
                 Specification::Simulator(SimulatorSpecification { clean: false, profile: Profile {
                     requires_approval: true, approval_lifetime: Lifetime::Lease,
                     device: "iPhone".into(), runtime: "iOS".into() } }), Lifetime::Lease, Some("test app"));
@@ -791,7 +799,7 @@ mod tests {
             broken["id"] = "broken".into();
             insert(db, "broken", &broken)?;
             let error = list(db, Some("owner")).unwrap_err().to_string();
-            assert!(error.contains("access request broken has an invalid record"), "{error}");
+            assert!(error.contains("approval request broken has an invalid record"), "{error}");
             db.execute("DELETE FROM access_requests WHERE id='broken'", [])?;
             broken["specification"] = record["specification"].clone();
             broken["target"] = "resource/lock".into();
@@ -814,7 +822,7 @@ mod tests {
                 assert_eq!(serde_json::to_value(lifetime)?, lifetime.to_string());
                 let tx = db.transaction()?;
                 let target = Target::Resource { scope: Scope::Global, pool: "lock".into() };
-                let request = AccessRequest::new("owner", target, "default",
+                let request = ApprovalRequest::new("owner", target, "default",
                     resource(LockMode::Read), lifetime, Some("read shared data"));
                 let pending = check(&tx, request.clone())?.unwrap();
                 assert_eq!(check(&tx, request.clone())?.unwrap().id, pending.id);

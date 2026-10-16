@@ -15,7 +15,7 @@ use audit::{CleanAction, CleanRequest, CleanRequestStatus, EvictedDevice};
 use simctl::Inventory;
 
 use crate::{
-    daemon::{access, allocation::Allocation, queue, workspace::Manager},
+    daemon::{allocation::Allocation, approvals, queue, workspace::Manager},
     model::Workspace,
     state::{WorkspaceState, states},
     time::unix_seconds,
@@ -28,7 +28,7 @@ pub struct Profile {
     #[serde(default)]
     pub requires_approval: bool,
     #[serde(default)]
-    pub approval_lifetime: crate::daemon::access::Lifetime,
+    pub approval_lifetime: crate::daemon::approvals::Lifetime,
     pub device: String,
     /// Empty selects the latest available compatible iOS runtime.
     #[serde(default)]
@@ -40,7 +40,7 @@ pub struct Profile {
 pub struct SimConfig {
     /// Repository-overridable approval policy, as written.
     pub requires_approval: Option<bool>,
-    pub approval_lifetime: Option<crate::daemon::access::Lifetime>,
+    pub approval_lifetime: Option<crate::daemon::approvals::Lifetime>,
     pub max_booted: usize,
     pub max_devices: usize,
     pub idle_seconds: u64,
@@ -293,7 +293,7 @@ impl Manager {
         // Join before the gate: waiting behind another boot keeps the place.
         let workspace_id = self.workspace(selector).await?.id;
         let mut place = self.queues.enter(
-            access::Target::Simulator,
+            approvals::Target::Simulator,
             &workspace_id,
             &request.name,
             request.queue,
@@ -332,15 +332,12 @@ impl Manager {
                 }
                 Ok(Allocation::Approval(request)) => {
                     audit.status =
-                        if request.status == crate::daemon::access::DecisionStatus::Denied {
+                        if request.status == crate::daemon::approvals::DecisionStatus::Denied {
                             CleanRequestStatus::Failed
                         } else {
                             CleanRequestStatus::Busy
                         };
-                    audit.error = Some(format!(
-                        "access approval {} ({})",
-                        request.status, request.id
-                    ));
+                    audit.error = Some(format!("approval {} ({})", request.status, request.id));
                 }
                 Err(error) => {
                     audit.status = CleanRequestStatus::Failed;
@@ -406,11 +403,11 @@ impl Manager {
         }
         let profile = profile.unwrap();
         if scoped && profile.requires_approval {
-            let approval = access::AccessRequest::new(
+            let approval = approvals::ApprovalRequest::new(
                 &workspace.id,
-                access::Target::Simulator,
+                approvals::Target::Simulator,
                 &request.name,
-                access::Specification::Simulator(access::SimulatorSpecification {
+                approvals::Specification::Simulator(approvals::SimulatorSpecification {
                     clean: request.clean,
                     profile: profile.clone(),
                 }),
@@ -422,7 +419,7 @@ impl Manager {
                 .run(move |db| {
                     let tx =
                         db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                    let pending = crate::daemon::access::check(&tx, approval)?;
+                    let pending = crate::daemon::approvals::check(&tx, approval)?;
                     tx.commit()?;
                     Ok(pending)
                 })
@@ -630,7 +627,7 @@ impl Manager {
         let Some(mut sim) = sim else {
             ensure!(
                 self.release_simulator_access(workspace.id, name).await?,
-                "unknown simulator lease or access request"
+                "unknown simulator lease or approval request"
             );
             return Ok(());
         };
@@ -656,7 +653,8 @@ impl Manager {
         self.store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                let released = access::release(&tx, &owner, &access::Target::Simulator, &name)?;
+                let released =
+                    approvals::release(&tx, &owner, &approvals::Target::Simulator, &name)?;
                 tx.commit()?;
                 Ok(released)
             })

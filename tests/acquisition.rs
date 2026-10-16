@@ -58,7 +58,7 @@ fn acquire(kind: &str, queue: bool, json: bool, replies: Vec<Value>) -> (Output,
 
 fn approval(kind: &str, status: &str) -> Value {
     let mut reply = json!({
-        "type": "access_request", "data": {
+        "type": "approval_request", "data": {
             "id": "approval-id", "workspace_id": "workspace-id", "workspace": "worker",
             "target": "simulator", "name": "default", "reason": "test allocation",
             "specification": {"clean": true, "profile": {"device": "Phone", "runtime": "iOS Test",

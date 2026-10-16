@@ -109,7 +109,7 @@ pub async fn authorize(
         | Method::LayeredConfig {
             target: ConfigTarget::Workspace(workspace),
         } => Some(workspace),
-        Method::ListAccess { workspace }
+        Method::ListApprovals { workspace }
         | Method::SimOverview { workspace }
         | Method::SimList { workspace }
         | Method::SimHistory { workspace, .. } => {

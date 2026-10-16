@@ -15,8 +15,8 @@ pub(crate) use repositories::ensure_no_external_leases;
 
 use crate::{
     daemon::{
-        access::{self, AccessRequest, ResourceSpecification, Specification, Target},
         allocation::Allocation,
+        approvals::{self, ApprovalRequest, ResourceSpecification, Specification, Target},
         queue,
         scope::Caller,
         store,
@@ -76,7 +76,7 @@ states!(LockMode: ValueEnum {
 #[serde(default, deny_unknown_fields)]
 pub struct ResourceConfig {
     pub requires_approval: bool,
-    pub approval_lifetime: crate::daemon::access::Lifetime,
+    pub approval_lifetime: crate::daemon::approvals::Lifetime,
     pub kind: ResourceKind,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub repo: Option<String>,
@@ -88,7 +88,7 @@ impl Default for ResourceConfig {
     fn default() -> Self {
         Self {
             requires_approval: false,
-            approval_lifetime: crate::daemon::access::Lifetime::Lease,
+            approval_lifetime: crate::daemon::approvals::Lifetime::Lease,
             kind: ResourceKind::Semaphore,
             repo: None,
             capacity: 1,
@@ -225,7 +225,7 @@ pub struct ResourceRequest {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ResourceStatus {
     pub requires_approval: bool,
-    pub approval_lifetime: crate::daemon::access::Lifetime,
+    pub approval_lifetime: crate::daemon::approvals::Lifetime,
     pub kind: ResourceKind,
     pub readers: u32,
     pub writers: u32,
@@ -706,7 +706,7 @@ impl Manager {
                         scope,
                         pool: pool.clone(),
                     };
-                    released |= access::release(&tx, &workspace.id, &target, &name)?;
+                    released |= approvals::release(&tx, &workspace.id, &target, &name)?;
                 }
                 ensure!(
                     tx.execute(
@@ -714,7 +714,7 @@ impl Manager {
                         params![workspace.id, pool, name]
                     )? == 1
                         || released,
-                    "unknown resource lease or access request"
+                    "unknown resource lease or approval request"
                 );
                 tx.commit()?;
                 Ok(())
@@ -826,10 +826,11 @@ fn acquire_lease(
         scope: scope.clone(),
         pool: request.pool.clone(),
     };
-    if scoped && let Some(pending) = access::current(&tx, &workspace_id, &target, &request.name)? {
+    if scoped && let Some(pending) = approvals::current(&tx, &workspace_id, &target, &request.name)?
+    {
         let Specification::Resource(bound) = &pending.specification else {
             bail!(
-                "access request {} for {target} does not select a pool member; release the name and request again",
+                "approval request {} for {target} does not select a pool member; release the name and request again",
                 pending.id
             );
         };
@@ -838,7 +839,7 @@ fn acquire_lease(
                 .resource
                 .as_deref()
                 .is_none_or(|r| r == bound.member),
-            "access request member changed; release it first"
+            "approval request member changed; release it first"
         );
         request.resource = Some(bound.member.clone());
     }
@@ -877,7 +878,7 @@ fn acquire_lease(
             member: resource.clone(),
             mode,
         };
-        let approval = AccessRequest::new(
+        let approval = ApprovalRequest::new(
             &workspace_id,
             target,
             &request.name,
@@ -885,7 +886,7 @@ fn acquire_lease(
             settings.approval_lifetime,
             request.reason.as_deref(),
         );
-        if let Some(approval) = access::check(&tx, approval)? {
+        if let Some(approval) = approvals::check(&tx, approval)? {
             tx.commit()?;
             return Ok(Allocation::Approval(Box::new(approval)));
         }
