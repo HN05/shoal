@@ -68,7 +68,7 @@ async fn interrupted(
     id: &str,
     wrapper: &Identity,
     child: Option<&Identity>,
-    stage: Stage,
+    stage: Option<Stage>,
 ) {
     let (id, workspace_id) = (id.to_owned(), workspace.id.clone());
     let (wrapper, child) = (wrapper.clone(), child.cloned());
@@ -115,7 +115,7 @@ async fn restart_forgets_a_stopped_agent_whose_wrapper_exited_and_keeps_its_reco
         "paused",
         &wrapper,
         None,
-        Stage::Stopped,
+        Some(Stage::Stopped),
     )
     .await;
     let reopened = restart(&manager).await;
@@ -150,7 +150,7 @@ async fn restart_keeps_uncertain_stopped_agents_and_notifies_once() {
         "survivor",
         &wrapper,
         Some(&child),
-        Stage::Stopped,
+        Some(Stage::Stopped),
     )
     .await;
     // Only the wrapper proves that a stop it never acknowledged took effect.
@@ -160,9 +160,10 @@ async fn restart_keeps_uncertain_stopped_agents_and_notifies_once() {
         "unproven",
         &wrapper,
         None,
-        Stage::Stopping,
+        Some(Stage::Stopping),
     )
     .await;
+    interrupted(&manager, &workspace, "legacy", &wrapper, None, None).await;
     let (_alive, live) = sleeper();
     interrupted(
         &manager,
@@ -170,7 +171,7 @@ async fn restart_keeps_uncertain_stopped_agents_and_notifies_once() {
         "reattaching",
         &live,
         None,
-        Stage::Stopped,
+        Some(Stage::Stopped),
     )
     .await;
     let reopened = restart(&manager).await;
@@ -184,9 +185,9 @@ async fn restart_keeps_uncertain_stopped_agents_and_notifies_once() {
         .map(|execution| execution.id)
         .collect();
     kept.sort();
-    assert_eq!(kept, ["reattaching", "survivor", "unproven"]);
+    assert_eq!(kept, ["legacy", "reattaching", "survivor", "unproven"]);
     let messages = blocked(&reopened).await;
-    assert_eq!(messages.len(), 2, "{messages:?}");
+    assert_eq!(messages.len(), 3, "{messages:?}");
     let survivor = messages.iter().find(|m| m.contains("survivor")).unwrap();
     assert!(
         survivor.contains(&format!(
@@ -202,6 +203,11 @@ async fn restart_keeps_uncertain_stopped_agents_and_notifies_once() {
     assert!(
         unproven.contains("process identity is incomplete"),
         "{unproven}"
+    );
+    let legacy = messages.iter().find(|m| m.contains("legacy")).unwrap();
+    assert!(
+        legacy.contains("process identity is incomplete"),
+        "{legacy}"
     );
     assert!(record(&reopened, &workspace, "survivor").is_some());
     reopened.store.shutdown().await;
@@ -229,7 +235,7 @@ async fn crash_while_protected(stop: impl AsyncFnOnce(&Manager)) {
     );
     assert!(executions(&reopened, &workspace).await.is_empty());
     let saved = record(&reopened, &workspace, &id).unwrap();
-    assert_eq!(saved.stage, Stage::Stopped);
+    assert_eq!(saved.stage, Some(Stage::Stopped));
     assert!(saved.stop_reason.is_some());
     assert!(crate::execution::recovery::pending(&reopened.paths, &workspace.id).unwrap());
     assert!(blocked(&reopened).await.is_empty());
@@ -292,7 +298,7 @@ async fn update_restart_discards_a_stop_that_never_reached_the_agent() {
     );
     assert_eq!(
         record(&reopened, &workspace, &id).unwrap().stage,
-        Stage::Stopping
+        Some(Stage::Stopping)
     );
     let serving = serve_fixture(reopened.clone());
     bounded(async {
@@ -310,7 +316,7 @@ async fn update_restart_discards_a_stop_that_never_reached_the_agent() {
     assert_eq!(bounded(launched).await.unwrap().unwrap(), 0);
     assert_eq!(
         record(&reopened, &workspace, &id).unwrap().stage,
-        Stage::Stopped
+        Some(Stage::Stopped)
     );
     reopened.store.shutdown().await;
     serving.abort();

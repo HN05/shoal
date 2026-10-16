@@ -43,9 +43,10 @@ pub(crate) struct Record {
     pub agent: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stop_reason: Option<String>,
-    /// Records saved before stages existed prove no more than a stop request.
-    #[serde(default = "stopping")]
-    pub stage: Stage,
+    /// Unknown for records saved before stages existed, which may come from
+    /// either side of the stop.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stage: Option<Stage>,
     /// The Herdr pane the agent ran in, where `shoal resume --all` restores it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub herdr_pane: Option<String>,
@@ -148,16 +149,12 @@ impl Recovery {
     }
 }
 
-fn stopping() -> Stage {
-    Stage::Stopping
-}
-
 impl Record {
     fn new(agent: &str, reason: Option<&str>, stage: Stage, herdr_pane: Option<String>) -> Self {
         Self {
             agent: agent.replace(' ', "-"),
             stop_reason: reason.map(str::to_owned),
-            stage,
+            stage: Some(stage),
             herdr_pane,
         }
     }
@@ -202,8 +199,8 @@ fn write_record(
     if let Ok(Some(saved)) = Record::load(&path) {
         record.stop_reason = record.stop_reason.or(saved.stop_reason);
         record.herdr_pane = record.herdr_pane.or(saved.herdr_pane);
-        if saved.stage == Stage::Stopped {
-            record.stage = Stage::Stopped;
+        if saved.stage == Some(Stage::Stopped) {
+            record.stage = saved.stage;
         }
     }
     crate::fsutil::replace_atomically(
@@ -222,7 +219,7 @@ fn write_record(
 pub(crate) fn discard_undelivered(paths: &Paths, workspace_id: &str, id: &str) -> Result<bool> {
     let path = record_path(paths, workspace_id, id);
     match Record::load(&path)? {
-        Some(record) if record.stage == Stage::Stopping => {
+        Some(record) if record.stage == Some(Stage::Stopping) => {
             consume(&path)?;
             Ok(true)
         }
@@ -430,7 +427,7 @@ mod tests {
         use std::os::unix::fs::PermissionsExt;
         let old: Record = serde_json::from_str(r#"{"agent":"codex"}"#).unwrap();
         assert!(old.stop_reason.is_none());
-        assert_eq!(old.stage, Stage::Stopping);
+        assert_eq!(old.stage, None);
         let root = tempfile::tempdir().unwrap();
         let paths = Paths::for_test(root.path());
         let path = save_record(
@@ -451,7 +448,7 @@ mod tests {
             record.stop_reason.as_deref(),
             Some("critical memory pressure")
         );
-        assert_eq!(record.stage, Stage::Stopping);
+        assert_eq!(record.stage, Some(Stage::Stopping));
         assert!(pending(&paths, "workspace").unwrap());
         let recovery = Recovery {
             agent: "codex".into(),
@@ -470,7 +467,24 @@ mod tests {
         );
         assert_eq!(record.herdr_pane.as_deref(), Some("w1:p2"));
         // The daemon's late handoff cannot undo the wrapper's stop.
-        assert_eq!(record.stage, Stage::Stopped);
+        assert_eq!(record.stage, Some(Stage::Stopped));
+    }
+
+    #[test]
+    fn only_a_daemon_saved_stop_counts_as_undelivered() {
+        let root = tempfile::tempdir().unwrap();
+        let paths = Paths::for_test(root.path());
+        let path = record_path(&paths, "workspace", "execution");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        // A record from before stages may be the wrapper's own.
+        std::fs::write(&path, r#"{"agent":"codex"}"#).unwrap();
+        assert!(!discard_undelivered(&paths, "workspace", "execution").unwrap());
+        assert!(path.is_file());
+        std::fs::remove_file(&path).unwrap();
+        save_record(&paths, "workspace", "execution", "codex", None).unwrap();
+        assert!(discard_undelivered(&paths, "workspace", "execution").unwrap());
+        assert!(!path.exists());
+        assert!(!discard_undelivered(&paths, "workspace", "execution").unwrap());
     }
 
     #[test]

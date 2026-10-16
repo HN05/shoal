@@ -199,7 +199,7 @@ fn assess(interrupted: &Interrupted, processes: &Processes) -> Outcome {
     // The daemon forgets a stopped agent's child only after its wrapper
     // reports the stop and the process inventory confirms it.
     let paused =
-        interrupted.record.stage == Stage::Stopped && interrupted.execution.wrapper.is_some();
+        interrupted.record.stage == Some(Stage::Stopped) && interrupted.execution.wrapper.is_some();
     if processes.launch_recorded || paused {
         Outcome::Stopped
     } else {
