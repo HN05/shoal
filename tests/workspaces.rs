@@ -14553,6 +14553,22 @@ fn the_user_messages_agents_who_read_their_own_messages_once() {
         })
     );
     assert_eq!(hook(event), "");
+
+    // The wake hook prints the next update for the agent and exits 2, which
+    // makes Claude Code start the idle agent's next turn with it.
+    fixture.ok(&["message", "Rebase onto main", "--workspace", "receiver"]);
+    let output = fixture
+        .command()
+        .args(["exec", "receiver", "--", env!("CARGO_BIN_EXE_shoal")])
+        .args(["internal", "wake"])
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(2), "{output:?}");
+    assert_eq!(
+        String::from_utf8(output.stderr).unwrap(),
+        "New Shoal messages for this workspace:\n- Rebase onto main\n"
+    );
+    assert_eq!(hook(event), "");
 }
 
 #[test]

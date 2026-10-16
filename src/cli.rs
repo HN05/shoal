@@ -1037,6 +1037,10 @@ pub enum InternalCommand {
         #[arg(long)]
         workspace: Option<String>,
     },
+    /// Wait for the workspace's next agent messages or item activity, print
+    /// them and exit 2; Shoal's Claude Code `Stop` hook runs it in the
+    /// background so the update starts the idle agent's next turn.
+    Wake,
     /// Finish a planned landing inside its tracked execution.
     #[command(name = internal::LAND)]
     Land {

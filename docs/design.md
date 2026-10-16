@@ -624,10 +624,13 @@ Messages to agents travel the other way: the user queues them for a workspace,
 and the daemon holds them until an agent in that workspace reads them, then
 deletes them. Shoal never writes to an agent's terminal, which it does not own;
 agents read messages through Shoal commands, and a pending watch ends for a new
-message, since agents tending a PR spend most of their time there. Built-in agent
-launches register a hook that runs the same command after each tool call and
-prompt, the only point where a working agent accepts new context; Shoal does not
-pre-trust it where the agent requires review. Identical unread messages collapse,
+message. Messages and item activity are pushed rather than polled by the agent,
+because agents forget or misuse watches: built-in agent launches register a hook
+that delivers both after each tool call and prompt, the only point where a
+working agent accepts new context, and replaces a running watch so nothing is
+delivered twice. Claude Code also runs a background `Stop` hook that waits for
+the next update and wakes the idle agent with it through `asyncRewake`. Shoal does not
+pre-trust hooks where the agent requires review. Identical unread messages collapse,
 and scoped processes may read their own workspace's messages but not send any.
 
 Shoal owns forge writes for its workspaces so that every client, from an agent

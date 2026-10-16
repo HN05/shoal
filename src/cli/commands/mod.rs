@@ -495,6 +495,7 @@ async fn internal(ctx: Context, command: InternalCommand) -> Result<i32> {
         InternalCommand::AgentState { state, workspace } => {
             agent_state::run(&ctx, workspace, state).await
         }
+        InternalCommand::Wake => messages::wake(&ctx).await,
         InternalCommand::Herdr {
             close_when_done,
             plan,

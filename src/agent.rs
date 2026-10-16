@@ -107,10 +107,28 @@ impl From<Agent> for String {
 /// after each tool call, and when the user submits a prompt.
 const MESSAGE_HOOK_EVENTS: [&str; 2] = ["PostToolUse", "UserPromptSubmit"];
 
+/// How long the Claude Code wake hook may wait for an update: a week, since
+/// an idle agent should hear about a review whenever it arrives.
+const WAKE_TIMEOUT_SECS: u64 = 7 * 24 * 60 * 60;
+
+/// The Claude Code `Stop` group that waits in the background for the next
+/// update and wakes the idle agent with it.
+fn claude_wake_hook(shoal: &str) -> (&'static str, serde_json::Value) {
+    (
+        "Stop",
+        serde_json::json!({"hooks": [{
+            "type": "command",
+            "command": format!("{shoal} internal wake"),
+            "asyncRewake": true,
+            "timeout": WAKE_TIMEOUT_SECS,
+        }]}),
+    )
+}
+
 impl BuiltinAgent {
     /// Arguments that register Shoal's hooks for this agent's session:
-    /// `shoal messages --hook`, and for Claude Code its turn state. The hooks
-    /// inherit the execution's scope and state directory.
+    /// `shoal messages --hook`, and for Claude Code its turn state and the
+    /// wake hook. The hooks inherit the execution's scope and state directory.
     pub fn hook_args(self) -> std::io::Result<Vec<std::ffi::OsString>> {
         let shoal = crate::fsutil::invoked_executable()?;
         let shoal = crate::shell::quote(&[&shoal.to_string_lossy()]);
@@ -124,7 +142,8 @@ impl BuiltinAgent {
                 let groups = MESSAGE_HOOK_EVENTS
                     .iter()
                     .map(|event| (*event, serde_json::json!({"hooks": [handler]})))
-                    .chain(state_hooks::claude(&shoal));
+                    .chain(state_hooks::claude(&shoal))
+                    .chain([claude_wake_hook(&shoal)]);
                 for (event, group) in groups {
                     if let serde_json::Value::Array(groups) =
                         hooks.entry(event).or_insert_with(|| serde_json::json!([]))
@@ -171,6 +190,17 @@ mod tests {
             .as_str()
             .unwrap();
         assert!(stop.contains(" agent-state idle "), "{stop}");
+        // A second Stop group waits in the background to wake the idle agent.
+        let wake = &settings["hooks"]["Stop"][1]["hooks"][0];
+        assert!(
+            wake["command"]
+                .as_str()
+                .unwrap()
+                .ends_with(" internal wake"),
+            "{wake}"
+        );
+        assert_eq!(wake["asyncRewake"], true);
+        assert_eq!(wake["timeout"], WAKE_TIMEOUT_SECS);
         let codex = BuiltinAgent::Codex.hook_args().unwrap();
         assert_eq!(codex.len(), 4);
         for (flag, event) in codex.chunks(2).zip(MESSAGE_HOOK_EVENTS) {
