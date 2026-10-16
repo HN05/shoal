@@ -17110,10 +17110,8 @@ fn herdr_focus_defaults_follow_the_agent_input_and_allow_overrides() {
         (Some(true), Some("pi"), "--focus"),
         (Some(false), Some("pi"), "--no-focus"),
     ] {
-        let mut config = "[commands]\npi = ['sh', '-c', 'exit 0']\n".to_owned();
-        if let Some(focus) = focus {
-            config.push_str(&format!("[herdr]\nfocus = {focus}\n"));
-        }
+        let mut config = focus.map_or_else(String::new, |focus| format!("focus = {focus}\n"));
+        config.push_str("[commands]\npi = ['sh', '-c', 'exit 0']\n");
         let fixture = Fixture::with_config(Some(&config));
         install_fake_herdr(&fixture);
         let mut args = vec!["add", fixture.repo.to_str().unwrap(), "focus"];
@@ -17147,7 +17145,7 @@ fn herdr_focus_defaults_follow_the_agent_input_and_allow_overrides() {
 
 #[test]
 fn herdr_no_agent_opens_workspace_shell_and_honors_focus_setting() {
-    let fixture = Fixture::with_config(Some("[herdr]\nfocus = false\n"));
+    let fixture = Fixture::with_config(Some("focus = false\n"));
     install_fake_herdr(&fixture);
     let (caller, _) = herdr_call(
         &fixture,
@@ -17790,7 +17788,7 @@ fn chat_runs_the_agent_in_the_checkout_in_a_labelled_zmx_session() {
 
 #[test]
 fn chat_opens_a_focused_herdr_tab_at_the_checkout() {
-    let fixture = Fixture::with_config(Some("[herdr]\nfocus = false\n"));
+    let fixture = Fixture::with_config(Some("focus = false\n"));
     install_fake_herdr(&fixture);
     install_recording_agent(&fixture, "codex");
     let repository = fixture.ok(&["repo", "list"])[0].clone();

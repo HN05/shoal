@@ -28,6 +28,7 @@ pub struct Effective {
     pub git_profile: Option<String>,
     pub default_agent: Option<crate::agent::Agent>,
     pub max_agents: Option<config::AgentLimit>,
+    pub focus: Option<bool>,
     pub codex: Codex,
     pub herdr: config::Herdr,
     pub setup_cmd: Option<String>,
@@ -167,11 +168,11 @@ impl Effective {
             git_profile: merged.git_profile,
             default_agent: merged.default_agent,
             max_agents: merged.max_agents,
+            focus: merged.focus,
             herdr: config::Herdr {
                 enabled: built_in(merged.herdr.enabled, "herdr.enabled")?,
                 tab_name: merged.herdr.tab_name,
                 new_tab: built_in(merged.herdr.new_tab, "herdr.new_tab")?,
-                focus: merged.herdr.focus,
                 close_when_done: built_in(merged.herdr.close_when_done, "herdr.close_when_done")?,
             },
             codex: Codex {
@@ -243,7 +244,6 @@ fn built_in() -> RepoConfig {
             enabled: Some(true),
             tab_name: None,
             new_tab: Some(true),
-            focus: None,
             close_when_done: Some(true),
         },
         codex: config::repo::Codex {
@@ -532,11 +532,11 @@ fn build_fields() -> Vec<Box<dyn Field + Send + Sync>> {
         scalar!(git_profile),
         scalar!(default_agent),
         scalar!(max_agents),
+        scalar!(focus),
         scalar!(codex.default_mode),
         scalar!(herdr.enabled),
         scalar!(herdr.new_tab),
         scalar!(herdr.tab_name),
-        scalar!(herdr.focus),
         scalar!(herdr.close_when_done),
     ];
     fields.extend(
@@ -578,10 +578,10 @@ mod tests {
     /// fails the destructuring below until the fixture states it too.
     const FULL: &str = "\
 issue_template = 'issue'\nagent_template = 'agent'\ngit_profile = 'work'\n\
-default_agent = 'claude'\nmax_agents = 2\nsetup_cmd = 'setup'\npre_setup_cmd = 'pre-setup'\n\
+default_agent = 'claude'\nmax_agents = 2\nfocus = false\nsetup_cmd = 'setup'\npre_setup_cmd = 'pre-setup'\n\
 post_remove_cmd = 'post-remove'\npost_done_cmd = 'post-done'\npost_ready_cmd = 'post-ready'\npost_agent_exit_cmd = 'agent-exit'\npost_resource_acquire_cmd = 'acquire'\n\
 pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd = 'detach'\n\
-[env]\nSESSION = '{workspace}'\n[secrets.TOKEN]\ncommand = ['token']\n[commands]\nreview = ['review']\n[agent_resume]\nreview = ['review', '--resume']\n[agent_auth]\nfj = '/fj'\nfj_home = '/fj-home'\ngh = '/gh'\nglab = '/glab'\ntea = '/tea'\ngit_profile = 'agent'\n[codex]\ndefault_mode = 'app'\n[herdr]\nenabled = false\ntab_name = '{branch}'\nnew_tab = false\nfocus = false\nclose_when_done = false\n\
+[env]\nSESSION = '{workspace}'\n[secrets.TOKEN]\ncommand = ['token']\n[commands]\nreview = ['review']\n[agent_resume]\nreview = ['review', '--resume']\n[agent_auth]\nfj = '/fj'\nfj_home = '/fj-home'\ngh = '/gh'\nglab = '/glab'\ntea = '/tea'\ngit_profile = 'agent'\n[codex]\ndefault_mode = 'app'\n[herdr]\nenabled = false\ntab_name = '{branch}'\nnew_tab = false\nclose_when_done = false\n\
 [ports]\non_conflict = 'auto'\nstart = 3000\nend = 3100\n[ports.web]\nport = 3000\n\
 [resources.lock]\ncapacity = 1\n[resource_pools.devices]\ncapacity = 2\n\
 [resource_pools.devices.resources.phone]\ncapacity = 1\n\
@@ -705,25 +705,31 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
     fn herdr_defaults_and_options_resolve_independently() {
         let defaults = stack("", "", "").resolve().unwrap().herdr;
         assert!(defaults.enabled && defaults.new_tab && defaults.close_when_done);
-        assert_eq!(defaults.focus, None);
         assert_eq!(defaults.tab_name, None);
         let settings = stack(
-            "[herdr]\nenabled = false\nnew_tab = false\nfocus = false\n",
+            "[herdr]\nenabled = false\nnew_tab = false\n",
             "[herdr]\nnew_tab = true\nclose_when_done = false\n",
-            "[herdr]\nfocus = true\n",
+            "",
         )
         .resolve()
         .unwrap()
         .herdr;
         assert!(!settings.enabled && settings.new_tab && !settings.close_when_done);
-        assert_eq!(settings.focus, Some(true));
+    }
+
+    #[test]
+    fn focus_is_unset_by_default_and_layers_per_repository() {
+        assert_eq!(stack("", "", "").resolve().unwrap().focus, None);
         assert_eq!(
-            stack("[herdr]\nfocus = false\n", "", "")
+            stack("focus = false\n", "", "").resolve().unwrap().focus,
+            Some(false)
+        );
+        assert_eq!(
+            stack("focus = false\n", "", "focus = true\n")
                 .resolve()
                 .unwrap()
-                .herdr
                 .focus,
-            Some(false)
+            Some(true)
         );
     }
 
@@ -741,7 +747,7 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
             (
                 "[herdr]\ntab_name = '{branch}'",
                 "[herdr]\ntab_name = '{repo}'",
-                "[herdr]\nfocus = true",
+                "[herdr]\nnew_tab = true",
                 Some("{repo}"),
                 Layer::WorktreeFile,
             ),
@@ -781,6 +787,7 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
             git_profile,
             default_agent,
             max_agents,
+            focus,
             codex,
             herdr,
             setup_cmd,
@@ -828,11 +835,11 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
             git_profile.is_some(),
             default_agent.is_some(),
             max_agents.is_some(),
+            focus.is_some(),
             codex.default_mode.is_some(),
             herdr.enabled.is_some(),
             herdr.tab_name.is_some(),
             herdr.new_tab.is_some(),
-            herdr.focus.is_some(),
             herdr.close_when_done.is_some(),
             setup_cmd.is_some(),
             pre_setup_cmd.is_some(),

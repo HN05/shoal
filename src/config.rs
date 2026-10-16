@@ -102,6 +102,8 @@ pub struct Config {
     pub max_agents: Option<AgentLimit>,
     /// How hard Shoal may load this machine; sets `[overload]` defaults.
     pub load: overload::Load,
+    /// Whether new tabs and sessions take the terminal; unset follows the launch.
+    pub focus: Option<bool>,
     pub codex: repo::Codex,
     pub herdr: repo::Herdr,
     pub overload: overload::Overload,
@@ -448,6 +450,7 @@ impl Config {
             git_profile: self.git_profile.clone(),
             default_agent: self.default_agent.clone(),
             max_agents: self.max_agents,
+            focus: self.focus,
             codex: self.codex,
             herdr: self.herdr.clone(),
             pre_setup_cmd: self.pre_setup_cmd.clone(),
@@ -551,6 +554,5 @@ pub struct Herdr {
     pub enabled: bool,
     pub tab_name: Option<String>,
     pub new_tab: bool,
-    pub focus: Option<bool>,
     pub close_when_done: bool,
 }

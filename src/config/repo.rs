@@ -62,6 +62,8 @@ pub struct RepoConfig {
     /// Agents of this repository running at once; defaults to the host
     /// capacity and `shoal add` queues past it. Use `none` for unlimited.
     pub max_agents: Option<crate::config::AgentLimit>,
+    /// Whether new tabs and sessions take the terminal; unset follows the launch.
+    pub focus: Option<bool>,
     pub codex: Codex,
     pub herdr: Herdr,
     pub setup_cmd: Option<String>,
@@ -390,6 +392,5 @@ pub struct Herdr {
     pub enabled: Option<bool>,
     pub tab_name: Option<String>,
     pub new_tab: Option<bool>,
-    pub focus: Option<bool>,
     pub close_when_done: Option<bool>,
 }

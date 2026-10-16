@@ -107,9 +107,7 @@ async fn open_tab(
         !env::inherits_scope(&ctx.paths.state),
         "workspace processes cannot allocate workspaces"
     );
-    let focus = focus
-        .or(settings.herdr.focus)
-        .unwrap_or(!plan.runs_unattended());
+    let focus = focus.or(settings.focus).unwrap_or(!plan.runs_unattended());
     if let Some(template) = settings.herdr.tab_name {
         let repos = client::repositories(&ctx.paths).await?;
         let repo = crate::forge::repository::select(&repos, &plan.repository).await?;

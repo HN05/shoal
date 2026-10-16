@@ -27,6 +27,10 @@ root_dir = "~/shoal"
 # CPU and memory thresholds in [overload] and dynamic agent admission.
 # load = "balanced"
 
+# New Herdr tabs focus workspace shells and leave agent launches that start
+# with input in the background; set to always (true) or never (false) focus.
+# focus = true
+
 # Prompt templates normally live beside this file as issue-template.md and
 # agent-template.md. Inline text takes precedence over the corresponding file.
 # issue_template = "Work on issue #{number}: {title}\n{url}\n\n{body}"
@@ -92,8 +96,6 @@ codex = ["codex", "{args}", "--sandbox", "danger-full-access", "--ask-for-approv
 enabled = true
 # Run issue/add in a new tab inside Herdr, after interactive choices.
 new_tab = true
-# Focus workspace shells by default, leaving agent launches in the background.
-# focus = true # Override the default for every new tab.
 close_when_done = true
 # tab_name = "{repo}: {branch}"
 

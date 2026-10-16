@@ -540,8 +540,8 @@ calls run in place.
 The `[herdr]` table in global or repository config uses normal per-option
 precedence. New tabs stay in the background by default when launching an agent
 with an issue prompt or forwarded arguments, and focus otherwise, so a workspace
-shell or an agent waiting for its first prompt is ready to type into; an explicit
-`focus` overrides this.
+shell or an agent waiting for its first prompt is ready to type into; the
+top-level `focus` option overrides this.
 `enabled`, `new_tab` and `close_when_done` default to true; with `enabled = false`
 Shoal treats a Herdr pane as a plain terminal:
 
@@ -549,7 +549,6 @@ Shoal treats a Herdr pane as a plain terminal:
 [herdr]
 enabled = true          # Use Herdr tabs and panes
 new_tab = true          # Enable the handoff inside Herdr
-# focus = true          # Always focus the new tab
 # tab_name = "{repo}: {branch}" # Customize the tab name
 close_when_done = true  # Close after the workspace is completed or removed
 ```
