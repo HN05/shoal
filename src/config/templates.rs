@@ -81,13 +81,46 @@ fn refresh_unedited(path: &Path, contents: &str, retired: &[&str]) -> Result<()>
     Ok(())
 }
 
-pub fn instructions(template: Option<&str>, workspace: &crate::model::Workspace) -> String {
+/// How a launched agent receives its issue and PR activity, which
+/// `{updates}` describes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Delivery {
+    /// Hooks deliver it during a turn and start the next turn with it.
+    Pushed,
+    /// The agent watches for it.
+    Watched,
+}
+
+impl Delivery {
+    fn instruction(self) -> &'static str {
+        match self {
+            Self::Pushed => {
+                "Shoal delivers their comments, reviews, CI results and merge\n   \
+                 conflicts to you as context after tool calls, and starts your next turn\n   \
+                 with them after you end one. Handle each delivery, then end your turn\n   \
+                 to wait for the next."
+            }
+            Self::Watched => {
+                "run `shoal watch pr`. Handle the reported\n   \
+                 comments, reviews, CI results and merge conflicts, then wait again; a\n   \
+                 timeout means no update."
+            }
+        }
+    }
+}
+
+pub fn instructions(
+    template: Option<&str>,
+    workspace: &crate::model::Workspace,
+    delivery: Delivery,
+) -> String {
     render(
         template.unwrap_or_default(),
         &[
             ("{workspace}", &workspace.name),
             ("{branch}", &workspace.branch),
             ("{path}", &workspace.path.to_string_lossy()),
+            ("{updates}", delivery.instruction()),
         ],
     )
 }
@@ -155,6 +188,24 @@ mod tests {
         install_at(directory.path()).unwrap();
         assert!(fs::symlink_metadata(&agent).unwrap().is_symlink());
         assert_eq!(fs::read_to_string(&linked).unwrap(), AGENT_RETIRED[0]);
+    }
+
+    #[test]
+    fn the_default_tells_each_launch_how_it_receives_updates() {
+        let workspace: crate::model::Workspace = serde_json::from_value(serde_json::json!({
+            "id": "id", "repository_id": "repo", "name": "topic", "branch": "topic",
+            "path": "/work/topic", "state": "ready", "created_at": 0, "updated_at": 0,
+        }))
+        .unwrap();
+        let pushed = instructions(Some(AGENT_DEFAULT), &workspace, Delivery::Pushed);
+        assert!(
+            pushed.contains("end your turn\n   to wait for the next."),
+            "{pushed}"
+        );
+        assert!(!pushed.contains("shoal watch pr"), "{pushed}");
+        let watched = instructions(Some(AGENT_DEFAULT), &workspace, Delivery::Watched);
+        assert!(watched.contains("open, run `shoal watch pr`."), "{watched}");
+        assert!(!watched.contains("{updates}"));
     }
 
     #[test]

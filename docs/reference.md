@@ -833,7 +833,9 @@ layer that configured it. Unknown placeholders stay literal. Templates are
 read at launch without a daemon restart.
 
 The agent template supplies general instructions, with `{workspace}`, `{branch}`
-and `{path}` from the target worktree. Claude receives `--append-system-prompt`,
+and `{path}` from the target worktree, and `{updates}` saying how the launch
+receives issue and PR activity: delivered by its hooks for Claude Code and for
+Codex in a zmx session, otherwise by running `shoal watch pr`. Claude receives `--append-system-prompt`,
 Codex CLI receives a `developer_instructions` config override, and Happy Codex
 receives the instructions before its first prompt through Happy's delivery path
 (or as the first message when no prompt was supplied). Desktop handoffs do not

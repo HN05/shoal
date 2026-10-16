@@ -248,6 +248,12 @@ pub(crate) async fn submit_prompt(session: &std::ffi::OsStr, text: &str) -> Resu
     zmx::submit_prompt(session, text).await
 }
 
+/// Whether an agent launched here runs in a session its wrapper can type a
+/// prompt into: a new one, or the session this process already runs in.
+pub(in crate::cli) fn agents_can_be_prompted(settings: &Effective) -> bool {
+    keeps_agents_in_sessions(settings) || prompt_session().is_some()
+}
+
 /// Whether agents launched here run in a session: they need a terminal to
 /// attach, never nest, and leave an enabled Herdr pane to Herdr, which reads
 /// the agent's state from the process in the pane.

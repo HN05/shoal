@@ -38,10 +38,15 @@ contains current HEAD. `shoal unlink pr <number-or-url>` unlinks one PR;
 omit its number or URL to unlink all PRs. Closed, unmerged PRs keep waiting, so cancel their
 watches before finishing without a merge.
 
-While watched PRs are open, run `shoal --json watch pr` from the workspace. Handle
-the returned `updates` by reading their items with `shoal view <url>`, then wait
-again. Comments
-and reviews wake the wait, as does each completed CI check or a merge conflict;
+While watched PRs are open, Shoal delivers their activity to Claude Code, and to
+Codex in a zmx session, launched through Shoal: as context after tool calls,
+and after you end your turn by starting your next one with it. Handle each
+delivery by reading its items with `shoal view <url>`, then end your turn to
+wait; a delivery replaces a running watch. Other agents, Happy sessions
+included, run `shoal --json watch pr` from the workspace, handle the returned
+`updates` by reading their items with `shoal view <url>`, then wait again. Comments
+and reviews are reported, as is each completed CI check or a merge conflict, but
+not comments, closing or reopening you did through Shoal;
 respond to available review findings while other checks run. The first wait
 includes existing activity; later waits share a persistent cursor per workspace.
 Run one wait at a time and read its result: a newer wait in the workspace
@@ -95,7 +100,7 @@ workspace.
 
 The user and Shoal can send messages to your workspace, such as a request to
 free memory or disk space. Claude Code and Codex launched through Shoal receive
-them as context after tool calls; a new message also ends `shoal --json watch pr`
+them with PR activity, as described above; a new message also ends `shoal --json watch pr`
 with a `messages` array, and `shoal --json messages` shows new ones. Each
 message is shown once. Follow it.
 
