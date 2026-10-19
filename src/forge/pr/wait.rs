@@ -173,6 +173,10 @@ impl Manager {
                 () = wait.superseded.notified() => return Ok(Updates::superseded()),
             }
         }
+        // A newer wait or hook delivery reads the same unacknowledged messages.
+        if !wait.is_current() {
+            return Ok(Updates::superseded());
+        }
         Ok(Updates {
             updates: Vec::new(),
             messages,
@@ -187,10 +191,15 @@ impl Manager {
     /// same updates again.
     pub async fn agent_updates(&self, selector: &str) -> Result<Updates> {
         let workspace = self.workspace(selector).await?;
-        let _delivery = self.item_waits.start(&workspace.id);
+        let delivery = self.item_waits.start(&workspace.id);
+        let messages = self.agent_messages(&workspace.id).await?;
+        let updates = self.queued_updates(workspace).await?;
+        if !delivery.is_current() {
+            return Ok(Updates::superseded());
+        }
         Ok(Updates {
-            messages: self.agent_messages(&workspace.id).await?,
-            updates: self.queued_updates(workspace).await?,
+            messages,
+            updates,
             timed_out: false,
             superseded: false,
         })
