@@ -192,17 +192,15 @@ impl Snapshot {
         }
     }
 
-    /// Take comments in `authored` that `next` shows for the first time as
-    /// already seen, and stop tracking each one `next` shows.
+    /// Take entries in `authored` that `next` shows new or changed as already
+    /// seen, and stop tracking each one taken.
     pub(crate) fn adopt_authored(&mut self, next: &Self, authored: &mut BTreeSet<String>) {
         authored.retain(|key| match next.comments.get(key) {
-            Some(comment) => {
-                self.comments
-                    .entry(key.clone())
-                    .or_insert_with(|| comment.clone());
+            Some(comment) if self.comments.get(key) != Some(comment) => {
+                self.comments.insert(key.clone(), comment.clone());
                 false
             }
-            None => true,
+            _ => true,
         });
     }
 
@@ -262,9 +260,14 @@ pub(super) fn id_text(id: &serde_json::Value) -> String {
     }
 }
 
+/// The activity key of `source`'s comment or review `id`.
+pub(super) fn activity_key(source: &str, id: &serde_json::Value) -> String {
+    format!("{source}:{}", id_text(id))
+}
+
 /// The activity key of the discussion comment `id`.
-pub(crate) fn discussion_key(id: &serde_json::Value) -> String {
-    format!("{DISCUSSION}:{}", id_text(id))
+pub(super) fn discussion_key(id: &serde_json::Value) -> String {
+    activity_key(DISCUSSION, id)
 }
 
 #[cfg(test)]
@@ -384,6 +387,21 @@ mod tests {
         others.record_comments(DISCUSSION, Ok(vec![("4".into(), "theirs".into())]));
         next.adopt_authored(&others, &mut authored);
         assert_eq!(next.changes(&others, "pr")[0].kind, UpdateKind::Comment);
+    }
+
+    #[test]
+    fn an_authored_reply_to_an_existing_review_is_taken_once_it_changes() {
+        let mut previous = Snapshot::default();
+        previous.record_comments("reviews", Ok(vec![("7".into(), "1 comment".into())]));
+        let mut authored = BTreeSet::from(["reviews:7".to_owned()]);
+        // A poll that read the review before the reply keeps waiting for it.
+        previous.adopt_authored(&previous.clone(), &mut authored);
+        assert_eq!(authored.len(), 1);
+        let mut replied = Snapshot::default();
+        replied.record_comments("reviews", Ok(vec![("7".into(), "2 comments".into())]));
+        previous.adopt_authored(&replied, &mut authored);
+        assert!(authored.is_empty());
+        assert!(previous.changes(&replied, "pr").is_empty());
     }
 
     #[test]

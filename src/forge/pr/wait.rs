@@ -111,7 +111,8 @@ struct ActivityRecord {
     snapshot: Snapshot,
     #[serde(default)]
     pending: Vec<Update>,
-    /// Comments the workspace posted through Shoal that no poll has seen yet.
+    /// Comments and reviews the workspace changed through Shoal that no
+    /// poll has seen change yet.
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     authored: BTreeSet<String>,
     /// Unix seconds when the workspace last set the item's state through
@@ -681,10 +682,11 @@ impl Manager {
 }
 
 /// A change the workspace's agent made to `url` through Shoal, which its
-/// watches do not report back: the comment it posted and the state it set.
+/// watches do not report back: the comment or reply it posted and the state
+/// it set.
 pub(crate) struct OwnChange<'a> {
     pub url: &'a str,
-    pub comment: Option<String>,
+    pub authored: Option<String>,
     pub state: Option<&'a str>,
 }
 
@@ -706,7 +708,7 @@ pub(crate) fn record_own_change(
         .map(|text| serde_json::from_str(&text))
         .transpose()?
         .unwrap_or_default();
-    record.authored.extend(change.comment);
+    record.authored.extend(change.authored);
     if let Some(state) = change.state {
         record.snapshot.adopt_state(state);
         record.own_state_at = Some(crate::time::unix_seconds());
@@ -1216,7 +1218,7 @@ mod tests {
             .run(move |db| {
                 let change = OwnChange {
                     url: "pr",
-                    comment: Some("discussion:2".into()),
+                    authored: Some("discussion:2".into()),
                     state: Some("closed"),
                 };
                 record_own_change(db, &id, change)

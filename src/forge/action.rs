@@ -122,8 +122,8 @@ impl Action {
 pub(crate) struct Acted {
     /// The item as the forge reports it afterwards.
     pub item: Item,
-    /// The activity key of the comment the action posted.
-    pub comment: Option<String>,
+    /// The activity key of the comment or review reply the action posted.
+    pub authored: Option<String>,
 }
 
 impl ForgeRepo {
@@ -139,7 +139,7 @@ impl ForgeRepo {
         Ok(self.apply(account, kind, number, action).await?.item)
     }
 
-    /// [`Self::act`], also naming the comment the action posted.
+    /// [`Self::act`], also naming the comment or reply the action posted.
     pub(crate) async fn apply(
         &self,
         account: &Account,
@@ -149,32 +149,41 @@ impl ForgeRepo {
     ) -> Result<Acted> {
         action.validate(kind)?;
         let current = self.read(account, kind, number).await?;
-        let mut comment = None;
+        let mut authored = None;
         for request in self.requests(account, current, action).await? {
             let response = self.send(account, &request).await?;
-            if matches!(action, Action::Comment { .. }) {
-                comment = self.posted_comment(&response);
+            // A comment, or a thread's reply, is the action's first request.
+            if authored.is_none() {
+                authored = self.posted(action, &response);
             }
         }
         Ok(Acted {
             item: self.read(account, kind, number).await?.item,
-            comment,
+            authored,
         })
     }
 
-    /// The activity key of a posted comment. GitHub activity reads the GraphQL
-    /// node ID, which its REST response carries as `node_id`. Without one the
-    /// comment is reported back like anyone else's, rather than failing a
-    /// comment that was posted.
-    fn posted_comment(&self, response: &serde_json::Value) -> Option<String> {
-        let field = match self.kind {
-            ForgeKind::GitHub => "node_id",
-            ForgeKind::Forgejo | ForgeKind::GitLab | ForgeKind::Bitbucket => "id",
+    /// The activity key of what `action` posted, from its response: the
+    /// entry each forge's activity records it under. GitHub reads discussion
+    /// comments by GraphQL node ID, which REST returns as `node_id`, and
+    /// Forgejo counts a reply in its review. Without an ID the post is
+    /// reported back like anyone else's, rather than failing a post that
+    /// succeeded.
+    fn posted(&self, action: &Action, response: &serde_json::Value) -> Option<String> {
+        use super::updates::DISCUSSION;
+        let reply = matches!(action, Action::Thread(change) if change.reply.is_some());
+        let (source, field) = match (action, self.kind) {
+            (Action::Comment { .. }, ForgeKind::GitHub) => (DISCUSSION, "node_id"),
+            (Action::Comment { .. }, _) => (DISCUSSION, "id"),
+            (_, ForgeKind::GitHub) if reply => ("inline", "id"),
+            (_, ForgeKind::Forgejo) if reply => ("reviews", "pull_request_review_id"),
+            (_, ForgeKind::GitLab | ForgeKind::Bitbucket) if reply => (DISCUSSION, "id"),
+            _ => return None,
         };
         response
             .get(field)
             .filter(|id| id.is_string() || id.is_number())
-            .map(crate::forge::updates::discussion_key)
+            .map(|id| super::updates::activity_key(source, id))
     }
 
     /// The requests that carry out `action`, after reading what it needs
@@ -497,6 +506,42 @@ mod tests {
             ForgeRepo::parse("git@github.com:team/repo.git").unwrap(),
             ForgeRepo::parse("https://forge.example/team/repo").unwrap(),
         ]
+    }
+
+    #[test]
+    fn posts_are_keyed_where_each_forge_records_their_activity() {
+        let [github, forgejo] = forges();
+        let gitlab = ForgeRepo::parse("https://gitlab.com/team/repo.git").unwrap();
+        let comment = Action::Comment { body: "hi".into() };
+        let reply = |reply: Option<&str>| {
+            Action::Thread(ThreadChange {
+                comment: 5,
+                reply: reply.map(str::to_owned),
+                resolve: Some(true),
+            })
+        };
+        let response = json!({"id": 9, "node_id": "IC_9", "pull_request_review_id": 4});
+        let posted = |forge: &ForgeRepo, action: &Action| forge.posted(action, &response);
+        assert_eq!(
+            posted(&github, &comment).as_deref(),
+            Some("discussion:IC_9")
+        );
+        assert_eq!(posted(&forgejo, &comment).as_deref(), Some("discussion:9"));
+        assert_eq!(
+            posted(&github, &reply(Some("Fixed"))).as_deref(),
+            Some("inline:9")
+        );
+        assert_eq!(
+            posted(&forgejo, &reply(Some("Fixed"))).as_deref(),
+            Some("reviews:4")
+        );
+        assert_eq!(
+            posted(&gitlab, &reply(Some("Fixed"))).as_deref(),
+            Some("discussion:9")
+        );
+        assert_eq!(posted(&forgejo, &reply(None)), None);
+        assert_eq!(posted(&forgejo, &Action::Close), None);
+        assert_eq!(forgejo.posted(&comment, &json!({})), None);
     }
 
     #[test]

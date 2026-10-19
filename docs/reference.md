@@ -1480,8 +1480,8 @@ watch, which returns at once; `watch pr` or `watch issue` filters by kind. `watc
 without linking it or changing completion policy; explicit PR watches also accept
 PRs whose head branch is in a fork. Watches return on comments,
 reviews, completed CI checks, new merge conflicts, closure, reopening, merging,
-or a merged base workspace, except for comments, closing and reopening that the
-workspace itself made through Shoal; the same change made another way, such as
+or a merged base workspace, except for comments, review thread replies, closing
+and reopening that the workspace itself made through Shoal; the same change made another way, such as
 with `fj` or the web interface, is reported.
 An unfiltered `shoal watch` without a linked PR also returns when the workspace
 branch newly conflicts with the default target of `shoal conflicts`, naming the

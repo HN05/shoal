@@ -54,14 +54,14 @@ impl Manager {
         let id = workspace.id.clone();
         let name = action.name();
         let own = own_state(&action).then(|| acted.item.state.as_str());
-        let comment = acted.comment;
+        let authored = acted.authored;
         self.store
             .run(move |db| {
                 let tx = db.transaction()?;
                 events::record_item(&tx, &id, kind, &url, name)?;
                 let change = OwnChange {
                     url: &url,
-                    comment,
+                    authored,
                     state: own,
                 };
                 record_own_change(&tx, &id, change)?;
