@@ -103,11 +103,15 @@ impl Snapshot {
                 check,
             })
         };
-        if next
+        let added_or_edited = next
             .comments
             .iter()
-            .any(|(id, comment)| !comment.is_empty() && self.comments.get(id) != Some(comment))
-        {
+            .any(|(id, comment)| !comment.is_empty() && self.comments.get(id) != Some(comment));
+        let deleted = self
+            .comments
+            .iter()
+            .any(|(id, comment)| !comment.is_empty() && !next.comments.contains_key(id));
+        if added_or_edited || deleted {
             emit(
                 UpdateKind::Comment,
                 format!("Comments or reviews changed; read them with shoal view {url}"),
@@ -332,6 +336,19 @@ mod tests {
         recovered.schedule_failure_reports(&changed, 5000);
         assert!(changed.changes(&recovered, "pr").is_empty());
         assert!(recovered.reported.is_empty());
+    }
+
+    #[test]
+    fn deleting_one_of_several_comments_is_reported() {
+        let mut both = Snapshot::default();
+        both.record_comments(
+            DISCUSSION,
+            Ok(vec![("1".into(), "hi".into()), ("2".into(), "typo".into())]),
+        );
+        let mut one = Snapshot::default();
+        one.record_comments(DISCUSSION, Ok(vec![("1".into(), "hi".into())]));
+        assert_eq!(both.changes(&one, "pr")[0].kind, UpdateKind::Comment);
+        assert!(one.changes(&one, "pr").is_empty());
     }
 
     #[test]
