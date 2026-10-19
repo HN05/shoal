@@ -1,6 +1,8 @@
-//! A stopped wrapper waits for healthy load or finishes normally when recovery
-//! is cancelled. Failed ownership checks never authorize a replacement process.
+//! A stopped wrapper waits until its processes are proven stopped and load is
+//! healthy, or finishes normally when recovery is cancelled. Failed ownership
+//! checks never authorize a replacement process.
 use anyhow::{Context, Result, ensure};
+use std::time::Duration;
 use tokio::sync::{mpsc, watch};
 
 use super::workspace::{Manager, Pause};
@@ -29,14 +31,16 @@ pub(super) async fn pause(
     if !manager.agent_was_overloaded(execution_id).await {
         return Ok(Action::Stop(requested_reason(manager, execution_id).await));
     }
-    if let Pause::Unproven(issue) = manager
+    // Stop survivors before anything can cancel the restore, so every outcome
+    // leaves only processes Shoal cannot stop. The wrapper finishes on each,
+    // and the daemon's completion scan decides whether they leave it unknown.
+    let stopped = match manager
         .pause_agent_execution(execution_id, workspace_id, timing::WORKSPACE_STOP_TIMEOUT)
-        .await?
+        .await
     {
-        anyhow::bail!("the stopped agent's processes are not proven stopped: {issue}");
-    }
-    // Only this successful pause proves termination. Recovery refusals after
-    // this point must let the wrapper report completion, rather than disconnect.
+        Ok(stopped) => stopped,
+        Err(error) => return Ok(restore_failed(error)),
+    };
     let ready = tokio::select! {
         biased;
         event = incoming.recv() => match event.context("execution disconnected")?? {
@@ -50,7 +54,10 @@ pub(super) async fn pause(
         () = recovery_disabled(manager) => {
             return Ok(Action::Stop(Some("automatic recovery was disabled".into())));
         }
-        ready = manager.await_overload_recovery(workspace_id) => ready,
+        ready = async {
+            await_stopped(manager, execution_id, workspace_id, stopped).await?;
+            manager.await_overload_recovery(workspace_id).await
+        } => ready,
     };
     let resume = async {
         ready?;
@@ -61,13 +68,36 @@ pub(super) async fn pause(
         prepare_resume(manager, execution_id, workspace_id).await
     }
     .await;
-    match resume {
-        Ok(action) => Ok(action),
-        Err(error) => {
-            log!("agent recovery cancelled: {error:#}");
-            Ok(Action::Stop(Some(format!(
-                "automatic restore failed: {error:#}"
-            ))))
+    Ok(resume.unwrap_or_else(restore_failed))
+}
+
+fn restore_failed(error: anyhow::Error) -> Action {
+    log!("agent recovery cancelled: {error:#}");
+    Action::Stop(Some(format!("automatic restore failed: {error:#}")))
+}
+
+/// How often a waiting restore checks again for survivors it could not stop.
+const SURVIVOR_POLL_INTERVAL: Duration = Duration::from_secs(5);
+
+/// Wait until none of the stopped agent's processes survive, since a restore
+/// must not start beside them, and tell the user once what it waits for.
+async fn await_stopped(
+    manager: &Manager,
+    execution_id: &str,
+    workspace_id: &str,
+    stopped: Pause,
+) -> Result<()> {
+    let Pause::Unproven(issue) = stopped else {
+        return Ok(());
+    };
+    manager.notify_restore_waits(execution_id, &issue).await;
+    loop {
+        tokio::time::sleep(SURVIVOR_POLL_INTERVAL).await;
+        if let Pause::Paused = manager
+            .pause_agent_execution(execution_id, workspace_id, Duration::ZERO)
+            .await?
+        {
+            return Ok(());
         }
     }
 }

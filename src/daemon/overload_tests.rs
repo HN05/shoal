@@ -716,6 +716,98 @@ async fn overload_without_recovery_stops_commands_outside_the_agent_group() {
 }
 
 #[tokio::test]
+async fn cancelling_a_restore_still_stops_commands_outside_the_agent_group() {
+    let (_root, manager, workspace, serving) = fixture().await;
+    let (launched, background) = launch_with_background(&manager, &workspace).await;
+    assert!(
+        manager
+            .stop_agent_for_overload("test memory pressure")
+            .await
+    );
+    // Disabling recovery cancels the restore however far the pause has come.
+    set_recovery(&manager, false).await;
+    bounded(launched).await.unwrap().unwrap();
+    assert!(!crate::process::identity::alive(&background).unwrap());
+    assert!(
+        manager
+            .inspect_workspace(&workspace.id)
+            .await
+            .unwrap()
+            .executions
+            .is_empty()
+    );
+    assert!(crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
+    serving.abort();
+}
+
+/// Set the recorded process group of the workspace's only execution.
+async fn record_group(manager: &Manager, workspace: &crate::model::Workspace, group: Option<u32>) {
+    let id = workspace.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "UPDATE executions SET group_id=?2 WHERE workspace_id=?1",
+                rusqlite::params![id, group],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn unproven_stop_keeps_the_agent_waiting_until_proof_then_restores_it() {
+    let (_root, manager, workspace, serving) = fixture().await;
+    let launched = launch(&manager, &workspace);
+    wait_started(&manager, &workspace).await;
+    // An incomplete launch identity stands in for survivors Shoal cannot stop.
+    let group = manager
+        .inspect_workspace(&workspace.id)
+        .await
+        .unwrap()
+        .executions[0]
+        .group_id;
+    record_group(&manager, &workspace, None).await;
+    assert!(
+        manager
+            .stop_agent_for_overload("test memory pressure")
+            .await
+    );
+    let message = bounded(async {
+        loop {
+            if let Some(event) = manager
+                .notifications(false, 10)
+                .await
+                .unwrap()
+                .into_iter()
+                .find(|event| event.kind == NotificationKind::RecoveryBlocked)
+            {
+                break event.message;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await;
+    assert!(
+        message.contains(
+            "waits until its remaining processes exit: its launch identity is incomplete"
+        ),
+        "{message}"
+    );
+    publish_recovery(&manager);
+    assert!(!launched.is_finished());
+    assert!(!workspace.path.join("restored").exists());
+    record_group(&manager, &workspace, group).await;
+    assert_eq!(bounded(launched).await.unwrap().unwrap(), 0);
+    assert_eq!(
+        fs::read_to_string(workspace.path.join("restored")).unwrap(),
+        "restored"
+    );
+    serving.abort();
+}
+
+#[tokio::test]
 async fn manual_stop_cancels_waiting_recovery_and_leaves_a_restore_record() {
     let (_root, manager, workspace, serving) = fixture().await;
     let launched = launch(&manager, &workspace);

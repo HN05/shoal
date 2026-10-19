@@ -230,8 +230,10 @@ headroom below each enabled signal’s recovery threshold, whose thresholds must
 positive and below their stop thresholds, and with disk protection enabled at
 least `disk.cleanup_free_gib` available on every monitored filesystem. Agents restore one at a time, each with
 a fresh healthy interval, which a reload changing `[overload]` restarts. Missing
-readings, manual stop/removal, lost connections, uncertain surviving processes, or
-changed workspace ownership prevent recovery. Reloading with recovery disabled
+readings, manual stop/removal, lost connections, or changed workspace ownership
+prevent recovery. Surviving processes Shoal cannot stop, or cannot prove stopped,
+delay it: a `recovery_blocked` notification names them, and the wrapper keeps
+waiting until they exit. Reloading with recovery disabled
 finishes waiting agents at once, keeping their records for `shoal resume`.
 
 `shoal stop [workspace]` stops tracked agents and commands through their wrappers,

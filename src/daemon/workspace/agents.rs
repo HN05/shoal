@@ -269,6 +269,27 @@ impl Manager {
         (!processes.visibility_complete()).then(|| "its launch identity is incomplete".into())
     }
 
+    /// Tell the user why a protection-stopped agent's automatic restore waits
+    /// beyond healthy readings.
+    pub(crate) async fn notify_restore_waits(&self, id: &str, issue: &str) {
+        let Some((name, workspace)) = self
+            .agents
+            .lock()
+            .await
+            .get(id)
+            .map(|agent| (agent.name.clone(), agent.workspace.clone()))
+        else {
+            return;
+        };
+        log!("restore of {name} in {workspace} waits for its processes to stop: {issue}");
+        self.notify(
+            Some(&workspace),
+            NotificationKind::RecoveryBlocked,
+            format!("Automatic restore of {name} waits until its remaining processes exit: {issue}; shoal stop {workspace} cancels the restore"),
+        )
+        .await;
+    }
+
     pub(crate) async fn resume_agent_execution(&self, id: &str) -> anyhow::Result<bool> {
         let connections = self.connections.lock().await;
         let stop = connections
