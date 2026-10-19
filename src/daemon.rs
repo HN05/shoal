@@ -981,6 +981,11 @@ async fn await_agent_wake(
         Ok(()) => Body::Ok,
         Err(error) => Body::error(ErrorCode::OperationFailed, format!("{error:#}")),
     };
+    // A restarting daemon could cut the reply off. Closing the connection
+    // unanswered sends the launcher to wait again on the replacement.
+    let Ok(_operation) = manager.background_operations.clone().try_read_owned() else {
+        return Ok(());
+    };
     protocol::write(&mut stream, &Response::new(request_id, body)).await
 }
 
