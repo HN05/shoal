@@ -411,12 +411,16 @@ impl Manager {
             } else {
                 None
             };
+            if matches!(removal, Removal::Deleted) && present {
+                bail!("workspace directory exists");
+            }
+            // Live resources are removed before the directory; failed cleanup
+            // retains their ownership records so removal can be retried.
+            self.remove_simulators(&workspace.id).await?;
             let outcome = match removal {
-                Removal::Deleted if present => bail!("workspace directory exists"),
                 _ if present => self.remove_present_worktree(&workspace, removal).await?,
                 _ => self.remove_missing_worktree(&workspace, removal).await?,
             };
-            self.remove_simulators(&workspace.id).await?;
             self.commit_workspace_removal(
                 &workspace.id,
                 if present {
@@ -557,9 +561,6 @@ impl Manager {
             )
             .await?;
         let (files, branch) = worktrunk_removal_options(&check, removal.choice())?;
-        // Live resources are removed before the directory; failed cleanup
-        // retains their ownership records so removal can be retried.
-        self.remove_simulators(&workspace.id).await?;
         worktrunk::remove(
             &repo.path,
             &self.paths.worktrunk_config(),
@@ -653,7 +654,6 @@ impl Manager {
             &super::StopRequest::removal(),
         )
         .await?;
-        self.remove_simulators(&workspace.id).await?;
         if self.is_registered_worktree(workspace).await? {
             // Prune only this owned registration, through Worktrunk, and
             // retain its branch because the contents cannot be inspected.
