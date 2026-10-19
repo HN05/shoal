@@ -199,28 +199,17 @@ pub async fn inspect(
     let branch = git::current_branch(path).await?;
     let branch = branch.trim_end_matches('\n');
     check.branch = (!branch.is_empty()).then(|| branch.to_owned());
-    let tree = git::revision(path, "HEAD^{tree}", git::run).await?;
+    let tree = git::status::head_tree(path).await?;
     // The default branch may be absent locally (workspaces created from another ref).
     let default_ref = match default_branch {
-        Some(name) => {
-            let reference = git::local_ref(name);
-            git::ref_exists(path, &reference, git::command)
-                .await?
-                .then_some(reference)
-        }
+        Some(name) => git::status::local_branch(path, name).await?,
         None => None,
     };
     if let Some(default_ref) = &default_ref {
-        check.matches_default_branch =
-            git::verify_revision(path, &format!("{default_ref}^{{tree}}"), git::run)
-                .await
-                .is_ok_and(|other| other == tree)
-                || git::is_ancestor(path, "HEAD", default_ref, git::command).await?;
+        check.matches_default_branch = git::status::retains_head(path, default_ref, &tree).await?;
     }
     check.unpushed_commits = git::status::unretained_commits(path, default_ref.as_deref()).await?;
-    check.matches_upstream = git::verify_revision(path, "@{upstream}^{tree}", git::run)
-        .await
-        .is_ok_and(|other| other == tree);
+    check.matches_upstream = git::status::upstream_records_tree(path, &tree).await;
     if policy == InspectionPolicy::IncludeDirectoryProcesses {
         check.load_directory_processes().await?;
     }
