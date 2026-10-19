@@ -158,6 +158,10 @@ enum Image {
     Ended,
 }
 
+/// macOS refuses the arguments of a process whose exec has not published them
+/// yet; Linux reads them as empty instead.
+const REFUSED_WHILE_LOADING: bool = cfg!(target_os = "macos");
+
 /// Linux reads an empty environment while a process replaces its image and
 /// after an exiting process releases its memory; neither is evidence about
 /// ownership. Wait for loading images, then confirm a settled empty read.
@@ -173,12 +177,14 @@ fn visibility(identity: &Identity, deadline: std::time::Instant) -> Result<Visib
             }
             // Without CAP_SYS_PTRACE, Linux refuses an exiting process's
             // environment. A refusal also hides env_end, so never wait on it.
-            Err(_) => {
-                return Ok(match image(identity.pid)? {
-                    Image::Ended => Visibility::Gone,
-                    _ => Visibility::Unreadable,
-                });
-            }
+            Err(_) => match image(identity.pid)? {
+                Image::Ended => return Ok(Visibility::Gone),
+                _ if REFUSED_WHILE_LOADING && std::time::Instant::now() < deadline => {
+                    std::thread::sleep(Duration::from_millis(1));
+                    continue;
+                }
+                _ => return Ok(Visibility::Unreadable),
+            },
             Ok(_) => {}
         }
         match image(identity.pid)? {
