@@ -3,7 +3,7 @@ use super::{
     Manager,
     identity::has_directory_identity,
     paths::{
-        canonical_parent_with_missing, contains_protected_directory, is_real_directory,
+        contains_protected_directory, is_real_directory, matches_recorded_worktree_path,
         real_directory_identity,
     },
 };
@@ -360,10 +360,13 @@ async fn check_checkout(repo: &Repository, workspaces: &[Workspace]) -> Result<(
                 Ok(_) => {}
             }
         }
-        let owned = workspaces.iter().any(|w| {
-            w.path == tree.path
-                || canonical_parent_with_missing(&w.path).is_ok_and(|p| p == tree.path)
-        });
+        let mut owned = false;
+        for workspace in workspaces {
+            if matches_recorded_worktree_path(&workspace.path, &tree.path)? {
+                owned = true;
+                break;
+            }
+        }
         let seed = crate::seed::Layout::of(repo).is_some_and(|seed| seed.is_worktree(&tree.path));
         ensure!(
             tree.path == repo.path || owned || seed,

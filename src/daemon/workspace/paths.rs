@@ -52,6 +52,12 @@ pub(super) fn canonical_parent_with_missing(path: &Path) -> Result<PathBuf> {
     Ok(parent.join(leaf))
 }
 
+/// Whether a Git worktree path refers to a recorded workspace path.
+pub(super) fn matches_recorded_worktree_path(recorded: &Path, candidate: &Path) -> Result<bool> {
+    let canonical_recorded = canonical_parent_with_missing(recorded)?;
+    Ok(candidate == canonical_recorded || candidate == recorded)
+}
+
 /// Whether `path` is a real, non-redirected directory; `false` when missing.
 pub(super) fn is_real_directory(path: &Path) -> Result<bool> {
     let metadata = match fs::symlink_metadata(path) {
@@ -219,6 +225,26 @@ mod tests {
         }
         fs::remove_dir(&state)?;
         assert!(contains_protected_directory(&root.join("other"), &paths).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn recorded_worktree_path_matches_canonical_parent_and_original() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let root = fs::canonicalize(temp.path())?;
+        let alias = root.join("alias");
+        symlink(&root, &alias)?;
+        let recorded = alias.join("missing");
+
+        assert!(matches_recorded_worktree_path(
+            &recorded,
+            &root.join("missing")
+        )?);
+        assert!(matches_recorded_worktree_path(&recorded, &recorded)?);
+        assert!(!matches_recorded_worktree_path(
+            &recorded,
+            &root.join("other")
+        )?);
         Ok(())
     }
 }

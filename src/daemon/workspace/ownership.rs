@@ -5,7 +5,7 @@ use super::{
         clear_owner, directory_identity, has_directory_identity, mark_owner, marked_owner,
         verify_owner,
     },
-    paths::canonical_parent_with_missing,
+    paths::matches_recorded_worktree_path,
 };
 use crate::{git, model::Workspace, state::WorkspaceState};
 use anyhow::{Context, Result, ensure};
@@ -186,11 +186,12 @@ impl Manager {
     /// Whether Git still lists the (possibly missing) worktree at its recorded path.
     pub(crate) async fn is_registered_worktree(&self, workspace: &Workspace) -> Result<bool> {
         let repo = self.repository(&workspace.repository_id).await?;
-        let recorded = canonical_parent_with_missing(&workspace.path)?;
-        Ok(git::worktrees(&repo.path, git::run)
-            .await?
-            .iter()
-            .any(|tree| tree.path == recorded || tree.path == workspace.path))
+        for tree in git::worktrees(&repo.path, git::run).await? {
+            if matches_recorded_worktree_path(&workspace.path, &tree.path)? {
+                return Ok(true);
+            }
+        }
+        Ok(false)
     }
 
     /// Missing worktrees may have been moved outside Shoal, not deleted. Consult
