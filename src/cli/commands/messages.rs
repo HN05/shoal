@@ -82,12 +82,12 @@ async fn deliver_to_hook(ctx: &Context, input: &str) -> Result<()> {
 
 /// Claude Code's `asyncRewake` `Stop` hook: wait for the workspace's next
 /// messages or item activity, then exit 2, which starts the idle agent's next
-/// turn with them. A newer delivery, a failure or the agent's exit ends it
-/// with 0 and leaves the agent idle.
-pub(super) async fn wake(ctx: &Context) -> Result<i32> {
+/// turn with them. A newer delivery, a failure or the exit of `agent`, the
+/// agent's process, ends it with 0 and leaves the agent idle.
+pub(super) async fn wake(ctx: &Context, agent: u32) -> Result<i32> {
     let next = tokio::select! {
         next = next_updates(ctx) => next,
-        () = parent_exit() => return Ok(0),
+        () = agent_exit(agent) => return Ok(0),
     };
     let (workspace, updates) = match next {
         Ok(Some(next)) => next,
@@ -105,24 +105,20 @@ pub(super) async fn wake(ctx: &Context) -> Result<i32> {
     Ok(2)
 }
 
-/// How often the wake hook checks that the agent that ran it still runs.
-const PARENT_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_secs(1);
+/// How often the wake hook checks that its agent still runs.
+const AGENT_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_secs(1);
 
-/// Resolves once the agent that ran this hook has exited. Claude Code runs
-/// hooks in their own process group, so stopping the agent's group leaves
-/// the hook running, and a surviving process keeps Shoal from proving the
-/// stop. An exited parent leaves this process to another, and one that exited
-/// before this check leaves it to init.
-async fn parent_exit() {
-    let parent = std::os::unix::process::parent_id();
-    if parent == 1 {
+/// Resolves once process `agent` has exited. Claude Code runs hooks in their
+/// own process group, so stopping the agent's group leaves the hook running,
+/// and a surviving process keeps Shoal from proving the stop. A process that
+/// cannot be identified counts as exited, so the hook never outlives it.
+async fn agent_exit(agent: u32) {
+    use crate::process::identity;
+    let Ok(Some(agent)) = identity::capture(agent) else {
         return;
-    }
-    loop {
-        tokio::time::sleep(PARENT_POLL_INTERVAL).await;
-        if std::os::unix::process::parent_id() != parent {
-            return;
-        }
+    };
+    while identity::alive(&agent).unwrap_or(false) {
+        tokio::time::sleep(AGENT_POLL_INTERVAL).await;
     }
 }
 

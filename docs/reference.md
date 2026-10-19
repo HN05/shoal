@@ -1686,9 +1686,10 @@ context after its next tool call or prompt. Delivering through the hook replaces
 the workspace, which ends with `superseded: true`. Claude Code launches also run
 `shoal internal wake` as a background `Stop` hook with `asyncRewake`: after each
 turn it waits up to a week for the next message or item activity, prints it and
-exits 2, so Claude Code starts the idle agent's next turn with it. It exits
-with Claude Code, which runs hooks outside its process group, so stopping the
-agent leaves no hook behind. Codex cannot
+exits 2, so Claude Code starts the idle agent's next turn with it. Its command
+passes Claude Code's process ID as `--agent "$PPID"`, and it exits with that
+process: Claude Code runs hooks outside its process group, so stopping the
+agent would otherwise leave the hook behind. Codex cannot
 be woken by a hook: when a Codex launched in a zmx session reports its turn
 finished and has undelivered messages or activity, Shoal types `Shoal: new
 messages or activity on this workspace's issues and PRs.` into the session and

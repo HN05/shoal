@@ -112,13 +112,14 @@ const MESSAGE_HOOK_EVENTS: [&str; 2] = ["PostToolUse", "UserPromptSubmit"];
 const WAKE_TIMEOUT_SECS: u64 = 7 * 24 * 60 * 60;
 
 /// The Claude Code `Stop` group that waits in the background for the next
-/// update and wakes the idle agent with it.
+/// update and wakes the idle agent with it. Claude Code runs the command in a
+/// shell it starts, whose parent is the agent.
 fn claude_wake_hook(shoal: &str) -> (&'static str, serde_json::Value) {
     (
         "Stop",
         serde_json::json!({"hooks": [{
             "type": "command",
-            "command": format!("{shoal} internal wake"),
+            "command": format!("{shoal} internal wake --agent \"$PPID\""),
             "asyncRewake": true,
             "timeout": WAKE_TIMEOUT_SECS,
         }]}),
@@ -205,7 +206,7 @@ mod tests {
             wake["command"]
                 .as_str()
                 .unwrap()
-                .ends_with(" internal wake"),
+                .ends_with(" internal wake --agent \"$PPID\""),
             "{wake}"
         );
         assert_eq!(wake["asyncRewake"], true);

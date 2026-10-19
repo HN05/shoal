@@ -1040,7 +1040,11 @@ pub enum InternalCommand {
     /// Wait for the workspace's next agent messages or item activity, print
     /// them and exit 2; Shoal's Claude Code `Stop` hook runs it in the
     /// background so the update starts the idle agent's next turn.
-    Wake,
+    Wake {
+        /// The agent's process ID; the hook ends when that process exits.
+        #[arg(long)]
+        agent: u32,
+    },
     /// Finish a planned landing inside its tracked execution.
     #[command(name = internal::LAND)]
     Land {
