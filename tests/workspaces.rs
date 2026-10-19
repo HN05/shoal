@@ -14500,6 +14500,37 @@ fn agents_notify_the_user_about_their_own_workspace_without_completing_it() {
 }
 
 #[test]
+fn the_wake_hook_exits_with_the_agent_that_ran_it() {
+    let fixture = Fixture::new();
+    let workspace = fixture.add("waking");
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    let home = fixture.root.path();
+    // The shell stands in for an agent that Shoal stopped: it exits at once,
+    // before or after the hook starts, leaving it waiting for an update that
+    // never comes.
+    let output = support::isolated(home, "sh")
+        .current_dir(path)
+        .args([
+            "-c",
+            r#""$0" internal wake >/dev/null 2>"$HOME/wake-stderr" & echo $!"#,
+        ])
+        .arg(env!("CARGO_BIN_EXE_shoal"))
+        .output()
+        .unwrap();
+    let pid = String::from_utf8(output.stdout).unwrap().trim().to_owned();
+    // A hang guard only: the hook checks its parent every second.
+    wait_until("the wake hook to exit", || {
+        !Command::new("kill")
+            .args(["-0", &pid])
+            .stderr(Stdio::null())
+            .status()
+            .unwrap()
+            .success()
+    });
+    assert_eq!(fs::read_to_string(home.join("wake-stderr")).unwrap(), "");
+}
+
+#[test]
 fn the_user_messages_agents_who_read_their_own_messages_once() {
     let fixture = Fixture::new();
     fixture.add("receiver");
