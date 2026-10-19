@@ -104,7 +104,7 @@ when behavior changes, distinguishing decisions from proposals.
   specifications are typed; preserve their existing SQLite/JSON representation
   and reject unknown values.
 - `doctor` reports by default; repair preserves work and resource leases.
-  Startup audits ownership and never deletes work; it clears an unknown
+  Startup audits ownership and never deletes work; the daemon clears an unknown
   execution only when a saved agent stop and a process scan prove it ended.
   Verify native PID birth identity before signaling survivors; unknown ownership
   must not authorize a kill. Explicit acknowledgement cannot bypass visible live

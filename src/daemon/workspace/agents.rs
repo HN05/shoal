@@ -82,7 +82,7 @@ impl Manager {
             let reconcile = if complete {
                 ""
             } else {
-                "; execution remains active or unknown; run shoal doctor before resuming"
+                "; its processes are not proven stopped, so the execution stays unknown until they exit or shoal doctor reconciles it"
             };
             format!(
                 "{agent} stopped after {reason} ({status}); {recovery}{reconcile}; workspace and resource leases retained"
@@ -768,7 +768,7 @@ mod tests {
             let events = manager.notifications(false, 1).await.unwrap();
             assert!(events[0].message.contains("critical memory pressure"));
             assert!(events[0].message.contains("recovery record unavailable"));
-            assert!(events[0].message.contains("shoal doctor before resuming"));
+            assert!(events[0].message.contains("stays unknown until they exit"));
             manager
                 .finish_execution(id.clone(), ExecutionKind::Command, Some(143))
                 .await

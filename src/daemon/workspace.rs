@@ -138,6 +138,8 @@ pub struct Manager {
     agent_queue_holds: std::sync::Mutex<HashMap<String, usize>>,
     /// Wakes the queue dispatcher when a slot may have freed.
     pub(crate) agent_queue_wake: tokio::sync::Notify,
+    /// Wakes stopped-agent reconciliation when an execution becomes unknown.
+    pub(crate) execution_unknown: tokio::sync::Notify,
     /// Recent CPU readings for dynamic agent admission.
     pub(crate) cpu_usage: std::sync::Mutex<crate::daemon::cpu_usage::CpuUsage>,
     /// The commit and settings whose seed build last failed, per repository.
@@ -185,6 +187,7 @@ impl Manager {
             agent_queue_gate: Mutex::new(()),
             agent_queue_holds: Default::default(),
             agent_queue_wake: tokio::sync::Notify::new(),
+            execution_unknown: tokio::sync::Notify::new(),
             cpu_usage: Default::default(),
             seed_failures: Default::default(),
             seed_builds: Default::default(),

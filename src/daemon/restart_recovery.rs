@@ -1,8 +1,9 @@
-//! Reconcile stopped agents that a daemon interruption left quarantined. A
-//! saved recovery record names the stop Shoal started; once its wrapper is gone
-//! and no process of the execution survives, the record alone represents the
-//! agent and `shoal resume` restores it. Survivors and incomplete evidence keep
-//! the execution for `shoal doctor`, and only they notify the user.
+//! Reconcile stopped agents whose executions became unknown, after a daemon
+//! interruption or a stop that could not be proven. A saved recovery record
+//! names the stop Shoal started; once its wrapper is gone and no process of
+//! the execution survives, the record alone represents the agent and
+//! `shoal resume` restores it. Survivors and incomplete evidence keep the
+//! execution, are checked again, and only they notify the user.
 use std::{collections::HashSet, sync::Arc, time::Duration};
 
 use anyhow::Result;
@@ -16,19 +17,21 @@ use crate::{
     state::ExecutionState,
 };
 
-/// How often to look again at wrappers that were alive at startup.
+/// How often to look again at wrappers that were alive during a pass.
 const WRAPPER_POLL_INTERVAL: Duration = Duration::from_secs(1);
 /// How long to wait before repeating a pass that failed.
 const RETRY_INTERVAL: Duration = Duration::from_secs(30);
+/// How often to look again at executions whose processes survive.
+const UNRESOLVED_RECHECK_INTERVAL: Duration = Duration::from_secs(30);
 
-/// An execution quarantined by a restart whose stop saved a recovery record.
+/// An unknown execution of an agent whose stop saved a recovery record.
 struct Interrupted {
     workspace: Workspace,
     execution: Execution,
     record: Record,
 }
 
-/// A quarantined execution whose saved recovery record cannot be read.
+/// An unknown execution whose saved recovery record cannot be read.
 struct Unreadable {
     workspace: Workspace,
     execution: String,
@@ -42,6 +45,14 @@ pub(crate) struct Waiting {
     wrapper: process::Identity,
 }
 
+/// What a pass left for a later one.
+#[derive(Default)]
+pub(crate) struct Pending {
+    pub waiting: Vec<Waiting>,
+    /// Some execution kept surviving processes or incomplete evidence.
+    pub unresolved: bool,
+}
+
 /// What reconciliation concluded for one interrupted agent.
 #[derive(Debug, PartialEq)]
 enum Outcome {
@@ -52,32 +63,65 @@ enum Outcome {
     Unresolved(String),
 }
 
-/// Reconcile at startup, then again whenever a wrapper that was alive exits,
-/// repeating a pass that failed until one succeeds.
+/// Reconcile at startup and whenever an execution becomes unknown or a pass
+/// may conclude differently, repeating a pass that failed until one succeeds.
 pub(super) async fn run(manager: Arc<Manager>) {
-    let mut waiting = reconcile_until_done(&manager).await;
-    while !waiting.is_empty() {
-        tokio::time::sleep(WRAPPER_POLL_INTERVAL).await;
-        waiting = still_unknown(&manager, waiting).await;
-        if waiting
-            .iter()
-            .any(|entry| !process::alive(&entry.wrapper).unwrap_or(true))
-        {
-            waiting = reconcile_until_done(&manager).await;
+    reconcile(&manager, UNRESOLVED_RECHECK_INTERVAL).await
+}
+
+/// `run`, looking again at unresolved executions after `recheck`.
+pub(super) async fn reconcile(manager: &Manager, recheck: Duration) {
+    loop {
+        let pending = reconcile_until_done(manager).await;
+        tokio::select! {
+            () = manager.execution_unknown.notified() => {}
+            () = await_change(manager, pending, recheck) => {}
         }
     }
 }
 
-async fn reconcile_until_done(manager: &Manager) -> Vec<Waiting> {
+/// Resolves once a waiting wrapper exits or unresolved executions are due for
+/// another look.
+async fn await_change(manager: &Manager, pending: Pending, recheck: Duration) {
+    let Pending {
+        mut waiting,
+        unresolved,
+    } = pending;
+    let recheck = async {
+        if !unresolved {
+            std::future::pending::<()>().await;
+        }
+        tokio::time::sleep(recheck).await;
+    };
+    let exited = async {
+        while !waiting.is_empty() {
+            tokio::time::sleep(WRAPPER_POLL_INTERVAL).await;
+            waiting = still_unknown(manager, waiting).await;
+            if waiting
+                .iter()
+                .any(|entry| !process::alive(&entry.wrapper).unwrap_or(true))
+            {
+                return;
+            }
+        }
+        std::future::pending::<()>().await;
+    };
+    tokio::select! {
+        () = recheck => {}
+        () = exited => {}
+    }
+}
+
+async fn reconcile_until_done(manager: &Manager) -> Pending {
     loop {
         let result = {
             let _operation = manager.background_operations.read().await;
             manager.reconcile_interrupted_agents().await
         };
         match result {
-            Ok(waiting) => return waiting,
+            Ok(pending) => return pending,
             Err(error) => log!(
-                "restart reconciliation failed; retrying in {}s: {error:#}",
+                "stopped agent reconciliation failed; retrying in {}s: {error:#}",
                 RETRY_INTERVAL.as_secs()
             ),
         }
@@ -94,7 +138,7 @@ async fn still_unknown(manager: &Manager, waiting: Vec<Waiting>) -> Vec<Waiting>
             Ok(false) => {}
             Ok(true) => unknown.push(entry),
             Err(error) => {
-                log!("restart reconciliation: {error:#}");
+                log!("stopped agent reconciliation: {error:#}");
                 unknown.push(entry);
             }
         }
@@ -103,32 +147,35 @@ async fn still_unknown(manager: &Manager, waiting: Vec<Waiting>) -> Vec<Waiting>
 }
 
 impl Manager {
-    /// Forget quarantined executions of stopped agents whose processes are
-    /// gone, keeping their recovery records, and notify about the ones that
-    /// remain uncertain. Returns the wrappers that are still alive.
-    pub(crate) async fn reconcile_interrupted_agents(&self) -> Result<Vec<Waiting>> {
+    /// Forget unknown executions of stopped agents whose processes are gone,
+    /// keeping their recovery records, and notify about the ones that remain
+    /// uncertain.
+    pub(crate) async fn reconcile_interrupted_agents(&self) -> Result<Pending> {
         let (interrupted, unreadable) = self.interrupted_agents().await?;
         for unreadable in &unreadable {
             self.notify_unreadable(unreadable).await;
         }
+        let mut pending = Pending::default();
         if interrupted.is_empty() {
-            return Ok(vec![]);
+            return Ok(pending);
         }
         let ids: HashSet<_> = interrupted.iter().map(|i| i.execution.id.clone()).collect();
         let scan = process::scan(ids).await?;
-        let mut waiting = Vec::new();
         for interrupted in interrupted {
             let outcome = match Processes::inspect(&interrupted.execution, &scan).await {
                 Ok(processes) => assess(&interrupted, &processes),
                 Err(error) => Outcome::Unresolved(format!("process inspection failed: {error:#}")),
             };
             match outcome {
-                Outcome::Waiting => waiting.extend(interrupted.waiting()),
+                Outcome::Waiting => pending.waiting.extend(interrupted.waiting()),
                 Outcome::Stopped => self.forget_stopped_agent(&interrupted).await?,
-                Outcome::Unresolved(issue) => self.notify_unresolved(&interrupted, &issue).await,
+                Outcome::Unresolved(issue) => {
+                    pending.unresolved = true;
+                    self.notify_unresolved(&interrupted, &issue).await;
+                }
             }
         }
-        Ok(waiting)
+        Ok(pending)
     }
 
     async fn interrupted_agents(&self) -> Result<(Vec<Interrupted>, Vec<Unreadable>)> {
@@ -172,7 +219,7 @@ impl Manager {
             .await?;
         if forgotten {
             log!(
-                "reconciled stopped {} in {} after the daemon restarted",
+                "reconciled stopped {} in {}",
                 interrupted.record.agent,
                 interrupted.workspace.name
             );
@@ -194,7 +241,7 @@ impl Manager {
             Some(&workspace.name),
             NotificationKind::RecoveryBlocked,
             format!(
-                "{} stopped{reason}, but its execution {} cannot be reconciled after the daemon restarted: {issue}; inspect it with shoal doctor {}, then run shoal resume {} --execution {}",
+                "{} stopped{reason}, but its execution {} is not proven stopped: {issue}; Shoal reconciles it once those processes exit, or inspect it with shoal doctor {}; then run shoal resume {} --execution {}",
                 record.agent, execution.id, workspace.name, workspace.name, execution.id
             ),
         )
@@ -211,7 +258,7 @@ impl Manager {
             Some(&workspace.name),
             NotificationKind::RecoveryBlocked,
             format!(
-                "The recovery record of execution {execution} cannot be read after the daemon restarted: {error:#}; inspect it with shoal doctor {}",
+                "The recovery record of execution {execution} cannot be read: {error:#}; inspect it with shoal doctor {}",
                 workspace.name
             ),
         )

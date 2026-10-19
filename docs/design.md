@@ -108,15 +108,16 @@ unfinished assignment; configured restore commands receive that prompt through
 restores, and preserve manual recovery across restarts. Saved recovery represents
 unfinished work until restored or explicitly discarded. A record names the
 stop's stage: the daemon saves `stopping` before delivering a stop, and the
-wrapper saves `stopped` after ending the agent. After a restart the daemon
-forgets a quarantined execution with a saved record once its wrapper has exited
-and no owned process survives, if its launch identity is complete or the record
-reached `stopped`, since the daemon clears a stopped child's identity only after
-verifying the stop. Live wrappers are rechecked when they exit; one that
-reattaches with its command running discards a `stopping` record, whose stop
-never arrived. Survivors and
-incomplete evidence keep the execution for `shoal doctor` and are the only
-outcome that notifies; `shoal resume` still reconciles the execution it selects.
+wrapper saves `stopped` after ending the agent. At startup, and whenever an
+execution becomes unknown, the daemon forgets an unknown execution with a saved
+record once its wrapper has exited and no owned process survives, if its launch
+identity is complete or the record reached `stopped`, since the daemon clears a
+stopped child's identity only after verifying the stop. Live wrappers are
+rechecked when they exit; one that reattaches with its command running discards
+a `stopping` record, whose stop never arrived. Survivors and incomplete evidence
+keep the execution, are rechecked periodically so it clears once they exit, and
+are the only outcome that notifies; `shoal doctor` inspects them, and
+`shoal resume` still reconciles the execution it selects.
 Agent metadata is transient, so restart cannot select disconnected survivors.
 Warnings come first: below each enabled protection's stop threshold, the daemon
 queues an agent message for every workspace with a running agent, so agents can

@@ -515,6 +515,9 @@ impl Manager {
         connections.remove(&id);
         drop(connections);
         self.forget_connection(&id).await;
+        if !complete {
+            self.execution_unknown.notify_one();
+        }
         Ok(complete)
     }
 

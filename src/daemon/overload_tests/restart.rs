@@ -124,6 +124,7 @@ async fn restart_forgets_a_stopped_agent_whose_wrapper_exited_and_keeps_its_reco
             .reconcile_interrupted_agents()
             .await
             .unwrap()
+            .waiting
             .is_empty()
     );
     assert!(executions(&reopened, &workspace).await.is_empty());
@@ -182,8 +183,9 @@ async fn restart_keeps_uncertain_stopped_agents_and_notifies_once() {
     .await;
     let reopened = restart(&manager).await;
     for _ in 0..2 {
-        let waiting = reopened.reconcile_interrupted_agents().await.unwrap();
-        assert_eq!(waiting.len(), 1);
+        let pending = reopened.reconcile_interrupted_agents().await.unwrap();
+        assert_eq!(pending.waiting.len(), 1);
+        assert!(pending.unresolved);
     }
     let mut kept: Vec<_> = executions(&reopened, &workspace)
         .await
@@ -232,6 +234,46 @@ async fn restart_keeps_uncertain_stopped_agents_and_notifies_once() {
     serving.abort();
 }
 
+#[tokio::test]
+async fn unresolved_stopped_agents_are_reconciled_once_their_survivors_exit() {
+    let (_root, manager, workspace, serving) = fixture().await;
+    let wrapper = exited().await;
+    let (mut survivor, child) = sleeper();
+    interrupted(
+        &manager,
+        &workspace,
+        "survivor",
+        &wrapper,
+        Some(&child),
+        Some(Stage::Stopped),
+    )
+    .await;
+    let reconciling = tokio::spawn({
+        let manager = manager.clone();
+        async move {
+            super::super::restart_recovery::reconcile(&manager, Duration::from_millis(50)).await
+        }
+    });
+    bounded(async {
+        while blocked(&manager).await.is_empty() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await;
+    assert_eq!(executions(&manager, &workspace).await.len(), 1);
+    survivor.kill().await.unwrap();
+    survivor.wait().await.unwrap();
+    bounded(async {
+        while !executions(&manager, &workspace).await.is_empty() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await;
+    assert!(record(&manager, &workspace, "survivor").is_some());
+    reconciling.abort();
+    serving.abort();
+}
+
 /// Protection stops the agent and the daemon dies while its wrapper waits for
 /// an automatic restore. The wrapper exits, and the next daemon reconciles.
 async fn crash_while_protected(stop: impl AsyncFnOnce(&Manager)) {
@@ -249,6 +291,7 @@ async fn crash_while_protected(stop: impl AsyncFnOnce(&Manager)) {
             .reconcile_interrupted_agents()
             .await
             .unwrap()
+            .waiting
             .is_empty()
     );
     assert!(executions(&reopened, &workspace).await.is_empty());
@@ -311,7 +354,12 @@ async fn update_restart_discards_a_stop_that_never_reached_the_agent() {
     let reopened = restart(&manager).await;
     // The live wrapper may still reattach, so nothing is decided yet.
     assert_eq!(
-        reopened.reconcile_interrupted_agents().await.unwrap().len(),
+        reopened
+            .reconcile_interrupted_agents()
+            .await
+            .unwrap()
+            .waiting
+            .len(),
         1
     );
     assert_eq!(
