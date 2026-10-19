@@ -456,6 +456,32 @@ fn forgejo_threads_take_replies_but_cannot_be_resolved() {
 }
 
 #[test]
+fn watches_read_every_page_of_a_discussion() {
+    let fixture = Fixture::new(Forge::Forgejo, "[cleanup.auto]\nenabled=false\n");
+    let issue = json!({"body": {"number": 8, "title": "Issue", "state": "open", "body": "",
+        "labels": [], "pull_request": null}});
+    let page = |ids: std::ops::RangeInclusive<u64>, last: &str| {
+        json!({"body": ids.map(|id| json!({"id": id, "body": if id == 51 { last } else { "old" }}))
+            .collect::<Vec<_>>()})
+    };
+    let respond = |last: &str| {
+        fixture.respond(json!({
+            "GET repos/team/project/issues/8": issue,
+            "GET repos/team/project/issues/8/comments?limit=50&page=1": page(1..=50, last),
+            "GET repos/team/project/issues/8/comments?limit=50&page=2": page(51..=51, last),
+        }))
+    };
+    respond("first");
+    fixture.ok(&["link", "issue", "8", "--workspace", "topic"]);
+    let first = fixture.ok(&["watch", "issue", "--workspace", "topic"]);
+    assert_eq!(first["updates"][0]["kind"], "comment", "{first}");
+    // Only the second page changes; the timeout is a hang guard.
+    respond("edited");
+    let edited = fixture.ok(&["watch", "issue", "--workspace", "topic", "--timeout", "600"]);
+    assert_eq!(edited["updates"][0]["kind"], "comment", "{edited}");
+}
+
+#[test]
 fn watches_do_not_report_the_agents_own_comments_back() {
     let fixture = Fixture::new(Forge::Forgejo, "[cleanup.auto]\nenabled=false\n");
     let issue = |state: &str| {
@@ -468,7 +494,7 @@ fn watches_do_not_report_the_agents_own_comments_back() {
     };
     fixture.respond(json!({
         "GET repos/team/project/issues/8": issue("open"),
-        "GET repos/team/project/issues/8/comments": comments(&[1]),
+        "GET repos/team/project/issues/8/comments?limit=50&page=1": comments(&[1]),
     }));
     fixture.ok(&["link", "issue", "8", "--workspace", "topic"]);
     let first = fixture.ok(&["watch", "issue", "--workspace", "topic"]);
@@ -477,7 +503,7 @@ fn watches_do_not_report_the_agents_own_comments_back() {
     fixture.respond(json!({
         "GET repos/team/project/issues/8": issue("open"),
         "POST repos/team/project/issues/8/comments": {"body": {"id": 2, "body": "comment 2"}},
-        "GET repos/team/project/issues/8/comments": comments(&[1, 2]),
+        "GET repos/team/project/issues/8/comments?limit=50&page=1": comments(&[1, 2]),
     }));
     let note = fixture.root.path().join("note.md");
     fs::write(&note, "comment 2").unwrap();
@@ -494,7 +520,7 @@ fn watches_do_not_report_the_agents_own_comments_back() {
     // comment beside it is not reported.
     fixture.respond(json!({
         "GET repos/team/project/issues/8": issue("closed"),
-        "GET repos/team/project/issues/8/comments": comments(&[1, 2]),
+        "GET repos/team/project/issues/8/comments?limit=50&page=1": comments(&[1, 2]),
     }));
     let closed = fixture.ok(&["watch", "issue", "--workspace", "topic"]);
     let kinds: Vec<_> = closed["updates"]
@@ -1132,7 +1158,7 @@ fn watch_reports_failed_steps_or_log_lookup_errors_without_hiding_comments() {
         responses["GET repos/team/project/commits/head/status?limit=50"] = json!({"body": {
             "total_count": 1, "statuses": [{"context": "rust", "status": "failure"}]
         }});
-        responses["GET repos/team/project/issues/8/comments"] =
+        responses["GET repos/team/project/issues/8/comments?limit=50&page=1"] =
             json!({"body": [{"id": 1, "body": "A review is ready", "user": {"login": "bot"}}]});
         responses["GET repos/team/project/pulls/8/reviews?limit=50&page=1"] = json!({"body": []});
         fixture.respond(responses);

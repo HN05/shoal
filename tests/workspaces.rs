@@ -11220,7 +11220,7 @@ fn watch_explicit_forgejo_fork_pr_without_linking_or_checkout() {
     forgejo_api(home, "repos/team/repo/pulls/7", &pull);
     forgejo_api(
         home,
-        "repos/team/repo/issues/7/comments",
+        "repos/team/repo/issues/7/comments?limit=50&page=1",
         &serde_json::json!([{"id": 1, "body": "please test forks"}]),
     );
     forgejo_api(
@@ -11280,7 +11280,7 @@ fn watch_forgejo_issue_reports_comments_closure_and_reopening() {
     state("open");
     forgejo_api(
         home,
-        "repos/team/repo/issues/8/comments",
+        "repos/team/repo/issues/8/comments?limit=50&page=1",
         &serde_json::json!([{"id": 1, "body": "first comment"}]),
     );
     fixture.ok(&["link", "issue", "8", "--workspace", "issue-watch"]);
@@ -11317,7 +11317,7 @@ fn pr_wait_reads_forgejo_ci_and_conflicts_from_the_api() {
     forgejo_api(home, "repos/team/repo/pulls/7", &pull);
     forgejo_api(
         home,
-        "repos/team/repo/issues/7/comments",
+        "repos/team/repo/issues/7/comments?limit=50&page=1",
         &serde_json::json!([]),
     );
     forgejo_api(
@@ -11388,7 +11388,7 @@ fn pr_wait_reports_forgejo_reviews_when_the_ci_lookup_fails() {
     );
     forgejo_api(
         home,
-        "repos/team/repo/issues/7/comments",
+        "repos/team/repo/issues/7/comments?limit=50&page=1",
         &serde_json::json!([]),
     );
     forgejo_api(home, &status, &checks("pending"));

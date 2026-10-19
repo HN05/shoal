@@ -117,10 +117,10 @@ impl ForgeRepo {
     ) -> Result<Vec<(String, String)>> {
         match self.kind {
             ForgeKind::GitHub | ForgeKind::Forgejo => {
+                // Every page: a comment missing from the set reads as deleted.
                 let endpoint = self.repo_endpoint(&format!("issues/{number}/comments"));
-                let comments = self.send(account, &Request::get(endpoint)).await?;
-                let comments = comments.as_array().context("comments are not a list")?;
-                fingerprints(comments, &["body", "updated_at"])
+                let comments = self.pages(account, &endpoint).await?;
+                fingerprints(&comments, &["body", "updated_at"])
             }
             ForgeKind::GitLab => {
                 let notes = self.gitlab_notes(account, kind, number).await?;
