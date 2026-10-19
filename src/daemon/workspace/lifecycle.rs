@@ -411,13 +411,8 @@ impl Manager {
             } else {
                 None
             };
-            if matches!(removal, Removal::Deleted) && present {
-                bail!("workspace directory exists");
-            }
-            // Live resources are removed before the directory; failed cleanup
-            // retains their ownership records so removal can be retried.
-            self.remove_simulators(&workspace.id).await?;
             let outcome = match removal {
+                Removal::Deleted if present => bail!("workspace directory exists"),
                 _ if present => self.remove_present_worktree(&workspace, removal).await?,
                 _ => self.remove_missing_worktree(&workspace, removal).await?,
             };
@@ -561,14 +556,8 @@ impl Manager {
             )
             .await?;
         let (files, branch) = worktrunk_removal_options(&check, removal.choice())?;
-        worktrunk::remove(
-            &repo.path,
-            &self.paths.worktrunk_config(),
-            &workspace.path,
-            files,
-            branch,
-        )
-        .await
+        self.remove_worktree(&repo.path, workspace, files, branch, true)
+            .await
     }
 
     /// Inspect the workspace again and apply every check `removal` needs at
@@ -654,15 +643,37 @@ impl Manager {
             &super::StopRequest::removal(),
         )
         .await?;
-        if self.is_registered_worktree(workspace).await? {
-            // Prune only this owned registration, through Worktrunk, and
-            // retain its branch because the contents cannot be inspected.
+        // Prune only this owned registration, through Worktrunk, and retain
+        // its branch because the contents cannot be inspected.
+        let registered = self.is_registered_worktree(workspace).await?;
+        self.remove_worktree(
+            &repo.path,
+            workspace,
+            FileRemoval::Force,
+            BranchRemoval::Keep,
+            registered,
+        )
+        .await
+    }
+
+    /// Release live resources immediately before removing the worktree. Failed
+    /// cleanup retains their ownership records so removal can be retried.
+    async fn remove_worktree(
+        &self,
+        repo: &std::path::Path,
+        workspace: &crate::model::Workspace,
+        files: FileRemoval,
+        branch: BranchRemoval,
+        registered: bool,
+    ) -> Result<RemovalResult> {
+        self.remove_simulators(&workspace.id).await?;
+        if registered {
             worktrunk::remove(
-                &repo.path,
+                repo,
                 &self.paths.worktrunk_config(),
                 &workspace.path,
-                FileRemoval::Force,
-                BranchRemoval::Keep,
+                files,
+                branch,
             )
             .await
         } else {
