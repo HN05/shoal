@@ -1164,6 +1164,15 @@ mod tests {
         migrated.quarantine_interrupted_operations().await.unwrap();
         let recovered = migrated.run(operation_snapshot).await.unwrap();
         assert_ne!(recovered, before);
+        for settled in [
+            r#"["failed","failed","original error"]"#,
+            r#"["ready","ready","original error"]"#,
+        ] {
+            assert!(
+                recovered.iter().any(|row| row == settled),
+                "{settled} changed"
+            );
+        }
         let reopened = Store::open(path).await.unwrap();
         reopened.quarantine_interrupted_operations().await.unwrap();
         assert_eq!(reopened.run(operation_snapshot).await.unwrap(), recovered);
