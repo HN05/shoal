@@ -25,7 +25,7 @@ pub(crate) mod review;
 mod stack;
 mod status;
 
-pub(crate) use agents::Protection;
+pub(crate) use agents::{Pause, Protection};
 pub use done::Requester;
 pub use executions::{ExecutionKind, StopRequest};
 pub(crate) use executions::{ReattachedExecution, StartedExecution};

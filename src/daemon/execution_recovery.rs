@@ -3,9 +3,12 @@
 use anyhow::{Context, Result, ensure};
 use tokio::sync::{mpsc, watch};
 
-use super::workspace::Manager;
+use super::workspace::{Manager, Pause};
 use crate::daemon::log;
-use crate::{model::PortReservation, protocol::ExecutionEvent};
+use crate::{
+    model::PortReservation,
+    protocol::{ExecutionEvent, timing},
+};
 
 pub(super) enum Action {
     Resume(Vec<PortReservation>),
@@ -26,9 +29,12 @@ pub(super) async fn pause(
     if !manager.agent_was_overloaded(execution_id).await {
         return Ok(Action::Stop(requested_reason(manager, execution_id).await));
     }
-    manager
-        .pause_agent_execution(execution_id, workspace_id)
-        .await?;
+    if let Pause::Unproven(issue) = manager
+        .pause_agent_execution(execution_id, workspace_id, timing::WORKSPACE_STOP_TIMEOUT)
+        .await?
+    {
+        anyhow::bail!("the stopped agent's processes are not proven stopped: {issue}");
+    }
     // Only this successful pause proves termination. Recovery refusals after
     // this point must let the wrapper report completion, rather than disconnect.
     let ready = tokio::select! {
@@ -63,6 +69,24 @@ pub(super) async fn pause(
                 "automatic restore failed: {error:#}"
             ))))
         }
+    }
+}
+
+/// A protection stop without automatic recovery still ends what the agent left
+/// running outside its process group, so `shoal resume` can restore it.
+pub(super) async fn stop_survivors(manager: &Manager, execution_id: &str, workspace_id: &str) {
+    if !manager.agent_was_overloaded(execution_id).await {
+        return;
+    }
+    match manager
+        .pause_agent_execution(execution_id, workspace_id, timing::WORKSPACE_STOP_TIMEOUT)
+        .await
+    {
+        Ok(Pause::Paused) => {}
+        Ok(Pause::Unproven(issue)) => {
+            log!("the stopped agent's processes are not proven stopped: {issue}")
+        }
+        Err(error) => log!("stopped agent's processes not checked: {error:#}"),
     }
 }
 

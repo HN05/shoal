@@ -218,7 +218,10 @@ assignment on manual or automatic resume. Configured commands receive that
 prompt through `{prompt}`; other agents need an entry in `[agent_resume]`.
 A failed command lookup warns and
 disables automatic recovery for that launch. Overload notifications include the
-pressure reason, execution ID, and automatic or manual recovery path. Shoal saves
+pressure reason, execution ID, and automatic or manual recovery path. After the
+wrapper stops the agent, Shoal also stops processes that carry the execution's
+identity outside the agent's process group, such as background shell commands,
+as `shoal doctor --stop` does. Shoal saves
 the agent identity and pressure reason before signaling the wrapper, so a wrapper killed
 under pressure can still be resumed after reconciliation. With one configured, the wrapper
 stays connected while the agent is stopped and automatically runs that command

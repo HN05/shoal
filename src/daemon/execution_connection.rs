@@ -315,6 +315,7 @@ async fn relay(
             ExecutionEvent::Paused => {
                 *handoff_claimed = true;
                 if !recovering {
+                    execution_recovery::stop_survivors(manager, execution_id, &workspace.id).await;
                     continue;
                 }
                 use execution_recovery::Action;

@@ -103,6 +103,12 @@ impl Processes {
         Some(issues.join("; "))
     }
 
+    /// Signal verified owned processes, leaving a live wrapper that still
+    /// reports to the daemon.
+    pub async fn stop_owned(&self) -> Result<()> {
+        process::stop_verified(&self.owned).await
+    }
+
     /// Only verified identities are signal targets. Return whether there were
     /// targets, not whether the execution can now be forgotten.
     pub async fn stop(&self) -> Result<bool> {

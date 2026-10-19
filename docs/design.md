@@ -90,7 +90,10 @@ CPU is opt-in and requires sustained aggregate busy time. One `load` setting
 user chooses how hard to load the machine without tuning each percentage;
 explicit thresholds override it. Linux memory defaults rise with swap, which
 makes the OOM killer a later risk. Stop connected tracked
-agents through their execution wrappers, preserving work and leases. Stop and exit
+agents through their execution wrappers, preserving work and leases. Once the
+wrapper reports the stop, the daemon also stops the agent's identity-verified
+processes outside its process group, such as background shell commands, since
+automatic and manual restores both require the execution proven stopped. Stop and exit
 notifications carry the pressure reason and recovery path, distinguishing automatic
 restore from manual recovery and missing recovery records. Persist a minimal
 agent recovery record with the stop reason before delivering the stop, so a lost wrapper does not lose

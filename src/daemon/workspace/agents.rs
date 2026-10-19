@@ -211,11 +211,17 @@ impl Manager {
         }
     }
 
+    /// Prove that a protection-stopped agent ended, then forget its stopped
+    /// child. Identity-verified processes it left outside its process group,
+    /// such as background shell commands, are stopped as `shoal doctor --stop`
+    /// stops them; the waiting wrapper is not a target. Reports what survives
+    /// when `patience` passes without proof.
     pub(crate) async fn pause_agent_execution(
         &self,
         id: &str,
         workspace_id: &str,
-    ) -> anyhow::Result<()> {
+        patience: Duration,
+    ) -> anyhow::Result<Pause> {
         let record = self
             .inspect_workspace(workspace_id)
             .await?
@@ -223,7 +229,11 @@ impl Manager {
             .into_iter()
             .find(|execution| execution.id == id)
             .ok_or_else(|| anyhow::anyhow!("execution no longer exists"))?;
-        self.verify_agent_processes_stopped(&record).await?;
+        if let Some(issue) =
+            await_process_proof(patience, || self.stop_agent_survivors(&record)).await
+        {
+            return Ok(Pause::Unproven(issue));
+        }
         let id = id.to_owned();
         self.store
             .run(move |db| {
@@ -233,23 +243,30 @@ impl Manager {
                 )?;
                 Ok(())
             })
-            .await
+            .await?;
+        Ok(Pause::Paused)
     }
 
-    async fn verify_agent_processes_stopped(
-        &self,
-        record: &crate::model::Execution,
-    ) -> anyhow::Result<()> {
-        await_process_proof(|| async {
-            let ids = std::collections::HashSet::from([record.id.clone()]);
+    /// Stop the execution's verified survivors and report what keeps its
+    /// processes from being proven stopped, if anything does.
+    async fn stop_agent_survivors(&self, record: &crate::model::Execution) -> Option<String> {
+        let ids = std::collections::HashSet::from([record.id.clone()]);
+        let processes = async {
             let scan = crate::process::identity::scan(ids).await?;
-            let processes = crate::process::execution::Processes::inspect(record, &scan).await?;
-            Ok(scan.processes.is_empty()
-                && processes.owned.is_empty()
-                && processes.group_candidates.is_empty()
-                && processes.visibility_complete())
-        })
-        .await
+            crate::process::execution::Processes::inspect(record, &scan).await
+        };
+        let processes = match processes.await {
+            Ok(processes) => processes,
+            Err(error) => return Some(format!("process inspection failed: {error:#}")),
+        };
+        if let Some(issue) = processes.completion_issue() {
+            // A survivor can fork while stopping, so only a later scan proves the stop.
+            return Some(match processes.stop_owned().await {
+                Ok(()) => issue,
+                Err(error) => format!("{issue}; {error:#}"),
+            });
+        }
+        (!processes.visibility_complete()).then(|| "its launch identity is incomplete".into())
     }
 
     pub(crate) async fn resume_agent_execution(&self, id: &str) -> anyhow::Result<bool> {
@@ -484,19 +501,25 @@ pub(crate) struct StoppedAgent {
     handoff_saved: bool,
 }
 
-async fn await_process_proof<F>(mut probe: impl FnMut() -> F) -> anyhow::Result<()>
+/// What a paused agent's process check concluded.
+pub(crate) enum Pause {
+    Paused,
+    /// Processes survive, or the evidence cannot prove that none do.
+    Unproven(String),
+}
+
+/// Probe until it finds nothing preventing proof or `patience` passes, and
+/// return the last issue it reported.
+async fn await_process_proof<F>(patience: Duration, mut probe: impl FnMut() -> F) -> Option<String>
 where
-    F: std::future::Future<Output = anyhow::Result<bool>>,
+    F: std::future::Future<Output = Option<String>>,
 {
-    let deadline = tokio::time::Instant::now() + timing::WORKSPACE_STOP_TIMEOUT;
+    let deadline = tokio::time::Instant::now() + patience;
     loop {
-        if probe().await? {
-            return Ok(());
+        let issue = probe().await;
+        if issue.is_none() || tokio::time::Instant::now() >= deadline {
+            return issue;
         }
-        anyhow::ensure!(
-            tokio::time::Instant::now() < deadline,
-            "cannot resume an execution whose processes are not proven stopped"
-        );
         tokio::time::sleep(timing::WORKSPACE_STOP_POLL_INTERVAL).await;
     }
 }
@@ -508,29 +531,30 @@ mod process_proof_tests {
     #[tokio::test(start_paused = true)]
     async fn transient_incomplete_visibility_is_rechecked() {
         let attempts = std::sync::atomic::AtomicUsize::new(0);
-        await_process_proof(|| async {
-            Ok(attempts.fetch_add(1, std::sync::atomic::Ordering::Relaxed) == 1)
+        let issue = await_process_proof(timing::WORKSPACE_STOP_TIMEOUT, || async {
+            (attempts.fetch_add(1, std::sync::atomic::Ordering::Relaxed) == 0)
+                .then(|| "unreadable".to_owned())
         })
-        .await
-        .unwrap();
+        .await;
+        assert_eq!(issue, None);
         assert_eq!(attempts.load(std::sync::atomic::Ordering::Relaxed), 2);
     }
 
     #[tokio::test(start_paused = true)]
-    async fn persistent_incomplete_visibility_still_refuses_recovery() {
+    async fn persistent_incomplete_visibility_reports_the_last_issue() {
         let started = tokio::time::Instant::now();
-        let error = await_process_proof(|| async { Ok(false) })
-            .await
-            .unwrap_err();
-        assert!(error.to_string().contains("not proven stopped"));
+        let attempts = std::sync::atomic::AtomicUsize::new(0);
+        let issue = await_process_proof(timing::WORKSPACE_STOP_TIMEOUT, || async {
+            let attempt = attempts.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            Some(format!("attempt {attempt}"))
+        })
+        .await;
         assert_eq!(
             tokio::time::Instant::now() - started,
             timing::WORKSPACE_STOP_TIMEOUT
         );
-        let error = await_process_proof(|| async { anyhow::bail!("inventory failed") })
-            .await
-            .unwrap_err();
-        assert_eq!(error.to_string(), "inventory failed");
+        let attempts = attempts.load(std::sync::atomic::Ordering::Relaxed);
+        assert_eq!(issue, Some(format!("attempt {}", attempts - 1)));
     }
 }
 

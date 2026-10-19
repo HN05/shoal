@@ -360,17 +360,37 @@ async fn tracked_agent_child() {
     if std::env::var_os("SHOAL_TEST_HELPER").is_none() {
         return;
     }
+    run_tracked_agent("trap 'exit 0' TERM; touch started; while :; do sleep 1; done").await;
+}
+
+/// Like `tracked_agent_child`, with a background command in its own process
+/// group, as Claude Code runs shell commands. It writes its PID to `background`
+/// and keeps running in Python: macOS hides platform binaries' environments.
+#[tokio::test]
+#[ignore = "isolated tracked wrapper launched by overload tests"]
+async fn tracked_agent_with_background_child() {
+    if std::env::var_os("SHOAL_TEST_HELPER").is_none() {
+        return;
+    }
+    run_tracked_agent(concat!(
+        "trap 'exit 0' TERM; python3 -c \"",
+        "import os, time; os.setpgid(0, 0); ",
+        "open('background.tmp', 'w').write(str(os.getpid())); ",
+        "os.rename('background.tmp', 'background'); ",
+        "time.sleep(300)\" & ",
+        "touch started; while :; do sleep 1; done"
+    ))
+    .await;
+}
+
+async fn run_tracked_agent(script: &str) {
     let root = std::env::current_dir().unwrap();
     let paths = crate::paths::Paths::for_test(root);
     let id = std::env::var("SHOAL_TEST_WORKSPACE").unwrap();
     let code = crate::execution::run(
         &paths,
         id,
-        vec![
-            "sh".into(),
-            "-c".into(),
-            "trap 'exit 0' TERM; touch started; while :; do sleep 1; done".into(),
-        ],
+        vec!["sh".into(), "-c".into(), script.into()],
         Some("fixture".into()),
     )
     .await
@@ -624,6 +644,74 @@ async fn overload_restores_the_configured_session_and_keeps_waiting_execution_ow
             .iter()
             .any(|event| event.kind == NotificationKind::AgentResumed)
     );
+    serving.abort();
+}
+
+/// Launch an agent with a background command outside its process group and
+/// return that command's identity once both run.
+async fn launch_with_background(
+    manager: &Manager,
+    workspace: &crate::model::Workspace,
+) -> (
+    tokio::task::JoinHandle<Result<i32>>,
+    crate::process::identity::Identity,
+) {
+    let launched = launch_child(
+        manager,
+        workspace,
+        "daemon::overload_tests::tracked_agent_with_background_child",
+    );
+    wait_launched(manager, workspace, "background", 1).await;
+    wait_started(manager, workspace).await;
+    let pid = fs::read_to_string(workspace.path.join("background")).unwrap();
+    let background = crate::process::identity::capture(pid.parse().unwrap())
+        .unwrap()
+        .unwrap();
+    (launched, background)
+}
+
+#[tokio::test]
+async fn overload_stops_commands_outside_the_agent_group_and_restores_it() {
+    let (_root, manager, workspace, serving) = fixture().await;
+    let (launched, background) = launch_with_background(&manager, &workspace).await;
+    assert!(
+        manager
+            .stop_agent_for_overload("test memory pressure")
+            .await
+    );
+    wait_paused(&manager, &workspace).await;
+    assert!(!crate::process::identity::alive(&background).unwrap());
+    publish_recovery(&manager);
+    assert_eq!(bounded(launched).await.unwrap().unwrap(), 0);
+    assert_eq!(
+        fs::read_to_string(workspace.path.join("restored")).unwrap(),
+        "restored"
+    );
+    serving.abort();
+}
+
+#[tokio::test]
+async fn overload_without_recovery_stops_commands_outside_the_agent_group() {
+    let (_root, manager, workspace, serving) = fixture().await;
+    set_recovery(&manager, false).await;
+    let (launched, background) = launch_with_background(&manager, &workspace).await;
+    assert!(
+        manager
+            .stop_agent_for_overload("test memory pressure")
+            .await
+    );
+    bounded(launched).await.unwrap().unwrap();
+    assert!(!crate::process::identity::alive(&background).unwrap());
+    // The execution ended proven, so `shoal resume` can select its record.
+    assert!(
+        manager
+            .inspect_workspace(&workspace.id)
+            .await
+            .unwrap()
+            .executions
+            .is_empty()
+    );
+    assert!(crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
     serving.abort();
 }
 
