@@ -463,6 +463,15 @@ pub fn require_ready(db: &Connection, workspace_id: &str) -> Result<()> {
     Ok(())
 }
 
+/// Whether any workspace of the repository has a tracked execution.
+pub fn repository_has_executions(db: &Connection, repository_id: &str) -> Result<bool> {
+    Ok(db.query_row(
+        "SELECT EXISTS(SELECT 1 FROM executions e JOIN workspaces w ON w.id=e.workspace_id WHERE w.repository_id=?1)",
+        [repository_id],
+        |row| row.get(0),
+    )?)
+}
+
 /// Serialize an optional value for a JSON text column.
 pub fn json_text<T: Serialize>(value: Option<&T>) -> Result<Option<String>> {
     value
