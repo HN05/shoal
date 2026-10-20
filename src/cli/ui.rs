@@ -21,7 +21,7 @@ use crate::{
     },
     execution::recovery,
     forge::link::{self, ItemKind},
-    model::{QueueEntry, Repository, ReviewMark, Workspace},
+    model::{Chat, QueueEntry, Repository, ReviewMark, Workspace},
     paths::Paths,
     removal::{BranchChoice, RemovalCheck},
     state::AgentState,
@@ -632,6 +632,89 @@ pub fn workspace_rows(
         .map(|w| status_cell(w, stopped.contains(&w.id)))
         .collect();
     rows_with_status(workspaces, repositories, statuses, palette)
+}
+
+/// `workspace_rows` for workspaces and the running chats that opened some
+/// of them: the user's own workspaces, then each chat followed by its
+/// workspaces, indented. A chat row names the chat, its status and its agent.
+pub fn workspace_tree_rows(
+    workspaces: &[Workspace],
+    chats: &[Chat],
+    repositories: &[Repository],
+    stopped: &HashSet<String>,
+    palette: Palette,
+) -> Vec<String> {
+    let opened_by = |w: &Workspace, chat: &Chat| w.chat.as_ref() == Some(&chat.id);
+    let mut rows: Vec<_> = workspaces
+        .iter()
+        .filter(|w| !chats.iter().any(|chat| opened_by(w, chat)))
+        .map(|w| tree_workspace_row(w, false, stopped, palette))
+        .collect();
+    for chat in chats {
+        rows.push(chat_row(chat, repositories, palette));
+        rows.extend(
+            workspaces
+                .iter()
+                .filter(|w| opened_by(w, chat))
+                .map(|w| tree_workspace_row(w, true, stopped, palette)),
+        );
+    }
+    let (markers, cells): (Vec<_>, Vec<_>) = rows.into_iter().unzip();
+    markers
+        .into_iter()
+        .zip(aligned(cells, palette))
+        .map(|(marker, row)| format!("{marker} {row}"))
+        .collect()
+}
+
+fn tree_workspace_row(
+    workspace: &Workspace,
+    indented: bool,
+    stopped: &HashSet<String>,
+    palette: Palette,
+) -> (String, [Cell; 4]) {
+    let name = if indented {
+        format!("└ {}", workspace.name)
+    } else {
+        workspace.name.clone()
+    };
+    (
+        palette.workspace_marker(workspace.state),
+        [
+            (name, Some(Style::Heading)),
+            (String::new(), None),
+            status_cell(workspace, stopped.contains(&workspace.id)),
+            (
+                workspace.links.issue_title.clone().unwrap_or_default(),
+                None,
+            ),
+        ],
+    )
+}
+
+fn chat_row(chat: &Chat, repositories: &[Repository], palette: Palette) -> (String, [Cell; 4]) {
+    let status = ListStatus::Running;
+    (
+        palette.paint(Style::Heading, "◆"),
+        [
+            (chat_label(chat, repositories), Some(Style::Heading)),
+            (String::new(), None),
+            (status.label().into(), Some(status.style())),
+            (chat.agent.clone(), None),
+        ],
+    )
+}
+
+/// How lists name a chat: after its repository, numbered after the first.
+pub fn chat_label(chat: &Chat, repositories: &[Repository]) -> String {
+    let repository = repositories
+        .iter()
+        .find(|repo| repo.id == chat.repository_id)
+        .map_or("unknown repository", crate::forge::repository::name);
+    match chat.number {
+        1 => format!("{repository} chat"),
+        number => format!("{repository} chat {number}"),
+    }
 }
 
 /// `workspace_rows` with a status cell per workspace.

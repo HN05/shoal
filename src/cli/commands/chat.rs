@@ -9,9 +9,10 @@ use std::{
 
 use anyhow::{Context as _, Result, ensure};
 
+use super::listing::ListFilter;
 use crate::{
     agent::{Agent, BuiltinAgent},
-    cli::{agents, client, context::Context, terminal, ui},
+    cli::{agents, client, context::Context, output::Palette, terminal, ui},
     config::{Effective, named_commands, templates},
     forge::repository,
     model::{Chat, Repository},
@@ -41,6 +42,40 @@ pub(super) async fn start(
     let command = command(&settings, &repo, agent, args)?;
     let chat = client::start_chat(&ctx.paths, &repo, agent.as_str()).await?;
     run_here(&repo, &chat, &command)
+}
+
+/// `shoal ls --chats`.
+pub(super) async fn list(ctx: &Context, filter: &ListFilter) -> Result<i32> {
+    let chats = listed(ctx, filter).await?;
+    let repositories = repositories(ctx, &chats).await?;
+    let rows = ui::workspace_tree_rows(
+        &[],
+        &chats,
+        &repositories,
+        &Default::default(),
+        Palette::stdout(ctx.json),
+    );
+    ctx.show(&chats, |_| {
+        for row in rows {
+            println!("{row}");
+        }
+    })?;
+    Ok(0)
+}
+
+/// The running chats `filter` keeps.
+pub(super) async fn listed(ctx: &Context, filter: &ListFilter) -> Result<Vec<Chat>> {
+    let mut chats = client::chats(&ctx.paths).await?;
+    chats.retain(|chat| filter.keeps_chat(chat));
+    Ok(chats)
+}
+
+/// The repositories that name `chats` in text rows; JSON output needs none.
+pub(super) async fn repositories(ctx: &Context, chats: &[Chat]) -> Result<Vec<Repository>> {
+    if ctx.json || chats.is_empty() {
+        return Ok(Vec::new());
+    }
+    client::repositories(&ctx.paths).await
 }
 
 /// The named repository, else the current checkout's or workspace's, else a picker.

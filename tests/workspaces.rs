@@ -18306,7 +18306,7 @@ fn workspaces_belong_to_the_chat_that_opened_them() {
     install_test_script(
         home.join("bin/claude"),
         format!(
-            "#!/bin/sh\n'{}' --json add \"$PWD\" chat-worker </dev/null > \"$HOME/chat-add\"\n",
+            "#!/bin/sh\nshoal='{}'\n\"$shoal\" --json add \"$PWD\" chat-worker </dev/null > \"$HOME/chat-add\"\n\"$shoal\" ls > \"$HOME/chat-ls\"\n\"$shoal\" --json ls --chats > \"$HOME/chat-chats\"\n",
             env!("CARGO_BIN_EXE_shoal")
         ),
     );
@@ -18333,6 +18333,39 @@ fn workspaces_belong_to_the_chat_that_opened_them() {
         .find(|event| event["kind"] == "chat_changed")
         .unwrap();
     assert_eq!((&changed["name"], &changed["chat"]), (&added["name"], chat));
+
+    // While it runs, `ls` lists the chat with its workspaces under it.
+    let chats: Value =
+        serde_json::from_str(&fs::read_to_string(home.join("chat-chats")).unwrap()).unwrap();
+    assert_eq!(chats, serde_json::json!([started["chat"]]));
+    let name = fs::canonicalize(&fixture.repo).unwrap();
+    let name = name.file_name().unwrap().to_str().unwrap();
+    let rows = fs::read_to_string(home.join("chat-ls")).unwrap();
+    let rows: Vec<Vec<&str>> = rows
+        .lines()
+        .map(|row| {
+            row.split("  ")
+                .map(str::trim)
+                .filter(|cell| !cell.is_empty())
+                .collect()
+        })
+        .collect();
+    assert_eq!(
+        rows,
+        [
+            vec![format!("◆ {name} chat").as_str(), "running", "claude"],
+            vec!["● └ chat-worker", "idle"],
+        ]
+    );
+
+    // Once its agent exits the chat ends, and its workspace returns to the user.
+    assert_eq!(fixture.ok(&["ls", "--chats"]), serde_json::json!([]));
+    assert_eq!(fixture.ok(&["ls"])[0]["chat"], Value::Null);
+    let ended = journal(&fixture)
+        .into_iter()
+        .find(|event| event["kind"] == "chat_ended")
+        .unwrap();
+    assert_eq!(ended["chat"], started["chat"]);
 
     // Opening it outside a chat gives it back to the user.
     let reopened = fixture.ok(&[

@@ -1,9 +1,9 @@
-//! Which workspaces and queued agents `shoal ls` lists.
+//! Which workspaces, chats and queued agents `shoal ls` lists.
 use anyhow::Result;
 
 use crate::{
     cli::{client, context::Context, list_status::ListStatus, ui},
-    model::{QueueEntry, Workspace},
+    model::{Chat, QueueEntry, Workspace},
 };
 
 /// The `shoal ls` filters, with the repository resolved to its ID. No
@@ -47,6 +47,11 @@ impl ListFilter {
     pub(super) fn keeps_entry(&self, entry: &QueueEntry) -> bool {
         self.keeps_repository(&entry.repository_id)
             && self.keeps_status(ListStatus::of_entry(entry))
+    }
+
+    /// A chat's status is `running`.
+    pub(super) fn keeps_chat(&self, chat: &Chat) -> bool {
+        self.keeps_repository(&chat.repository_id) && self.keeps_status(ListStatus::Running)
     }
 
     fn keeps_repository(&self, repository_id: &str) -> bool {

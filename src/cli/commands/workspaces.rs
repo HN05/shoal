@@ -1231,6 +1231,8 @@ pub(super) async fn list(
     if queue {
         return super::agent_queue::list(ctx, filter).await;
     }
+    // Listing chats first ends finished ones, returning their workspaces to the user.
+    let chats = super::chat::listed(ctx, filter).await?;
     let mut workspaces = client::workspaces(&ctx.paths).await?;
     let stopped = ui::stopped_workspaces(&ctx.paths, &workspaces);
     workspaces
@@ -1250,7 +1252,14 @@ pub(super) async fn list(
         };
         ui::review_rows(&workspaces, &repositories, Palette::stdout(ctx.json))
     } else {
-        ui::workspace_rows(&workspaces, &[], &stopped, Palette::stdout(ctx.json))
+        let repositories = super::chat::repositories(ctx, &chats).await?;
+        ui::workspace_tree_rows(
+            &workspaces,
+            &chats,
+            &repositories,
+            &stopped,
+            Palette::stdout(ctx.json),
+        )
     };
     ctx.show(&workspaces, |_| {
         for row in rows.into_iter().chain(queued) {

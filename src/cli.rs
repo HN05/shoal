@@ -323,15 +323,18 @@ pub enum Command {
     /// List workspaces and queued agents.
     Ls {
         /// List ready-for-review PRs, issues and workspaces instead.
-        #[arg(long, conflicts_with = "queue")]
+        #[arg(long, conflicts_with_all = ["queue", "chats"])]
         ready: bool,
         /// List only the agents waiting for a slot under max_agents.
-        #[arg(long)]
+        #[arg(long, conflicts_with = "chats")]
         queue: bool,
-        /// List only this registered repository's workspaces and agents.
+        /// List only the running chats.
+        #[arg(long)]
+        chats: bool,
+        /// List only this registered repository's workspaces, chats and agents.
         #[arg(long = "repo")]
         repository: Option<String>,
-        /// List only workspaces and agents with this status; repeat or separate with commas.
+        /// List only workspaces, chats and agents with this status; repeat or separate with commas.
         #[arg(long, value_delimiter = ',', conflicts_with = "ready")]
         status: Vec<list_status::ListStatus>,
     },

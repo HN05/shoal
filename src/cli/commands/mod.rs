@@ -320,10 +320,14 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         Command::Ls {
             ready,
             queue,
+            chats,
             repository,
             status,
         } => {
             let filter = listing::ListFilter::resolve(&ctx, repository, status).await?;
+            if chats {
+                return chat::list(&ctx, &filter).await;
+            }
             workspaces::list(&ctx, ready, queue, &filter).await
         }
         Command::Hold { command, scope } => holds::run(&ctx, command, scope).await,

@@ -367,10 +367,14 @@ state unless ready; for a ready workspace it is, in order of precedence,
 `stopped` when `shoal stop` saved agents or commands for `shoal resume`,
 `waiting for input`, `ready for review`, the other [agent states](#agent-state),
 `running` while an agent or command runs, `ready for review (outdated)`, or `idle`. Branches and paths are in `shoal status`.
-`ls --repo <repository>`, with or without `--ready` or `--queue`, lists only that
-registered repository's workspaces and queued agents. `ls --status <status>`,
+`shoal ls` lists your own workspaces first, then each running [chat](#chats)
+marked ◆ with its agent, followed by the workspaces it opened; `ls --chats`
+lists only the chats. `ls --repo <repository>`, with or without `--ready`,
+`--queue` or `--chats`, lists only that registered repository's workspaces,
+chats and queued agents. `ls --status <status>`,
 repeated or comma-separated, lists only rows with one of those statuses, spelled
-in kebab case (`waiting-for-input`, `ready-for-review-outdated`, `queued`).
+in kebab case (`waiting-for-input`, `ready-for-review-outdated`, `queued`);
+a chat's status is `running`.
 Enter enters the selection; Ctrl-D deletes, Ctrl-E
 runs Claude/Codex CLI, starts a Happy session, opens Codex/T3 apps, or runs a shell command, Ctrl-A adds,
 Ctrl-O inspects, Ctrl-S stops, Ctrl-F shows the diff. Each action returns to your
@@ -683,8 +687,9 @@ inside a zmx session or a Herdr pane it runs in place. Chats run with your
 authority, not a workspace scope, and workspace processes cannot start one.
 Chats are not tracked executions, so they are never queued, stopped under
 pressure or resumed. The daemon records each chat while its agent process runs,
-numbering a repository's running chats from 1, and
-[workspace events](#workspace-events) report its start and end. A workspace
+numbering a repository's running chats from 1; `shoal ls` lists it with the
+workspaces it opened, and [workspace events](#workspace-events) report its
+start and end. A workspace
 belongs to the chat whose agent last opened it with `shoal add`: its `chat`
 field names that chat until the chat ends or the workspace is opened outside a
 chat, which returns it to you.

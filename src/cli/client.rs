@@ -206,6 +206,11 @@ pub async fn start_chat(paths: &Paths, repository: &Repository, agent: &str) -> 
     .await
 }
 
+/// Running chats; listing them ends those whose agent exited.
+pub async fn chats(paths: &Paths) -> Result<Vec<Chat>> {
+    request(paths, Method::ListChats).await
+}
+
 pub async fn repositories(paths: &Paths) -> Result<Vec<Repository>> {
     request(paths, Method::ListRepositories).await
 }
