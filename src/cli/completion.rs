@@ -55,6 +55,8 @@ enum Target {
     Commands,
     Repositories,
     Workspaces,
+    /// Workspaces with work saved for `shoal resume`.
+    StoppedWorkspaces,
     Pools,
     Members,
     ResourceNames,
@@ -175,6 +177,7 @@ fn decorate(command: Command, parent: &str, typed: Arc<Typed>) -> Command {
                 ("id", "approvals", "approve" | "deny") => Some(Target::ApprovalRequests),
                 ("name", _, "run") => Some(Target::Commands),
                 ("repository" | "repository_override", _, _) => Some(Target::Repositories),
+                ("workspace", _, "resume") => Some(Target::StoppedWorkspaces),
                 ("workspace", _, _) => Some(Target::Workspaces),
                 ("pool", "resource", _) => Some(Target::Pools),
                 ("resource", "resource", _) => Some(Target::Members),
@@ -193,7 +196,9 @@ fn decorate(command: Command, parent: &str, typed: Arc<Typed>) -> Command {
             };
             if let Some(target) = target {
                 let typed = typed.clone();
-                let offer_all = offer_all && !typed.all && matches!(target, Target::Workspaces);
+                let offer_all = offer_all
+                    && !typed.all
+                    && matches!(target, Target::Workspaces | Target::StoppedWorkspaces);
                 arg.add(ArgValueCompleter::new(move |current: &OsStr| {
                     let mut values = typed.complete(target, current);
                     if offer_all && "--all".starts_with(current.to_string_lossy().as_ref()) {
@@ -404,9 +409,16 @@ impl Typed {
                 .collect());
         }
         let workspaces = client::workspaces(&paths).await?;
-        if matches!(target, Target::Workspaces) {
+        if matches!(target, Target::Workspaces | Target::StoppedWorkspaces) {
+            let stopped = matches!(target, Target::StoppedWorkspaces)
+                .then(|| ui::stopped_workspaces(&paths, &workspaces));
             return Ok(workspaces
                 .into_iter()
+                .filter(|w| {
+                    stopped
+                        .as_ref()
+                        .is_none_or(|stopped| stopped.contains(&w.id))
+                })
                 .map(|w| CompletionCandidate::new(w.name))
                 .collect());
         }
@@ -458,6 +470,7 @@ impl Typed {
             Target::Commands
             | Target::Repositories
             | Target::Workspaces
+            | Target::StoppedWorkspaces
             | Target::ApprovalRequests => unreachable!(),
         }
         Ok(names.into_iter().map(CompletionCandidate::new).collect())

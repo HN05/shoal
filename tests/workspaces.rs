@@ -216,6 +216,17 @@ impl Fixture {
         (output, fs::read_to_string(&rows).unwrap_or_default())
     }
 
+    /// Save an interrupted command for `shoal resume`, as `shoal stop` does.
+    fn save_stopped_command(&self, workspace: &Value) {
+        let state = self
+            .root
+            .path()
+            .join("state/workspaces")
+            .join(workspace["id"].as_str().unwrap());
+        fs::create_dir_all(&state).unwrap();
+        fs::write(state.join("saved.command.json"), r#"{"argv":["true"]}"#).unwrap();
+    }
+
     /// Interactive commands open pickers for whatever agents and fzf they find,
     /// so they see only the fixture's `bin`, the runner's Git and Worktrunk, and
     /// system directories.
@@ -961,10 +972,19 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
             .all(|(i, _)| i > target)
     );
     // `--all` comes once, before a scope's workspaces, until it is typed.
-    let choices = complete(&["resume", ""], fixture.root.path());
+    let choices = complete(&["stop", ""], fixture.root.path());
     assert_eq!(choices[0], "--all", "{choices:?}");
     assert!(choices.contains(&"first".into()), "{choices:?}");
     assert_eq!(choices.iter().filter(|v| *v == "--all").count(), 1);
+    // Resume completes only workspaces with stopped work.
+    let resumable = || {
+        let mut choices = complete(&["resume", ""], fixture.root.path());
+        choices.retain(|v| !v.starts_with('-'));
+        choices
+    };
+    assert!(resumable().is_empty());
+    fixture.save_stopped_command(&first);
+    assert_eq!(resumable(), ["first"]);
     assert!(!complete(&["stop", "--all", ""], fixture.root.path()).contains(&"--all".into()));
     let cwd = Path::new(first["path"].as_str().unwrap());
     fs::write(cwd.join(".shoal.toml"), "[commands]\nreview = ['tuicr']\n").unwrap();
@@ -6934,12 +6954,49 @@ head -n 1 "$HOME/picker-input"
 fn workspace_pickers_offer_all_workspaces_after_the_workspaces() {
     let fixture = Fixture::new();
     fixture.add("first");
-    let (output, rows) = fixture.pick(&["resume"], "--all", "");
+    let (output, rows) = fixture.pick(&["stop"], "--all", "");
     assert!(output.status.success(), "{output:?}");
     assert!(rows.contains("first"), "{rows}");
     assert_eq!(rows.lines().last(), Some("--all\tAll workspaces"), "{rows}");
     assert!(
+        String::from_utf8_lossy(&output.stdout).contains("No running agents or commands"),
+        "{output:?}"
+    );
+}
+
+#[test]
+fn resume_picks_only_among_workspaces_with_stopped_work() {
+    let fixture = Fixture::new();
+    let first = fixture.add("first");
+    let second = fixture.add("second");
+    fixture.add("idle");
+    // Nothing to resume: no picker.
+    let (output, rows) = fixture.pick(&["resume"], "--all", "");
+    assert!(output.status.success(), "{output:?}");
+    assert!(rows.is_empty(), "{rows}");
+    assert!(
         String::from_utf8_lossy(&output.stdout).contains("No stopped agents or commands"),
+        "{output:?}"
+    );
+    // One workspace with stopped work is resumed without asking.
+    fixture.save_stopped_command(&first);
+    let (output, rows) = fixture.pick(&["resume"], "--all", "");
+    assert!(output.status.success(), "{output:?}");
+    assert!(rows.is_empty(), "{rows}");
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("Stopped commands in first"),
+        "{output:?}"
+    );
+    // Several are offered alone, before the entry for all.
+    fixture.save_stopped_command(&first);
+    fixture.save_stopped_command(&second);
+    let (output, rows) = fixture.pick(&["resume"], second["id"].as_str().unwrap(), "");
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(rows.lines().count(), 3, "{rows}");
+    assert!(rows.contains("first") && rows.contains("second"), "{rows}");
+    assert_eq!(rows.lines().last(), Some("--all\tAll workspaces"), "{rows}");
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("Stopped commands in second"),
         "{output:?}"
     );
 }

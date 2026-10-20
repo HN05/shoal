@@ -457,13 +457,39 @@ pub async fn select_workspace_filter(
     }
     match resolve_workspace(ctx, scope.workspace, Fallback::CurrentDirectory).await? {
         Resolution::Workspace(id) => Ok(Some(id)),
-        Resolution::Picker(workspaces) => {
-            let mut entries = workspace_entries(ctx, workspaces);
-            entries.push((ALL_ID.to_owned(), ALL_WORKSPACES.to_owned()));
-            let id = pick(ctx, "Workspace> ", entries)?;
-            Ok((id != ALL_ID).then_some(id))
+        Resolution::Picker(workspaces) => pick_workspace_or_all(ctx, workspaces),
+    }
+}
+
+/// Like `select_workspace_filter`, but the picker offers only workspaces with
+/// work saved for `shoal resume`; with none it selects all, and with one that
+/// workspace, without asking.
+pub async fn select_stopped_workspace(
+    ctx: &Context,
+    scope: WorkspaceScope,
+) -> Result<Option<String>> {
+    if scope.all {
+        return Ok(None);
+    }
+    match resolve_workspace(ctx, scope.workspace, Fallback::CurrentDirectory).await? {
+        Resolution::Workspace(id) => Ok(Some(id)),
+        Resolution::Picker(mut workspaces) => {
+            let stopped = stopped_workspaces(&ctx.paths, &workspaces);
+            workspaces.retain(|w| stopped.contains(&w.id));
+            match workspaces.as_slice() {
+                [] => Ok(None),
+                [workspace] => Ok(Some(workspace.id.clone())),
+                _ => pick_workspace_or_all(ctx, workspaces),
+            }
         }
     }
+}
+
+fn pick_workspace_or_all(ctx: &Context, workspaces: Vec<Workspace>) -> Result<Option<String>> {
+    let mut entries = workspace_entries(ctx, workspaces);
+    entries.push((ALL_ID.to_owned(), ALL_WORKSPACES.to_owned()));
+    let id = pick(ctx, "Workspace> ", entries)?;
+    Ok((id != ALL_ID).then_some(id))
 }
 
 /// How pickers and completion name `--all`.

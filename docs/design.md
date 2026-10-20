@@ -481,7 +481,9 @@ workspace or the workspace containing the current directory, then an interactive
 picker; a deleted current directory provides no workspace context. Explicit misses
 fail without fallback; noninteractive and JSON calls
 without a current workspace require a target. Scope remains daemon-enforced.
-Bare `cd` always picks; all-workspace operations retain their scope. Shell
+Bare `cd` always picks; all-workspace operations retain their scope.
+`resume` picks and completes only among workspaces with stopped work: with none
+it reports that, and with one it resumes that workspace without a picker. Shell
 navigation refreshes the Zsh line-editor prompt after changing directories,
 while Bash uses its prompt command hooks.
 An omitted required argument that names an existing record opens a picker on a

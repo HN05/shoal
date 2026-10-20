@@ -11,8 +11,8 @@ use anyhow::{Context as _, Result, ensure};
 use serde_json::json;
 use std::ffi::OsString;
 
-/// `shoal resume`: the selected workspace, or every one for `--all` or the
-/// picker's entry for all.
+/// `shoal resume`: the selected workspace, or every one for `--all`, the
+/// picker's entry for all, or no stopped work to pick from.
 pub async fn select(
     ctx: &Context,
     scope: WorkspaceScope,
@@ -23,7 +23,7 @@ pub async fn select(
         !crate::env::inherits_scope(&ctx.paths.state),
         "resume agents outside scoped executions"
     );
-    match ui::select_workspace_filter(ctx, scope).await? {
+    match ui::select_stopped_workspace(ctx, scope).await? {
         None => run_all(ctx, discard).await,
         Some(workspace) => run(ctx, workspace, execution, discard).await,
     }
