@@ -305,13 +305,18 @@ async fn interrupt_while_protected(interruption: Interruption, stop: impl AsyncF
     assert!(crate::execution::recovery::pending(&reopened.paths, &workspace.id).unwrap());
     assert!(!crate::execution::recovery::any_pending(&reopened.paths));
     let serving = serve_fixture(reopened.clone());
+    // Reattachment restores the protection stop after recording the execution
+    // as running.
     bounded(async {
-        while executions(&reopened, &workspace).await[0].state != ExecutionState::Running {
+        while !reopened.agent_was_overloaded(&id).await {
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
     })
     .await;
-    assert!(reopened.agent_was_overloaded(&id).await);
+    assert_eq!(
+        executions(&reopened, &workspace).await[0].state,
+        ExecutionState::Running
+    );
     assert!(!launched.is_finished());
     assert!(!workspace.path.join("restored").exists());
     publish_recovery(&reopened);
