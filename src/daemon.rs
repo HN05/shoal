@@ -136,42 +136,30 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
     };
     log!("shoal daemon listening on {}", paths.socket.display());
     let mut background = JoinSet::new();
-    background.spawn(supervise("auto cleanup", {
-        let manager = manager.clone();
-        move || cleanup::run(manager.clone())
-    }));
-    background.spawn(supervise("restart reconciliation", {
-        let manager = manager.clone();
-        move || restart_recovery::run(manager.clone())
-    }));
-    background.spawn(supervise("overload monitor", {
-        let manager = manager.clone();
-        move || overload::run(manager.clone())
-    }));
-    background.spawn(supervise("disk monitor", {
-        let manager = manager.clone();
-        move || disk::run(manager.clone())
-    }));
-    background.spawn(supervise("CPU usage", {
-        let manager = manager.clone();
-        move || cpu_usage::run(manager.clone())
-    }));
-    background.spawn(supervise("agent queue", {
-        let manager = manager.clone();
-        move || agent_queue::run(manager.clone())
-    }));
-    background.spawn(supervise("simulator cleanup", {
-        let manager = manager.clone();
-        move || expire_simulators(manager.clone())
-    }));
-    background.spawn(supervise("seed builds", {
-        let manager = manager.clone();
-        move || seed::run(manager.clone())
-    }));
-    background.spawn(supervise("item activity", {
-        let manager = manager.clone();
-        move || poll_item_activity(manager.clone())
-    }));
+    spawn_supervised(&mut background, &manager, "auto cleanup", cleanup::run);
+    spawn_supervised(
+        &mut background,
+        &manager,
+        "restart reconciliation",
+        restart_recovery::run,
+    );
+    spawn_supervised(&mut background, &manager, "overload monitor", overload::run);
+    spawn_supervised(&mut background, &manager, "disk monitor", disk::run);
+    spawn_supervised(&mut background, &manager, "CPU usage", cpu_usage::run);
+    spawn_supervised(&mut background, &manager, "agent queue", agent_queue::run);
+    spawn_supervised(
+        &mut background,
+        &manager,
+        "simulator cleanup",
+        expire_simulators,
+    );
+    spawn_supervised(&mut background, &manager, "seed builds", seed::run);
+    spawn_supervised(
+        &mut background,
+        &manager,
+        "item activity",
+        poll_item_activity,
+    );
     let mut clients = JoinSet::new();
     let mut quiescence = None;
     let result = loop {
@@ -233,6 +221,20 @@ fn remove_stale_socket(paths: &Paths) -> Result<()> {
         Err(e) => return Err(e.into()),
     }
     Ok(())
+}
+
+/// Register a manager-owned loop with panic supervision.
+fn spawn_supervised<F, Fut>(
+    background: &mut JoinSet<()>,
+    manager: &Arc<Manager>,
+    name: &'static str,
+    task: F,
+) where
+    F: Fn(Arc<Manager>) -> Fut + Send + 'static,
+    Fut: Future<Output = ()> + Send + 'static,
+{
+    let manager = manager.clone();
+    background.spawn(supervise(name, move || task(manager.clone())));
 }
 
 /// Run a background loop again after it panics, so one failure cannot stop it
