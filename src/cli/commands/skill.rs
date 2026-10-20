@@ -88,37 +88,36 @@ pub(super) fn run(
     } else {
         Changed::Keep
     };
+    // Tools that share a directory share one installation, reported once.
+    let mut agents: BTreeMap<PathBuf, Vec<String>> = BTreeMap::new();
+    for (agent, directory) in destinations {
+        agents.entry(directory).or_default().push(agent);
+    }
     let mut installed = Vec::new();
     let mut kept = Vec::new();
-    // Tools that share a directory share one installation.
-    let mut outcomes = BTreeMap::new();
-    for (agent, directory) in destinations {
-        if !outcomes.contains_key(&directory) {
-            let outcome = refresh(&directory, &skills, Mode::Install(changed))?;
-            outcomes.insert(directory.clone(), outcome);
-        }
-        let outcome = &outcomes[&directory];
+    for (directory, agents) in &agents {
+        let outcome = refresh(directory, &skills, Mode::Install(changed))?;
         for name in &outcome.installed {
-            let path = skill_file(&directory, name);
+            let path = skill_file(directory, name);
             if !json_output {
-                println!("Installed {agent} skill {name} at {}", path.display());
+                println!("Installed skill {name} at {}", path.display());
             }
-            installed.push(json!({"agent": agent, "skill": name, "path": path}));
+            installed.push(json!({"agents": agents, "skill": name, "path": path}));
         }
         for name in &outcome.kept {
-            let path = skill_file(&directory, name);
+            let path = skill_file(directory, name);
             if !json_output {
                 println!(
-                    "Kept modified {agent} skill {name} at {}; use --force to replace it",
+                    "Kept modified skill {name} at {}; use --force to replace it",
                     path.display()
                 );
             }
-            kept.push(json!({"agent": agent, "skill": name, "path": path}));
+            kept.push(json!({"agents": agents, "skill": name, "path": path}));
         }
     }
     if json_output {
         println!("{}", json!({"installed": installed, "kept": kept}));
-    } else if outcomes.is_empty() {
+    } else if agents.is_empty() {
         println!("No skill directories found; run `shoal skill install <tool>` to create one");
     }
     Ok(0)

@@ -7,6 +7,8 @@ use std::{
     process::{Command, Output},
 };
 
+use serde_json::json;
+
 fn cli(home: &Path) -> Command {
     let mut command = support::cli(home);
     command
@@ -225,23 +227,36 @@ fn skill_export_and_default_install_work_without_daemon_or_repository() {
     ))
     .unwrap();
     let entries = installed["installed"].as_array().unwrap();
-    // opencode and pi share Codex's directory; Grok's does not exist.
-    assert_eq!(entries.len(), 8);
-    for (agent, relative) in [
-        ("codex", ".agents/skills"),
-        ("opencode", ".agents/skills"),
-        ("pi", ".agents/skills"),
-        ("claude", ".claude/skills"),
+    // opencode and pi share Codex's directory, reported once; Grok's does not
+    // exist.
+    assert_eq!(entries.len(), 4);
+    for (agents, relative) in [
+        (&["codex", "opencode", "pi"][..], ".agents/skills"),
+        (&["claude"], ".claude/skills"),
     ] {
         let directory = home.path().join(relative);
         assert_installed(&directory);
         for (name, _) in SKILLS {
             let path = directory.join(name).join("SKILL.md");
-            assert!(entries.iter().any(|entry| entry["agent"] == agent
+            assert!(entries.iter().any(|entry| entry["agents"] == json!(agents)
                 && entry["skill"] == name
                 && entry["path"] == path.to_str().unwrap()));
         }
     }
+    // Text output names each file once and no tool.
+    let output = String::from_utf8(success(
+        cli(home.path())
+            .args(["skill", "install", "--force"])
+            .output()
+            .unwrap(),
+    ))
+    .unwrap();
+    assert_eq!(output.lines().count(), 4);
+    assert!(
+        output
+            .lines()
+            .all(|line| line.starts_with("Installed skill "))
+    );
     assert!(!retired.exists());
     assert_eq!(fs::read_dir(home.path()).unwrap().count(), 2);
 }
@@ -276,7 +291,9 @@ fn skill_install_refreshes_only_selected_tool_and_preserves_siblings() {
             .args(["skill", "install", "codex"])
             .output()
             .unwrap();
-        assert!(String::from_utf8_lossy(&success(output)).contains("Kept modified codex skill"));
+        assert!(
+            String::from_utf8_lossy(&success(output)).contains("Kept modified skill shoal-worker")
+        );
         assert_eq!(
             fs::read_to_string(directory.join("SKILL.md")).unwrap(),
             "edited skill\n"
@@ -402,7 +419,7 @@ fn configured_ai_tools_install_selected_or_all_skills_and_override_defaults() {
     };
     let installed: serde_json::Value = serde_json::from_slice(&success(run("pi"))).unwrap();
     assert_eq!(installed["installed"].as_array().unwrap().len(), 2);
-    assert_eq!(installed["installed"][0]["agent"], "pi");
+    assert_eq!(installed["installed"][0]["agents"], json!(["pi"]));
     assert!(!home.path().join("custom codex").exists());
     fs::create_dir(home.path().join("custom codex")).unwrap();
     let installed: serde_json::Value = serde_json::from_slice(&success(run("all"))).unwrap();
