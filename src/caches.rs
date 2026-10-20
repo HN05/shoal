@@ -111,12 +111,11 @@ impl Layout {
     }
 
     /// Delete the caches [`Self::move_aside`] moved, including any an
-    /// interrupted pass left behind.
+    /// interrupted pass left behind; a directory Shoal did not create stays.
     pub fn purge(&self) -> Result<()> {
-        if self.root.symlink_metadata().is_err() {
+        if !is_marked_dir(&self.root, &self.owner) {
             return Ok(());
         }
-        self.ensure_owned()?;
         remove_dir(&self.root.join(TRASH))
     }
 

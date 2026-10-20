@@ -38,6 +38,11 @@ impl Manager {
         let Some(layout) = Layout::of(repo) else {
             return Ok(None);
         };
+        if !dry_run {
+            // An interrupted pass may have left emptied caches behind.
+            let purging = layout.clone();
+            tokio::task::spawn_blocking(move || purging.purge()).await??;
+        }
         let caches = layout.list()?;
         if caches.is_empty() {
             return Ok(None);
@@ -156,6 +161,15 @@ mod tests {
         );
         assert!(!go.exists());
         assert_eq!(manager.empty_caches(&repo, false).await.unwrap(), None);
+
+        // A pass interrupted before purging leaves nothing behind for long.
+        let layout = Layout::of(&repo).unwrap();
+        crate::caches::directories(&repo, &configured).unwrap();
+        assert_eq!(layout.move_aside().unwrap(), ["go"]);
+        let trash = layout.root().join("trash");
+        assert!(trash.is_dir());
+        assert_eq!(manager.empty_caches(&repo, false).await.unwrap(), None);
+        assert!(!trash.exists());
     }
 
     #[tokio::test]
