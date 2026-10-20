@@ -18,10 +18,18 @@ fn limits(global: Option<u32>, repositories: &[(&str, Option<u32>)]) -> Limits {
     }
 }
 
-fn waiting(entries: &[(&str, &str)]) -> Vec<(String, String)> {
+fn waiting(entries: &[(&str, &str)]) -> Vec<Waiting> {
     entries
         .iter()
-        .map(|(id, repository)| (id.to_string(), repository.to_string()))
+        .map(|(id, repository)| Waiting {
+            id: id.to_string(),
+            repository: repository.to_string(),
+            work: if id.starts_with('r') {
+                Work::Restore { waiting: true }
+            } else {
+                Work::Launch
+            },
+        })
         .collect()
 }
 
@@ -30,23 +38,87 @@ fn admission_fills_free_slots_in_order_and_passes_over_full_repositories() {
     let queue = waiting(&[("a1", "a"), ("a2", "a"), ("b1", "b"), ("b2", "b")]);
     // Repository a may run one agent and already does; b has no limit of its own.
     let limits = limits(Some(3), &[("a", Some(1)), ("b", None)]);
-    assert_eq!(admit(&["a".into()], &queue, &limits), ["b1", "b2"]);
+    assert_eq!(admit(&["a".into()], &queue, &limits, false), ["b1", "b2"]);
     // A full machine admits nothing, whatever the repositories allow.
-    assert!(admit(&vec!["b".to_owned(); 3], &queue, &limits).is_empty());
+    assert!(admit(&vec!["b".to_owned(); 3], &queue, &limits, false).is_empty());
     // Without any limit every entry starts.
-    assert_eq!(admit(&[], &queue, &Limits::default()).len(), 4);
+    assert_eq!(admit(&[], &queue, &Limits::default(), false).len(), 4);
     // Low disk holds the machine below its fixed limit.
     let low_disk = Limits {
         disk: Some(2),
         ..limits
     };
-    assert_eq!(admit(&["a".into()], &queue, &low_disk), ["b1"]);
+    assert_eq!(admit(&["a".into()], &queue, &low_disk, false), ["b1"]);
     // Measured load starts as many as it allows, whatever the slots in use.
     let dynamic = Limits {
         starts: Some(1),
         ..Limits::default()
     };
-    assert_eq!(admit(&vec!["b".to_owned(); 9], &queue, &dynamic), ["a1"]);
+    assert_eq!(
+        admit(&vec!["b".to_owned(); 9], &queue, &dynamic, false),
+        ["a1"]
+    );
+}
+
+#[test]
+fn restores_take_back_their_own_slot_under_fixed_limits() {
+    // Restores are named r…; each one's stopped agent holds a slot in `occupied`.
+    let queue = waiting(&[("a1", "a"), ("ra", "a"), ("b1", "b")]);
+    let occupied = |repositories: &[&str]| -> Vec<String> {
+        repositories.iter().map(|id| id.to_string()).collect()
+    };
+    // The machine is full: the launch waits and the restore takes its slot back.
+    let full = limits(Some(3), &[("a", Some(2))]);
+    assert_eq!(
+        admit(&occupied(&["a", "a", "b"]), &queue, &full, true),
+        ["ra"]
+    );
+    // A lowered machine limit holds the restore until running agents leave.
+    let lowered = limits(Some(2), &[]);
+    assert!(admit(&occupied(&["a", "b", "b"]), &queue, &lowered, true).is_empty());
+    assert_eq!(
+        admit(&occupied(&["a", "b"]), &queue, &lowered, true),
+        ["ra"]
+    );
+    // So does a lowered repository limit, which holds back only its own entries.
+    let lowered = limits(Some(4), &[("a", Some(1))]);
+    assert_eq!(
+        admit(&occupied(&["a", "a"]), &queue, &lowered, true),
+        ["b1"]
+    );
+    // Low disk holds the slots in use, which a restore already has.
+    let low_disk = Limits {
+        disk: Some(3),
+        ..Limits::default()
+    };
+    assert_eq!(
+        admit(&occupied(&["a", "a", "b"]), &queue, &low_disk, true),
+        ["ra"]
+    );
+}
+
+#[test]
+fn restores_wait_for_healthy_readings_and_hold_back_later_entries() {
+    let mut queue = waiting(&[("a1", "a"), ("ra", "a"), ("rb", "b"), ("b1", "b")]);
+    let occupied = vec!["a".to_owned(), "b".to_owned()];
+    let unlimited = Limits::default();
+    // Without healthy readings only the launch ahead of the restores starts.
+    assert_eq!(admit(&occupied, &queue, &unlimited, false), ["a1"]);
+    // Each healthy interval restores one agent; the rest keep their place.
+    assert_eq!(admit(&occupied, &queue, &unlimited, true), ["a1", "ra"]);
+    // A restore whose agent is not waiting yet is passed over.
+    queue[1].work = Work::Restore { waiting: false };
+    assert_eq!(
+        admit(&occupied, &queue, &unlimited, true),
+        ["a1", "rb", "b1"]
+    );
+    // Dynamic admission measures room for a restored agent's load too.
+    let starts = |starts| Limits {
+        starts: Some(starts),
+        ..Limits::default()
+    };
+    assert_eq!(admit(&occupied, &queue[1..], &starts(1), true), ["rb"]);
+    assert!(admit(&occupied, &queue[1..], &starts(0), true).is_empty());
 }
 
 async fn register(manager: &Manager, temp: &tempfile::TempDir, name: &str) -> Repository {
@@ -419,4 +491,306 @@ async fn protection_stopped_agents_keep_their_slot_without_load() {
         activities(manager.occupied_slots().await.unwrap()),
         [Activity::Stopped]
     );
+}
+
+/// A hang guard, not a deadline: the awaited step is already admitted.
+async fn bounded<T>(future: impl std::future::Future<Output = T>) -> T {
+    tokio::time::timeout(Duration::from_secs(60), future)
+        .await
+        .expect("queue step hung")
+}
+
+async fn create(manager: &Manager, repository: &Repository, name: &str) -> crate::model::Workspace {
+    manager
+        .create_workspace(&repository.id, name.into(), None, None, None)
+        .await
+        .unwrap()
+}
+
+/// Agents connected in `workspaces`, each stopped by memory protection with
+/// its restore queued in order.
+async fn stopped_agents(
+    manager: &Manager,
+    workspaces: &[&crate::model::Workspace],
+) -> Vec<(String, tokio::sync::watch::Receiver<bool>)> {
+    let mut agents = Vec::new();
+    for workspace in workspaces {
+        agents.push(connected_agent(manager, workspace).await);
+    }
+    for (id, _) in &agents {
+        assert!(
+            manager
+                .stop_agent_for_overload("critical memory pressure")
+                .await
+        );
+        manager.queue_agent_restore(id).await.unwrap();
+    }
+    agents
+}
+
+/// The restore of `execution` waiting for admission, once its waiter counts.
+async fn await_restore(
+    manager: &std::sync::Arc<Manager>,
+    execution: &str,
+) -> tokio::task::JoinHandle<Result<()>> {
+    let waiting = {
+        let (manager, execution) = (manager.clone(), execution.to_owned());
+        tokio::spawn(async move { manager.await_restore_admission(&execution).await })
+    };
+    bounded(async {
+        while !manager.restore_waiters.lock().unwrap().contains(execution) {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await;
+    waiting
+}
+
+fn publish_recovery(manager: &Manager) {
+    let epoch = manager
+        .recovery_epoch
+        .load(std::sync::atomic::Ordering::Relaxed);
+    manager.recovery_ready.send_replace(Some(epoch));
+}
+
+/// Each entry's name, kind and state in queue order.
+async fn queue(manager: &Manager) -> Vec<(String, QueueKind, QueueState)> {
+    manager
+        .queue_entries()
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|entry| (entry.name, entry.kind, entry.state))
+        .collect()
+}
+
+/// Forget a stopped agent as `shoal resume --discard` does once its wrapper ended.
+async fn discard(manager: &Manager, workspace: &crate::model::Workspace, execution: &str) {
+    manager
+        .finish_execution(
+            execution.to_owned(),
+            crate::daemon::workspace::ExecutionKind::Command,
+            Some(0),
+        )
+        .await
+        .unwrap();
+    std::fs::remove_file(crate::execution::recovery::record_path(
+        &manager.paths,
+        &workspace.id,
+        execution,
+    ))
+    .unwrap();
+}
+
+use QueueKind::{Launch, Restore};
+use QueueState::{Queued, Starting};
+
+#[tokio::test]
+async fn stopped_agents_restore_in_queue_order_before_later_launches() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 2);
+    let (first, second) = (
+        create(&manager, &repo, "first").await,
+        create(&manager, &repo, "second").await,
+    );
+    let agents = stopped_agents(&manager, &[&first, &second]).await;
+    let launch = add(&manager, &repo, "later").await;
+    assert!(!launch.start);
+    let launch = launch.entry.unwrap();
+    let restoring = [
+        await_restore(&manager, &agents[0].0).await,
+        await_restore(&manager, &agents[1].0).await,
+    ];
+    manager.dispatch_queue().await.unwrap();
+    assert_eq!(
+        queue(&manager).await,
+        [
+            ("first".into(), Restore, Queued),
+            ("second".into(), Restore, Queued),
+            ("later".into(), Launch, Queued),
+        ]
+    );
+
+    // A healthy interval restores the first stopped agent only.
+    publish_recovery(&manager);
+    manager.dispatch_queue().await.unwrap();
+    let [first_restore, second_restore] = restoring;
+    bounded(first_restore).await.unwrap().unwrap();
+    assert!(!manager.recovery_published());
+    assert_eq!(
+        queue(&manager).await[..2],
+        [
+            ("first".into(), Restore, Starting),
+            ("second".into(), Restore, Queued),
+        ]
+    );
+    // The restored agent registers and takes over the slot it kept.
+    manager.remove_restore(&agents[0].0).await;
+    publish_recovery(&manager);
+    manager.dispatch_queue().await.unwrap();
+    bounded(second_restore).await.unwrap().unwrap();
+    manager.remove_restore(&agents[1].0).await;
+    // Both agents have their slots back, so the launch keeps waiting.
+    manager.dispatch_queue().await.unwrap();
+    assert_eq!(queue(&manager).await, [("later".into(), Launch, Queued)]);
+    discard(&manager, &first, &agents[0].0).await;
+    manager.dispatch_queue().await.unwrap();
+    assert!(started(&launch.id));
+}
+
+#[tokio::test]
+async fn lowered_limits_hold_restores_until_a_stopped_agent_is_discarded() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 2);
+    let (first, second) = (
+        create(&manager, &repo, "first").await,
+        create(&manager, &repo, "second").await,
+    );
+    let agents = stopped_agents(&manager, &[&first, &second]).await;
+    let restoring = await_restore(&manager, &agents[0].0).await;
+    limit_globally(&manager, 1);
+    publish_recovery(&manager);
+    // Each restore would take back its own slot, but the other one fills the machine.
+    manager.dispatch_queue().await.unwrap();
+    assert_eq!(queue(&manager).await[0], ("first".into(), Restore, Queued));
+    assert!(manager.recovery_published());
+
+    // `shoal stop` cancels the second restore; its wrapper ends with the
+    // recovery record, which still holds the slot until it is discarded.
+    manager.remove_restore(&agents[1].0).await;
+    manager
+        .finish_execution(
+            agents[1].0.clone(),
+            crate::daemon::workspace::ExecutionKind::Command,
+            Some(0),
+        )
+        .await
+        .unwrap();
+    manager.dispatch_queue().await.unwrap();
+    assert_eq!(queue(&manager).await, [("first".into(), Restore, Queued)]);
+    std::fs::remove_file(crate::execution::recovery::record_path(
+        &manager.paths,
+        &second.id,
+        &agents[1].0,
+    ))
+    .unwrap();
+    manager.dispatch_queue().await.unwrap();
+    bounded(restoring).await.unwrap().unwrap();
+    assert_eq!(queue(&manager).await, [("first".into(), Restore, Starting)]);
+}
+
+#[tokio::test]
+async fn restart_keeps_restores_in_order_without_starting_one_twice() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 2);
+    let (first, second) = (
+        create(&manager, &repo, "first").await,
+        create(&manager, &repo, "second").await,
+    );
+    let agents = stopped_agents(&manager, &[&first, &second]).await;
+    let launch = add(&manager, &repo, "later").await.entry.unwrap();
+    let restoring = await_restore(&manager, &agents[0].0).await;
+    publish_recovery(&manager);
+    manager.dispatch_queue().await.unwrap();
+    bounded(restoring).await.unwrap().unwrap();
+
+    // The daemon restarts before the restored agent registers.
+    let restarted = Manager::open(manager.paths.clone()).await.unwrap();
+    restarted
+        .store
+        .quarantine_interrupted_operations()
+        .await
+        .unwrap();
+    limit_globally(&restarted, 2);
+    restarted.refresh_starting_entries().await.unwrap();
+    publish_recovery(&restarted);
+    // Until the waiting wrappers reattach, nothing restores and the launch
+    // behind the restores waits for its slot.
+    restarted.dispatch_queue().await.unwrap();
+    assert!(!started(&launch.id));
+    assert_eq!(
+        queue(&restarted).await,
+        [
+            ("first".into(), Restore, Starting),
+            ("second".into(), Restore, Queued),
+            ("later".into(), Launch, Queued),
+        ]
+    );
+    // The first wrapper never got its restore, so it reattaches waiting and
+    // keeps its place instead of queueing a second restore.
+    restarted
+        .queue_restore(&agents[0].0, "claude", &first.id)
+        .await
+        .unwrap();
+    let restoring = await_restore(&restarted, &agents[0].0).await;
+    restarted.dispatch_queue().await.unwrap();
+    bounded(restoring).await.unwrap().unwrap();
+    assert_eq!(
+        queue(&restarted).await,
+        [
+            ("first".into(), Restore, Starting),
+            ("second".into(), Restore, Queued),
+            ("later".into(), Launch, Queued),
+        ]
+    );
+    // The second wrapper never reattaches; its restore expires and leaves
+    // the recovery record to `shoal resume`.
+    let past = crate::time::unix_seconds() as i64 - START_GRACE.as_secs() as i64 - 1;
+    restarted
+        .store
+        .run(move |db| {
+            db.execute(
+                "UPDATE agent_queue SET seen_at=?1 WHERE kind='restore'",
+                [past],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    restarted.dispatch_queue().await.unwrap();
+    assert_eq!(queue(&restarted).await, [("later".into(), Launch, Queued)]);
+    assert!(crate::execution::recovery::pending(&restarted.paths, &second.id).unwrap());
+}
+
+#[tokio::test]
+async fn dynamic_admission_restores_once_measured_load_has_room() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    manager.publish_config(
+        toml::from_str("[overload.memory]\nenabled = false\n[overload.disk]\nenabled = false")
+            .unwrap(),
+    );
+    let (busy, stopped) = (
+        create(&manager, &repo, "busy").await,
+        create(&manager, &repo, "stopped").await,
+    );
+    let agents = stopped_agents(&manager, &[&stopped]).await;
+    // A settled agent keeps running beside the stopped one.
+    let _running = connected_agent(&manager, &busy).await;
+    let restoring = await_restore(&manager, &agents[0].0).await;
+    publish_recovery(&manager);
+    tokio::time::pause();
+    let start = tokio::time::Instant::now();
+    let record = |seconds: u64, busy: u64, total: u64| {
+        manager.cpu_usage.lock().unwrap().record(
+            start + Duration::from_secs(seconds),
+            Ok(crate::process::load::CpuTicks { busy, total }),
+        );
+    };
+    // Ninety percent busy leaves no room for the restored agent's load.
+    record(0, 0, 0);
+    record(5, 90, 100);
+    tokio::time::advance(Duration::from_secs(5)).await;
+    manager.dispatch_queue().await.unwrap();
+    assert_eq!(queue(&manager).await[0].2, Queued);
+    // A quiet minute makes room.
+    record(120, 92, 150);
+    record(125, 94, 200);
+    tokio::time::advance(Duration::from_secs(120)).await;
+    manager.dispatch_queue().await.unwrap();
+    bounded(restoring).await.unwrap().unwrap();
+    assert_eq!(queue(&manager).await[0].2, Starting);
 }

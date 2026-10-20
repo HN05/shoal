@@ -229,7 +229,8 @@ as `shoal doctor --stop` does. Shoal saves
 the agent identity and pressure reason before signaling the wrapper, so a wrapper killed
 under pressure can still be resumed after reconciliation. With one configured, the wrapper
 stays connected while the agent is stopped and automatically runs that command
-after healthy readings persist for the recovery interval. Recovery requires
+once healthy readings persist for the recovery interval and the
+[agent queue](#agent-queue) admits the restore. Recovery requires
 headroom below each enabled signal’s recovery threshold, whose thresholds must be
 positive and below their stop thresholds, and with disk protection enabled at
 least `disk.cleanup_free_gib` available on every monitored filesystem. Agents restore one at a time, each with
@@ -710,7 +711,7 @@ shoal config set max_agents none --repo docs  # No repository limit
 shoal add <issue-url> --agent claude          # Starts now, or queues when no slot is free
 shoal add <issue-url> --agent claude --now    # Starts now regardless of the limits
 shoal ls --queue                              # Waiting and starting entries
-shoal rm issue-612-add-a-queue-cmd            # Removes a waiting entry
+shoal rm issue-612-add-a-queue-cmd            # Removes a waiting launch
 ```
 
 `max_agents` limits the agents that run at once. It defaults to `dynamic`,
@@ -747,11 +748,23 @@ its agent registers; a start that fails, or whose launch ends without opening th
 workspace for two minutes, records a `queue_failed` notification with the reason
 and frees the slot. `--now` starts at once and still takes a slot.
 
+An agent's automatic restore after a protection stop waits in the same queue,
+in order with launches, from when its processes stop. It keeps the agent's slot,
+so a fixed limit lets it take that slot back on a full machine, while `dynamic`
+still needs room for its load; a lowered limit holds it until other agents
+leave. It starts only after the recovery interval's healthy readings, one
+restore per interval, and nothing queued behind it starts first. The restored
+agent takes the slot over once it runs. Stopping the workspace or a failed
+restore removes the entry and keeps the recovery record. A daemon restart keeps
+the order; an entry whose waiting wrapper has not reattached within two minutes
+is removed, leaving its record to `shoal resume`.
+
 `shoal ls` lists entries after the workspaces as `queued, position N` or
-`starting`; `ls --queue` lists only them (`--json` gives the entries, while `ls
---json` stays a list of workspaces). `shoal rm` removes a waiting entry by name
-or ID, and only by ID when a workspace has the same name; a starting one belongs
-to its workspace. Scoped callers see no entries.
+`starting`, a restore with its agent; `ls --queue` lists only them (`--json`
+gives the entries with their `kind`, `launch` or `restore`, while `ls --json`
+stays a list of workspaces). `shoal rm` removes a waiting launch by name or ID,
+and only by ID when a workspace has the same name; a starting one belongs to its
+workspace. Scoped callers see no entries.
 
 ### Agent accounts
 

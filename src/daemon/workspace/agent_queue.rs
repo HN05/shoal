@@ -48,13 +48,36 @@ impl Limits {
     }
 }
 
+/// What a waiting entry starts, as admission sees it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Work {
+    Launch,
+    /// A stopped agent's restore, whose slot `occupied` still counts.
+    /// `waiting` says its agent waits for it with every process stopped.
+    Restore {
+        waiting: bool,
+    },
+}
+
+/// A queued entry and the repository it starts an agent in.
+pub(crate) struct Waiting {
+    pub id: String,
+    pub repository: String,
+    pub work: Work,
+}
+
 /// The waiting entries that fit, in queue order. `occupied` holds one
-/// repository ID per used slot; `waiting` pairs entry and repository IDs. An
-/// entry whose repository is full is passed over; a full machine ends the pass.
+/// repository ID per used slot. Under fixed limits a launch needs a free slot
+/// and a restore takes back its own; under dynamic admission each needs room
+/// for its load. Restores start only on sustained healthy readings
+/// (`recovered`), one per healthy interval, and nothing queued behind a
+/// restore starts before it. An entry that does not fit is passed over; once
+/// nothing more can start the pass ends.
 pub(crate) fn admit(
     occupied: &[String],
-    waiting: &[(String, String)],
+    waiting: &[Waiting],
     limits: &Limits,
+    mut recovered: bool,
 ) -> Vec<String> {
     let mut total = occupied.len();
     let mut starts = limits.starts;
@@ -63,26 +86,33 @@ pub(crate) fn admit(
         *used.entry(repository).or_default() += 1;
     }
     let mut admitted = Vec::new();
-    for (id, repository) in waiting {
-        if starts == Some(0)
-            || [limits.global, limits.disk]
-                .into_iter()
-                .flatten()
-                .any(|limit| total >= limit as usize)
-        {
+    for entry in waiting {
+        if starts == Some(0) {
             break;
         }
-        let used = used.entry(repository).or_default();
-        if limits
-            .repository(repository)
-            .is_some_and(|limit| *used >= limit as usize)
+        let own = match entry.work {
+            Work::Launch => 0,
+            Work::Restore { .. } if !recovered => break,
+            Work::Restore { waiting: false } => continue,
+            Work::Restore { waiting: true } => 1,
+        };
+        let used = used.entry(&entry.repository).or_default();
+        let full = |count: usize, limit: u32| count.saturating_sub(own) >= limit as usize;
+        if [limits.global, limits.disk]
+            .into_iter()
+            .flatten()
+            .any(|limit| full(total, limit))
+            || limits
+                .repository(&entry.repository)
+                .is_some_and(|limit| full(*used, limit))
         {
             continue;
         }
-        *used += 1;
-        total += 1;
+        *used += 1 - own;
+        total += 1 - own;
         starts = starts.map(|starts| starts - 1);
-        admitted.push(id.clone());
+        recovered &= own == 0;
+        admitted.push(entry.id.clone());
     }
     admitted
 }
@@ -133,8 +163,8 @@ impl Manager {
                 ensure!(
                     !crate::daemon::store::exists(
                         &tx,
-                        "SELECT 1 FROM agent_queue WHERE repository_id=?1 AND name=?2",
-                        params![repository.id, request.name],
+                        "SELECT 1 FROM agent_queue WHERE repository_id=?1 AND name=?2 AND kind=?3",
+                        params![repository.id, request.name, QueueKind::Launch],
                     )?,
                     "{} is already in the agent queue",
                     request.name
@@ -173,65 +203,110 @@ impl Manager {
         })
     }
 
-    /// End abandoned starts, then start the waiting entries that fit.
+    /// End abandoned starts and restores, then start the waiting entries that fit.
     pub(crate) async fn dispatch_queue(&self) -> Result<()> {
         let _gate = self.agent_queue_gate.lock().await;
         self.expire_starting_entries().await?;
+        self.expire_orphaned_restores().await?;
         self.admit_waiting(None).await?;
         Ok(())
     }
 
-    /// Admit waiting entries that fit, start those other than `caller`'s,
-    /// and return whether `caller`'s entry was admitted. Requires the queue gate.
+    /// Admit waiting entries that fit, start launches other than `caller`'s,
+    /// and return whether `caller`'s entry was admitted. An admitted restore
+    /// is left to its waiting agent. Requires the queue gate.
     async fn admit_waiting(&self, caller: Option<&str>) -> Result<bool> {
-        let waiting = self
-            .store
-            .run(|db| {
-                Ok(db
-                    .prepare(
-                        "SELECT id,repository_id FROM agent_queue WHERE state=?1 ORDER BY seq",
-                    )?
-                    .query_map([QueueState::Queued], |row| Ok((row.get(0)?, row.get(1)?)))?
-                    .collect::<rusqlite::Result<Vec<(String, String)>>>()?)
-            })
-            .await?;
+        let waiting = self.waiting_work().await?;
         if waiting.is_empty() {
             return Ok(false);
         }
         let repositories = waiting
             .iter()
-            .map(|(_, repository)| repository.clone())
+            .map(|entry| entry.repository.clone())
             .collect();
         let slots = self.occupied_slots().await?;
         let limits = self.agent_limits(repositories, &slots).await?;
         let occupied: Vec<String> = slots.into_iter().map(|slot| slot.repository).collect();
-        let admitted = admit(&occupied, &waiting, &limits);
-        let starts = self
+        let admitted = admit(&occupied, &waiting, &limits, self.recovery_published());
+        let (starts, restored) = self.mark_starting(admitted).await?;
+        // The next restore needs another healthy interval.
+        if restored {
+            self.reset_overload_recovery();
+        }
+        self.start_launches(starts, caller).await
+    }
+
+    /// The queued entries in order, each restore with whether its agent waits.
+    async fn waiting_work(&self) -> Result<Vec<Waiting>> {
+        let queued = self
             .store
+            .run(|db| {
+                Ok(db
+                    .prepare(
+                        "SELECT id,repository_id,kind,execution_id FROM agent_queue
+                         WHERE state=?1 ORDER BY seq",
+                    )?
+                    .query_map([QueueState::Queued], |row| {
+                        Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+                    })?
+                    .collect::<rusqlite::Result<Vec<(String, String, QueueKind, Option<String>)>>>(
+                    )?)
+            })
+            .await?;
+        let waiters = self.restore_waiters.lock().unwrap();
+        Ok(queued
+            .into_iter()
+            .map(|(id, repository, kind, execution)| Waiting {
+                id,
+                repository,
+                work: match kind {
+                    QueueKind::Launch => Work::Launch,
+                    QueueKind::Restore => Work::Restore {
+                        waiting: execution.is_some_and(|id| waiters.contains(&id)),
+                    },
+                },
+            })
+            .collect())
+    }
+
+    /// Mark `admitted` entries starting, returning the launches the daemon
+    /// starts and whether a restore was admitted.
+    async fn mark_starting(&self, admitted: Vec<String>) -> Result<(Vec<Start>, bool)> {
+        self.store
             .run(move |db| {
                 let tx = db.transaction()?;
                 let now = crate::time::unix_seconds() as i64;
                 let mut starts = Vec::new();
+                let mut restored = false;
                 for id in admitted {
                     tx.execute(
                         "UPDATE agent_queue SET state=?2,seen_at=?3 WHERE id=?1",
                         params![id, QueueState::Starting, now],
                     )?;
-                    let (name, env): (String, String) = tx.query_row(
-                        "SELECT name,env FROM agent_queue WHERE id=?1",
+                    let (kind, name, env): (QueueKind, String, Option<String>) = tx.query_row(
+                        "SELECT kind,name,env FROM agent_queue WHERE id=?1",
                         [&id],
-                        |row| Ok((row.get(0)?, row.get(1)?)),
+                        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
                     )?;
-                    starts.push(Start {
-                        id,
-                        name,
-                        env: serde_json::from_str(&env).context("read queued environment")?,
-                    });
+                    match kind {
+                        QueueKind::Launch => starts.push(Start {
+                            id,
+                            name,
+                            env: serde_json::from_str(&env.unwrap_or_default())
+                                .context("read queued environment")?,
+                        }),
+                        QueueKind::Restore => restored = true,
+                    }
                 }
                 tx.commit()?;
-                Ok(starts)
+                Ok((starts, restored))
             })
-            .await?;
+            .await
+    }
+
+    /// Start each admitted launch other than `caller`'s, which starts in the
+    /// caller, and return whether `caller`'s was among them.
+    async fn start_launches(&self, starts: Vec<Start>, caller: Option<&str>) -> Result<bool> {
         let mut caller_admitted = false;
         for start in starts {
             if Some(start.id.as_str()) == caller {
@@ -333,7 +408,8 @@ impl Manager {
 
     /// The used slots. Each agent in a workspace that is not done uses one
     /// while it runs, awaits reattachment or waits for resume, counted once by
-    /// its execution; so does each starting entry until its agent registers.
+    /// its execution; so does each starting launch until its agent registers.
+    /// An admitted restore starts in its agent's slot.
     async fn occupied_slots(&self) -> Result<Vec<Slot>> {
         let mut agents = self.agent_executions().await;
         let (open, unknown, starting) = self
@@ -354,15 +430,23 @@ impl Manager {
                     .collect::<rusqlite::Result<Vec<(String, String)>>>()?;
                 let starting = db
                     .prepare(
-                        "SELECT repository_id,workspace_id,seen_at FROM agent_queue WHERE state=?1",
+                        "SELECT repository_id,workspace_id,seen_at,execution_id FROM agent_queue
+                         WHERE state=?1",
                     )?
                     .query_map([QueueState::Starting], |row| {
-                        Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+                        Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
                     })?
-                    .collect::<rusqlite::Result<Vec<(String, Option<String>, Option<i64>)>>>()?;
+                    .collect::<rusqlite::Result<
+                        Vec<(String, Option<String>, Option<i64>, Option<String>)>,
+                    >>()?;
                 Ok((open, unknown, starting))
             })
             .await?;
+        let now = crate::time::unix_seconds() as i64;
+        let starting_since = |seen_at: Option<i64>| {
+            let since = now.saturating_sub(seen_at.unwrap_or(now)).max(0) as u64;
+            Activity::Starting(Duration::from_secs(since))
+        };
         let stopped = |workspace: String| (workspace, Activity::Stopped);
         for (execution, workspace) in unknown {
             agents
@@ -376,6 +460,17 @@ impl Manager {
                     .or_insert_with(|| stopped(workspace.clone()));
             }
         }
+        let mut launches = Vec::new();
+        for (repository, workspace, seen_at, execution) in starting {
+            match execution {
+                Some(execution) => {
+                    if let Some((_, activity)) = agents.get_mut(&execution) {
+                        *activity = starting_since(seen_at);
+                    }
+                }
+                None => launches.push((repository, workspace, seen_at)),
+            }
+        }
         let mut slots: Vec<Slot> = agents
             .into_values()
             .filter_map(|(workspace, activity)| {
@@ -385,20 +480,18 @@ impl Manager {
                 })
             })
             .collect();
-        let now = crate::time::unix_seconds() as i64;
-        for (repository, workspace, seen_at) in starting {
+        for (repository, workspace, seen_at) in launches {
             if workspace.is_none_or(|workspace| open.contains_key(&workspace)) {
-                let since = now.saturating_sub(seen_at.unwrap_or(now)).max(0) as u64;
                 slots.push(Slot {
                     repository,
-                    activity: Activity::Starting(Duration::from_secs(since)),
+                    activity: starting_since(seen_at),
                 });
             }
         }
         Ok(slots)
     }
 
-    /// End starting entries whose holder has been gone for the grace period.
+    /// End starting launches whose holder has been gone for the grace period.
     /// One that never opened a workspace failed to start, so say so.
     async fn expire_starting_entries(&self) -> Result<()> {
         let held: HashSet<String> = self
@@ -415,11 +508,13 @@ impl Manager {
                 let tx = db.transaction()?;
                 let stale = tx
                     .prepare(
-                        "SELECT id,name,workspace_id FROM agent_queue WHERE state=?1 AND seen_at<?2",
+                        "SELECT id,name,workspace_id FROM agent_queue
+                         WHERE state=?1 AND kind=?2 AND seen_at<?3",
                     )?
-                    .query_map(params![QueueState::Starting, cutoff], |row| {
-                        Ok((row.get(0)?, row.get(1)?, row.get(2)?))
-                    })?
+                    .query_map(
+                        params![QueueState::Starting, QueueKind::Launch, cutoff],
+                        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                    )?
                     .collect::<rusqlite::Result<Vec<(String, String, Option<String>)>>>()?;
                 let mut expired = Vec::new();
                 for (id, name, workspace) in stale {
@@ -444,15 +539,37 @@ impl Manager {
         Ok(())
     }
 
-    /// Restart every starting entry's grace period, since no holder could
-    /// reconnect while the daemon was away.
+    /// Forget restores whose wrapper has been gone for the grace period, such
+    /// as one that never reattached after a daemon restart. Its recovery
+    /// record stays for `shoal resume`.
+    async fn expire_orphaned_restores(&self) -> Result<()> {
+        let connected: HashSet<String> = self.connections.lock().await.keys().cloned().collect();
+        let cutoff = crate::time::unix_seconds() as i64 - START_GRACE.as_secs() as i64;
+        self.store
+            .run(move |db| {
+                let tx = db.transaction()?;
+                let stale = tx
+                    .prepare("SELECT execution_id FROM agent_queue WHERE kind=?1 AND seen_at<?2")?
+                    .query_map(params![QueueKind::Restore, cutoff], |row| row.get(0))?
+                    .collect::<rusqlite::Result<Vec<String>>>()?;
+                for execution in stale.iter().filter(|id| !connected.contains(*id)) {
+                    tx.execute("DELETE FROM agent_queue WHERE execution_id=?1", [execution])?;
+                }
+                tx.commit()?;
+                Ok(())
+            })
+            .await
+    }
+
+    /// Restart every starting launch's and restore's grace period, since no
+    /// holder or wrapper could reconnect while the daemon was away.
     pub(crate) async fn refresh_starting_entries(&self) -> Result<()> {
         let now = crate::time::unix_seconds() as i64;
         self.store
             .run(move |db| {
                 db.execute(
-                    "UPDATE agent_queue SET seen_at=?2 WHERE state=?1",
-                    params![QueueState::Starting, now],
+                    "UPDATE agent_queue SET seen_at=?3 WHERE state=?1 OR kind=?2",
+                    params![QueueState::Starting, QueueKind::Restore, now],
                 )?;
                 Ok(())
             })
@@ -644,6 +761,89 @@ impl Manager {
         Ok(())
     }
 
+    /// Queue the automatic restore of `execution`, an agent that protection
+    /// stopped in `workspace_id`, behind the work already waiting. A wrapper
+    /// that reattached while waiting keeps its place and waits again.
+    pub(crate) async fn queue_restore(
+        &self,
+        execution: &str,
+        agent: &str,
+        workspace_id: &str,
+    ) -> Result<()> {
+        let workspace = self.workspace(workspace_id).await?;
+        let (id, execution, agent) = (
+            uuid::Uuid::new_v4().to_string(),
+            execution.to_owned(),
+            agent.to_owned(),
+        );
+        self.store
+            .run(move |db| {
+                let now = crate::time::unix_seconds() as i64;
+                db.execute(
+                    "INSERT INTO agent_queue(id,kind,repository_id,name,agent,state,created_at,seen_at,workspace_id,execution_id)
+                     VALUES (?1,?2,?3,?4,?5,?6,?7,?7,?8,?9)
+                     ON CONFLICT(execution_id) DO UPDATE SET state=excluded.state,seen_at=excluded.seen_at",
+                    params![
+                        id,
+                        QueueKind::Restore,
+                        workspace.repository_id,
+                        workspace.name,
+                        agent,
+                        QueueState::Queued,
+                        now,
+                        workspace.id,
+                        execution,
+                    ],
+                )?;
+                Ok(())
+            })
+            .await
+    }
+
+    /// Wait until admission starts the queued restore of `execution`, whose
+    /// agent waits with every process stopped.
+    pub(crate) async fn await_restore_admission(&self, execution: &str) -> Result<()> {
+        let mut changed = self.store.watch_changes();
+        let _waiter = RestoreWaiter::register(self, execution);
+        self.agent_queue_wake.notify_one();
+        loop {
+            let id = execution.to_owned();
+            let state = self
+                .store
+                .run(move |db| {
+                    Ok(db
+                        .query_row(
+                            "SELECT state FROM agent_queue WHERE execution_id=?1",
+                            [id],
+                            |row| row.get(0),
+                        )
+                        .optional()?)
+                })
+                .await?;
+            match state {
+                Some(QueueState::Starting) => return Ok(()),
+                Some(QueueState::Queued) => changed.changed().await?,
+                None => bail!("the restore is no longer in the agent queue"),
+            }
+        }
+    }
+
+    /// Take `execution`'s restore out of the queue, once its agent registered
+    /// again or the restore ended without it.
+    pub(crate) async fn remove_restore(&self, execution: &str) {
+        let execution = execution.to_owned();
+        let removed = self
+            .store
+            .run(move |db| {
+                db.execute("DELETE FROM agent_queue WHERE execution_id=?1", [execution])?;
+                Ok(())
+            })
+            .await;
+        if let Err(error) = removed {
+            crate::daemon::log!("agent queue: {error:#}");
+        }
+    }
+
     /// The agent a queued launch started takes over the slot its entry kept.
     /// Only that launch's agent names the entry, so another agent registering
     /// in the same workspace leaves it starting.
@@ -661,6 +861,36 @@ impl Manager {
         if let Err(error) = consumed {
             crate::daemon::log!("agent queue: {error:#}");
         }
+    }
+}
+
+/// Marks a restore's agent as waiting for admission while it lives.
+struct RestoreWaiter<'a> {
+    manager: &'a Manager,
+    execution: String,
+}
+
+impl<'a> RestoreWaiter<'a> {
+    fn register(manager: &'a Manager, execution: &str) -> Self {
+        manager
+            .restore_waiters
+            .lock()
+            .unwrap()
+            .insert(execution.to_owned());
+        Self {
+            manager,
+            execution: execution.to_owned(),
+        }
+    }
+}
+
+impl Drop for RestoreWaiter<'_> {
+    fn drop(&mut self) {
+        self.manager
+            .restore_waiters
+            .lock()
+            .unwrap()
+            .remove(&self.execution);
     }
 }
 

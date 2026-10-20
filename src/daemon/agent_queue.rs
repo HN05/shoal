@@ -1,5 +1,5 @@
-//! Starts queued agents as slots free and keeps starting entries' slots while
-//! their launch runs.
+//! Starts queued agents and restores as slots free and keeps starting
+//! entries' slots while their launch runs.
 use std::{sync::Arc, time::Duration};
 
 use anyhow::Result;
@@ -23,6 +23,8 @@ pub(super) async fn run(manager: Arc<Manager>) {
     }
     let mut changed = manager.store.watch_changes();
     let mut config = manager.watch_config();
+    // Restores wait for sustained healthy readings.
+    let mut recovered = manager.recovery_ready.subscribe();
     loop {
         {
             let _operation = manager.background_operations.read().await;
@@ -33,12 +35,14 @@ pub(super) async fn run(manager: Arc<Manager>) {
         tokio::select! {
             _ = changed.changed() => {}
             _ = config.changed() => {}
+            _ = recovered.changed() => {}
             _ = manager.agent_queue_wake.notified() => {}
             _ = tokio::time::sleep(SWEEP_INTERVAL) => {}
         }
         tokio::time::sleep(SETTLE).await;
         changed.borrow_and_update();
         config.borrow_and_update();
+        recovered.borrow_and_update();
     }
 }
 

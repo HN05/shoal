@@ -94,6 +94,12 @@ fn serve_fixture(manager: Arc<Manager>) -> tokio::task::JoinHandle<()> {
     };
     tokio::spawn(async move {
         let mut clients = JoinSet::new();
+        // Restores wait in the agent queue; aborting the server ends it too.
+        let manager = server.manager.clone();
+        clients.spawn(async move {
+            crate::daemon::agent_queue::run(manager).await;
+            Ok(())
+        });
         loop {
             tokio::select! {
                 accepted = listener.accept() => {
@@ -296,6 +302,28 @@ fn wait_paused<'a>(
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
     })
+}
+
+/// Waits until the stopped agent's restore waits in the agent queue.
+#[track_caller]
+fn wait_restore_queued(manager: &Manager) -> impl Future<Output = ()> + '_ {
+    bounded(async move {
+        // Subscribe before the first check so a concurrent commit cannot be missed.
+        let mut changed = manager.store.watch_changes();
+        while !manager
+            .queue_entries()
+            .await
+            .unwrap()
+            .iter()
+            .any(|entry| entry.kind == crate::state::QueueKind::Restore)
+        {
+            changed.changed().await.unwrap();
+        }
+    })
+}
+
+async fn queue_is_empty(manager: &Manager) -> bool {
+    manager.queue_entries().await.unwrap().is_empty()
 }
 
 fn launch(
@@ -633,6 +661,7 @@ async fn overload_restores_the_configured_session_and_keeps_waiting_execution_ow
     // An update waits for the restore, so the stop holds one back.
     assert!(manager.background_operations.try_write().is_err());
     wait_paused(&manager, &workspace).await;
+    wait_restore_queued(&manager).await;
     assert!(manager.background_operations.try_write().is_err());
     assert!(!launched.is_finished());
     assert!(!workspace.path.join("restored").exists());
@@ -641,6 +670,8 @@ async fn overload_restores_the_configured_session_and_keeps_waiting_execution_ow
         .load(std::sync::atomic::Ordering::Relaxed);
     manager.recovery_ready.send_replace(Some(epoch));
     assert_eq!(bounded(launched).await.unwrap().unwrap(), 7);
+    // The restored agent took over the slot its restore kept.
+    assert!(queue_is_empty(&manager).await);
     drop(bounded(manager.background_operations.write()).await);
     assert!(!crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
     assert_eq!(
@@ -875,11 +906,13 @@ async fn manual_stop_cancels_waiting_recovery_and_leaves_a_restore_record() {
             .await
     );
     wait_paused(&manager, &workspace).await;
+    wait_restore_queued(&manager).await;
     bounded(manager.stop_workspace(&workspace.id, StopRequest::manual()))
         .await
         .unwrap();
     bounded(launched).await.unwrap().unwrap();
     assert!(!workspace.path.join("restored").exists());
+    assert!(queue_is_empty(&manager).await);
     let records = fs::read_dir(manager.paths.workspace_state(&workspace.id))
         .unwrap()
         .map(|entry| entry.unwrap().path())
@@ -1026,6 +1059,7 @@ async fn refused_recovery_finishes_the_stopped_execution_and_retains_manual_reco
             .is_empty()
     );
     assert!(!workspace.path.join("restored").exists());
+    assert!(queue_is_empty(&manager).await);
     assert!(crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
     assert!(
         manager

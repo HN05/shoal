@@ -355,36 +355,35 @@ impl Manager {
         self.recovery_ready.send_replace(None);
     }
 
-    pub(crate) async fn await_overload_recovery(&self, workspace_id: &str) -> anyhow::Result<()> {
-        let _gate = self.recovery_gate.lock().await;
-        let mut ready = self.recovery_ready.subscribe();
-        loop {
-            let epoch = self
-                .recovery_epoch
-                .load(std::sync::atomic::Ordering::Relaxed);
-            if *ready.borrow_and_update() != Some(epoch) {
-                ready.changed().await?;
-                continue;
-            }
-            let workspace = self.workspace(workspace_id).await?;
-            self.verify_worktree(&workspace).await?;
-            anyhow::ensure!(
-                workspace.state == crate::state::WorkspaceState::Ready,
-                "workspace is no longer ready for agent recovery"
-            );
-            // Ownership checks may yield while load worsens; stale permission
-            // cannot authorize a restore after those checks finish.
-            if self
-                .recovery_epoch
-                .load(std::sync::atomic::Ordering::Relaxed)
-                != epoch
-                || *ready.borrow_and_update() != Some(epoch)
-            {
-                continue;
-            }
-            self.reset_overload_recovery();
-            break;
-        }
+    /// Whether the overload monitor published sustained healthy readings
+    /// since the last restore or protection stop.
+    pub(super) fn recovery_published(&self) -> bool {
+        let epoch = self
+            .recovery_epoch
+            .load(std::sync::atomic::Ordering::Relaxed);
+        *self.recovery_ready.borrow() == Some(epoch)
+    }
+
+    /// Queue the automatic restore of the protection-stopped agent `id`.
+    pub(crate) async fn queue_agent_restore(&self, id: &str) -> anyhow::Result<()> {
+        let (name, workspace_id) = self
+            .agents
+            .lock()
+            .await
+            .get(id)
+            .map(|agent| (agent.name.clone(), agent.workspace_id.clone()))
+            .ok_or_else(|| anyhow::anyhow!("agent no longer exists"))?;
+        self.queue_restore(id, &name, &workspace_id).await
+    }
+
+    /// Check that an admitted restore still has its ready, verified worktree.
+    pub(crate) async fn verify_restore_workspace(&self, workspace_id: &str) -> anyhow::Result<()> {
+        let workspace = self.workspace(workspace_id).await?;
+        self.verify_worktree(&workspace).await?;
+        anyhow::ensure!(
+            workspace.state == crate::state::WorkspaceState::Ready,
+            "workspace is no longer ready for agent recovery"
+        );
         Ok(())
     }
 
@@ -883,53 +882,5 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(manager.agents.lock().await.len(), 1);
-    }
-}
-
-#[cfg(test)]
-mod recovery_tests {
-    use crate::test_support::{manager, repository};
-
-    #[tokio::test]
-    async fn each_restore_consumes_a_fresh_healthy_interval() {
-        let (root, manager) = manager().await;
-        let path = repository(root.path(), "repo");
-        let repo = manager
-            .register_repository(path.to_str().unwrap().into(), None, None)
-            .await
-            .unwrap();
-        let workspace = manager
-            .create_workspace(&repo.id, "resume".into(), None, None, None)
-            .await
-            .unwrap();
-        manager.recovery_ready.send_replace(Some(0));
-        manager
-            .await_overload_recovery(&workspace.id)
-            .await
-            .unwrap();
-        assert_eq!(
-            manager
-                .recovery_epoch
-                .load(std::sync::atomic::Ordering::Relaxed),
-            1
-        );
-        let mut pending = {
-            let manager = manager.clone();
-            let id = workspace.id;
-            Box::pin(async move { manager.await_overload_recovery(&id).await })
-        };
-        manager.recovery_ready.send_replace(Some(0));
-        crate::test_support::assert_pending(&mut pending).await;
-        manager.recovery_ready.send_replace(Some(1));
-        tokio::time::timeout(std::time::Duration::from_secs(60), pending)
-            .await
-            .unwrap()
-            .unwrap();
-        assert_eq!(
-            manager
-                .recovery_epoch
-                .load(std::sync::atomic::Ordering::Relaxed),
-            2
-        );
     }
 }

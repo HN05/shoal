@@ -110,8 +110,8 @@ recovered. Manual and automatic restores prompt the agent to continue its
 unfinished assignment; configured restore commands receive that prompt through
 `{prompt}`. Never replay the original task prompt. Keep waiting wrappers tracked; they reattach
 like running commands, so a daemon restart or crash hands the wait to the next
-daemon instead of cancelling the restore. Serialize restores, and preserve
-manual recovery across restarts. Saved recovery represents
+daemon instead of cancelling the restore. Restores wait in the agent queue,
+and manual recovery persists across restarts. Saved recovery represents
 unfinished work until restored or explicitly discarded. A record names the
 stop's stage: the daemon saves `stopping` before delivering a stop, and the
 wrapper saves `stopped` after ending the agent. At startup, and whenever an
@@ -485,8 +485,19 @@ critical readings admit none. Dynamic is machine-wide, so a repository's
 `dynamic` adds no limit. A positive number fixes a limit and `none` disables it
 for that layer. Fixed limits keep dynamic admission's disk rule, since an agent
 started on a nearly full disk is soon stopped by disk protection. Per-agent
-memory profiles and routing automatic recovery through admission remain
-proposals.
+memory profiles remain a proposal.
+Automatic restores are typed queue entries ordered with launches, queued when
+the stopped agent's processes are proven stopped. A waiting restore keeps the
+agent's slot, so fixed limits let it take that slot back rather than counting it
+twice, which would deadlock a full machine of stopped agents, while dynamic
+admission measures its load like a new start. Restores also need the recovery
+interval's healthy readings, one per interval, and hold back work queued behind
+them, since starting new agents on a machine that just stopped one would undo
+the protection. The slot passes to the agent when its restored process
+registers. The entry is keyed by execution, so a reattached wrapper keeps its
+place and a restart cannot restore it twice; an entry without its wrapper for the
+start grace period is dropped, and cancellation or failure leaves the recovery
+record.
 The queue stores
 the CLI's launch plan opaquely and creates nothing until a slot frees, so a
 waiting entry costs no worktree and branches from the default branch current

@@ -1,6 +1,6 @@
-//! A stopped wrapper waits until its processes are proven stopped and load is
-//! healthy, or finishes normally when recovery is cancelled. Failed ownership
-//! checks never authorize a replacement process.
+//! A stopped wrapper waits until its processes are proven stopped and the
+//! agent queue admits its restore, or finishes normally when recovery is
+//! cancelled. Failed ownership checks never authorize a replacement process.
 use anyhow::{Context, Result, ensure};
 use std::time::Duration;
 use tokio::sync::{mpsc, watch};
@@ -41,6 +41,11 @@ pub(super) async fn pause(
         Ok(stopped) => stopped,
         Err(error) => return Ok(restore_failed(error)),
     };
+    // Take a place in the agent queue as the agent stops, so restores and
+    // launches start in the order they arrived.
+    if let Err(error) = manager.queue_agent_restore(execution_id).await {
+        return Ok(restore_failed(error));
+    }
     let ready = tokio::select! {
         biased;
         event = incoming.recv() => match event.context("execution disconnected")?? {
@@ -56,7 +61,7 @@ pub(super) async fn pause(
         }
         ready = async {
             await_stopped(manager, execution_id, workspace_id, stopped).await?;
-            manager.await_overload_recovery(workspace_id).await
+            manager.await_restore_admission(execution_id).await
         } => ready,
     };
     let resume = async {
@@ -146,6 +151,7 @@ async fn prepare_resume(
     execution_id: &str,
     workspace_id: &str,
 ) -> Result<Action> {
+    manager.verify_restore_workspace(workspace_id).await?;
     let ports = manager.inspect_workspace(workspace_id).await?.ports;
     if manager.resume_agent_execution(execution_id).await? {
         Ok(Action::Resume(ports))

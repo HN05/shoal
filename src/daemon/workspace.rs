@@ -121,7 +121,6 @@ pub struct Manager {
     shutting_down: std::sync::atomic::AtomicBool,
     pub(super) recovery_ready: watch::Sender<Option<u64>>,
     pub(super) recovery_epoch: std::sync::atomic::AtomicU64,
-    pub(super) recovery_gate: Mutex<()>,
     /// Counts published configurations, so a reading taken under an earlier
     /// one cannot pass for a current one.
     pub(super) config_generation: std::sync::atomic::AtomicU64,
@@ -146,6 +145,9 @@ pub struct Manager {
     agent_queue_gate: Mutex<()>,
     /// Open holds per starting queue entry.
     agent_queue_holds: std::sync::Mutex<HashMap<String, usize>>,
+    /// Executions whose stopped agent waits for its queued restore with
+    /// every process stopped.
+    restore_waiters: std::sync::Mutex<HashSet<String>>,
     /// Wakes the queue dispatcher when a slot may have freed.
     pub(crate) agent_queue_wake: tokio::sync::Notify,
     /// Wakes stopped-agent reconciliation when an execution becomes unknown.
@@ -186,7 +188,6 @@ impl Manager {
             shutting_down: std::sync::atomic::AtomicBool::new(false),
             recovery_ready: watch::channel(None).0,
             recovery_epoch: std::sync::atomic::AtomicU64::new(0),
-            recovery_gate: Mutex::new(()),
             config_generation: std::sync::atomic::AtomicU64::new(0),
             disk_recovered_in: std::sync::atomic::AtomicU64::new(0),
             activity: Mutex::new(HashMap::new()),
@@ -197,6 +198,7 @@ impl Manager {
             agent_wake_changed: watch::channel(0).0,
             agent_queue_gate: Mutex::new(()),
             agent_queue_holds: Default::default(),
+            restore_waiters: Default::default(),
             agent_queue_wake: tokio::sync::Notify::new(),
             execution_unknown: tokio::sync::Notify::new(),
             cpu_usage: Default::default(),
