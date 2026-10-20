@@ -15,7 +15,7 @@ use super::{
     capacity::{self, Activity, Agents},
 };
 use crate::{
-    config::AgentLimit,
+    config::{AgentLimit, overload::Overload},
     daemon::notifications::NotificationKind,
     model::{QueueAdmission, QueueEntry, QueueRequest, QueuedPlan},
     protocol::ConfigTarget,
@@ -257,7 +257,7 @@ impl Manager {
         let global = config.max_agents.unwrap_or_default();
         let mut limits = Limits {
             global: match global {
-                AgentLimit::Dynamic => Some(self.dynamic_limit(slots).await?),
+                AgentLimit::Dynamic => Some(self.dynamic_limit(&config.overload, slots).await?),
                 limit => fixed_limit(limit),
             },
             repositories: HashMap::new(),
@@ -276,14 +276,13 @@ impl Manager {
                 .insert(id, resolved.max_agents.and_then(fixed_limit));
         }
         if fixed_limit(global).is_some() || limits.repositories.values().any(Option::is_some) {
-            limits.disk = self.disk_limit(slots).await?;
+            limits.disk = self.disk_limit(&config.overload, slots).await?;
         }
         Ok(limits)
     }
 
     /// The machine-wide limit measured load allows for `slots`.
-    async fn dynamic_limit(&self, slots: &[Slot]) -> Result<u32> {
-        let config = self.config();
+    async fn dynamic_limit(&self, overload: &Overload, slots: &[Slot]) -> Result<u32> {
         let paths = self.admission_paths().await?;
         let paths: Vec<&Path> = paths.iter().map(PathBuf::as_path).collect();
         let cpu = self
@@ -292,21 +291,20 @@ impl Manager {
             .unwrap()
             .admission(tokio::time::Instant::now());
         Ok(capacity::limit(
-            capacity::sample(&paths, &config.overload, cpu),
+            capacity::sample(&paths, overload, cpu),
             Agents::count(slots.iter().map(|slot| slot.activity)),
-            &config.overload,
+            overload,
         ))
     }
 
     /// The machine-wide limit free disk space sets for `slots` beside fixed limits.
-    async fn disk_limit(&self, slots: &[Slot]) -> Result<Option<u32>> {
-        let config = self.config();
+    async fn disk_limit(&self, overload: &Overload, slots: &[Slot]) -> Result<Option<u32>> {
         let paths = self.admission_paths().await?;
         let paths: Vec<&Path> = paths.iter().map(PathBuf::as_path).collect();
         Ok(capacity::disk_limit(
-            capacity::disk_free(&paths, &config.overload),
+            capacity::disk_free(&paths, overload),
             slots.len().try_into().unwrap_or(u32::MAX),
-            &config.overload,
+            overload,
         ))
     }
 
