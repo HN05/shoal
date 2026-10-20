@@ -395,6 +395,21 @@ async fn open_questions_retain_completion_and_pr_cleanup() {
     assert!(workspace.path.exists());
     let completion = manager.completion(&workspace.id).await.unwrap().unwrap();
     assert!(completion.error.is_none());
+    // A question asked after a sweep checked for one still stops its removal.
+    for error in [
+        manager
+            .remove_completed(&workspace.id, &completion.head, EventCause::Completion)
+            .await
+            .unwrap_err(),
+        manager
+            .remove_merged(&workspace.id, &completion.head)
+            .await
+            .unwrap_err(),
+    ] {
+        assert!(error.to_string().contains("question"), "{error:#}");
+    }
+    assert!(workspace.path.exists());
+    assert!(manager.has_open_questions(&workspace.id).await.unwrap());
     manager
         .answer_question(question.id, "No".into(), None)
         .await

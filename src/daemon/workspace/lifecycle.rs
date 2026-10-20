@@ -109,9 +109,9 @@ impl Removal<'_> {
         }
     }
 
-    /// Unattended removals retain a held workspace, whenever the hold was
-    /// taken; a user's request overrides holds.
-    fn respects_holds(self) -> bool {
+    /// Unattended removals retain a workspace that is held or has an open
+    /// question, whenever it was recorded; a user's request overrides both.
+    fn unattended(self) -> bool {
         matches!(
             self,
             Removal::Automatic { .. } | Removal::Merged { .. } | Removal::Completed { .. }
@@ -749,10 +749,16 @@ impl Manager {
         let check = self
             .check_removal(&workspace.id, removal.inspection())
             .await?;
-        if removal.respects_holds() {
+        if removal.unattended() {
             ensure!(
                 check.workspace.holds.is_empty(),
                 "workspace is held; retaining it"
+            );
+            // The reservation refuses new questions, so this covers one asked
+            // after the sweep's own check.
+            ensure!(
+                !self.has_open_questions(&workspace.id).await?,
+                "a question waits for the user; retaining workspace"
             );
         }
         removal.verify(&check, stage)?;
