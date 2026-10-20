@@ -248,7 +248,12 @@ restore and requires explicit resume even with `[agent_resume]` configured.
 Run stop and resume outside scoped executions.
 
 `shoal resume [workspace]` restores a saved agent recovery record after its
-wrapper exits; use `--execution <id>` when several agents stopped in one workspace.
+wrapper exits; use `--execution <id>` when several agents stopped in one workspace,
+or pick the agent by name, stop time and reason on a terminal. Without a
+workspace, resume uses the current workspace when it has stopped work, otherwise
+a picker listing every workspace with what it would restore, stopped work first;
+with no stopped work anywhere it reports that without a picker. Completion
+describes each workspace the same way.
 Stopped commands are included in the continuation prompt, asking the agent to
 rerun the ones still needed: built-in agents receive it as their prompt argument,
 and `[agent_resume]` commands through `{prompt}`. Otherwise, and when no agent was

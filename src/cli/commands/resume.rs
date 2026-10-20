@@ -12,7 +12,7 @@ use serde_json::json;
 use std::ffi::OsString;
 
 /// `shoal resume`: the selected workspace, or every one for `--all`, the
-/// picker's entry for all, or no stopped work to pick from.
+/// picker's entry for all, or when no workspace has stopped work.
 pub async fn select(
     ctx: &Context,
     scope: WorkspaceScope,
@@ -73,11 +73,16 @@ pub async fn run(
         }
         [(_, path)] => path.clone(),
         agents if ctx.interactive() => {
+            let labels = agents
+                .iter()
+                .map(|(_, path)| agent_label(path))
+                .collect::<Vec<_>>();
             let choices = agents
                 .iter()
-                .map(|(id, path)| (path.clone(), id.as_str()))
+                .zip(&labels)
+                .map(|((_, path), label)| (path.clone(), label.as_str()))
                 .collect::<Vec<_>>();
-            ui::pick_choice(ctx, "Resume execution> ", &choices)?
+            ui::pick_choice(ctx, "Resume agent> ", &choices)?
         }
         _ => anyhow::bail!("multiple stopped agents; select one with --execution <id>"),
     };
@@ -141,6 +146,27 @@ pub async fn run(
         records,
     )
     .await
+}
+
+/// How the agent picker names a stopped agent: its name, when it stopped,
+/// and why when known.
+fn agent_label(path: &std::path::Path) -> String {
+    let record = Record::load(path).ok().flatten();
+    let mut label = record
+        .as_ref()
+        .map_or_else(|| "agent".to_owned(), |record| record.agent.clone());
+    let stopped = std::fs::metadata(path)
+        .and_then(|metadata| metadata.modified())
+        .ok()
+        .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok());
+    if let Some(stopped) = stopped {
+        let time = crate::time::local_minutes(stopped.as_secs() as i64);
+        label.push_str(&format!(", stopped {time}"));
+    }
+    if let Some(reason) = record.and_then(|record| record.stop_reason) {
+        label.push_str(&format!(" after {reason}"));
+    }
+    label
 }
 
 /// A daemon restart quarantines interrupted executions as unknown. Recovery
@@ -405,6 +431,24 @@ fn claim(path: &std::path::Path) -> Result<RecoveryClaim> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn agents_are_labelled_by_name_stop_time_and_reason() {
+        let root = tempfile::tempdir().unwrap();
+        let record = root.path().join("execution.recovery.json");
+        std::fs::write(
+            &record,
+            r#"{"agent":"claude","stop_reason":"critical memory pressure"}"#,
+        )
+        .unwrap();
+        let label = agent_label(&record);
+        assert!(label.starts_with("claude, stopped "), "{label}");
+        assert!(
+            label.ends_with(" after critical memory pressure"),
+            "{label}"
+        );
+        assert!(!label.contains("execution"), "{label}");
+    }
 
     #[test]
     fn a_recovery_record_cannot_be_claimed_twice() {

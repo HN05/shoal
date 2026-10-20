@@ -198,6 +198,11 @@ impl Fixture {
     /// Run `args` on a terminal with a picker that records its rows and selects
     /// the row whose ID is `choice`, then type `answer` into later prompts.
     fn pick(&self, args: &[&str], choice: &str, answer: &str) -> (Output, String) {
+        self.pick_in(self.root.path(), args, choice, answer)
+    }
+
+    /// `pick` run from `cwd`.
+    fn pick_in(&self, cwd: &Path, args: &[&str], choice: &str, answer: &str) -> (Output, String) {
         let bin = self.root.path().join("bin");
         let fzf = bin.join("fzf");
         install_test_script(
@@ -208,6 +213,7 @@ impl Fixture {
         let _ = fs::remove_file(&rows);
         let (output, _) = self.interactive_command(
             self.command()
+                .current_dir(cwd)
                 .env("SHOAL_TEST_PICK_INPUT", &rows)
                 .env("SHOAL_TEST_PICK_ID", choice)
                 .args(args),
@@ -976,15 +982,24 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
     assert_eq!(choices[0], "--all", "{choices:?}");
     assert!(choices.contains(&"first".into()), "{choices:?}");
     assert_eq!(choices.iter().filter(|v| *v == "--all").count(), 1);
-    // Resume completes only workspaces with stopped work.
+    // Resume describes each workspace by what it would restore.
     let resumable = || {
-        let mut choices = complete(&["resume", ""], fixture.root.path());
-        choices.retain(|v| !v.starts_with('-'));
-        choices
+        let output = fixture
+            .command()
+            .args(["--", "shoal", "resume", ""])
+            .env("SHOAL_COMPLETE", "zsh")
+            .env("_CLAP_COMPLETE_INDEX", "2")
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+        String::from_utf8(output.stdout).unwrap()
     };
-    assert!(resumable().is_empty());
+    let choices = resumable();
+    assert!(choices.contains("first:nothing to resume"), "{choices}");
     fixture.save_stopped_command(&first);
-    assert_eq!(resumable(), ["first"]);
+    let choices = resumable();
+    assert!(choices.contains("first:stopped: 1 command"), "{choices}");
+    assert!(choices.contains("second:nothing to resume"), "{choices}");
     assert!(!complete(&["stop", "--all", ""], fixture.root.path()).contains(&"--all".into()));
     let cwd = Path::new(first["path"].as_str().unwrap());
     fs::write(cwd.join(".shoal.toml"), "[commands]\nreview = ['tuicr']\n").unwrap();
@@ -6965,11 +6980,12 @@ fn workspace_pickers_offer_all_workspaces_after_the_workspaces() {
 }
 
 #[test]
-fn resume_picks_only_among_workspaces_with_stopped_work() {
+fn resume_picker_describes_what_each_workspace_would_restore() {
     let fixture = Fixture::new();
     let first = fixture.add("first");
     let second = fixture.add("second");
-    fixture.add("idle");
+    let idle = fixture.add("idle");
+    let idle_path = Path::new(idle["path"].as_str().unwrap());
     // Nothing to resume: no picker.
     let (output, rows) = fixture.pick(&["resume"], "--all", "");
     assert!(output.status.success(), "{output:?}");
@@ -6978,25 +6994,32 @@ fn resume_picks_only_among_workspaces_with_stopped_work() {
         String::from_utf8_lossy(&output.stdout).contains("No stopped agents or commands"),
         "{output:?}"
     );
-    // One workspace with stopped work is resumed without asking.
-    fixture.save_stopped_command(&first);
-    let (output, rows) = fixture.pick(&["resume"], "--all", "");
-    assert!(output.status.success(), "{output:?}");
-    assert!(rows.is_empty(), "{rows}");
-    assert!(
-        String::from_utf8_lossy(&output.stdout).contains("Stopped commands in first"),
-        "{output:?}"
-    );
-    // Several are offered alone, before the entry for all.
-    fixture.save_stopped_command(&first);
+    // Every workspace is listed with what it would restore, stopped work first.
     fixture.save_stopped_command(&second);
     let (output, rows) = fixture.pick(&["resume"], second["id"].as_str().unwrap(), "");
     assert!(output.status.success(), "{output:?}");
-    assert_eq!(rows.lines().count(), 3, "{rows}");
-    assert!(rows.contains("first") && rows.contains("second"), "{rows}");
-    assert_eq!(rows.lines().last(), Some("--all\tAll workspaces"), "{rows}");
+    let rows = rows.lines().collect::<Vec<_>>();
+    assert_eq!(rows.len(), 4, "{rows:?}");
+    assert!(
+        rows[0].contains("second") && rows[0].contains("stopped: 1 command"),
+        "{rows:?}"
+    );
+    for name in ["first", "idle"] {
+        let row = rows.iter().find(|row| row.contains(name)).unwrap();
+        assert!(row.contains("nothing to resume"), "{rows:?}");
+    }
+    assert_eq!(rows[3], "--all\tAll workspaces", "{rows:?}");
     assert!(
         String::from_utf8_lossy(&output.stdout).contains("Stopped commands in second"),
+        "{output:?}"
+    );
+    // A current workspace without stopped work falls back to the picker.
+    fixture.save_stopped_command(&first);
+    let (output, rows) = fixture.pick_in(idle_path, &["resume"], first["id"].as_str().unwrap(), "");
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(rows.lines().count(), 4, "{rows}");
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("Stopped commands in first"),
         "{output:?}"
     );
 }

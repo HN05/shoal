@@ -19,6 +19,7 @@ use crate::{
         output::{Palette, Style},
         workspace_context::{ScopeOrder, WorkspaceContext},
     },
+    execution::recovery,
     forge::link::{self, ItemKind},
     model::{QueueEntry, Repository, ReviewMark, Workspace},
     paths::Paths,
@@ -461,9 +462,9 @@ pub async fn select_workspace_filter(
     }
 }
 
-/// Like `select_workspace_filter`, but the picker offers only workspaces with
-/// work saved for `shoal resume`; with none it selects all, and with one that
-/// workspace, without asking.
+/// Like `select_workspace_filter`, but the current workspace counts only with
+/// stopped work, and the picker lists what each workspace has to resume.
+/// Without stopped work anywhere it selects all.
 pub async fn select_stopped_workspace(
     ctx: &Context,
     scope: WorkspaceScope,
@@ -471,17 +472,70 @@ pub async fn select_stopped_workspace(
     if scope.all {
         return Ok(None);
     }
-    match resolve_workspace(ctx, scope.workspace, Fallback::CurrentDirectory).await? {
-        Resolution::Workspace(id) => Ok(Some(id)),
-        Resolution::Picker(mut workspaces) => {
-            let stopped = stopped_workspaces(&ctx.paths, &workspaces);
-            workspaces.retain(|w| stopped.contains(&w.id));
-            match workspaces.as_slice() {
-                [] => Ok(None),
-                [workspace] => Ok(Some(workspace.id.clone())),
-                _ => pick_workspace_or_all(ctx, workspaces),
+    let explicit = scope.workspace.is_some();
+    let workspaces =
+        match resolve_workspace(ctx, scope.workspace, Fallback::CurrentDirectory).await? {
+            Resolution::Workspace(id) if explicit || stopped_work(&ctx.paths, &id).is_some() => {
+                return Ok(Some(id));
             }
-        }
+            Resolution::Workspace(_) => client::workspaces(&ctx.paths).await?,
+            Resolution::Picker(workspaces) => workspaces,
+        };
+    pick_resume_workspace(ctx, workspaces)
+}
+
+/// Workspaces with stopped work come first; `None` picks all, or nothing is
+/// stopped.
+fn pick_resume_workspace(ctx: &Context, workspaces: Vec<Workspace>) -> Result<Option<String>> {
+    let mut rows = workspaces
+        .into_iter()
+        .map(|w| (stopped_work(&ctx.paths, &w.id), w))
+        .collect::<Vec<_>>();
+    if rows.iter().all(|(stopped, _)| stopped.is_none()) {
+        return Ok(None);
+    }
+    rows.sort_by_key(|(stopped, _)| stopped.is_none());
+    let (statuses, workspaces): (Vec<_>, Vec<_>) = rows
+        .into_iter()
+        .map(|(stopped, w)| (resume_status_cell(stopped), w))
+        .unzip();
+    let labels = rows_with_status(&workspaces, &[], statuses, Palette::stderr(ctx.json));
+    let mut entries: Entries = workspaces.into_iter().map(|w| w.id).zip(labels).collect();
+    entries.push((ALL_ID.to_owned(), ALL_WORKSPACES.to_owned()));
+    let id = pick(ctx, "Workspace> ", entries)?;
+    Ok((id != ALL_ID).then_some(id))
+}
+
+/// What `shoal resume` restores in a workspace, such as `stopped: claude,
+/// 1 command`; `None` when nothing is saved.
+pub fn stopped_work(paths: &Paths, workspace_id: &str) -> Option<String> {
+    let saved = recovery::Saved::load(paths, workspace_id).unwrap_or_default();
+    if saved.is_empty() {
+        return None;
+    }
+    let mut parts = saved
+        .agents
+        .iter()
+        .map(|(_, path)| match recovery::Record::load(path) {
+            Ok(Some(record)) => record.agent,
+            _ => "agent".to_owned(),
+        })
+        .collect::<Vec<_>>();
+    match saved.commands.len() {
+        0 => {}
+        1 => parts.push("1 command".into()),
+        n => parts.push(format!("{n} commands")),
+    }
+    Some(format!("stopped: {}", parts.join(", ")))
+}
+
+/// How the resume picker and completion name a workspace without stopped work.
+pub const NOTHING_TO_RESUME: &str = "nothing to resume";
+
+fn resume_status_cell(stopped: Option<String>) -> Cell {
+    match stopped {
+        Some(text) => (text, Some(ListStatus::Stopped.style())),
+        None => (NOTHING_TO_RESUME.into(), Some(Style::Muted)),
     }
 }
 
@@ -549,7 +603,7 @@ fn workspace_entries(ctx: &Context, workspaces: Vec<Workspace>) -> Entries {
 pub fn stopped_workspaces(paths: &Paths, workspaces: &[Workspace]) -> HashSet<String> {
     workspaces
         .iter()
-        .filter(|w| crate::execution::recovery::pending(paths, &w.id).unwrap_or(false))
+        .filter(|w| recovery::pending(paths, &w.id).unwrap_or(false))
         .map(|w| w.id.clone())
         .collect()
 }
@@ -573,14 +627,29 @@ pub fn workspace_rows(
     stopped: &HashSet<String>,
     palette: Palette,
 ) -> Vec<String> {
+    let statuses = workspaces
+        .iter()
+        .map(|w| status_cell(w, stopped.contains(&w.id)))
+        .collect();
+    rows_with_status(workspaces, repositories, statuses, palette)
+}
+
+/// `workspace_rows` with a status cell per workspace.
+fn rows_with_status(
+    workspaces: &[Workspace],
+    repositories: &[(String, String)],
+    statuses: Vec<Cell>,
+    palette: Palette,
+) -> Vec<String> {
     let cells: Vec<[Cell; 4]> = workspaces
         .iter()
         .zip(repository_column(workspaces, repositories))
-        .map(|(w, repository)| {
+        .zip(statuses)
+        .map(|((w, repository), status)| {
             [
                 (w.name.clone(), Some(Style::Heading)),
                 (repository, None),
-                status_cell(w, stopped.contains(&w.id)),
+                status,
                 (w.links.issue_title.clone().unwrap_or_default(), None),
             ]
         })
