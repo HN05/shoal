@@ -23,6 +23,67 @@ async fn record(manager: &Manager, id: &str) -> Option<RemovedWorkspace> {
 }
 
 #[tokio::test]
+async fn restore_point_keeps_files_workspace_processes_write_as_they_stop() {
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "topic".into(), None, None, None)
+        .await
+        .unwrap();
+    // A process started with the workspace identity, as hooks and `shoal env`
+    // exports start them, that saves its work when asked to stop.
+    let ready = root.path().join("ready");
+    let mut process = tokio::process::Command::new("python3")
+        .args([
+            "-c",
+            "import signal, sys, time\n\
+             def stop(*_):\n    open(sys.argv[1], 'w').write('flushed\\n'); sys.exit(0)\n\
+             signal.signal(signal.SIGTERM, stop)\n\
+             open(sys.argv[2], 'w').close()\n\
+             while True: time.sleep(1)",
+        ])
+        .arg(workspace.path.join("flushed"))
+        .arg(&ready)
+        .env_clear()
+        .env("PATH", std::env::var_os("PATH").unwrap_or_default())
+        .env(crate::env::WORKSPACE_ID, &workspace.id)
+        .current_dir(root.path())
+        .kill_on_drop(true)
+        .spawn()
+        .unwrap();
+    tokio::time::timeout(std::time::Duration::from_secs(60), async {
+        while !ready.exists() {
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("workspace process did not start");
+
+    manager
+        .remove_workspace(
+            &workspace.id,
+            BranchChoice::DeleteBranch,
+            InspectionPolicy::GitOnly,
+        )
+        .await
+        .unwrap();
+
+    assert!(process.wait().await.unwrap().success());
+    let removed = record(&manager, &workspace.id).await.unwrap();
+    assert_eq!(
+        git(
+            &checkout,
+            &["show", &format!("{}:flushed", removed.snapshot)]
+        ),
+        "flushed\n"
+    );
+}
+
+#[tokio::test]
 async fn removal_keeps_a_restore_point_until_it_expires() {
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");

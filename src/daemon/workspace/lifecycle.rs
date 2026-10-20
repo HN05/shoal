@@ -669,6 +669,9 @@ impl Manager {
             self.run_resource_release_hook(workspace, &lease, release_hook.as_deref())
                 .await?;
         }
+        // Processes can write files as they stop, which the final inspection
+        // and the restore point must include.
+        self.stop_workspace_processes(&workspace.id).await?;
         let check = self
             .recheck_removal(
                 workspace,
@@ -787,6 +790,7 @@ impl Manager {
             &super::StopRequest::removal(),
         )
         .await?;
+        self.stop_workspace_processes(&workspace.id).await?;
         // Prune only this owned registration, through Worktrunk, and retain
         // its branch because the contents cannot be inspected.
         let registered = self.is_registered_worktree(workspace).await?;
@@ -810,7 +814,6 @@ impl Manager {
         branch: BranchRemoval,
         registered: bool,
     ) -> Result<RemovalResult> {
-        self.stop_workspace_processes(&workspace.id).await?;
         self.remove_simulators(&workspace.id).await?;
         if registered {
             worktrunk::remove(
