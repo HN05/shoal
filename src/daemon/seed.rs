@@ -46,6 +46,7 @@ struct Plan {
     command: PathBuf,
     paths: Vec<String>,
     environment: BTreeMap<String, OsString>,
+    caches: BTreeMap<String, crate::config::repo::Cache>,
 }
 
 impl Plan {
@@ -71,8 +72,9 @@ impl Plan {
                 &identity,
                 crate::forge::repository::name(repo),
                 &[],
-                &crate::caches::directories(repo, &settings.caches)?,
+                &crate::caches::locate(repo, &settings.caches),
             ),
+            caches: settings.caches.clone(),
             branch,
         }))
     }
@@ -180,6 +182,8 @@ impl Manager {
             self.ensure_repository_available(&repo.id).await?;
             check_out_seed(repo, layout, tip).await?;
         }
+        // Under the gate, which keeps cache emptying out until the build ends.
+        crate::caches::directories(repo, &plan.caches)?;
         log!("seed build for {} at {tip}", repo.path.display());
         run_build(
             plan,
@@ -595,13 +599,13 @@ mod tests {
         let script = checkout.join("seed.sh");
         fs::write(
             &script,
-            "#!/bin/sh\nmkdir -p out\ncat other > out/built\necho edit >> tracked\n",
+            "#!/bin/sh\ntouch \"$GOCACHE/seed\" || exit 1\nmkdir -p out\ncat other > out/built\necho edit >> tracked\n",
         )
         .unwrap();
         fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
         fs::write(
             checkout.join(".shoal.toml"),
-            "[seed]\ncmd = 'seed.sh'\npaths = ['out']\n",
+            "[seed]\ncmd = 'seed.sh'\npaths = ['out']\n[env]\nGOCACHE = '{cache.go}'\n[caches.go]\nscope = 'shared'\n",
         )
         .unwrap();
         fs::write(checkout.join("other"), "first\n").unwrap();
@@ -613,6 +617,13 @@ mod tests {
             .await
             .unwrap();
         manager.refresh_seeds().await;
+        // The build prepared and used the shared cache.
+        let cache = repo
+            .workspaces_dir
+            .as_ref()
+            .unwrap()
+            .join(".caches/shared/go");
+        assert!(cache.join("seed").exists());
         let layout = Layout::of(&repo).unwrap();
         let Some(snapshot) = Snapshot::open(&layout).unwrap() else {
             // Without copy-on-write cloning the seed is reported, never copied.

@@ -59,6 +59,14 @@ impl Layout {
         &self.root
     }
 
+    /// Each configured cache's directory, without creating it.
+    pub fn locate(&self, caches: &BTreeMap<String, Cache>) -> BTreeMap<String, PathBuf> {
+        caches
+            .keys()
+            .map(|name| (name.clone(), self.root.join(SHARED).join(name)))
+            .collect()
+    }
+
     /// Each configured cache's directory, created when missing.
     pub fn prepare(&self, caches: &BTreeMap<String, Cache>) -> Result<BTreeMap<String, PathBuf>> {
         if caches.is_empty() {
@@ -67,15 +75,12 @@ impl Layout {
         create_marked_dir(&self.root, &self.owner)
             .with_context(|| format!("create {}", self.root.display()))?;
         self.ensure_owned()?;
-        caches
-            .keys()
-            .map(|name| {
-                let directory = self.root.join(SHARED).join(name);
-                fs::create_dir_all(&directory)
-                    .with_context(|| format!("create {}", directory.display()))?;
-                Ok((name.clone(), directory))
-            })
-            .collect()
+        let directories = self.locate(caches);
+        for directory in directories.values() {
+            fs::create_dir_all(directory)
+                .with_context(|| format!("create {}", directory.display()))?;
+        }
+        Ok(directories)
     }
 
     /// The caches that exist, configured or not.
@@ -136,6 +141,11 @@ impl Layout {
         );
         Ok(())
     }
+}
+
+/// The directories of the repository's configured caches, without creating them.
+pub fn locate(repo: &Repository, caches: &BTreeMap<String, Cache>) -> BTreeMap<String, PathBuf> {
+    Layout::of(repo).map_or_else(BTreeMap::new, |layout| layout.locate(caches))
 }
 
 /// The directories of the repository's configured caches, created when missing.
