@@ -176,8 +176,8 @@ fn write_launchers(secrets: &Secrets, paths: &Paths) -> Result<tempfile::TempDir
 
 /// Run `tool` with the secrets configured for it in place of the launcher
 /// in `launchers`: the next `tool` on PATH, which may be an enclosing
-/// launch's launcher. Gated secrets are fetched only after the daemon
-/// confirms every grant.
+/// launch's launcher. Values are fetched only after the daemon authorizes
+/// every one.
 pub async fn run_tool(
     paths: &Paths,
     launchers: &Path,
@@ -209,12 +209,15 @@ fn served_to<'a>(secrets: &'a Secrets, tool: &str) -> Vec<(&'a String, &'a Secre
         .collect()
 }
 
-/// Confirm a grant for every gated secret before any value is fetched.
+/// A scoped run asks the daemon about every secret, so current approval
+/// policy applies even when it changed after the agent started; unscoped
+/// callers need no approval.
 async fn authorize(paths: &Paths, tool: &str, served: &[(&String, &Secret)]) -> Result<()> {
+    if !env::inherits_scope(&paths.state) {
+        return Ok(());
+    }
     for (name, secret) in served {
-        if secret.requires_approval {
-            confirm_grant(paths, tool, name, secret).await?;
-        }
+        confirm_grant(paths, tool, name, secret).await?;
     }
     Ok(())
 }

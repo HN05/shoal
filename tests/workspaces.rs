@@ -13392,6 +13392,32 @@ fn gated_tool_secrets_wait_for_the_users_approval() {
     fixture.ok(&["release", "--workspace", "gated", "secret", "TOOL_TOKEN"]);
     let (success, _, _) = launch();
     assert!(!success);
+
+    // A launcher from before approval was required still follows current policy.
+    let launchers = fixture.root.path().join("ungated");
+    fs::create_dir_all(&launchers).unwrap();
+    fs::write(
+        launchers.join(".secrets.json"),
+        r#"{"TOOL_TOKEN": {"command": ["sh", "-c", "echo fetched >> \"$0\"; printf secret", "fetches"], "tools": ["show-token"]}}"#,
+    )
+    .unwrap();
+    let output = fixture.run(&[
+        "exec",
+        "gated",
+        "--",
+        env!("CARGO_BIN_EXE_shoal"),
+        "internal",
+        "secret-tool",
+        launchers.to_str().unwrap(),
+        "show-token",
+        "--",
+    ]);
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("shoal acquire secret TOOL_TOKEN --reason"),
+        "{stderr}"
+    );
 }
 
 #[test]
