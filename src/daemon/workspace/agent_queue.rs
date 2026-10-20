@@ -26,10 +26,13 @@ use crate::{
 /// a launch to hand over to a Herdr tab or reconnect after a daemon restart.
 pub(crate) const START_GRACE: Duration = Duration::from_secs(120);
 
-/// The machine's agent limit and each repository's.
+/// The machine's agent limits and each repository's.
 #[derive(Debug, Default)]
 pub(crate) struct Limits {
+    /// The machine's fixed slot count.
     pub global: Option<u32>,
+    /// How many agents measured load lets start now, under dynamic admission.
+    pub starts: Option<u32>,
     pub repositories: HashMap<String, Option<u32>>,
     /// The machine-wide limit free disk space sets while a fixed limit applies.
     pub disk: Option<u32>,
@@ -41,7 +44,7 @@ impl Limits {
     }
 
     fn apply_to(&self, repository: &str) -> bool {
-        self.global.is_some() || self.repository(repository).is_some()
+        self.global.is_some() || self.starts.is_some() || self.repository(repository).is_some()
     }
 }
 
@@ -54,16 +57,18 @@ pub(crate) fn admit(
     limits: &Limits,
 ) -> Vec<String> {
     let mut total = occupied.len();
+    let mut starts = limits.starts;
     let mut used: HashMap<&str, usize> = HashMap::new();
     for repository in occupied {
         *used.entry(repository).or_default() += 1;
     }
     let mut admitted = Vec::new();
     for (id, repository) in waiting {
-        if [limits.global, limits.disk]
-            .into_iter()
-            .flatten()
-            .any(|limit| total >= limit as usize)
+        if starts == Some(0)
+            || [limits.global, limits.disk]
+                .into_iter()
+                .flatten()
+                .any(|limit| total >= limit as usize)
         {
             break;
         }
@@ -76,6 +81,7 @@ pub(crate) fn admit(
         }
         *used += 1;
         total += 1;
+        starts = starts.map(|starts| starts - 1);
         admitted.push(id.clone());
     }
     admitted
@@ -250,7 +256,7 @@ impl Manager {
         Ok(caller_admitted)
     }
 
-    /// The global limit given the `slots` in use, each named repository's
+    /// The global limits given the `slots` in use, each named repository's
     /// effective limit, and the disk limit when any of them is fixed. A
     /// repository without its own value inherits the global one, which the
     /// machine limit already covers.
@@ -258,9 +264,10 @@ impl Manager {
         let config = self.config();
         let global = config.max_agents.unwrap_or_default();
         let mut limits = Limits {
-            global: match global {
-                AgentLimit::Dynamic => Some(self.dynamic_limit(&config.overload, slots).await?),
-                limit => fixed_limit(limit),
+            global: fixed_limit(global),
+            starts: match global {
+                AgentLimit::Dynamic => Some(self.dynamic_starts(&config.overload, slots).await?),
+                _ => None,
             },
             repositories: HashMap::new(),
             disk: None,
@@ -283,8 +290,8 @@ impl Manager {
         Ok(limits)
     }
 
-    /// The machine-wide limit measured load allows for `slots`.
-    async fn dynamic_limit(&self, overload: &Overload, slots: &[Slot]) -> Result<u32> {
+    /// How many agents measured load lets start beside `slots`.
+    async fn dynamic_starts(&self, overload: &Overload, slots: &[Slot]) -> Result<u32> {
         let paths = self.admission_paths().await?;
         let paths: Vec<&Path> = paths.iter().map(PathBuf::as_path).collect();
         let cpu = self
@@ -292,11 +299,12 @@ impl Manager {
             .lock()
             .unwrap()
             .admission(tokio::time::Instant::now());
-        Ok(capacity::limit(
+        let limit = capacity::limit(
             capacity::sample(&paths, overload, cpu),
             Agents::count(slots.iter().map(|slot| slot.activity)),
             overload,
-        ))
+        );
+        Ok(limit.saturating_sub(slots.len().try_into().unwrap_or(u32::MAX)))
     }
 
     /// The machine-wide limit free disk space sets for `slots` beside fixed limits.

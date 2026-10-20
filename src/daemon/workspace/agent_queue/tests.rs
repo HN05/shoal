@@ -9,6 +9,7 @@ use crate::{
 fn limits(global: Option<u32>, repositories: &[(&str, Option<u32>)]) -> Limits {
     Limits {
         global,
+        starts: None,
         repositories: repositories
             .iter()
             .map(|(id, limit)| (id.to_string(), *limit))
@@ -40,6 +41,12 @@ fn admission_fills_free_slots_in_order_and_passes_over_full_repositories() {
         ..limits
     };
     assert_eq!(admit(&["a".into()], &queue, &low_disk), ["b1"]);
+    // Measured load starts as many as it allows, whatever the slots in use.
+    let dynamic = Limits {
+        starts: Some(1),
+        ..Limits::default()
+    };
+    assert_eq!(admit(&vec!["b".to_owned(); 9], &queue, &dynamic), ["a1"]);
 }
 
 async fn register(manager: &Manager, temp: &tempfile::TempDir, name: &str) -> Repository {
