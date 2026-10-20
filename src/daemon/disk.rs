@@ -20,7 +20,11 @@ use super::{
     workspace::{Manager, Protection},
 };
 use crate::daemon::log;
-use crate::{caches::Layout, config::overload::Disk, model::Workspace};
+use crate::{
+    caches::Layout,
+    config::overload::Disk,
+    model::{Repository, Workspace},
+};
 
 /// Each pass inspects every workspace, so a pass that could not free enough
 /// space repeats at the idle sweep's pace.
@@ -242,38 +246,55 @@ async fn empty_caches(
         if filesystem.free >= settings.cleanup_free_bytes() {
             break;
         }
-        let on_filesystem = Layout::of(&repo).is_some_and(|layout| {
-            layout.root().metadata().map(|metadata| metadata.dev()).ok() == Some(filesystem.device)
-        });
-        if !on_filesystem {
+        if !caches_on(&repo, filesystem) {
             continue;
         }
         let name = crate::forge::repository::name(&repo);
-        let (kind, message) = match manager.empty_caches(&repo, false).await {
-            Ok(Some(Emptying::Emptied { caches })) => {
-                log!("disk space cleanup emptied caches of {name}");
-                (
-                    NotificationKind::CachesEmptied,
-                    format!(
-                        "Emptied caches of {name} for disk space: {}; {}",
-                        caches.join(", "),
-                        filesystem.describe()
-                    ),
-                )
-            }
-            Ok(_) => continue,
-            Err(error) => {
-                log!("disk space cleanup kept caches of {name}: {error:#}");
-                (
-                    NotificationKind::CleanupFailed,
-                    format!("Disk space cleanup could not empty caches of {name}: {error:#}"),
-                )
-            }
-        };
-        manager.notify(None, kind, message).await;
+        let emptying = manager.empty_caches(&repo, false).await;
+        if let Some((kind, message)) = emptying_notice(name, emptying, filesystem) {
+            manager.notify(None, kind, message).await;
+        }
+        // Even caches it reports as busy or absent may have had leftovers purged.
         filesystem.free = available(&filesystem.path)?;
     }
     Ok(())
+}
+
+/// Whether the repository keeps its shared caches on the filesystem.
+fn caches_on(repo: &Repository, filesystem: &Filesystem) -> bool {
+    Layout::of(repo).is_some_and(|layout| {
+        layout.root().metadata().map(|metadata| metadata.dev()).ok() == Some(filesystem.device)
+    })
+}
+
+/// The notification for emptying a repository's caches, if it did anything
+/// worth telling the user.
+fn emptying_notice(
+    name: &str,
+    emptying: Result<Option<Emptying>>,
+    filesystem: &Filesystem,
+) -> Option<(NotificationKind, String)> {
+    match emptying {
+        Ok(Some(Emptying::Emptied { caches })) => {
+            log!("disk space cleanup emptied caches of {name}");
+            Some((
+                NotificationKind::CachesEmptied,
+                format!(
+                    "Emptied caches of {name} for disk space: {}; {}",
+                    caches.join(", "),
+                    filesystem.describe()
+                ),
+            ))
+        }
+        Ok(_) => None,
+        Err(error) => {
+            log!("disk space cleanup kept caches of {name}: {error:#}");
+            Some((
+                NotificationKind::CleanupFailed,
+                format!("Disk space cleanup could not empty caches of {name}: {error:#}"),
+            ))
+        }
+    }
 }
 
 /// Stop every running agent through protection, so it restores once free
@@ -525,6 +546,52 @@ mod tests {
             "{}",
             emptied.message
         );
+    }
+
+    #[tokio::test]
+    async fn cleanup_reads_space_again_after_purging_leftover_caches() {
+        let (root, manager) = manager().await;
+        let checkout = repository(root.path(), "repo");
+        let repo = manager
+            .register_repository(checkout.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        let held = manager
+            .create_workspace(&repo.id, "held".into(), None, None, None)
+            .await
+            .unwrap();
+        manager
+            .acquire_hold(&held.id, "keep".into(), None)
+            .await
+            .unwrap();
+        let repo = manager.repository(&repo.id).await.unwrap();
+        let caches = std::collections::BTreeMap::from([(
+            "go".to_owned(),
+            crate::config::repo::Cache {
+                scope: crate::config::repo::CacheScope::Shared,
+            },
+        )]);
+        crate::caches::directories(&repo, &caches).unwrap();
+        // A pass interrupted after moving the caches aside.
+        let layout = Layout::of(&repo).unwrap();
+        layout.move_aside().unwrap();
+        let readings = AtomicUsize::new(0);
+        let critical = manager.config().overload.disk.stop_free_bytes() - 1;
+        let available = |_: &Path| {
+            // Purging the leftovers frees enough space.
+            Ok(if readings.fetch_add(1, Ordering::Relaxed) == 0 {
+                critical
+            } else {
+                u64::MAX
+            })
+        };
+        Monitor::default()
+            .check(&manager, Instant::now(), &available)
+            .await
+            .unwrap();
+        assert!(!layout.root().join("trash").exists());
+        // The stop decision used the reading taken after the purge.
+        assert_eq!(readings.load(Ordering::Relaxed), 2);
     }
 
     #[tokio::test]
