@@ -95,6 +95,7 @@ async fn marks_bind_to_head_follow_links_and_record_events() {
             issue: Some(issue.clone()),
             issue_title: None,
             prs: vec![pr.clone()],
+            ..Default::default()
         }
     );
     let inspection = manager.inspect_workspace(&workspace.id).await.unwrap();

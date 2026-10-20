@@ -692,8 +692,27 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
             manager.set_issue(&workspace, &url, title).await?;
             Body::Ok
         }
-        Method::ClearIssue { workspace, url } => {
-            manager.clear_issue(&workspace, url.as_deref()).await?;
+        Method::LinkItem {
+            workspace,
+            kind,
+            url,
+            relation,
+            title,
+        } => {
+            manager
+                .link_item(&workspace, kind, &url, relation, title)
+                .await?;
+            Body::Ok
+        }
+        Method::UnlinkItems {
+            workspace,
+            relation,
+            kind,
+            url,
+        } => {
+            manager
+                .unlink_items(&workspace, relation, kind, url.as_deref())
+                .await?;
             Body::Ok
         }
         Method::SetPr { workspace, action } => {

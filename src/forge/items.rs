@@ -8,7 +8,7 @@ use super::{
     action::{Action, Edit},
     create::{NewIssue, NewPull, PullOptions},
     item::{Item, ItemState, Opened},
-    link::ItemKind,
+    link::{ItemKind, Relation},
     pr::wait::{OwnChange, record_own_change},
     repository,
 };
@@ -181,40 +181,35 @@ impl Manager {
         let _gate = self.pr_gate.lock().await;
         let workspace = self.workspace(selector).await?;
         self.verify_worktree(&workspace).await?;
-        // Refuse before creating anything that could not then be linked.
-        if link {
-            anyhow::ensure!(
-                workspace.links.issue.is_none(),
-                "the workspace already has a linked issue; open the issue without --link"
-            );
-            anyhow::ensure!(
-                workspace.state.accepts_issue(),
-                "workspace cannot accept an issue in its current state"
-            );
-        }
+        // Refuse before creating anything that could not then be recorded
+        // or linked.
+        anyhow::ensure!(
+            workspace.state.accepts_links(),
+            "workspace cannot accept an issue in its current state"
+        );
+        anyhow::ensure!(
+            !link || workspace.links.issue.is_none(),
+            "the workspace already has a linked issue; open the issue without --link"
+        );
         let forge = workspace_forge(&workspace).await?;
         let account = self.agent_account(&workspace).await?;
         let item = forge.create_issue(&account, &issue).await?;
-        let (id, url) = (workspace.id.clone(), item.url.clone());
-        self.store
-            .run(move |db| events::record_item(db, &id, ItemKind::Issue, &url, "open"))
+        let (linked, warning) = self
+            .keep_created(&workspace, ItemKind::Issue, &item, link)
             .await?;
-        if link {
-            self.set_issue_gated(&workspace.id, &item.url, Some(item.title.clone()))
-                .await
-                .with_context(|| format!("{} was opened, but linking it failed", item.url))?;
-        }
         Ok(Opened {
             item,
             created: true,
-            linked: link,
+            linked,
+            warning,
         })
     }
 }
 
 impl Manager {
     /// Link the open PR of the workspace's branch, or open one as its agent
-    /// account and link it, so a PR Shoal opens is never left unlinked.
+    /// account and link it; only a removal that starts meanwhile leaves it
+    /// unlinked.
     pub async fn open_pull(&self, selector: &str, options: PullOptions) -> Result<Opened> {
         // Cleanup holds the gate, so it cannot remove the workspace between
         // opening the PR and linking it.
@@ -222,6 +217,10 @@ impl Manager {
         let workspace = self.workspace(selector).await?;
         self.verify_worktree(&workspace).await?;
         super::pr::current_head(&workspace).await?;
+        anyhow::ensure!(
+            workspace.state.accepts_links(),
+            "workspace cannot accept a PR in its current state"
+        );
         let forge = workspace_forge(&workspace).await?;
         let account = self.agent_account(&workspace).await?;
         let existing = forge.open_pull_for(&account, &workspace.branch).await?;
@@ -236,12 +235,6 @@ impl Manager {
                 (forge.create_pull(&account, &pull).await?, true)
             }
         };
-        if created {
-            let (id, url) = (workspace.id.clone(), item.url.clone());
-            self.store
-                .run(move |db| events::record_item(db, &id, ItemKind::Pr, &url, "open"))
-                .await?;
-        }
         anyhow::ensure!(
             item.pr
                 .as_ref()
@@ -249,21 +242,104 @@ impl Manager {
             "{} does not have the workspace branch as its head",
             item.url
         );
-        self.set_pr_gated(
-            &workspace.id,
-            super::pr::Action::Watch {
-                url: item.url.clone(),
-            },
-            super::pr::WatchCheck::Known,
-        )
-        .await
-        .with_context(|| format!("{} is open, but linking it failed", item.url))?;
+        let (linked, warning) = if created {
+            self.keep_created(&workspace, ItemKind::Pr, &item, true)
+                .await?
+        } else {
+            self.set_pr_gated(&workspace.id, watch(&item), super::pr::WatchCheck::Known)
+                .await
+                .with_context(|| format!("{} is open, but linking it failed", item.url))?;
+            (true, None)
+        };
         Ok(Opened {
             item,
             created,
-            linked: true,
+            linked,
+            warning,
         })
     }
+
+    /// Record an item the workspace just created as opened and, with `link`,
+    /// assign it. A removal that starts after the caller's check leaves it
+    /// unrecorded or unlinked with a warning, so nothing fails once the item
+    /// exists and a retry cannot create a duplicate. Returns whether it was
+    /// linked, and the warning.
+    async fn keep_created(
+        &self,
+        workspace: &Workspace,
+        kind: ItemKind,
+        item: &Item,
+        link: bool,
+    ) -> Result<(bool, Option<String>)> {
+        let (id, url, title) = (workspace.id.clone(), item.url.clone(), item.title.clone());
+        let recorded = self
+            .store
+            .run(move |db| record_opened(db, &id, kind, &url, &title))
+            .await
+            .with_context(|| format!("{} was opened, but recording it failed", item.url))?;
+        if !recorded || !link {
+            return Ok((false, (!recorded).then(|| removal_warning(&item.url))));
+        }
+        let linked = match kind {
+            ItemKind::Issue => {
+                let title = Some(item.title.clone());
+                self.set_issue_gated(&workspace.id, &item.url, title).await
+            }
+            ItemKind::Pr => {
+                let check = super::pr::WatchCheck::Known;
+                self.set_pr_gated(&workspace.id, watch(item), check).await
+            }
+        };
+        match linked {
+            Ok(()) => Ok((true, None)),
+            Err(_) if !self.accepts_links(&workspace.id).await? => {
+                Ok((false, Some(removal_warning(&item.url))))
+            }
+            Err(error) => {
+                Err(error.context(format!("{} was opened, but linking it failed", item.url)))
+            }
+        }
+    }
+
+    /// Whether the workspace still exists and takes link changes.
+    async fn accepts_links(&self, id: &str) -> Result<bool> {
+        let id = id.to_owned();
+        self.store
+            .run(move |db| super::relations::accepts_links(db, &id))
+            .await
+    }
+}
+
+fn watch(item: &Item) -> super::pr::Action {
+    super::pr::Action::Watch {
+        url: item.url.clone(),
+    }
+}
+
+/// Record an item the workspace created as opened, with the event of its
+/// creation, in one transaction, returning whether it was recorded: a
+/// removal that started after the caller's check takes no link changes, and
+/// the item exists either way.
+fn record_opened(
+    db: &mut rusqlite::Connection,
+    id: &str,
+    kind: ItemKind,
+    url: &str,
+    title: &str,
+) -> Result<bool> {
+    let tx = db.transaction()?;
+    events::record_item(&tx, id, kind, url, "open")?;
+    let recorded = super::relations::accepts_links(&tx, id)?;
+    if recorded {
+        super::relations::record(&tx, id, Relation::Opened, kind, url, Some(title))?;
+    }
+    tx.commit()?;
+    Ok(recorded)
+}
+
+/// The warning for an item created after removal started.
+fn removal_warning(url: &str) -> String {
+    format!("{url} was opened, but removal started first, so the workspace does not link it")
 }
 
 /// Fill what the caller left unset: the title from the linked issue, then
@@ -362,5 +438,93 @@ mod tests {
         assert_eq!(description(Some("Fix\n".into()), Some(7)), "Fix\n");
         assert_eq!(description(Some("Refs #7".into()), Some(7)), "Refs #7");
         assert_eq!(description(Some("".into()), Some(7)), "");
+    }
+
+    #[tokio::test]
+    async fn a_workspace_being_removed_opens_nothing_and_keeps_late_items_unlinked() {
+        use crate::{
+            state::WorkspaceState,
+            test_support::{manager, repository},
+        };
+        let (root, manager) = manager().await;
+        let path = repository(root.path(), "repo");
+        let repo = manager
+            .register_repository(path.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        let workspace = manager
+            .create_workspace(&repo.id, "topic".into(), None, None, None)
+            .await
+            .unwrap();
+        let item = |number: u64| Item {
+            kind: ItemKind::Issue,
+            number,
+            url: format!("https://forge.example/team/repo/issues/{number}"),
+            title: "Follow-up".into(),
+            state: ItemState::Open,
+            labels: Vec::new(),
+            pr: None,
+        };
+
+        // A link failing for another reason still fails, after the record.
+        let error = manager
+            .keep_created(&workspace, ItemKind::Issue, &item(1), true)
+            .await
+            .unwrap_err();
+        assert!(
+            format!("{error:#}").contains("linking it failed"),
+            "{error:#}"
+        );
+        let links = manager.workspace(&workspace.id).await.unwrap().links;
+        assert_eq!(links.opened.len(), 1);
+
+        manager
+            .reserve_lifecycle(&workspace.id, WorkspaceState::Removing)
+            .await
+            .unwrap();
+        // Refused before the forge is consulted: the repository has no origin.
+        let issue = NewIssue {
+            title: "Follow-up".into(),
+            body: String::new(),
+            labels: Vec::new(),
+        };
+        let error = manager
+            .open_issue(&workspace.id, issue, false)
+            .await
+            .unwrap_err();
+        assert!(
+            format!("{error:#}").contains("cannot accept an issue"),
+            "{error:#}"
+        );
+        let error = manager
+            .open_pull(&workspace.id, PullOptions::default())
+            .await
+            .unwrap_err();
+        assert!(
+            format!("{error:#}").contains("cannot accept a PR"),
+            "{error:#}"
+        );
+
+        // An item created after the check but before removal reserved the
+        // workspace keeps its creation event and comes back with a warning.
+        let (linked, warning) = manager
+            .keep_created(&workspace, ItemKind::Issue, &item(2), true)
+            .await
+            .unwrap();
+        assert!(!linked);
+        assert!(warning.unwrap().contains("removal started"));
+        let links = manager.workspace(&workspace.id).await.unwrap().links;
+        assert_eq!(links.opened.len(), 1);
+        let created = manager
+            .workspace_events(None, 100)
+            .await
+            .unwrap()
+            .into_iter()
+            .filter(|item| {
+                matches!(item,
+                crate::daemon::events::EventItem::Event(event) if event.details.item.is_some())
+            })
+            .count();
+        assert_eq!(created, 2);
     }
 }

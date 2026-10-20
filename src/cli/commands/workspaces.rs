@@ -1547,6 +1547,8 @@ fn render_status(view: &StatusView, json: bool) {
         }
         None => println!("PR watch:      none"),
     }
+    render_recorded("Opened:", &workspace.links.opened);
+    render_recorded("Related:", &workspace.links.related);
     println!("Cleanup:       {}", status.cleanup_reason);
     if let Some(error) = &status.cleanup_error {
         println!("Auto cleanup:  {}", palette.paint(Style::Warning, error));
@@ -1558,6 +1560,15 @@ fn render_status(view: &StatusView, json: bool) {
         println!("{}", super::links::review_lines(&workspace.review));
     }
     println!("Notifications: {} unread", status.unread_notifications);
+}
+
+fn render_recorded(label: &str, items: &[crate::model::LinkedItem]) {
+    for item in items {
+        match &item.title {
+            Some(title) => println!("{label:<15}{} {title}", item.url),
+            None => println!("{label:<15}{}", item.url),
+        }
+    }
 }
 
 fn render_pr(pr: &PrStatus, palette: Palette) {

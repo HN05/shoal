@@ -26,7 +26,7 @@ use crate::{
     sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
 };
 
-pub const VERSION: u32 = 97;
+pub const VERSION: u32 = 98;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -280,8 +280,20 @@ pub enum Method {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         title: Option<String>,
     },
-    ClearIssue {
+    /// Link an issue or PR by number or URL with a relation.
+    LinkItem {
         workspace: String,
+        kind: crate::forge::link::ItemKind,
+        url: String,
+        relation: crate::forge::link::Relation,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        title: Option<String>,
+    },
+    /// Unlink the relation's items, optionally only one kind or one item.
+    UnlinkItems {
+        workspace: String,
+        relation: crate::forge::link::Relation,
+        kind: Option<crate::forge::link::ItemKind>,
         url: Option<String>,
     },
     SetPr {

@@ -990,8 +990,8 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
         );
     }
     for words in [
-        vec!["link", "pr", "42", "--workspace", "fi"],
-        vec!["unlink", "pr", "--workspace", "fi"],
+        vec!["link", "pr", "42", "assigned", "--workspace", "fi"],
+        vec!["unlink", "pr", "assigned", "--workspace", "fi"],
     ] {
         assert!(complete(&words, fixture.root.path()).contains(&"first".into()));
     }
@@ -2605,7 +2605,7 @@ fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
     let linked_prs = || fixture.ok(&["inspect", "stack-top"])["workspace"]["links"]["prs"].clone();
     assert_eq!(linked_prs(), serde_json::json!([url]));
     // Opening the PR again relinks it to its owner.
-    fixture.ok(&["unlink", "pr", url, "--workspace", "stack-top"]);
+    fixture.ok(&["unlink", "pr", url, "assigned", "--workspace", "stack-top"]);
     assert_eq!(linked_prs(), serde_json::json!([]));
     let added = fixture
         .command()
@@ -2639,7 +2639,7 @@ fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
     );
 
     // Reviewing in the owner links the PR as well.
-    fixture.ok(&["unlink", "pr", url, "--workspace", "stack-top"]);
+    fixture.ok(&["unlink", "pr", url, "assigned", "--workspace", "stack-top"]);
     commit("more");
     git(&author, &["push", "origin", "stack/top"]);
     let output = review(&["https://forge.example/team/project/pulls/7", "--no-post"]);
@@ -4687,8 +4687,8 @@ fn execution_scope_limits_management_and_expires() {
         vec!["inspect", "other"],
         vec!["exec", "other", "--", "true"],
         vec!["setup", "other"],
-        vec!["link", "pr", "42", "--workspace", "other"],
-        vec!["unlink", "pr", "--workspace", "other"],
+        vec!["link", "pr", "42", "assigned", "--workspace", "other"],
+        vec!["unlink", "pr", "assigned", "--workspace", "other"],
         vec!["undone", "other"],
         vec!["done", "other", "--keep"],
         vec!["done", "other", "--cleanup"],
@@ -10551,12 +10551,20 @@ case "$1 $2" in
 esac
 "#,
     );
-    let missing = fixture.run(&["link", "--workspace", "topic"]);
+    let missing = fixture.run(&["link", "assigned", "--workspace", "topic"]);
     assert!(String::from_utf8_lossy(&missing.stderr).contains("link needs an issue or PR"));
     let picker = fixture.root.path().join("bin/fzf");
     for (args, kind, number) in [
-        (vec!["link", "--workspace", "topic"], "Pull request", "7"),
-        (vec!["link", "issue", "--workspace", "topic"], "", "34"),
+        (
+            vec!["link", "assigned", "--workspace", "topic"],
+            "Pull request",
+            "7",
+        ),
+        (
+            vec!["link", "issue", "assigned", "--workspace", "topic"],
+            "",
+            "34",
+        ),
     ] {
         install_test_script(
             &picker,
@@ -10707,7 +10715,7 @@ fn merged_retains_dirty_work_and_changed_head_across_restart_and_can_be_cancelle
     fixture.restart();
     wait_pr_error(&fixture, "retain", "HEAD changed");
     assert!(path.join("dirty").exists());
-    fixture.ok(&["unlink", "pr", "--workspace", "retain"]);
+    fixture.ok(&["unlink", "pr", "assigned", "--workspace", "retain"]);
     assert!(fixture.ok(&["inspect", "retain"])["pr_cleanup"].is_null());
 }
 
@@ -10721,12 +10729,12 @@ fn pr_cleanup_can_be_disabled_independently() {
         fixture.root.path().join("bin/gh"),
         "#!/bin/sh\necho '{\"number\":7,\"state\":\"OPEN\",\"headRefName\":\"keep\",\"commits\":[]}'\n",
     );
-    fixture.ok(&["link", "pr", "7", "--workspace", "keep"]);
+    fixture.ok(&["link", "pr", "7", "assigned", "--workspace", "keep"]);
     assert_eq!(
         fixture.ok(&["inspect", "keep"])["workspace"]["links"]["prs"],
         serde_json::json!(["https://github.com/team/project/pull/7"])
     );
-    fixture.ok(&["unlink", "pr", "--workspace", "keep"]);
+    fixture.ok(&["unlink", "pr", "assigned", "--workspace", "keep"]);
     let output = fixture.acknowledge("keep");
     assert_eq!(output["type"], "error");
     assert!(
@@ -10773,14 +10781,15 @@ fn legacy_pr_registrations_survive_disabled_cleanup_and_clear_after_restart() {
                 env!("CARGO_BIN_EXE_shoal"),
                 "--json",
                 "unlink",
-                "pr"
+                "pr",
+                "assigned",
             ]),
             serde_json::json!({"registered": false})
         );
         fixture.restart();
         assert!(fixture.ok(&["inspect", name])["pr_cleanup"].is_null());
         assert_eq!(
-            fixture.ok(&["unlink", "pr", "--workspace", name]),
+            fixture.ok(&["unlink", "pr", "assigned", "--workspace", name]),
             serde_json::json!({"registered": false})
         );
         assert!(Path::new(workspace["path"].as_str().unwrap()).exists());
@@ -10808,7 +10817,7 @@ fn invalid_persisted_pr_registration_retains_workspace_and_can_be_cleared() {
             String::from_utf8_lossy(&output.stderr).contains("expected exactly one of url or head")
         );
         assert!(Path::new(workspace["path"].as_str().unwrap()).exists());
-        fixture.ok(&["unlink", "pr", "--workspace", "invalid"]);
+        fixture.ok(&["unlink", "pr", "assigned", "--workspace", "invalid"]);
         assert!(fixture.ok(&["inspect", "invalid"])["pr_cleanup"].is_null());
     }
 }
@@ -10863,7 +10872,7 @@ fn repository_config_sets_pr_cleanup_over_the_global_default() {
 fn pr_watch_checks_github_state_and_commit_and_survives_restart() {
     let mut fixture = Fixture::with_config(Some("[cleanup.auto]\nenabled=false\n"));
     let workspace = fixture.add("watch");
-    let failed = fixture.run(&["link", "pr", "56", "--workspace", "watch"]);
+    let failed = fixture.run(&["link", "pr", "56", "assigned", "--workspace", "watch"]);
     assert!(!failed.status.success());
     assert!(String::from_utf8_lossy(&failed.stderr).contains("origin remote"));
     assert!(fixture.ok(&["inspect", "watch"])["pr_cleanup"].is_null());
@@ -10882,6 +10891,7 @@ fn pr_watch_checks_github_state_and_commit_and_survives_restart() {
         "link",
         "pr",
         "https://github.com/team/repo/pull/56",
+        "assigned",
         "--workspace",
         "watch",
     ]);
@@ -10894,6 +10904,7 @@ fn pr_watch_checks_github_state_and_commit_and_survives_restart() {
                 "link",
                 "pr",
                 "https://github.com/other/repo/pull/56",
+                "assigned",
                 "--workspace",
                 "watch"
             ])
@@ -10915,10 +10926,11 @@ fn pr_watch_checks_github_state_and_commit_and_survives_restart() {
         "link",
         "pr",
         "https://github.com/team/repo/pull/56",
+        "assigned",
         "--workspace",
         "watch",
     ]);
-    fixture.ok(&["unlink", "pr", "--workspace", "watch"]);
+    fixture.ok(&["unlink", "pr", "assigned", "--workspace", "watch"]);
     let events = fixture
         .command()
         .args(["--json", "internal", "events"])
@@ -10937,10 +10949,11 @@ fn pr_watch_checks_github_state_and_commit_and_survives_restart() {
             .find(|event| event["kind"] == kind)
             .unwrap_or_else(|| panic!("missing {kind} event"));
         assert_eq!(event["link"]["kind"], "pr");
+        assert_eq!(event["link"]["relation"], "assigned");
         assert_eq!(event["link"]["url"], "https://github.com/team/repo/pull/56");
     }
-    fixture.ok(&["link", "pr", "56", "--workspace", "watch"]);
-    fixture.ok(&["unlink", "pr", "--workspace", "watch"]);
+    fixture.ok(&["link", "pr", "56", "assigned", "--workspace", "watch"]);
+    fixture.ok(&["unlink", "pr", "assigned", "--workspace", "watch"]);
     // Scoped callers can omit the workspace and register by number too.
     fixture.ok(&[
         "exec",
@@ -10951,6 +10964,7 @@ fn pr_watch_checks_github_state_and_commit_and_survives_restart() {
         "link",
         "pr",
         "56",
+        "assigned",
     ]);
     fixture.restart();
     assert_eq!(
@@ -11024,7 +11038,7 @@ fn pr_watch_checks_forgejo_merge_and_commits_through_the_api() {
         "repos/team/repo/pulls/56/commits?limit=50&page=1",
         &serde_json::json!([{"sha": head}]),
     );
-    fixture.ok(&["link", "pr", "56", "--workspace", "fj-watch"]);
+    fixture.ok(&["link", "pr", "56", "assigned", "--workspace", "fj-watch"]);
     // A merge alone waits for the agent's explicit done.
     assert!(fixture.ok(&["inspect", "fj-watch"])["completion"].is_null());
     fixture.ok(&["done", "fj-watch"]);
@@ -11055,7 +11069,7 @@ fn pr_wait_wakes_for_individual_ci_reviews_and_conflicts_with_own_scope() {
         "[[{\"id\":1,\"body\":\"review finding\"}]]",
     )
     .unwrap();
-    fixture.ok(&["link", "pr", "7", "--workspace", "watch"]);
+    fixture.ok(&["link", "pr", "7", "assigned", "--workspace", "watch"]);
     let binary = env!("CARGO_BIN_EXE_shoal");
     let first = fixture.ok(&["exec", "watch", "--", binary, "--json", "watch", "pr"]);
     assert_eq!(first["timed_out"], false);
@@ -11111,7 +11125,7 @@ fn pr_wait_wakes_for_individual_ci_reviews_and_conflicts_with_own_scope() {
     assert_eq!(second["updates"][0]["message"], "rust: FAILURE");
     assert_eq!(second["updates"][1]["kind"], "merge_conflict");
     assert!(fixture.ok(&["inspect", "watch"])["completion"].is_null());
-    fixture.ok(&["unlink", "pr", "--workspace", "watch"]);
+    fixture.ok(&["unlink", "pr", "assigned", "--workspace", "watch"]);
     let missing = fixture.run(&["watch", "pr", "--workspace", "watch"]);
     assert!(!missing.status.success());
     assert!(String::from_utf8_lossy(&missing.stderr).contains("no linked items"));
@@ -11137,7 +11151,7 @@ if [ "$1" = api ]; then printf '[]'; else cat "$HOME/pr.json"; fi
     );
     fs::write(fixture.root.path().join("pr.json"), serde_json::json!({"number":7,"state":"OPEN","headRefName":"waits","headRefOid":"head",
         "commits":[],"comments":[{"id":1,"body":"review"}],"reviews":[],"statusCheckRollup":[],"mergeable":"MERGEABLE"}).to_string()).unwrap();
-    fixture.ok(&["link", "pr", "7", "--workspace", "waits"]);
+    fixture.ok(&["link", "pr", "7", "assigned", "--workspace", "waits"]);
     fs::write(fixture.root.path().join("block"), "").unwrap();
     let wait = || {
         fixture
@@ -11205,10 +11219,11 @@ esac
     fs::write(fixture.root.path().join("pr.json"), serde_json::json!({"number":7,"state":"OPEN","headRefName":"items","headRefOid":"head","title":"PR","baseRefName":"main","isCrossRepository":false,
         "commits":[],"comments":[{"id":2,"body":"PR comment"}],"reviews":[],"statusCheckRollup":[],"mergeable":"MERGEABLE"}).to_string()).unwrap();
     write_issue(1, "first");
-    fixture.ok(&["link", "pr", "7", "--workspace", "items"]);
+    fixture.ok(&["link", "pr", "7", "assigned", "--workspace", "items"]);
     fixture.ok(&[
         "link",
         "https://github.com/team/project/issues/1",
+        "assigned",
         "--workspace",
         "items",
     ]);
@@ -11238,7 +11253,7 @@ esac
     assert_eq!(direct["updates"].as_array().unwrap().len(), 1);
     assert!(
         !fixture
-            .run(&["unlink", "issue", "2", "--workspace", "items"])
+            .run(&["unlink", "issue", "2", "assigned", "--workspace", "items"])
             .status
             .success()
     );
@@ -11257,7 +11272,7 @@ esac
             .success()
     );
     fixture.ok(&[
-        "exec", "items", "--", binary, "--json", "unlink", "issue", "1",
+        "exec", "items", "--", binary, "--json", "unlink", "issue", "1", "assigned",
     ]);
     let inspection = fixture.ok(&["inspect", "items"]);
     assert!(inspection["issue"].is_null());
@@ -11274,8 +11289,8 @@ esac
     let inspection = fixture.ok(&["inspect", "items"]);
     assert!(inspection["issue"].is_null() && inspection["completion"].is_null());
     write_issue(1, "relink");
-    fixture.ok(&["link", "issue", "1", "--workspace", "items"]);
-    fixture.ok(&["unlink", "--workspace", "items"]);
+    fixture.ok(&["link", "issue", "1", "assigned", "--workspace", "items"]);
+    fixture.ok(&["unlink", "assigned", "--workspace", "items"]);
     assert!(fixture.ok(&["inspect", "items"])["issue"].is_null());
     assert!(fixture.ok(&["inspect", "items"])["pr_cleanup"].is_null());
     // With nothing linked, a watch waits for branch conflicts alone.
@@ -11398,7 +11413,14 @@ fn watch_forgejo_issue_reports_comments_closure_and_reopening() {
         "repos/team/repo/issues/8/comments?limit=50&page=1",
         &serde_json::json!([{"id": 1, "body": "first comment"}]),
     );
-    fixture.ok(&["link", "issue", "8", "--workspace", "issue-watch"]);
+    fixture.ok(&[
+        "link",
+        "issue",
+        "8",
+        "assigned",
+        "--workspace",
+        "issue-watch",
+    ]);
     let first = fixture.ok(&["watch", "issue", "--workspace", "issue-watch"]);
     assert_eq!(first["updates"][0]["kind"], "comment");
     state("closed");
@@ -11447,7 +11469,7 @@ fn pr_wait_reads_forgejo_ci_and_conflicts_from_the_api() {
             {"context": "rust", "status": "failure"}, {"context": "gate", "status": "pending"}
         ]}),
     );
-    fixture.ok(&["link", "pr", "7", "--workspace", "api"]);
+    fixture.ok(&["link", "pr", "7", "assigned", "--workspace", "api"]);
     let watched = fixture.ok(&["watch", "pr", "--workspace", "api"]);
     let updates = watched["updates"].as_array().unwrap();
     assert_eq!(
@@ -11508,7 +11530,7 @@ fn pr_wait_reports_forgejo_reviews_when_the_ci_lookup_fails() {
     );
     forgejo_api(home, &status, &checks("pending"));
     forgejo_api(home, reviews, &review("A finding"));
-    fixture.ok(&["link", "pr", "7", "--workspace", "watch"]);
+    fixture.ok(&["link", "pr", "7", "assigned", "--workspace", "watch"]);
     let first = fixture.ok(&["watch", "pr", "--workspace", "watch"]);
     assert_eq!(first["updates"].as_array().unwrap().len(), 2, "{first}");
     assert_eq!(first["updates"][1]["message"], "review/default: Success");
@@ -11737,8 +11759,8 @@ fn view_shows_linked_items_with_status_and_discussion() {
         .to_string(),
     )
     .unwrap();
-    fixture.ok(&["link", "issue", "3", "--workspace", "view"]);
-    fixture.ok(&["link", "pr", "7", "--workspace", "view"]);
+    fixture.ok(&["link", "issue", "3", "assigned", "--workspace", "view"]);
+    fixture.ok(&["link", "pr", "7", "assigned", "--workspace", "view"]);
 
     let views = fixture.ok(&["view", "--workspace", "view"]);
     let views = views.as_array().unwrap();
@@ -16525,9 +16547,9 @@ fn multiple_prs_clean_up_only_after_every_merge_and_honor_done_policy() {
         };
         write_pr(1, "OPEN", "earlier");
         write_pr(2, "OPEN", head.trim());
-        fixture.ok(&["link", "pr", "1", "--workspace", "multi"]);
-        fixture.ok(&["link", "pr", "2", "--workspace", "multi"]);
-        fixture.ok(&["link", "pr", "1", "--workspace", "multi"]);
+        fixture.ok(&["link", "pr", "1", "assigned", "--workspace", "multi"]);
+        fixture.ok(&["link", "pr", "2", "assigned", "--workspace", "multi"]);
+        fixture.ok(&["link", "pr", "1", "assigned", "--workspace", "multi"]);
         assert_eq!(
             fixture.ok(&["inspect", "multi"])["pr_cleanup"]["urls"]
                 .as_array()
@@ -16545,6 +16567,7 @@ fn multiple_prs_clean_up_only_after_every_merge_and_honor_done_policy() {
             "unlink",
             "pr",
             "2",
+            "assigned",
         ]);
         assert_eq!(
             fixture.ok(&["inspect", "multi"])["pr_cleanup"]["url"],
@@ -16559,6 +16582,7 @@ fn multiple_prs_clean_up_only_after_every_merge_and_honor_done_policy() {
             "link",
             "pr",
             "2",
+            "assigned",
         ]);
         if manual_keep {
             fixture.ok(&["done", "multi", "--keep"]);
@@ -16698,8 +16722,8 @@ cat >/dev/null
         };
         write_pr(1, "Open", "lower", "main");
         write_pr(2, "Open", "upper", "lower");
-        fixture.ok(&["link", "pr", "1", "--workspace", "lower"]);
-        fixture.ok(&["link", "pr", "2", "--workspace", "upper"]);
+        fixture.ok(&["link", "pr", "1", "assigned", "--workspace", "lower"]);
+        fixture.ok(&["link", "pr", "2", "assigned", "--workspace", "upper"]);
         fixture.restart();
         assert_eq!(
             fixture.ok(&["inspect", "upper"])["workspace"]["base_workspace"]["name"],
@@ -16785,8 +16809,8 @@ fn failed_restacks_are_reported_even_when_pr_cleanup_is_disabled() {
     };
     write_pr(1, "OPEN", "lower", "main");
     write_pr(2, "OPEN", "upper", "lower");
-    fixture.ok(&["link", "pr", "1", "--workspace", "lower"]);
-    fixture.ok(&["link", "pr", "2", "--workspace", "upper"]);
+    fixture.ok(&["link", "pr", "1", "assigned", "--workspace", "lower"]);
+    fixture.ok(&["link", "pr", "2", "assigned", "--workspace", "upper"]);
     fs::write(
         root.join(".config/shoal/config.toml"),
         "[cleanup.auto]\nenabled=false\n[cleanup.pr]\nenabled=false\n",

@@ -79,7 +79,8 @@ pub async fn authorize(
         | Method::SetAgentState { workspace, .. }
         | Method::SetPr { workspace, .. }
         | Method::SetIssue { workspace, .. }
-        | Method::ClearIssue { workspace, .. }
+        | Method::LinkItem { workspace, .. }
+        | Method::UnlinkItems { workspace, .. }
         | Method::PrWait { workspace, .. }
         | Method::WatchItems { workspace, .. }
         | Method::AcknowledgePrUpdates { workspace, .. }

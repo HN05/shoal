@@ -13,7 +13,7 @@ merged and nothing has used it for hours; issue closure and merged PRs do not
 end the assignment. Finish every assignment with these steps:
 
 1. Open the PR with `shoal pr open`, which pushes the branch and links the PR.
-   Link a PR opened another way with `shoal link pr <number-or-url>`.
+   Link a PR opened another way with `shoal link pr <number-or-url> assigned`.
 2. While watched PRs are open, {updates}
    When a PR is ready to merge, run `shoal ready`, and again
    after later fixes. Ask with `shoal ask` when you need a decision from the

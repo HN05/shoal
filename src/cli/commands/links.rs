@@ -6,14 +6,14 @@ use anyhow::{Context as _, Result, ensure};
 use super::workspaces::{self, AgentLaunch, Creation};
 use crate::{
     agent::Agent,
-    cli::{ItemArgs, client, context::Context, ui},
+    cli::{ItemArgs, RelationArgs, client, context::Context, ui},
     forge::{
         ForgeRepo, IssueInput, PullRequest,
-        link::{ItemKind, Link, LinkTarget, Selection},
-        view::Selected,
+        link::{ItemKind, Link, LinkTarget, Relation, Selection},
+        view::{Selected, SelectedItem},
     },
     git,
-    model::{Repository, ReviewMark},
+    model::{Repository, ReviewMark, Workspace},
     protocol::Method,
 };
 
@@ -50,9 +50,9 @@ async fn resolve_kind(ctx: &Context, workspace: &str, selection: Selection) -> R
     })
 }
 
-/// The kind of the workspace's linked item numbered `number`.
+/// The kind of the workspace's item numbered `number` under any relation.
 async fn linked_kind(ctx: &Context, workspace: &str, number: u64) -> Result<Option<ItemKind>> {
-    let linked: Selected = client::request(
+    let mut linked: Selected = client::request(
         &ctx.paths,
         Method::SelectItems {
             workspace: workspace.to_owned(),
@@ -60,10 +60,17 @@ async fn linked_kind(ctx: &Context, workspace: &str, number: u64) -> Result<Opti
         },
     )
     .await?;
+    let links = workspace_record(ctx, workspace).await?.links;
+    let recorded = links.opened.into_iter().chain(links.related);
+    linked.items.extend(recorded.map(|item| SelectedItem {
+        url: item.url,
+        kind: item.kind,
+    }));
     linked.kind_of(number)
 }
 
-pub(super) async fn link(ctx: &Context, items: ItemArgs) -> Result<i32> {
+pub(super) async fn link(ctx: &Context, items: RelationArgs) -> Result<i32> {
+    let (items, relation) = items.split()?;
     let selected = Selection::parse(items.kind_or_url, items.item)?;
     ensure!(
         selected.input.is_some() || ctx.interactive(),
@@ -79,39 +86,40 @@ pub(super) async fn link(ctx: &Context, items: ItemArgs) -> Result<i32> {
         } => (kind, input),
         Selection { kind, .. } => pick_open_item(ctx, &workspace, kind).await?,
     };
-    match kind {
-        ItemKind::Pr => {
-            client::request::<()>(
-                &ctx.paths,
-                Method::SetPr {
-                    workspace,
-                    action: crate::forge::pr::Action::Watch { url: input },
-                },
-            )
-            .await?;
-            ctx.emit(
-                "PR linked; run shoal watch pr for updates and shoal done once the assignment is finished.",
-                serde_json::json!({"registered": true}),
-            )?;
-            Ok(0)
+    let title = match kind {
+        ItemKind::Issue => issue_title(ctx, &workspace, &input).await,
+        ItemKind::Pr => None,
+    };
+    client::request::<()>(
+        &ctx.paths,
+        Method::LinkItem {
+            workspace,
+            kind,
+            url: input,
+            relation,
+            title,
+        },
+    )
+    .await?;
+    ctx.emit(
+        link_outcome(kind, relation),
+        serde_json::json!({"registered": true, "relation": relation}),
+    )?;
+    Ok(0)
+}
+
+fn link_outcome(kind: ItemKind, relation: Relation) -> &'static str {
+    match (relation, kind) {
+        (Relation::Assigned, ItemKind::Pr) => {
+            "PR linked as assigned; run shoal watch pr for updates and shoal done once the assignment is finished."
         }
-        ItemKind::Issue => {
-            let title = issue_title(ctx, &workspace, &input).await;
-            client::request::<()>(
-                &ctx.paths,
-                Method::SetIssue {
-                    workspace,
-                    url: input,
-                    title,
-                },
-            )
-            .await?;
-            ctx.emit(
-                "Issue linked; closure can complete the assignment.",
-                serde_json::json!({"registered": true}),
-            )?;
-            Ok(0)
+        (Relation::Assigned, ItemKind::Issue) => {
+            "Issue linked as assigned; closure can complete the assignment."
         }
+        (Relation::Opened, ItemKind::Pr) => "PR linked as opened.",
+        (Relation::Opened, ItemKind::Issue) => "Issue linked as opened.",
+        (Relation::Related, ItemKind::Pr) => "PR linked as related.",
+        (Relation::Related, ItemKind::Issue) => "Issue linked as related.",
     }
 }
 
@@ -135,13 +143,16 @@ async fn issue_title(ctx: &Context, workspace: &str, input: &str) -> Option<Stri
     }
 }
 
-async fn workspace_repository(ctx: &Context, workspace: &str) -> Result<Repository> {
-    let repository = client::workspaces(&ctx.paths)
+async fn workspace_record(ctx: &Context, workspace: &str) -> Result<Workspace> {
+    client::workspaces(&ctx.paths)
         .await?
         .into_iter()
         .find(|w| w.id == workspace || w.name == workspace)
-        .with_context(|| format!("unknown workspace: {workspace}"))?
-        .repository_id;
+        .with_context(|| format!("unknown workspace: {workspace}"))
+}
+
+async fn workspace_repository(ctx: &Context, workspace: &str) -> Result<Repository> {
+    let repository = workspace_record(ctx, workspace).await?.repository_id;
     client::repositories(&ctx.paths)
         .await?
         .into_iter()
@@ -179,26 +190,19 @@ async fn pick_open_item(
     Ok((kind, number))
 }
 
-pub(super) async fn unlink(ctx: &Context, items: ItemArgs) -> Result<i32> {
+pub(super) async fn unlink(ctx: &Context, items: RelationArgs) -> Result<i32> {
+    let (items, relation) = items.split()?;
     let (workspace, selected) = select(ctx, items).await?;
-    if selected.kind != Some(ItemKind::Pr) {
-        client::request::<()>(
-            &ctx.paths,
-            Method::ClearIssue {
-                workspace: workspace.clone(),
-                url: selected.input.clone(),
-            },
-        )
-        .await?;
-    }
-    if selected.kind != Some(ItemKind::Issue) {
-        let action = selected
-            .input
-            .map_or(crate::forge::pr::Action::Clear, |url| {
-                crate::forge::pr::Action::Unwatch { url }
-            });
-        client::request::<()>(&ctx.paths, Method::SetPr { workspace, action }).await?;
-    }
+    client::request::<()>(
+        &ctx.paths,
+        Method::UnlinkItems {
+            workspace,
+            relation,
+            kind: selected.kind,
+            url: selected.input,
+        },
+    )
+    .await?;
     ctx.emit("Items unlinked", serde_json::json!({"registered": false}))?;
     Ok(0)
 }

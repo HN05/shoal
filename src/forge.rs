@@ -17,6 +17,7 @@ pub mod link;
 pub mod list;
 mod locator;
 pub mod pr;
+mod relations;
 mod remote_url;
 pub mod repository;
 mod rest;

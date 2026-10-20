@@ -232,7 +232,13 @@ async fn restore_reopens_the_branch_with_its_files_and_issue() {
         .run(move |db| {
             db.execute(
                 "INSERT INTO workspace_issue(workspace_id,url,title) VALUES (?1,'https://github.com/acme/repo/issues/1','Fix it')",
-                [id],
+                [&id],
+            )?;
+            db.execute(
+                "INSERT INTO workspace_items(workspace_id,relation,kind,url,title) VALUES
+                    (?1,'opened','issue','https://github.com/acme/repo/issues/2','Follow-up'),
+                    (?1,'related','pr','https://github.com/acme/repo/pull/3',NULL)",
+                [&id],
             )?;
             Ok(())
         })
@@ -272,6 +278,23 @@ async fn restore_reopens_the_branch_with_its_files_and_issue() {
     assert_eq!(
         workspace.links.issue.as_deref(),
         Some("https://github.com/acme/repo/issues/1")
+    );
+    let recorded = |items: &[crate::model::LinkedItem]| {
+        items
+            .iter()
+            .map(|item| (item.url.clone(), item.title.clone()))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        recorded(&workspace.links.opened),
+        [(
+            "https://github.com/acme/repo/issues/2".to_owned(),
+            Some("Follow-up".to_owned())
+        )]
+    );
+    assert_eq!(
+        recorded(&workspace.links.related),
+        [("https://github.com/acme/repo/pull/3".to_owned(), None)]
     );
     assert!(manager.removed_workspaces().await.unwrap().is_empty());
     assert!(
@@ -322,6 +345,102 @@ async fn restore_refuses_a_branch_that_moved_away_or_is_in_use() {
         "{error:#}"
     );
     assert_eq!(manager.removed_workspaces().await.unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn a_restore_point_keeps_links_made_until_removal_starts() {
+    use crate::forge::link::{ItemKind, Relation};
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    // Removal works from this snapshot, taken before the links change.
+    let workspace = manager
+        .create_workspace(&repo.id, "topic".into(), None, None, None)
+        .await
+        .unwrap();
+    git(
+        &checkout,
+        &["remote", "add", "origin", "https://github.com/acme/repo"],
+    );
+    manager
+        .link_item(&workspace.id, ItemKind::Pr, "3", Relation::Related, None)
+        .await
+        .unwrap();
+    manager
+        .link_item(&workspace.id, ItemKind::Pr, "4", Relation::Related, None)
+        .await
+        .unwrap();
+    manager
+        .unlink_items(
+            &workspace.id,
+            Relation::Related,
+            Some(ItemKind::Pr),
+            Some("4"),
+        )
+        .await
+        .unwrap();
+    manager
+        .link_item(
+            &workspace.id,
+            ItemKind::Issue,
+            "7",
+            Relation::Assigned,
+            None,
+        )
+        .await
+        .unwrap();
+    manager
+        .reserve_lifecycle(&workspace.id, crate::state::WorkspaceState::Removing)
+        .await
+        .unwrap();
+    assert!(
+        manager
+            .unlink_items(
+                &workspace.id,
+                Relation::Assigned,
+                Some(ItemKind::Issue),
+                None
+            )
+            .await
+            .is_err()
+    );
+    let error = manager
+        .link_item(&workspace.id, ItemKind::Pr, "5", Relation::Related, None)
+        .await
+        .unwrap_err();
+    assert!(
+        format!("{error:#}").contains("cannot change links"),
+        "{error:#}"
+    );
+    assert!(
+        manager
+            .unlink_items(&workspace.id, Relation::Related, None, None)
+            .await
+            .is_err()
+    );
+    let check = manager
+        .check_removal(&workspace.id, InspectionPolicy::GitOnly)
+        .await
+        .unwrap();
+    manager
+        .save_restore_point(&repo, &workspace, &check, EventCause::Manual)
+        .await
+        .unwrap();
+    let saved = record(&manager, &workspace.id).await.unwrap();
+    let urls: Vec<_> = saved
+        .links
+        .related
+        .iter()
+        .map(|item| item.url.as_str())
+        .collect();
+    assert_eq!(urls, ["https://github.com/acme/repo/pull/3"]);
+    assert_eq!(
+        saved.links.issue.as_deref(),
+        Some("https://github.com/acme/repo/issues/7")
+    );
 }
 
 #[tokio::test]

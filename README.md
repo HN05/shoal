@@ -80,8 +80,8 @@ shoal adopt --copy ../existing-worktree      # Copy work into Shoal's default di
 shoal rename fix-login fix/login             # Rename its branch and workspace together
 shoal add https://github.com/owner/repo/issues/68 # Create from an issue
 shoal add https://github.com/owner/repo/issues/34  # Add an issue, PR, or branch link
-shoal link https://github.com/owner/repo/issues/34  # Link an issue to the current workspace
-shoal unlink issue                         # Remove the linked issue
+shoal link https://github.com/owner/repo/issues/34 assigned  # Assign an issue to the current workspace
+shoal unlink issue assigned                # Remove the assigned issue
 shoal watch pr 505                         # Watch an explicit PR
 ```
 
@@ -167,17 +167,18 @@ shoal pr comment --body Done  # Comment on the linked PR; close and reopen work 
 shoal pr resolve 812 --body-file why.md # Reply in a review thread, then resolve it
 shoal pr merge 42 --method rebase # Merge a PR yourself; agents cannot
 shoal issue close             # Close the linked issue; edit, comment, reopen too
-shoal issue open --title Bug  # Open an issue; --link links it
-shoal link 42                 # Link an issue or PR by number (or paste its URL)
-shoal link pr 43              # Link another PR; all must merge before cleanup after done
+shoal issue open --title Bug  # Open an issue, recorded as opened; --link also assigns it
+shoal link 42 assigned        # Assign an issue or PR by number (or paste its URL)
+shoal link pr 43 assigned     # Assign another PR; all must merge before cleanup after done
+shoal link 50 related         # Record an issue or PR the work relates to
 shoal watch                   # Wake on all linked item comments, checks, or closure
 shoal view                    # Linked items with state, failed CI logs, comments, and reviews
 shoal view pr 44 --no-comments  # One PR, linked or not, without its discussion
 shoal view pr 44 --check rust   # Show only this failed CI check's log
 shoal ci rerun --check rust     # Rerun a failed check on the linked PR; cancel stops running ones
 shoal ready                   # Mark linked items ready for review at HEAD
-shoal unlink pr 43            # Cancel one linked PR
-shoal unlink pr               # Cancel linked PRs
+shoal unlink pr 43 assigned   # Cancel one assigned PR
+shoal unlink pr assigned      # Cancel assigned PRs
 ```
 
 For workspace actions, omit the name to use your scoped or current workspace;

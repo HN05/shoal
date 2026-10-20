@@ -82,11 +82,29 @@ pub struct WorkspaceRef {
 /// Canonical issue and pull-request links associated with a workspace.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct WorkspaceLinks {
+    /// The assigned issue.
     pub issue: Option<String>,
     /// The linked issue's title when the linking caller knew it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub issue_title: Option<String>,
+    /// The assigned PRs.
     pub prs: Vec<String>,
+    /// Issues and PRs the workspace created through Shoal, oldest first.
+    #[serde(default)]
+    pub opened: Vec<LinkedItem>,
+    /// Issues and PRs linked as related to the work, oldest first.
+    #[serde(default)]
+    pub related: Vec<LinkedItem>,
+}
+
+/// An issue or PR a workspace records without lifecycle effect.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LinkedItem {
+    pub kind: crate::forge::link::ItemKind,
+    pub url: String,
+    /// The item's title when the recording caller knew it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
 }
 
 /// What `shoal restore` recreates of a removed workspace until `expires_at`.

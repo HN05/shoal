@@ -157,8 +157,8 @@ impl WorkspaceState {
         })
     }
 
-    /// A workspace being stopped, removed or reconciled takes no new issue link.
-    pub fn accepts_issue(self) -> bool {
+    /// A workspace being stopped, removed or reconciled takes no link changes.
+    pub fn accepts_links(self) -> bool {
         matches!(self, Self::Ready | Self::Preparing | Self::Failed)
     }
 }

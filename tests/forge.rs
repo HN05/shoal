@@ -472,7 +472,7 @@ fn watches_read_every_page_of_a_discussion() {
         }))
     };
     respond("first");
-    fixture.ok(&["link", "issue", "8", "--workspace", "topic"]);
+    fixture.ok(&["link", "issue", "8", "assigned", "--workspace", "topic"]);
     let first = fixture.ok(&["watch", "issue", "--workspace", "topic"]);
     assert_eq!(first["updates"][0]["kind"], "comment", "{first}");
     // Only the second page changes; the timeout is a hang guard.
@@ -496,7 +496,7 @@ fn watches_do_not_report_the_agents_own_comments_back() {
         "GET repos/team/project/issues/8": issue("open"),
         "GET repos/team/project/issues/8/comments?limit=50&page=1": comments(&[1]),
     }));
-    fixture.ok(&["link", "issue", "8", "--workspace", "topic"]);
+    fixture.ok(&["link", "issue", "8", "assigned", "--workspace", "topic"]);
     let first = fixture.ok(&["watch", "issue", "--workspace", "topic"]);
     assert_eq!(first["updates"][0]["kind"], "comment", "{first}");
 
@@ -544,18 +544,28 @@ fn bare_numbers_select_the_issue_or_pr_they_name() {
         "GET repos/team/project/issues/9": {"body": pr_issue},
         "GET repos/team/project/pulls/9": {"body": pull(9, "open", "Fix", &[])},
     }));
-    fixture.ok(&["link", "8", "--workspace", "topic"]);
-    fixture.ok(&["link", "#9", "--workspace", "topic"]);
+    fixture.ok(&["link", "8", "assigned", "--workspace", "topic"]);
+    fixture.ok(&["link", "#9", "assigned", "--workspace", "topic"]);
     let links = &fixture.ok(&["inspect", "topic"])["workspace"]["links"];
     assert_eq!(links["issue"], format!("{}/issues/8", fixture.web));
     assert_eq!(links["prs"], json!([format!("{}/pulls/9", fixture.web)]));
 
     let marks = fixture.ok(&["ready", "#9", "--workspace", "topic"]);
     assert_eq!(marks[0]["kind"], "pr", "{marks}");
-    fixture.ok(&["unlink", "8", "--workspace", "topic"]);
+    fixture.ok(&["unlink", "8", "assigned", "--workspace", "topic"]);
     let links = &fixture.ok(&["inspect", "topic"])["workspace"]["links"];
     assert!(links["issue"].is_null(), "{links}");
     assert_eq!(links["prs"], json!([format!("{}/pulls/9", fixture.web)]));
+
+    // Recorded relations name the kind without asking the forge, as forges
+    // with separate issue and PR numbers need.
+    fixture.ok(&["link", "pr", "10", "related", "--workspace", "topic"]);
+    fixture.respond(json!({}));
+    fixture.requests();
+    fixture.ok(&["unlink", "10", "related", "--workspace", "topic"]);
+    assert!(fixture.requests().is_empty());
+    let links = &fixture.ok(&["inspect", "topic"])["workspace"]["links"];
+    assert_eq!(links["related"], json!([]), "{links}");
 }
 
 #[test]
@@ -573,7 +583,7 @@ fn pr_and_issue_commands_act_on_linked_or_named_items() {
         "GET repos/team/project/issues/3": {"body": issue},
         "POST repos/team/project/issues/3/comments": {"body": {}},
     }));
-    fixture.ok(&["link", "pr", "8", "--workspace", "topic"]);
+    fixture.ok(&["link", "pr", "8", "assigned", "--workspace", "topic"]);
     fixture.requests();
 
     let nothing = fixture.run(&["pr", "edit", "--workspace", "topic"]);
@@ -671,6 +681,11 @@ fn issues_open_with_labels_and_link_on_request() {
         assert_eq!(opened["labels"], json!(["bug"]));
         assert_eq!(opened["created"], true);
         assert_eq!(opened["linked"], forge == Forge::GitHub);
+        // Linked or not, the issue is recorded as opened by the workspace.
+        assert_eq!(
+            fixture.ok(&["inspect", "topic"])["workspace"]["links"]["opened"],
+            json!([{"kind": "issue", "url": url, "title": "Flaky"}])
+        );
         let sent: Vec<_> = fixture
             .requests()
             .into_iter()
@@ -732,7 +747,7 @@ fn pr_open_pushes_creates_and_links_or_finds_the_open_pr() {
             "GET repos/team/project/pulls/9": {"body": pull(9, "open", "Fix", &[])},
         }));
         let expected = if forge == Forge::GitHub {
-            fixture.ok(&["link", "issue", "34", "--workspace", "topic"]);
+            fixture.ok(&["link", "issue", "34", "assigned", "--workspace", "topic"]);
             json!({"title": "Fix API timeout", "body": "Closes #34", "head": "topic",
                 "base": "main", "draft": false})
         } else {
@@ -770,7 +785,7 @@ fn pr_open_pushes_creates_and_links_or_finds_the_open_pr() {
         assert_eq!(links, json!([url]));
 
         // An open PR for the branch is linked instead of opening another.
-        fixture.ok(&["unlink", "pr", "--workspace", "topic"]);
+        fixture.ok(&["unlink", "pr", "assigned", "--workspace", "topic"]);
         let mut responses: Value =
             serde_json::from_str(&fs::read_to_string(root.join("forge/responses.json")).unwrap())
                 .unwrap();
@@ -885,7 +900,7 @@ fn issue_open_with_link_refuses_before_creating_when_an_issue_is_linked() {
         "issue view 34": {"body": {"number": 34, "state": "OPEN", "title": "Assignment",
             "body": "", "comments": []}},
     }));
-    fixture.ok(&["link", "issue", "34", "--workspace", "topic"]);
+    fixture.ok(&["link", "issue", "34", "assigned", "--workspace", "topic"]);
     fixture.requests();
     let output = fixture.run(&[
         "issue",
@@ -1108,7 +1123,7 @@ fn view_automatically_includes_failed_logs_and_leaves_successful_checks_quiet() 
             ]
         }});
         fixture.respond(responses);
-        fixture.ok(&["link", "pr", "8", "--workspace", "topic"]);
+        fixture.ok(&["link", "pr", "8", "assigned", "--workspace", "topic"]);
         fixture.requests();
         for no_comments in [false, true] {
             let mut args = vec!["view", "--workspace", "topic"];

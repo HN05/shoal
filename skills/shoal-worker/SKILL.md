@@ -33,14 +33,16 @@ finding in its thread: `shoal view` shows every review comment's ID, and
 `shoal pr resolve <comment-id> --body-file F` replies and then resolves the thread
 (Forgejo cannot resolve threads through its API; reply there instead). They default to the
 linked item; pass a number or URL for another item in the repository. File
-follow-up work with `shoal issue open --title`; it stays unlinked without
-`--link`. Merging is
+follow-up work with `shoal issue open --title`; Shoal records it as opened by your
+workspace, and only `--link` assigns it to you. Merging is
 the user's: `shoal pr merge` refuses workspace processes.
 
-Register a PR opened another way with `shoal link pr <number-or-url>`. Watches accumulate per
-workspace; after `done`, cleanup waits until all have merged and the merged set
-contains current HEAD. `shoal unlink pr <number-or-url>` unlinks one PR;
-omit its number or URL to unlink all PRs. Closed, unmerged PRs keep waiting, so cancel their
+Every link names its relation last: `assigned` for the work you are doing,
+`opened` for an item you created another way, `related` for one the work relates to.
+Register a PR opened another way with `shoal link pr <number-or-url> assigned`.
+Assigned PRs accumulate per workspace; after `done`, cleanup waits until all have
+merged and the merged set contains current HEAD. `shoal unlink pr <number-or-url>
+assigned` unlinks one PR; omit its number or URL to unlink all assigned PRs. Closed, unmerged PRs keep waiting, so cancel their
 watches before finishing without a merge.
 
 While watched PRs are open, Shoal delivers their activity to Claude Code, and to

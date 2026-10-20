@@ -73,7 +73,7 @@ impl Manager {
                     |row| row.get(0),
                 )?;
                 ensure!(
-                    state.accepts_issue(),
+                    state.accepts_links(),
                     "workspace cannot accept an issue in its current state"
                 );
                 let existing: Option<String> = tx
@@ -98,6 +98,7 @@ impl Manager {
                         &tx,
                         &workspace.id,
                         EventKind::Linked,
+                        crate::forge::link::Relation::Assigned,
                         crate::forge::link::ItemKind::Issue,
                         &url,
                     )?;
@@ -118,6 +119,7 @@ impl Manager {
         self.store
             .run(move |db| {
                 let tx = db.transaction()?;
+                super::relations::ensure_accepts_links(&tx, &workspace.id)?;
                 let existing: Option<String> = tx
                     .query_row(
                         "SELECT url FROM workspace_issue WHERE workspace_id=?1",
@@ -149,6 +151,7 @@ impl Manager {
                         &tx,
                         &workspace.id,
                         EventKind::Unlinked,
+                        crate::forge::link::Relation::Assigned,
                         crate::forge::link::ItemKind::Issue,
                         &url,
                     )?;
@@ -165,7 +168,7 @@ impl Manager {
         Ok(())
     }
 
-    async fn issue_forge(
+    pub(super) async fn issue_forge(
         &self,
         workspace: &Workspace,
         input: &str,

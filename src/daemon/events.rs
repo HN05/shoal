@@ -143,6 +143,9 @@ pub struct AgentStateEvent {
 pub struct LinkEvent {
     pub kind: crate::forge::link::ItemKind,
     pub url: String,
+    /// Absent from events recorded before relations existed, which were assignments.
+    #[serde(default)]
+    pub relation: crate::forge::link::Relation,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -255,6 +258,7 @@ pub(crate) fn record_link(
     db: &Connection,
     id: &str,
     event_kind: EventKind,
+    relation: crate::forge::link::Relation,
     kind: crate::forge::link::ItemKind,
     url: &str,
 ) -> Result<()> {
@@ -266,9 +270,9 @@ pub(crate) fn record_link(
         "INSERT INTO workspace_events(record)
          SELECT json_object('kind',?2,'workspace_id',id,'repository_id',repository_id,
              'name',name,'path',path,'branch',branch,'cause',NULL,'error',NULL,
-             'link',json_object('kind',?3,'url',?4))
+             'link',json_object('kind',?3,'url',?4,'relation',?5))
          FROM workspaces WHERE id=?1",
-        params![id, event_kind, kind, url],
+        params![id, event_kind, kind, url, relation],
     )?;
     Ok(())
 }

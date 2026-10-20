@@ -415,8 +415,10 @@ when nothing does, in `cleanup_reason`. `--json`
 returns the same data, with PRs in `prs`, the issue in `issue_status` and sessions
 in `sessions`, or a failed `zmx list` in `sessions_error`; `inspect` keeps the raw workspace and
 execution records. Workspace records from `ls --json` and `inspect --json` include
-`links.issue` and linked PR URLs in `links.prs`; an acknowledgement without a PR
-URL leaves `links.prs` empty. An issue or PR URL, `pr` or `issue` with a number or URL, or
+the assigned issue in `links.issue`, assigned PR URLs in `links.prs`, and items
+recorded as opened or related in `links.opened` and `links.related`, each with
+`kind`, `url` and `title` when known; an acknowledgement without a PR URL leaves
+`links.prs` empty. `status` lists opened and related items too. An issue or PR URL, `pr` or `issue` with a number or URL, or
 `resource` with a pool or member name shows every workspace that links or holds
 it instead, as a JSON array; a number must be linked in only one repository.
 Scoped callers find only their own workspace.
@@ -1356,8 +1358,9 @@ shoal restore topic    # open topic again with its unsaved files and links
 `shoal restore <workspace>` opens the newest removed workspace with that name or
 ID on its branch and recorded base, which restores its stack link while the base
 workspace exists, recreating the branch at the removed HEAD when it was deleted,
-puts its unsaved files back as uncommitted changes, links its issue, runs setup,
-and links its PRs; a link that fails is a warning. It refuses when another
+puts its unsaved files back as uncommitted changes, links its issue and its
+opened and related items, runs setup, and links its PRs; a link that fails is a
+warning. It refuses when another
 workspace uses the branch, when the branch no longer contains the removed HEAD,
 or when it moved past HEAD while unsaved files would have to be applied to it;
 the error names the commit to recover by hand. Workspace processes cannot run it.
@@ -1365,7 +1368,8 @@ the error names the commit to recover by hand. Workspace processes cannot run it
 Every removal of an existing worktree, manual or automatic, keeps a restore
 point: a commit of HEAD plus its uncommitted and untracked files, without
 ignored ones, under `refs/shoal/removed/<workspace id>` in the repository, and a
-record of the branch, HEAD, base and linked issue and PRs. When the unsaved files
+record of the branch, HEAD, base and links. Links cannot change once removal
+starts, so the record holds the final ones. When the unsaved files
 exceed `archive_max_mb`, include an untracked nested repository or a changed
 submodule, whose files it cannot hold, the restore point keeps HEAD only, and merged cleanup keeps the workspace instead. Restore points expire after `retention_days`.
 
@@ -1549,8 +1553,10 @@ Forgejo and Gitea have no API for thread resolution, so `resolve` and
 `merge` takes `--method merge|rebase|squash`; `--delete-branch` deletes the
 PR's branch on the forge when it is in the repository, never a local branch.
 `issue open` takes `--title`, `--body` or `--body-file`, and repeated `--label`;
-the new issue is linked only with `--link`, which fails while another issue is
-linked. Its JSON adds `created` and `linked`.
+the new issue is recorded as opened, and assigned only with `--link`, which fails
+while another issue is assigned. A workspace being removed refuses it. Its JSON
+adds `created` and `linked`, and `warning` when removal started before the
+workspace could record and link the new issue.
 
 The daemon sends each change through the forge's REST API as the workspace's
 [agent account](#agent-accounts), except `merge`, which uses your login and is
@@ -1580,18 +1586,28 @@ Bitbucket Pipelines are not supported. `--json` returns `url`, `action` and the
 
 ### Linked items and cleanup
 
-`shoal link <number-or-url>` associates an issue or PR with the workspace;
-`shoal link issue <number-or-url>` and `shoal link pr <number-or-url>` select the
-kind explicitly. Commands that select items this way give a number without a
+`shoal link <number-or-url> <relation>` associates an issue or PR with the
+workspace; `shoal link issue <number-or-url> <relation>` and `shoal link pr
+<number-or-url> <relation>` select the kind explicitly, and omitting the item picks
+an open one. The relation is required:
+
+| Relation | Effect |
+|---|---|
+| `assigned` | The work the workspace exists for: the rules below and in [ready for review](#ready-for-review) apply |
+| `opened` | Records that the workspace created the item; `issue open` and `pr open` record it themselves |
+| `related` | Records an item the work relates to |
+
+Opened and related items have no watch, completion or cleanup effect; `status pr
+<number>` finds the workspaces that link an item under any relation. Commands that select items this way give a number without a
 kind the kind of the linked item with that number, otherwise the kind the forge
 reports; GitLab and Bitbucket number issues and PRs separately, so there such a
 number must be linked. Use `--workspace` to select a workspace instead of the current
-context. Numbers resolve against its origin and URLs must match it. An issue
-association is idempotent and must be unlinked before linking a different issue.
+context. Numbers resolve against its origin and URLs must match it. Links are
+idempotent; an assigned issue must be unlinked before assigning a different one.
 Linking an issue records its title for workspace lists; when the forge cannot be
 read, the link is recorded without one and a warning names the error.
-PR links accumulate without duplicates and must name the recorded workspace
-branch. Linked items suppress idle cleanup.
+Assigned PRs accumulate without duplicates and must name the recorded workspace
+branch. Assigned items suppress idle cleanup.
 
 `shoal view` shows linked items as the forge reports them now: title, state,
 author, labels, description, comments, and reviews with their inline comments; a
@@ -1647,8 +1663,9 @@ confirmed set survives restart without querying again. Cleanup uses normal branc
 or newer work. `inspect` shows lookup and removal
 errors in `pr_cleanup`. Invalid registrations retain the workspace.
 
-`shoal unlink` removes all associations; `unlink pr` or `unlink issue` removes
-one kind, and an explicit number or URL removes just that item. Removing the last
+`shoal unlink <relation>` removes the relation's items; `unlink pr <relation>` or
+`unlink issue <relation>` removes one kind, and an explicit number or URL removes
+just that item. Removing the last
 link does not mark done or undo recorded completion; `done --keep` cancels its
 cleanup. `[cleanup.pr] enabled = false` pauses PR completion independently of idle
 cleanup, globally on reload or per repository immediately; linking and unlinking

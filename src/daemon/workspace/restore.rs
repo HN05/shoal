@@ -9,8 +9,9 @@ use rusqlite::{Connection, OptionalExtension, params};
 use super::Manager;
 use crate::{
     daemon::{events::EventCause, log},
+    forge::link::Relation,
     git,
-    model::{RemovedWorkspace, Repository, RestoredWorkspace, Workspace},
+    model::{RemovedWorkspace, Repository, RestoredWorkspace, Workspace, WorkspaceLinks},
     removal::RemovalCheck,
     time::unix_seconds,
 };
@@ -46,6 +47,9 @@ impl Manager {
             git::restore::snapshot(path, &message, !files_omitted, earlier.as_deref()).await?;
         let reference = git::restore::reference(&workspace.id);
         git::restore::save(&repo.path, &reference, &snapshot).await?;
+        // Removal refuses link changes, so links read now are final, unlike
+        // those of the snapshot taken before it started.
+        let links = self.workspace(&workspace.id).await?.links;
         let removed_at = unix_seconds();
         let removed = RemovedWorkspace {
             workspace_id: workspace.id.clone(),
@@ -57,7 +61,7 @@ impl Manager {
             files_omitted,
             base_ref: workspace.base_ref.clone(),
             base_commit: workspace.base_commit.clone(),
-            links: workspace.links.clone(),
+            links,
             cause,
             removed_at,
             expires_at: removed_at + retention.as_secs(),
@@ -110,7 +114,7 @@ impl Manager {
     }
 
     /// Open a removed workspace again on its branch at the removed HEAD, with
-    /// its unsaved files and linked issue; the caller sets it up and links
+    /// its unsaved files, linked issue, and opened and related items; the caller sets it up and links
     /// its PRs. The record goes once the files are back.
     pub async fn restore_workspace(&self, selector: &str) -> Result<RestoredWorkspace> {
         let removed = self.removed_workspace(selector).await?;
@@ -137,20 +141,41 @@ impl Manager {
             "workspace {} opened branch {branch} during the restore",
             opened.workspace.name
         );
-        let mut warnings = Vec::new();
-        if let Some(url) = &removed.links.issue
-            && let Err(error) = self
-                .set_issue(&opened.workspace.id, url, removed.links.issue_title.clone())
-                .await
-        {
-            warnings.push(format!("cannot link issue {url}: {error:#}"));
-        }
+        let warnings = self.relink(&opened.workspace.id, &removed.links).await;
         self.forget_restore_point(&removed).await?;
         Ok(RestoredWorkspace {
             opened,
             removed,
             warnings,
         })
+    }
+
+    /// Link the restored workspace's issue and recorded items again; the
+    /// caller links its PRs. Each failure becomes a warning.
+    async fn relink(&self, workspace_id: &str, links: &WorkspaceLinks) -> Vec<String> {
+        let mut warnings = Vec::new();
+        if let Some(url) = &links.issue
+            && let Err(error) = self
+                .set_issue(workspace_id, url, links.issue_title.clone())
+                .await
+        {
+            warnings.push(format!("cannot link issue {url}: {error:#}"));
+        }
+        let recorded = links
+            .opened
+            .iter()
+            .map(|item| (Relation::Opened, item.clone()))
+            .chain(
+                links
+                    .related
+                    .iter()
+                    .map(|item| (Relation::Related, item.clone())),
+            )
+            .collect();
+        if let Err(error) = self.record_items(workspace_id, recorded).await {
+            warnings.push(format!("cannot link opened and related items: {error:#}"));
+        }
+        warnings
     }
 
     async fn removed_workspace(&self, selector: &str) -> Result<RemovedWorkspace> {

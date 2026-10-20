@@ -61,8 +61,9 @@ wire format; unfamiliar codes are preserved verbatim for version compatibility.
 Internal CLI workers are built through one typed argument builder that explicitly
 passes the resolved state directory and output mode.
 Workspace JSON records expose canonical linked-item URLs under `links`, with one
-optional issue URL, that issue's title when the linking caller supplied it, and a
-list of watched PR URLs; acknowledgement-only PR cleanup records have no URL to
+optional assigned issue URL, that issue's title when the linking caller supplied it, a
+list of watched PR URLs, and `opened` and `related` lists of items with their kind,
+URL and known title; acknowledgement-only PR cleanup records have no URL to
 expose. Linking the same issue again records a newly supplied title.
 Their `running` flag says whether a tracked execution is running; unverified
 executions after a daemon restart do not count.
@@ -633,7 +634,7 @@ follow them without consuming notifications; expired cursors report a gap for
 resync. External branch changes are observed during daemon sweeps without
 changing recorded ownership. Issue and PR association changes append `linked` or
 `unlinked` events in the same transaction as the association mutation, carrying
-the item's kind and canonical URL so integrations can follow links without
+the item's kind, canonical URL and relation so integrations can follow links without
 polling workspace inspection.
 Item selectors make the `pr`/`issue` word optional for numbers: a linked
 item with that number decides the kind, otherwise the forge's issue read where
@@ -722,13 +723,15 @@ forge's web UI, so it cannot resolve threads on Forgejo, whose API has no
 endpoint for it. Resolving a thread nobody has answered needs confirmation,
 because the reply tells the reviewer why. Each action
 returns the item as the forge reports it afterwards and records an
-`item_changed` event for integrations. A new issue is linked only on request:
-a workspace's linked issue is its assignment, while an issue an agent opens is
-usually follow-up work. Browsing across repositories and review
+`item_changed` event for integrations. A new issue is recorded as opened and
+assigned only on request: a workspace's assigned issue is its work, while an issue
+an agent opens is usually follow-up work. Browsing across repositories and review
 tooling stay with clients.
 
-`shoal pr open` pushes, then finds or opens the branch's PR and links it in one
-daemon request, so a PR Shoal opens is never left unlinked. A new PR is ready
+`shoal pr open` pushes, then finds or opens the branch's PR and assigns it in one
+daemon request, so a PR Shoal opens is left unlinked only when removal started
+after its check, which the result reports as a warning; a PR it creates is also
+recorded as opened. A new PR is ready
 unless `--draft` or `[pr] draft` asks for one, because opening a ready PR is
 what requests review.
 An explicitly supplied description is preserved verbatim; when no description
@@ -1023,8 +1026,12 @@ an interrupted removal is retried.
 PR cleanup is separately enabled by default; disabling it pauses PR completion
 without affecting links, which serve more than cleanup. Persisted watches use the
 user's gh/fj login, resolve numbers against the workspace's origin into stored
-URLs bound to that repository. Top-level `link` and `unlink` manage associations;
-unlinking can select one item, one kind or the entire set. PR links accumulate
+URLs bound to that repository. Top-level `link` and `unlink` manage associations
+and always name a relation, so no link becomes the assignment by default. `assigned`
+items are the work the workspace exists for and drive completion and cleanup;
+`opened` and `related` items are records for integrations without lifecycle effect,
+and Shoal records `opened` itself for the issues and PRs it creates. Unlinking
+selects a relation's items, one kind of them, or one item. PR links accumulate
 without duplicates and require
 every watched PR to merge, with HEAD present in at least one; the existing branch
 checks apply to each PR. PRs are looked up only once the assignment is done, and

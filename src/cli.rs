@@ -21,7 +21,7 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 
 use crate::{
     agent::{Agent, BuiltinAgent},
-    forge::IssueInput,
+    forge::{IssueInput, link::Relation},
 };
 
 #[derive(Debug, Parser)]
@@ -141,15 +141,19 @@ pub enum Command {
         #[arg(last = true)]
         args: Vec<OsString>,
     },
-    /// Link an issue or PR by number or URL, optionally after pr/issue.
+    /// Link an issue or PR with a relation: `link 42 assigned`, `link pr 43 related`.
+    ///
+    /// Assigned items drive completion and cleanup; opened and related items
+    /// are recorded only.
     Link {
         #[command(flatten)]
-        items: ItemArgs,
+        items: RelationArgs,
     },
-    /// Unlink all items, one kind, or a selected issue or PR.
+    /// Unlink a relation's items, one kind, or a selected issue or PR:
+    /// `unlink assigned`, `unlink pr 43 related`.
     Unlink {
         #[command(flatten)]
-        items: ItemArgs,
+        items: RelationArgs,
     },
     /// Wait for activity on linked items, one kind, or an explicit item.
     Watch {
@@ -883,6 +887,37 @@ pub struct BodyArgs {
     pub body_file: Option<PathBuf>,
 }
 
+/// An optional item selection followed by its relation.
+#[derive(Debug, Args)]
+pub struct RelationArgs {
+    /// pr/issue, a number or URL, then assigned, opened or related.
+    #[arg(required = true, num_args = 1..=3, value_name = "[ITEM] RELATION")]
+    pub args: Vec<String>,
+    /// Workspace to use; defaults to the current workspace or picker.
+    #[arg(long)]
+    pub workspace: Option<String>,
+}
+
+impl RelationArgs {
+    /// Split the trailing relation from the item selection before it.
+    pub fn split(self) -> anyhow::Result<(ItemArgs, Relation)> {
+        let mut args = self.args;
+        let last = args.pop().unwrap_or_default();
+        let relation = Relation::from_str(&last, false).map_err(|_| {
+            anyhow::anyhow!("end with a relation: assigned, opened or related (got {last})")
+        })?;
+        let mut items = args
+            .into_iter()
+            .map(|arg| item_reference(&arg).unwrap_or_else(|never| match never {}));
+        let items = ItemArgs {
+            kind_or_url: items.next(),
+            item: items.next(),
+            workspace: self.workspace,
+        };
+        Ok((items, relation))
+    }
+}
+
 #[derive(Debug, Args)]
 pub struct ItemArgs {
     /// pr/issue to select a kind, or an issue or PR number or URL.
@@ -1524,18 +1559,26 @@ mod tests {
     }
 
     #[test]
-    fn item_arguments_accept_hash_numbers() {
+    fn link_arguments_end_with_a_relation_and_accept_hash_numbers() {
         let items = |args: &[&str]| {
             let parsed = Cli::try_parse_from(args).unwrap();
             let Some(Command::Link { items }) = parsed.command else {
                 panic!("wrong command")
             };
-            (items.kind_or_url, items.item)
+            let (items, relation) = items.split().unwrap();
+            (items.kind_or_url, items.item, relation)
         };
-        assert_eq!(items(&["shoal", "link", "#42"]), (Some("42".into()), None));
         assert_eq!(
-            items(&["shoal", "link", "pr", "#42"]),
-            (Some("pr".into()), Some("42".into()))
+            items(&["shoal", "link", "#42", "assigned"]),
+            (Some("42".into()), None, Relation::Assigned)
+        );
+        assert_eq!(
+            items(&["shoal", "link", "pr", "#42", "related"]),
+            (Some("pr".into()), Some("42".into()), Relation::Related)
+        );
+        assert_eq!(
+            items(&["shoal", "link", "opened"]),
+            (None, None, Relation::Opened)
         );
         for unchanged in [
             "#",
@@ -1544,10 +1587,19 @@ mod tests {
             "https://forge.example/team/repo/issues/1",
         ] {
             assert_eq!(
-                items(&["shoal", "link", unchanged]),
-                (Some(unchanged.into()), None)
+                items(&["shoal", "link", unchanged, "assigned"]),
+                (Some(unchanged.into()), None, Relation::Assigned)
             );
         }
+        assert!(Cli::try_parse_from(["shoal", "link"]).is_err());
+        assert!(Cli::try_parse_from(["shoal", "link", "pr", "1", "2", "assigned"]).is_err());
+        let Some(Command::Unlink { items }) = Cli::try_parse_from(["shoal", "unlink", "42"])
+            .unwrap()
+            .command
+        else {
+            panic!("wrong command")
+        };
+        assert!(items.split().is_err());
     }
 
     #[test]

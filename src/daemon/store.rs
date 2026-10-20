@@ -6,13 +6,14 @@ use serde::{Serialize, de::DeserializeOwned};
 use std::{path::PathBuf, time::Duration};
 
 use crate::{
-    model::{Execution, PortReservation, Repository, Workspace, WorkspaceLinks},
+    forge::link::Relation,
+    model::{Execution, LinkedItem, PortReservation, Repository, Workspace, WorkspaceLinks},
     sim::audit::CleanRequestStatus,
     state::{ExecutionState, WorkspaceState},
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 46;
+const SCHEMA_VERSION: i64 = 47;
 
 #[cfg(test)]
 mod benchmark;
@@ -374,6 +375,7 @@ const MIGRATIONS: &[(i64, &str, Option<Precondition>)] = &[
     (44, "ALTER TABLE workspaces ADD COLUMN active_at INTEGER;", None),
     (45, REMOVED_WORKSPACES, None),
     (46, include_str!("store/display_numbers.sql"), None),
+    (47, include_str!("store/workspace_items.sql"), None),
 ];
 
 /// Restore records outlive their workspace, not their repository.
@@ -604,7 +606,29 @@ pub fn workspace_links(db: &Connection, workspace_id: &str) -> rusqlite::Result<
         issue,
         issue_title,
         prs,
+        opened: recorded_items(db, workspace_id, Relation::Opened)?,
+        related: recorded_items(db, workspace_id, Relation::Related)?,
     })
+}
+
+/// The workspace's items with a recorded relation, oldest first.
+pub fn recorded_items(
+    db: &Connection,
+    workspace_id: &str,
+    relation: Relation,
+) -> rusqlite::Result<Vec<LinkedItem>> {
+    db.prepare(
+        "SELECT kind,url,title FROM workspace_items WHERE workspace_id=?1 AND relation=?2
+         ORDER BY created_at,rowid",
+    )?
+    .query_map(rusqlite::params![workspace_id, relation], |row| {
+        Ok(LinkedItem {
+            kind: row.get(0)?,
+            url: row.get(1)?,
+            title: row.get(2)?,
+        })
+    })?
+    .collect()
 }
 
 const PORT_COLUMNS: &str = "workspace_id,name,port,env_var,reason";
@@ -859,6 +883,9 @@ mod tests {
         }
         if version >= 46 {
             db.execute_batch(include_str!("store/display_numbers.sql"))?;
+        }
+        if version >= 47 {
+            db.execute_batch(include_str!("store/workspace_items.sql"))?;
         }
         db.pragma_update(None, "user_version", version)?;
         db.execute_batch(
@@ -1128,7 +1155,7 @@ mod tests {
                 "branch": "feature", "state": "failed", "error": "setup error",
                 "base_commit": "abc", "base_ref": "refs/heads/main",
                 "git_dir": "/git/worktrees/worker", "git_dir_id": "1:2",
-                "base_workspace": null, "links": {"issue": null, "prs": []}, "running": false,
+                "base_workspace": null, "links": {"issue": null, "prs": [], "opened": [], "related": []}, "running": false,
                 "chat": null
             }),
         )?;

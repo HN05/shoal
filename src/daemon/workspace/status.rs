@@ -6,7 +6,7 @@ use crate::{
     forge::{
         ForgeRepo, IssueInput,
         account::Account,
-        link::{self, ItemKind},
+        link::{self, ItemKind, Relation},
         pr::{self, wait::linked_items},
         repository,
         view::{Selected, SelectedItem},
@@ -157,6 +157,13 @@ impl Manager {
                 for id in ids {
                     for (url, _) in linked_items(db, &id, Some(kind))? {
                         links.push((id.clone(), url));
+                    }
+                    for relation in [Relation::Opened, Relation::Related] {
+                        for item in store::recorded_items(db, &id, relation)? {
+                            if item.kind == kind {
+                                links.push((id.clone(), item.url));
+                            }
+                        }
                     }
                 }
                 Ok(links)

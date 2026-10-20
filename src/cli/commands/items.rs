@@ -208,18 +208,21 @@ async fn open_pr(ctx: &Context, workspace: Option<String>, options: PullOptions)
         },
     )
     .await?;
+    warn_unrecorded(&opened);
     let outcome = if opened.created {
         "PR opened"
     } else {
         "Open PR found"
     };
-    ctx.emit(
-        &format!(
+    let message = if opened.linked {
+        format!(
             "{outcome} and linked: {}\nRun shoal watch pr for updates and shoal done once the assignment is finished.",
             opened.item.url
-        ),
-        &opened,
-    )?;
+        )
+    } else {
+        format!("{outcome}: {}", opened.item.url)
+    };
+    ctx.emit(&message, &opened)?;
     Ok(0)
 }
 
@@ -256,12 +259,19 @@ async fn open_issue(
         },
     )
     .await?;
+    warn_unrecorded(&opened);
     let linked = if opened.linked { " and linked" } else { "" };
     ctx.emit(
         &format!("Issue opened{linked}: {}", opened.item.url),
         &opened,
     )?;
     Ok(0)
+}
+
+fn warn_unrecorded(opened: &Opened) {
+    if let Some(warning) = &opened.warning {
+        eprintln!("{warning}");
+    }
 }
 
 fn edit_fields(edit: EditArgs) -> Result<Edit> {
