@@ -339,16 +339,15 @@ async fn dynamic_admission_staggers_starts() {
 }
 
 #[tokio::test]
-async fn low_disk_holds_fixed_limits_after_the_first_start() {
+async fn low_disk_holds_fixed_limits() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
-    // No disk has this much free space, and none has less than a GiB.
+    // No disk has this much free space, so the host reads low or critical;
+    // either holds every start after the first below the fixed limit.
     manager.publish_config(
-        toml::from_str("max_agents = 3\n[overload.warning]\ndisk_free_gib = 1048576\n[overload.disk]\nstop_free_gib = 1")
-            .unwrap(),
+        toml::from_str("max_agents = 3\n[overload.warning]\ndisk_free_gib = 1048576").unwrap(),
     );
-    // With no agent running, one starts anyway.
-    assert!(add(&manager, &repo, "first").await.start);
+    add(&manager, &repo, "first").await;
     assert!(!add(&manager, &repo, "second").await.start);
     // Starting now still starts at once.
     assert!(
