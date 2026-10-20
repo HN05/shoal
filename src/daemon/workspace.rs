@@ -58,8 +58,13 @@ use tokio::sync::{Mutex, OwnedMutexGuard, RwLock, watch};
 
 enum WorkspaceSource {
     New(Option<String>),
-    /// An existing branch, with an optional base ref overriding the default branch.
-    Existing(crate::git::existing_branch::Branch, Option<String>),
+    /// An existing branch, with an optional base ref overriding the default
+    /// branch, and the unsaved files a restore writes into it.
+    Existing {
+        branch: crate::git::existing_branch::Branch,
+        base: Option<String>,
+        files: Option<restore::RestoredFiles>,
+    },
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -439,7 +444,7 @@ impl Manager {
             self.config().git.profile(name)?;
         }
         let base_branch = match &source {
-            WorkspaceSource::New(base) | WorkspaceSource::Existing(_, base) => match base {
+            WorkspaceSource::New(base) | WorkspaceSource::Existing { base, .. } => match base {
                 Some(base) => stack::base_branch(&repo.path, base).await?,
                 None => None,
             },
@@ -549,7 +554,8 @@ impl Manager {
             .await
     }
 
-    /// Create and configure the worktree, returning whether setup is still needed.
+    /// Create and configure the worktree, returning whether setup is still
+    /// needed. A restore's files go in before the workspace can be used.
     async fn materialize_worktree(
         &self,
         repo: &crate::model::Repository,
@@ -557,7 +563,7 @@ impl Manager {
         source: WorkspaceSource,
         git_profile: Option<&str>,
     ) -> Result<bool> {
-        if let WorkspaceSource::Existing(branch, _) = &source {
+        if let WorkspaceSource::Existing { branch, .. } = &source {
             self.materialize_branch(repo, branch).await?;
         }
         let base = self.resolve_worktree_base(repo, workspace, &source).await?;
@@ -571,6 +577,12 @@ impl Manager {
         )
         .await?;
         self.record_worktree_identity(workspace).await?;
+        if let WorkspaceSource::Existing {
+            files: Some(files), ..
+        } = &source
+        {
+            restore::write_files(&workspace.path, files).await?;
+        }
         let config = self.config();
         let settings = self.workspace_settings_from(&config, workspace).await?;
         self.apply_workspace_git_profile(workspace, &config, &settings, git_profile)
@@ -587,7 +599,7 @@ impl Manager {
         source: &WorkspaceSource,
     ) -> Result<String> {
         match source {
-            WorkspaceSource::Existing(_, base) => {
+            WorkspaceSource::Existing { base, .. } => {
                 self.existing_branch_base(repo, &workspace.branch, base.as_deref())
                     .await
             }

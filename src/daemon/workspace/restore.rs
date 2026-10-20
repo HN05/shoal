@@ -1,6 +1,8 @@
 //! Restore points for removed workspaces: every removal of an existing
 //! worktree keeps its HEAD and unsaved files reachable under a private ref
 //! and records what `shoal restore` needs, until the record expires.
+use std::path::Path;
+
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 
@@ -106,19 +108,27 @@ impl Manager {
     pub async fn restore_workspace(&self, selector: &str) -> Result<RestoredWorkspace> {
         let removed = self.removed_workspace(selector).await?;
         let branch = self.restore_branch(&removed).await?;
+        let files = (removed.snapshot != removed.head).then(|| RestoredFiles {
+            head: removed.head.clone(),
+            snapshot: removed.snapshot.clone(),
+        });
         let opened = self
-            .open_branch(removed.repository_id.as_str(), &branch, None, None, None)
+            .open_branch_with(
+                removed.repository_id.as_str(),
+                &branch,
+                None,
+                None,
+                None,
+                files,
+            )
             .await?;
         // The branch check released the repository gate, so another request
-        // may have opened the branch meanwhile; its files stay untouched.
+        // may have opened the branch meanwhile; that workspace got no files.
         ensure!(
             !opened.reused,
             "workspace {} opened branch {branch} during the restore",
             opened.workspace.name
         );
-        if removed.snapshot != removed.head {
-            self.restore_files(&opened.workspace, &removed).await?;
-        }
         let mut warnings = Vec::new();
         if let Some(url) = &removed.links.issue
             && let Err(error) = self
@@ -185,18 +195,6 @@ impl Manager {
             removed.snapshot
         );
         Ok(branch)
-    }
-
-    /// Apply the snapshot's files to a new worktree still at the removed HEAD.
-    async fn restore_files(&self, workspace: &Workspace, removed: &RemovedWorkspace) -> Result<()> {
-        let head = git::revision(&workspace.path, "HEAD", git::run).await?;
-        ensure!(
-            head.trim() == removed.head,
-            "branch {} moved during the restore; apply the unsaved files with git cherry-pick --no-commit {}",
-            workspace.branch,
-            removed.snapshot
-        );
-        git::restore::apply(&workspace.path, &removed.snapshot).await
     }
 
     /// Delete a restored workspace's record and the ref that kept its commits.
@@ -298,6 +296,24 @@ impl Manager {
         }
         Ok(())
     }
+}
+
+/// The unsaved files of a restore point, written into the new worktree.
+pub(super) struct RestoredFiles {
+    pub head: String,
+    pub snapshot: String,
+}
+
+/// Write a restore point's files into a new worktree still at the removed
+/// HEAD, before the workspace can be used.
+pub(super) async fn write_files(worktree: &Path, files: &RestoredFiles) -> Result<()> {
+    let head = git::revision(worktree, "HEAD", git::run).await?;
+    ensure!(
+        head.trim() == files.head,
+        "the branch moved during the restore; apply the unsaved files with git cherry-pick --no-commit {}",
+        files.snapshot
+    );
+    git::restore::apply(worktree, &files.snapshot).await
 }
 
 /// A removal notification that says how to undo it.

@@ -179,6 +179,21 @@ impl Manager {
         path: Option<std::path::PathBuf>,
         base: Option<String>,
     ) -> Result<OpenedWorkspace> {
+        self.open_branch_with(repository, selector, git_profile, path, base, None)
+            .await
+    }
+
+    /// [`Self::open_branch`], writing a restore's files into a new worktree
+    /// before it can be used; a reopened workspace gets none.
+    pub(super) async fn open_branch_with(
+        &self,
+        repository: impl Into<crate::forge::repository::Selector>,
+        selector: &str,
+        git_profile: Option<&str>,
+        path: Option<std::path::PathBuf>,
+        base: Option<String>,
+        files: Option<super::restore::RestoredFiles>,
+    ) -> Result<OpenedWorkspace> {
         let (repo, _guard) = self.lock_repository(repository).await?;
         let branch = self.select_existing_branch(&repo, selector).await?;
         let name = &branch.name;
@@ -217,7 +232,11 @@ impl Manager {
                 &repo,
                 name.clone(),
                 name.clone(),
-                super::WorkspaceSource::Existing(branch, base),
+                super::WorkspaceSource::Existing {
+                    branch,
+                    base,
+                    files,
+                },
                 git_profile,
                 path,
             )
