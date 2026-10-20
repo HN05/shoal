@@ -117,33 +117,43 @@ impl Manager {
     }
 
     /// Refuse to approve a land request whose branch has moved since the
-    /// request: drop it and tell the agent to request again. The landing
-    /// itself still lands only the approved commit.
+    /// request: drop it and tell the agent to request again. A failed Git
+    /// lookup keeps the request. The landing itself lands only the approved commit.
     pub(crate) async fn ensure_land_current(&self, request: &ApprovalRequest) -> Result<()> {
         let Specification::Land(land) = &request.specification else {
             bail!("approval request {} has no land specification", request.id);
         };
         let workspace = self.workspace(&request.workspace_id).await?;
-        let head = git::resolve_commit(&workspace.path, &git::local_ref(&land.branch), git_run)
+        let head = git::status::local_branch_commit(&workspace.path, &land.branch)
             .await
-            .ok();
+            .with_context(|| format!("could not check {} for approval", land.branch))?;
         if workspace.branch == land.branch && head.as_deref() == Some(land.head.as_str()) {
             return Ok(());
         }
-        self.discard_approval(request.id.clone()).await?;
-        let stale = format!(
-            "Approval {} for {} is stale: the branch moved; run shoal land again to request landing it.",
-            request.id,
-            request.subject()
-        );
-        if let Err(error) = self.queue_agent_message(&request.workspace_id, stale).await {
-            log!("stale land request message not queued: {error:#}");
-        }
+        self.drop_stale_land_request(request).await?;
         bail!(
             "approval request {} is stale: {} moved since it was requested",
             request.id,
             land.branch
         )
+    }
+
+    /// Delete a stale land request and tell the requesting agent; failing to
+    /// queue the message only logs.
+    async fn drop_stale_land_request(&self, request: &ApprovalRequest) -> Result<()> {
+        self.discard_approval(request.id.clone()).await?;
+        let message = format!(
+            "Approval {} for {} is stale: the branch moved; run shoal land again to request landing it.",
+            request.id,
+            request.subject()
+        );
+        if let Err(error) = self
+            .queue_agent_message(&request.workspace_id, message)
+            .await
+        {
+            log!("stale land request message not queued: {error:#}");
+        }
+        Ok(())
     }
 
     /// The managed workspace that has `branch` checked out, if any.

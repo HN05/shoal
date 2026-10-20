@@ -39,6 +39,18 @@ pub async fn local_branch(repo: &Path, name: &str) -> Result<Option<String>> {
         .then_some(reference))
 }
 
+/// The commit a local branch points at, or `None` when the branch is gone.
+/// A broken ref or failed lookup stays an error.
+pub async fn local_branch_commit(repo: &Path, name: &str) -> Result<Option<String>> {
+    let reference = super::local_ref(name);
+    if !super::ref_exists(repo, &reference, super::isolated_command).await? {
+        return Ok(None);
+    }
+    super::resolve_commit(repo, &reference, super::run_isolated)
+        .await
+        .map(Some)
+}
+
 /// The tree HEAD records, to compare with other revisions by content.
 pub async fn head_tree(repo: &Path) -> Result<String> {
     super::revision(repo, "HEAD^{tree}", run).await

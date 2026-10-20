@@ -1278,6 +1278,31 @@ async fn scoped_land_waits_for_approval_of_its_commit() {
 }
 
 #[tokio::test]
+async fn approving_a_land_request_keeps_it_when_the_branch_cannot_be_read() {
+    let f = Fixture::new().await;
+    let workspace = f.add("worker").await;
+    let pending = undecided_land(&f, &workspace).await;
+    let reference = f.repo.join(".git/refs/heads/worker");
+    let saved = fs::read(&reference).unwrap();
+    fs::write(&reference, "not a commit\n").unwrap();
+    let error = f
+        .manager
+        .decide_approval(pending.id.clone(), true)
+        .await
+        .unwrap_err();
+    fs::write(&reference, saved).unwrap();
+    assert!(!error.to_string().contains("stale"), "{error:#}");
+    let requests = f.manager.approval_requests(Some("worker")).await.unwrap();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(
+        requests[0].status,
+        crate::daemon::approvals::DecisionStatus::Pending
+    );
+    assert!(f.manager.agent_messages("worker").await.unwrap().is_empty());
+    f.manager.decide_approval(pending.id, true).await.unwrap();
+}
+
+#[tokio::test]
 async fn scoped_land_skips_approval_when_configured() {
     let f = Fixture::new().await;
     let workspace = f.add("worker").await;
