@@ -410,6 +410,39 @@ pub fn decide(tx: &Transaction<'_>, id: &str, approve: bool) -> Result<Decision>
 }
 
 impl Manager {
+    /// [`check`] in its own transaction, for allocations that claim nothing else.
+    pub async fn request_approval(
+        &self,
+        request: ApprovalRequest,
+    ) -> Result<Option<ApprovalRequest>> {
+        self.store
+            .run(move |db| {
+                let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+                let pending = check(&tx, request)?;
+                tx.commit()?;
+                Ok(pending)
+            })
+            .await
+    }
+
+    /// [`release`] in its own transaction, once the workspace is ready.
+    pub async fn release_approval(
+        &self,
+        owner: String,
+        target: Target,
+        name: String,
+    ) -> Result<bool> {
+        self.store
+            .run(move |db| {
+                let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+                store::require_ready(&tx, &owner)?;
+                let released = release(&tx, &owner, &target, &name)?;
+                tx.commit()?;
+                Ok(released)
+            })
+            .await
+    }
+
     pub async fn approval_requests(&self, selector: Option<&str>) -> Result<Vec<ApprovalRequest>> {
         let owner = self.workspace_filter(selector).await?;
         self.store.run(move |db| list(db, owner.as_deref())).await

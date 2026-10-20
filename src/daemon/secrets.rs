@@ -1,15 +1,17 @@
 //! Access grants for approval-gated secrets. The daemon records the decision;
 //! the CLI fetches the value only after the daemon confirms it.
 use anyhow::{Result, anyhow, ensure};
-use rusqlite::TransactionBehavior;
 use serde::{Deserialize, Serialize};
 
-use crate::daemon::{
-    allocation::Allocation,
-    approvals::{self, ApprovalRequest, SecretSpecification, Specification, Target},
-    scope::Caller,
-    store,
-    workspace::Manager,
+use crate::{
+    daemon::{
+        allocation::Allocation,
+        approvals::{ApprovalRequest, SecretSpecification, Specification, Target},
+        scope::Caller,
+        workspace::Manager,
+    },
+    model::Workspace,
+    secrets::Secret,
 };
 
 /// The caller may fetch the named secret.
@@ -32,12 +34,7 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<Allocation<SecretGrant>> {
         let workspace = self.workspace(selector).await?;
-        let secret = self
-            .workspace_settings(&workspace)
-            .await?
-            .secrets
-            .remove(&name)
-            .ok_or_else(|| anyhow!("secrets.{name} is not configured for this workspace"))?;
+        let secret = self.configured_secret(&workspace, &name).await?;
         crate::validate::reason("secret", reason.as_deref())?;
         if caller.is_none() || !secret.requires_approval {
             return Ok(Allocation::Granted(SecretGrant {
@@ -46,28 +43,9 @@ impl Manager {
             }));
         }
         self.touch(&workspace.id).await;
-        let request = ApprovalRequest::new(
-            &workspace.id,
-            Target::Secret(name.clone()),
-            &name,
-            Specification::Secret(SecretSpecification {
-                command: secret.command,
-                tools: secret.tools,
-            }),
-            secret.approval_lifetime,
-            reason.as_deref(),
-        );
-        let pending = self
-            .store
-            .run(move |db| {
-                let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
-                let pending = approvals::check(&tx, request)?;
-                tx.commit()?;
-                Ok(pending)
-            })
-            .await?;
-        let outcome = match pending {
-            Some(request) => Allocation::Approval(Box::new(request)),
+        let approval = grant_request(&workspace, &name, secret, reason.as_deref());
+        let outcome = match self.request_approval(approval).await? {
+            Some(pending) => Allocation::Approval(Box::new(pending)),
             None => Allocation::Granted(SecretGrant {
                 name,
                 approved: true,
@@ -82,19 +60,48 @@ impl Manager {
     pub async fn release_secret(&self, selector: &str, name: String) -> Result<()> {
         let workspace = self.workspace(selector).await?;
         self.touch(&workspace.id).await;
-        self.store
-            .run(move |db| {
-                let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
-                store::require_ready(&tx, &workspace.id)?;
-                ensure!(
-                    approvals::release(&tx, &workspace.id, &Target::Secret(name.clone()), &name)?,
-                    "no secret grant or approval request {name}"
-                );
-                tx.commit()?;
-                Ok(())
-            })
-            .await
+        let target = Target::Secret(name.clone());
+        ensure!(
+            self.release_approval(workspace.id, target, name.clone())
+                .await?,
+            "no secret grant or approval request {name}"
+        );
+        Ok(())
     }
+
+    /// The workspace's current definition of `name`.
+    async fn configured_secret(&self, workspace: &Workspace, name: &str) -> Result<Secret> {
+        self.workspace_settings(workspace)
+            .await?
+            .secrets
+            .remove(name)
+            .ok_or_else(|| anyhow!("secrets.{name} is not configured for this workspace"))
+    }
+}
+
+/// What a grant for `secret` binds: the command that fetches it and the tools
+/// it serves.
+fn specification(secret: &Secret) -> SecretSpecification {
+    SecretSpecification {
+        command: secret.command.clone(),
+        tools: secret.tools.clone(),
+    }
+}
+
+fn grant_request(
+    workspace: &Workspace,
+    name: &str,
+    secret: Secret,
+    reason: Option<&str>,
+) -> ApprovalRequest {
+    ApprovalRequest::new(
+        &workspace.id,
+        Target::Secret(name.to_owned()),
+        name,
+        Specification::Secret(specification(&secret)),
+        secret.approval_lifetime,
+        reason,
+    )
 }
 
 #[cfg(test)]
