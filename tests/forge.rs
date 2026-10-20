@@ -1228,7 +1228,7 @@ fn ci_actions_rerun_failed_jobs_and_cancel_running_runs_on_the_head() {
     };
     fixture.respond(json!({
         "GET repos/team/project/pulls/8": {"body": open},
-        "GET repos/team/project/commits/head/check-runs?per_page=100": {"body": {
+        "GET repos/team/project/commits/head/check-runs?filter=latest&per_page=100": {"body": {
             "total_count": 5, "check_runs": [
                 {"name": "rust", "status": "completed", "conclusion": "failure", "details_url": job(1, 11)},
                 {"name": "coverage", "status": "completed", "conclusion": "failure", "details_url": "https://coverage.example/7"},

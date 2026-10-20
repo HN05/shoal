@@ -202,8 +202,10 @@ impl ForgeRepo {
     async fn ci_jobs(&self, account: &Account, head: &str) -> Result<Vec<Job>> {
         let checks = match self.kind {
             ForgeKind::GitHub => {
-                let endpoint =
-                    self.repo_endpoint(&format!("commits/{head}/check-runs?per_page=100"));
+                // Only each check's latest attempt, not those reruns replaced.
+                let endpoint = self.repo_endpoint(&format!(
+                    "commits/{head}/check-runs?filter=latest&per_page=100"
+                ));
                 github_checks(&self.send(account, &Request::get(endpoint)).await?)?
             }
             ForgeKind::Forgejo => {
@@ -475,12 +477,11 @@ fn gitlab_checks(statuses: &[Value]) -> Result<Vec<Check>> {
                 | "preparing"
                 | "pending"
                 | "running"
-                | "scheduled",
+                | "scheduled"
+                | "waiting_for_callback",
             ) => JobState::Running,
             Some("failed" | "canceled") => JobState::Failed,
-            Some("success" | "skipped" | "manual" | "canceling" | "waiting_for_callback") => {
-                JobState::Finished
-            }
+            Some("success" | "skipped" | "manual" | "canceling") => JobState::Finished,
             state => bail!("unknown GitLab CI state {state:?}"),
         };
         let check = check(status, "name", state, "target_url")?;
@@ -656,10 +657,12 @@ mod tests {
             json!({"id": 7, "name": "rust", "status": "failed", "target_url": "old"}),
             json!({"id": 9, "name": "rust", "status": "running", "target_url": "new"}),
             json!({"id": 8, "name": "docs", "status": "canceled"}),
+            json!({"id": 10, "name": "deploy", "status": "waiting_for_callback"}),
         ];
         assert_eq!(
             gitlab_checks(&gitlab).unwrap(),
             [
+                ("deploy".into(), JobState::Running, String::new()),
                 ("docs".into(), JobState::Failed, String::new()),
                 ("rust".into(), JobState::Running, "new".into())
             ]
