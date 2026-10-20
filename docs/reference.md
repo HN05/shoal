@@ -684,7 +684,10 @@ authority, not a workspace scope, and workspace processes cannot start one.
 Chats are not tracked executions, so they are never queued, stopped under
 pressure or resumed. The daemon records each chat while its agent process runs,
 numbering a repository's running chats from 1, and
-[workspace events](#workspace-events) report its start and end.
+[workspace events](#workspace-events) report its start and end. A workspace
+belongs to the chat whose agent last opened it with `shoal add`: its `chat`
+field names that chat until the chat ends or the workspace is opened outside a
+chat, which returns it to you.
 
 ### Agent queue
 

@@ -276,6 +276,11 @@ pub fn is_scoped() -> bool {
     std::env::var_os(SCOPE_TOKEN).is_some()
 }
 
+/// The chat this process runs under, if any.
+pub fn chat() -> Option<String> {
+    std::env::var(CHAT).ok().filter(|chat| !chat.is_empty())
+}
+
 /// True when this process or an ancestor carries scope for the `state`
 /// directory, so clearing Shoal variables in a child does not lift its
 /// execution's limits.

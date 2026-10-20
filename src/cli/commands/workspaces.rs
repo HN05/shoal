@@ -293,6 +293,7 @@ pub(super) async fn add(
         agent,
         args,
         queue_entry: None,
+        chat: env::chat(),
     };
     if let Some(agent) = plan.agent_name() {
         let title = issue.as_ref().map(|issue| issue.title.clone());
@@ -378,6 +379,9 @@ pub(in crate::cli) struct AddPlan {
     /// The agent queue entry whose slot this launch uses.
     #[serde(default)]
     pub queue_entry: Option<String>,
+    /// The chat that planned the addition, which the workspace belongs to.
+    #[serde(default)]
+    chat: Option<String>,
 }
 
 impl AddPlan {
@@ -482,9 +486,10 @@ async fn add_planned(
         agent,
         args,
         queue_entry,
+        chat,
     } = plan;
     let pr = creation.pr.clone();
-    let opened = open_add_workspace(ctx, &target, creation).await?;
+    let opened = open_add_workspace(ctx, &target, creation, chat).await?;
     if let Some(entry) = &queue_entry {
         super::agent_queue::attach(ctx, entry, &opened.workspace).await?;
     }
@@ -820,10 +825,12 @@ async fn issue_creation(
     Ok(creation)
 }
 
+/// Open the planned workspace for `chat`, or for the user without one.
 async fn open_add_workspace(
     ctx: &Context,
     target: &AddTarget,
     creation: Creation,
+    chat: Option<String>,
 ) -> Result<OpenedWorkspace> {
     let Creation {
         path,
@@ -843,7 +850,7 @@ async fn open_add_workspace(
                 branch,
                 git_profile,
                 base,
-                chat: None,
+                chat,
             },
         )
         .await
@@ -857,7 +864,7 @@ async fn open_add_workspace(
                 name,
                 base,
                 git_profile,
-                chat: None,
+                chat,
             },
         )
         .await?;

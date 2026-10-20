@@ -18299,6 +18299,52 @@ fn chat_runs_the_agent_in_the_checkout_in_a_labelled_zmx_session() {
 }
 
 #[test]
+fn workspaces_belong_to_the_chat_that_opened_them() {
+    let fixture = Fixture::new();
+    let home = fixture.root.path();
+    // The chat's agent opens a workspace while the chat runs.
+    install_test_script(
+        home.join("bin/claude"),
+        format!(
+            "#!/bin/sh\n'{}' --json add \"$PWD\" chat-worker </dev/null > \"$HOME/chat-add\"\n",
+            env!("CARGO_BIN_EXE_shoal")
+        ),
+    );
+    let (output, transcript) = fixture.terminal_command(
+        fixture
+            .command()
+            .current_dir(&fixture.repo)
+            .env("ZMX_SESSION", "outer")
+            .args(["chat", "--agent", "claude"]),
+        "",
+        true,
+    );
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    let started = journal(&fixture)
+        .into_iter()
+        .find(|event| event["kind"] == "chat_started")
+        .unwrap();
+    let chat = &started["chat"]["id"];
+    let added: Value =
+        serde_json::from_str(&fs::read_to_string(home.join("chat-add")).unwrap()).unwrap();
+    assert_eq!(added["chat"], *chat, "{added}");
+    let changed = journal(&fixture)
+        .into_iter()
+        .find(|event| event["kind"] == "chat_changed")
+        .unwrap();
+    assert_eq!((&changed["name"], &changed["chat"]), (&added["name"], chat));
+
+    // Opening it outside a chat gives it back to the user.
+    let reopened = fixture.ok(&[
+        "add",
+        fixture.repo.to_str().unwrap(),
+        "--existing",
+        "chat-worker",
+    ]);
+    assert_eq!(reopened["chat"], Value::Null);
+}
+
+#[test]
 fn chat_instructions_append_the_checkout_template_to_the_global_one() {
     let fixture = Fixture::new();
     install_recording_agent(&fixture, "claude");
