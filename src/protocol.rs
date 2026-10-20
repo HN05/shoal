@@ -26,7 +26,7 @@ use crate::{
     sim::{SimRequest, Simulator, SimulatorCatalog, audit::AuditEntry},
 };
 
-pub const VERSION: u32 = 92;
+pub const VERSION: u32 = 93;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -359,6 +359,8 @@ pub enum Method {
     /// Remove idle cleanup candidates without waiting for their idle delay.
     Cleanup {
         dry_run: bool,
+        /// Also empty the shared caches of repositories nothing is using.
+        caches: bool,
     },
     Diagnose,
     Doctor {

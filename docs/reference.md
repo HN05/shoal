@@ -1305,6 +1305,9 @@ names. Shoal creates the directory before starting such a process and marks
 is in the way; registrations without a repository directory leave the field
 literal. Build output directories such as Cargo's `target/` do not belong here:
 concurrent builds serialize or corrupt them, so use a [seed](#seed-builds).
+
+`shoal cleanup --caches` empties a repository's caches, configured or not, while
+none of its tracked executions and no seed build of it is running. Processes started with an exported environment are not tracked.
 Removing the repository deletes `.caches`.
 
 ### Remove a workspace
@@ -1679,7 +1682,9 @@ Sweeps run about every 30 seconds; a failed step does not skip the others, and
 timers reset on restart. The daemon needs `lsof` on PATH.
 `shoal cleanup` removes these workspaces now, without their idle delay and also
 where idle cleanup is disabled, and reports any it retained; `--dry-run` lists them
-instead, with the reason `status` gives for keeping each other workspace. Removals record the `manual` event cause. Workspace processes cannot run it.
+instead, with the reason `status` gives for keeping each other workspace. `--caches`
+also empties [shared caches](#shared-caches) nothing is using, reporting each
+repository's `caches` with the `outcome` `emptied`, `busy` or `failed`. Removals record the `manual` event cause. Workspace processes cannot run it.
 
 ```toml
 [cleanup.auto]

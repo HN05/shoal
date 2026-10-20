@@ -5,6 +5,7 @@ pub(crate) mod agent_queue;
 pub mod allocation;
 pub mod approvals;
 mod auto_update;
+pub(crate) mod caches;
 pub mod cleanup;
 pub(crate) mod cpu_usage;
 mod disk;
@@ -696,7 +697,9 @@ async fn operation(manager: &Manager, method: Method, caller: Option<&Caller>) -
                 .remove_workspace(&workspace, choice, removal_inspection(caller_pid))
                 .await?,
         ),
-        Method::Cleanup { dry_run } => Body::Cleanup(cleanup::on_request(manager, dry_run).await?),
+        Method::Cleanup { dry_run, caches } => {
+            Body::Cleanup(cleanup::on_request(manager, dry_run, caches).await?)
+        }
         Method::Diagnose => Body::Diagnostics(manager.diagnose().await?),
         Method::Doctor { workspace, options } => Body::Doctor(
             manager

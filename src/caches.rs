@@ -20,6 +20,9 @@ use crate::{
 
 /// Holds the caches, apart from the owner marker.
 const SHARED: &str = "shared";
+/// Where emptied caches wait for deletion, inside `.caches` so moving one
+/// there never crosses filesystems.
+const TRASH: &str = "trash";
 
 pub fn validate(caches: &BTreeMap<String, Cache>) -> Result<()> {
     for name in caches.keys() {
@@ -69,6 +72,48 @@ impl Layout {
                 Ok((name.clone(), directory))
             })
             .collect()
+    }
+
+    /// The caches that exist, configured or not.
+    pub fn list(&self) -> Result<Vec<String>> {
+        let shared = self.root.join(SHARED);
+        let entries = match fs::read_dir(&shared) {
+            Ok(entries) => entries,
+            Err(error) if error.kind() == ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(error) => return Err(error).with_context(|| format!("read {}", shared.display())),
+        };
+        let mut names = entries
+            .map(|entry| Ok(entry?.file_name().to_string_lossy().into_owned()))
+            .collect::<std::io::Result<Vec<_>>>()?;
+        names.sort();
+        Ok(names)
+    }
+
+    /// Move every cache aside for [`Self::purge`] and return the names moved;
+    /// the next process Shoal starts recreates the directories it uses.
+    /// Callers keep tracked executions from starting meanwhile.
+    pub fn move_aside(&self) -> Result<Vec<String>> {
+        let names = self.list()?;
+        if names.is_empty() {
+            return Ok(names);
+        }
+        self.ensure_owned()?;
+        let trash = self.root.join(TRASH);
+        fs::create_dir_all(&trash)?;
+        let shared = self.root.join(SHARED);
+        fs::rename(&shared, trash.join(uuid::Uuid::new_v4().to_string()))
+            .with_context(|| format!("move {} aside", shared.display()))?;
+        Ok(names)
+    }
+
+    /// Delete the caches [`Self::move_aside`] moved, including any an
+    /// interrupted pass left behind.
+    pub fn purge(&self) -> Result<()> {
+        if self.root.symlink_metadata().is_err() {
+            return Ok(());
+        }
+        self.ensure_owned()?;
+        remove_dir(&self.root.join(TRASH))
     }
 
     /// Delete every cache with the directory itself, when the repository
@@ -127,24 +172,39 @@ mod tests {
     }
 
     #[test]
-    fn caches_are_created_and_removed_only_when_owned() {
+    fn caches_are_created_emptied_and_removed_only_when_owned() {
         let root = tempfile::tempdir().unwrap();
         let layout = Layout::new(root.path(), "repo");
+        let directory = root.path().join(".caches");
         assert!(layout.prepare(&BTreeMap::new()).unwrap().is_empty());
-        assert!(!root.path().join(".caches").exists());
+        assert!(!directory.exists());
 
         let directories = layout.prepare(&configured(&["go", "sccache"])).unwrap();
         assert_eq!(directories["go"], root.path().join(".caches/shared/go"));
-        assert!(directories["sccache"].is_dir());
+        fs::write(directories["go"].join("entry"), "cached").unwrap();
+        let dropped = directory.join(SHARED).join("dropped");
+        fs::create_dir(&dropped).unwrap();
+
+        assert_eq!(layout.list().unwrap(), ["dropped", "go", "sccache"]);
+        let moved = layout.move_aside().unwrap();
+        assert_eq!(moved, ["dropped", "go", "sccache"]);
+        assert!(layout.list().unwrap().is_empty());
+        assert!(!dropped.exists());
+        assert!(directory.join(TRASH).is_dir());
+        layout.purge().unwrap();
+        assert!(!directory.join(TRASH).exists());
+        let directories = layout.prepare(&configured(&["go", "sccache"])).unwrap();
 
         // Another repository's directory is never used or deleted.
         let other = Layout::new(root.path(), "other");
         assert!(other.prepare(&configured(&["go"])).is_err());
+        assert!(other.move_aside().is_err());
         other.remove().unwrap();
-        assert!(directories["go"].is_dir());
+        assert!(directories["sccache"].is_dir());
 
         layout.remove().unwrap();
-        assert!(!root.path().join(".caches").exists());
+        assert!(!directory.exists());
+        assert!(layout.move_aside().unwrap().is_empty());
     }
 
     #[test]

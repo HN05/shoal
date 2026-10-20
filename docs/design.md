@@ -375,7 +375,9 @@ sccache's directory, are the exception: `[caches.NAME]` with `scope = "shared"`
 gives a repository one directory per cache, and `[env]` maps it to the tool's
 variable with `{cache.NAME}`, so workspaces stop repeating downloads and
 compilation. The scope is explicit because a cache shared by live workspaces is
-only safe for such tools.
+only safe for such tools. A cache is disposable, so `cleanup --caches` empties it, but only while no tracked execution or seed build of the
+repository runs; registering an execution records it before preparing the
+directories, so emptying under the store's write lock cannot race a start.
 
 ## Scope and user interfaces
 

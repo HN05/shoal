@@ -259,6 +259,19 @@ impl Manager {
         }
     }
 
+    /// Keep the repository's seed builds from starting until the returned
+    /// guard drops, or `None` while one runs.
+    pub(super) fn pause_idle_seed(
+        &self,
+        repository_id: &str,
+    ) -> Option<tokio::sync::OwnedMutexGuard<()>> {
+        self.seed_slot(repository_id)
+            .gate
+            .clone()
+            .try_lock_owned()
+            .ok()
+    }
+
     fn seed_slot(&self, repository_id: &str) -> Arc<SeedSlot> {
         self.seed_builds
             .lock()

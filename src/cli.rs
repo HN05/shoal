@@ -533,6 +533,9 @@ pub enum Command {
         /// List the workspaces without removing them.
         #[arg(long)]
         dry_run: bool,
+        /// Also empty the shared caches of repositories without running executions.
+        #[arg(long)]
+        caches: bool,
     },
     /// Run an arbitrary command in a workspace.
     Exec {

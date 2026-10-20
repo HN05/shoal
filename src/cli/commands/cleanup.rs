@@ -7,17 +7,21 @@ use crate::{
         context::Context,
         output::{Palette, Style},
     },
-    daemon::cleanup::ManualCleanup,
+    daemon::{caches::Emptying, cleanup::ManualCleanup},
     protocol::Method,
 };
 
-pub(super) async fn run(ctx: &Context, dry_run: bool) -> Result<i32> {
+pub(super) async fn run(ctx: &Context, dry_run: bool, caches: bool) -> Result<i32> {
     let report = ctx
         .progress(
             "Cleaning up workspaces",
-            request::<ManualCleanup>(&ctx.paths, Method::Cleanup { dry_run }),
+            request::<ManualCleanup>(&ctx.paths, Method::Cleanup { dry_run, caches }),
         )
         .await?;
+    let failed = report
+        .caches
+        .iter()
+        .any(|cleanup| matches!(cleanup.emptying, Emptying::Failed { .. }));
     ctx.show(&report, |report| {
         if report.removed.is_empty() && report.retained.is_empty() {
             println!("No workspaces to clean up");
@@ -45,6 +49,7 @@ pub(super) async fn run(ctx: &Context, dry_run: bool) -> Result<i32> {
                 println!("  {:width$}  {}", kept.workspace, kept.reason);
             }
         }
+        show_caches(report, ctx.json);
         let palette = Palette::stderr(ctx.json);
         for retained in &report.retained {
             eprintln!(
@@ -56,5 +61,39 @@ pub(super) async fn run(ctx: &Context, dry_run: bool) -> Result<i32> {
             );
         }
     })?;
-    Ok(if report.retained.is_empty() { 0 } else { 1 })
+    Ok(if report.retained.is_empty() && !failed {
+        0
+    } else {
+        1
+    })
+}
+
+fn show_caches(report: &ManualCleanup, json: bool) {
+    let palette = Palette::stdout(json);
+    for cleanup in &report.caches {
+        let repository = &cleanup.repository;
+        match &cleanup.emptying {
+            Emptying::Emptied { caches } if report.dry_run => {
+                println!("Would empty caches of {repository}: {}", caches.join(", "));
+            }
+            Emptying::Emptied { caches } => println!(
+                "{}",
+                palette.paint(
+                    Style::Success,
+                    format!("Emptied caches of {repository}: {}", caches.join(", "))
+                )
+            ),
+            Emptying::Busy { caches } => println!(
+                "Kept caches of {repository}: {} (an execution or seed build is running)",
+                caches.join(", ")
+            ),
+            Emptying::Failed { error } => eprintln!(
+                "{}",
+                Palette::stderr(json).paint(
+                    Style::Error,
+                    format!("Could not empty caches of {repository}: {error}")
+                )
+            ),
+        }
+    }
 }

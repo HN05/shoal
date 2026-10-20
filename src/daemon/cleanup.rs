@@ -16,6 +16,7 @@ use tokio::time::{Instant, sleep};
 
 use crate::{
     daemon::{
+        caches::Emptying,
         doctor::{Check, CheckStatus},
         events::EventCause,
         log,
@@ -446,6 +447,8 @@ pub struct ManualCleanup {
     pub retained: Vec<Retained>,
     #[serde(default)]
     pub kept: Vec<Kept>,
+    #[serde(default)]
+    pub caches: Vec<CacheCleanup>,
 }
 
 impl ManualCleanup {
@@ -468,9 +471,50 @@ pub struct Kept {
     pub reason: CleanupReason,
 }
 
+/// One repository's shared caches on a cleanup request.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CacheCleanup {
+    pub repository: String,
+    #[serde(flatten)]
+    pub emptying: Emptying,
+}
+
 /// Remove every workspace idle cleanup would remove, now: the user's request
-/// replaces the idle delay and applies where idle cleanup is disabled.
-pub async fn on_request(manager: &Manager, dry_run: bool) -> Result<ManualCleanup> {
+/// replaces the idle delay and applies where idle cleanup is disabled. With
+/// `caches`, empty the shared caches nothing is using afterwards.
+pub async fn on_request(manager: &Manager, dry_run: bool, caches: bool) -> Result<ManualCleanup> {
+    let mut report = remove_on_request(manager, dry_run).await?;
+    if caches {
+        report.caches = empty_caches_on_request(manager, dry_run).await?;
+    }
+    Ok(report)
+}
+
+async fn empty_caches_on_request(manager: &Manager, dry_run: bool) -> Result<Vec<CacheCleanup>> {
+    let mut report = Vec::new();
+    for repo in manager.repositories().await? {
+        let emptying = match manager.empty_caches(&repo, dry_run).await {
+            Ok(None) => continue,
+            Ok(Some(emptying)) => emptying,
+            Err(error) => {
+                log!(
+                    "manual cleanup kept caches of {}: {error:#}",
+                    repo.path.display()
+                );
+                Emptying::Failed {
+                    error: format!("{error:#}"),
+                }
+            }
+        };
+        report.push(CacheCleanup {
+            repository: crate::forge::repository::name(&repo).to_owned(),
+            emptying,
+        });
+    }
+    Ok(report)
+}
+
+async fn remove_on_request(manager: &Manager, dry_run: bool) -> Result<ManualCleanup> {
     let mut report = ManualCleanup {
         dry_run,
         ..ManualCleanup::default()
@@ -1214,7 +1258,7 @@ mod tests {
                 .collect::<Vec<_>>()
         };
 
-        let preview = on_request(&manager, true).await.unwrap();
+        let preview = on_request(&manager, true, false).await.unwrap();
         assert_eq!(preview.removed, ["idle"]);
         assert_eq!(retained(&preview), ["broken"]);
         let kept = preview
@@ -1231,7 +1275,7 @@ mod tests {
         );
         assert_eq!(names(&manager).await, ["broken", "dirty", "held", "idle"]);
 
-        let report = on_request(&manager, false).await.unwrap();
+        let report = on_request(&manager, false, false).await.unwrap();
         assert!(!report.dry_run);
         assert_eq!(report.removed, ["idle"]);
         assert_eq!(retained(&report), ["broken"]);

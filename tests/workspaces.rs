@@ -3270,8 +3270,14 @@ fn configured_environment_renders_for_tracked_commands() {
     );
     assert_eq!(exported["GOCACHE"], cache);
     fixture.ok(&["rm", "env-values"]);
-    // The repository keeps its caches after workspace removal.
+    // The repository keeps its caches until cleanup empties them.
     assert!(Path::new(cache).join("entry").exists());
+    let report = fixture.ok(&["cleanup", "--caches"]);
+    assert_eq!(
+        report["caches"],
+        serde_json::json!([{"repository": "repo with ' quotes & $literal", "outcome": "emptied", "caches": ["go"]}])
+    );
+    assert!(!Path::new(cache).exists());
 }
 
 #[test]

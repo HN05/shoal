@@ -81,7 +81,8 @@ workspace the user wants ended, use `shoal --json done <workspace>` (with
 commands, or `shoal rm <workspace>` to remove it, which asks what to do with
 unmerged work. `shoal --json cleanup` removes every workspace automatic
 cleanup would remove without waiting for its idle delay; `--dry-run` lists
-them and why it keeps each other workspace, as `status` gives in `cleanup_reason`. When the repository has no remote, `shoal land <workspace>`
+them and why it keeps each other workspace, as `status` gives in `cleanup_reason`;
+`--caches` also empties shared tool caches nothing is using. When the repository has no remote, `shoal land <workspace>`
 merges a finished branch into the default branch; an agent's own `shoal land`
 asks for that through `shoal approvals` first.
 
