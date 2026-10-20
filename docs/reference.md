@@ -1787,7 +1787,7 @@ decide to take the work back: idle, merged and PR cleanup, and cleanup after
 unsaved work after `done`, does not start it. `shoal status` shows when the grace
 period ends; a sweep that no longer removes the workspace, as after `undone`, a
 new commit or new activity, ends it, and a later attempt starts a new one. The end
-time survives restarts. `shoal rm`, `shoal cleanup` and disk-space removal do not wait.
+time survives restarts, except that idle cleanup starts over with its timers. `shoal rm`, `shoal cleanup` and disk-space removal do not wait.
 
 ```toml
 [cleanup]
