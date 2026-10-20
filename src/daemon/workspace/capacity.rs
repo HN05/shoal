@@ -154,13 +154,14 @@ fn sample_disk(
 
 /// The machine-wide limit: the slots in use, plus one when another agent may
 /// start now. Critical or unavailable memory and disk readings start none;
-/// otherwise an idle machine always starts one.
+/// otherwise an idle machine, where no agent runs or starts, always starts one.
 pub(crate) fn limit(sample: HostSample, agents: Agents, settings: &Overload) -> u32 {
     if blocked(sample, settings) {
         return 0;
     }
-    let start = agents.total == 0
-        || (agents.newest.is_none_or(|age| age >= STAGGER) && room(sample, agents, settings));
+    let idle = agents.warming + agents.settled == 0;
+    let start =
+        idle || (agents.newest.is_none_or(|age| age >= STAGGER) && room(sample, agents, settings));
     agents.total + u32::from(start)
 }
 
@@ -351,6 +352,9 @@ mod tests {
             ..sample(0.0)
         };
         assert_eq!(limit(unmeasured, Agents::default(), &settings), 1);
+        // Stopped agents run nothing, so the machine is still idle.
+        let stopped = Agents::count([Activity::Stopped, Activity::Stopped]);
+        assert_eq!(limit(unmeasured, stopped, &settings), 3);
         assert_eq!(limit(unmeasured, agents(0, 1, 600), &settings), 1);
         let warning = HostSample {
             memory: MemoryState::Warning,
