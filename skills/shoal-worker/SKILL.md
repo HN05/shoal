@@ -82,7 +82,8 @@ current head, after you have read its log and fixed or reported the cause, and
 `shoal --json ci cancel` cancels running ones; omit `--check` for all of them.
 Forgejo cannot rerun through its API.
 
-`shoal done` defaults to cleanup, which may stop your execution. Use
+`shoal done` defaults to cleanup, which may stop your execution once a grace
+period (`[cleanup] grace_minutes`) has passed. Use
 `shoal done --keep --reason "<why>"` when the user wants to review in this
 workspace: it records completion and asks the user to approve keeping the
 workspace (`keep_request` names the request). Cleanup waits for the decision, and
@@ -103,8 +104,9 @@ such as a PR that is ready, run `shoal notify "<one-line message>"`. Neither
 affects completion or cleanup. Ask for decisions with `shoal ask` instead (see
 Questions).
 
-`shoal undone` withdraws a `shoal done` you ran too early. It does not keep the
-workspace.
+`shoal undone` withdraws a `shoal done` you ran too early. When the user gives
+you more work during the grace period, run it before starting. It does not keep
+the workspace.
 
 ## Messages
 
