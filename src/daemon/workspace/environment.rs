@@ -41,10 +41,11 @@ impl Manager {
         let _guard = self.lock_repository_git(&workspace.repository_id).await;
         let workspace = self.workspace(&workspace.id).await?;
         self.verify_worktree(&workspace).await?;
-        let configured = self.workspace_settings(&workspace).await?.env;
-        let repository_name =
-            crate::forge::repository::name(&self.repository(&workspace.repository_id).await?)
-                .to_owned();
+        let settings = self.workspace_settings(&workspace).await?;
+        let repository = self.repository(&workspace.repository_id).await?;
+        let caches = crate::caches::directories(&repository, &settings.caches)?;
+        let configured = settings.env;
+        let repository_name = crate::forge::repository::name(&repository).to_owned();
         let workspace_id = workspace.id.clone();
         let token = Uuid::new_v4().to_string();
         let paths = self.paths.clone();
@@ -58,6 +59,7 @@ impl Manager {
                     &workspace,
                     &repository_name,
                     &ports,
+                    &caches,
                 );
                 values.extend(env::workspace_environment(
                     &workspace, &paths, &ports, &token,

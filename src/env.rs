@@ -107,6 +107,7 @@ pub fn render_configured_environment(
     workspace: &Workspace,
     repository_name: &str,
     ports: &[PortReservation],
+    caches: &BTreeMap<String, PathBuf>,
 ) -> BTreeMap<String, OsString> {
     let mut fields = vec![
         ("{workspace}", std::ffi::OsStr::new(&workspace.name)),
@@ -123,6 +124,15 @@ pub fn render_configured_environment(
         port_values
             .iter()
             .map(|(name, value)| (name.as_str(), std::ffi::OsStr::new(value))),
+    );
+    let cache_keys: Vec<_> = caches
+        .iter()
+        .map(|(name, directory)| (format!("{{cache.{name}}}"), directory))
+        .collect();
+    fields.extend(
+        cache_keys
+            .iter()
+            .map(|(key, directory)| (key.as_str(), directory.as_os_str())),
     );
     values
         .iter()
@@ -336,14 +346,21 @@ mod tests {
                 "URL".into(),
                 "http://localhost:{port.web}/{port.missing}".into(),
             ),
+            ("GOCACHE".into(), "{cache.go}:{cache.missing}".into()),
             (
                 "LITERAL".into(),
                 "$HOME $(false) {unknown} {SESSION}".into(),
             ),
             ("EMPTY".into(), "".into()),
         ]);
-        let rendered =
-            render_configured_environment(&values, &workspace, "project-{workspace}", &ports);
+        let caches = BTreeMap::from([("go".into(), PathBuf::from("/tmp/.caches/{cache.go}"))]);
+        let rendered = render_configured_environment(
+            &values,
+            &workspace,
+            "project-{workspace}",
+            &ports,
+            &caches,
+        );
         assert_eq!(
             rendered["SESSION"],
             "project-{workspace}:task-{branch}:feature/session"
@@ -353,6 +370,10 @@ mod tests {
             "/tmp/{repo}/$(false) 日本語/profile:/tmp/{repo}/$(false) 日本語"
         );
         assert_eq!(rendered["URL"], "http://localhost:3000/{port.missing}");
+        assert_eq!(
+            rendered["GOCACHE"],
+            "/tmp/.caches/{cache.go}:{cache.missing}"
+        );
         assert_eq!(rendered["LITERAL"], "$HOME $(false) {unknown} {SESSION}");
         assert_eq!(rendered["EMPTY"], "");
     }
@@ -368,7 +389,8 @@ mod tests {
             crate::state::WorkspaceState::Ready,
         );
         let values = BTreeMap::from([("PROFILE".into(), "{workspace_path}/profile".into())]);
-        let rendered = render_configured_environment(&values, &workspace, "repo", &[]);
+        let rendered =
+            render_configured_environment(&values, &workspace, "repo", &[], &BTreeMap::new());
         assert_eq!(
             rendered["PROFILE"].as_os_str(),
             OsStr::from_bytes(b"/tmp/\xff/profile")

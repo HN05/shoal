@@ -370,6 +370,13 @@ every freshly checked-out file as new. Platforms without clones skip the seed
 rather than copy. Seeds are best effort: failures notify and never fail creation,
 and builds wait under host pressure so they never add load an agent would feel.
 
+Tool caches whose tools lock or address entries by content, such as `GOCACHE` or
+sccache's directory, are the exception: `[caches.NAME]` with `scope = "shared"`
+gives a repository one directory per cache, and `[env]` maps it to the tool's
+variable with `{cache.NAME}`, so workspaces stop repeating downloads and
+compilation. The scope is explicit because a cache shared by live workspaces is
+only safe for such tools.
+
 ## Scope and user interfaces
 
 Tracked executions and processes started with exported workspace environments

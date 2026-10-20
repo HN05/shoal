@@ -122,6 +122,7 @@ pub struct Config {
     pub ports: PortRange,
     /// Environment variables layered per repository and rendered for a workspace.
     pub env: BTreeMap<String, String>,
+    pub caches: BTreeMap<String, repo::Cache>,
     pub secrets: crate::secrets::Secrets,
     pub resources: std::collections::BTreeMap<String, crate::daemon::resources::ResourceConfig>,
     pub resource_pools: std::collections::BTreeMap<String, crate::daemon::resources::PoolConfig>,
@@ -507,6 +508,7 @@ impl Config {
                 ..Default::default()
             },
             env: self.env.clone(),
+            caches: self.caches.clone(),
             secrets: self.secrets.clone(),
             resources: self.resources.clone(),
             resource_pools: self.resource_pools.clone(),
@@ -563,6 +565,7 @@ impl Config {
         }
         crate::daemon::resources::definitions(&config.resources, &config.resource_pools)?;
         crate::env::validate_configured_environment(&config.env)?;
+        crate::caches::validate(&config.caches)?;
         crate::secrets::validate(&config.secrets)?;
         // A global file is complete on its own: its bounds must combine with
         // the built-in defaults, so `config set ports.end 4000` is refused

@@ -1,6 +1,7 @@
 mod agent;
 mod agent_auth;
 mod ai;
+mod caches;
 mod cli;
 mod config;
 mod daemon;

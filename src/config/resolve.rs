@@ -44,6 +44,7 @@ pub struct Effective {
     pub pre_remove_cmd: Option<String>,
     pub ports: Ports,
     pub env: BTreeMap<String, String>,
+    pub caches: BTreeMap<String, config::repo::Cache>,
     pub secrets: crate::secrets::Secrets,
     pub resources: BTreeMap<String, crate::daemon::resources::ResourceConfig>,
     pub resource_pools: BTreeMap<String, crate::daemon::resources::PoolConfig>,
@@ -196,6 +197,7 @@ impl Effective {
             pre_remove_cmd: merged.pre_remove_cmd,
             ports,
             env: merged.env,
+            caches: merged.caches,
             secrets: merged.secrets,
             resources: merged.resources,
             resource_pools: merged.resource_pools,
@@ -586,6 +588,7 @@ fn build_fields() -> Vec<Box<dyn Field + Send + Sync>> {
         scalar!(ports.end),
         named!("ports", ports.definitions),
         named!("env", env),
+        named!("caches", caches),
         named!("secrets", secrets),
         named!("resources", resources),
         named!("resource_pools", resource_pools),
@@ -623,7 +626,7 @@ issue_template = 'issue'\nagent_template = 'agent'\nchat_template = 'chat'\ngit_
 default_agent = 'claude'\nmax_agents = 2\nfocus = false\nsetup_cmd = 'setup'\npre_setup_cmd = 'pre-setup'\n\
 post_remove_cmd = 'post-remove'\npost_done_cmd = 'post-done'\npost_ready_cmd = 'post-ready'\npost_agent_exit_cmd = 'agent-exit'\npost_resource_acquire_cmd = 'acquire'\n\
 pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd = 'detach'\n\
-[env]\nSESSION = '{workspace}'\n[secrets.TOKEN]\ncommand = ['token']\n[commands]\nreview = ['review']\n[agent_resume]\nreview = ['review', '--resume']\n[agent_auth]\nfj = '/fj'\nfj_home = '/fj-home'\ngh = '/gh'\nglab = '/glab'\ntea = '/tea'\ngit_profile = 'agent'\n[codex]\ndefault_mode = 'app'\n[herdr]\nenabled = false\ntab_name = '{branch}'\nnew_tab = false\nclose_when_done = false\n\
+[env]\nSESSION = '{workspace}'\n[caches.go]\nscope = 'shared'\n[secrets.TOKEN]\ncommand = ['token']\n[commands]\nreview = ['review']\n[agent_resume]\nreview = ['review', '--resume']\n[agent_auth]\nfj = '/fj'\nfj_home = '/fj-home'\ngh = '/gh'\nglab = '/glab'\ntea = '/tea'\ngit_profile = 'agent'\n[codex]\ndefault_mode = 'app'\n[herdr]\nenabled = false\ntab_name = '{branch}'\nnew_tab = false\nclose_when_done = false\n\
 [ports]\non_conflict = 'auto'\nstart = 3000\nend = 3100\n[ports.web]\nport = 3000\n\
 [resources.lock]\ncapacity = 1\n[resource_pools.devices]\ncapacity = 2\n\
 [resource_pools.devices.resources.phone]\ncapacity = 1\n\
@@ -850,6 +853,7 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
             pre_remove_cmd,
             ports,
             env,
+            caches,
             secrets,
             resources,
             resource_pools,
@@ -869,6 +873,7 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
         assert!(
             !commands.is_empty()
                 && !env.is_empty()
+                && !caches.is_empty()
                 && !secrets.is_empty()
                 && !agent_resume.is_empty()
                 && !resources.is_empty()

@@ -3214,7 +3214,7 @@ fn execution_preserves_pipes_exit_code_environment_and_current_workspace() {
 #[test]
 fn configured_environment_renders_for_tracked_commands() {
     let fixture = Fixture::with_config(Some(
-        "[env]\nSESSION = '{workspace}'\nPROFILE = '{workspace_path}/.profile'\nREPO = '{repo}'\nBRANCH = '{branch}'\nLITERAL = '{workspace}'\nAPI_PORT = 'wrong'\nURL = 'http://localhost:{port.api}'\n",
+        "[env]\nSESSION = '{workspace}'\nPROFILE = '{workspace_path}/.profile'\nREPO = '{repo}'\nBRANCH = '{branch}'\nLITERAL = '{workspace}'\nAPI_PORT = 'wrong'\nURL = 'http://localhost:{port.api}'\nGOCACHE = '{cache.go}'\n[caches.go]\nscope = 'shared'\n",
     ));
     fixture.add("env-values");
     let port = fixture.ok(&["port", "acquire", "api", "env-values", "--env", "API_PORT"]);
@@ -3249,15 +3249,18 @@ fn configured_environment_renders_for_tracked_commands() {
             "--",
             "sh",
             "-c",
-            "printf '%s|%s' \"$API_PORT\" \"$URL\"",
+            "printf '%s|%s|%s' \"$API_PORT\" \"$URL\" \"$GOCACHE\"; touch \"$GOCACHE/entry\"",
         ])
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
+    let output = String::from_utf8(output.stdout).unwrap();
+    let (ports, cache) = output.rsplit_once('|').unwrap();
     assert_eq!(
-        String::from_utf8(output.stdout).unwrap(),
+        ports,
         format!("{}|http://localhost:{}", port["port"], port["port"])
     );
+    assert!(cache.ends_with("/.caches/shared/go"), "{cache}");
     let exported = fixture.ok(&["env", "env-values"]);
     assert_eq!(exported["API_PORT"], port["port"].to_string());
     assert_eq!(exported["SESSION"], "env-values");
@@ -3265,7 +3268,10 @@ fn configured_environment_renders_for_tracked_commands() {
         exported["URL"],
         format!("http://localhost:{}", port["port"])
     );
+    assert_eq!(exported["GOCACHE"], cache);
     fixture.ok(&["rm", "env-values"]);
+    // The repository keeps its caches after workspace removal.
+    assert!(Path::new(cache).join("entry").exists());
 }
 
 #[test]

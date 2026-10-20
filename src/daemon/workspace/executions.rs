@@ -271,11 +271,14 @@ impl Manager {
                 Ok(ports)
             })
             .await?;
+        // After the execution is recorded, so emptying caches waits for it.
+        let caches = crate::caches::directories(&repository, &settings.caches)?;
         let environment = crate::env::render_configured_environment(
             &settings.env,
             &workspace,
             crate::forge::repository::name(&repository),
             &ports,
+            &caches,
         );
         let (sender, receiver) = watch::channel(false);
         connections.insert(id.clone(), sender);

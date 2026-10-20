@@ -1086,7 +1086,7 @@ shoal repo rm my-project -y
 
 Permanently deletes the checkout (including in-place local repositories with
 uncommitted or unpushed work), all its workspaces, their ports, simulators, and
-leases, and the saved config, stopping managed commands first. Shoal attempts to
+leases, its seed and shared caches, and the saved config, stopping managed commands first. Shoal attempts to
 delete workspace branches; a branch whose recorded worktree directory is already
 missing is retained because its contents cannot be inspected.
 Interactive calls identify the resolved repository, source, and checkout path before asking
@@ -1282,6 +1282,30 @@ builds in nor deletes a seed whose marks are missing; `doctor` reports such a
 outside the worktree at a path inside it, such as
 `xcodebuild -derivedDataPath build/DerivedData`, so workspace removal deletes them
 too.
+
+### Shared caches
+
+Tool caches that lock or address their entries by content can serve every
+workspace of a repository at once:
+
+```toml
+[caches.go]
+scope = "shared"  # Required; the only scope
+
+[env]
+GOCACHE = "{cache.go}"
+SCCACHE_DIR = "{cache.sccache}"  # Needs its own [caches.sccache]
+```
+
+Each `[caches.NAME]` is a directory in the repository directory's
+`.caches/shared`, which `{cache.NAME}` names in `[env]`, so every process Shoal
+starts in a workspace, and the seed build, uses it. Names are lowercase like port
+names. Shoal creates the directory before starting such a process and marks
+`.caches` with the repository, refusing to start one while an unmarked `.caches`
+is in the way; registrations without a repository directory leave the field
+literal. Build output directories such as Cargo's `target/` do not belong here:
+concurrent builds serialize or corrupt them, so use a [seed](#seed-builds).
+Removing the repository deletes `.caches`.
 
 ### Remove a workspace
 
@@ -1935,8 +1959,8 @@ executions, with a fresh `SHOAL_SCOPE_TOKEN` and no `SHOAL_EXECUTION_ID`.
 The `[env]` table adds user-defined variables to tracked executions, lifecycle hooks,
 and this exported environment. Values resolve from saved repository config, the
 worktree file, global config, then the default, and substitute `{workspace}`,
-`{workspace_path}` (also `{path}`), `{repo}`, `{branch}`, and reserved `{port.NAME}`
-fields once. Unknown fields remain literal, inserted values are not expanded, and
+`{workspace_path}` (also `{path}`), `{repo}`, `{branch}`, reserved `{port.NAME}` and
+[`{cache.NAME}`](#shared-caches) fields once. Unknown fields remain literal, inserted values are not expanded, and
 `SHOAL_*` names are reserved for Shoal. Names must be ASCII identifiers; values
 must be strings without NUL. An empty string sets an empty value; inherited
 variables and shell expressions are not expanded. Reserved port exports take

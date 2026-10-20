@@ -96,6 +96,7 @@ impl Manager {
         }
         verify_directory(&repo.path, identity, true)?;
         self.remove_seed(&repo).await?;
+        delete_caches(&repo).await?;
         delete_checkout(repo.path.clone()).await?;
         delete_empty_workspaces_dir(repo.workspaces_dir.clone()).await?;
         self.unregister_repository(&repo.id).await?;
@@ -296,6 +297,13 @@ async fn delete_checkout(path: std::path::PathBuf) -> Result<()> {
     .await?
 }
 
+async fn delete_caches(repo: &Repository) -> Result<()> {
+    let Some(caches) = crate::caches::Layout::of(repo) else {
+        return Ok(());
+    };
+    tokio::task::spawn_blocking(move || caches.remove()).await?
+}
+
 async fn delete_empty_workspaces_dir(directory: Option<std::path::PathBuf>) -> Result<()> {
     let Some(directory) = directory else {
         return Ok(());
@@ -413,6 +421,14 @@ mod tests {
         });
         test_support::assert_pending(&mut creating).await;
 
+        // Shared caches go with the repository directory.
+        let caches = std::collections::BTreeMap::from([(
+            "go".to_owned(),
+            crate::config::repo::Cache {
+                scope: crate::config::repo::CacheScope::Shared,
+            },
+        )]);
+        crate::caches::directories(&repo, &caches).unwrap();
         let mut removing = Box::pin(manager.remove_repository(&repo.id));
         test_support::assert_pending(&mut removing).await;
         drop(gate);

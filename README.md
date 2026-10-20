@@ -296,13 +296,18 @@ A `[seed]` table keeps a build of the default branch that new workspaces clone, 
 they rebuild only what their branch changed; see [seed builds](docs/reference.md#seed-builds).
 
 Use `[env]` to give tracked executions and hooks workspace-specific variables. Values
-substitute `{workspace}`, `{workspace_path}`, `{repo}`, `{branch}`, and reserved
-`{port.NAME}` values once; inserted text is not evaluated. For example:
+substitute `{workspace}`, `{workspace_path}`, `{repo}`, `{branch}`, reserved
+`{port.NAME}` values and [shared cache](docs/reference.md#shared-caches) directories
+`{cache.NAME}` once; inserted text is not evaluated. For example:
 
 ```toml
 [env]
 AGENT_BROWSER_SESSION = "{workspace}"
 AGENT_BROWSER_PROFILE = "{workspace_path}/.agent-browser"
+GOCACHE = "{cache.go}"
+
+[caches.go]
+scope = "shared"
 ```
 
 Use `[secrets]` in global or saved repository config to give agents, or only

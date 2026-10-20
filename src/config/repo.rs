@@ -81,6 +81,7 @@ pub struct RepoConfig {
     pub pre_remove_cmd: Option<String>,
     pub ports: PortDefaults,
     pub env: BTreeMap<String, String>,
+    pub caches: BTreeMap<String, Cache>,
     /// Machine-specific, so the global config or saved repository config sets
     /// it, never the worktree file.
     pub secrets: crate::secrets::Secrets,
@@ -101,6 +102,21 @@ pub struct RepoConfig {
     pub pr: Pr,
     pub land: Land,
     pub seed: Seed,
+}
+
+states!(
+    /// Who shares a cache directory.
+    CacheScope {
+        /// Every workspace of the repository.
+        Shared => "shared",
+    }
+);
+
+/// A tool cache directory `[env]` names with `{cache.NAME}`.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Cache {
+    pub scope: CacheScope,
 }
 
 /// The default-branch build new workspaces start from.
@@ -237,6 +253,7 @@ pub fn parse(text: &str) -> Result<RepoConfig> {
     }
     crate::daemon::resources::definitions(&config.resources, &config.resource_pools)?;
     crate::env::validate_configured_environment(&config.env)?;
+    crate::caches::validate(&config.caches)?;
     crate::secrets::validate(&config.secrets)?;
     config.seed.validate()?;
     Ok(config)

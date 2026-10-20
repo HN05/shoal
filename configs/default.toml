@@ -166,10 +166,17 @@ start = 49152
 end = 65535
 
 # Variables exported to tracked executions and hooks. Values substitute
-# {workspace}, {workspace_path}, {repo}, {branch}, and {port.NAME} once.
+# {workspace}, {workspace_path}, {repo}, {branch}, {port.NAME} and
+# {cache.NAME} once.
 # [env]
 # AGENT_BROWSER_SESSION = "{workspace}"
 # AGENT_BROWSER_PROFILE = "{workspace_path}/.agent-browser"
+# GOCACHE = "{cache.go}"
+
+# A tool cache every workspace of a repository shares; only for tools that
+# lock or address entries by content.
+# [caches.go]
+# scope = "shared"
 
 [simulators]
 # Xcode simulator leases (macOS).

@@ -186,11 +186,13 @@ impl Manager {
         let settings = self.workspace_settings(workspace).await?;
         let repository = self.repository(&workspace.repository_id).await?;
         let ports = self.list_ports(Some(&workspace.id)).await?;
+        let caches = crate::caches::directories(&repository, &settings.caches)?;
         Ok(crate::env::render_configured_environment(
             &settings.env,
             workspace,
             crate::forge::repository::name(&repository),
             &ports,
+            &caches,
         ))
     }
 }

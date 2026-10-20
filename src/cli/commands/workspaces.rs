@@ -1083,6 +1083,7 @@ async fn run_post_setup(ctx: &Context, workspace: &Workspace) -> Result<()> {
             &client::inspect(&ctx.paths, workspace.id.clone())
                 .await?
                 .ports,
+            &crate::caches::directories(&repo, &settings.caches)?,
         );
         hooks::run_interactive(
             Hook::PostSetup,

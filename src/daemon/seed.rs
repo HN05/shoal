@@ -71,6 +71,7 @@ impl Plan {
                 &identity,
                 crate::forge::repository::name(repo),
                 &[],
+                &crate::caches::directories(repo, &settings.caches)?,
             ),
             branch,
         }))
