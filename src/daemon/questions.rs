@@ -290,6 +290,9 @@ impl Manager {
             .store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+                // A workspace reserved for removal takes no question its
+                // cleanup checks have not seen.
+                crate::daemon::store::require_ready(&tx, &workspace.id)?;
                 if let Some(question) = repeated(&tx, &workspace.id, &ask)? {
                     return Ok((question, false));
                 }

@@ -378,3 +378,33 @@ async fn notifications_of_maximal_questions_fit_one_response() {
     assert_eq!(manager.question(first.id).await.unwrap(), first);
     assert!(manager.question(first.id + 100).await.is_err());
 }
+
+#[tokio::test]
+async fn a_workspace_reserved_for_removal_takes_no_question() {
+    let (_root, manager, workspace) = fixture().await;
+    let id = workspace.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "UPDATE workspaces SET state=?2 WHERE id=?1",
+                params![id, crate::state::WorkspaceState::Removing],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let error = manager
+        .ask_question(&workspace.name, ask("Which database?", &[]))
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("not ready"), "{error:#}");
+    assert!(
+        manager
+            .questions(None, false)
+            .await
+            .unwrap()
+            .questions
+            .is_empty()
+    );
+}
