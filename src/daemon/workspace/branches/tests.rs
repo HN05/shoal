@@ -967,6 +967,47 @@ async fn squash_merge_on_the_remote_default_branch_counts_as_retained() {
 }
 
 #[tokio::test]
+async fn default_branch_has_the_changes_of_a_branch_rebased_after_its_merge() {
+    let f = Fixture::new().await;
+    let author = f.remote();
+    let workspace = f.add("worker").await;
+    fs::write(workspace.path.join("one"), "one\n").unwrap();
+    commit(&workspace.path, "one");
+    let merged_head = git(&workspace.path, &["rev-parse", "HEAD"]);
+    let forge = |args: &[&str]| {
+        let mut command = vec![
+            "-c",
+            "user.name=Forge",
+            "-c",
+            "user.email=forge@example.invalid",
+        ];
+        command.extend(args);
+        git(&author, &command);
+    };
+    fs::write(author.join("other"), "other\n").unwrap();
+    forge(&["add", "other"]);
+    forge(&["commit", "-q", "-m", "other"]);
+    forge(&["push", "-q", "origin", "main"]);
+    // The agent rebases onto that main while the forge merges the PR's
+    // original commit, which only the remote has.
+    git(&workspace.path, &["fetch", "-q", "origin"]);
+    git(&workspace.path, &["rebase", "-q", "origin/main"]);
+    forge(&[
+        "fetch",
+        "-q",
+        workspace.path.to_str().unwrap(),
+        merged_head.trim(),
+    ]);
+    forge(&["merge", "-q", "--no-ff", "-m", "merge", "FETCH_HEAD"]);
+    forge(&["push", "-q", "origin", "main"]);
+    assert!(f.manager.default_branch_has_head(&workspace).await.unwrap());
+    // A change the default branch lacks keeps the workspace.
+    fs::write(workspace.path.join("two"), "two\n").unwrap();
+    commit(&workspace.path, "two");
+    assert!(!f.manager.default_branch_has_head(&workspace).await.unwrap());
+}
+
+#[tokio::test]
 async fn execution_scope_preserves_role_authorization_and_expires() {
     let f = Fixture::new().await;
     let workspace = f.add("worker").await;

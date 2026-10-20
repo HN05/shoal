@@ -518,9 +518,10 @@ impl Manager {
             };
             contains_head |= commits.iter().any(|commit| commit == head);
         }
+        // A branch rebased after its PR merged has new commits for the same changes.
         ensure!(
-            contains_head,
-            "merged PR set does not contain the current workspace commit; retaining workspace"
+            contains_head || self.default_branch_has_head(workspace).await?,
+            "merged PRs do not contain HEAD and the default branch lacks its changes; retaining workspace"
         );
         Ok(true)
     }

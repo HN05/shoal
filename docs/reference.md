@@ -1657,8 +1657,9 @@ PR's head commit, read with fj's login for the host when it has one.
 Failed Forgejo checks include the failing step when the runner records it and
 a command to read the log; a log lookup failure stays on that check's update.
 
-Once every linked PR has merged and at least one contains current HEAD, a
-workspace marked `done` is cleaned up; PRs are looked up only after `done`. A
+Once every linked PR has merged and at least one contains current HEAD, or the
+freshly fetched default branch has its changes, as after a rebase that followed
+the merge, a workspace marked `done` is cleaned up; PRs are looked up only after `done`. A
 confirmed set survives restart without querying again. Cleanup uses normal branch retention and resource release, retaining dirty
 or newer work. `inspect` shows lookup and removal
 errors in `pr_cleanup`. Invalid registrations retain the workspace.

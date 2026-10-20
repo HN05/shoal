@@ -68,7 +68,7 @@ when behavior changes, distinguishing decisions from proposals.
   cleanup, retaining the default branch unless explicitly deleted; every removal of
   an existing worktree keeps an expiring restore point of HEAD and unsaved files. Only explicit
   `done` records completion. PR cleanup is on by default: all watched PRs must merge and
-  cover HEAD before a completed workspace is removed. Cleanup stops tracked
+  contain HEAD, or the default branch have its changes, before a completed workspace is removed. Cleanup stops tracked
   agents, verifies clean merged HEAD, and uses that path. Withdrawing completion
   preserves associations and watches but never defers cleanup; only holds keep a
   workspace.

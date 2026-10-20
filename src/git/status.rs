@@ -125,6 +125,12 @@ pub async fn retains_head(repo: &Path, references: &[String], head_tree: &str) -
     Ok(false)
 }
 
+/// Whether any of the default branch `name`'s refs retains HEAD.
+pub async fn default_branch_retains_head(repo: &Path, name: &str) -> Result<bool> {
+    let references = default_refs(repo, name).await?;
+    retains_head(repo, &references, &head_tree(repo).await?).await
+}
+
 /// Whether `target` already has HEAD's changes: HEAD is its ancestor, a
 /// trial merge of HEAD leaves its tree unchanged (squash merges), or every
 /// commit since the fork point, none of them a merge, has an equivalent patch

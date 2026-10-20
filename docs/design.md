@@ -1033,7 +1033,8 @@ items are the work the workspace exists for and drive completion and cleanup;
 and Shoal records `opened` itself for the issues and PRs it creates. Unlinking
 selects a relation's items, one kind of them, or one item. PR links accumulate
 without duplicates and require
-every watched PR to merge, with HEAD present in at least one; the existing branch
+every watched PR to merge, with HEAD present in at least one or merged into the freshly
+fetched default branch, as a rebase after the merge leaves it; the existing branch
 checks apply to each PR. PRs are looked up only once the assignment is done, and
 confirmation proceeds to cleanup. The confirmed
 HEAD persists so restart cannot query the same watch set again. Persisted manual

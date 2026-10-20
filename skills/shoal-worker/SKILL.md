@@ -41,7 +41,8 @@ Every link names its relation last: `assigned` for the work you are doing,
 `opened` for an item you created another way, `related` for one the work relates to.
 Register a PR opened another way with `shoal link pr <number-or-url> assigned`.
 Assigned PRs accumulate per workspace; after `done`, cleanup waits until all have
-merged and the merged set contains current HEAD. `shoal unlink pr <number-or-url>
+merged and the merged set contains current HEAD, or the default branch has its
+changes. `shoal unlink pr <number-or-url>
 assigned` unlinks one PR; omit its number or URL to unlink all assigned PRs. Closed, unmerged PRs keep waiting, so cancel their
 watches before finishing without a merge.
 
