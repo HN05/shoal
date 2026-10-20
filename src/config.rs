@@ -194,6 +194,7 @@ pub struct Simulators {
 pub struct Cleanup {
     pub auto: AutoCleanup,
     pub pr: PrCleanup,
+    pub merged: MergedCleanup,
 }
 
 #[derive(Debug, Serialize)]
@@ -219,12 +220,36 @@ impl AutoCleanup {
     }
 }
 
-pub fn validate_idle_minutes(minutes: u64) -> Result<()> {
+pub fn validate_idle_minutes(key: &str, minutes: u64) -> Result<()> {
     ensure!(
         minutes > 0 && minutes <= 525600,
-        "cleanup.auto.idle_minutes must be between 1 and 525600"
+        "{key} must be between 1 and 525600"
     );
     Ok(())
+}
+
+/// Removal of merged workspaces whether or not their assignment is done.
+#[derive(Debug, Serialize)]
+pub struct MergedCleanup {
+    pub enabled: bool,
+    pub idle_minutes: u64,
+}
+
+impl Default for MergedCleanup {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            idle_minutes: 240,
+        }
+    }
+}
+
+impl MergedCleanup {
+    /// The idle period before removal; `None` when disabled.
+    pub fn delay(&self) -> Option<Duration> {
+        self.enabled
+            .then(|| Duration::from_secs(self.idle_minutes * 60))
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -542,9 +567,7 @@ impl Config {
             .fold_legacy(&mut config.auto_cleanup, &mut config.pr_cleanup);
         crate::ai::validate(&config.ai, &config.commands, &paths.home)?;
         config.root_dir(paths)?;
-        if let Some(minutes) = config.cleanup.auto.idle_minutes {
-            validate_idle_minutes(minutes)?;
-        }
+        config.cleanup.validate()?;
         config.overload.validate()?;
         config.simulators.validate()?;
         config.git.validate()?;

@@ -2,7 +2,7 @@
 use super::{Manager, executions::StopPolicy};
 use crate::{
     daemon::{
-        cleanup::Snapshot,
+        cleanup::{Rule, Snapshot},
         events::{self, EventCause, EventKind},
     },
     git::{
@@ -248,7 +248,11 @@ impl Manager {
         };
         let tree = tokio::task::spawn_blocking(move || crate::daemon::cleanup::fingerprint(&path))
             .await??;
-        Ok(Ok(Snapshot { signals, tree }))
+        Ok(Ok(Snapshot {
+            rule: Rule::Idle,
+            signals,
+            tree,
+        }))
     }
 
     /// Why automatic cleanup keeps the workspace, or its idle delay when
@@ -298,6 +302,63 @@ impl Manager {
             check.workspace.path,
             crate::daemon::cleanup::signals(&head, activity),
         )))
+    }
+
+    /// The path and signals of a merged cleanup candidate, or `None` when
+    /// it is not one: merged into the default branch, clean and unused, with
+    /// no hold or keep choice. Assignment state does not keep it.
+    pub async fn merged_candidate(&self, id: &str) -> Result<Option<(PathBuf, u64)>> {
+        if self.keep_reason(id).await?.is_some() || self.usage_reason(id).await?.is_some() {
+            return Ok(None);
+        }
+        let mut check = self.check_removal(id, InspectionPolicy::GitOnly).await?;
+        if !check.workspace.path.is_dir()
+            || !check.matches_default_branch
+            || git::status::operation_in_progress(&check.workspace.path).await?
+            || worktree_cleanup_reason(&check).is_some()
+        {
+            return Ok(None);
+        }
+        check.load_directory_processes().await?;
+        if worktree_cleanup_reason(&check).is_some() {
+            return Ok(None);
+        }
+        let head = git::revision(&check.workspace.path, "HEAD", git::run).await?;
+        let activity = self.activity(id).await;
+        Ok(Some((
+            check.workspace.path,
+            crate::daemon::cleanup::signals(&head, activity),
+        )))
+    }
+
+    /// The full snapshot of a merged cleanup candidate.
+    pub async fn merged_snapshot(&self, id: &str) -> Result<Option<Snapshot>> {
+        let Some((path, signals)) = self.merged_candidate(id).await? else {
+            return Ok(None);
+        };
+        let tree = tokio::task::spawn_blocking(move || crate::daemon::cleanup::fingerprint(&path))
+            .await??;
+        Ok(Some(Snapshot {
+            rule: Rule::Merged,
+            signals,
+            tree,
+        }))
+    }
+
+    /// The signals an automatic removal compares after stopping commands,
+    /// under the rule that made the workspace a candidate.
+    async fn automatic_signals(&self, id: &str, rule: Rule) -> Result<Option<u64>> {
+        match rule {
+            Rule::Idle => self.cleanup_signals(id).await,
+            Rule::Merged => Ok(self.merged_candidate(id).await?.map(|(_, signals)| signals)),
+        }
+    }
+
+    async fn automatic_snapshot(&self, id: &str, rule: Rule) -> Result<Option<Snapshot>> {
+        match rule {
+            Rule::Idle => self.cleanup_snapshot(id).await,
+            Rule::Merged => self.merged_snapshot(id).await,
+        }
     }
 
     /// What daemon records keep the workspace: holds and assignment state
@@ -365,6 +426,11 @@ impl Manager {
 
     pub async fn remove_idle(&self, selector: &str, snapshot: Snapshot) -> Result<()> {
         self.remove_unused(selector, snapshot, EventCause::Idle)
+            .await
+    }
+
+    pub async fn remove_merged_idle(&self, selector: &str, snapshot: Snapshot) -> Result<()> {
+        self.remove_unused(selector, snapshot, EventCause::Merged)
             .await
     }
 
@@ -608,14 +674,17 @@ impl Manager {
             // cover changes made before removal started.
             (Removal::Automatic { .. }, Stage::Initial) => {}
             (Removal::Automatic { snapshot, .. }, Stage::AfterStop) => ensure!(
-                self.cleanup_signals(&workspace.id).await? == Some(snapshot.signals),
+                self.automatic_signals(&workspace.id, snapshot.rule).await?
+                    == Some(snapshot.signals),
                 "workspace changed {}",
                 stage.change()
             ),
             // The tree is compared only after the hooks: change times only
             // move forward, so that also covers changes made before them.
             (Removal::Automatic { snapshot, .. }, Stage::AfterHooks { .. }) => ensure!(
-                self.cleanup_snapshot(&workspace.id).await? == Some(snapshot),
+                self.automatic_snapshot(&workspace.id, snapshot.rule)
+                    .await?
+                    == Some(snapshot),
                 "workspace changed {}",
                 stage.change()
             ),

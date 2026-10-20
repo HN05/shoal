@@ -99,6 +99,14 @@ fn template_states_the_defaults_and_its_examples_are_valid() {
         Some(default_effective.cleanup.pr.enabled)
     );
     assert_eq!(
+        written.cleanup.merged.enabled,
+        Some(default_effective.cleanup.merged.enabled)
+    );
+    assert_eq!(
+        written.cleanup.merged.idle_minutes,
+        Some(default_effective.cleanup.merged.idle_minutes)
+    );
+    assert_eq!(
         (written.ports.start, written.ports.end),
         (
             Some(default_effective.ports.start),

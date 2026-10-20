@@ -225,6 +225,10 @@ instead of the PR delivery guidance below.
   the assignment once confirmed closed, without replacing an existing completion or
   bypassing removal checks.
   Tracked agent exits wake cleanup after the exit hook, retaining its usual checks.
+  Merged cleanup ignores links, watches and completion but never holds, keep
+  choices, commands, saved stopped work, leases, directory users or a Git
+  operation under way; its idle period is persisted so restarts cannot shorten
+  or reset it, and removal rechecks its snapshot through the shared path.
   Lookup failures and changed origin identity never count as closure.
 - Single-workspace actions use an explicit target, then scope or current directory,
   then an interactive picker; a deleted current directory provides no workspace

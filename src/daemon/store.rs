@@ -12,7 +12,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 43;
+const SCHEMA_VERSION: i64 = 44;
 
 #[cfg(test)]
 mod benchmark;
@@ -370,6 +370,8 @@ const MIGRATIONS: &[(i64, &str, Option<Precondition>)] = &[
             WHERE kind='approval_requested';",
         None,
     ),
+    // Unix time of the last recorded activity, so idle periods survive restarts.
+    (44, "ALTER TABLE workspaces ADD COLUMN active_at INTEGER;", None),
 ];
 
 fn migrate(db: &mut Connection) -> Result<()> {
@@ -824,6 +826,9 @@ mod tests {
         }
         if version >= 42 {
             db.execute_batch(include_str!("store/chats.sql"))?;
+        }
+        if version >= 44 {
+            db.execute_batch("ALTER TABLE workspaces ADD COLUMN active_at INTEGER;")?;
         }
         db.pragma_update(None, "user_version", version)?;
         db.execute_batch(

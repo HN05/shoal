@@ -1713,8 +1713,28 @@ from locally known remote branches, or merged into the default branch as removal
 decides; no fetch.
 Sweeps run about every 30 seconds; a failed step does not skip the others, and
 timers reset on restart. The daemon needs `lsof` on PATH.
-`shoal cleanup` removes these workspaces now, without their idle delay and also
-where idle cleanup is disabled, and reports any it retained; `--dry-run` lists them
+#### Merged workspaces
+
+A workspace whose branch merged into the default branch is removed once nothing
+has used it for `idle_minutes`, whether or not its agent ran `shoal done` or it
+has linked issues and PRs. Merged has the meaning [removal](#remove-a-workspace)
+gives it, against the default branch's remote-tracking branch, fetched at most
+every ten minutes. Uncommitted or untracked files, a merge, rebase or other Git
+operation under way, commands, agents saved for `shoal resume`, directory users,
+leases, permits, holds and `done --keep` keep the workspace. Shoal records the
+time of each command start and exit, lease and hold change, and takes the newest
+change time of the worktree's files, including ignored ones, and of its HEAD,
+index and reflog; the period runs from the latest of those and survives restarts.
+Removals record the `merged` event cause.
+
+```toml
+[cleanup.merged]
+enabled = true
+idle_minutes = 240
+```
+
+`shoal cleanup` removes idle and merged workspaces now, without their idle
+periods and also where those rules are disabled, and reports any it retained; `--dry-run` lists them
 instead, with the reason `status` gives for keeping each other workspace. `--caches`
 also empties [shared caches](#shared-caches) nothing is using, reporting each
 repository's `caches` with the `outcome` `emptied`, `busy` or `failed`. Removals record the `manual` event cause. Workspace processes cannot run it.

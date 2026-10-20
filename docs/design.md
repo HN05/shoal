@@ -982,9 +982,17 @@ an explicit keep or delete choice. The default branch, and every branch while th
 be resolved, is retained unless deletion is explicit.
 Automatic cleanup removes only clean, idle worktrees whose commits are all on a
 remote or merged, with no executions, directory users, leases, or
-permits, rechecked immediately before deletion, without fetching. `shoal cleanup`
-removes those candidates on request without their idle delay, including where idle
-cleanup is disabled; it is unavailable to scoped callers. `repo rm`
+permits, rechecked immediately before deletion, without fetching. Merged cleanup
+(`[cleanup.merged]`, default 240 idle minutes) decides from the workspace's state
+instead of its assignment: a merged branch, clean files, no Git operation under
+way, nothing running or saved for resume, no leases, permits, directory users,
+holds or keep choice, and no recorded activity, file change or per-worktree Git
+change for the idle period. Idle time is persisted, so restarts do not reset it;
+it fetches the default branch's remote at most every ten minutes and never moves
+local branches. A link, a watch or a recorded `done` does not keep the
+workspace. `shoal cleanup` removes the candidates of both rules on request without
+their idle periods, including where they are disabled; it is unavailable to
+scoped callers. `repo rm`
 deletes the checkout and every workspace through that path, refuses external
 worktrees and dangerous paths, persists progress, and blocks new workspaces until
 an interrupted removal is retried.

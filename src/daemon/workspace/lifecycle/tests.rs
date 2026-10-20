@@ -356,6 +356,7 @@ async fn directory_activity_distinguishes_inspection_from_removal_checks() {
         (
             Removal::Automatic {
                 snapshot: Snapshot {
+                    rule: Rule::Idle,
                     signals: 0,
                     tree: 0,
                 },
@@ -412,6 +413,7 @@ async fn unknown_execution_blocks_stop_and_unattended_removal_even_when_missing(
             },
             Removal::Automatic {
                 snapshot: Snapshot {
+                    rule: Rule::Idle,
                     signals: 0,
                     tree: 0,
                 },

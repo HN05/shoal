@@ -60,6 +60,26 @@ pub async fn head_tree(repo: &Path) -> Result<String> {
     super::revision(repo, "HEAD^{tree}", run).await
 }
 
+/// Whether a merge, rebase, cherry-pick, revert or bisect is under way, or the
+/// index has conflicts: state a snapshot of the files would not capture.
+pub async fn operation_in_progress(repo: &Path) -> Result<bool> {
+    const MARKERS: &[&str] = &[
+        "MERGE_HEAD",
+        "CHERRY_PICK_HEAD",
+        "REVERT_HEAD",
+        "BISECT_LOG",
+        "rebase-merge",
+        "rebase-apply",
+    ];
+    let git_dir = super::git_dir(repo).await?;
+    for marker in MARKERS {
+        if git_dir.join(marker).try_exists()? {
+            return Ok(true);
+        }
+    }
+    Ok(!run(repo, &["ls-files", "--unmerged"]).await?.is_empty())
+}
+
 /// The local default branch and its remote-tracking branch, those that exist.
 pub async fn default_refs(repo: &Path, name: &str) -> Result<Vec<String>> {
     let Some(local) = local_branch(repo, name).await? else {

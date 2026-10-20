@@ -59,7 +59,9 @@ when behavior changes, distinguishing decisions from proposals.
   default branch under the creation refresh rules. It never pushes or moves
   workspace branches; agents update their branch from it with plain Git.
 - `[cleanup.auto]` has `enabled` (default true) and `idle_minutes` (default
-  10), resolved per workspace on each sweep. Automatic removal is only for idle,
+  10), resolved per workspace on each sweep. `[cleanup.merged]` (default true,
+  240 idle minutes, persisted across restarts) removes merged, clean, unused
+  workspaces whatever their assignment state; only holds and keep choices keep them. Automatic removal is only for idle,
   clean worktrees with all commits pushed or merged into the default branch (including
   squash and rebase merges), or deleted worktrees. Keep one removal path for manual and automatic
   cleanup, retaining the default branch unless explicitly deleted. Only explicit

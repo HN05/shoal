@@ -784,9 +784,44 @@ impl Manager {
             .await
     }
 
-    /// Record activity so automatic cleanup restarts its idle timer.
+    /// Record activity so automatic cleanup restarts its idle timer, and its
+    /// time for idle periods that must survive a restart.
     pub async fn touch(&self, id: &str) {
         *self.activity.lock().await.entry(id.to_owned()).or_default() += 1;
+        let id = id.to_owned();
+        let recorded = self
+            .store
+            .run(move |db| {
+                db.execute(
+                    "UPDATE workspaces SET active_at=unixepoch() WHERE id=?1",
+                    [id],
+                )?;
+                Ok(())
+            })
+            .await;
+        if let Err(error) = recorded {
+            crate::daemon::log!("activity time not recorded: {error:#}");
+        }
+    }
+
+    /// The Unix time of the workspace's last recorded activity; one without
+    /// any starts its idle period now.
+    pub(crate) async fn active_at(&self, id: &str) -> Result<u64> {
+        let id = id.to_owned();
+        self.store
+            .run(move |db| {
+                db.execute(
+                    "UPDATE workspaces SET active_at=unixepoch() WHERE id=?1 AND active_at IS NULL",
+                    [&id],
+                )?;
+                let active_at: i64 = db.query_row(
+                    "SELECT active_at FROM workspaces WHERE id=?1",
+                    [&id],
+                    |row| row.get(0),
+                )?;
+                Ok(u64::try_from(active_at)?)
+            })
+            .await
     }
 
     pub(crate) async fn activity(&self, id: &str) -> u64 {

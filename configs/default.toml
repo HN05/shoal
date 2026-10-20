@@ -160,6 +160,11 @@ idle_minutes = 10
 # Remove completed workspaces once every watched PR has merged.
 enabled = true
 
+[cleanup.merged]
+# Remove workspaces merged into the default branch once idle, done or not.
+enabled = true
+idle_minutes = 240
+
 [ports]
 # Range for automatic TCP port reservations.
 start = 49152

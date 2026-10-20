@@ -239,9 +239,7 @@ pub fn parse(text: &str) -> Result<RepoConfig> {
     for &kind in crate::hooks::HookKind::ALL {
         kind.validate(kind.repository_command(&config))?;
     }
-    if let Some(minutes) = config.cleanup.auto.idle_minutes {
-        crate::config::validate_idle_minutes(minutes)?;
-    }
+    config.cleanup.validate()?;
     crate::config::validate_port_range(config.ports.start, config.ports.end)?;
     for (name, definition) in &config.ports.definitions {
         crate::validate::lowercase_name("port", name)
@@ -280,9 +278,22 @@ pub struct Codex {
 pub struct Cleanup {
     pub auto: AutoCleanup,
     pub pr: PrCleanup,
+    pub merged: MergedCleanup,
 }
 
 impl Cleanup {
+    pub fn validate(&self) -> anyhow::Result<()> {
+        for (key, minutes) in [
+            ("cleanup.auto.idle_minutes", self.auto.idle_minutes),
+            ("cleanup.merged.idle_minutes", self.merged.idle_minutes),
+        ] {
+            if let Some(minutes) = minutes {
+                crate::config::validate_idle_minutes(key, minutes)?;
+            }
+        }
+        Ok(())
+    }
+
     /// Take the values the former `[auto_cleanup]` and `[pr_cleanup]` tables
     /// set where `[cleanup]` leaves them unset, emptying those tables.
     pub fn fold_legacy(&mut self, auto: &mut AutoCleanup, pr: &mut PrCleanup) {
@@ -297,6 +308,14 @@ impl Cleanup {
 #[derive(Debug, Default, Clone, Copy, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct AutoCleanup {
+    pub enabled: Option<bool>,
+    pub idle_minutes: Option<u64>,
+}
+
+/// Repository values for the global `[cleanup.merged]`.
+#[derive(Debug, Default, Clone, Copy, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct MergedCleanup {
     pub enabled: Option<bool>,
     pub idle_minutes: Option<u64>,
 }

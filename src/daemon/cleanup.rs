@@ -1,6 +1,6 @@
-//! Automatic removal of idle, clean, fully pushed worktrees, and of workspaces
-//! whose directory was deleted outside Shoal; the user can remove the idle
-//! candidates on request.
+//! Automatic removal of idle, clean, fully pushed worktrees, of merged ones,
+//! and of workspaces whose directory was deleted outside Shoal; the user can
+//! remove the idle candidates on request.
 use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -27,6 +27,8 @@ use crate::{
     state::WorkspaceState,
     time::{local_seconds, unix_seconds},
 };
+
+mod merged;
 
 const SWEEP_INTERVAL: Duration = Duration::from_secs(30);
 /// A pass normally finishes within seconds; none for this long means the
@@ -195,9 +197,19 @@ impl Manager {
     }
 }
 
+/// The rules that made a workspace a cleanup candidate, rechecked during removal.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Rule {
+    /// Clean, unused, every commit pushed or merged, and no assignment state.
+    Idle,
+    /// Merged into the default branch, clean and unused, whatever its assignment.
+    Merged,
+}
+
 /// What automatic cleanup must see unchanged before removing a workspace.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Snapshot {
+    pub rule: Rule,
     /// HEAD and recorded activity, cheap enough to compare on every pass.
     pub signals: u64,
     /// The metadata of every file in the worktree, which takes a full walk.
@@ -213,6 +225,7 @@ struct Idle {
 #[derive(Default)]
 pub struct Timers {
     idle: HashMap<String, Idle>,
+    merged: merged::State,
 }
 
 impl Timers {
@@ -296,6 +309,10 @@ pub async fn sweep(manager: &Manager, timers: &mut Timers) -> Result<()> {
     step("completion cleanup", manager.sweep_completed().await);
     step("PR cleanup", manager.sweep_prs().await);
     step("idle cleanup", sweep_idle(manager, timers).await);
+    step(
+        "merged cleanup",
+        merged::sweep(manager, &mut timers.merged).await,
+    );
     ensure!(failed.is_empty(), "{}", failed.join("; "));
     Ok(())
 }
@@ -479,9 +496,9 @@ pub struct CacheCleanup {
     pub emptying: Emptying,
 }
 
-/// Remove every workspace idle cleanup would remove, now: the user's request
-/// replaces the idle delay and applies where idle cleanup is disabled. With
-/// `caches`, empty the shared caches nothing is using afterwards.
+/// Remove every workspace idle or merged cleanup would remove, now: the
+/// user's request replaces their idle periods and applies where they are
+/// disabled. With `caches`, empty the shared caches nothing is using afterwards.
 pub async fn on_request(manager: &Manager, dry_run: bool, caches: bool) -> Result<ManualCleanup> {
     let mut report = remove_on_request(manager, dry_run).await?;
     if caches {
@@ -525,7 +542,7 @@ async fn remove_on_request(manager: &Manager, dry_run: bool) -> Result<ManualCle
             report.keep(workspace.name, CleanupReason::NotReady { state });
             continue;
         }
-        let snapshot = match manager.cleanup_candidacy(&workspace.id).await {
+        let snapshot = match requested_candidacy(manager, &workspace.id).await {
             Ok(Ok(snapshot)) => snapshot,
             Ok(Err(reason)) => {
                 report.keep(workspace.name, reason);
@@ -562,6 +579,19 @@ async fn remove_on_request(manager: &Manager, dry_run: bool) -> Result<ManualCle
         }
     }
     Ok(report)
+}
+
+/// The snapshot of an idle or merged cleanup candidate, or why idle cleanup
+/// keeps the workspace.
+async fn requested_candidacy(
+    manager: &Manager,
+    id: &str,
+) -> Result<Result<Snapshot, CleanupReason>> {
+    let reason = match manager.cleanup_candidacy(id).await? {
+        Ok(snapshot) => return Ok(Ok(snapshot)),
+        Err(reason) => reason,
+    };
+    Ok(manager.merged_snapshot(id).await?.ok_or(reason))
 }
 
 /// A deleted worktree is forgotten unless it was moved or still has commands
@@ -631,6 +661,7 @@ mod tests {
         let now = Instant::now();
         let delay = Duration::from_secs(600);
         let snapshot = Snapshot {
+            rule: Rule::Idle,
             signals: 1,
             tree: 7,
         };

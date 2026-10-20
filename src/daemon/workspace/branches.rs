@@ -60,6 +60,14 @@ impl Manager {
         })
     }
 
+    /// Fetch the default branch's remote, so merge checks see what the forge
+    /// merged; local branches stay unchanged.
+    pub async fn fetch_default_branch(&self, repository_id: &str) -> Result<()> {
+        let repo = self.repository(repository_id).await?;
+        let _guard = self.lock_repository_git(&repo.id).await;
+        fetch_default_remote(&repo).await.map(|_| ())
+    }
+
     /// Match a canonical checkout path against recorded workspace locations.
     pub(super) async fn managed_workspace_at(&self, path: &Path) -> Result<Option<String>> {
         Ok(self
