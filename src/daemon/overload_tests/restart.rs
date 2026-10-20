@@ -27,6 +27,18 @@ async fn executions(manager: &Manager, workspace: &Workspace) -> Vec<Execution> 
         .executions
 }
 
+/// Wait until a committed state change satisfies `reached`.
+async fn store_reaches(manager: &Manager, mut reached: impl AsyncFnMut() -> bool) {
+    // Subscribe before the first check so a concurrent commit cannot be missed.
+    let mut changed = manager.store.watch_changes();
+    bounded(async {
+        while !reached().await {
+            changed.changed().await.unwrap();
+        }
+    })
+    .await;
+}
+
 fn record(manager: &Manager, workspace: &Workspace, id: &str) -> Option<Record> {
     Record::load(&record_path(&manager.paths, &workspace.id, id)).unwrap()
 }
@@ -254,19 +266,12 @@ async fn unresolved_stopped_agents_are_reconciled_once_their_survivors_exit() {
             super::super::restart_recovery::reconcile(&manager, Duration::from_millis(50)).await
         }
     });
-    bounded(async {
-        while blocked(&manager).await.is_empty() {
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-    })
-    .await;
+    store_reaches(&manager, async || !blocked(&manager).await.is_empty()).await;
     assert_eq!(executions(&manager, &workspace).await.len(), 1);
     survivor.kill().await.unwrap();
     survivor.wait().await.unwrap();
-    bounded(async {
-        while !executions(&manager, &workspace).await.is_empty() {
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
+    store_reaches(&manager, async || {
+        executions(&manager, &workspace).await.is_empty()
     })
     .await;
     assert!(record(&manager, &workspace, "survivor").is_some());
@@ -403,18 +408,14 @@ async fn update_restart_discards_a_stop_that_never_reached_the_agent() {
         Some(Stage::Stopping)
     );
     let serving = serve_fixture(reopened.clone());
-    // Reattachment commits `Running` before it discards the stop, so wait on
-    // the discard itself.
-    bounded(async {
-        while record(&reopened, &workspace, &id).is_some() {
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
+    // Reattachment commits `Running`, then discards the stop before it
+    // releases the connection lock.
+    store_reaches(&reopened, async || {
+        executions(&reopened, &workspace).await[0].state == ExecutionState::Running
     })
     .await;
-    assert_eq!(
-        executions(&reopened, &workspace).await[0].state,
-        ExecutionState::Running
-    );
+    drop(reopened.connections.lock().await);
+    assert!(record(&reopened, &workspace, &id).is_none());
     assert!(blocked(&reopened).await.is_empty());
     // A stop the agent receives saves the wrapper's record as usual.
     bounded(reopened.stop_workspace(&workspace.id, StopRequest::manual()))

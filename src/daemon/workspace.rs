@@ -103,7 +103,7 @@ pub struct Manager {
     /// Scope token → the execution it was issued to.
     scopes: Mutex<HashMap<String, Caller>>,
     /// Connected executions and the channel that asks their wrapper to stop.
-    connections: Mutex<HashMap<String, watch::Sender<bool>>>,
+    pub(super) connections: Mutex<HashMap<String, watch::Sender<bool>>>,
     /// Connected executions whose wrapper stops instead of reattaching when
     /// the daemon shuts down.
     unattachable: std::sync::Mutex<HashSet<String>>,
