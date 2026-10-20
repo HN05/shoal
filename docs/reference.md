@@ -835,9 +835,9 @@ approvals`. Each run of a listed tool in a workspace asks the daemon about
 every secret it serves, under the current policy, and fetches a gated value
 only once the workspace holds a grant for the secret's current `command` and
 `tools`; otherwise the run fails, naming the pending or denied request, or the
-`acquire` command when there is none. A launcher serves the config of its agent
-launch, so once a secret's `command` or `tools` change, its runs fail until the
-agent restarts. `shoal release secret NAME` cancels the request or
+`acquire` command when there is none; a run that cleared `SHOAL_SCOPE_TOKEN`
+fails too. A launcher serves the config of its agent launch, so once a
+secret's `command` or `tools` change, its runs fail until the agent restarts. `shoal release secret NAME` cancels the request or
 ends a lease grant.
 
 ### Prompt templates

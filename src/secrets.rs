@@ -213,13 +213,24 @@ fn served_to<'a>(secrets: &'a Secrets, tool: &str) -> Vec<(&'a String, &'a Secre
 /// policy applies even when it changed after the agent started; unscoped
 /// callers need no approval.
 async fn authorize(paths: &Paths, tool: &str, served: &[(&String, &Secret)]) -> Result<()> {
-    if !env::inherits_scope(&paths.state) {
+    if !must_authorize(tool, env::inherits_scope(&paths.state), env::is_scoped())? {
         return Ok(());
     }
     for (name, secret) in served {
         confirm_grant(paths, tool, name, secret).await?;
     }
     Ok(())
+}
+
+/// Whether a run must ask the daemon. A run scoped by ancestry must still
+/// carry its token: the daemon treats a request without one as unscoped.
+fn must_authorize(tool: &str, inherited: bool, token: bool) -> Result<bool> {
+    ensure!(
+        !inherited || token,
+        "{tool} cannot fetch secrets once {} is cleared",
+        env::SCOPE_TOKEN
+    );
+    Ok(inherited)
 }
 
 /// Fetch each served value with PATH set to `search`.
@@ -417,6 +428,14 @@ mod tests {
             format!("{error:#}").contains("cannot go on PATH"),
             "{error:#}"
         );
+    }
+
+    #[test]
+    fn scoped_runs_keep_their_token_to_fetch_secrets() {
+        assert!(!must_authorize("tool", false, false).unwrap());
+        assert!(must_authorize("tool", true, true).unwrap());
+        let error = must_authorize("tool", true, false).unwrap_err();
+        assert!(error.to_string().contains("SHOAL_SCOPE_TOKEN"), "{error}");
     }
 
     #[test]
