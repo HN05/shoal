@@ -112,7 +112,7 @@ pub(in crate::cli) async fn run_chat(
 ) -> Result<i32> {
     let taken = list().await?.into_iter().map(|session| session.0).collect();
     let name = free_name(&format!("{}-chat", repository::name(repository)), &taken);
-    let mut argv = internal::shoal_argv(&ctx.paths)?;
+    let mut argv = internal::session_argv(&ctx.paths)?;
     argv.extend_from_slice(args);
     let status = Command::new(Tool::Zmx.program())
         .arg("attach")

@@ -65,6 +65,17 @@ pub fn shoal_argv(paths: &Paths) -> Result<Vec<OsString>> {
     Ok(argv)
 }
 
+/// This executable for a command a session runs in the caller's environment,
+/// naming the state directory even when it is the default, so an inherited
+/// `SHOAL_STATE_DIR` cannot redirect it.
+pub fn session_argv(paths: &Paths) -> Result<Vec<OsString>> {
+    Ok(vec![
+        crate::fsutil::invoked_executable()?.into_os_string(),
+        "--state-dir".into(),
+        paths.state.clone().into_os_string(),
+    ])
+}
+
 /// Build an argv for this executable, preserving the caller's resolved globals.
 pub fn internal_command(paths: &Paths, json: bool, worker: Worker<'_>) -> Result<Vec<OsString>> {
     let mut args = vec![
@@ -152,6 +163,18 @@ mod tests {
         assert_eq!(
             shoal_argv(&custom).unwrap()[1..],
             ["--state-dir", "/home/state"]
+        );
+    }
+
+    #[test]
+    fn session_argv_names_even_the_default_state_directory() {
+        let default = Paths {
+            state: "/home/.local/state/shoal".into(),
+            ..Paths::for_test("/home")
+        };
+        assert_eq!(
+            session_argv(&default).unwrap()[1..],
+            ["--state-dir", "/home/.local/state/shoal"]
         );
     }
 
