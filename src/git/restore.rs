@@ -83,8 +83,8 @@ async fn changed_submodule(worktree: &Path) -> Result<bool> {
     Ok(false)
 }
 
-/// A commit on top of HEAD with the worktree's files, ignored ones excepted,
-/// or with HEAD's tree when `files` is false, keeping `earlier` reachable as
+/// A commit on top of HEAD with the worktree's files, ignored ones excepted
+/// unless staged, or with HEAD's tree when `files` is false, keeping `earlier` reachable as
 /// its second parent; HEAD itself when it would add neither. A temporary
 /// index keeps the worktree's own index and files untouched.
 pub async fn snapshot(
@@ -118,9 +118,17 @@ pub async fn snapshot(
             .args(args);
         subprocess::output(command).await
     };
-    in_index(&["read-tree", &head]).await?;
     if files {
+        // The worktree's own index keeps paths staged despite ignore rules.
+        let own = run_isolated(
+            worktree,
+            &["rev-parse", "--path-format=absolute", "--git-path", "index"],
+        )
+        .await?;
+        std::fs::copy(own.trim(), &index).context("copy the worktree's index")?;
         in_index(&["add", "--all", "--", ":/"]).await?;
+    } else {
+        in_index(&["read-tree", &head]).await?;
     }
     let tree = in_index(&["write-tree"]).await?;
     let mut args = vec!["commit-tree", tree.trim(), "-p", &head];
@@ -168,7 +176,7 @@ mod tests {
     async fn snapshot_keeps_changes_and_untracked_files_without_touching_the_worktree() {
         let root = tempfile::tempdir().unwrap();
         let repo = repository(root.path(), "repo");
-        fs::write(repo.join(".gitignore"), "ignored\n").unwrap();
+        fs::write(repo.join(".gitignore"), "ignored\nforced\n").unwrap();
         crate::test_support::commit(&repo, ".gitignore");
         let head = git(&repo, &["rev-parse", "HEAD"]);
         assert_eq!(
@@ -182,14 +190,19 @@ mod tests {
         fs::create_dir(repo.join("scratch")).unwrap();
         fs::write(repo.join("scratch/notes"), "notes\n").unwrap();
         fs::write(repo.join("ignored"), "build output\n").unwrap();
+        fs::write(repo.join("forced"), "forced\n").unwrap();
+        git(&repo, &["add", "-f", "forced"]);
         let status = git(&repo, &["status", "--porcelain"]);
-        assert_eq!(unsaved_bytes(&repo).await.unwrap(), Some(8 + 7 + 6));
+        assert_eq!(unsaved_bytes(&repo).await.unwrap(), Some(8 + 7 + 6 + 7));
 
         let commit = snapshot(&repo, "restore point", true, None).await.unwrap();
         assert_eq!(git(&repo, &["status", "--porcelain"]), status);
         assert_eq!(git(&repo, &["rev-parse", &format!("{commit}^")]), head);
         let files = git(&repo, &["ls-tree", "-r", "--name-only", &commit]);
-        assert_eq!(files, ".gitignore\nscratch/notes\nstaged\ntracked\n");
+        assert_eq!(
+            files,
+            ".gitignore\nforced\nscratch/notes\nstaged\ntracked\n"
+        );
         assert_eq!(
             git(&repo, &["show", &format!("{commit}:tracked")]),
             "changed\n"
