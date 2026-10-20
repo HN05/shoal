@@ -34,16 +34,7 @@ pub struct Credentials {
 
 impl Credentials {
     pub fn validate(&self) -> Result<()> {
-        if let Some(program) = self.token_command.first() {
-            ensure!(
-                !program.is_empty(),
-                "bitbucket.token_command must name a program"
-            );
-        }
-        ensure!(
-            self.token_command.iter().all(|word| !word.contains('\0')),
-            "bitbucket.token_command contains NUL"
-        );
+        super::token::validate("bitbucket.token_command", &self.token_command)?;
         if let Some(email) = &self.email {
             ensure!(
                 !self.token_command.is_empty(),
@@ -60,35 +51,21 @@ impl Credentials {
     /// The curl config line that signs a request in, or none without a
     /// configured token, which reaches only public repositories.
     pub(super) async fn authorization(&self) -> Result<Option<Vec<u8>>> {
-        let Some((program, args)) = self.token_command.split_first() else {
+        if self.token_command.is_empty() {
             return Ok(None);
-        };
-        let mut command = tokio::process::Command::new(program);
-        command.args(args);
-        let token = crate::subprocess::Run::new(command)
-            .timeout(super::api::TIMEOUT)
-            .output()
-            .await
-            .context("run bitbucket.token_command")?;
-        Ok(Some(authorization(token.trim(), self.email.as_deref())?))
+        }
+        let token = super::token::fetch("bitbucket.token_command", &self.token_command).await?;
+        Ok(Some(authorization(&token, self.email.as_deref())))
     }
 }
 
 /// An access token is a bearer token; an API token signs in with its email.
-fn authorization(token: &str, email: Option<&str>) -> Result<Vec<u8>> {
-    // The value goes into a curl config line; anything but a plain token is refused.
-    ensure!(
-        !token.is_empty()
-            && token
-                .chars()
-                .all(|c| c.is_ascii_graphic() && !matches!(c, '"' | '\\')),
-        "bitbucket.token_command printed no token or an unexpected token format"
-    );
+fn authorization(token: &str, email: Option<&str>) -> Vec<u8> {
     let value = match email {
         Some(email) => format!("Basic {}", BASE64.encode(format!("{email}:{token}"))),
         None => format!("Bearer {token}"),
     };
-    Ok(format!("header = \"Authorization: {value}\"\n").into_bytes())
+    format!("header = \"Authorization: {value}\"\n").into_bytes()
 }
 
 impl ForgeRepo {
@@ -495,20 +472,17 @@ mod tests {
     #[test]
     fn tokens_are_bearer_or_basic_with_an_email() {
         assert_eq!(
-            authorization("abc", None).unwrap(),
+            authorization("abc", None),
             b"header = \"Authorization: Bearer abc\"\n"
         );
         assert_eq!(
-            authorization("abc", Some("me@example.com")).unwrap(),
+            authorization("abc", Some("me@example.com")),
             format!(
                 "header = \"Authorization: Basic {}\"\n",
                 BASE64.encode("me@example.com:abc")
             )
             .into_bytes()
         );
-        for token in ["", "a b", "a\"b", "a\\b", "a\nb"] {
-            assert!(authorization(token, None).is_err(), "{token:?}");
-        }
     }
 
     #[test]

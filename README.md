@@ -46,9 +46,9 @@ the daemon. Prebuilt binaries do not require Rust.
 | `ps` (included with macOS; typically `procps` or `procps-ng` on Linux) | Tracking and stopping processes |
 | [fzf](https://github.com/junegunn/fzf) | Interactive menus and pickers |
 
-Feature-specific tools are installed separately: an authenticated `gh` (GitHub),
-`glab` (GitLab), or `fj` or `tea` (Forgejo, Gitea) for issues and PR watches, or
-`curl` and [Bitbucket credentials](docs/reference.md#forges); the agent or
+Feature-specific tools are installed separately: an authenticated `gh` (GitHub)
+or `glab` (GitLab) for issues and PR watches, or `curl` and
+[Forgejo, Gitea or Bitbucket tokens](docs/reference.md#forges); the agent or
 command you want to run;
 and `happy` plus `curl` for Happy sessions. Simulator use requires macOS with
 Xcode, `xcrun simctl`, and an installed simulator runtime.
@@ -220,9 +220,11 @@ For a separate agent account, configure forge executable wrappers and a
 ```toml
 [agent_auth]
 fj = "~/bin/fj-agent"
-fj_home = "~/.local/share/shoal-auth/fj"  # the HOME fj-agent runs fj with
 gh = "~/bin/gh-agent"
 git_profile = "agent"
+
+[agent_auth.forgejo."git.example.com"]  # the token Shoal's requests use
+token_command = ["security", "find-generic-password", "-s", "forgejo-agent", "-w"]
 ```
 
 See [agent accounts](docs/reference.md#agent-accounts)

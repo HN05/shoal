@@ -31,8 +31,8 @@ launcher fetches it only after the daemon confirms a workspace grant bound to
 its command and tools, and fails instead of waiting. Environment secrets cannot
 require approval, since they are fetched before the agent can ask. Forge changes Shoal
 makes for a workspace act as the agent too: through the `gh` wrapper, and on
-Forgejo with the token the agent's fj saved under the configured `fj_home`,
-because fj has no API passthrough, or else through the agent's `tea` wrapper. An agent Git profile
+Forgejo with the token the agent's configured command prints, because fj has no
+API passthrough and its saved logins are its private files. An agent Git profile
 selected the same way reaches tracked agents as Git's environment-level config,
 so the agent's commands use it in any repository while the worktree's config and
 other executions keep theirs. Desktop handoffs have no authentication override
@@ -706,9 +706,9 @@ Shoal owns forge writes for its workspaces so that every client, from an agent
 in a terminal to an app built on Shoal, gets one item model, one account rule
 and one policy. Issue and PR actions are typed (edit, comment, close, reopen,
 merge) and planned per forge as REST requests: `gh api` and `glab api`, which
-own GitHub's and GitLab's logins, or curl with the token fj saved for a Forgejo
-host, since fj has no API passthrough, or the configured Bitbucket token. Gitea shares Forgejo's API; a host fj has no login for uses tea's
-login through `tea api`, which owns that token, and otherwise reads anonymously.
+own GitHub's and GitLab's logins, or curl with the token a configured command
+prints for a Forgejo or Gitea host or for Bitbucket, since neither fj nor
+Bitbucket offers an API passthrough. A host without a token is read anonymously.
 The forge is selected from the remote's host and the user's local logins, without
 probing the host or requiring configuration: well-known hosts by name, a host glab
 has a login for or whose name has a `gitlab` label as GitLab, and any other as
@@ -970,7 +970,7 @@ Issue associations suppress idle cleanup, not merged cleanup.
 Item views let agents read issues and PRs without knowing the forge. The daemon
 selects linked or explicit items; the CLI looks them up with the user's forge
 login, because discussion can exceed a protocol frame: `gh` for GitHub, and
-Forgejo's API with fj's saved token for the host, or anonymously without one,
+Forgejo's API with the host's configured token, or anonymously without one,
 because fj has no structured output. Views automatically include failed Forgejo
 check logs, fetched by the daemon with the workspace's agent account and returned as
 bounded tails, so scoped callers never need forge credentials. Successful and
@@ -980,8 +980,9 @@ log is reported on that update without hiding other activity.
 Agents can also rerun failed and cancel running CI jobs on a PR's current head
 through the daemon, as the agent account and under the same scope, with each
 action recorded as an `item_changed` event. Each forge's own job API carries them
-out; Forgejo's API cannot rerun jobs and Shoal does not sign in to its web UI, so
-Forgejo only cancels, and Bitbucket Pipelines are not supported.
+out; Forgejo's API cannot rerun jobs and Shoal does not sign in to its web UI,
+which would need the account's password, so Forgejo only cancels and a rerun
+there is a new push. Bitbucket Pipelines are not supported.
 
 Manual and automatic cleanup share one path: establish ownership, stop owned
 executions, saving an existing worktree's agent sessions but no commands, run
@@ -1028,7 +1029,7 @@ worktrees and dangerous paths, persists progress, and blocks new workspaces unti
 an interrupted removal is retried.
 PR cleanup is separately enabled by default; disabling it pauses PR completion
 without affecting links, which serve more than cleanup. Persisted watches use the
-user's gh/fj login, resolve numbers against the workspace's origin into stored
+user's forge login, resolve numbers against the workspace's origin into stored
 URLs bound to that repository. Top-level `link` and `unlink` manage associations
 and always name a relation, so no link becomes the assignment by default. `assigned`
 items are the work the workspace exists for and drive completion and cleanup;

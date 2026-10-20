@@ -184,7 +184,7 @@ impl ForgeRepo {
                 Ok(())
             }
             (ForgeKind::Forgejo, CiAction::Rerun) => bail!(
-                "Forgejo's API cannot rerun Actions jobs; rerun them from the web UI or push a fix"
+                "Forgejo's API cannot rerun Actions jobs; push a commit to start a new run (`git commit --allow-empty` for a flaky job), or rerun them from the web UI"
             ),
             (ForgeKind::Bitbucket, _) => bail!("Shoal cannot {action} Bitbucket Pipelines"),
         }

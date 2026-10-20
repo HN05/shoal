@@ -1,21 +1,14 @@
 //! Forge REST requests sent as an [`Account`]: GitHub through `gh api`, which
-//! owns its login, and Forgejo or Gitea through curl with the token fj saved
-//! for the host, read per request and passed on stdin, never placed on a
-//! command line, or else through tea's login for the host.
-use std::{
-    path::{Path, PathBuf},
-    time::Duration,
-};
+//! owns its login, and Forgejo or Gitea through curl with the token the
+//! account's command prints for the host, passed on stdin, never placed on a
+//! command line.
+use std::time::Duration;
 
 use anyhow::{Context, Result, bail, ensure};
 use serde_json::Value;
 use tokio::process::Command;
 
-use super::{
-    ForgeKind, ForgeRepo,
-    account::{Account, ForgejoLogin},
-    tea,
-};
+use super::{ForgeKind, ForgeRepo, account::Account};
 use crate::tools::Tool;
 
 pub(super) const TIMEOUT: Duration = Duration::from_secs(30);
@@ -81,16 +74,7 @@ impl Request {
 impl ForgeRepo {
     /// Read plaintext logs without following redirects or exposing the login.
     pub(super) async fn forgejo_log(&self, account: &Account, endpoint: &str) -> Result<String> {
-        let token = match account.forgejo_login(&self.host).await? {
-            ForgejoLogin::Tea(login) => {
-                let request = Request::get(endpoint.to_owned());
-                return tea::send(account, &login, &request, MAX_LOG_BYTES)
-                    .await
-                    .context("fetch Forgejo job log (maximum 8 MiB)");
-            }
-            ForgejoLogin::Token(token) => Some(token),
-            ForgejoLogin::Anonymous => None,
-        };
+        let token = account.forgejo_token(&self.host).await?;
         let url = format!("{}://{}/api/v1/{endpoint}", self.web_scheme, self.host);
         let mut curl = Command::new(Tool::Curl.program());
         curl.args([
@@ -200,23 +184,13 @@ impl ForgeRepo {
     }
 
     async fn forgejo_send(&self, account: &Account, request: &Request) -> Result<Value> {
-        match account.forgejo_login(&self.host).await? {
-            ForgejoLogin::Tea(login) => {
-                json_body(&tea::send(account, &login, request, MAX_RESPONSE_BYTES).await?)
-            }
-            ForgejoLogin::Token(token) => {
-                self.curl_send(
-                    &self.forgejo_url(request),
-                    Some(authorization(token)),
-                    request,
-                )
-                .await
-            }
-            ForgejoLogin::Anonymous => {
-                self.curl_send(&self.forgejo_url(request), None, request)
-                    .await
-            }
-        }
+        let token = account.forgejo_token(&self.host).await?;
+        self.curl_send(
+            &self.forgejo_url(request),
+            token.map(authorization),
+            request,
+        )
+        .await
     }
 
     fn forgejo_url(&self, request: &Request) -> String {
@@ -409,44 +383,6 @@ pub(super) fn authorization(token: String) -> Vec<u8> {
     format!("header = \"Authorization: token {token}\"\n").into_bytes()
 }
 
-/// Where fj keeps the user's logins.
-pub(super) fn fj_keys_path() -> Result<PathBuf> {
-    let data = std::env::var_os("XDG_DATA_HOME")
-        .filter(|dir| !dir.is_empty())
-        .map(PathBuf::from);
-    Ok(fj_keys_at(&crate::fsutil::home_dir()?, data))
-}
-
-/// Where fj run with `home` keeps its logins; `data` is its XDG data
-/// directory, which Linux honors.
-pub(super) fn fj_keys_at(home: &Path, data: Option<PathBuf>) -> PathBuf {
-    if cfg!(target_os = "macos") {
-        home.join("Library/Application Support/forgejo-cli.forgejo-cli/keys.json")
-    } else {
-        data.unwrap_or_else(|| home.join(".local/share"))
-            .join("forgejo-cli/keys.json")
-    }
-}
-
-/// The token fj saved for exactly this host.
-pub(super) fn fj_token(path: &Path, host: &str) -> Result<String> {
-    let text = std::fs::read_to_string(path)
-        .with_context(|| format!("read fj logins at {}; run fj auth login", path.display()))?;
-    let keys: serde_json::Value = serde_json::from_str(&text).context("parse fj logins")?;
-    let token = keys["hosts"][host]["token"]
-        .as_str()
-        .with_context(|| format!("fj has no login for {host}; run fj auth login"))?;
-    // The token goes into a curl config line; anything but a plain token is refused.
-    ensure!(
-        !token.is_empty()
-            && token
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.')),
-        "fj's login for {host} has an unexpected token format"
-    );
-    Ok(token.to_owned())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -525,23 +461,5 @@ mod tests {
                 .unwrap(),
             "Repository not found"
         );
-    }
-
-    #[test]
-    fn fj_tokens_are_read_per_host_and_refused_when_malformed() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("keys.json");
-        std::fs::write(
-            &path,
-            r#"{"hosts":{"forge.example":{"type":"Application","token":"abc123"},
-                "bad.example":{"type":"Application","token":"a\"b"}},"aliases":{}}"#,
-        )
-        .unwrap();
-        assert_eq!(fj_token(&path, "forge.example").unwrap(), "abc123");
-        assert!(
-            format!("{:#}", fj_token(&path, "other.example").unwrap_err()).contains("no login")
-        );
-        assert!(fj_token(&path, "bad.example").is_err());
-        assert!(fj_token(&dir.path().join("missing"), "forge.example").is_err());
     }
 }

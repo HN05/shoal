@@ -53,7 +53,9 @@ impl Fixture {
     fn new(forge: Forge, config: &str) -> Self {
         let root = tempfile::tempdir_in("/tmp").unwrap();
         fs::create_dir_all(root.path().join(".config/shoal")).unwrap();
-        fs::write(root.path().join(".config/shoal/config.toml"), config).unwrap();
+        // `{host}` names the scripted forge, which is not listening yet.
+        let config_file = root.path().join(".config/shoal/config.toml");
+        fs::write(&config_file, config.replace("{host}", "github.com")).unwrap();
         fs::create_dir_all(root.path().join("forge")).unwrap();
         fs::write(root.path().join("forge/responses.json"), "{}").unwrap();
         let script = root.path().join("forge.py");
@@ -79,12 +81,12 @@ impl Fixture {
             }
             Forge::Forgejo => {
                 let host = fixture.serve();
-                let keys = if cfg!(target_os = "macos") {
-                    "Library/Application Support/forgejo-cli.forgejo-cli/keys.json"
-                } else {
-                    ".local/share/forgejo-cli/keys.json"
-                };
-                fixture.write_keys(&fixture.root.path().join(keys), &host, "usertoken");
+                let config = format!(
+                    "{}\n[forgejo.\"{host}\"]\ntoken_command = ['echo', 'usertoken']\n",
+                    config.replace("{host}", &host)
+                );
+                fs::write(&config_file, config).unwrap();
+                fixture.ok(&["daemon", "reload"]);
                 fixture.web = format!("http://{host}/team/project");
                 format!("http://{host}/team/project.git")
             }
@@ -113,15 +115,6 @@ impl Fixture {
         // A hang guard only: the server writes its port once it listens.
         support::wait::wait_until("forge server to start", || port_file.exists());
         format!("127.0.0.1:{}", fs::read_to_string(port_file).unwrap())
-    }
-
-    fn write_keys(&self, path: &Path, host: &str, token: &str) {
-        fs::create_dir_all(path.parent().unwrap()).unwrap();
-        fs::write(
-            path,
-            json!({"hosts": {host: {"type": "Application", "token": token}}}).to_string(),
-        )
-        .unwrap();
     }
 
     fn respond(&self, responses: Value) {
@@ -279,8 +272,8 @@ fn item_actions_send_rest_requests_and_record_events() {
 #[test]
 fn changes_use_the_agent_account_and_merges_the_users() {
     for forge in [Forge::GitHub, Forge::Forgejo] {
-        let config =
-            "[agent_auth]\ngh = '~/agent-gh'\nfj = '~/agent-fj'\nfj_home = '~/agent-home'\n";
+        let config = "[agent_auth]\ngh = '~/agent-gh'\nfj = '~/agent-fj'\n\
+            [agent_auth.forgejo.\"{host}\"]\ntoken_command = ['echo', 'agenttoken']\n";
         let fixture = Fixture::new(forge, config);
         let root = fixture.root.path();
         for (name, body) in [
@@ -294,16 +287,7 @@ fn changes_use_the_agent_account_and_merges_the_users() {
         }
         let (agent, user) = match forge {
             Forge::GitHub => (json!("agent"), Value::Null),
-            Forge::Forgejo => {
-                let host = fixture.web.split('/').nth(2).unwrap().to_owned();
-                let keys = if cfg!(target_os = "macos") {
-                    "agent-home/Library/Application Support/forgejo-cli.forgejo-cli/keys.json"
-                } else {
-                    "agent-home/.local/share/forgejo-cli/keys.json"
-                };
-                fixture.write_keys(&root.join(keys), &host, "agenttoken");
-                (json!("token agenttoken"), json!("token usertoken"))
-            }
+            Forge::Forgejo => (json!("token agenttoken"), json!("token usertoken")),
         };
         let endpoint = "repos/team/project/pulls/8";
         fixture.respond(json!({
@@ -331,7 +315,7 @@ fn changes_use_the_agent_account_and_merges_the_users() {
         assert_eq!(auth, [agent, user]);
     }
 
-    // An fj wrapper whose home Shoal does not know cannot stand in for the agent.
+    // The user's token cannot stand in for an agent with an fj wrapper.
     let fixture = Fixture::new(Forge::Forgejo, "[agent_auth]\nfj = '~/agent-fj'\n");
     support::install_test_script(fixture.root.path().join("agent-fj"), "#!/bin/sh\n");
     let refused = fixture.request(json!({"item_action": {"workspace": "topic", "kind": "pr",
@@ -340,7 +324,7 @@ fn changes_use_the_agent_account_and_merges_the_users() {
         refused["data"]["message"]
             .as_str()
             .unwrap()
-            .contains("agent_auth.fj_home"),
+            .contains("agent_auth.forgejo"),
         "{refused}"
     );
     assert!(fixture.requests().is_empty());
@@ -920,20 +904,10 @@ fn issue_open_with_link_refuses_before_creating_when_an_issue_is_linked() {
 
 #[test]
 fn scoped_check_logs_resolve_web_indices_and_use_the_agent_account() {
-    let fixture = Fixture::new(Forge::Forgejo, "[agent_auth]\nfj_home = '~/agent'\n");
-    let host = fixture
-        .web
-        .strip_prefix("http://")
-        .unwrap()
-        .split('/')
-        .next()
-        .unwrap();
-    let keys = if cfg!(target_os = "macos") {
-        "agent/Library/Application Support/forgejo-cli.forgejo-cli/keys.json"
-    } else {
-        "agent/.local/share/forgejo-cli/keys.json"
-    };
-    fixture.write_keys(&fixture.root.path().join(keys), host, "agenttoken");
+    let fixture = Fixture::new(
+        Forge::Forgejo,
+        "[agent_auth.forgejo.\"{host}\"]\ntoken_command = ['echo', 'agenttoken']\n",
+    );
     let mut responses = failed_check_responses();
     fixture.respond(responses.clone());
     let exported = fixture.ok(&["env", "topic"]);

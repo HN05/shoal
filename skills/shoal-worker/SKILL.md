@@ -80,7 +80,7 @@ include the failing step when the runner records it and a command to read the lo
 `shoal --json ci rerun --check '<check name>'` reruns a failed check on the PR's
 current head, after you have read its log and fixed or reported the cause, and
 `shoal --json ci cancel` cancels running ones; omit `--check` for all of them.
-Forgejo cannot rerun through its API.
+Forgejo cannot rerun through its API; push a commit to start a new run.
 
 `shoal done` defaults to cleanup, which may stop your execution. Use
 `shoal done --keep --reason "<why>"` when the user wants to review in this

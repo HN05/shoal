@@ -81,6 +81,7 @@ pub struct Config {
     pub agent_template: Option<String>,
     pub chat_template: Option<String>,
     pub agent_auth: crate::agent_auth::Config,
+    pub forgejo: crate::forge::token::ForgejoHosts,
     pub bitbucket: crate::forge::bitbucket::Credentials,
     pub git: crate::git_profile::Git,
     pub git_profile: Option<String>,
@@ -596,6 +597,7 @@ impl Config {
         config.simulators.validate()?;
         config.git.validate()?;
         config.agent_auth.validate()?;
+        crate::forge::token::validate_forgejo("forgejo", &config.forgejo)?;
         config.bitbucket.validate()?;
         for &kind in crate::hooks::HookKind::ALL {
             if kind.allows_global() {

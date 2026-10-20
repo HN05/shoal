@@ -9,14 +9,13 @@ use std::{ffi::OsString, path::PathBuf};
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
     pub fj: Option<PathBuf>,
-    /// The HOME the agent's `fj` runs with, holding the login Shoal uses for
-    /// the agent's Forgejo API requests.
-    pub fj_home: Option<PathBuf>,
+    /// The agent's token command per Forgejo or Gitea host, which Shoal's
+    /// requests for the agent use.
+    pub forgejo: crate::forge::token::ForgejoHosts,
     pub gh: Option<PathBuf>,
     /// The agent's `glab`, which sends GitLab requests as the agent.
     pub glab: Option<PathBuf>,
-    /// The agent's `tea`, whose login stands for the agent on Gitea and on
-    /// Forgejo hosts without `fj_home`.
+    /// The agent's `tea`.
     pub tea: Option<PathBuf>,
     pub git_profile: Option<String>,
 }
@@ -79,7 +78,6 @@ impl Config {
     pub fn validate(&self) -> Result<()> {
         for (name, path) in [
             (Tool::Forgejo.program(), &self.fj),
-            ("fj_home", &self.fj_home),
             (Tool::GitHub.program(), &self.gh),
             (Tool::GitLab.program(), &self.glab),
             (Tool::Tea.program(), &self.tea),
@@ -92,6 +90,7 @@ impl Config {
                 );
             }
         }
+        crate::forge::token::validate_forgejo("agent_auth.forgejo", &self.forgejo)?;
         if let Some(name) = &self.git_profile {
             crate::validate::name("git profile", name)?;
         }

@@ -155,7 +155,8 @@ fn own_state(action: &Action) -> bool {
 impl Manager {
     /// The user's own logins, which reads and the user's decisions use.
     pub(crate) fn user_account(&self) -> Account {
-        Account::user(&self.config().bitbucket)
+        let config = self.config();
+        Account::user(&config.forgejo, &config.bitbucket)
     }
 
     pub(super) async fn agent_account(&self, workspace: &Workspace) -> Result<Account> {
@@ -166,6 +167,7 @@ impl Manager {
             &settings.agent_auth,
             &self.paths,
             &config.git,
+            &config.forgejo,
             &config.bitbucket,
         )
     }

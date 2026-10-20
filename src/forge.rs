@@ -22,8 +22,8 @@ mod remote_url;
 pub mod repository;
 mod rest;
 mod retarget;
-mod tea;
 mod thread;
+pub mod token;
 pub mod updates;
 pub mod view;
 

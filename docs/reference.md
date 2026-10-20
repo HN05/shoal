@@ -494,7 +494,7 @@ without one, the agent reviews. Choosing “No agent” returns without starting
 The agent is otherwise chosen as for `shoal add` and is
 prompted to report findings, not to change files, commit, push, or post.
 `shoal review <pr-url>` or `shoal review --pr <number-or-url>` looks up the PR
-with your `gh`/`fj` login and reviews it the same way in the workspace that owns
+with your forge login and reviews it the same way in the workspace that owns
 its head branch, fast-forwarded to the pushed head and refused when diverged, or
 opens one from origin whose base is the PR's refreshed `origin/<base>`. Either
 workspace links the PR as `shoal add` does; fork PRs are refused. `--repo` selects the PR's repository,
@@ -755,9 +755,9 @@ to its workspace. Scoped callers see no entries.
 ### Agent accounts
 
 `[agent_auth]` selects user-owned executable wrappers for `fj`, `gh`, `glab` and
-`tea`, each an absolute or `~/` path, `fj_home`, the HOME the `fj` wrapper runs `fj` with,
-and a `git_profile` naming one of the global [Git profiles](#git-profiles), all
-defaulting to unset. Values follow repository/global
+`tea`, each an absolute or `~/` path, a `git_profile` naming one of the global
+[Git profiles](#git-profiles), and `[agent_auth.forgejo."<host>"]` tables shaped
+like [`[forgejo]`](#forges) with the agent's tokens, all defaulting to unset. Values follow repository/global
 precedence and appear in `config show`. Tracked agent shortcuts prepend a private
 directory containing these tool names to the child's PATH; nested commands inherit
 it. Missing or non-executable wrappers fail before the agent starts. The directory
@@ -771,11 +771,10 @@ or a shell that resets PATH bypasses it.
 
 Issue and PR changes Shoal makes for a workspace use the agent account. On
 GitHub they run `gh api` through the `gh` wrapper, and on GitLab `glab api`
-through the `glab` wrapper. On Forgejo and Gitea they use
-the token the agent's `fj` saved under `fj_home`, read for each request and passed
-to curl on stdin; with an `fj` wrapper but no `fj_home` they fail rather than use
-your login. For a host the agent's fj has no login for, a `tea` wrapper sends
-them through `tea api` with its login for the host. Options left unset use your own logins, as the agent would.
+through the `glab` wrapper. On Forgejo and Gitea they use the token
+`[agent_auth.forgejo."<host>"]` prints; with an `fj` or `tea` wrapper but no
+agent token for the host they fail rather than use yours. Options left unset use
+your own logins, as the agent would.
 
 The agent Git profile reaches tracked agents through Git's `GIT_CONFIG_COUNT`
 variables, after any inherited entries, so it overrides every Git config file for
@@ -797,8 +796,8 @@ exec env HOME="$agent_home" XDG_DATA_HOME="$agent_home/.local/share" \
 ```
 
 Run `~/bin/fj-agent auth login` (or `auth add-token`) yourself to authenticate
-as the agent account, and set `fj_home = "~/.local/share/shoal-auth/fj"` so
-Shoal finds that login. Only the `fj` process receives the separate home.
+the agent's `fj` as the agent account. Only the `fj` process receives the
+separate home; Shoal's own requests use the `[agent_auth.forgejo]` token.
 
 For `gh`, changing `GH_CONFIG_DIR` alone can still reach your system keyring.
 A wrapper can instead obtain an agent token from your credential manager and
@@ -983,8 +982,7 @@ PRs that still target its branch to the branch it merged into. Their next
 `watch` returns a `base_merged` update with the rebase command; the agent
 rebases and force-pushes its branch. The PR is retargeted through the forge's
 API with the user's login: `gh api` on GitHub, and on Forgejo or Gitea curl with
-the token fj saved for that host, read for the request and passed on stdin, or
-`tea api` with tea's login for the host. A missing login or failed request is
+the [configured token](#forges) for that host. A missing login or failed request is
 reported in the update.
 
 ### Repositories
@@ -1479,18 +1477,22 @@ Shoal reads and changes the issues and PRs of the forge serving a repository's
 `origin`. `github.com` is GitHub and `bitbucket.org` is Bitbucket Cloud;
 `gitlab.com`, a host with a `gitlab` name label and a host `glab` has a login for
 are GitLab; any other host is Forgejo or Gitea, which share an API. Lookups use
-your login: `gh` on GitHub, `glab` on GitLab, on Forgejo or Gitea the token `fj`
-saved for the host, else `tea`'s login through `tea api`, and on Bitbucket the
-token `[bitbucket]` configures. Without a login, only public repositories are
-readable. Shoal stores no forge credentials. An issue or PR number may be
-written `#42`.
+your login: `gh` on GitHub, `glab` on GitLab, and on Forgejo, Gitea and
+Bitbucket the token the global config names. Without a login, only public
+repositories are readable. Shoal stores no forge credentials. An issue or PR
+number may be written `#42`.
 
-Bitbucket has no official CLI, so the global `[bitbucket]` table names a
-`token_command`, an argument array whose output is the token; Shoal runs it for
-each lookup or change and keeps nothing. The token is an access token, or an
+A Forgejo or Gitea host and Bitbucket each take a `token_command`, an argument
+array whose output is the token, so no token sits in a config file. Shoal runs
+it once for each lookup or change, passes the token to curl on stdin, and keeps
+nothing. A `[forgejo."<host>"]` table is keyed by the host as the remote names
+it, with its port if any. The Bitbucket token is an access token, or an
 Atlassian API token when `email` names its account:
 
 ```toml
+[forgejo."git.example.com"]
+token_command = ["security", "find-generic-password", "-s", "forgejo", "-w"]
+
 [bitbucket]
 token_command = ["security", "find-generic-password", "-s", "bitbucket", "-w"]
 email = "you@example.com"
@@ -1586,7 +1588,8 @@ a failed request stops the rest. GitHub reruns a failed Actions job, or every
 failed job of a run when several of its jobs are selected, because a rerun starts
 a new attempt of the run, refuses a rerun while another job of the run is still
 running, and cancels the job's run; GitLab retries or cancels each job. Forgejo's API cannot rerun jobs, so `rerun`
-fails there without sending anything, and `cancel` cancels each check's run.
+fails there without sending anything and suggests pushing a commit to start a
+new run; `cancel` cancels each check's run.
 Bitbucket Pipelines are not supported. `--json` returns `url`, `action` and the
 `checks` acted on.
 
@@ -1659,7 +1662,7 @@ for it. Scoped callers can watch only in their own
 workspace. Activity polling continues when PR cleanup is disabled. Lookup failures report errors or `lookup_failed` updates; a source
 that keeps failing with the same error is reported again every 10 minutes. Forgejo
 comment and review changes are grouped; CI results are the commit statuses of the
-PR's head commit, read with fj's login for the host when it has one.
+PR's head commit, read with the host's configured token when it has one.
 Failed Forgejo checks include the failing step when the runner records it and
 a command to read the log; a log lookup failure stays on that check's update.
 
