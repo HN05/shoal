@@ -61,7 +61,7 @@ pub(super) async fn pause(
         }
         ready = async {
             await_stopped(manager, execution_id, workspace_id, stopped).await?;
-            manager.await_restore_admission(execution_id).await
+            manager.admit_agent_restore(execution_id, workspace_id).await
         } => ready,
     };
     let resume = async {
@@ -151,7 +151,6 @@ async fn prepare_resume(
     execution_id: &str,
     workspace_id: &str,
 ) -> Result<Action> {
-    manager.verify_restore_workspace(workspace_id).await?;
     let ports = manager.inspect_workspace(workspace_id).await?.ports;
     if manager.resume_agent_execution(execution_id).await? {
         Ok(Action::Resume(ports))

@@ -376,15 +376,44 @@ impl Manager {
         self.queue_restore(id, &name, &workspace_id).await
     }
 
-    /// Check that an admitted restore still has its ready, verified worktree.
-    pub(crate) async fn verify_restore_workspace(&self, workspace_id: &str) -> anyhow::Result<()> {
+    /// Wait until the agent queue admits the restore of `id` and the
+    /// admission holds through the checks of its workspace.
+    pub(crate) async fn admit_agent_restore(
+        &self,
+        id: &str,
+        workspace_id: &str,
+    ) -> anyhow::Result<()> {
+        loop {
+            let epoch = self.await_restore_admission(id).await?;
+            if self.confirm_restore(id, workspace_id, epoch).await? {
+                return Ok(());
+            }
+        }
+    }
+
+    /// Check that an admitted restore's workspace is ready and verified. A
+    /// stop or reload since its admission at `epoch` revokes it, since its
+    /// healthy readings no longer hold, and returns it to its place.
+    pub(super) async fn confirm_restore(
+        &self,
+        id: &str,
+        workspace_id: &str,
+        epoch: u64,
+    ) -> anyhow::Result<bool> {
         let workspace = self.workspace(workspace_id).await?;
         self.verify_worktree(&workspace).await?;
         anyhow::ensure!(
             workspace.state == crate::state::WorkspaceState::Ready,
             "workspace is no longer ready for agent recovery"
         );
-        Ok(())
+        let current = self
+            .recovery_epoch
+            .load(std::sync::atomic::Ordering::Relaxed)
+            == epoch;
+        if !current {
+            self.requeue_restore(id).await?;
+        }
+        Ok(current)
     }
 
     /// Each tracked agent's execution, workspace and load. One waiting for
@@ -398,7 +427,7 @@ impl Manager {
         agents
             .iter()
             .map(|(id, agent)| {
-                let activity = if waiting.contains(id) {
+                let activity = if waiting.contains_key(id) {
                     Activity::Stopped
                 } else {
                     Activity::Running(agent.started.elapsed())

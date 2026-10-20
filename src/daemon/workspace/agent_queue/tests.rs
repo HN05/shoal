@@ -539,13 +539,18 @@ async fn stopped_agents(
 async fn await_restore(
     manager: &std::sync::Arc<Manager>,
     execution: &str,
-) -> tokio::task::JoinHandle<Result<()>> {
+) -> tokio::task::JoinHandle<Result<u64>> {
     let waiting = {
         let (manager, execution) = (manager.clone(), execution.to_owned());
         tokio::spawn(async move { manager.await_restore_admission(&execution).await })
     };
     bounded(async {
-        while !manager.restore_waiters.lock().unwrap().contains(execution) {
+        while !manager
+            .restore_waiters
+            .lock()
+            .unwrap()
+            .contains_key(execution)
+        {
             tokio::task::yield_now().await;
         }
     })
@@ -644,6 +649,48 @@ async fn stopped_agents_restore_in_queue_order_before_later_launches() {
     discard(&manager, &first, &agents[0].0).await;
     manager.dispatch_queue().await.unwrap();
     assert!(started(&launch.id));
+}
+
+#[tokio::test]
+async fn a_stop_after_admission_returns_the_restore_to_its_place() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 2);
+    let (first, second) = (
+        create(&manager, &repo, "first").await,
+        create(&manager, &repo, "second").await,
+    );
+    let agents = stopped_agents(&manager, &[&first, &second]).await;
+    let restoring = await_restore(&manager, &agents[0].0).await;
+    publish_recovery(&manager);
+    manager.dispatch_queue().await.unwrap();
+    let epoch = bounded(restoring).await.unwrap().unwrap();
+    // Load worsens again while the restore checks its workspace.
+    manager.reset_overload_recovery();
+    assert!(
+        !manager
+            .confirm_restore(&agents[0].0, &first.id, epoch)
+            .await
+            .unwrap()
+    );
+    assert_eq!(
+        queue(&manager).await,
+        [
+            ("first".into(), Restore, Queued),
+            ("second".into(), Restore, Queued),
+        ]
+    );
+    // The next healthy interval admits it again, and that admission holds.
+    let restoring = await_restore(&manager, &agents[0].0).await;
+    publish_recovery(&manager);
+    manager.dispatch_queue().await.unwrap();
+    let epoch = bounded(restoring).await.unwrap().unwrap();
+    assert!(
+        manager
+            .confirm_restore(&agents[0].0, &first.id, epoch)
+            .await
+            .unwrap()
+    );
 }
 
 #[tokio::test]

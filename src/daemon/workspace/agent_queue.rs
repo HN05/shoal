@@ -216,7 +216,7 @@ impl Manager {
     /// and return whether `caller`'s entry was admitted. An admitted restore
     /// is left to its waiting agent. Requires the queue gate.
     async fn admit_waiting(&self, caller: Option<&str>) -> Result<bool> {
-        let waiting = self.waiting_work().await?;
+        let (waiting, restores) = self.waiting_work().await?;
         if waiting.is_empty() {
             return Ok(false);
         }
@@ -228,16 +228,17 @@ impl Manager {
         let limits = self.agent_limits(repositories, &slots).await?;
         let occupied: Vec<String> = slots.into_iter().map(|slot| slot.repository).collect();
         let admitted = admit(&occupied, &waiting, &limits, self.recovery_published());
-        let (starts, restored) = self.mark_starting(admitted).await?;
-        // The next restore needs another healthy interval.
-        if restored {
-            self.reset_overload_recovery();
+        let restored: Vec<&String> = admitted.iter().filter_map(|id| restores.get(id)).collect();
+        if !restored.is_empty() {
+            self.grant_restores(&restored);
         }
+        let starts = self.mark_starting(admitted).await?;
         self.start_launches(starts, caller).await
     }
 
-    /// The queued entries in order, each restore with whether its agent waits.
-    async fn waiting_work(&self) -> Result<Vec<Waiting>> {
+    /// The queued entries in order, each restore with whether its agent
+    /// waits, and each restore's execution by entry ID.
+    async fn waiting_work(&self) -> Result<(Vec<Waiting>, HashMap<String, String>)> {
         let queued = self
             .store
             .run(|db| {
@@ -254,30 +255,51 @@ impl Manager {
             })
             .await?;
         let waiters = self.restore_waiters.lock().unwrap();
-        Ok(queued
-            .into_iter()
-            .map(|(id, repository, kind, execution)| Waiting {
+        let mut restores = HashMap::new();
+        let mut waiting = Vec::new();
+        for (id, repository, kind, execution) in queued {
+            let work = match (kind, execution) {
+                (QueueKind::Restore, Some(execution)) => {
+                    let work = Work::Restore {
+                        waiting: waiters.contains_key(&execution),
+                    };
+                    restores.insert(id.clone(), execution);
+                    work
+                }
+                _ => Work::Launch,
+            };
+            waiting.push(Waiting {
                 id,
                 repository,
-                work: match kind {
-                    QueueKind::Launch => Work::Launch,
-                    QueueKind::Restore => Work::Restore {
-                        waiting: execution.is_some_and(|id| waiters.contains(&id)),
-                    },
-                },
-            })
-            .collect())
+                work,
+            });
+        }
+        Ok((waiting, restores))
     }
 
-    /// Mark `admitted` entries starting, returning the launches the daemon
-    /// starts and whether a restore was admitted.
-    async fn mark_starting(&self, admitted: Vec<String>) -> Result<(Vec<Start>, bool)> {
+    /// Bind the admitted restores of `executions` to a new recovery epoch,
+    /// so the next restore needs another healthy interval and a stop or
+    /// reload before a restored agent starts revokes its admission.
+    fn grant_restores(&self, executions: &[&String]) {
+        self.reset_overload_recovery();
+        let epoch = self
+            .recovery_epoch
+            .load(std::sync::atomic::Ordering::Relaxed);
+        let mut waiters = self.restore_waiters.lock().unwrap();
+        for execution in executions {
+            if let Some(granted) = waiters.get_mut(*execution) {
+                *granted = Some(epoch);
+            }
+        }
+    }
+
+    /// Mark `admitted` entries starting, returning the launches the daemon starts.
+    async fn mark_starting(&self, admitted: Vec<String>) -> Result<Vec<Start>> {
         self.store
             .run(move |db| {
                 let tx = db.transaction()?;
                 let now = crate::time::unix_seconds() as i64;
                 let mut starts = Vec::new();
-                let mut restored = false;
                 for id in admitted {
                     tx.execute(
                         "UPDATE agent_queue SET state=?2,seen_at=?3 WHERE id=?1",
@@ -288,18 +310,17 @@ impl Manager {
                         [&id],
                         |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
                     )?;
-                    match kind {
-                        QueueKind::Launch => starts.push(Start {
+                    if kind == QueueKind::Launch {
+                        starts.push(Start {
                             id,
                             name,
                             env: serde_json::from_str(&env.unwrap_or_default())
                                 .context("read queued environment")?,
-                        }),
-                        QueueKind::Restore => restored = true,
+                        });
                     }
                 }
                 tx.commit()?;
-                Ok((starts, restored))
+                Ok(starts)
             })
             .await
     }
@@ -801,8 +822,9 @@ impl Manager {
     }
 
     /// Wait until admission starts the queued restore of `execution`, whose
-    /// agent waits with every process stopped.
-    pub(crate) async fn await_restore_admission(&self, execution: &str) -> Result<()> {
+    /// agent waits with every process stopped, and return the recovery epoch
+    /// the admission holds while it lasts.
+    pub(crate) async fn await_restore_admission(&self, execution: &str) -> Result<u64> {
         let mut changed = self.store.watch_changes();
         let _waiter = RestoreWaiter::register(self, execution);
         self.agent_queue_wake.notify_one();
@@ -821,11 +843,34 @@ impl Manager {
                 })
                 .await?;
             match state {
-                Some(QueueState::Starting) => return Ok(()),
+                Some(QueueState::Starting) => {
+                    return self
+                        .restore_waiters
+                        .lock()
+                        .unwrap()
+                        .get(execution)
+                        .copied()
+                        .flatten()
+                        .context("the restore started without admission");
+                }
                 Some(QueueState::Queued) => changed.changed().await?,
                 None => bail!("the restore is no longer in the agent queue"),
             }
         }
+    }
+
+    /// Return `execution`'s revoked restore to its place in the queue.
+    pub(crate) async fn requeue_restore(&self, execution: &str) -> Result<()> {
+        let execution = execution.to_owned();
+        self.store
+            .run(move |db| {
+                db.execute(
+                    "UPDATE agent_queue SET state=?2 WHERE execution_id=?1",
+                    params![execution, QueueState::Queued],
+                )?;
+                Ok(())
+            })
+            .await
     }
 
     /// Take `execution`'s restore out of the queue, once its agent registered
@@ -876,7 +921,7 @@ impl<'a> RestoreWaiter<'a> {
             .restore_waiters
             .lock()
             .unwrap()
-            .insert(execution.to_owned());
+            .insert(execution.to_owned(), None);
         Self {
             manager,
             execution: execution.to_owned(),

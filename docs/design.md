@@ -493,8 +493,9 @@ twice, which would deadlock a full machine of stopped agents, while dynamic
 admission measures its load like a new start. Restores also need the recovery
 interval's healthy readings, one per interval, and hold back work queued behind
 them, since starting new agents on a machine that just stopped one would undo
-the protection. The slot passes to the agent when its restored process
-registers. The entry is keyed by execution, so a reattached wrapper keeps its
+the protection. Admission binds the recovery epoch, so a stop or reload before
+the agent restarts returns the restore to its place. The slot passes to the
+agent when its restored process registers. The entry is keyed by execution, so a reattached wrapper keeps its
 place and a restart cannot restore it twice; an entry without its wrapper for the
 start grace period is dropped, and cancellation or failure leaves the recovery
 record.
