@@ -9,7 +9,10 @@ use crate::{
 };
 use anyhow::{Context as _, Result, ensure};
 use serde_json::json;
-use std::ffi::OsString;
+use std::{
+    ffi::OsString,
+    path::{Path, PathBuf},
+};
 
 /// `shoal resume`: the selected workspace, or every one for `--all`, the
 /// picker's entry for all, or when no workspace has stopped work.
@@ -71,20 +74,7 @@ pub async fn run(
             ctx.show(&report, |_| {})?;
             return Ok(0);
         }
-        [(_, path)] => path.clone(),
-        agents if ctx.interactive() => {
-            let labels = agents
-                .iter()
-                .map(|(_, path)| agent_label(path))
-                .collect::<Vec<_>>();
-            let choices = agents
-                .iter()
-                .zip(&labels)
-                .map(|((_, path), label)| (path.clone(), label.as_str()))
-                .collect::<Vec<_>>();
-            ui::pick_choice(ctx, "Resume agent> ", &choices)?
-        }
-        _ => anyhow::bail!("multiple stopped agents; select one with --execution <id>"),
+        agents => select_agent(ctx, agents)?,
     };
     let selected_id = selected
         .file_name()
@@ -148,9 +138,30 @@ pub async fn run(
     .await
 }
 
+/// The stopped agent's recovery record to restore: the only one, or one picked
+/// on a terminal.
+fn select_agent(ctx: &Context, agents: &[(String, PathBuf)]) -> Result<PathBuf> {
+    match agents {
+        [(_, path)] => Ok(path.clone()),
+        agents if ctx.interactive() => {
+            let labels = agents
+                .iter()
+                .map(|(_, path)| agent_label(path))
+                .collect::<Vec<_>>();
+            let choices = agents
+                .iter()
+                .zip(&labels)
+                .map(|((_, path), label)| (path.clone(), label.as_str()))
+                .collect::<Vec<_>>();
+            ui::pick_choice(ctx, "Resume agent> ", &choices)
+        }
+        _ => anyhow::bail!("multiple stopped agents; select one with --execution <id>"),
+    }
+}
+
 /// How the agent picker names a stopped agent: its name, when it stopped,
 /// and why when known.
-fn agent_label(path: &std::path::Path) -> String {
+fn agent_label(path: &Path) -> String {
     let record = Record::load(path).ok().flatten();
     let mut label = record
         .as_ref()
