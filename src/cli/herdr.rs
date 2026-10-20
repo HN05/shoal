@@ -1,7 +1,7 @@
 //! Herdr terminal handoffs; workspace ownership stays with the daemon.
 use std::{collections::BTreeMap, ffi::OsString, path::Path, process::Stdio, time::Duration};
 
-use anyhow::{Context as _, Result};
+use anyhow::{Context as _, Result, bail};
 use serde::{Deserialize, Serialize};
 use tokio::process::Command;
 
@@ -375,14 +375,24 @@ impl Tab {
         }
     }
 
-    /// The tab's agent state; `None` once the tab is gone.
-    async fn agent_status(&self) -> Option<AgentStatus> {
+    /// The tab's agent state; `None` once Herdr reports the tab gone.
+    async fn agent_status(&self) -> Result<Option<AgentStatus>> {
         let mut get = Command::new("herdr");
         get.args(["tab", "get"]).arg(&self.id);
-        let output = Run::new(get).checked().await.ok()?;
-        Some(
-            serde_json::from_slice::<TabInfo>(&output.stdout)
-                .map_or(AgentStatus::Unknown, |info| info.result.tab.agent_status),
+        let output = Run::new(get).capture().await.context("query Herdr tab")?;
+        if output.status.success() {
+            return Ok(Some(
+                serde_json::from_slice::<TabInfo>(&output.stdout)
+                    .map_or(AgentStatus::Unknown, |info| info.result.tab.agent_status),
+            ));
+        }
+        if tab_not_found(&output.stdout) {
+            return Ok(None);
+        }
+        bail!(
+            "herdr tab get {} failed: {}",
+            self.id,
+            String::from_utf8_lossy(&output.stdout).trim()
         )
     }
 
@@ -431,14 +441,17 @@ pub async fn watch(ctx: &Context, workspace: String, tab: String) -> Result<i32>
     let executable = super::installed::Executable::current();
     // A missing daemon or a failed query does not prove completion or removal.
     // Retain the observer across daemon restarts, but not deletion of its state.
-    // A closed tab leaves nothing to close, whatever the daemon reports.
+    // A closed tab leaves nothing to close, whatever the daemon reports; a
+    // failed tab query, like a failed daemon query, proves neither.
     while ctx.paths.state.exists() {
         let lifecycle = workspace_lifecycle(ctx, &workspace).await;
-        let Some(status) = tab.agent_status().await else {
-            break;
+        let status = match tab.agent_status().await {
+            Ok(Some(status)) => Some(status),
+            Ok(None) => break,
+            Err(_) => None,
         };
         match lifecycle {
-            Ok(lifecycle) if lifecycle.closes_tab(status) => {
+            Ok(lifecycle) if status.is_some_and(|status| lifecycle.closes_tab(status)) => {
                 tab.close().await;
                 break;
             }
@@ -513,6 +526,22 @@ struct TabInfoResult {
 struct TabState {
     #[serde(default)]
     agent_status: AgentStatus,
+}
+
+/// Herdr's answer to a failed query; a missing server is not a missing tab,
+/// since a replacement server can keep its tabs.
+#[derive(Deserialize)]
+struct QueryFailure {
+    error: QueryError,
+}
+#[derive(Deserialize)]
+struct QueryError {
+    code: String,
+}
+
+fn tab_not_found(stdout: &[u8]) -> bool {
+    serde_json::from_slice::<QueryFailure>(stdout)
+        .is_ok_and(|failure| failure.error.code == "tab_not_found")
 }
 
 /// Herdr's view of the agent in a tab; `Done` is a finished turn not yet seen.
@@ -649,6 +678,17 @@ mod tests {
         let older: TabInfo =
             serde_json::from_str(r#"{"result":{"tab":{"tab_id":"w2:t1"}}}"#).unwrap();
         assert_eq!(older.result.tab.agent_status, AgentStatus::Unknown);
+    }
+
+    #[test]
+    fn only_herdr_reporting_the_tab_missing_proves_it_gone() {
+        assert!(tab_not_found(
+            br#"{"error":{"code":"tab_not_found","message":"tab w2:t9 not found"},"id":"cli:tab:get"}"#
+        ));
+        assert!(!tab_not_found(
+            br#"{"id":"cli:tab:get","error":{"code":"server_not_running","message":"no herdr server is running"}}"#
+        ));
+        assert!(!tab_not_found(b"connection reset"));
     }
 
     async fn inspect_lifecycle(completed: bool, executions: Vec<Execution>) -> Lifecycle {

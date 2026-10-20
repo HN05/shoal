@@ -17004,6 +17004,9 @@ elif args[:2] == ['tab', 'get']:
     if closed.exists() and args[2] in closed.read_text().split():
         print(json.dumps({'error': {'code': 'tab_not_found'}}))
         sys.exit(1)
+    if (root / 'herdr-unreachable').exists():
+        print(json.dumps({'error': {'code': 'server_not_running'}}))
+        sys.exit(1)
     print(json.dumps({'result': {'tab_id': args[2]}}))
 elif args[:2] == ['pane', 'process-info']:
     idle = root / 'idle-panes'
@@ -17736,6 +17739,15 @@ fn herdr_tab_watchers_end_with_their_tab_whatever_the_daemon_reports() {
         let mut watcher = watch(&fixture, &active, tab);
         wait_until("Herdr tab polling", || tab_gets(&fixture, tab) >= 2);
         assert!(watcher.try_wait().unwrap().is_none());
+        // A failed tab query is not a closed tab.
+        let unreachable = fixture.root.path().join("herdr-unreachable");
+        fs::write(&unreachable, "").unwrap();
+        let seen = tab_gets(&fixture, tab);
+        wait_until("failed Herdr tab polling", || {
+            tab_gets(&fixture, tab) >= seen + 2
+        });
+        assert!(watcher.try_wait().unwrap().is_none());
+        fs::remove_file(unreachable).unwrap();
         close_tab(&fixture, tab);
         watchers.push(watcher);
     }
