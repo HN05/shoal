@@ -8,6 +8,7 @@ use super::{
     ForgeKind, ForgeRepo,
     account::Account,
     api::{HttpMethod, Request},
+    checks::validate_check_name,
     item::ItemState,
     items::{linked, workspace_forge},
     link::ItemKind,
@@ -100,10 +101,7 @@ impl Manager {
         checks: Vec<String>,
     ) -> Result<CiActed> {
         for check in &checks {
-            ensure!(
-                !check.trim().is_empty() && check.len() <= 1024,
-                "check name must be nonempty and at most 1024 bytes"
-            );
+            validate_check_name(check)?;
         }
         let workspace = self.workspace(selector).await?;
         self.verify_worktree(&workspace).await?;
@@ -302,7 +300,11 @@ fn select(jobs: &[Job], action: CiAction, names: &[String]) -> Result<Vec<Job>> 
         return Ok(selected);
     }
     let mut selected = Vec::new();
-    for name in names {
+    for (index, name) in names.iter().enumerate() {
+        // A repeated name selects its jobs once.
+        if names[..index].contains(name) {
+            continue;
+        }
         let named = jobs.iter().filter(|job| job.name == *name);
         ensure!(
             named.clone().next().is_some(),
@@ -578,7 +580,8 @@ mod tests {
             ]
         );
         assert_eq!(checks, ["rust", "docs", "lint", "fmt"]);
-        let (planned, checks) = operations(&jobs, &jobs[..1], CiAction::Rerun).unwrap();
+        let repeated = select(&jobs, CiAction::Rerun, &["rust".into(), "rust".into()]).unwrap();
+        let (planned, checks) = operations(&jobs, &repeated, CiAction::Rerun).unwrap();
         assert_eq!(planned, [post("actions/jobs/11/rerun")]);
         assert_eq!(checks, ["rust"]);
         let (planned, _) = operations(&jobs, &jobs[4..5], CiAction::Cancel).unwrap();

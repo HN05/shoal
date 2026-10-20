@@ -76,10 +76,7 @@ impl Manager {
         selection: &Selection,
         name: &str,
     ) -> Result<CheckLog> {
-        ensure!(
-            !name.trim().is_empty() && name.len() <= 1024,
-            "check name must be nonempty and at most 1024 bytes"
-        );
+        validate_check_name(name)?;
         let workspace = self.workspace(selector).await?;
         self.verify_worktree(&workspace).await?;
         let selection = Selection {
@@ -96,6 +93,15 @@ impl Manager {
         let account = self.agent_account(&workspace).await?;
         forge.failed_check_log(&account, url, name).await
     }
+}
+
+/// Refuse a check name no forge shows, before any lookup.
+pub(super) fn validate_check_name(name: &str) -> Result<()> {
+    ensure!(
+        !name.trim().is_empty() && name.len() <= 1024,
+        "check name must be nonempty and at most 1024 bytes"
+    );
+    Ok(())
 }
 
 impl ForgeRepo {
