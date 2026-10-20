@@ -233,7 +233,8 @@ async fn workspace_label(ctx: &Context, settings: &Effective, workspace: &Worksp
     })
 }
 
-// The tab environment carries the plan, keeping the typed command short.
+// The tab environment carries the plan, keeping the typed command short, and
+// the file in which the worker leaves the workspace for the tab's shell to enter.
 async fn create_tab(ctx: &Context, plan: &AddPlan, focus: bool) -> Result<CreatedResult> {
     let mut create = tab_command(ctx, &std::env::current_dir()?, &plan.label(), focus)?;
     create.arg("--env").arg(format!(
@@ -241,6 +242,16 @@ async fn create_tab(ctx: &Context, plan: &AddPlan, focus: bool) -> Result<Create
         env::ADD_PLAN,
         serde_json::to_string(plan)?
     ));
+    let directive = tempfile::Builder::new()
+        .prefix("shoal-cd.")
+        .tempfile()
+        .context("create the tab's shell directive")?
+        .into_temp_path()
+        .keep()
+        .context("keep the tab's shell directive")?;
+    create
+        .arg("--env")
+        .arg(format!("{}={}", env::SHELL_DIRECTIVE, directive.display()));
     created(create).await
 }
 

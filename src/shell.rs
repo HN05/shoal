@@ -58,9 +58,23 @@ fn is_init_line(line: &str) -> bool {
 }
 
 /// Directory changes use a private data file, never shell code evaluated from
-/// a repository path or command output. The wrapper works in Bash and Zsh.
-pub const INIT: &str = r#"_shoal_recover_directory() {
+/// a repository path or command output. The wrapper works in Bash and Zsh. A
+/// Herdr tab Shoal opens exports its file, which the tab's shell follows once
+/// at a prompt after the worker writes it.
+pub const INIT: &str = r#"_shoal_enter_tab_workspace() {
+  local shoal_destination
+  { [ -n "${SHOAL_SHELL_DIRECTIVE-}" ] && [ -s "$SHOAL_SHELL_DIRECTIVE" ]; } || return 0
+  IFS= read -r shoal_destination < "$SHOAL_SHELL_DIRECTIVE" || :
+  command rm -f -- "$SHOAL_SHELL_DIRECTIVE"
+  unset SHOAL_SHELL_DIRECTIVE
+  if [ -d "$shoal_destination" ]; then
+    builtin cd -- "$shoal_destination"
+  fi
+}
+
+_shoal_recover_directory() {
   local shoal_status=$? shoal_recovery
+  _shoal_enter_tab_workspace || :
   if [ -z "${SHOAL_SCOPE_TOKEN+x}" ] && { [ ! -d "$PWD" ] || ! builtin pwd -P >/dev/null 2>&1; }; then
     shoal_recovery="$(command shoal shell recover -- "$PWD" 2>/dev/null)" &&
       builtin cd -- "$shoal_recovery"

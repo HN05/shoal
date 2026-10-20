@@ -193,10 +193,11 @@ pub(in crate::cli) async fn host_workspace(
     Ok(())
 }
 
-/// Whether the caller's shell enters a new workspace afterwards: only when
-/// this process runs in the caller's own terminal.
+/// Whether the shell that started this process enters a new workspace
+/// afterwards: the caller's own or that of the tab opened for it. A session
+/// ends with its agent, leaving no shell.
 pub(in crate::cli) fn follows_caller(ctx: &Context) -> bool {
-    ctx.place.is_none()
+    !matches!(ctx.place, Some(Place::Session))
 }
 
 /// Give a workspace added without an agent a shell at `cwd` in the place

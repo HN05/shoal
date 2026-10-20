@@ -106,6 +106,67 @@ printf 'recovery-ok\n'
 }
 
 #[test]
+fn tab_shell_enters_the_workspace_its_worker_wrote_once() {
+    let root = tempfile::tempdir().unwrap();
+    let integration = root.path().join("init.sh");
+    let output = support::cli(root.path())
+        .args(["shell", "init"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    fs::write(&integration, output.stdout).unwrap();
+
+    for shell in ["bash", "zsh"] {
+        let output = support::isolated(root.path(), shell)
+            .args([
+                "-f",
+                "-c",
+                r#"
+set -eu
+. "$INTEGRATION"
+workspace="$HOME/workspace \$(touch injected)"
+mkdir -p "$workspace" "$HOME/elsewhere"
+cd "$HOME"
+# Herdr exports the file before the worker has written anything.
+export SHOAL_SHELL_DIRECTIVE="$HOME/directive"
+: > "$SHOAL_SHELL_DIRECTIVE"
+_shoal_recover_directory
+test "$PWD" = "$HOME"
+test -e "$HOME/directive"
+# The worker's agent exits; the next prompt enters its workspace once.
+printf '%s\n' "$workspace" > "$SHOAL_SHELL_DIRECTIVE"
+if (exit 9); then exit 1; else
+  if _shoal_recover_directory; then exit 1; else test "$?" -eq 9; fi
+fi
+test "$PWD" = "$workspace"
+test ! -e "$HOME/directive"
+test -z "${SHOAL_SHELL_DIRECTIVE+x}"
+test ! -e "$HOME/injected"
+cd "$HOME/elsewhere"
+_shoal_recover_directory
+test "$PWD" = "$HOME/elsewhere"
+# A workspace removed before the prompt is not entered.
+export SHOAL_SHELL_DIRECTIVE="$HOME/directive"
+printf '%s\n' "$HOME/removed" > "$SHOAL_SHELL_DIRECTIVE"
+_shoal_recover_directory
+test "$PWD" = "$HOME/elsewhere"
+printf 'tab-ok\n'
+"#,
+            ])
+            .env("INTEGRATION", &integration)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{shell}: {}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(String::from_utf8_lossy(&output.stdout).ends_with("tab-ok\n"));
+    }
+}
+
+#[test]
 fn interactive_prompt_recovers_cleanup_that_finishes_after_command_return() {
     use std::{io::Write, process::Stdio};
 

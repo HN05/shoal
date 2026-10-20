@@ -17217,6 +17217,18 @@ fn herdr_handoff_preserves_choices_and_literal_arguments() {
     );
     let (agent, transcript) = fixture.interactive_command(&mut herdr_worker_command(&fixture), "");
     assert_eq!(agent.status.code(), Some(7), "{agent:?} {transcript}");
+    // The tab's shell, not the caller's, enters the workspace after the agent.
+    let tab_directive = herdr_calls(&fixture)[0]
+        .iter()
+        .find_map(|arg| arg.strip_prefix("SHOAL_SHELL_DIRECTIVE="))
+        .map(PathBuf::from)
+        .unwrap();
+    let workspace = fixture.ok(&["inspect", "herdr-agent"]);
+    assert_eq!(
+        fs::read_to_string(&tab_directive).unwrap(),
+        format!("{}\n", workspace["workspace"]["path"].as_str().unwrap())
+    );
+    fs::remove_file(tab_directive).unwrap();
     assert_eq!(
         strip_shoal_arguments(
             &fs::read_to_string(fixture.root.path().join("agent-args")).unwrap(),
