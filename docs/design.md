@@ -223,7 +223,9 @@ canonical path. IDs and sources win before path lookup; a registered name surviv
 unrelated path collisions, while a name and path matching different registrations
 require disambiguation.
 `repo rm` binds confirmation to the resolved registration and shows
-its source and checkout path; it deletes the directory only once it is empty.
+its source and checkout path. After verifying the checkout's identity and
+boundaries, it deletes the checkout recursively, then removes the repository
+directory only when that directory is empty.
 
 A new branch starts from the repository default branch: `origin/HEAD`, the sole
 remote's HEAD, or the checkout's current branch without remotes, never a guessed
