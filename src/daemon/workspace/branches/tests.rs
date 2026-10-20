@@ -954,9 +954,16 @@ async fn squash_merge_on_the_remote_default_branch_counts_as_retained() {
     );
     git(&author, &["push", "-q", "origin", "main"]);
     git(&f.repo, &["fetch", "-q", "origin"]);
-    let check = check().await;
-    assert_eq!(check.unpushed_commits, 0);
-    assert!(check.can_delete_branch());
+    let merged = check().await;
+    assert_eq!(merged.unpushed_commits, 0);
+    assert!(merged.can_delete_branch());
+    // A clone may keep only the remote-tracking default branch.
+    git(&f.repo, &["remote", "set-head", "origin", "main"]);
+    git(&f.repo, &["checkout", "-q", "--detach"]);
+    git(&f.repo, &["branch", "-q", "-D", "main"]);
+    let merged = check().await;
+    assert_eq!(merged.unpushed_commits, 0);
+    assert!(merged.matches_default_branch);
 }
 
 #[tokio::test]

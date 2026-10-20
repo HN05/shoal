@@ -17720,7 +17720,9 @@ fn scoped_undone_withdraws_completion_without_keeping_the_workspace() {
     assert_eq!(undone["withdrawn"]["cleanup"], false);
     assert!(scoped(&fixture, &["undone"])["withdrawn"].is_null());
     assert!(fixture.ok(&["inspect", "issue-work"])["completion"].is_null());
-    // Only holds keep a workspace; cleanup removes the merged one on request.
+    // Only holds keep a workspace; cleanup removes the merged one on request,
+    // which needs a default branch it can fetch.
+    git(&fixture.repo, &["remote", "remove", "origin"]);
     assert_eq!(
         fixture.ok(&["cleanup"])["removed"],
         serde_json::json!(["issue-work"])

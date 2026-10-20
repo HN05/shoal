@@ -60,12 +60,32 @@ impl Manager {
         })
     }
 
-    /// Fetch the default branch's remote, so merge checks see what the forge
-    /// merged; local branches stay unchanged.
+    /// Fetch every remote that holds a default-branch ref merge checks read:
+    /// the local default branch's upstream and the default remote, so they
+    /// see what the forge merged; local branches stay unchanged.
     pub async fn fetch_default_branch(&self, repository_id: &str) -> Result<()> {
         let repo = self.repository(repository_id).await?;
         let _guard = self.lock_repository_git(&repo.id).await;
-        fetch_default_remote(&repo).await.map(|_| ())
+        let default =
+            crate::git::default_branch::resolve(&repo.path, DefaultBranchLookup::Discover).await?;
+        let mut remotes = Vec::new();
+        let local = git::local_ref(&default);
+        if git::ref_exists(&repo.path, &local, git::isolated_command).await?
+            && let Some((remote, _)) = upstream(&repo, &local).await?
+        {
+            remotes.push(remote);
+        }
+        if let Some(remote) = crate::git::default_branch::remote(&repo.path).await?
+            && !remotes.contains(&remote)
+        {
+            remotes.push(remote);
+        }
+        for remote in remotes {
+            fetch::remote(&repo.path, &remote)
+                .await
+                .with_context(|| format!("could not fetch {remote}"))?;
+        }
+        Ok(())
     }
 
     /// Match a canonical checkout path against recorded workspace locations.

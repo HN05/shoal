@@ -90,18 +90,26 @@ pub async fn operation_in_progress(repo: &Path) -> Result<bool> {
     Ok(!run(repo, &["ls-files", "--unmerged"]).await?.is_empty())
 }
 
-/// The local default branch and its remote-tracking branch, those that exist.
+/// The default branch's refs that exist, local first: the local branch, its
+/// upstream, and the default remote's remote-tracking branch, which a clone
+/// keeps even without a local branch.
 pub async fn default_refs(repo: &Path, name: &str) -> Result<Vec<String>> {
-    let Some(local) = local_branch(repo, name).await? else {
-        return Ok(Vec::new());
-    };
-    let tracking = run(repo, &["for-each-ref", "--format=%(upstream)", &local]).await?;
-    let tracking = tracking.trim();
-    let mut refs = vec![local.clone()];
-    if tracking.starts_with(super::REMOTE_REFS)
-        && super::ref_exists(repo, tracking, super::command).await?
-    {
-        refs.push(tracking.to_owned());
+    let mut candidates = Vec::new();
+    if let Some(local) = local_branch(repo, name).await? {
+        let upstream = run(repo, &["for-each-ref", "--format=%(upstream)", &local]).await?;
+        candidates.extend([local, upstream.trim().to_owned()]);
+    }
+    if let Some(remote) = super::default_branch::remote(repo).await? {
+        candidates.push(super::remote_ref(&remote, name));
+    }
+    let mut refs: Vec<String> = Vec::new();
+    for reference in candidates {
+        if (reference.starts_with(super::LOCAL_REFS) || reference.starts_with(super::REMOTE_REFS))
+            && !refs.contains(&reference)
+            && super::ref_exists(repo, &reference, super::command).await?
+        {
+            refs.push(reference);
+        }
     }
     Ok(refs)
 }
